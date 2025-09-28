@@ -37,10 +37,10 @@
 **CONSTITUTIONAL REQUIREMENT: Tests MUST be written first and MUST FAIL before implementation**
 
 ### Contract Tests (Protobuf Services)
-- [ ] T011 [P] Contract test WorkspaceService.CreateWorkspace in services/repository/tests/contract/workspace_test.go
-- [ ] T012 [P] Contract test WorkspaceService.ListWorkspaces in services/repository/tests/contract/workspace_list_test.go
-- [ ] T013 [P] Contract test RepositoryService.CreateRepository in services/repository/tests/contract/repository_test.go
-- [ ] T014 [P] Contract test RepositoryService.GenerateCode in services/repository/tests/contract/codegen_test.go
+- [x] T011 [P] Contract test WorkspaceService.CreateWorkspace in services/repository/tests/contract/workspace_test.go
+- [x] T012 [P] Contract test WorkspaceService.ListWorkspaces in services/repository/tests/contract/workspace_list_test.go
+- [x] T013 [P] Contract test RepositoryService.CreateRepository in services/repository/tests/contract/repository_test.go
+- [x] T014 [P] Contract test RepositoryService.GenerateCode in services/repository/tests/contract/codegen_test.go
 - [x] T015 [P] Contract test APICatalogService.CreateSchema in services/api-catalog/tests/contract/schema_test.go
 - [x] T016 [P] Contract test APICatalogService.ValidateSchema in services/api-catalog/tests/contract/validation_test.go
 - [x] T017 [P] Contract test KnowledgeService.CreatePage in services/knowledge/tests/contract/create_page_test.go
