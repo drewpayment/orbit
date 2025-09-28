@@ -1,0 +1,185 @@
+# Tasks: Internal Developer Portal (IDP)
+
+**Input**: Design documents from `/specs/001-internal-developer-portal/`
+**Prerequisites**: plan.md (✅), research.md (✅), data-model.md (✅), contracts/ (✅)
+
+## Execution Flow (main)
+```
+1. Load plan.md from feature directory ✅
+   → Tech stack: Go 1.21+, NextJS 14 with PayloadCMS, PostgreSQL, Redis, Temporal
+   → Structure: Microservices (repository, api-catalog, knowledge services) + Temporal workflows
+2. Load design documents: ✅
+   → data-model.md: 5 core entities (Workspace, Repository, APISchema, KnowledgeSpace, User)
+   → contracts/: 7 protobuf files (workspace, repository, api_catalog, knowledge, auth, common, pagination)
+   → quickstart.md: 5 integration scenarios
+3. Generate tasks by category: Setup → Tests → Models → Services → Endpoints → Polish
+4. Apply task rules: TDD mandatory, different files = [P], tests before implementation
+5. Validate completeness: All contracts tested, all entities modeled
+```
+
+## Format: `[ID] [P?] Description`
+- **[P]**: Can run in parallel (different files, no dependencies)
+- Include exact file paths in descriptions
+
+## Phase 3.1: Setup & Quality Gates
+- [ ] T001 Create project structure per implementation plan (frontend/, services/, temporal-workflows/, proto/, infrastructure/)
+- [ ] T002 Initialize Go modules for all four services (repository, api-catalog, knowledge, temporal-workflows)
+- [ ] T003 [P] Initialize NextJS 14 frontend with TypeScript, shadcn/ui components, and integrated PayloadCMS
+- [ ] T004 [P] Set up Temporal server and configure workflow workers for all services
+- [ ] T005 [P] Configure Go linting (golangci-lint), TypeScript ESLint, and Prettier
+- [ ] T006 [P] Set up Go testing framework with testify, Jest for frontend, and coverage reporting (90% business logic, 80% overall)
+- [ ] T007 [P] Configure performance monitoring tools (pprof for Go, Lighthouse CI for frontend)
+- [ ] T008 [P] Set up security scanning (gosec, npm audit, OWASP dependency check)
+- [ ] T009 [P] Configure Docker Compose for development environment with all services and Temporal
+- [ ] T010 [P] Set up protobuf code generation with Buf CLI for Go and TypeScript
+
+## Phase 3.2: Tests First (TDD) ⚠️ MUST COMPLETE BEFORE 3.3
+**CONSTITUTIONAL REQUIREMENT: Tests MUST be written first and MUST FAIL before implementation**
+
+### Contract Tests (Protobuf Services)
+- [ ] T011 [P] Contract test WorkspaceService.CreateWorkspace in services/repository/tests/contract/workspace_test.go
+- [ ] T012 [P] Contract test WorkspaceService.ListWorkspaces in services/repository/tests/contract/workspace_list_test.go
+- [ ] T013 [P] Contract test RepositoryService.CreateRepository in services/repository/tests/contract/repository_test.go
+- [ ] T014 [P] Contract test RepositoryService.GenerateCode in services/repository/tests/contract/codegen_test.go
+- [ ] T015 [P] Contract test APICatalogService.CreateSchema in services/api-catalog/tests/contract/schema_test.go
+- [ ] T016 [P] Contract test APICatalogService.ValidateSchema in services/api-catalog/tests/contract/validation_test.go
+- [ ] T017 [P] Contract test KnowledgeService.CreateKnowledgeSpace in services/knowledge/tests/contract/space_test.go
+- [ ] T018 [P] Contract test KnowledgeService.CreatePage in services/knowledge/tests/contract/page_test.go
+
+### Integration Tests (User Scenarios)
+- [ ] T019 [P] Integration test Scenario 1: Creating service repository in frontend/tests/integration/repository-creation.test.ts
+- [ ] T020 [P] Integration test Scenario 2: Publishing API schema in frontend/tests/integration/api-publishing.test.ts
+- [ ] T021 [P] Integration test Scenario 3: Knowledge documentation in frontend/tests/integration/knowledge-docs.test.ts
+- [ ] T022 [P] Integration test Scenario 4: Dependency discovery in frontend/tests/integration/dependency-management.test.ts
+- [ ] T023 [P] Integration test Scenario 5: Multi-service generation in frontend/tests/integration/multi-service.test.ts
+
+### Performance & Security Tests
+- [ ] T024 [P] Performance test workspace operations (<200ms p95) in services/repository/tests/performance/workspace_perf_test.go
+- [ ] T025 [P] Performance test auth operations (<100ms p95) in services/repository/tests/performance/auth_perf_test.go
+- [ ] T026 [P] Performance test code generation (<30s) in services/api-catalog/tests/performance/codegen_perf_test.go
+- [ ] T027 [P] Security test authentication flows in services/repository/tests/security/auth_security_test.go
+- [ ] T028 [P] Security test authorization and RBAC in services/repository/tests/security/rbac_security_test.go
+
+## Phase 3.3: Core Implementation (ONLY after tests are failing)
+**CONSTITUTIONAL REQUIREMENT: All code MUST pass quality gates before acceptance**
+
+### Data Models (Database Layer)
+- [ ] T029 [P] User model with auth fields in services/repository/internal/domain/user.go
+- [ ] T030 [P] Workspace model with settings in services/repository/internal/domain/workspace.go
+- [ ] T031 [P] Repository model with template config in services/repository/internal/domain/repository.go
+- [ ] T032 [P] APISchema model with versioning in services/api-catalog/internal/domain/schema.go
+- [ ] T033 [P] KnowledgeSpace model with hierarchy in services/knowledge/internal/domain/space.go
+- [ ] T034 [P] KnowledgePage model with content in services/knowledge/internal/domain/page.go
+
+### Service Layer (Business Logic)
+- [ ] T035 [P] WorkspaceService with CRUD and member management in services/repository/internal/service/workspace_service.go
+- [ ] T036 [P] RepositoryService with template handling in services/repository/internal/service/repository_service.go
+- [ ] T037 [P] CodeGenerationService with job processing in services/api-catalog/internal/service/codegen_service.go
+- [ ] T038 [P] SchemaService with validation logic in services/api-catalog/internal/service/schema_service.go
+- [ ] T039 [P] KnowledgeSpaceService with permissions in services/knowledge/internal/service/space_service.go
+- [ ] T040 [P] PageService with content management in services/knowledge/internal/service/page_service.go
+
+### API Layer (gRPC Servers)
+- [ ] T041 WorkspaceService gRPC server implementation in services/repository/internal/api/workspace_server.go
+- [ ] T042 RepositoryService gRPC server implementation in services/repository/internal/api/repository_server.go
+- [ ] T043 APICatalogService gRPC server implementation in services/api-catalog/internal/api/catalog_server.go
+- [ ] T044 KnowledgeService gRPC server implementation in services/knowledge/internal/api/knowledge_server.go
+
+### Frontend Components
+- [ ] T045 [P] Workspace management UI in frontend/src/components/features/workspace/WorkspaceManager.tsx
+- [ ] T046 [P] Repository creation wizard in frontend/src/components/features/repository/RepositoryWizard.tsx
+- [ ] T047 [P] API schema editor in frontend/src/components/features/api-catalog/SchemaEditor.tsx
+- [ ] T048 [P] Knowledge space navigator in frontend/src/components/features/knowledge/SpaceNavigator.tsx
+- [ ] T049 [P] Code generation monitor in frontend/src/components/features/repository/GenerationMonitor.tsx
+
+### Temporal Workflows
+- [ ] T050 [P] Repository generation workflow in temporal-workflows/internal/workflows/repository_workflow.go
+- [ ] T051 [P] Code generation workflow in temporal-workflows/internal/workflows/codegen_workflow.go
+- [ ] T052 [P] Knowledge synchronization workflow in temporal-workflows/internal/workflows/knowledge_sync_workflow.go
+
+## Phase 3.4: Integration & Middleware
+- [ ] T053 PostgreSQL connection and migration setup for all services
+- [ ] T054 Redis cache integration for session storage and API responses
+- [ ] T055 Temporal workflow orchestration setup for inter-service communication and long-running operations
+- [ ] T056 OAuth 2.0 authentication middleware with JWT tokens
+- [ ] T057 RBAC authorization middleware with workspace isolation
+- [ ] T058 Request/response logging with audit trails
+- [ ] T059 CORS and security headers (OWASP compliance)
+- [ ] T060 Rate limiting and DDoS protection middleware
+- [ ] T061 Database indexing strategy for multi-tenant queries
+- [ ] T062 Background job processing for code generation using Temporal workflows
+
+## Phase 3.5: Quality Assurance & Polish
+- [ ] T063 [P] Unit tests for workspace validation logic in services/repository/tests/unit/workspace_validation_test.go
+- [ ] T064 [P] Unit tests for repository template logic in services/repository/tests/unit/template_validation_test.go
+- [ ] T065 [P] Unit tests for schema validation logic in services/api-catalog/tests/unit/schema_validation_test.go
+- [ ] T066 [P] Unit tests for knowledge page content logic in services/knowledge/tests/unit/page_validation_test.go
+- [ ] T067 [P] Load testing for 500 concurrent users per workspace
+- [ ] T068 [P] End-to-end tests with Playwright for critical user journeys
+- [ ] T069 [P] Accessibility testing (WCAG 2.1 AA compliance) for frontend
+- [ ] T070 [P] API documentation generation from protobuf definitions
+- [ ] T071 [P] Security vulnerability scanning with high-severity remediation
+- [ ] T072 Final performance optimization and monitoring dashboard setup
+- [ ] T073 Code quality review and technical debt elimination
+- [ ] T074 Production deployment configuration and health checks
+
+## Dependencies
+- **Setup Phase**: T001-T010 (all setup) before any other phases
+- **TDD Gate**: T011-T028 (all tests) before T029-T074 (implementation) - CONSTITUTIONAL REQUIREMENT
+- **Models before Services**: T029-T034 before T035-T040
+- **Services before APIs**: T035-T040 before T041-T044
+- **Core before Integration**: T029-T052 before T053-T062
+- **Implementation before QA**: T029-T062 before T063-T074
+
+## Parallel Execution Examples
+
+### Phase 3.2 - Contract Tests (Launch together after setup)
+```bash
+# All contract tests can run in parallel (different files)
+Task: "Contract test WorkspaceService.CreateWorkspace in services/repository/tests/contract/workspace_test.go"
+Task: "Contract test RepositoryService.CreateRepository in services/repository/tests/contract/repository_test.go" 
+Task: "Contract test APICatalogService.CreateSchema in services/api-catalog/tests/contract/schema_test.go"
+Task: "Contract test KnowledgeService.CreateKnowledgeSpace in services/knowledge/tests/contract/space_test.go"
+```
+
+### Phase 3.3 - Data Models (Launch together after tests fail)
+```bash
+# All models can be created in parallel (different services/files)
+Task: "User model with auth fields in services/repository/internal/domain/user.go"
+Task: "Workspace model with settings in services/repository/internal/domain/workspace.go"
+Task: "APISchema model with versioning in services/api-catalog/internal/domain/schema.go"
+Task: "KnowledgeSpace model with hierarchy in services/knowledge/internal/domain/space.go"
+```
+
+### Phase 3.5 - Unit Tests (Launch together for final validation)
+```bash
+# Unit tests can run in parallel (different services and test files)
+Task: "Unit tests for workspace validation logic in services/repository/tests/unit/workspace_validation_test.go"
+Task: "Unit tests for schema validation logic in services/api-catalog/tests/unit/schema_validation_test.go"
+Task: "Load testing for 500 concurrent users per workspace"
+Task: "Security vulnerability scanning with high-severity remediation"
+```
+
+## Validation Checklist
+*GATE: Verify completeness before execution*
+
+- [✅] All 7 protobuf contracts have corresponding test tasks (T011-T018)
+- [✅] All 5 core entities have model creation tasks (T029-T034)
+- [✅] All 5 quickstart scenarios have integration tests (T019-T023)
+- [✅] All tests come before implementation (T011-T028 before T029+)
+- [✅] Parallel tasks are truly independent (different files/services)
+- [✅] Each task specifies exact file path
+- [✅] Constitutional requirements embedded (TDD, performance, security, quality gates)
+- [✅] Multi-service architecture properly handled (3 Go services + frontend + CMS)
+
+## Notes
+- **CONSTITUTIONAL**: Tests must fail before implementing (TDD mandatory)
+- **CONSTITUTIONAL**: 90% business logic coverage, 80% overall coverage required
+- **CONSTITUTIONAL**: <200ms p95 API responses, <100ms auth, <30s code generation
+- **CONSTITUTIONAL**: Security scanning must pass without high-severity vulnerabilities
+- **Multi-tenant**: All database queries must include workspace context for isolation
+- **Performance**: Redis caching for frequently accessed data, proper PostgreSQL indexing
+- **Security**: OAuth 2.0 + JWT tokens, RBAC with workspace-level permissions, audit logging
+- Commit after each task completion with descriptive messages
+- Services communicate via gRPC with protobuf definitions
+- Frontend uses NextJS App Router with server-side rendering where beneficial

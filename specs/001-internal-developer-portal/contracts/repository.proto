@@ -1,0 +1,313 @@
+syntax = "proto3";
+
+package idp.repository.v1;
+
+option go_package = "github.com/idp/proto/repository/v1;repositoryv1";
+
+import "common.proto";
+import "pagination.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/any.proto";
+
+// Repository Management Service
+service RepositoryService {
+  // Create repository from template
+  rpc CreateRepository(CreateRepositoryRequest) returns (CreateRepositoryResponse);
+  
+  // Get repository by ID
+  rpc GetRepository(GetRepositoryRequest) returns (GetRepositoryResponse);
+  
+  // List repositories in workspace
+  rpc ListRepositories(ListRepositoriesRequest) returns (ListRepositoriesResponse);
+  
+  // Update repository
+  rpc UpdateRepository(UpdateRepositoryRequest) returns (UpdateRepositoryResponse);
+  
+  // Delete repository
+  rpc DeleteRepository(DeleteRepositoryRequest) returns (DeleteRepositoryResponse);
+  
+  // Code generation
+  rpc GenerateCode(GenerateCodeRequest) returns (GenerateCodeResponse);
+  rpc GetGenerationStatus(GetGenerationStatusRequest) returns (GetGenerationStatusResponse);
+  
+  // Template management
+  rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse);
+  rpc GetTemplate(GetTemplateRequest) returns (GetTemplateResponse);
+  
+  // Dependencies
+  rpc AddDependency(AddDependencyRequest) returns (AddDependencyResponse);
+  rpc RemoveDependency(RemoveDependencyRequest) returns (RemoveDependencyResponse);
+  rpc ListDependencies(ListDependenciesRequest) returns (ListDependenciesResponse);
+}
+
+// Repository entity
+message Repository {
+  idp.common.v1.EntityMetadata metadata = 1;
+  idp.common.v1.WorkspaceRef workspace = 2;
+  string name = 3;
+  string slug = 4;
+  string description = 5;
+  string git_url = 6;
+  idp.common.v1.Visibility visibility = 7;
+  RepositoryType type = 8;
+  
+  // Template configuration
+  TemplateConfig template_config = 9;
+  repeated RepositoryVariable variables = 10;
+  
+  // Generation status
+  GenerationStatus generation_status = 11;
+  google.protobuf.Timestamp last_generated_at = 12;
+  
+  // Relations
+  repeated RepositoryRef dependencies = 13;
+  repeated RepositoryRef dependents = 14;
+  RepositoryStats stats = 15;
+}
+
+enum RepositoryType {
+  REPOSITORY_TYPE_UNSPECIFIED = 0;
+  REPOSITORY_TYPE_SERVICE = 1;
+  REPOSITORY_TYPE_LIBRARY = 2;
+  REPOSITORY_TYPE_FRONTEND = 3;
+  REPOSITORY_TYPE_MOBILE = 4;
+  REPOSITORY_TYPE_DOCUMENTATION = 5;
+}
+
+message RepositoryRef {
+  string id = 1;
+  string name = 2;
+  string slug = 3;
+}
+
+// Template configuration
+message TemplateConfig {
+  string base_template = 1;
+  string language = 2;
+  string framework = 3;
+  map<string, google.protobuf.Any> customizations = 4;
+  TemplateHooks hooks = 5;
+}
+
+message TemplateHooks {
+  repeated string pre_generation = 1;
+  repeated string post_generation = 2;
+}
+
+// Repository variable
+message RepositoryVariable {
+  string key = 1;
+  string value = 2;
+  VariableType type = 3;
+  bool required = 4;
+  string description = 5;
+  repeated idp.common.v1.ValidationRule validation_rules = 6;
+  VariableOptions options = 7;
+}
+
+enum VariableType {
+  VARIABLE_TYPE_UNSPECIFIED = 0;
+  VARIABLE_TYPE_STRING = 1;
+  VARIABLE_TYPE_NUMBER = 2;
+  VARIABLE_TYPE_BOOLEAN = 3;
+  VARIABLE_TYPE_SELECT = 4;
+  VARIABLE_TYPE_MULTISELECT = 5;
+}
+
+message VariableOptions {
+  repeated VariableOption options = 1;
+  string default_value = 2;
+  string placeholder = 3;
+}
+
+message VariableOption {
+  string value = 1;
+  string label = 2;
+  string description = 3;
+}
+
+// Generation status
+enum GenerationStatus {
+  GENERATION_STATUS_UNSPECIFIED = 0;
+  GENERATION_STATUS_PENDING = 1;
+  GENERATION_STATUS_GENERATING = 2;
+  GENERATION_STATUS_COMPLETED = 3;
+  GENERATION_STATUS_FAILED = 4;
+}
+
+// Repository statistics
+message RepositoryStats {
+  int32 file_count = 1;
+  int64 size_bytes = 2;
+  int32 commit_count = 3;
+  google.protobuf.Timestamp last_commit_at = 4;
+  int32 dependency_count = 5;
+  int32 dependent_count = 6;
+}
+
+// Template definition
+message Template {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string language = 4;
+  string framework = 5;
+  RepositoryType type = 6;
+  repeated RepositoryVariable variables = 7;
+  TemplateMetadata metadata = 8;
+  repeated string tags = 9;
+}
+
+message TemplateMetadata {
+  string version = 1;
+  string author = 2;
+  string license = 3;
+  string documentation_url = 4;
+  string source_url = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+// Request/Response messages
+
+message CreateRepositoryRequest {
+  string workspace_id = 1;
+  string name = 2;
+  string slug = 3;
+  string description = 4;
+  string template_id = 5;
+  idp.common.v1.Visibility visibility = 6;
+  repeated RepositoryVariable variables = 7;
+  bool generate_immediately = 8;
+}
+
+message CreateRepositoryResponse {
+  idp.common.v1.Response response = 1;
+  Repository repository = 2;
+}
+
+message GetRepositoryRequest {
+  string id = 1;
+}
+
+message GetRepositoryResponse {
+  idp.common.v1.Response response = 1;
+  Repository repository = 2;
+}
+
+message ListRepositoriesRequest {
+  string workspace_id = 1;
+  idp.common.v1.PaginationRequest pagination = 2;
+  repeated idp.common.v1.Filter filters = 3;
+  repeated idp.common.v1.Sort sort = 4;
+}
+
+message ListRepositoriesResponse {
+  idp.common.v1.Response response = 1;
+  repeated Repository repositories = 2;
+  idp.common.v1.PaginationResponse pagination = 3;
+}
+
+message UpdateRepositoryRequest {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  idp.common.v1.Visibility visibility = 4;
+  repeated RepositoryVariable variables = 5;
+}
+
+message UpdateRepositoryResponse {
+  idp.common.v1.Response response = 1;
+  Repository repository = 2;
+}
+
+message DeleteRepositoryRequest {
+  string id = 1;
+}
+
+message DeleteRepositoryResponse {
+  idp.common.v1.Response response = 1;
+}
+
+// Code generation
+message GenerateCodeRequest {
+  string repository_id = 1;
+  bool force_regenerate = 2;
+}
+
+message GenerateCodeResponse {
+  idp.common.v1.Response response = 1;
+  string job_id = 2;
+  GenerationStatus status = 3;
+}
+
+message GetGenerationStatusRequest {
+  string repository_id = 1;
+  string job_id = 2;
+}
+
+message GetGenerationStatusResponse {
+  idp.common.v1.Response response = 1;
+  GenerationStatus status = 2;
+  string progress = 3;
+  repeated string logs = 4;
+  string error_message = 5;
+}
+
+// Template management
+message ListTemplatesRequest {
+  idp.common.v1.PaginationRequest pagination = 1;
+  repeated idp.common.v1.Filter filters = 2;
+  repeated idp.common.v1.Sort sort = 3;
+}
+
+message ListTemplatesResponse {
+  idp.common.v1.Response response = 1;
+  repeated Template templates = 2;
+  idp.common.v1.PaginationResponse pagination = 3;
+}
+
+message GetTemplateRequest {
+  string id = 1;
+}
+
+message GetTemplateResponse {
+  idp.common.v1.Response response = 1;
+  Template template = 2;
+}
+
+// Dependencies
+message AddDependencyRequest {
+  string repository_id = 1;
+  string dependency_id = 2;
+  string relationship_type = 3; // "depends_on", "implements", "extends"
+}
+
+message AddDependencyResponse {
+  idp.common.v1.Response response = 1;
+}
+
+message RemoveDependencyRequest {
+  string repository_id = 1;
+  string dependency_id = 2;
+}
+
+message RemoveDependencyResponse {
+  idp.common.v1.Response response = 1;
+}
+
+message ListDependenciesRequest {
+  string repository_id = 1;
+  string direction = 2; // "dependencies", "dependents", "both"
+}
+
+message ListDependenciesResponse {
+  idp.common.v1.Response response = 1;
+  repeated RepositoryDependency dependencies = 2;
+}
+
+message RepositoryDependency {
+  Repository repository = 1;
+  string relationship_type = 2;
+  google.protobuf.Timestamp created_at = 3;
+}

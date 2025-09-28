@@ -1,0 +1,367 @@
+syntax = "proto3";
+
+package idp.knowledge.v1;
+
+option go_package = "github.com/idp/proto/knowledge/v1;knowledgev1";
+
+import "common.proto";
+import "pagination.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/any.proto";
+
+// Knowledge Management Service
+service KnowledgeService {
+  // Knowledge Space management
+  rpc CreateKnowledgeSpace(CreateKnowledgeSpaceRequest) returns (CreateKnowledgeSpaceResponse);
+  rpc GetKnowledgeSpace(GetKnowledgeSpaceRequest) returns (GetKnowledgeSpaceResponse);
+  rpc ListKnowledgeSpaces(ListKnowledgeSpacesRequest) returns (ListKnowledgeSpacesResponse);
+  rpc UpdateKnowledgeSpace(UpdateKnowledgeSpaceRequest) returns (UpdateKnowledgeSpaceResponse);
+  rpc DeleteKnowledgeSpace(DeleteKnowledgeSpaceRequest) returns (DeleteKnowledgeSpaceResponse);
+  
+  // Page management
+  rpc CreatePage(CreatePageRequest) returns (CreatePageResponse);
+  rpc GetPage(GetPageRequest) returns (GetPageResponse);
+  rpc ListPages(ListPagesRequest) returns (ListPagesResponse);
+  rpc UpdatePage(UpdatePageRequest) returns (UpdatePageResponse);
+  rpc DeletePage(DeletePageRequest) returns (DeletePageResponse);
+  
+  // Content search
+  rpc SearchContent(SearchContentRequest) returns (SearchContentResponse);
+  
+  // Comments
+  rpc AddComment(AddCommentRequest) returns (AddCommentResponse);
+  rpc ListComments(ListCommentsRequest) returns (ListCommentsResponse);
+  rpc UpdateComment(UpdateCommentRequest) returns (UpdateCommentResponse);
+  rpc DeleteComment(DeleteCommentRequest) returns (DeleteCommentResponse);
+}
+
+// Knowledge Space entity
+message KnowledgeSpace {
+  idp.common.v1.EntityMetadata metadata = 1;
+  idp.common.v1.WorkspaceRef workspace = 2;
+  
+  string name = 3;
+  string slug = 4;
+  string description = 5;
+  string icon = 6;
+  string color = 7;
+  
+  // Organization
+  string parent_id = 8;
+  int32 sort_order = 9;
+  
+  // Access control
+  idp.common.v1.Visibility visibility = 10;
+  AccessLevel access_level = 11;
+  
+  // Relations
+  KnowledgeSpace parent = 12;
+  repeated KnowledgeSpace children = 13;
+  repeated KnowledgePage pages = 14;
+  repeated KnowledgeSpacePermission permissions = 15;
+  KnowledgeSpaceStats stats = 16;
+}
+
+enum AccessLevel {
+  ACCESS_LEVEL_UNSPECIFIED = 0;
+  ACCESS_LEVEL_READ = 1;
+  ACCESS_LEVEL_COMMENT = 2;
+  ACCESS_LEVEL_EDIT = 3;
+  ACCESS_LEVEL_ADMIN = 4;
+}
+
+// Knowledge Page entity
+message KnowledgePage {
+  idp.common.v1.EntityMetadata metadata = 1;
+  string knowledge_space_id = 2;
+  
+  string title = 3;
+  string slug = 4;
+  google.protobuf.Any content = 5; // Rich text content
+  ContentType content_type = 6;
+  
+  // Organization
+  string parent_id = 7;
+  int32 sort_order = 8;
+  
+  // Metadata
+  repeated string tags = 9;
+  idp.common.v1.UserRef author = 10;
+  idp.common.v1.UserRef last_edited_by = 11;
+  int32 version = 12;
+  
+  // Publishing
+  PageStatus status = 13;
+  google.protobuf.Timestamp published_at = 14;
+  
+  // Relations
+  KnowledgePage parent = 15;
+  repeated KnowledgePage children = 16;
+  repeated PageComment comments = 17;
+  repeated PageAttachment attachments = 18;
+}
+
+enum ContentType {
+  CONTENT_TYPE_UNSPECIFIED = 0;
+  CONTENT_TYPE_MARKDOWN = 1;
+  CONTENT_TYPE_RICH_TEXT = 2;
+  CONTENT_TYPE_CODE = 3;
+  CONTENT_TYPE_DIAGRAM = 4;
+}
+
+enum PageStatus {
+  PAGE_STATUS_UNSPECIFIED = 0;
+  PAGE_STATUS_DRAFT = 1;
+  PAGE_STATUS_REVIEW = 2;
+  PAGE_STATUS_PUBLISHED = 3;
+  PAGE_STATUS_ARCHIVED = 4;
+}
+
+// Permission management
+message KnowledgeSpacePermission {
+  string knowledge_space_id = 1;
+  string user_id = 2;
+  string role = 3; // Optional, for role-based permissions
+  AccessLevel permission_type = 4;
+  google.protobuf.Timestamp granted_at = 5;
+  idp.common.v1.UserRef granted_by = 6;
+}
+
+// Page comment
+message PageComment {
+  idp.common.v1.EntityMetadata metadata = 1;
+  string page_id = 2;
+  idp.common.v1.UserRef author = 3;
+  
+  string content = 4;
+  string parent_id = 5; // For threaded comments
+  
+  // Status
+  CommentStatus status = 6;
+  bool resolved = 7;
+  idp.common.v1.UserRef resolved_by = 8;
+  google.protobuf.Timestamp resolved_at = 9;
+}
+
+enum CommentStatus {
+  COMMENT_STATUS_UNSPECIFIED = 0;
+  COMMENT_STATUS_ACTIVE = 1;
+  COMMENT_STATUS_DELETED = 2;
+  COMMENT_STATUS_HIDDEN = 3;
+}
+
+// Page attachment
+message PageAttachment {
+  string id = 1;
+  string page_id = 2;
+  string filename = 3;
+  string content_type = 4;
+  int64 size_bytes = 5;
+  string url = 6;
+  idp.common.v1.UserRef uploaded_by = 7;
+  google.protobuf.Timestamp uploaded_at = 8;
+}
+
+// Statistics
+message KnowledgeSpaceStats {
+  int32 page_count = 1;
+  int32 child_space_count = 2;
+  google.protobuf.Timestamp last_updated = 3;
+  int32 total_views = 4;
+  int32 total_comments = 5;
+}
+
+// Request/Response messages
+
+message CreateKnowledgeSpaceRequest {
+  string workspace_id = 1;
+  string parent_id = 2; // Optional
+  string name = 3;
+  string slug = 4;
+  string description = 5;
+  string icon = 6;
+  string color = 7;
+  idp.common.v1.Visibility visibility = 8;
+  AccessLevel access_level = 9;
+}
+
+message CreateKnowledgeSpaceResponse {
+  idp.common.v1.Response response = 1;
+  KnowledgeSpace knowledge_space = 2;
+}
+
+message GetKnowledgeSpaceRequest {
+  string id = 1;
+}
+
+message GetKnowledgeSpaceResponse {
+  idp.common.v1.Response response = 1;
+  KnowledgeSpace knowledge_space = 2;
+}
+
+message ListKnowledgeSpacesRequest {
+  string workspace_id = 1;
+  string parent_id = 2; // Optional filter
+  idp.common.v1.PaginationRequest pagination = 3;
+  repeated idp.common.v1.Filter filters = 4;
+  repeated idp.common.v1.Sort sort = 5;
+}
+
+message ListKnowledgeSpacesResponse {
+  idp.common.v1.Response response = 1;
+  repeated KnowledgeSpace knowledge_spaces = 2;
+  idp.common.v1.PaginationResponse pagination = 3;
+}
+
+message UpdateKnowledgeSpaceRequest {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string icon = 4;
+  string color = 5;
+  idp.common.v1.Visibility visibility = 6;
+  AccessLevel access_level = 7;
+}
+
+message UpdateKnowledgeSpaceResponse {
+  idp.common.v1.Response response = 1;
+  KnowledgeSpace knowledge_space = 2;
+}
+
+message DeleteKnowledgeSpaceRequest {
+  string id = 1;
+}
+
+message DeleteKnowledgeSpaceResponse {
+  idp.common.v1.Response response = 1;
+}
+
+// Page management
+message CreatePageRequest {
+  string knowledge_space_id = 1;
+  string parent_id = 2; // Optional
+  string title = 3;
+  string slug = 4;
+  google.protobuf.Any content = 5;
+  ContentType content_type = 6;
+  repeated string tags = 7;
+  PageStatus status = 8;
+}
+
+message CreatePageResponse {
+  idp.common.v1.Response response = 1;
+  KnowledgePage page = 2;
+}
+
+message GetPageRequest {
+  string id = 1;
+}
+
+message GetPageResponse {
+  idp.common.v1.Response response = 1;
+  KnowledgePage page = 2;
+}
+
+message ListPagesRequest {
+  string knowledge_space_id = 1;
+  string parent_id = 2; // Optional filter
+  idp.common.v1.PaginationRequest pagination = 3;
+  repeated idp.common.v1.Filter filters = 4;
+  repeated idp.common.v1.Sort sort = 5;
+}
+
+message ListPagesResponse {
+  idp.common.v1.Response response = 1;
+  repeated KnowledgePage pages = 2;
+  idp.common.v1.PaginationResponse pagination = 3;
+}
+
+message UpdatePageRequest {
+  string id = 1;
+  string title = 2;
+  google.protobuf.Any content = 3;
+  repeated string tags = 4;
+  PageStatus status = 5;
+}
+
+message UpdatePageResponse {
+  idp.common.v1.Response response = 1;
+  KnowledgePage page = 2;
+}
+
+message DeletePageRequest {
+  string id = 1;
+}
+
+message DeletePageResponse {
+  idp.common.v1.Response response = 1;
+}
+
+// Search
+message SearchContentRequest {
+  string workspace_id = 1;
+  string query = 2;
+  repeated string knowledge_space_ids = 3; // Optional filter
+  repeated ContentType content_types = 4; // Optional filter
+  repeated string tags = 5; // Optional filter
+  idp.common.v1.PaginationRequest pagination = 6;
+}
+
+message SearchContentResponse {
+  idp.common.v1.Response response = 1;
+  repeated SearchResult results = 2;
+  idp.common.v1.PaginationResponse pagination = 3;
+}
+
+message SearchResult {
+  string type = 1; // "knowledge_space", "page"
+  string id = 2;
+  string title = 3;
+  string snippet = 4;
+  float relevance_score = 5;
+  repeated string highlights = 6;
+  google.protobuf.Timestamp last_updated = 7;
+}
+
+// Comments
+message AddCommentRequest {
+  string page_id = 1;
+  string parent_id = 2; // Optional for threaded comments
+  string content = 3;
+}
+
+message AddCommentResponse {
+  idp.common.v1.Response response = 1;
+  PageComment comment = 2;
+}
+
+message ListCommentsRequest {
+  string page_id = 1;
+  idp.common.v1.PaginationRequest pagination = 2;
+  bool include_resolved = 3;
+}
+
+message ListCommentsResponse {
+  idp.common.v1.Response response = 1;
+  repeated PageComment comments = 2;
+  idp.common.v1.PaginationResponse pagination = 3;
+}
+
+message UpdateCommentRequest {
+  string id = 1;
+  string content = 2;
+  bool resolved = 3;
+}
+
+message UpdateCommentResponse {
+  idp.common.v1.Response response = 1;
+  PageComment comment = 2;
+}
+
+message DeleteCommentRequest {
+  string id = 1;
+}
+
+message DeleteCommentResponse {
+  idp.common.v1.Response response = 1;
+}

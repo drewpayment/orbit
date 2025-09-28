@@ -89,7 +89,7 @@ When creating this spec from a user prompt:
 
 ### Content Quality
 - [ ] No implementation details (languages, frameworks, APIs)
-- [ ] Focused on user value and business needs
+- [ ] Focused on user value and business needs  
 - [ ] Written for non-technical stakeholders
 - [ ] All mandatory sections completed
 
@@ -99,6 +99,12 @@ When creating this spec from a user prompt:
 - [ ] Success criteria are measurable
 - [ ] Scope is clearly bounded
 - [ ] Dependencies and assumptions identified
+
+### Constitutional Alignment
+- [ ] Performance requirements specified (response times, load capacity)
+- [ ] User experience consistency requirements defined
+- [ ] Security and compliance requirements documented
+- [ ] Quality standards and acceptance criteria established
 
 ---
 

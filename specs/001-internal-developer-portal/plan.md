@@ -1,8 +1,11 @@
 
-# Implementation Plan: [FEATURE]
+# Implementation Plan: Internal Developer Portal (IDP)
 
-**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
-**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
+**Branch**: `001-internal-developer-portal/`
+
+**Spec**: [spec.md](./spec.md)                     
+
+**Input**: Feature specification from `/specs/001-internal-developer-portal/spec.md`
 
 ## Execution Flow (/plan command scope)
 ```
@@ -31,51 +34,51 @@
 - Phase 3-4: Implementation execution (manual or via tools)
 
 ## Summary
-[Extract from feature spec: primary requirement + technical approach from research]
+Internal Developer Portal (IDP) is a multi-tenant SaaS platform that serves as a centralized hub for developer productivity, infrastructure management, and service collaboration. The platform enables teams to create repositories from templates, manage API schemas with automatic code generation, and maintain collaborative documentation spaces. Core capabilities include Git integration (GitHub/GitLab), OAuth authentication, role-based access control, and real-time collaborative editing. Performance requirements include 200ms p95 API responses, 30-second code generation, and support for 500 concurrent users per workspace.
 
 ## Technical Context
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
-**Project Type**: [single/web/mobile - determines source structure]  
-**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
-**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
-**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
+**Language/Version**: Go 1.21+ (backend services), TypeScript/Node.js 18+ (frontend, CMS), Python 3.11+ (optional tooling)  
+**Primary Dependencies**: NextJS 14 with PayloadCMS integration, PostgreSQL, Redis, Temporal, Docker, Kubernetes  
+**Storage**: PostgreSQL 15+ (primary), Redis (cache), MinIO/S3 (object storage), Git repositories  
+**Testing**: Go testing, Jest/Vitest (frontend), Playwright (e2e), Artillery (load testing)  
+**Target Platform**: Linux containers, Kubernetes, Docker Compose (development)
+**Project Type**: web - Multi-service web application with frontend and multiple backend services  
+**Performance Goals**: 200ms p95 API responses, 30s code generation, 1s search results, 500 concurrent users per workspace  
+**Constraints**: <200ms p95 API responses, <100ms auth operations, <512MB memory per service, TLS 1.3 required  
+**Scale/Scope**: 500 concurrent users per workspace, 10,000 files per repository sync, multi-tenant architecture
 
 ## Constitution Check
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
 **Code Quality Standards**: 
-- [ ] Architecture follows established patterns and principles
-- [ ] Static analysis tools configured for chosen technology stack
-- [ ] Code review process defined with quality criteria
-- [ ] Documentation standards established
+- [x] Architecture follows established patterns and principles
+- [x] Static analysis tools configured for chosen technology stack
+- [x] Code review process defined with quality criteria
+- [x] Documentation standards established
 
 **Test-First Development**:
-- [ ] TDD approach planned with test framework selection
-- [ ] Test coverage targets defined (90% business logic, 80% overall)
-- [ ] Integration test strategy for all API endpoints planned
-- [ ] Test automation pipeline designed
+- [x] TDD approach planned with test framework selection
+- [x] Test coverage targets defined (90% business logic, 80% overall)
+- [x] Integration test strategy for all API endpoints planned
+- [x] Test automation pipeline designed
 
 **User Experience Consistency**:
-- [ ] UI/UX patterns defined and documented
-- [ ] Error handling and messaging standards established
-- [ ] Accessibility requirements (WCAG 2.1 AA) planned
-- [ ] User feedback collection mechanisms designed
+- [x] UI/UX patterns defined and documented
+- [x] Error handling and messaging standards established
+- [x] Accessibility requirements (WCAG 2.1 AA) planned
+- [x] User feedback collection mechanisms designed
 
 **Performance Requirements**:
-- [ ] Response time targets defined (200ms p95, 100ms auth)
-- [ ] Load testing strategy planned (10,000 concurrent users)
-- [ ] Caching strategy designed for frequently accessed data
-- [ ] Performance monitoring and alerting planned
+- [x] Response time targets defined (200ms p95, 100ms auth)
+- [x] Load testing strategy planned (10,000 concurrent users)
+- [x] Caching strategy designed for frequently accessed data
+- [x] Performance monitoring and alerting planned
 
 **Security & Compliance**:
-- [ ] Authentication and authorization architecture defined
-- [ ] Security headers and OWASP guidelines implementation planned
-- [ ] Audit logging requirements specified
-- [ ] Data protection compliance requirements addressed
+- [x] Authentication and authorization architecture defined
+- [x] Security headers and OWASP guidelines implementation planned
+- [x] Audit logging requirements specified
+- [x] Data protection compliance requirements addressed
 
 ## Project Structure
 
@@ -91,50 +94,77 @@ specs/[###-feature]/
 ```
 
 ### Source Code (repository root)
-<!--
-  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this feature. Delete unused options and expand the chosen structure with
-  real paths (e.g., apps/admin, packages/something). The delivered plan must
-  not include Option labels.
--->
 ```
-# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
-src/
-├── models/
-├── services/
-├── cli/
-└── lib/
-
-tests/
-├── contract/
-├── integration/
-└── unit/
-
-# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
-backend/
-├── src/
-│   ├── models/
-│   ├── services/
-│   └── api/
-└── tests/
-
+# NextJS Application with integrated 
 frontend/
 ├── src/
+│   ├── app/                 # App router pages
+│   │   ├── workspaces/
+│   │   ├── repositories/
+│   │   ├── api-catalog/
+│   │   ├── knowledge/
+│   │   └── admin/          # PayloadCMS admin interface
 │   ├── components/
-│   ├── pages/
-│   └── services/
+│   │   ├── ui/             # shadcn/ui components
+│   │   └── features/
+│   ├── lib/
+│   │   ├── temporal/       # Temporal client configuration
+│   │   └── payload/        # PayloadCMS configuration
+│   ├── collections/        # PayloadCMS collections
+│   ├── blocks/             # PayloadCMS blocks
+│   └── temporal/           # Temporal workflows and activities
 └── tests/
 
-# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
-api/
-└── [same as backend above]
+services/
+├── repository/              # Go Repository Service
+│   ├── cmd/server/
+│   ├── internal/
+│   │   ├── api/
+│   │   ├── domain/
+│   │   ├── service/
+│   │   └── temporal/       # Temporal workers and activities
+│   ├── pkg/
+│   └── tests/
+├── api-catalog/            # Go API Catalog Service
+│   ├── cmd/server/
+│   ├── internal/
+│   │   ├── codegen/
+│   │   ├── protobuf/
+│   │   ├── storage/
+│   │   └── temporal/       # Temporal workers and activities
+│   ├── pkg/
+│   └── tests/
+├── knowledge/              # Go Knowledge Service
+│   ├── cmd/server/
+│   ├── internal/
+│   │   ├── api/
+│   │   ├── domain/
+│   │   ├── service/
+│   │   └── temporal/       # Temporal workers and activities
+│   ├── pkg/
+│   └── tests/
+└── temporal-workflows/      # Temporal Workflow Service
+    ├── cmd/worker/
+    ├── internal/
+    │   ├── workflows/
+    │   ├── activities/
+    │   └── config/
+    ├── pkg/
+    └── tests/
 
-ios/ or android/
-└── [platform-specific structure: feature modules, UI flows, platform tests]
+proto/                      # Protobuf Definitions
+├── idp/
+│   ├── repository/v1/
+│   ├── catalog/v1/
+│   └── knowledge/v1/
+
+infrastructure/
+├── docker-compose.yml
+├── k8s/
+└── terraform/
 ```
 
-**Structure Decision**: [Document the selected structure and reference the real
-directories captured above]
+**Structure Decision**: Web application with multiple backend services (microservices architecture). Frontend uses NextJS with integrated PayloadCMS for content management and admin interface. Three core Go services handle repository, API catalog, and knowledge management functionality. Temporal orchestrates workflows and long-running operations across services. Protobuf definitions are centralized for cross-service communication.
 
 ## Phase 0: Outline & Research
 1. **Extract unknowns from Technical Context** above:
@@ -230,9 +260,9 @@ directories captured above]
 *This checklist is updated during execution flow*
 
 **Phase Status**:
-- [ ] Phase 0: Research complete (/plan command)
-- [ ] Phase 1: Design complete (/plan command)
-- [ ] Phase 2: Task planning complete (/plan command - describe approach only)
+- [x] Phase 0: Research complete (/plan command)
+- [x] Phase 1: Design complete (/plan command)
+- [ ] Phase 2: Task planning complete (/plan command - describe approach only) - READY
 - [ ] Phase 3: Tasks generated (/tasks command)
 - [ ] Phase 4: Implementation complete
 - [ ] Phase 5: Validation passed

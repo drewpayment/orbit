@@ -1,0 +1,230 @@
+syntax = "proto3";
+
+package idp.workspace.v1;
+
+option go_package = "github.com/idp/proto/workspace/v1;workspacev1";
+
+import "common.proto";
+import "pagination.proto";
+import "auth.proto";
+import "google/protobuf/timestamp.proto";
+
+// Workspace Management Service
+service WorkspaceService {
+  // Create a new workspace
+  rpc CreateWorkspace(CreateWorkspaceRequest) returns (CreateWorkspaceResponse);
+  
+  // Get workspace by ID
+  rpc GetWorkspace(GetWorkspaceRequest) returns (GetWorkspaceResponse);
+  
+  // List workspaces for current user
+  rpc ListWorkspaces(ListWorkspacesRequest) returns (ListWorkspacesResponse);
+  
+  // Update workspace
+  rpc UpdateWorkspace(UpdateWorkspaceRequest) returns (UpdateWorkspaceResponse);
+  
+  // Delete workspace
+  rpc DeleteWorkspace(DeleteWorkspaceRequest) returns (DeleteWorkspaceResponse);
+  
+  // Workspace Members
+  rpc AddMember(AddMemberRequest) returns (AddMemberResponse);
+  rpc UpdateMemberRole(UpdateMemberRoleRequest) returns (UpdateMemberRoleResponse);
+  rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse);
+  rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
+  
+  // Workspace Settings
+  rpc UpdateSettings(UpdateSettingsRequest) returns (UpdateSettingsResponse);
+  rpc GetSettings(GetSettingsRequest) returns (GetSettingsResponse);
+}
+
+// Workspace entity
+message Workspace {
+  idp.common.v1.EntityMetadata metadata = 1;
+  string name = 2;
+  string slug = 3;
+  string description = 4;
+  WorkspaceSettings settings = 5;
+  repeated WorkspaceMember members = 6;
+  WorkspaceStats stats = 7;
+}
+
+// Workspace settings
+message WorkspaceSettings {
+  idp.common.v1.Visibility default_visibility = 1;
+  bool require_approval_for_repos = 2;
+  bool enable_code_generation = 3;
+  repeated string allowed_template_types = 4;
+  IntegrationSettings integration_settings = 5;
+}
+
+// Integration settings
+message IntegrationSettings {
+  repeated GitProviderConfig git_providers = 1;
+  repeated CICDProviderConfig cicd_providers = 2;
+}
+
+message GitProviderConfig {
+  string provider = 1; // "github", "gitlab", "azure_devops"
+  string organization = 2;
+  map<string, string> config = 3;
+  bool enabled = 4;
+}
+
+message CICDProviderConfig {
+  string provider = 1; // "github_actions", "gitlab_ci", "azure_devops", "jenkins"
+  map<string, string> config = 2;
+  bool enabled = 3;
+}
+
+// Workspace member
+message WorkspaceMember {
+  string workspace_id = 1;
+  idp.common.v1.UserRef user = 2;
+  WorkspaceRole role = 3;
+  repeated Permission permissions = 4;
+  google.protobuf.Timestamp joined_at = 5;
+  idp.common.v1.UserRef invited_by = 6;
+}
+
+enum WorkspaceRole {
+  WORKSPACE_ROLE_UNSPECIFIED = 0;
+  WORKSPACE_ROLE_VIEWER = 1;
+  WORKSPACE_ROLE_MEMBER = 2;
+  WORKSPACE_ROLE_ADMIN = 3;
+  WORKSPACE_ROLE_OWNER = 4;
+}
+
+message Permission {
+  string resource = 1; // "repositories", "api_schemas", "knowledge_spaces", etc.
+  repeated string actions = 2; // "read", "write", "delete", "admin"
+}
+
+// Workspace statistics
+message WorkspaceStats {
+  int32 repository_count = 1;
+  int32 api_schema_count = 2;
+  int32 knowledge_space_count = 3;
+  int32 member_count = 4;
+  google.protobuf.Timestamp last_activity = 5;
+}
+
+// Request/Response messages
+
+message CreateWorkspaceRequest {
+  string name = 1;
+  string slug = 2;
+  string description = 3;
+  WorkspaceSettings settings = 4;
+}
+
+message CreateWorkspaceResponse {
+  idp.common.v1.Response response = 1;
+  Workspace workspace = 2;
+}
+
+message GetWorkspaceRequest {
+  string id = 1;
+}
+
+message GetWorkspaceResponse {
+  idp.common.v1.Response response = 1;
+  Workspace workspace = 2;
+}
+
+message ListWorkspacesRequest {
+  idp.common.v1.PaginationRequest pagination = 1;
+  repeated idp.common.v1.Filter filters = 2;
+  repeated idp.common.v1.Sort sort = 3;
+}
+
+message ListWorkspacesResponse {
+  idp.common.v1.Response response = 1;
+  repeated Workspace workspaces = 2;
+  idp.common.v1.PaginationResponse pagination = 3;
+}
+
+message UpdateWorkspaceRequest {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  WorkspaceSettings settings = 4;
+}
+
+message UpdateWorkspaceResponse {
+  idp.common.v1.Response response = 1;
+  Workspace workspace = 2;
+}
+
+message DeleteWorkspaceRequest {
+  string id = 1;
+}
+
+message DeleteWorkspaceResponse {
+  idp.common.v1.Response response = 1;
+}
+
+// Member management
+message AddMemberRequest {
+  string workspace_id = 1;
+  string user_email = 2;
+  WorkspaceRole role = 3;
+  repeated Permission permissions = 4;
+}
+
+message AddMemberResponse {
+  idp.common.v1.Response response = 1;
+  WorkspaceMember member = 2;
+}
+
+message UpdateMemberRoleRequest {
+  string workspace_id = 1;
+  string user_id = 2;
+  WorkspaceRole role = 3;
+  repeated Permission permissions = 4;
+}
+
+message UpdateMemberRoleResponse {
+  idp.common.v1.Response response = 1;
+  WorkspaceMember member = 2;
+}
+
+message RemoveMemberRequest {
+  string workspace_id = 1;
+  string user_id = 2;
+}
+
+message RemoveMemberResponse {
+  idp.common.v1.Response response = 1;
+}
+
+message ListMembersRequest {
+  string workspace_id = 1;
+  idp.common.v1.PaginationRequest pagination = 2;
+  repeated idp.common.v1.Filter filters = 3;
+}
+
+message ListMembersResponse {
+  idp.common.v1.Response response = 1;
+  repeated WorkspaceMember members = 2;
+  idp.common.v1.PaginationResponse pagination = 3;
+}
+
+// Settings management
+message UpdateSettingsRequest {
+  string workspace_id = 1;
+  WorkspaceSettings settings = 2;
+}
+
+message UpdateSettingsResponse {
+  idp.common.v1.Response response = 1;
+  WorkspaceSettings settings = 2;
+}
+
+message GetSettingsRequest {
+  string workspace_id = 1;
+}
+
+message GetSettingsResponse {
+  idp.common.v1.Response response = 1;
+  WorkspaceSettings settings = 2;
+}
