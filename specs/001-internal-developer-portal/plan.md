@@ -37,12 +37,12 @@
 Internal Developer Portal (IDP) is a multi-tenant SaaS platform that serves as a centralized hub for developer productivity, infrastructure management, and service collaboration. The platform enables teams to create repositories from templates, manage API schemas with automatic code generation, and maintain collaborative documentation spaces. Core capabilities include Git integration (GitHub/GitLab), OAuth authentication, role-based access control, and real-time collaborative editing. Performance requirements include 200ms p95 API responses, 30-second code generation, and support for 500 concurrent users per workspace.
 
 ## Technical Context
-**Language/Version**: Go 1.21+ (backend services), TypeScript/Node.js 18+ (frontend, CMS), Python 3.11+ (optional tooling)  
-**Primary Dependencies**: NextJS 14 with PayloadCMS integration, PostgreSQL, Redis, Temporal, Docker, Kubernetes  
-**Storage**: PostgreSQL 15+ (primary), Redis (cache), MinIO/S3 (object storage), Git repositories  
-**Testing**: Go testing, Jest/Vitest (frontend), Playwright (e2e), Artillery (load testing)  
+**Language/Version**: Go 1.21+ (backend services), TypeScript/Node.js 18+ (Payload frontend), Python 3.11+ (optional tooling)  
+**Primary Dependencies**: Payload 3.0 with NextJS 15 integration, PostgreSQL, Redis, Temporal, Docker, Kubernetes  
+**Storage**: PostgreSQL 15+ (primary), SQLite (Payload development), Redis (cache), MinIO/S3 (object storage), Git repositories  
+**Testing**: Go testing, Vitest (frontend), Playwright (e2e), Artillery (load testing)  
 **Target Platform**: Linux containers, Kubernetes, Docker Compose (development)
-**Project Type**: web - Multi-service web application with frontend and multiple backend services  
+**Project Type**: web - Multi-service web application with Payload CMS frontend and multiple backend services  
 **Performance Goals**: 200ms p95 API responses, 30s code generation, 1s search results, 500 concurrent users per workspace  
 **Constraints**: <200ms p95 API responses, <100ms auth operations, <512MB memory per service, TLS 1.3 required  
 **Scale/Scope**: 500 concurrent users per workspace, 10,000 files per repository sync, multi-tenant architecture
@@ -95,24 +95,24 @@ specs/[###-feature]/
 
 ### Source Code (repository root)
 ```
-# NextJS Application with integrated 
-frontend/
+# Payload 3.0 Application with integrated NextJS
+orbit-www/
 ├── src/
-│   ├── app/                 # App router pages
+│   ├── app/
+│   │   ├── (frontend)/     # Public frontend pages
+│   │   ├── (payload)/      # Payload admin interface
 │   │   ├── workspaces/
 │   │   ├── repositories/
 │   │   ├── api-catalog/
-│   │   ├── knowledge/
-│   │   └── admin/          # PayloadCMS admin interface
+│   │   └── knowledge/
 │   ├── components/
-│   │   ├── ui/             # shadcn/ui components
-│   │   └── features/
+│   │   ├── ui/             # UI components
+│   │   └── features/       # Feature-specific components
 │   ├── lib/
 │   │   ├── temporal/       # Temporal client configuration
 │   │   └── payload/        # PayloadCMS configuration
-│   ├── collections/        # PayloadCMS collections
-│   ├── blocks/             # PayloadCMS blocks
-│   └── temporal/           # Temporal workflows and activities
+│   ├── collections/        # PayloadCMS collections (Users, Media)
+│   └── payload.config.ts   # Payload configuration
 └── tests/
 
 services/

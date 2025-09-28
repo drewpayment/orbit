@@ -1,0 +1,36 @@
+# Dynamic config for Temporal development environment
+# See: https://docs.temporal.io/references/dynamic-configuration
+
+# History service configuration
+history.maxAutoResetPoints:
+  - value: 20
+    constraints: {}
+
+# Matching service configuration  
+matching.numTaskqueueWritePartitions:
+  - value: 1
+    constraints: {}
+
+matching.numTaskqueueReadPartitions:
+  - value: 1
+    constraints: {}
+
+# Frontend service configuration
+frontend.keepAliveMinTime:
+  - value: "10s"
+    constraints: {}
+
+# Worker configuration
+worker.taskProcessorCount:
+  - value: 10
+    constraints: {}
+
+# System limits
+system.enableActivityLocalDispatch:
+  - value: true
+    constraints: {}
+
+# Archival configuration (disabled for development)
+system.enableArchival:
+  - value: false
+    constraints: {}

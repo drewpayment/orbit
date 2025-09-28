@@ -4,35 +4,37 @@
 
 ### Frontend Framework Selection
 
-**Decision**: NextJS 14 with App Router  
+**Decision**: Payload 3.0 with integrated NextJS 15  
 **Rationale**: 
-- Strong ecosystem and community support for developer tooling
-- Built-in SSR/SSG capabilities for performance
-- Excellent TypeScript integration
-- API routes for backend integration
-- Large developer community and extensive documentation
+- Modern headless CMS with built-in admin interface and user management
+- Native TypeScript support with auto-generated types
+- Built-in authentication and role-based access control
+- Integrated NextJS 15 for optimal performance and developer experience
+- Local development with SQLite, production with PostgreSQL
+- Extensible collections system perfect for multi-tenant architecture
 
 **Alternatives Considered**: 
+- NextJS + separate PayloadCMS: More complex setup, additional service overhead
 - Remix: Good for full-stack apps but smaller ecosystem
 - SvelteKit: Excellent performance but less enterprise adoption
-- React with Vite: More configuration overhead, no built-in SSR
 
 ### Content Management System
 
-**Decision**: PayloadCMS integrated into NextJS frontend  
+**Decision**: Payload 3.0 as integrated application  
 **Rationale**:
-- TypeScript-native for better integration with frontend
-- Can be embedded directly into NextJS application
+- TypeScript-native with auto-generated types for all collections
+- Built-in authentication, user management, and file uploads
+- Integrated directly with NextJS 15 for optimal performance
 - Flexible schema definition matching our entity requirements
-- Built-in authentication and role-based access control
-- Extensible block system for technical documentation
-- Reduces operational complexity by having one less service
+- Built-in role-based access control and multi-tenancy support
+- Local development with SQLite, production scaling with PostgreSQL
+- Modern admin UI with extensible components
 
 **Alternatives Considered**:
+- Separate PayloadCMS service: More operational overhead and complexity
 - Strapi: Good but less TypeScript integration, requires separate service
 - Directus: SQL-based but more complex setup
-- Contentful: SaaS-only, less control over data
-- Separate PayloadCMS service: More operational overhead
+- Contentful: SaaS-only, less control over data and functionality
 
 ### Backend Services Language
 

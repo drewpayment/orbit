@@ -41,9 +41,9 @@ Orbit serves as the single source of truth for development teams, enabling them 
 
 ### Multi-Service Architecture
 ```
-Frontend (NextJS + PayloadCMS)
-├── User Interface & Admin Panel
+Frontend (Payload 3.0 + NextJS 15)
 ├── Content Management System
+├── User Interface & Public Pages  
 └── Temporal Workflow Management
 
 Backend Services (Go)
@@ -54,6 +54,7 @@ Backend Services (Go)
 
 Data Layer
 ├── PostgreSQL (Primary Database)
+├── SQLite (Payload Development)
 ├── Redis (Caching & Sessions)
 ├── MeiliSearch (Full-text Search)
 └── MinIO/S3 (Object Storage)
@@ -62,9 +63,9 @@ Data Layer
 ### Technology Stack
 
 **Frontend**
-- NextJS 14 with App Router for server-side rendering and optimal performance
-- PayloadCMS integration for content management and admin interfaces
+- Payload 3.0 with NextJS 15 for content management and server-side rendering
 - TypeScript throughout for type safety and developer experience
+- SQLite for development, PostgreSQL for production
 
 **Backend**
 - Go 1.21+ microservices for high performance and Kubernetes-native deployment
@@ -139,8 +140,8 @@ docker-compose up -d
 # Initialize the database
 make db-migrate
 
-# Start the frontend development server
-cd frontend && npm run dev
+# Start the Payload development server
+cd orbit-www && pnpm dev
 
 # Access the application
 open http://localhost:3000
@@ -189,7 +190,7 @@ open http://localhost:3000
 
 ### Project Structure
 ```
-frontend/           # NextJS application with PayloadCMS
+orbit-www/          # Payload 3.0 application with integrated NextJS
 services/           # Go microservices
   ├── repository/   # Repository management service
   ├── api-catalog/  # API schema catalog service

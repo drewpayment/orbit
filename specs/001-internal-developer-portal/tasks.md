@@ -22,16 +22,16 @@
 - Include exact file paths in descriptions
 
 ## Phase 3.1: Setup & Quality Gates
-- [ ] T001 Create project structure per implementation plan (frontend/, services/, temporal-workflows/, proto/, infrastructure/)
-- [ ] T002 Initialize Go modules for all four services (repository, api-catalog, knowledge, temporal-workflows)
-- [ ] T003 [P] Initialize NextJS 14 frontend with TypeScript, shadcn/ui components, and integrated PayloadCMS
-- [ ] T004 [P] Set up Temporal server and configure workflow workers for all services
-- [ ] T005 [P] Configure Go linting (golangci-lint), TypeScript ESLint, and Prettier
-- [ ] T006 [P] Set up Go testing framework with testify, Jest for frontend, and coverage reporting (90% business logic, 80% overall)
-- [ ] T007 [P] Configure performance monitoring tools (pprof for Go, Lighthouse CI for frontend)
-- [ ] T008 [P] Set up security scanning (gosec, npm audit, OWASP dependency check)
-- [ ] T009 [P] Configure Docker Compose for development environment with all services and Temporal
-- [ ] T010 [P] Set up protobuf code generation with Buf CLI for Go and TypeScript
+- [x] T001 Create project structure per implementation plan (orbit-www/, services/, temporal-workflows/, proto/, infrastructure/)
+- [x] T002 Initialize Go modules for all four services (repository, api-catalog, knowledge, temporal-workflows)
+- [x] T003 [P] Initialize Payload 3.0 frontend with NextJS, TypeScript, and integrated CMS in orbit-www/
+- [x] T004 [P] Set up Temporal server and configure workflow workers for all services
+- [x] T005 [P] Configure Go linting (golangci-lint), TypeScript ESLint, and Prettier
+- [x] T006 [P] Set up Go testing framework with testify, Jest for frontend, and coverage reporting (90% business logic, 80% overall)
+- [x] T007 [P] Configure performance monitoring tools (pprof for Go, Lighthouse CI for frontend)
+- [x] T008 [P] Set up security scanning (gosec, npm audit, OWASP dependency check)
+- [x] T009 [P] Configure Docker Compose for development environment with all services and Temporal
+- [x] T010 [P] Set up protobuf code generation with Buf CLI for Go and TypeScript
 
 ## Phase 3.2: Tests First (TDD) ⚠️ MUST COMPLETE BEFORE 3.3
 **CONSTITUTIONAL REQUIREMENT: Tests MUST be written first and MUST FAIL before implementation**
@@ -47,11 +47,11 @@
 - [ ] T018 [P] Contract test KnowledgeService.CreatePage in services/knowledge/tests/contract/page_test.go
 
 ### Integration Tests (User Scenarios)
-- [ ] T019 [P] Integration test Scenario 1: Creating service repository in frontend/tests/integration/repository-creation.test.ts
-- [ ] T020 [P] Integration test Scenario 2: Publishing API schema in frontend/tests/integration/api-publishing.test.ts
-- [ ] T021 [P] Integration test Scenario 3: Knowledge documentation in frontend/tests/integration/knowledge-docs.test.ts
-- [ ] T022 [P] Integration test Scenario 4: Dependency discovery in frontend/tests/integration/dependency-management.test.ts
-- [ ] T023 [P] Integration test Scenario 5: Multi-service generation in frontend/tests/integration/multi-service.test.ts
+- [ ] T019 [P] Integration test Scenario 1: Creating service repository in orbit-www/tests/int/repository-creation.test.ts
+- [ ] T020 [P] Integration test Scenario 2: Publishing API schema in orbit-www/tests/int/api-publishing.test.ts
+- [ ] T021 [P] Integration test Scenario 3: Knowledge documentation in orbit-www/tests/int/knowledge-docs.test.ts
+- [ ] T022 [P] Integration test Scenario 4: Dependency discovery in orbit-www/tests/int/dependency-management.test.ts
+- [ ] T023 [P] Integration test Scenario 5: Multi-service generation in orbit-www/tests/int/multi-service.test.ts
 
 ### Performance & Security Tests
 - [ ] T024 [P] Performance test workspace operations (<200ms p95) in services/repository/tests/performance/workspace_perf_test.go
@@ -86,11 +86,11 @@
 - [ ] T044 KnowledgeService gRPC server implementation in services/knowledge/internal/api/knowledge_server.go
 
 ### Frontend Components
-- [ ] T045 [P] Workspace management UI in frontend/src/components/features/workspace/WorkspaceManager.tsx
-- [ ] T046 [P] Repository creation wizard in frontend/src/components/features/repository/RepositoryWizard.tsx
-- [ ] T047 [P] API schema editor in frontend/src/components/features/api-catalog/SchemaEditor.tsx
-- [ ] T048 [P] Knowledge space navigator in frontend/src/components/features/knowledge/SpaceNavigator.tsx
-- [ ] T049 [P] Code generation monitor in frontend/src/components/features/repository/GenerationMonitor.tsx
+- [ ] T045 [P] Workspace management UI in orbit-www/src/components/features/workspace/WorkspaceManager.tsx
+- [ ] T046 [P] Repository creation wizard in orbit-www/src/components/features/repository/RepositoryWizard.tsx
+- [ ] T047 [P] API schema editor in orbit-www/src/components/features/api-catalog/SchemaEditor.tsx
+- [ ] T048 [P] Knowledge space navigator in orbit-www/src/components/features/knowledge/SpaceNavigator.tsx
+- [ ] T049 [P] Code generation monitor in orbit-www/src/components/features/repository/GenerationMonitor.tsx
 
 ### Temporal Workflows
 - [ ] T050 [P] Repository generation workflow in temporal-workflows/internal/workflows/repository_workflow.go

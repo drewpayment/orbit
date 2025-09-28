@@ -1,0 +1,314 @@
+syntax = "proto3";
+
+package idp.api_catalog.v1;
+
+option go_package = "github.com/drewpayment/orbit/proto/gen/go/idp/api_catalog/v1;api_catalogv1";
+
+import "common.proto";
+import "pagination.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/any.proto";
+
+// API Catalog Service
+service APICatalogService {
+  // Schema management
+  rpc CreateSchema(CreateSchemaRequest) returns (CreateSchemaResponse);
+  rpc GetSchema(GetSchemaRequest) returns (GetSchemaResponse);
+  rpc ListSchemas(ListSchemasRequest) returns (ListSchemasResponse);
+  rpc UpdateSchema(UpdateSchemaRequest) returns (UpdateSchemaResponse);
+  rpc DeleteSchema(DeleteSchemaRequest) returns (DeleteSchemaResponse);
+  
+  // Schema validation
+  rpc ValidateSchema(ValidateSchemaRequest) returns (ValidateSchemaResponse);
+  
+  // Consumer management
+  rpc RegisterConsumer(RegisterConsumerRequest) returns (RegisterConsumerResponse);
+  rpc ListConsumers(ListConsumersRequest) returns (ListConsumersResponse);
+  rpc RemoveConsumer(RemoveConsumerRequest) returns (RemoveConsumerResponse);
+  
+  // Discovery
+  rpc SearchSchemas(SearchSchemasRequest) returns (SearchSchemasResponse);
+  rpc GetSchemaDependencies(GetSchemaDependenciesRequest) returns (GetSchemaDependenciesResponse);
+}
+
+// API Schema entity
+message APISchema {
+  idp.common.v1.EntityMetadata metadata = 1;
+  idp.common.v1.WorkspaceRef workspace = 2;
+  idp.common.v1.RepositoryRef repository = 3; // Optional
+  
+  string name = 4;
+  string slug = 5;
+  string version = 6;
+  string description = 7;
+  
+  // Schema definition
+  SchemaType schema_type = 8;
+  google.protobuf.Any schema_content = 9; // JSON representation
+  string raw_content = 10; // Original schema content
+  
+  // Metadata
+  repeated string tags = 11;
+  ContactInfo contact_info = 12;
+  string license = 13;
+  
+  // Lifecycle
+  SchemaStatus status = 14;
+  google.protobuf.Timestamp published_at = 15;
+  google.protobuf.Timestamp deprecated_at = 16;
+  
+  // Relations
+  repeated APIEndpoint endpoints = 17;
+  repeated APIConsumer consumers = 18;
+  SchemaStats stats = 19;
+}
+
+enum SchemaType {
+  SCHEMA_TYPE_UNSPECIFIED = 0;
+  SCHEMA_TYPE_OPENAPI = 1;
+  SCHEMA_TYPE_GRAPHQL = 2;
+  SCHEMA_TYPE_PROTOBUF = 3;
+  SCHEMA_TYPE_AVRO = 4;
+  SCHEMA_TYPE_JSON_SCHEMA = 5;
+}
+
+enum SchemaStatus {
+  SCHEMA_STATUS_UNSPECIFIED = 0;
+  SCHEMA_STATUS_DRAFT = 1;
+  SCHEMA_STATUS_PUBLISHED = 2;
+  SCHEMA_STATUS_DEPRECATED = 3;
+}
+
+message ContactInfo {
+  string name = 1;
+  string email = 2;
+  string url = 3;
+}
+
+// API Endpoint
+message APIEndpoint {
+  string id = 1;
+  string schema_id = 2;
+  string method = 3;
+  string path = 4;
+  string summary = 5;
+  string description = 6;
+  repeated APIParameter parameters = 7;
+  APIRequestBody request_body = 8;
+  repeated APIResponse responses = 9;
+  repeated string tags = 10;
+}
+
+message APIParameter {
+  string name = 1;
+  ParameterLocation location = 2;
+  bool required = 3;
+  string type = 4;
+  string description = 5;
+  google.protobuf.Any example = 6;
+}
+
+enum ParameterLocation {
+  PARAMETER_LOCATION_UNSPECIFIED = 0;
+  PARAMETER_LOCATION_QUERY = 1;
+  PARAMETER_LOCATION_PATH = 2;
+  PARAMETER_LOCATION_HEADER = 3;
+  PARAMETER_LOCATION_COOKIE = 4;
+}
+
+message APIRequestBody {
+  string description = 1;
+  bool required = 2;
+  map<string, MediaType> content = 3;
+}
+
+message APIResponse {
+  string code = 1;
+  string description = 2;
+  map<string, MediaType> content = 3;
+  map<string, string> headers = 4;
+}
+
+message MediaType {
+  google.protobuf.Any schema = 1;
+  google.protobuf.Any example = 2;
+}
+
+// API Consumer
+message APIConsumer {
+  string id = 1;
+  string schema_id = 2;
+  idp.common.v1.RepositoryRef repository = 3; // Optional
+  ConsumerType consumer_type = 4;
+  string name = 5;
+  string contact_email = 6;
+  google.protobuf.Timestamp registered_at = 7;
+  idp.common.v1.UserRef registered_by = 8;
+}
+
+enum ConsumerType {
+  CONSUMER_TYPE_UNSPECIFIED = 0;
+  CONSUMER_TYPE_REPOSITORY = 1;
+  CONSUMER_TYPE_EXTERNAL = 2;
+}
+
+// Schema statistics
+message SchemaStats {
+  int32 endpoint_count = 1;
+  int32 consumer_count = 2;
+  google.protobuf.Timestamp last_updated = 3;
+  int32 version_count = 4;
+}
+
+// Request/Response messages
+
+message CreateSchemaRequest {
+  string workspace_id = 1;
+  string repository_id = 2; // Optional
+  string name = 3;
+  string slug = 4;
+  string version = 5;
+  string description = 6;
+  SchemaType schema_type = 7;
+  string raw_content = 8;
+  repeated string tags = 9;
+  ContactInfo contact_info = 10;
+  string license = 11;
+}
+
+message CreateSchemaResponse {
+  idp.common.v1.Response response = 1;
+  APISchema schema = 2;
+}
+
+message GetSchemaRequest {
+  string id = 1;
+  string version = 2; // Optional, gets latest if not specified
+}
+
+message GetSchemaResponse {
+  idp.common.v1.Response response = 1;
+  APISchema schema = 2;
+}
+
+message ListSchemasRequest {
+  string workspace_id = 1;
+  string repository_id = 2; // Optional filter
+  idp.common.v1.PaginationRequest pagination = 3;
+  repeated idp.common.v1.Filter filters = 4;
+  repeated idp.common.v1.Sort sort = 5;
+}
+
+message ListSchemasResponse {
+  idp.common.v1.Response response = 1;
+  repeated APISchema schemas = 2;
+  idp.common.v1.PaginationResponse pagination = 3;
+}
+
+message UpdateSchemaRequest {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string raw_content = 4;
+  repeated string tags = 5;
+  ContactInfo contact_info = 6;
+  string license = 7;
+  SchemaStatus status = 8;
+}
+
+message UpdateSchemaResponse {
+  idp.common.v1.Response response = 1;
+  APISchema schema = 2;
+}
+
+message DeleteSchemaRequest {
+  string id = 1;
+}
+
+message DeleteSchemaResponse {
+  idp.common.v1.Response response = 1;
+}
+
+// Schema validation
+message ValidateSchemaRequest {
+  SchemaType schema_type = 1;
+  string raw_content = 2;
+}
+
+message ValidateSchemaResponse {
+  idp.common.v1.Response response = 1;
+  bool is_valid = 2;
+  repeated ValidationError validation_errors = 3;
+}
+
+message ValidationError {
+  string path = 1;
+  string message = 2;
+  string error_code = 3;
+}
+
+// Consumer management
+message RegisterConsumerRequest {
+  string schema_id = 1;
+  string repository_id = 2; // Optional
+  ConsumerType consumer_type = 3;
+  string name = 4;
+  string contact_email = 5;
+}
+
+message RegisterConsumerResponse {
+  idp.common.v1.Response response = 1;
+  APIConsumer consumer = 2;
+}
+
+message ListConsumersRequest {
+  string schema_id = 1;
+  idp.common.v1.PaginationRequest pagination = 2;
+  repeated idp.common.v1.Filter filters = 3;
+}
+
+message ListConsumersResponse {
+  idp.common.v1.Response response = 1;
+  repeated APIConsumer consumers = 2;
+  idp.common.v1.PaginationResponse pagination = 3;
+}
+
+message RemoveConsumerRequest {
+  string schema_id = 1;
+  string consumer_id = 2;
+}
+
+message RemoveConsumerResponse {
+  idp.common.v1.Response response = 1;
+}
+
+// Discovery
+message SearchSchemasRequest {
+  string workspace_id = 1;
+  string query = 2;
+  repeated SchemaType schema_types = 3;
+  repeated string tags = 4;
+  idp.common.v1.PaginationRequest pagination = 5;
+}
+
+message SearchSchemasResponse {
+  idp.common.v1.Response response = 1;
+  repeated APISchema schemas = 2;
+  idp.common.v1.PaginationResponse pagination = 3;
+}
+
+message GetSchemaDependenciesRequest {
+  string schema_id = 1;
+  string direction = 2; // "dependencies", "dependents", "both"
+}
+
+message GetSchemaDependenciesResponse {
+  idp.common.v1.Response response = 1;
+  repeated SchemaDependency dependencies = 2;
+}
+
+message SchemaDependency {
+  APISchema schema = 1;
+  string relationship_type = 2; // "imports", "extends", "references"
+  google.protobuf.Timestamp created_at = 3;
+}

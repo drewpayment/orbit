@@ -1,0 +1,318 @@
+syntax = "proto3";
+
+package idp.temporal.v1;
+
+import "common.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+option go_package = "github.com/drewpayment/orbit/proto/gen/go/idp/temporal/v1;temporalv1";
+
+// Temporal Workflow Request/Response Messages
+
+// Repository Generation Workflow
+message RepositoryGenerationWorkflowRequest {
+  string request_id = 1;
+  string workspace_id = 2;
+  string user_id = 3;
+  string repository_name = 4;
+  string template_type = 5;
+  map<string, string> variables = 6;
+  RepositoryConfiguration config = 7;
+}
+
+message RepositoryConfiguration {
+  string language = 1;
+  string framework = 2;
+  repeated string features = 3;
+  GitConfiguration git_config = 4;
+  map<string, string> customizations = 5;
+}
+
+message GitConfiguration {
+  string provider = 1; // github, gitlab
+  string organization = 2;
+  bool private_repo = 3;
+  repeated string topics = 4;
+}
+
+message RepositoryGenerationWorkflowResponse {
+  string request_id = 1;
+  WorkflowStatus status = 2;
+  string repository_id = 3;
+  string git_url = 4;
+  repeated WorkflowStep steps = 5;
+  optional string error_message = 6;
+  google.protobuf.Timestamp completed_at = 7;
+}
+
+// Code Generation Workflow
+message CodeGenerationWorkflowRequest {
+  string request_id = 1;
+  string workspace_id = 2;
+  string user_id = 3;
+  string schema_id = 4;
+  repeated string target_languages = 5;
+  CodeGenerationOptions options = 6;
+}
+
+message CodeGenerationOptions {
+  bool include_tests = 1;
+  bool include_docs = 2;
+  string output_format = 3; // zip, git_branch, artifacts
+  map<string, string> language_configs = 4;
+}
+
+message CodeGenerationWorkflowResponse {
+  string request_id = 1;
+  WorkflowStatus status = 2;
+  repeated GeneratedArtifact artifacts = 3;
+  repeated WorkflowStep steps = 4;
+  optional string error_message = 5;
+  google.protobuf.Timestamp completed_at = 6;
+}
+
+message GeneratedArtifact {
+  string language = 1;
+  string artifact_type = 2; // client_library, server_stub, documentation
+  string download_url = 3;
+  string version = 4;
+  int64 size_bytes = 5;
+  string checksum = 6;
+}
+
+// Knowledge Synchronization Workflow
+message KnowledgeSyncWorkflowRequest {
+  string request_id = 1;
+  string workspace_id = 2;
+  string user_id = 3;
+  string knowledge_space_id = 4;
+  SyncOperation operation = 5;
+  KnowledgeSyncOptions options = 6;
+}
+
+enum SyncOperation {
+  SYNC_OPERATION_UNSPECIFIED = 0;
+  SYNC_OPERATION_FULL_SYNC = 1;
+  SYNC_OPERATION_INCREMENTAL_SYNC = 2;
+  SYNC_OPERATION_BACKUP = 3;
+  SYNC_OPERATION_RESTORE = 4;
+}
+
+message KnowledgeSyncOptions {
+  bool include_attachments = 1;
+  bool preserve_permissions = 2;
+  repeated string page_filters = 3;
+  string backup_location = 4;
+}
+
+message KnowledgeSyncWorkflowResponse {
+  string request_id = 1;
+  WorkflowStatus status = 2;
+  KnowledgeSyncResult sync_result = 3;
+  repeated WorkflowStep steps = 4;
+  optional string error_message = 5;
+  google.protobuf.Timestamp completed_at = 6;
+}
+
+message KnowledgeSyncResult {
+  int32 pages_processed = 1;
+  int32 pages_updated = 2;
+  int32 pages_created = 3;
+  int32 pages_deleted = 4;
+  int32 attachments_processed = 5;
+  int64 total_size_bytes = 6;
+}
+
+// Common Workflow Types
+enum WorkflowStatus {
+  WORKFLOW_STATUS_UNSPECIFIED = 0;
+  WORKFLOW_STATUS_PENDING = 1;
+  WORKFLOW_STATUS_RUNNING = 2;
+  WORKFLOW_STATUS_COMPLETED = 3;
+  WORKFLOW_STATUS_FAILED = 4;
+  WORKFLOW_STATUS_CANCELLED = 5;
+  WORKFLOW_STATUS_TIMED_OUT = 6;
+}
+
+message WorkflowStep {
+  string step_name = 1;
+  WorkflowStatus status = 2;
+  google.protobuf.Timestamp started_at = 3;
+  optional google.protobuf.Timestamp completed_at = 4;
+  optional string error_message = 5;
+  map<string, string> metadata = 6;
+}
+
+// Workflow Management Service
+service WorkflowService {
+  // Start repository generation workflow
+  rpc StartRepositoryGeneration(RepositoryGenerationWorkflowRequest) returns (WorkflowExecutionResponse);
+  
+  // Start code generation workflow
+  rpc StartCodeGeneration(CodeGenerationWorkflowRequest) returns (WorkflowExecutionResponse);
+  
+  // Start knowledge synchronization workflow
+  rpc StartKnowledgeSync(KnowledgeSyncWorkflowRequest) returns (WorkflowExecutionResponse);
+  
+  // Get workflow status
+  rpc GetWorkflowStatus(GetWorkflowStatusRequest) returns (GetWorkflowStatusResponse);
+  
+  // Cancel workflow
+  rpc CancelWorkflow(CancelWorkflowRequest) returns (CancelWorkflowResponse);
+  
+  // List workflows for workspace
+  rpc ListWorkflows(ListWorkflowsRequest) returns (ListWorkflowsResponse);
+}
+
+message WorkflowExecutionResponse {
+  string workflow_id = 1;
+  string run_id = 2;
+  WorkflowStatus status = 3;
+  google.protobuf.Timestamp started_at = 4;
+}
+
+message GetWorkflowStatusRequest {
+  string workflow_id = 1;
+  string run_id = 2;
+}
+
+message GetWorkflowStatusResponse {
+  string workflow_id = 1;
+  string run_id = 2;
+  WorkflowStatus status = 3;
+  google.protobuf.Timestamp started_at = 4;
+  optional google.protobuf.Timestamp completed_at = 5;
+  repeated WorkflowStep steps = 6;
+  optional string error_message = 7;
+}
+
+message CancelWorkflowRequest {
+  string workflow_id = 1;
+  string run_id = 2;
+  string reason = 3;
+}
+
+message CancelWorkflowResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ListWorkflowsRequest {
+  string workspace_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+  optional WorkflowStatus status_filter = 4;
+  optional google.protobuf.Timestamp start_time = 5;
+  optional google.protobuf.Timestamp end_time = 6;
+}
+
+message ListWorkflowsResponse {
+  repeated WorkflowExecution workflows = 1;
+  string next_page_token = 2;
+  int32 total_count = 3;
+}
+
+message WorkflowExecution {
+  string workflow_id = 1;
+  string run_id = 2;
+  string workflow_type = 3;
+  WorkflowStatus status = 4;
+  google.protobuf.Timestamp started_at = 5;
+  optional google.protobuf.Timestamp completed_at = 6;
+  google.protobuf.Duration duration = 7;
+  string initiated_by = 8;
+  map<string, string> metadata = 9;
+}
+
+// Activity Messages for Temporal Activities
+
+// Repository Activities
+message CreateRepositoryActivityRequest {
+  string workspace_id = 1;
+  string repository_name = 2;
+  string template_type = 3;
+  map<string, string> variables = 4;
+  RepositoryConfiguration config = 5;
+}
+
+message CreateRepositoryActivityResponse {
+  string repository_id = 1;
+  bool success = 2;
+  optional string error_message = 3;
+}
+
+message InitializeGitActivityRequest {
+  string repository_id = 1;
+  GitConfiguration git_config = 2;
+}
+
+message InitializeGitActivityResponse {
+  string git_url = 1;
+  bool success = 2;
+  optional string error_message = 3;
+}
+
+// Code Generation Activities
+message GenerateCodeActivityRequest {
+  string schema_id = 1;
+  string target_language = 2;
+  CodeGenerationOptions options = 3;
+}
+
+message GenerateCodeActivityResponse {
+  GeneratedArtifact artifact = 1;
+  bool success = 2;
+  optional string error_message = 3;
+}
+
+message ValidateSchemaActivityRequest {
+  string schema_id = 1;
+  string schema_content = 2;
+  string schema_type = 3;
+}
+
+message ValidateSchemaActivityResponse {
+  bool valid = 1;
+  repeated string validation_errors = 2;
+  repeated string warnings = 3;
+}
+
+// Knowledge Activities
+message SyncKnowledgePageActivityRequest {
+  string knowledge_space_id = 1;
+  string page_id = 2;
+  SyncOperation operation = 3;
+  KnowledgeSyncOptions options = 4;
+}
+
+message SyncKnowledgePageActivityResponse {
+  bool success = 1;
+  string page_id = 2;
+  optional string error_message = 3;
+  int64 size_bytes = 4;
+}
+
+// Notification Activities
+message SendNotificationActivityRequest {
+  string user_id = 1;
+  NotificationType notification_type = 2;
+  string title = 3;
+  string message = 4;
+  map<string, string> metadata = 5;
+}
+
+enum NotificationType {
+  NOTIFICATION_TYPE_UNSPECIFIED = 0;
+  NOTIFICATION_TYPE_WORKFLOW_COMPLETED = 1;
+  NOTIFICATION_TYPE_WORKFLOW_FAILED = 2;
+  NOTIFICATION_TYPE_CODE_GENERATED = 3;
+  NOTIFICATION_TYPE_REPOSITORY_CREATED = 4;
+  NOTIFICATION_TYPE_SYNC_COMPLETED = 5;
+}
+
+message SendNotificationActivityResponse {
+  bool success = 1;
+  string notification_id = 2;
+  optional string error_message = 3;
+}

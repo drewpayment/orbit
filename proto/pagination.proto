@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package idp.common.v1;
+
+option go_package = "github.com/drewpayment/orbit/proto/gen/go/idp/pagination/v1;paginationv1";
+
+import "google/protobuf/any.proto";
+
+// Pagination request parameters
+message PaginationRequest {
+  int32 page = 1;      // Page number (1-based)
+  int32 size = 2;      // Page size (default: 20, max: 100)
+  string cursor = 3;   // Cursor for cursor-based pagination (optional)
+}
+
+// Pagination response metadata
+message PaginationResponse {
+  int32 page = 1;           // Current page number
+  int32 size = 2;           // Current page size
+  int64 total = 3;          // Total number of items
+  int32 total_pages = 4;    // Total number of pages
+  bool has_next = 5;        // Whether there's a next page
+  bool has_previous = 6;    // Whether there's a previous page
+  string next_cursor = 7;   // Cursor for next page (if using cursor pagination)
+  string previous_cursor = 8; // Cursor for previous page (if using cursor pagination)
+}
+
+// Generic paginated list wrapper
+message PaginatedResponse {
+  PaginationResponse pagination = 1;
+  repeated google.protobuf.Any items = 2;
+}

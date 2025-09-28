@@ -1,0 +1,24 @@
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - typecheck
+    - unused
+    - gofmt
+    - goimports
+    - goconst
+    - misspell
+    - lll
+    - gosec
+
+linters-settings:
+  lll:
+    line-length: 120
+  goimports:
+    local-prefixes: github.com/drewpayment/orbit/services/api-catalog

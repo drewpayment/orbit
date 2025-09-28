@@ -1,0 +1,139 @@
+version: '3.8'
+
+services:
+  # Temporal Services
+  temporal-postgresql:
+    container_name: temporal-postgresql
+    environment:
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_USER: temporal
+      POSTGRES_DB: temporal
+    image: postgres:15-alpine
+    ports:
+      - 5432:5432
+    volumes:
+      - temporal-postgresql:/var/lib/postgresql/data
+
+  temporal-elasticsearch:
+    container_name: temporal-elasticsearch
+    environment:
+      - cluster.routing.allocation.disk.threshold_enabled=true
+      - cluster.routing.allocation.disk.watermark.low=512mb
+      - cluster.routing.allocation.disk.watermark.high=256mb
+      - cluster.routing.allocation.disk.watermark.flood_stage=128mb
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms256m -Xmx256m
+      - xpack.security.enabled=false
+    image: elasticsearch:7.16.2
+    ports:
+      - 9200:9200
+    volumes:
+      - temporal-elasticsearch:/usr/share/elasticsearch/data
+
+  temporal-server:
+    container_name: temporal-server
+    depends_on:
+      - temporal-postgresql
+      - temporal-elasticsearch
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=temporal-postgresql
+      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
+      - ENABLE_ES=true
+      - ES_SEEDS=temporal-elasticsearch
+      - ES_VERSION=v7
+    image: temporalio/auto-setup:1.25.1
+    ports:
+      - 7233:7233
+      - 8233:8233
+    volumes:
+      - ./infrastructure/temporal/dynamicconfig:/etc/temporal/config/dynamicconfig
+
+  temporal-admin-tools:
+    container_name: temporal-admin-tools
+    depends_on:
+      - temporal-server
+    environment:
+      - TEMPORAL_ADDRESS=temporal-server:7233
+      - TEMPORAL_CLI_ADDRESS=temporal-server:7233
+    image: temporalio/admin-tools:1.25.1
+    stdin_open: true
+    tty: true
+
+  temporal-ui:
+    container_name: temporal-ui
+    depends_on:
+      - temporal-server
+    environment:
+      - TEMPORAL_ADDRESS=temporal-server:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000,http://localhost:3001
+    image: temporalio/ui:2.30.0
+    ports:
+      - 8080:8080
+
+  # Application Services
+  orbit-www:
+    container_name: orbit-www
+    build:
+      context: ./orbit-www
+      dockerfile: Dockerfile
+    ports:
+      - 3000:3000
+    environment:
+      - DATABASE_URI=postgresql://orbit:orbit@postgres:5432/orbit_dev
+      - PAYLOAD_SECRET=your-secret-here
+      - TEMPORAL_NAMESPACE=default
+      - TEMPORAL_ADDRESS=temporal-server:7233
+    depends_on:
+      - postgres
+      - temporal-server
+    volumes:
+      - ./orbit-www:/app
+      - /app/node_modules
+
+  postgres:
+    container_name: orbit-postgres
+    environment:
+      POSTGRES_PASSWORD: orbit
+      POSTGRES_USER: orbit
+      POSTGRES_DB: orbit_dev
+    image: postgres:15-alpine
+    ports:
+      - 5433:5432
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    container_name: orbit-redis
+    image: redis:7-alpine
+    ports:
+      - 6379:6379
+    volumes:
+      - redis-data:/data
+
+  # Go Services (will be added as we implement them)
+  # repository-service:
+  #   container_name: orbit-repository-service
+  #   build:
+  #     context: ./services/repository
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - 8001:8001
+  #   environment:
+  #     - DATABASE_URI=postgresql://orbit:orbit@postgres:5432/orbit_dev
+  #     - REDIS_URI=redis://redis:6379
+  #     - TEMPORAL_NAMESPACE=default
+  #     - TEMPORAL_ADDRESS=temporal-server:7233
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #     - temporal-server
+
+volumes:
+  temporal-postgresql:
+  temporal-elasticsearch:
+  postgres-data:
+  redis-data:

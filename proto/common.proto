@@ -1,0 +1,119 @@
+syntax = "proto3";
+
+package idp.common.v1;
+
+option go_package = "github.com/drewpayment/orbit/proto/gen/go/idp/common/v1;commonv1";
+
+import "google/protobuf/timestamp.proto";
+
+// Standard response wrapper for all APIs
+message Response {
+  bool success = 1;
+  string message = 2;
+  repeated Error errors = 3;
+  ResponseMetadata metadata = 4;
+}
+
+// Error details
+message Error {
+  string code = 1;
+  string message = 2;
+  string field = 3;
+  map<string, string> details = 4;
+}
+
+// Response metadata
+message ResponseMetadata {
+  string request_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string api_version = 3;
+}
+
+// Common entity metadata
+message EntityMetadata {
+  string id = 1;
+  google.protobuf.Timestamp created_at = 2;
+  google.protobuf.Timestamp updated_at = 3;
+  string created_by = 4;
+  string updated_by = 5;
+}
+
+// Visibility levels
+enum Visibility {
+  VISIBILITY_UNSPECIFIED = 0;
+  VISIBILITY_PRIVATE = 1;
+  VISIBILITY_INTERNAL = 2;  
+  VISIBILITY_PUBLIC = 3;
+}
+
+// Status states
+enum Status {
+  STATUS_UNSPECIFIED = 0;
+  STATUS_ACTIVE = 1;
+  STATUS_INACTIVE = 2;
+  STATUS_DRAFT = 3;
+  STATUS_PUBLISHED = 4;
+  STATUS_ARCHIVED = 5;
+  STATUS_DEPRECATED = 6;
+}
+
+// User reference
+message UserRef {
+  string id = 1;
+  string username = 2;
+  string display_name = 3;
+  string email = 4;
+  string avatar_url = 5;
+}
+
+// Workspace reference  
+message WorkspaceRef {
+  string id = 1;
+  string name = 2;
+  string slug = 3;
+}
+
+// Repository reference
+message RepositoryRef {
+  string id = 1;
+  string name = 2;
+  string slug = 3;
+  WorkspaceRef workspace = 4;
+}
+
+// Validation rule
+message ValidationRule {
+  string type = 1; // "required", "min_length", "max_length", "pattern", etc.
+  string value = 2;
+  string message = 3;
+}
+
+// Search filter
+message Filter {
+  string field = 1;
+  FilterOperator operator = 2;
+  repeated string values = 3;
+}
+
+enum FilterOperator {
+  FILTER_OPERATOR_UNSPECIFIED = 0;
+  FILTER_OPERATOR_EQUALS = 1;
+  FILTER_OPERATOR_NOT_EQUALS = 2;
+  FILTER_OPERATOR_IN = 3;
+  FILTER_OPERATOR_NOT_IN = 4;
+  FILTER_OPERATOR_CONTAINS = 5;
+  FILTER_OPERATOR_STARTS_WITH = 6;
+  FILTER_OPERATOR_ENDS_WITH = 7;
+}
+
+// Sort specification
+message Sort {
+  string field = 1;
+  SortOrder order = 2;
+}
+
+enum SortOrder {
+  SORT_ORDER_UNSPECIFIED = 0;
+  SORT_ORDER_ASC = 1;
+  SORT_ORDER_DESC = 2;
+}

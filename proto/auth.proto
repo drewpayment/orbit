@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package idp.auth.v1;
+
+option go_package = "github.com/drewpayment/orbit/proto/gen/go/idp/auth/v1;authv1";
+
+import "common.proto";
+import "google/protobuf/timestamp.proto";
+
+// Authentication types and user management
+
+// User entity
+message User {
+  idp.common.v1.EntityMetadata metadata = 1;
+  string email = 2;
+  string username = 3;
+  string display_name = 4;
+  string avatar_url = 5;
+  
+  // Authentication
+  AuthProvider auth_provider = 6;
+  string external_id = 7;
+  
+  // Profile
+  string title = 8;
+  string bio = 9;
+  string location = 10;
+  string timezone = 11;
+  
+  // Status
+  UserStatus status = 12;
+  google.protobuf.Timestamp last_active_at = 13;
+}
+
+enum AuthProvider {
+  AUTH_PROVIDER_UNSPECIFIED = 0;
+  AUTH_PROVIDER_LOCAL = 1;
+  AUTH_PROVIDER_GITHUB = 2;
+  AUTH_PROVIDER_GOOGLE = 3;
+  AUTH_PROVIDER_AZURE_AD = 4;
+}
+
+enum UserStatus {
+  USER_STATUS_UNSPECIFIED = 0;
+  USER_STATUS_ACTIVE = 1;
+  USER_STATUS_INACTIVE = 2;
+  USER_STATUS_SUSPENDED = 3;
+}
+
+// JWT token claims
+message TokenClaims {
+  string user_id = 1;
+  string email = 2;
+  string username = 3;
+  repeated string workspace_ids = 4;
+  repeated WorkspaceRole workspace_roles = 5;
+  google.protobuf.Timestamp issued_at = 6;
+  google.protobuf.Timestamp expires_at = 7;
+}
+
+message WorkspaceRole {
+  string workspace_id = 1;
+  string role = 2; // "owner", "admin", "member", "viewer"
+}
+
+// Session information
+message Session {
+  string id = 1;
+  string user_id = 2;
+  string device_info = 3;
+  string ip_address = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp expires_at = 6;
+  google.protobuf.Timestamp last_accessed_at = 7;
+}
