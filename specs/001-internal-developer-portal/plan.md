@@ -37,14 +37,18 @@
 Internal Developer Portal (IDP) is a multi-tenant SaaS platform that serves as a centralized hub for developer productivity, infrastructure management, and service collaboration. The platform enables teams to create repositories from templates, manage API schemas with automatic code generation, and maintain collaborative documentation spaces. Core capabilities include Git integration (GitHub/GitLab), OAuth authentication, role-based access control, and real-time collaborative editing. Performance requirements include 200ms p95 API responses, 30-second code generation, and support for 500 concurrent users per workspace.
 
 ## Technical Context
-**Language/Version**: Go 1.21+ (backend services), TypeScript/Node.js 18+ (Payload frontend), Python 3.11+ (optional tooling)  
-**Primary Dependencies**: Payload 3.0 with NextJS 15 integration, PostgreSQL, Redis, Temporal, Docker, Kubernetes  
-**Storage**: PostgreSQL 15+ (primary), SQLite (Payload development), Redis (cache), MinIO/S3 (object storage), Git repositories  
-**Testing**: Go testing, Vitest (frontend), Playwright (e2e), Artillery (load testing)  
+**Language/Version**: Go 1.21+ (backend services), TypeScript/Node.js 18+ (Payload frontend), Python 3.11+ (optional tooling)
+**Primary Dependencies**: Payload 3.0 with NextJS 15 integration, PostgreSQL, Redis, Temporal, Pulumi, Docker, Kubernetes
+**Storage**: PostgreSQL 15+ (primary), SQLite (Payload development), Redis (cache), MinIO/S3 (object storage), Git repositories
+**Testing**: Go testing, Vitest (frontend), Playwright (e2e), Artillery (load testing), Temporal workflow testing
 **Target Platform**: Linux containers, Kubernetes, Docker Compose (development)
-**Project Type**: web - Multi-service web application with Payload CMS frontend and multiple backend services  
-**Performance Goals**: 200ms p95 API responses, 30s code generation, 1s search results, 500 concurrent users per workspace  
-**Constraints**: <200ms p95 API responses, <100ms auth operations, <512MB memory per service, TLS 1.3 required  
+**Project Type**: web - Multi-service web application with Payload CMS frontend and multiple backend services
+**Communication Patterns**:
+  - Temporal workflows for IDP operations (repository generation, code generation, infrastructure provisioning)
+  - HTTP REST APIs for CRUD operations (knowledge management, catalog browsing, search)
+  - Protocol Buffers for type-safe contracts across both patterns
+**Performance Goals**: 200ms p95 API responses, 30s code generation, 1s search results, 500 concurrent users per workspace
+**Constraints**: <200ms p95 API responses, <100ms auth operations, <512MB memory per service, TLS 1.3 required
 **Scale/Scope**: 500 concurrent users per workspace, 10,000 files per repository sync, multi-tenant architecture
 
 ## Constitution Check
@@ -164,7 +168,7 @@ infrastructure/
 └── terraform/
 ```
 
-**Structure Decision**: Web application with multiple backend services (microservices architecture). Frontend uses NextJS with integrated PayloadCMS for content management and admin interface. Three core Go services handle repository, API catalog, and knowledge management functionality. Temporal orchestrates workflows and long-running operations across services. Protobuf definitions are centralized for cross-service communication.
+**Structure Decision**: Web application with hybrid communication architecture. Frontend uses Next.js 15 with integrated Payload CMS 3.0 for content management and admin interface. Go backend services implement two communication patterns: (1) Temporal workflows for user-initiated IDP tasks (repository generation, code generation, infrastructure provisioning via Pulumi) with polling-based status updates, and (2) HTTP REST APIs for conventional CRUD operations (knowledge management, catalog browsing, search). Protocol Buffers define type-safe contracts for both communication patterns, generating TypeScript clients for the frontend and Go implementations for the backend.
 
 ## Phase 0: Outline & Research
 1. **Extract unknowns from Technical Context** above:

@@ -72,21 +72,37 @@ A development team lead wants to create a new microservice repository using esta
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
-- **FR-001**: System MUST enable users to create new repositories from predefined templates
-- **FR-002**: System MUST validate repository configurations against organizational policies  
-- **FR-003**: System MUST support multi-tenant workspaces with proper data isolation
-- **FR-004**: System MUST allow teams to upload and manage protocol buffer API schemas
-- **FR-005**: System MUST generate client libraries in multiple programming languages from API schemas
-- **FR-006**: System MUST provide version control and compatibility checking for API changes
-- **FR-007**: System MUST enable teams to create and maintain documentation spaces
-- **FR-008**: System MUST provide full-text search across all documentation and API schemas
-- **FR-009**: System MUST support real-time collaborative editing of documentation
-- **FR-010**: System MUST integrate with external Git providers (GitHub, GitLab)
-- **FR-011**: System MUST authenticate users via OAuth with popular identity providers
-- **FR-012**: System MUST implement role-based access control per workspace
-- **FR-013**: System MUST track and audit all system activities for compliance
-- **FR-014**: System MUST generate Kubernetes manifests from repository templates
-- **FR-015**: System MUST support webhook processing for Git repository events
+
+#### Repository Management
+- **FR-001**: System MUST enable users to create new repositories from predefined templates via asynchronous task execution
+- **FR-002**: System MUST validate repository configurations against organizational policies before generation
+- **FR-003**: System MUST allow users to browse, search, and view repository details
+- **FR-004**: System MUST track repository generation progress with real-time status updates
+
+#### API Catalog Management
+- **FR-005**: System MUST allow teams to upload and manage API schemas (OpenAPI, Protocol Buffers, GraphQL)
+- **FR-006**: System MUST generate client libraries in multiple programming languages via asynchronous task execution
+- **FR-007**: System MUST provide version control and compatibility checking for API changes
+- **FR-008**: System MUST enable browsing and searching of published API schemas
+
+#### Knowledge Management
+- **FR-009**: System MUST enable teams to create, update, and delete documentation
+- **FR-010**: System MUST provide full-text search across all documentation and API schemas
+- **FR-011**: System MUST support real-time collaborative editing of documentation pages
+- **FR-012**: System MUST synchronize knowledge spaces to external systems via asynchronous task execution
+
+#### Infrastructure & Deployment
+- **FR-013**: System MUST execute infrastructure provisioning tasks via asynchronous execution
+- **FR-014**: System MUST generate Kubernetes manifests from repository templates during creation
+- **FR-015**: System MUST provide status polling for all long-running operations
+
+#### Platform Capabilities
+- **FR-016**: System MUST support multi-tenant workspaces with proper data isolation
+- **FR-017**: System MUST integrate with external Git providers (GitHub, GitLab) during repository operations
+- **FR-018**: System MUST authenticate users via OAuth with popular identity providers
+- **FR-019**: System MUST implement role-based access control per workspace
+- **FR-020**: System MUST track and audit all system activities for compliance
+- **FR-021**: System MUST support webhook processing for Git repository events
 
 ### Performance Requirements
 - **PR-001**: API responses MUST complete within 200ms for 95th percentile requests

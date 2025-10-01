@@ -1,5 +1,59 @@
 # Data Model: Internal Developer Portal (IDP)
 
+## Communication Architecture
+
+The IDP uses a hybrid communication pattern optimized for different types of operations:
+
+### Temporal Workflows (Asynchronous IDP Operations)
+**Use Case**: User-initiated tasks that are long-running, require durability, or involve infrastructure changes
+
+**Operations**:
+- Repository generation from templates
+- Code generation for API clients
+- Infrastructure provisioning via Pulumi
+- Knowledge space synchronization to external systems
+- Bulk operations across multiple resources
+
+**Pattern**:
+1. Frontend triggers workflow via Temporal TypeScript SDK
+2. Go workers execute workflow activities
+3. Frontend polls workflow status for progress updates
+4. Workflow state persisted in Temporal server
+5. Results stored in application database and S3
+
+**Entities**: WorkflowExecution, WorkflowStep, GeneratedArtifact, WorkflowSchedule
+
+### HTTP REST APIs (Synchronous CRUD Operations)
+**Use Case**: Quick read/write operations with immediate responses
+
+**Operations**:
+- Browse and search repositories, schemas, and documentation
+- Create, update, delete knowledge pages
+- Upload and validate API schemas
+- User authentication and authorization
+- Workspace and member management
+- Real-time collaborative editing
+
+**Pattern**:
+1. Frontend makes HTTP request via generated TypeScript client
+2. Go HTTP handler processes request
+3. Business logic executes in service layer
+4. Response returned immediately (<200ms p95)
+5. Data persisted in PostgreSQL
+
+**Entities**: Workspace, Repository, APISchema, KnowledgeSpace, KnowledgePage, User
+
+### Protocol Buffers (Type-Safe Contracts)
+Both communication patterns use Protocol Buffer definitions for:
+- Request/response message contracts
+- Data model consistency across TypeScript and Go
+- API documentation generation
+- Contract testing
+
+Code generation produces:
+- Go service interfaces and implementations
+- TypeScript client libraries (Connect-ES for HTTP, Temporal SDK for workflows)
+
 ## Core Entities
 
 ### 1. Workspace Entity
