@@ -73,12 +73,11 @@ docker-logs: ## View service logs
 
 proto-gen: ## Generate protobuf code
 	@echo "Generating protobuf code..."
-	@cd proto && buf generate
+	@cd orbit-www && bun run generate:proto
 
 install-deps: ## Install development dependencies
 	@echo "Installing Go tools..."
 	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	@go install github.com/bufbuild/buf/cmd/buf@latest
 	@go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
-	@echo "Installing frontend dependencies..."
+	@echo "Installing frontend dependencies (includes buf CLI)..."
 	@cd orbit-www && pnpm install

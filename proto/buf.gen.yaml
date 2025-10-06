@@ -1,0 +1,21 @@
+version: v2
+plugins:
+  # Go code generation
+  - remote: buf.build/protocolbuffers/go
+    out: gen/go
+    opt:
+      - paths=source_relative
+  - remote: buf.build/grpc/go
+    out: gen/go
+    opt:
+      - paths=source_relative
+
+  # TypeScript code generation (Connect-ES)
+  - remote: buf.build/connectrpc/es
+    out: ../orbit-www/src/lib/proto
+    opt:
+      - target=ts
+  - remote: buf.build/bufbuild/es
+    out: ../orbit-www/src/lib/proto
+    opt:
+      - target=ts

@@ -73,10 +73,16 @@ cd orbit-www && pnpm build
 ### Protocol Buffers
 
 ```bash
-make proto-gen      # Generate gRPC code from protobuf definitions
+make proto-gen      # Generate gRPC code from protobuf definitions (no global tools needed!)
                     # Generates Go code to proto/gen/go
                     # Generates TypeScript code to orbit-www/src/lib/proto
+                    # Uses locally installed buf CLI from orbit-www/node_modules
+
+# Alternative: Run directly from frontend
+cd orbit-www && bun run generate:proto
 ```
+
+**Note**: No global installation of `buf` required! The buf CLI is installed as a dev dependency in `orbit-www/package.json`. This ensures consistent versions across all developers and CI/CD environments.
 
 ### Docker Commands
 
@@ -89,7 +95,8 @@ make docker-logs    # View service logs
 ### Installing Dependencies
 
 ```bash
-make install-deps   # Install golangci-lint, buf, gosec, and frontend deps
+make install-deps   # Install golangci-lint, gosec, and frontend deps (includes buf CLI)
+                    # Note: buf is installed locally via npm, not globally
 ```
 
 ## Architecture & Code Organization
