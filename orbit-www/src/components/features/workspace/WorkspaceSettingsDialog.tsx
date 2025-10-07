@@ -184,7 +184,7 @@ export function WorkspaceSettingsDialog({
             />
 
             <div className="flex items-center justify-between pt-2">
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm">
                 Slug: <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
                   /{workspace.slug}
                 </code>

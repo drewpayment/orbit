@@ -69,6 +69,8 @@ export interface Config {
   collections: {
     users: User;
     media: Media;
+    workspaces: Workspace;
+    'workspace-members': WorkspaceMember;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -77,6 +79,8 @@ export interface Config {
   collectionsSelect: {
     users: UsersSelect<false> | UsersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
+    workspaces: WorkspacesSelect<false> | WorkspacesSelect<true>;
+    'workspace-members': WorkspaceMembersSelect<false> | WorkspaceMembersSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -119,6 +123,8 @@ export interface UserAuthOperations {
  */
 export interface User {
   id: string;
+  name?: string | null;
+  avatar?: (string | null) | Media;
   updatedAt: string;
   createdAt: string;
   email: string;
@@ -158,6 +164,70 @@ export interface Media {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "workspaces".
+ */
+export interface Workspace {
+  id: string;
+  name: string;
+  /**
+   * URL-friendly identifier for this workspace
+   */
+  slug: string;
+  description?: string | null;
+  avatar?: (string | null) | Media;
+  settings?: {
+    enabledPlugins?:
+      | {
+          pluginId: string;
+          config?:
+            | {
+                [k: string]: unknown;
+              }
+            | unknown[]
+            | string
+            | number
+            | boolean
+            | null;
+          id?: string | null;
+        }[]
+      | null;
+    /**
+     * Custom theme colors, branding, etc.
+     */
+    customization?:
+      | {
+          [k: string]: unknown;
+        }
+      | unknown[]
+      | string
+      | number
+      | boolean
+      | null;
+  };
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "workspace-members".
+ */
+export interface WorkspaceMember {
+  id: string;
+  workspace: string | Workspace;
+  user: string | User;
+  role: 'owner' | 'admin' | 'member';
+  status: 'active' | 'pending' | 'rejected';
+  requestedAt: string;
+  approvedAt?: string | null;
+  /**
+   * User who approved this membership request
+   */
+  approvedBy?: (string | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
 export interface PayloadLockedDocument {
@@ -170,6 +240,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'media';
         value: string | Media;
+      } | null)
+    | ({
+        relationTo: 'workspaces';
+        value: string | Workspace;
+      } | null)
+    | ({
+        relationTo: 'workspace-members';
+        value: string | WorkspaceMember;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -218,6 +296,8 @@ export interface PayloadMigration {
  * via the `definition` "users_select".
  */
 export interface UsersSelect<T extends boolean = true> {
+  name?: T;
+  avatar?: T;
   updatedAt?: T;
   createdAt?: T;
   email?: T;
@@ -252,6 +332,45 @@ export interface MediaSelect<T extends boolean = true> {
   height?: T;
   focalX?: T;
   focalY?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "workspaces_select".
+ */
+export interface WorkspacesSelect<T extends boolean = true> {
+  name?: T;
+  slug?: T;
+  description?: T;
+  avatar?: T;
+  settings?:
+    | T
+    | {
+        enabledPlugins?:
+          | T
+          | {
+              pluginId?: T;
+              config?: T;
+              id?: T;
+            };
+        customization?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "workspace-members_select".
+ */
+export interface WorkspaceMembersSelect<T extends boolean = true> {
+  workspace?: T;
+  user?: T;
+  role?: T;
+  status?: T;
+  requestedAt?: T;
+  approvedAt?: T;
+  approvedBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
