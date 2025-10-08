@@ -118,6 +118,7 @@ export async function inviteWorkspaceMember(
     })
 
     revalidatePath('/workspaces')
+    revalidatePath('/admin/workspaces')
 
     return {
       success: true,
@@ -147,6 +148,7 @@ export async function updateMemberRole(
     })
 
     revalidatePath('/workspaces')
+    revalidatePath('/admin/workspaces')
 
     return {
       success: true,
@@ -170,6 +172,7 @@ export async function removeMember(memberId: string) {
     })
 
     revalidatePath('/workspaces')
+    revalidatePath('/admin/workspaces')
 
     return {
       success: true,
@@ -205,6 +208,7 @@ export async function updateWorkspaceSettings(
     })
 
     revalidatePath('/workspaces')
+    revalidatePath('/admin/workspaces')
 
     return {
       success: true,
@@ -250,6 +254,7 @@ export async function deleteWorkspace(workspaceId: string) {
     })
 
     revalidatePath('/workspaces')
+    revalidatePath('/admin/workspaces')
 
     return {
       success: true,

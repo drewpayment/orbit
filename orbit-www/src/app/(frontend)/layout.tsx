@@ -1,5 +1,6 @@
 import React from 'react'
 import { ThemeProvider } from '@/components/theme-provider'
+import { BreadcrumbProvider } from '@/components/breadcrumb-provider'
 import '@/app/globals.css'
 
 export default function FrontendLayout({ children }: { children: React.ReactNode }) {
@@ -12,7 +13,9 @@ export default function FrontendLayout({ children }: { children: React.ReactNode
           enableSystem={false}
           disableTransitionOnChange
         >
-          <main>{children}</main>
+          <BreadcrumbProvider>
+            <main>{children}</main>
+          </BreadcrumbProvider>
         </ThemeProvider>
       </body>
     </html>

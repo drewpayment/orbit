@@ -3,20 +3,15 @@
 import { SidebarIcon } from "lucide-react"
 
 import { SearchForm } from "@/components/search-form"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
+import { BreadcrumbNav } from "@/components/breadcrumb-nav"
+import { useBreadcrumb } from "@/components/breadcrumb-provider"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { useSidebar } from "@/components/ui/sidebar"
 
 export function SiteHeader() {
   const { toggleSidebar } = useSidebar()
+  const { items, workspaceName } = useBreadcrumb()
 
   return (
     <header className="flex sticky top-0 z-50 w-full items-center border-b bg-background">
@@ -30,19 +25,9 @@ export function SiteHeader() {
           <SidebarIcon />
         </Button>
         <Separator orientation="vertical" className="mr-2 h-4" />
-        <Breadcrumb className="hidden sm:block">
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink href="#">
-                Building Your Application
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>Data Fetching</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
+        <div className="hidden sm:block">
+          <BreadcrumbNav items={items.length > 0 ? items : undefined} workspaceName={workspaceName} />
+        </div>
         <SearchForm className="w-full sm:ml-auto sm:w-auto" />
       </div>
     </header>

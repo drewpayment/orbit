@@ -63,10 +63,10 @@ export default async function DashboardPage() {
                   </CardHeader>
                   <CardContent className="space-y-2">
                     <Button asChild className="w-full">
-                      <Link href="/workspaces/new">Create Workspace</Link>
+                      <Link href="/admin/workspaces">Manage Workspaces</Link>
                     </Button>
                     <Button asChild variant="outline" className="w-full">
-                      <Link href="/workspaces">Browse Workspaces</Link>
+                      <Link href="/workspaces">My Workspaces</Link>
                     </Button>
                   </CardContent>
                 </Card>
@@ -117,7 +117,7 @@ export default async function DashboardPage() {
                         No workspaces available yet. Be the first to create one!
                       </p>
                       <Button asChild className="mt-4">
-                        <Link href="/workspaces/new">Create Workspace</Link>
+                        <Link href="/admin/workspaces">Create Workspace</Link>
                       </Button>
                     </CardContent>
                   </Card>

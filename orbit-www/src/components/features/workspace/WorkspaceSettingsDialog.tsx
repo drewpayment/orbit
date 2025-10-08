@@ -111,7 +111,7 @@ export function WorkspaceSettingsDialog({
           description: `${workspace.name} has been permanently deleted`,
         })
         onOpenChange(false)
-        router.push('/workspaces')
+        router.push('/admin/workspaces')
         router.refresh()
       } else {
         toast.error('Failed to delete workspace', {
