@@ -16,6 +16,7 @@ export const WorkspaceMembers: CollectionConfig = {
         const membership = await payload.findByID({
           collection: 'workspace-members',
           id,
+          overrideAccess: true, // Bypass access control to prevent infinite loop
         })
 
         // Can read if it's your own membership or you're an admin of the workspace
@@ -31,6 +32,7 @@ export const WorkspaceMembers: CollectionConfig = {
               { status: { equals: 'active' } },
             ],
           },
+          overrideAccess: true, // Bypass access control to prevent infinite loop
         })
 
         return adminMembership.docs.length > 0
@@ -44,10 +46,12 @@ export const WorkspaceMembers: CollectionConfig = {
     // Only workspace admins/owners can update (for approvals)
     update: async ({ req: { user, payload }, id }) => {
       if (!user) return false
+      if (!id) return false
 
       const membership = await payload.findByID({
         collection: 'workspace-members',
         id,
+        overrideAccess: true, // Bypass access control to prevent infinite loop
       })
 
       const adminMembership = await payload.find({
@@ -60,6 +64,7 @@ export const WorkspaceMembers: CollectionConfig = {
             { status: { equals: 'active' } },
           ],
         },
+        overrideAccess: true, // Bypass access control to prevent infinite loop
       })
 
       return adminMembership.docs.length > 0
@@ -67,10 +72,12 @@ export const WorkspaceMembers: CollectionConfig = {
     // Only workspace owners can delete memberships
     delete: async ({ req: { user, payload }, id }) => {
       if (!user) return false
+      if (!id) return false
 
       const membership = await payload.findByID({
         collection: 'workspace-members',
         id,
+        overrideAccess: true, // Bypass access control to prevent infinite loop
       })
 
       // Allow users to delete their own membership (leave workspace)
@@ -86,6 +93,7 @@ export const WorkspaceMembers: CollectionConfig = {
             { status: { equals: 'active' } },
           ],
         },
+        overrideAccess: true, // Bypass access control to prevent infinite loop
       })
 
       return ownerMembership.docs.length > 0
@@ -178,7 +186,6 @@ export const WorkspaceMembers: CollectionConfig = {
   ],
   indexes: [
     {
-      name: 'workspace_user_unique',
       fields: ['workspace', 'user'],
       unique: true,
     },

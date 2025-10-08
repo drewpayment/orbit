@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { Loader2, Trash2 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import {
   Dialog,
   DialogContent,
@@ -16,7 +17,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -24,16 +24,10 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
 import type { Workspace } from './WorkspaceManager'
+import { updateWorkspaceSettings, deleteWorkspace } from '@/app/(frontend)/workspaces/actions'
 
 const settingsSchema = z.object({
   name: z
@@ -41,7 +35,6 @@ const settingsSchema = z.object({
     .min(3, 'Workspace name must be at least 3 characters')
     .max(50, 'Workspace name must be less than 50 characters'),
   description: z.string().max(200, 'Description must be less than 200 characters').optional(),
-  default_visibility: z.enum(['private', 'internal', 'public']),
 })
 
 type SettingsFormData = z.infer<typeof settingsSchema>
@@ -57,6 +50,7 @@ export function WorkspaceSettingsDialog({
   open,
   onOpenChange,
 }: WorkspaceSettingsDialogProps) {
+  const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
@@ -65,24 +59,35 @@ export function WorkspaceSettingsDialog({
     defaultValues: {
       name: workspace.name,
       description: workspace.description || '',
-      default_visibility: workspace.settings.default_visibility,
     },
   })
+
+  // Reset form when workspace changes
+  useEffect(() => {
+    form.reset({
+      name: workspace.name,
+      description: workspace.description || '',
+    })
+  }, [workspace, form])
 
   const onSubmit = async (data: SettingsFormData) => {
     try {
       setIsSubmitting(true)
-
-      // TODO: Replace with actual gRPC client call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-
-      console.log('Updating workspace settings:', data)
-
-      toast.success('Settings updated', {
-        description: 'Workspace settings have been saved successfully',
+      const result = await updateWorkspaceSettings(workspace.id, {
+        name: data.name,
+        description: data.description,
       })
 
-      onOpenChange(false)
+      if (result.success) {
+        toast.success('Settings updated', {
+          description: 'Workspace settings have been saved successfully',
+        })
+        onOpenChange(false)
+      } else {
+        toast.error('Failed to update settings', {
+          description: result.error || 'An unexpected error occurred',
+        })
+      }
     } catch (error) {
       toast.error('Failed to update settings', {
         description: error instanceof Error ? error.message : 'An unexpected error occurred',
@@ -99,15 +104,20 @@ export function WorkspaceSettingsDialog({
 
     try {
       setIsDeleting(true)
+      const result = await deleteWorkspace(workspace.id)
 
-      // TODO: Replace with actual gRPC client call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-
-      toast.success('Workspace deleted', {
-        description: `${workspace.name} has been permanently deleted`,
-      })
-
-      onOpenChange(false)
+      if (result.success) {
+        toast.success('Workspace deleted', {
+          description: `${workspace.name} has been permanently deleted`,
+        })
+        onOpenChange(false)
+        router.push('/workspaces')
+        router.refresh()
+      } else {
+        toast.error('Failed to delete workspace', {
+          description: result.error || 'An unexpected error occurred',
+        })
+      }
     } catch (error) {
       toast.error('Failed to delete workspace', {
         description: error instanceof Error ? error.message : 'An unexpected error occurred',
@@ -152,32 +162,6 @@ export function WorkspaceSettingsDialog({
                   <FormControl>
                     <Input placeholder="Main engineering workspace" {...field} />
                   </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="default_visibility"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Default Visibility</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="private">Private</SelectItem>
-                      <SelectItem value="internal">Internal</SelectItem>
-                      <SelectItem value="public">Public</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormDescription>
-                    Default visibility for new resources
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

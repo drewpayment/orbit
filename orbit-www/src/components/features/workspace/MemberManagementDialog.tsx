@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { UserPlus, Loader2, MoreVertical, Mail } from 'lucide-react'
 import {
   Dialog,
@@ -36,7 +36,25 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
-import type { Workspace, WorkspaceMember } from './WorkspaceManager'
+import type { Workspace } from './WorkspaceManager'
+import {
+  getWorkspaceMembers,
+  inviteWorkspaceMember,
+  updateMemberRole,
+  removeMember,
+} from '@/app/(frontend)/workspaces/actions'
+
+interface WorkspaceMember {
+  id: string
+  workspaceId: string
+  userId: string
+  userEmail: string
+  userName: string
+  userAvatar?: string | null
+  role: 'owner' | 'admin' | 'member'
+  status: string
+  joinedAt: string
+}
 
 interface MemberManagementDialogProps {
   workspace: Workspace
@@ -55,50 +73,18 @@ export function MemberManagementDialog({
   const [inviteRole, setInviteRole] = useState<WorkspaceMember['role']>('member')
   const [isInviting, setIsInviting] = useState(false)
 
-  useEffect(() => {
-    if (open) {
-      loadMembers()
-    }
-  }, [open, workspace.id])
-
-  const loadMembers = async () => {
+  const loadMembers = useCallback(async () => {
     try {
       setIsLoading(true)
-
-      // TODO: Replace with actual gRPC client call
-      await new Promise(resolve => setTimeout(resolve, 800))
-
-      const mockMembers: WorkspaceMember[] = [
-        {
-          workspace_id: workspace.id,
-          user_id: 'user-1',
-          user_email: 'alice@example.com',
-          user_name: 'Alice Johnson',
-          user_avatar: undefined,
-          role: 'owner',
-          joined_at: new Date('2024-01-15'),
-        },
-        {
-          workspace_id: workspace.id,
-          user_id: 'user-2',
-          user_email: 'bob@example.com',
-          user_name: 'Bob Smith',
-          user_avatar: undefined,
-          role: 'admin',
-          joined_at: new Date('2024-02-01'),
-        },
-        {
-          workspace_id: workspace.id,
-          user_id: 'user-3',
-          user_email: 'charlie@example.com',
-          user_name: 'Charlie Brown',
-          user_avatar: undefined,
-          role: 'member',
-          joined_at: new Date('2024-03-10'),
-        },
-      ]
-
-      setMembers(mockMembers)
+      const result = await getWorkspaceMembers(workspace.id)
+      
+      if (result.success) {
+        setMembers(result.members)
+      } else {
+        toast.error('Failed to load members', {
+          description: result.error || 'An unexpected error occurred',
+        })
+      }
     } catch (error) {
       toast.error('Failed to load members', {
         description: error instanceof Error ? error.message : 'An unexpected error occurred',
@@ -106,7 +92,13 @@ export function MemberManagementDialog({
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [workspace.id])
+
+  useEffect(() => {
+    if (open) {
+      loadMembers()
+    }
+  }, [open, loadMembers])
 
   const handleInvite = async () => {
     if (!inviteEmail) {
@@ -118,19 +110,22 @@ export function MemberManagementDialog({
 
     try {
       setIsInviting(true)
+      const result = await inviteWorkspaceMember(workspace.id, inviteEmail, inviteRole)
 
-      // TODO: Replace with actual gRPC client call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-
-      toast.success('Invitation sent', {
-        description: `Invited ${inviteEmail} as ${inviteRole}`,
-      })
-
-      setInviteEmail('')
-      setInviteRole('member')
-      loadMembers()
+      if (result.success) {
+        toast.success('Member added', {
+          description: `Added ${inviteEmail} as ${inviteRole}`,
+        })
+        setInviteEmail('')
+        setInviteRole('member')
+        loadMembers()
+      } else {
+        toast.error('Failed to add member', {
+          description: result.error || 'An unexpected error occurred',
+        })
+      }
     } catch (error) {
-      toast.error('Failed to send invitation', {
+      toast.error('Failed to add member', {
         description: error instanceof Error ? error.message : 'An unexpected error occurred',
       })
     } finally {
@@ -140,14 +135,18 @@ export function MemberManagementDialog({
 
   const handleChangeRole = async (memberId: string, newRole: WorkspaceMember['role']) => {
     try {
-      // TODO: Replace with actual gRPC client call
-      await new Promise(resolve => setTimeout(resolve, 500))
+      const result = await updateMemberRole(memberId, newRole)
 
-      toast.success('Role updated', {
-        description: 'Member role has been changed successfully',
-      })
-
-      loadMembers()
+      if (result.success) {
+        toast.success('Role updated', {
+          description: 'Member role has been changed successfully',
+        })
+        loadMembers()
+      } else {
+        toast.error('Failed to update role', {
+          description: result.error || 'An unexpected error occurred',
+        })
+      }
     } catch (error) {
       toast.error('Failed to update role', {
         description: error instanceof Error ? error.message : 'An unexpected error occurred',
@@ -161,14 +160,18 @@ export function MemberManagementDialog({
     }
 
     try {
-      // TODO: Replace with actual gRPC client call
-      await new Promise(resolve => setTimeout(resolve, 500))
+      const result = await removeMember(memberId)
 
-      toast.success('Member removed', {
-        description: 'Member has been removed from the workspace',
-      })
-
-      loadMembers()
+      if (result.success) {
+        toast.success('Member removed', {
+          description: 'Member has been removed from the workspace',
+        })
+        loadMembers()
+      } else {
+        toast.error('Failed to remove member', {
+          description: result.error || 'An unexpected error occurred',
+        })
+      }
     } catch (error) {
       toast.error('Failed to remove member', {
         description: error instanceof Error ? error.message : 'An unexpected error occurred',
@@ -231,7 +234,6 @@ export function MemberManagementDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="viewer">Viewer</SelectItem>
                 <SelectItem value="member">Member</SelectItem>
                 <SelectItem value="admin">Admin</SelectItem>
               </SelectContent>
@@ -270,16 +272,16 @@ export function MemberManagementDialog({
                 </TableHeader>
                 <TableBody>
                   {members.map((member) => (
-                    <TableRow key={member.user_id}>
+                    <TableRow key={member.userId}>
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <Avatar className="h-8 w-8">
-                            <AvatarImage src={member.user_avatar} />
-                            <AvatarFallback>{getInitials(member.user_name)}</AvatarFallback>
+                            <AvatarImage src={member.userAvatar || undefined} />
+                            <AvatarFallback>{getInitials(member.userName)}</AvatarFallback>
                           </Avatar>
                           <div>
-                            <p className="text-sm font-medium">{member.user_name}</p>
-                            <p className="text-xs text-muted-foreground">{member.user_email}</p>
+                            <p className="text-sm font-medium">{member.userName}</p>
+                            <p className="text-xs text-muted-foreground">{member.userEmail}</p>
                           </div>
                         </div>
                       </TableCell>
@@ -289,7 +291,7 @@ export function MemberManagementDialog({
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {new Date(member.joined_at).toLocaleDateString()}
+                        {new Date(member.joinedAt).toLocaleDateString()}
                       </TableCell>
                       <TableCell>
                         {member.role !== 'owner' && (
@@ -300,18 +302,15 @@ export function MemberManagementDialog({
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleChangeRole(member.user_id, 'admin')}>
+                              <DropdownMenuItem onClick={() => handleChangeRole(member.id, 'admin')}>
                                 Change to Admin
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleChangeRole(member.user_id, 'member')}>
+                              <DropdownMenuItem onClick={() => handleChangeRole(member.id, 'member')}>
                                 Change to Member
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleChangeRole(member.user_id, 'viewer')}>
-                                Change to Viewer
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
-                                onClick={() => handleRemoveMember(member.user_id)}
+                                onClick={() => handleRemoveMember(member.id)}
                                 className="text-destructive"
                               >
                                 Remove from workspace

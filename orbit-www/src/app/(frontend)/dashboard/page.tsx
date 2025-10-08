@@ -1,65 +1,23 @@
-'use client'
-
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useSession } from '@/lib/auth-client'
+import { getPayload } from 'payload'
+import config from '@payload-config'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 
-interface Workspace {
-  id: string
-  name: string
-  slug: string
-  description?: string
-  avatar?: string
-}
+export default async function DashboardPage() {
+  const payload = await getPayload({ config })
 
-export default function DashboardPage() {
-  const router = useRouter()
-  const { data: session, isPending } = useSession()
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
-  const [loading, setLoading] = useState(true)
+  // Fetch workspaces
+  const workspacesResult = await payload.find({
+    collection: 'workspaces',
+    limit: 6,
+    sort: '-createdAt',
+  })
 
-  useEffect(() => {
-    if (!isPending && !session) {
-      router.push('/login')
-    }
-  }, [session, isPending, router])
-
-  useEffect(() => {
-    if (session) {
-      fetchWorkspaces()
-    }
-  }, [session])
-
-  const fetchWorkspaces = async () => {
-    try {
-      const response = await fetch('/api/workspaces')
-      if (response.ok) {
-        const data = await response.json()
-        setWorkspaces(data.docs || [])
-      }
-    } catch (error) {
-      console.error('Failed to fetch workspaces:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (isPending || !session) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 dark:border-white mx-auto"></div>
-          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
-        </div>
-      </div>
-    )
-  }
+  const workspaces = workspacesResult.docs
 
   return (
     <div className="[--header-height:calc(theme(spacing.14))]">
@@ -152,11 +110,7 @@ export default function DashboardPage() {
                   </Button>
                 </div>
 
-                {loading ? (
-                  <div className="text-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-white mx-auto"></div>
-                  </div>
-                ) : workspaces.length === 0 ? (
+                {workspaces.length === 0 ? (
                   <Card>
                     <CardContent className="py-8 text-center">
                       <p className="text-gray-600 dark:text-gray-400">
@@ -169,7 +123,7 @@ export default function DashboardPage() {
                   </Card>
                 ) : (
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {workspaces.slice(0, 6).map((workspace) => (
+                    {workspaces.map((workspace) => (
                       <Card key={workspace.id} className="hover:shadow-lg transition-shadow">
                         <CardHeader>
                           <CardTitle className="text-lg">{workspace.name}</CardTitle>
