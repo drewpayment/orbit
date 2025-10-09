@@ -15,6 +15,7 @@ import { NavMain } from "@/components/nav-main"
 import { NavProjects } from "@/components/nav-projects"
 import { NavSecondary } from "@/components/nav-secondary"
 import { NavUser } from "@/components/nav-user"
+import { useSession } from "@/lib/auth-client"
 import {
   Sidebar,
   SidebarContent,
@@ -108,9 +109,24 @@ const data = {
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const { data: session } = useSession()
+
+  // Get user info from session or use defaults
+  const user = session?.user
+    ? {
+        name: session.user.name || session.user.email || "User",
+        email: session.user.email || "",
+        avatar: session.user.image || "",
+      }
+    : {
+        name: "Guest",
+        email: "",
+        avatar: "",
+      }
+
   return (
     <Sidebar
-      className="top-[--header-height] !h-[calc(100svh-var(--header-height))]"
+      className="top-[--header-height] !h-[calc(100svh-var(--header-height))] mt-11"
       {...props}
     >
       <SidebarHeader>
@@ -136,7 +152,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser user={user} />
       </SidebarFooter>
     </Sidebar>
   )

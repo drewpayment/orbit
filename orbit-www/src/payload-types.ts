@@ -175,6 +175,14 @@ export interface Workspace {
   slug: string;
   description?: string | null;
   avatar?: (string | null) | Media;
+  /**
+   * The parent workspace this workspace belongs to
+   */
+  parentWorkspace?: (string | null) | Workspace;
+  /**
+   * Workspaces that belong to this workspace
+   */
+  childWorkspaces?: (string | Workspace)[] | null;
   settings?: {
     enabledPlugins?:
       | {
@@ -342,6 +350,8 @@ export interface WorkspacesSelect<T extends boolean = true> {
   slug?: T;
   description?: T;
   avatar?: T;
+  parentWorkspace?: T;
+  childWorkspaces?: T;
   settings?:
     | T
     | {

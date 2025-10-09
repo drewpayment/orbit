@@ -24,7 +24,7 @@ export default async function DashboardPage() {
       <SidebarProvider className="flex flex-col">
         <SiteHeader />
         <div className="flex flex-1">
-          <AppSidebar className="pt-11" />
+          <AppSidebar />
           <SidebarInset>
             <div className="flex flex-1 flex-col gap-4 p-8">
               <div className="mb-8">
