@@ -31,7 +31,43 @@ Then wait for the user's input.
 
 ## Process Steps
 
-### Step 1: Context Gathering & Initial Analysis
+### Step 0: Silent Scan & Confidence Check
+
+**CRITICAL RULE**: Do NOT proceed past Step 1.5 until confidence >= 95%
+
+**Before any research, privately assess:**
+1. What facts do I NEED to know that aren't provided?
+2. What constraints or requirements are unclear?
+3. What architectural decisions require human judgment?
+4. What edge cases or failure scenarios must be considered?
+5. **Current confidence level: [0-100%]**
+6. **Confidence blockers**: What specific information would raise confidence to 95%+?
+
+**Create initial planning todo list** (privately, using manage_todo_list):
+```json
+[
+  {"id": 1, "title": "Read .agent documentation", "description": "Read README, system docs, SOPs, similar tasks", "status": "not-started"},
+  {"id": 2, "title": "Clarify requirements with user", "description": "Ask clarifying questions until >= 95% confidence", "status": "not-started"},
+  {"id": 3, "title": "Spawn deep research tasks", "description": "Use codebase-locator, analyzer, pattern-finder", "status": "not-started"},
+  {"id": 4, "title": "Analyze research findings", "description": "Synthesize discoveries, identify patterns", "status": "not-started"},
+  {"id": 5, "title": "Create plan blueprint", "description": "High-level structure, phases, key files", "status": "not-started"},
+  {"id": 6, "title": "Write detailed plan", "description": "Complete markdown with all sections", "status": "not-started"},
+  {"id": 7, "title": "Self-test plan quality", "description": "Verify completeness, quality, confidence", "status": "not-started"}
+]
+```
+
+**Confidence Threshold**: Do NOT proceed to detailed planning until >= 95% confidence that you understand:
+- The feature's purpose and business value
+- Technical requirements and constraints
+- Success criteria (both automated and manual)
+- Integration points with existing systems
+- Risks and mitigation strategies
+
+### Step 1A: Initial Context Gathering
+
+**OBJECTIVE**: Gather enough context to ask intelligent clarifying questions
+
+**DO NOT show confidence percentage or echo check in this step**
 
 1. **Read the .agent documentation system first**:
    - **ALWAYS** read `.agent/README.md` to understand existing documentation
@@ -40,62 +76,164 @@ Then wait for the user's input.
    - Look at `.agent/tasks/` for similar implementations
    - Read `CLAUDE.md` for project-wide conventions
 
-2. **Spawn parallel research tasks to gather context**:
-   Before asking the user questions, use specialized agents to research:
+2. **Quick skim of provided context**:
+   - Review user's request carefully
+   - Scan any attached files (don't deep read yet - save for Step 2)
+   - Identify obvious gaps in information
+   - Note apparent constraints or requirements
 
-   - **codebase-locator**: Find all files related to the feature area
-   - **codebase-analyzer**: Understand current implementation patterns
-   - **codebase-pattern-finder**: Find similar features to model after
-   - **thoughts-locator**: Search for any related research or decisions (if thoughts/ directory exists)
-
-   Example research prompts:
+3. **Update planning todo status**:
    ```
-   "Locate all files related to [feature area] in the Orbit IDP codebase.
-   Focus on services/[service]/, orbit-www/src/, and proto/ directories."
-
-   "Analyze how [similar feature] is currently implemented. Identify:
-   - File locations and structure
-   - Key patterns and conventions
-   - Integration points
-   - Testing approach"
-
-   "Find examples of [pattern type] implementations in the codebase.
-   Look for: gRPC service implementations, Temporal workflows, or frontend forms."
+   ✅ Mark todo #1 "Read .agent documentation" as completed
+   ⏳ Mark todo #2 "Clarify requirements" as in-progress (if questions needed)
    ```
 
-3. **Read all files identified by research tasks**:
-   - After research tasks complete, read ALL relevant files FULLY
-   - Focus on files in the feature's domain (e.g., services/repository/, proto/repository.proto)
-   - Read test files to understand testing patterns
-   - This ensures complete understanding before proceeding
+4. **Identify critical clarification needs**:
+   - What business requirements are ambiguous?
+   - What technical constraints are missing?
+   - What success criteria need definition?
+   - What scope boundaries are unclear?
+   - Which architectural decisions require human judgment?
 
-4. **Analyze and verify understanding**:
-   - Cross-reference requirements with actual code patterns
-   - Identify architectural constraints (monorepo structure, gRPC patterns, etc.)
-   - Note established conventions (error handling, validation, etc.)
-   - Determine true scope based on codebase reality
+**DO NOT**:
+- ❌ Spawn deep research tasks yet (save for Step 2)
+- ❌ Show echo check or confidence level to user
+- ❌ Make architectural decisions
+- ❌ Start writing any plan sections
+- ❌ Read full file contents (quick skim only)
 
-5. **Present informed understanding and focused questions**:
+**IF clarification needed**: Proceed to Step 1.5 (Clarification Loop)  
+**IF no questions needed** (rare): Skip to Step 1B (Echo Check)
+
+---
+
+### Step 1.5: Clarification Loop (MANDATORY GATE)
+
+**CRITICAL RULE**: This step MUST complete before showing any confidence level or echo check
+
+**PREREQUISITE**: Step 1A identified gaps that need clarification
+
+**Process:**
+
+1. **Ask ONE clarifying question at a time**:
    ```
-   Based on my research of the Orbit IDP codebase, I understand we need to [accurate summary].
-
-   I've found that:
-   - Current architecture: [detail with file references]
-   - Existing patterns to follow: [pattern with examples]
-   - Integration points: [specific files/services]
-   - Testing approach used: [pattern from similar features]
-
-   Questions I need answered:
-   - [Specific technical decision requiring human judgment]
-   - [Business logic clarification]
-   - [Design preference that affects implementation]
+   I need to clarify: [specific question about requirement/constraint/scope]
+   
+   This will help me: [explain how it impacts the plan]
+   
+   Current understanding: [show what you think might be true]
+   
+   Options I'm considering:
+   - Option A: [approach]
+   - Option B: [approach]
    ```
 
-   Only ask questions that cannot be answered through code investigation.
+2. **Wait for user response** - DO NOT proceed without answer
 
-### Step 2: Research & Discovery
+3. **Update confidence tracking** (privately):
+   - Record answer
+   - Recalculate confidence level
+   - Identify next highest-priority blocker
+   - Update planning todos if needed
 
-After getting initial clarifications:
+4. **Repeat until confidence >= 95%**:
+   - **IF** more critical questions → Ask next ONE question
+   - **IF** confidence < 95% → Ask next ONE question  
+   - **IF** confidence >= 95% → Proceed to Step 1B
+
+**GATE CHECK** (before proceeding to Step 1B):
+```
+✅ All critical questions answered
+✅ Confidence level >= 95%
+✅ No ambiguous requirements remain
+✅ Success criteria are clear
+✅ Scope boundaries are defined
+✅ Technical constraints understood
+```
+
+**DO NOT**:
+- ❌ Show confidence percentage to user yet
+- ❌ Show echo check yet
+- ❌ Skip questions and assume answers
+- ❌ Ask multiple questions in one message (ONE AT A TIME)
+- ❌ Proceed to Step 1B without >= 95% confidence
+- ❌ Batch questions together
+
+**Update todos**:
+```
+✅ Mark todo #2 "Clarify requirements" as completed when done
+```
+
+---
+
+### Step 1B: Echo Check & Research Planning
+
+**PREREQUISITE**: 
+- ✅ Step 1.5 completed (all questions answered) OR no clarification was needed
+- ✅ Confidence >= 95%
+- ✅ Gate check passed
+
+**NOW you can show the echo check**:
+
+1. **Present understanding with confidence**:
+   ```
+   UNDERSTANDING: [Deliverable] + [#1 must-include fact] + [hardest constraint]
+   
+   CONFIDENCE: 95%+ - Ready to proceed with detailed research
+   
+   Based on [clarification/initial context], I understand we need to [accurate summary].
+
+   Key requirements confirmed:
+   - [Requirement 1 with source/confirmation]
+   - [Requirement 2 with source/confirmation]
+   - [Constraint 1 with source/confirmation]
+
+   Initial research plan:
+   - Research current [component] implementation
+   - Identify integration points with [service]
+   - Find testing patterns for similar features
+   - Analyze error handling conventions
+   
+   **Ready for:**
+   - ✅ YES - Proceed to deep research (Step 2)
+   - ❌ EDITS - Clarify understanding
+   - 🔍 BLUEPRINT - Show plan structure first
+   - 🚩 RISK - Analyze failure scenarios
+   ```
+
+2. **Update planning todos**:
+   ```
+   Progress: ✅ 2/7 todos completed
+   
+   ✅ Read .agent documentation
+   ✅ Clarify requirements
+   ⏳ Spawn research tasks (next - waiting for approval)
+   - [ ] Analyze research findings
+   - [ ] Create plan structure
+   - [ ] Write detailed plan
+   - [ ] Self-test plan quality
+   ```
+
+3. **WAIT for user approval** before proceeding to Step 2
+
+**DO NOT proceed to Step 2 without explicit user approval**
+
+---
+
+### Step 2: Research & Discovery (Only After Echo Check Approval)
+
+**PREREQUISITE**: 
+- ✅ User responded to Step 1B with approval (YES, BLUEPRINT, or RISK)
+- ✅ Confidence >= 95%
+
+**Update todos**:
+```
+✅ Mark todo #2 "Clarify requirements" as completed (if not already)
+⏳ Mark todo #3 "Spawn research tasks" as in-progress
+```
+
+
+After getting ✅ YES or resolving EDITS:
 
 1. **If the user corrects any misunderstanding**:
    - DO NOT just accept the correction
@@ -103,16 +241,7 @@ After getting initial clarifications:
    - Read the specific files/directories they mention
    - Only proceed once you've verified the facts yourself
 
-2. **Create a research todo list** using TodoWrite to track exploration:
-   ```
-   - Research current [component] implementation
-   - Identify integration points with [service]
-   - Find testing patterns for similar features
-   - Analyze error handling conventions
-   - Review protobuf service definitions
-   ```
-
-3. **Spawn parallel sub-tasks for comprehensive research**:
+2. **Spawn parallel sub-tasks for comprehensive research**:
    Use specialized agents for deep investigation:
 
    **For codebase understanding:**
@@ -129,9 +258,17 @@ After getting initial clarifications:
    - Review `.agent/tasks/` for related feature implementations
    - Look for lessons learned and challenges documented
 
-4. **Wait for ALL sub-tasks to complete** before proceeding
+3. **Wait for ALL sub-tasks to complete** before proceeding
 
-5. **Present findings and design options**:
+4. **Update todos**:
+   ```
+   ✅ Mark todo #3 "Spawn research tasks" as completed
+   ⏳ Mark todo #4 "Analyze research findings" as in-progress
+   
+   Progress: ✅ 3/7 todos completed
+   ```
+
+5. **Present findings and design options with confidence check**:
    ```
    Based on my research, here's what I found:
 
@@ -147,20 +284,66 @@ After getting initial clarifications:
    **Recommended Approach:**
    [Your recommendation based on codebase patterns and .agent documentation]
 
-   **Open Questions:**
-   - [Technical uncertainty requiring decision]
-   - [Design tradeoff needing user input]
+   **CONFIDENCE: [X%]**
+   
+   **Remaining Questions** (if < 95% confidence):
+   - [ONE specific question - most critical uncertainty]
+   
+   (Ask one at a time until >= 95% confidence)
 
-   Which approach aligns best with your vision?
+   **Ready for:**
+   - ✅ **YES** - Proceed to structure planning
+   - ❌ **EDITS** - Adjust approach or clarify
+   - 🔍 **BLUEPRINT** - See high-level plan outline
+   - 🚩 **RISK** - Review top 3 failure scenarios
    ```
 
-### Step 3: Plan Structure Development
+### Step 2.5: Risk Analysis (If User Selects 🚩 RISK)
 
-Once aligned on approach:
+**Top 3 Failure Scenarios:**
 
-1. **Create initial plan outline**:
+1. **[Risk Category: Technical/Security/Performance/Business]**
+   - **Scenario**: [What could go wrong]
+   - **Impact**: [Severity and consequences]
+   - **Probability**: [High/Medium/Low]
+   - **Mitigation**: [Specific approach to prevent/handle]
+
+2. **[Risk Category]**
+   - **Scenario**: [What could go wrong]
+   - **Impact**: [Severity and consequences]
+   - **Probability**: [High/Medium/Low]
+   - **Mitigation**: [Specific approach to prevent/handle]
+
+3. **[Risk Category]**
+   - **Scenario**: [What could go wrong]
+   - **Impact**: [Severity and consequences]
+   - **Probability**: [High/Medium/Low]
+   - **Mitigation**: [Specific approach to prevent/handle]
+
+**Ready for:**
+- ✅ **YES** - Proceed to structure planning
+- ❌ **EDITS** - Adjust risk analysis
+- 🔍 **BLUEPRINT** - See high-level plan outline
+
+### Step 3: Blueprint/Structure Development (If User Selects 🔍 BLUEPRINT or ✅ YES)
+
+**PREREQUISITE**:
+- ✅ Step 2 research findings presented and approved
+- ✅ Confidence >= 95%
+
+**Update todos**:
+```
+✅ Mark todo #4 "Analyze research findings" as completed (if not already)
+⏳ Mark todo #5 "Create plan blueprint" as in-progress
+
+Progress: ✅ 4/7 todos completed
+```
+
+Once aligned on approach and >= 95% confidence:
+
+1. **Create high-level blueprint first**:
    ```
-   Here's my proposed plan structure:
+   🔍 BLUEPRINT - High-Level Plan Structure
 
    ## Overview
    [1-2 sentence summary]
@@ -169,26 +352,66 @@ Once aligned on approach:
    1. [Phase name] - [what it accomplishes]
       - Key files: [list]
       - Follows pattern from: [.agent reference]
+      - Estimated complexity: [Low/Medium/High]
    2. [Phase name] - [what it accomplishes]
       - Key files: [list]
       - Similar to: [.agent/tasks/feature-X.md]
+      - Estimated complexity: [Low/Medium/High]
    3. [Phase name] - [what it accomplishes]
       - Key files: [list]
       - New pattern (explain why)
+      - Estimated complexity: [Low/Medium/High]
 
-   Does this phasing make sense? Should I adjust the order or granularity?
+   ## Key Integration Points:
+   - [Integration 1 with file reference]
+   - [Integration 2 with file reference]
+
+   ## Testing Approach:
+   - Unit: [scope]
+   - Integration: [scope]
+   - E2E: [scope]
+
+   **CONFIDENCE: [X%]** - Ready to write detailed plan
+   
+   **Ready for:**
+   - ✅ **YES-GO** - Write full detailed plan
+   - ❌ **EDITS** - Adjust structure/phasing
+   - 🚩 **RISK** - Review failure scenarios first
    ```
 
-2. **Get feedback on structure** before writing details
+2. **WAIT for explicit YES-GO** before writing detailed plan
 
 3. **Verify against .agent documentation**:
    - Does it follow patterns from `.agent/SOPs/`?
    - Are there similar implementations in `.agent/tasks/`?
    - Does it align with `.agent/system/` architecture?
 
-### Step 4: Detailed Plan Writing
+4. **Update todos**:
+   ```
+   ✅ Mark todo #5 "Create plan blueprint" as completed
+   
+   Progress: ✅ 5/7 todos completed
+   Current: Waiting for blueprint approval
+   ```
 
-After structure approval:
+### Step 4: Detailed Plan Writing (Only After ✅ YES-GO)
+
+**GATE CHECK**: Do NOT write detailed plan unless:
+- ✅ User has approved with explicit YES-GO
+- ✅ Confidence >= 95%
+- ✅ All critical questions answered
+- ✅ Blueprint/structure approved
+- ✅ No unresolved technical uncertainties
+
+**Update todos**:
+```
+⏳ Mark todo #6 "Write detailed plan" as in-progress
+
+Progress: ✅ 5/7 todos completed
+Current: Writing detailed implementation plan
+```
+
+After structure approval and YES-GO:
 
 1. **Determine the plan filename**:
    - Format: `feature-[descriptive-name].md`
@@ -627,7 +850,54 @@ After implementation:
 [To be completed after implementation]
 ````
 
-### Step 5: Plan Review and Iteration
+### Step 5: Self-Test Before Delivery
+
+**PREREQUISITE**:
+- ✅ Detailed plan has been written to `.agent/tasks/[filename].md`
+- ✅ Plan includes all required sections
+
+**Update todos**:
+```
+✅ Mark todo #6 "Write detailed plan" as completed
+⏳ Mark todo #7 "Self-test plan quality" as in-progress
+
+Progress: ✅ 6/7 todos completed
+Current: Performing self-test before delivery
+```
+
+**Before presenting the plan, self-review:**
+
+1. **Completeness Check:**
+   - [ ] All phases have specific file paths
+   - [ ] Success criteria split into automated vs manual
+   - [ ] Testing strategy covers unit/integration/E2E
+   - [ ] Risk mitigation included for top failure scenarios
+   - [ ] Rollback plans for each phase
+   - [ ] .agent documentation referenced throughout
+
+2. **Quality Check:**
+   - [ ] Code examples follow project conventions
+   - [ ] Patterns align with .agent/SOPs/
+   - [ ] Architecture decisions justified with .agent/system/ references
+   - [ ] No open questions or TBD items
+   - [ ] Phases are properly sequenced with dependencies
+
+3. **Confidence Check:**
+   - [ ] >= 95% confidence plan is actionable
+   - [ ] No assumptions that need verification
+   - [ ] All edge cases considered
+   - [ ] Technical approach validated against codebase
+
+**Fix any issues found before delivery.**
+
+**Update todos**:
+```
+✅ Mark todo #7 "Self-test plan quality" as completed
+
+Progress: ✅ 7/7 todos completed - Ready for delivery
+```
+
+### Step 6: Plan Delivery and Iteration
 
 1. **Update .agent/README.md**:
    After writing the plan, update the index:
@@ -635,26 +905,36 @@ After implementation:
    - Include brief description
    - Note related SOPs and system docs
 
-2. **Present the draft plan location**:
+2. **Present the completed plan**:
    ```
-   I've created the implementation plan at:
+   ✅ PLAN COMPLETE - Implementation plan created at:
    `.agent/tasks/feature-[name].md`
 
-   The plan follows Orbit IDP conventions and references:
+   **CONFIDENCE: 95%+** - Plan is actionable and complete
+
+   **Progress: ✅ 7/7 todos completed**
+
+   The plan follows project conventions and references:
    - [.agent/system/X.md] for architectural patterns
    - [.agent/SOPs/Y.md] for implementation procedures
    - [.agent/tasks/Z.md] for similar implementation examples
 
-   Please review and let me know:
-   - Are the phases properly scoped and sequenced?
-   - Are success criteria specific enough (both automated and manual)?
-   - Any technical details that need adjustment?
-   - Missing edge cases or considerations?
-   - Should I adjust the testing strategy?
+   **Self-Test Results:**
+   ✅ All phases have specific file paths and changes
+   ✅ Success criteria split into automated vs manual verification
+   ✅ Top 3 risks identified with mitigation strategies
+   ✅ Testing strategy covers all layers
+   ✅ Rollback plans included
+   ✅ No unresolved questions or TBD items
 
-   Once approved, you can:
-   - Implement directly from this plan
-   - Use `/update doc save task [name]` after completion to document lessons learned
+   **Ready for:**
+   - ✅ **IMPLEMENT** - Start building from this plan
+   - ❌ **REVISE** - Adjust specific sections
+   - 🔍 **REVIEW** - Discuss specific phases or decisions
+
+   After implementation:
+   - Use `/update doc save task [name]` to document lessons learned
+   - Update .agent/SOPs/ if new patterns emerged
    ```
 
 3. **Iterate based on feedback**:
@@ -668,28 +948,35 @@ After implementation:
 
 ## Important Guidelines
 
-### 1. Be Skeptical
+### 1. Be Skeptical & Confidence-Driven
 - Question vague requirements
 - Identify potential issues early
 - Ask "why" and "what about edge cases"
 - Don't assume - verify with code
 - Challenge inconsistencies with .agent documentation
+- **Track confidence explicitly** - Don't proceed without >= 95% confidence
+- **Stop and ask** if critical information is missing
+- **Use Step 1.5 Clarification Loop** - Ask ONE question at a time until confident
 
-### 2. Be Interactive
-- Don't write the full plan in one shot
+### 2. Be Interactive with Explicit Gates
+- **Use approval gates**: ✅ YES / ❌ EDITS / 🔍 BLUEPRINT / 🚩 RISK
+- **Ask ONE question at a time** in Step 1.5 (don't batch questions)
 - Get buy-in at each major step
 - Allow course corrections
-- Work collaboratively
-- Confirm understanding before proceeding
+- **Echo check ONLY in Step 1B** after confidence >= 95%
+- **WAIT for YES-GO** before writing detailed plan (Step 4 gate)
+- Work collaboratively with clear checkpoints
+- **Never show confidence percentage until >= 95%**
 
 ### 3. Be Thorough
-- **ALWAYS** read `.agent/README.md` first
-- Read all context files COMPLETELY before planning
-- Research actual code patterns using parallel sub-tasks
+- **ALWAYS** read `.agent/README.md` first in Step 1A
+- Read all context files COMPLETELY before planning (but quick skim in Step 1A)
+- Research actual code patterns using parallel sub-tasks in Step 2
 - Include specific file paths and line numbers
 - Write measurable success criteria with automated vs manual distinction
 - Reference .agent documentation extensively
 - Use `make` commands for automated verification when possible
+- **Follow the step sequence**: 0 → 1A → 1.5 → 1B → 2 → 2.5 → 3 → 4 → 5 → 6
 
 ### 4. Be Practical
 - Focus on incremental, testable changes
@@ -701,25 +988,103 @@ After implementation:
 - Align with architecture in `.agent/system/`
 
 ### 5. Track Progress
-- Use TodoWrite to track planning tasks
-- Update todos as you complete research
-- Mark planning tasks complete when done
-- Show progress to user
+- **MANDATORY**: Use manage_todo_list to track planning tasks (see guideline #7)
+- Create initial todo list in Step 0
+- Update todos at each major step transition
+- Mark todos complete immediately when finished
+- Show progress to user in status updates
+- Never skip todo updates - they maintain context across conversation gaps
 
-### 6. No Open Questions in Final Plan
-- If you encounter open questions during planning, STOP
+### 6. No Open Questions & Confidence Threshold
+- **STOP if confidence < 95%** at any stage
+- If you encounter open questions during planning, **PAUSE and ask ONE question**
 - Research or ask for clarification immediately
 - Do NOT write the plan with unresolved questions
 - The implementation plan must be complete and actionable
 - Every decision must be made before finalizing the plan
+- **Track and communicate confidence level** at each major step
+- Use explicit approval gates before proceeding to next phase
 
-### 7. Follow Orbit IDP Conventions
-- **Go Services**: Follow three-layer architecture (domain/service/grpc)
-- **Protobuf**: Always run `make proto-gen` after changes
-- **Frontend**: Use Payload CMS patterns, shadcn/ui components
-- **Testing**: Table-driven tests for Go, Vitest for frontend
-- **Error Handling**: Follow patterns from `.agent/SOPs/error-handling.md`
-- **Module Structure**: Reference `.agent/system/project-structure.md`
+### 7. Todo List Management (MANDATORY)
+
+**RULE**: You MUST use `manage_todo_list` to track planning progress throughout the entire process
+
+#### When to Create Initial Todo List
+- **Immediately in Step 0** (privately, not shown to user initially)
+- Contains all major planning phases as separate todos
+- Use the standard structure shown in Step 0
+
+#### Todo Structure for Planning
+The standard planning todo list should contain these 7 todos:
+```json
+[
+  {"id": 1, "title": "Read .agent documentation", "description": "Read README, system docs, SOPs, similar tasks", "status": "not-started"},
+  {"id": 2, "title": "Clarify requirements with user", "description": "Ask clarifying questions until >= 95% confidence", "status": "not-started"},
+  {"id": 3, "title": "Spawn deep research tasks", "description": "Use codebase-locator, analyzer, pattern-finder", "status": "not-started"},
+  {"id": 4, "title": "Analyze research findings", "description": "Synthesize discoveries, identify patterns", "status": "not-started"},
+  {"id": 5, "title": "Create plan blueprint", "description": "High-level structure, phases, key files", "status": "not-started"},
+  {"id": 6, "title": "Write detailed plan", "description": "Complete markdown with all sections", "status": "not-started"},
+  {"id": 7, "title": "Self-test plan quality", "description": "Verify completeness, quality, confidence", "status": "not-started"}
+]
+```
+
+#### When to Update Todos (Mandatory Update Points)
+- **Step 0 complete**: Create initial list (all not-started)
+- **Step 1A complete**: Mark #1 completed
+- **Step 1.5 start**: Mark #2 in-progress
+- **Step 1.5 complete**: Mark #2 completed
+- **Step 1B presented**: Show progress summary
+- **Step 2 start**: Mark #3 in-progress
+- **Step 2 research complete**: Mark #3 completed, #4 in-progress
+- **Step 2 findings presented**: Mark #4 completed
+- **Step 3 start**: Mark #5 in-progress
+- **Step 3 blueprint approved**: Mark #5 completed, #6 in-progress
+- **Step 4 plan written**: Mark #6 completed, #7 in-progress
+- **Step 5 self-test complete**: Mark #7 completed
+- **Step 6 delivery**: All completed
+
+#### Update Frequency
+- **Minimum**: At the start and end of each major step (0, 1A, 1.5, 1B, 2, 3, 4, 5, 6)
+- **Recommended**: After completing any significant sub-task within a step
+- **Required**: Before asking user for approval/input at gates
+
+#### Show Progress to User
+When showing echo checks, research findings, blueprints, or status updates, include:
+```
+Progress: ✅ 3/7 todos completed
+Current: Analyzing research findings (todo #4)
+
+✅ Read .agent documentation
+✅ Clarify requirements  
+✅ Spawn research tasks
+⏳ Analyze findings (current)
+- [ ] Create plan blueprint
+- [ ] Write detailed plan
+- [ ] Self-test plan quality
+```
+
+#### Why This Matters
+- **Prevents skipping steps**: Explicit checklist ensures no shortcuts
+- **Maintains context**: If conversation pauses, todos show current state
+- **Shows user progress**: Transparency about what's done and what's next
+- **Enforces confidence gates**: Can't mark "Clarify requirements" done until >= 95%
+- **Accountability**: Clear audit trail of planning process
+
+### 8. Self-Test Before Delivery
+- **Always run self-test** before presenting plan
+- Check for completeness, quality, and confidence
+- Fix any issues found during self-review
+- Ensure no TBD items or unresolved questions
+- Verify alignment with .agent documentation
+
+### 9. Follow Project Conventions
+- **Package-First**: Business logic in shared packages first
+- **TypeScript**: 100% TypeScript with strict type checking
+- **React Native**: Mobile-first with Expo patterns
+- **PayloadCMS**: Headless CMS with MongoDB
+- **Testing**: Unit tests with Vitest, E2E with Playwright
+- **Monorepo**: Turborepo with pnpm workspaces
+- **Reference .agent docs**: Always align with documented patterns
 
 ## Success Criteria Guidelines
 
