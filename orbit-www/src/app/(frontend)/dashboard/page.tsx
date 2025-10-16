@@ -20,14 +20,12 @@ export default async function DashboardPage() {
   const workspaces = workspacesResult.docs
 
   return (
-    <div className="[--header-height:calc(theme(spacing.14))]">
-      <SidebarProvider className="flex flex-col">
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset>
         <SiteHeader />
-        <div className="flex flex-1">
-          <AppSidebar />
-          <SidebarInset>
-            <div className="flex flex-1 flex-col gap-4 p-8">
-              <div className="mb-8">
+        <div className="flex flex-1 flex-col gap-4 p-8">
+          <div className="mb-8">
                 <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
                   Welcome to Orbit
                 </h1>
@@ -148,8 +146,6 @@ export default async function DashboardPage() {
               </div>
             </div>
           </SidebarInset>
-        </div>
       </SidebarProvider>
-    </div>
   )
 }

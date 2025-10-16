@@ -76,13 +76,11 @@ export function WorkspaceManager({ initialWorkspaces = [] }: WorkspaceManagerPro
   }
 
   return (
-    <div className="[--header-height:calc(theme(spacing.14))]">
-      <SidebarProvider className="flex flex-col">
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset>
         <SiteHeader />
-        <div className="flex flex-1">
-          <AppSidebar className="pt-11" />
-          <SidebarInset>
-            <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full">
               {/* Header */}
               <div className="border-b bg-background">
                 <div className="flex h-16 items-center justify-between px-6">
@@ -184,8 +182,6 @@ export function WorkspaceManager({ initialWorkspaces = [] }: WorkspaceManagerPro
               )}
             </div>
           </SidebarInset>
-        </div>
       </SidebarProvider>
-    </div>
   )
 }

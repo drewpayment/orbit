@@ -71,6 +71,8 @@ export interface Config {
     media: Media;
     workspaces: Workspace;
     'workspace-members': WorkspaceMember;
+    'knowledge-spaces': KnowledgeSpace;
+    'knowledge-pages': KnowledgePage;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -81,6 +83,8 @@ export interface Config {
     media: MediaSelect<false> | MediaSelect<true>;
     workspaces: WorkspacesSelect<false> | WorkspacesSelect<true>;
     'workspace-members': WorkspaceMembersSelect<false> | WorkspaceMembersSelect<true>;
+    'knowledge-spaces': KnowledgeSpacesSelect<false> | KnowledgeSpacesSelect<true>;
+    'knowledge-pages': KnowledgePagesSelect<false> | KnowledgePagesSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -236,6 +240,109 @@ export interface WorkspaceMember {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "knowledge-spaces".
+ */
+export interface KnowledgeSpace {
+  id: string;
+  /**
+   * The workspace this knowledge space belongs to
+   */
+  workspace: string | Workspace;
+  name: string;
+  /**
+   * URL-friendly identifier (e.g., "engineering-docs")
+   */
+  slug: string;
+  description?: string | null;
+  /**
+   * Icon identifier (e.g., "book", "docs", "wiki")
+   */
+  icon?: string | null;
+  /**
+   * Hex color code for visual identification
+   */
+  color?: string | null;
+  /**
+   * Who can view this knowledge space
+   */
+  visibility: 'private' | 'internal' | 'public';
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Pages are managed within their Knowledge Space. Use the Knowledge Space interface to create and edit pages.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "knowledge-pages".
+ */
+export interface KnowledgePage {
+  id: string;
+  /**
+   * The knowledge space this page belongs to
+   */
+  knowledgeSpace: string | KnowledgeSpace;
+  title: string;
+  /**
+   * URL-friendly identifier within the knowledge space
+   */
+  slug: string;
+  /**
+   * Main content of the knowledge page
+   */
+  content: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  };
+  /**
+   * The parent page in the hierarchy (leave empty for root page)
+   */
+  parentPage?: (string | null) | KnowledgePage;
+  /**
+   * Pages that are children of this page
+   */
+  childPages?: (string | KnowledgePage)[] | null;
+  /**
+   * Order of this page among siblings (lower numbers appear first)
+   */
+  sortOrder: number;
+  /**
+   * Publication status of the page
+   */
+  status: 'draft' | 'published' | 'archived';
+  tags?:
+    | {
+        tag: string;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * Original author of the page
+   */
+  author: string | User;
+  /**
+   * User who last edited the page
+   */
+  lastEditedBy?: (string | null) | User;
+  /**
+   * Version number (incremented on each edit)
+   */
+  version: number;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
 export interface PayloadLockedDocument {
@@ -256,6 +363,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'workspace-members';
         value: string | WorkspaceMember;
+      } | null)
+    | ({
+        relationTo: 'knowledge-spaces';
+        value: string | KnowledgeSpace;
+      } | null)
+    | ({
+        relationTo: 'knowledge-pages';
+        value: string | KnowledgePage;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -379,6 +494,46 @@ export interface WorkspaceMembersSelect<T extends boolean = true> {
   requestedAt?: T;
   approvedAt?: T;
   approvedBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "knowledge-spaces_select".
+ */
+export interface KnowledgeSpacesSelect<T extends boolean = true> {
+  workspace?: T;
+  name?: T;
+  slug?: T;
+  description?: T;
+  icon?: T;
+  color?: T;
+  visibility?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "knowledge-pages_select".
+ */
+export interface KnowledgePagesSelect<T extends boolean = true> {
+  knowledgeSpace?: T;
+  title?: T;
+  slug?: T;
+  content?: T;
+  parentPage?: T;
+  childPages?: T;
+  sortOrder?: T;
+  status?: T;
+  tags?:
+    | T
+    | {
+        tag?: T;
+        id?: T;
+      };
+  author?: T;
+  lastEditedBy?: T;
+  version?: T;
   updatedAt?: T;
   createdAt?: T;
 }

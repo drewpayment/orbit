@@ -128,6 +128,19 @@ export const Workspaces: CollectionConfig = {
         },
       ],
     },
+    {
+      name: 'knowledge',
+      type: 'ui',
+      label: 'Knowledge',
+      admin: {
+        components: {
+          Field: {
+            path: '/components/admin/fields/WorkspaceKnowledgeField',
+            exportName: 'WorkspaceKnowledgeField',
+          },
+        },
+      },
+    },
   ],
   hooks: {
     beforeValidate: [

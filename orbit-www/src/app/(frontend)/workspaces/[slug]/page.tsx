@@ -12,6 +12,7 @@ import { WorkspaceClient } from './workspace-client'
 import { checkMembershipStatus } from './actions'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
+import { WorkspaceKnowledgeSection } from '@/components/features/workspace/WorkspaceKnowledgeSection'
 
 interface PageProps {
   params: Promise<{
@@ -81,15 +82,58 @@ export default async function WorkspacePage({ params }: PageProps) {
     ? workspace.childWorkspaces.filter(w => typeof w === 'object')
     : []
 
+  // Fetch knowledge spaces for this workspace
+  const spacesResult = await payload.find({
+    collection: 'knowledge-spaces',
+    where: {
+      workspace: {
+        equals: workspace.id,
+      },
+    },
+    limit: 100,
+    sort: 'name',
+  })
+
+  // Fetch page counts for each space
+  const knowledgeSpaces = await Promise.all(
+    spacesResult.docs.map(async (space) => {
+      const pagesResult = await payload.find({
+        collection: 'knowledge-pages',
+        where: {
+          knowledgeSpace: {
+            equals: space.id,
+          },
+        },
+        limit: 1000,
+      })
+
+      const pages = pagesResult.docs
+      return {
+        id: space.id,
+        name: space.name,
+        slug: space.slug,
+        description: space.description || undefined,
+        icon: space.icon || undefined,
+        visibility: space.visibility,
+        pageCount: pages.length,
+        publishedCount: pages.filter((p) => p.status === 'published').length,
+        draftCount: pages.filter((p) => p.status === 'draft').length,
+      }
+    })
+  )
+
+  // Check if user can manage knowledge spaces
+  const canManageKnowledge = membershipStatus?.role 
+    ? ['owner', 'admin', 'contributor'].includes(membershipStatus.role)
+    : false
+
   return (
-    <div className="[--header-height:calc(theme(spacing.14))]">
-      <SidebarProvider className="flex flex-col">
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset>
         <SiteHeader />
-        <div className="flex flex-1">
-          <AppSidebar />
-          <SidebarInset>
-            <div className="flex flex-1 flex-col gap-4 p-8">
-              <div className="container mx-auto">
+        <div className="flex flex-1 flex-col gap-4 p-8">
+          <div className="container mx-auto">
                 {/* Workspace Header */}
                 <div className="mb-8">
                   <div className="flex items-start gap-6">
@@ -120,7 +164,7 @@ export default async function WorkspacePage({ params }: PageProps) {
 
                 {/* Workspace Content */}
                 <div className="grid gap-8 lg:grid-cols-3">
-                  <div className="lg:col-span-2">
+                  <div className="lg:col-span-2 space-y-8">
                     <Card>
                       <CardHeader>
                         <CardTitle>Welcome</CardTitle>
@@ -136,6 +180,13 @@ export default async function WorkspacePage({ params }: PageProps) {
                         </p>
                       </CardContent>
                     </Card>
+
+                    {/* Knowledge Section */}
+                    <WorkspaceKnowledgeSection
+                      workspaceSlug={workspace.slug}
+                      spaces={knowledgeSpaces}
+                      canManage={canManageKnowledge}
+                    />
                   </div>
 
                   <div className="space-y-8">
@@ -346,8 +397,6 @@ export default async function WorkspacePage({ params }: PageProps) {
               </div>
             </div>
           </SidebarInset>
-        </div>
       </SidebarProvider>
-    </div>
   )
 }
