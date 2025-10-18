@@ -75,6 +75,7 @@ Then wait for the user's input.
    - Review `.agent/SOPs/` for established patterns
    - Look at `.agent/tasks/` for similar implementations
    - Read `CLAUDE.md` for project-wide conventions
+   - **Consider using the `researcher` agent** to efficiently gather .agent documentation context and condense findings
 
 2. **Quick skim of provided context**:
    - Review user's request carefully
@@ -244,19 +245,28 @@ After getting ✅ YES or resolving EDITS:
 2. **Spawn parallel sub-tasks for comprehensive research**:
    Use specialized agents for deep investigation:
 
-   **For codebase understanding:**
-   - **codebase-locator**: Find specific components, configs, tests
-   - **codebase-analyzer**: Understand implementation details and patterns
-   - **codebase-pattern-finder**: Find similar implementations to model after
+   **Primary Research Agent (Recommended for most cases):**
+   - **researcher**: Use PROACTIVELY for comprehensive research that combines codebase search, documentation reading, and pattern analysis. This agent condenses findings into concise summaries to save main thread tokens. Best for multi-faceted research questions.
+
+   **Specialized Agents (For targeted searches):**
+   - **codebase-locator**: Find specific components, configs, tests (use when you need file locations)
+   - **codebase-analyzer**: Understand implementation details and patterns (use when you need deep analysis of specific components)
+   - **codebase-pattern-finder**: Find similar implementations to model after (use when you need concrete code examples)
+
+   **When to use researcher vs. specialized agents:**
+   - Use **researcher** when you need to: gather documentation context, understand architectural patterns, find and analyze multiple related implementations, or combine multiple research tasks
+   - Use **specialized agents** when you need: a very specific file location, targeted analysis of a single component, or concrete code examples from a known area
 
    **For architectural context:**
    - Read `.agent/system/project-structure.md` for module layout
    - Read `.agent/system/api-architecture.md` for gRPC patterns
    - Check `.agent/SOPs/` for relevant procedures
+   - **Consider using researcher agent** to efficiently gather and summarize architectural context
 
    **For similar implementations:**
    - Review `.agent/tasks/` for related feature implementations
    - Look for lessons learned and challenges documented
+   - **Consider using researcher agent** to find and summarize relevant patterns
 
 3. **Wait for ALL sub-tasks to complete** before proceeding
 
@@ -970,8 +980,9 @@ Progress: ✅ 7/7 todos completed - Ready for delivery
 
 ### 3. Be Thorough
 - **ALWAYS** read `.agent/README.md` first in Step 1A
+- **Consider using the researcher agent** to efficiently gather and synthesize .agent documentation
 - Read all context files COMPLETELY before planning (but quick skim in Step 1A)
-- Research actual code patterns using parallel sub-tasks in Step 2
+- Research actual code patterns using parallel sub-tasks in Step 2 (use researcher for comprehensive research)
 - Include specific file paths and line numbers
 - Write measurable success criteria with automated vs manual distinction
 - Reference .agent documentation extensively
@@ -1195,24 +1206,48 @@ Current: Analyzing research findings (todo #4)
 
 When spawning research sub-tasks:
 
-1. **Spawn multiple tasks in parallel** for efficiency
-2. **Each task should be focused** on a specific area
-3. **Provide detailed instructions** including:
+1. **Choose the right agent** for the task:
+   - Use **researcher** for comprehensive, multi-faceted research that requires documentation reading, pattern analysis, and codebase searching
+   - Use **specialized agents** (codebase-locator, codebase-analyzer, codebase-pattern-finder) for very targeted, specific searches
+2. **Spawn multiple tasks in parallel** for efficiency (can mix researcher and specialized agents)
+3. **Each task should be focused** on a specific area
+4. **Provide detailed instructions** including:
    - Exactly what to search for
    - Which directories to focus on (services/X/, orbit-www/src/Y/)
    - What information to extract
    - Expected output format with file:line references
-4. **Be specific about Orbit IDP structure**:
+5. **Be specific about Orbit IDP structure**:
    - For backend: `services/[service-name]/`
    - For frontend: `orbit-www/src/`
    - For proto: `proto/[service].proto`
    - For Temporal: `temporal-workflows/`
-5. **Specify read-only tools** to use (Read, Grep, Glob)
-6. **Request specific file:line references** in responses
-7. **Wait for all tasks to complete** before synthesizing
-8. **Verify sub-task results** against .agent documentation
+6. **Specify read-only tools** to use (Read, Grep, Glob, Bash for the researcher agent)
+7. **Request specific file:line references** in responses
+8. **Wait for all tasks to complete** before synthesizing
+9. **Verify sub-task results** against .agent documentation
 
-Example of spawning multiple tasks:
+Example of spawning multiple tasks with researcher agent:
+```
+Task 1 (researcher): "Research how gRPC services are structured in the Orbit IDP codebase.
+- Analyze the service architecture patterns in services/repository/, services/api-catalog/, and services/knowledge/
+- Identify how domain/, service/, and grpc/ layers are organized
+- Find error handling patterns used across services
+- Check .agent/SOPs/ for gRPC service conventions
+- Summarize findings with specific file:line references for key patterns"
+
+Task 2 (researcher): "Research workspace isolation implementation patterns.
+- Search for workspace_id validation across all services
+- Analyze how workspace context is propagated through gRPC calls
+- Find examples of workspace-scoped database queries
+- Check .agent/system/ docs for workspace isolation architecture
+- Provide concrete code examples with file:line references"
+
+Task 3 (codebase-pattern-finder): "Find examples of React forms with Zod validation in orbit-www/src/.
+Look for patterns in components/ and app/(admin)/.
+Show how form submission and error handling is done."
+```
+
+Example of spawning targeted tasks with specialized agents:
 ```
 Task 1 (codebase-locator): "Find all gRPC service implementations in services/ directory.
 List the structure of services/repository/, services/api-catalog/, and services/knowledge/.
@@ -1234,6 +1269,7 @@ Show how form submission and error handling is done."
 2. **Review relevant `.agent/system/`** - Understand architecture
 3. **Check `.agent/SOPs/`** - Find applicable procedures
 4. **Study `.agent/tasks/`** - Find similar implementations
+5. **Consider using the researcher agent** - For efficient documentation gathering and synthesis across all .agent files
 
 ### During Planning
 1. **Reference patterns extensively** - Link to .agent docs in plan

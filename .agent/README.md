@@ -26,6 +26,7 @@ Reference these for similar feature implementations:
 - **[Workspace Management Feature](tasks/feature-workspace-management.md)** - Multi-tenant workspace implementation
 - **[Repository Service Implementation](tasks/feature-repository-service.md)** - gRPC service creation pattern
 - **[Knowledge Management Navigator](tasks/feature-knowledge-management-navigator.md)** - Hierarchical documentation with Payload CMS and Lexical editor
+- **[Backstage Plugin Integration](tasks/feature-backstage-plugin-integration.md)** - Integrating Backstage community plugins as a third-party integration layer
 
 ## When to Read What
 
