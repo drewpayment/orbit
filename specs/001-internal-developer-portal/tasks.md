@@ -88,7 +88,7 @@
 - [x] T044 KnowledgeService gRPC server implementation in services/knowledge/internal/api/knowledge_server.go
 
 ### Frontend Components
-- [ ] T045 [P] Workspace management UI in orbit-www/src/components/features/workspace/WorkspaceManager.tsx
+- [x] T045 [P] Workspace management UI in orbit-www/src/components/features/workspace/WorkspaceManager.tsx
 - [ ] T046 [P] Repository creation wizard in orbit-www/src/components/features/repository/RepositoryWizard.tsx
 - [ ] T047 [P] API schema editor in orbit-www/src/components/features/api-catalog/SchemaEditor.tsx
 - [ ] T048 [P] Knowledge space navigator in orbit-www/src/components/features/knowledge/SpaceNavigator.tsx

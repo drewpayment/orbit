@@ -3,22 +3,33 @@
 import { useEffect, useState } from 'react'
 import { Building2, Users, GitBranch, Loader2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import type { Workspace } from './WorkspaceManager'
 import { cn } from '@/lib/utils'
 
 interface WorkspaceListProps {
+  initialWorkspaces?: Workspace[]
   onWorkspaceSelect?: (workspace: Workspace) => void
   selectedWorkspaceId?: string
 }
 
-export function WorkspaceList({ onWorkspaceSelect, selectedWorkspaceId }: WorkspaceListProps) {
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+export function WorkspaceList({ 
+  initialWorkspaces = [], 
+  onWorkspaceSelect, 
+  selectedWorkspaceId 
+}: WorkspaceListProps) {
+  const [workspaces, setWorkspaces] = useState<Workspace[]>(initialWorkspaces)
+  const [isLoading, setIsLoading] = useState(initialWorkspaces.length === 0)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // TODO: Replace with actual gRPC client call
+    // If we have initial workspaces, use them
+    if (initialWorkspaces.length > 0) {
+      setWorkspaces(initialWorkspaces)
+      setIsLoading(false)
+      return
+    }
+
+    // Otherwise, show mock data (fallback for when component is used standalone)
     const fetchWorkspaces = async () => {
       try {
         setIsLoading(true)
@@ -34,14 +45,11 @@ export function WorkspaceList({ onWorkspaceSelect, selectedWorkspaceId }: Worksp
             slug: 'engineering',
             description: 'Main engineering workspace for product development',
             settings: {
-              default_visibility: 'internal',
-              require_approval_for_repos: true,
-              enable_code_generation: true,
-              allowed_template_types: ['service', 'library', 'frontend'],
+              enabledPlugins: [],
+              customization: {},
             },
-            created_at: new Date('2024-01-15'),
-            updated_at: new Date('2024-03-20'),
-            created_by: 'user-1',
+            createdAt: new Date('2024-01-15').toISOString(),
+            updatedAt: new Date('2024-03-20').toISOString(),
             memberCount: 12,
             repositoryCount: 45,
           },
@@ -51,14 +59,11 @@ export function WorkspaceList({ onWorkspaceSelect, selectedWorkspaceId }: Worksp
             slug: 'platform',
             description: 'Infrastructure and platform services',
             settings: {
-              default_visibility: 'private',
-              require_approval_for_repos: true,
-              enable_code_generation: true,
-              allowed_template_types: ['service', 'library'],
+              enabledPlugins: [],
+              customization: {},
             },
-            created_at: new Date('2024-02-01'),
-            updated_at: new Date('2024-03-22'),
-            created_by: 'user-2',
+            createdAt: new Date('2024-02-01').toISOString(),
+            updatedAt: new Date('2024-03-22').toISOString(),
             memberCount: 8,
             repositoryCount: 23,
           },
@@ -73,7 +78,7 @@ export function WorkspaceList({ onWorkspaceSelect, selectedWorkspaceId }: Worksp
     }
 
     fetchWorkspaces()
-  }, [])
+  }, [initialWorkspaces])
 
   if (isLoading) {
     return (
@@ -136,9 +141,6 @@ export function WorkspaceList({ onWorkspaceSelect, selectedWorkspaceId }: Worksp
                   <p className="text-sm text-muted-foreground">/{workspace.slug}</p>
                 </div>
               </div>
-              <Badge variant="outline">
-                {workspace.settings.default_visibility}
-              </Badge>
             </div>
           </CardHeader>
           <CardContent>
