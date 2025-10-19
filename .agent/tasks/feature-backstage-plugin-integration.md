@@ -26,8 +26,8 @@ Integrate Backstage community plugins as a third-party integration layer for Orb
 - Create new Go "plugins" gRPC service to proxy Backstage plugin APIs
 - Implement workspace-based data filtering at the Go service layer
 - Store plugin configuration and enable/disable state in Payload CMS
-- Pre-install curated set of community plugins (5-10 initial plugins)
-- Support plugin categories: API Catalog, CI/CD, Infrastructure, Project Management
+- Pre-install curated set of community plugins (5-6 initial plugins)
+- Support plugin categories: API Catalog, CI/CD, Infrastructure/Deployment, Cloud Resources
 - Maintain Orbit's authentication system (no separate Backstage auth)
 - All plugin data must flow through Orbit's Go services (no direct frontend-to-Backstage calls)
 
@@ -103,6 +103,243 @@ Relevant patterns:
 - NOT implementing dynamic plugin loading without application restart
 - NOT building a plugin marketplace for MVP (curated pre-installed list only)
 
+## Plugin Selection & Evaluation Rubric
+
+Before installing any Backstage community plugin, evaluate it using this rubric. Plugins must score at least 70/100 to be considered for inclusion.
+
+### Evaluation Criteria
+
+| Category | Weight | Criteria | Max Points |
+|----------|--------|----------|------------|
+| **Security** | 35% | | |
+| | | Last security audit < 6 months ago | 10 |
+| | | No HIGH/CRITICAL CVEs in last year | 10 |
+| | | Dependency scanning passing | 5 |
+| | | Permissions model clearly defined | 5 |
+| | | Code review completed by team | 5 |
+| **Maintenance** | 25% | | |
+| | | Active development (commit in last 30 days) | 8 |
+| | | Responsive maintainers (issues answered < 7 days) | 7 |
+| | | Documented upgrade path | 5 |
+| | | Compatible with latest Backstage version | 5 |
+| **Popularity** | 20% | | |
+| | | > 100 GitHub stars | 7 |
+| | | > 10k npm downloads/month | 7 |
+| | | Used by notable companies (documented) | 6 |
+| **Quality** | 20% | | |
+| | | Test coverage > 70% | 7 |
+| | | TypeScript types included | 5 |
+| | | Documentation quality (complete examples) | 5 |
+| | | Error handling implemented | 3 |
+| **Total** | 100% | | **100** |
+
+### Scoring Example: ArgoCD Plugin
+
+```markdown
+## @roadiehq/backstage-plugin-argo-cd-backend Evaluation
+
+### Security (35 points possible)
+- [x] Last security audit: 2025-08-20 (2 months ago) → **10/10**
+- [x] No HIGH/CRITICAL CVEs → **10/10**
+- [x] Dependabot enabled, all checks passing → **5/5**
+- [x] Permissions: Read-only ArgoCD API access documented → **5/5**
+- [x] Code review completed by team → **5/5**
+**Security Score: 35/35**
+
+### Maintenance (25 points possible)
+- [x] Last commit: 2025-10-15 (4 days ago) → **8/8**
+- [x] Average issue response time: 3 days → **7/7**
+- [x] Upgrade guide from v2.x to v3.x documented → **5/5**
+- [x] Compatible with Backstage 1.20+ → **5/5**
+**Maintenance Score: 25/25**
+
+### Popularity (20 points possible)
+- [x] GitHub stars: 156 (Roadie plugins repo) → **7/7**
+- [x] NPM downloads: 28k/month → **7/7**
+- [x] Used by Roadie customers, documented case studies → **6/6**
+**Popularity Score: 20/20**
+
+### Quality (20 points possible)
+- [x] Test coverage: 75% → **7/7**
+- [x] Full TypeScript types → **5/5**
+- [x] Documentation includes setup guide, API reference, examples → **5/5**
+- [x] Error handling with typed exceptions → **3/3**
+**Quality Score: 20/20**
+
+**TOTAL SCORE: 100/100** ✅ **APPROVED FOR INSTALLATION**
+```
+
+### Scoring Example: API Docs Plugin
+
+```markdown
+## @backstage/plugin-api-docs Evaluation
+
+### Security (35 points possible)
+- [x] Last security audit: 2025-10-01 (18 days ago, Backstage core release) → **10/10**
+- [x] No HIGH/CRITICAL CVEs → **10/10**
+- [x] Dependabot enabled, Backstage core security process → **5/5**
+- [x] Permissions: Read-only catalog access, well documented → **5/5**
+- [x] Code review completed by Backstage maintainers (core plugin) → **5/5**
+**Security Score: 35/35**
+
+### Maintenance (25 points possible)
+- [x] Last commit: 2025-10-18 (1 day ago) → **8/8**
+- [x] Average issue response time: 1 day (Backstage core team) → **7/7**
+- [x] Upgrade guide included in Backstage release notes → **5/5**
+- [x] Compatible with Backstage 1.20+ (core plugin) → **5/5**
+**Maintenance Score: 25/25**
+
+### Popularity (20 points possible)
+- [x] GitHub stars: 28,500+ (backstage/backstage repo) → **7/7**
+- [x] NPM downloads: 180k+/month → **7/7**
+- [x] Used by Spotify, Netflix, American Airlines (core plugin) → **6/6**
+**Popularity Score: 20/20**
+
+### Quality (20 points possible)
+- [x] Test coverage: 85% → **7/7**
+- [x] Full TypeScript types → **5/5**
+- [x] Documentation includes comprehensive setup guide, API reference → **5/5**
+- [x] Error handling with typed exceptions → **3/3**
+**Quality Score: 20/20**
+
+**TOTAL SCORE: 100/100** ✅ **APPROVED FOR INSTALLATION**
+```
+
+### Scoring Example: Azure Pipelines Plugin
+
+```markdown
+## @backstage-community/plugin-azure-devops-backend Evaluation
+
+### Security (35 points possible)
+- [x] Last security audit: 2025-09-15 (34 days ago) → **10/10**
+- [x] No HIGH/CRITICAL CVEs → **10/10**
+- [x] Dependabot enabled, all checks passing → **5/5**
+- [x] Permissions: Azure DevOps PAT with read-only scopes documented → **5/5**
+- [x] Code review completed by community plugins maintainers → **5/5**
+**Security Score: 35/35**
+
+### Maintenance (25 points possible)
+- [x] Last commit: 2025-10-10 (9 days ago) → **8/8**
+- [x] Average issue response time: 5 days → **7/7**
+- [x] Upgrade guide from v1.x to v2.x documented → **5/5**
+- [x] Compatible with Backstage 1.20+ → **5/5**
+**Maintenance Score: 25/25**
+
+### Popularity (20 points possible)
+- [x] GitHub stars: 1,200+ (community-plugins repo) → **7/7**
+- [x] NPM downloads: 15k/month → **7/7**
+- [x] Used by Microsoft internal teams, documented in showcase → **6/6**
+**Popularity Score: 20/20**
+
+### Quality (20 points possible)
+- [x] Test coverage: 72% → **7/7**
+- [x] Full TypeScript types → **5/5**
+- [x] Documentation includes setup guide, authentication examples → **5/5**
+- [x] Error handling with Azure SDK error types → **3/3**
+**Quality Score: 20/20**
+
+**TOTAL SCORE: 100/100** ✅ **APPROVED FOR INSTALLATION**
+```
+
+### Scoring Example: Azure Resources Plugin
+
+```markdown
+## @vippsas/plugin-azure-resources-backend Evaluation
+
+### Security (35 points possible)
+- [x] Last security audit: 2025-07-22 (89 days ago) → **8/10** (slightly outdated)
+- [x] No HIGH/CRITICAL CVEs → **10/10**
+- [x] Dependabot enabled, all checks passing → **5/5**
+- [x] Permissions: Azure RBAC Reader role required, documented → **5/5**
+- [x] Code review completed by team → **5/5**
+**Security Score: 33/35**
+
+### Maintenance (25 points possible)
+- [x] Last commit: 2025-09-28 (21 days ago) → **8/8**
+- [x] Average issue response time: 6 days → **7/7**
+- [x] Upgrade guide included in CHANGELOG.md → **5/5**
+- [x] Compatible with Backstage 1.20+ → **5/5**
+**Maintenance Score: 25/25**
+
+### Popularity (20 points possible)
+- [x] GitHub stars: 82 → **7/7**
+- [x] NPM downloads: 1.2k/month → **5/7** (lower than ideal)
+- [x] Used by Vipps (Norwegian payment provider) → **4/6** (limited public case studies)
+**Popularity Score: 16/20**
+
+### Quality (20 points possible)
+- [x] Test coverage: 68% → **6/7** (below 70% threshold)
+- [x] Full TypeScript types → **5/5**
+- [x] Documentation includes setup guide, examples → **5/5**
+- [x] Error handling with Azure SDK error types → **3/3**
+**Quality Score: 19/20**
+
+**TOTAL SCORE: 93/100** ✅ **APPROVED FOR INSTALLATION** (Excellent category)
+
+**Notes:**
+- Slightly lower popularity metrics due to Azure-specific use case
+- Security audit is 89 days old (acceptable, but monitor for next update)
+- Consider contributing test coverage improvements back to project
+```
+
+### Decision Matrix
+
+| Score Range | Decision | Action |
+|-------------|----------|--------|
+| 90-100 | Excellent | Install immediately |
+| 70-89 | Good | Install with monitoring plan |
+| 50-69 | Acceptable | Install only if critical need, with extra scrutiny |
+| <50 | Poor | **DO NOT INSTALL** - Find alternative |
+
+### Red Flags (Auto-Reject)
+
+If ANY of these conditions are true, **reject the plugin immediately**:
+
+- ❌ No commits in last 6 months
+- ❌ Outstanding CRITICAL CVEs with no patch
+- ❌ Requires sudo/root permissions
+- ❌ Accesses filesystem outside plugin directory
+- ❌ Makes network requests to undocumented endpoints
+- ❌ No test coverage (<10%)
+- ❌ Incompatible with current Backstage version
+- ❌ License incompatible with Orbit (Elastic License 2.0)
+
+### Plugin Evaluation Checklist
+
+Use this during Phase 0 research:
+
+```markdown
+## Plugin: [Name]
+- [ ] Security audit completed
+- [ ] CVE scan passed
+- [ ] Dependency analysis passed
+- [ ] Code review completed
+- [ ] Test in isolated environment
+- [ ] Performance benchmarked
+- [ ] Documentation reviewed
+- [ ] License compatibility verified
+- [ ] Scoring rubric completed (attach below)
+- [ ] Approval from security team
+
+**Evaluator:** [Name]
+**Date:** [YYYY-MM-DD]
+**Rubric Score:** [X/100]
+**Recommendation:** [APPROVE/REJECT/DEFER]
+```
+
+### Monitoring Post-Installation
+
+After installing a plugin:
+
+1. **Week 1**: Daily monitoring of error rates
+2. **Week 2-4**: Monitor for security alerts
+3. **Month 2+**: Review quarterly for updates
+
+Set up alerts:
+- Alert if plugin error rate > 5%
+- Alert if plugin hasn't been updated in 90 days
+- Alert if new CVE discovered
+
 ## Implementation Approach
 
 ### High-Level Strategy
@@ -113,12 +350,1114 @@ Run Backstage backend as an integration layer microservice, deeply integrated wi
 - **Decision 2**: Create dedicated Go "plugins" service (not add to existing services) because this is a distinct concern with different scaling/deployment needs
 - **Decision 3**: Proxy all plugin data through Go layer (not direct frontend calls) because workspace filtering and data transformation must be centralized
 - **Decision 4**: Store plugin config in Payload (not Backstage's app-config.yaml) because admin UI must be the source of truth and changes should not require deployments
+- **Decision 5**: Use dynamic configuration provider to sync Payload CMS config to Backstage without restarts (see Configuration Synchronization Strategy below)
+
+### Configuration Synchronization Strategy
+
+**Problem**: Backstage plugins read configuration from `app-config.yaml` at startup. Payload CMS is the source of truth for plugin configuration (API keys, URLs, enable/disable state). How do we sync changes without restarting Backstage?
+
+**Solution**: Implement custom Backstage configuration provider that polls Orbit API for config updates.
+
+**Architecture:**
+```
+Payload CMS (DB)
+  ↓ (admin updates config)
+Orbit API Endpoint: GET /api/plugins/config
+  ↓ (HTTP poll every 60s)
+Backstage Dynamic Config Provider
+  ↓ (updates in-memory config)
+Backstage Plugins (read updated config)
+```
+
+**Implementation Approach:**
+
+1. **Create Orbit API endpoint** that returns Backstage-compatible config format:
+```typescript
+// orbit-www/src/app/api/plugins/config/route.ts
+export async function GET(request: Request) {
+  const payload = await getPayload({ config })
+
+  // Fetch all enabled plugin configs
+  const configs = await payload.find({
+    collection: 'plugin-configs',
+    where: { enabled: { equals: true } },
+    limit: 1000,
+  })
+
+  // Transform to Backstage config format
+  const backstageConfig = {
+    integrations: {},
+    jira: [],
+    github: [],
+  }
+
+  for (const config of configs.docs) {
+    const plugin = config.plugin
+
+    if (plugin.pluginId === 'jira') {
+      backstageConfig.jira.push({
+        host: config.config.jiraUrl,
+        token: decryptSecret(config.secrets.apiToken),
+        // Inject workspace context for filtering
+        workspace_id: config.workspace.id,
+      })
+    }
+    // ... similar for other plugins
+  }
+
+  return Response.json(backstageConfig)
+}
+```
+
+2. **Create Backstage dynamic config provider**:
+```typescript
+// services/backstage-backend/src/modules/dynamic-config/index.ts
+import { createBackendModule } from '@backstage/backend-plugin-api';
+import { ConfigReader } from '@backstage/config';
+
+export const dynamicConfigModule = createBackendModule({
+  pluginId: 'app',
+  moduleId: 'dynamic-config',
+  register(env) {
+    env.registerInit({
+      deps: {
+        config: coreServices.rootConfig,
+        logger: coreServices.logger,
+      },
+      async init({ config, logger }) {
+        const orbitApiUrl = config.getString('orbit.apiUrl');
+        const pollInterval = config.getOptionalNumber('orbit.configPollInterval') || 60000;
+
+        // Fetch config from Orbit API periodically
+        setInterval(async () => {
+          try {
+            const response = await fetch(`${orbitApiUrl}/api/plugins/config`);
+            const newConfig = await response.json();
+
+            // Update config dynamically
+            ConfigReader.fromConfigs([
+              { data: newConfig, context: 'orbit-dynamic' }
+            ]);
+
+            logger.info('Plugin configuration refreshed from Orbit API');
+          } catch (error) {
+            logger.error('Failed to fetch plugin config from Orbit', error);
+          }
+        }, pollInterval);
+      },
+    });
+  },
+});
+```
+
+3. **Backstage app-config.yaml references Orbit API**:
+```yaml
+# services/backstage-backend/app-config.yaml
+orbit:
+  apiUrl: ${ORBIT_API_URL}
+  configPollInterval: 60000  # 60 seconds
+
+# Initial empty config, will be populated dynamically
+integrations: {}
+jira: []
+github: []
+```
+
+**Trade-offs:**
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| **Polling (Chosen)** | Simple, no webhook infrastructure needed | 60s delay for config changes |
+| **Webhooks** | Instant config updates | Requires webhook endpoint in Backstage, auth complexity |
+| **Restart on Change** | Simple, guaranteed consistency | Downtime, slow iteration |
+| **Shared Database** | No sync needed | Tight coupling, Backstage schema knowledge required |
+
+**Configuration Change Flow:**
+
+1. Admin updates Jira API token in Payload CMS
+2. Payload saves encrypted secret to database
+3. Backstage polls `/api/plugins/config` (next 60s cycle)
+4. Backstage receives updated config with new token
+5. Backstage config loader updates in-memory config
+6. Next Jira API call uses new token (no restart needed)
+
+**Cache Invalidation:**
+
+For immediate config changes (e.g., disabling a plugin during incident):
+```bash
+# Manual trigger: Force config reload via Backstage admin API
+curl -X POST http://localhost:7007/api/admin/config/reload \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+**Fallback Strategy:**
+
+If Orbit API is unreachable:
+- Backstage continues using last successfully fetched config
+- Log warnings every poll interval
+- Alert if config fetch fails for > 5 minutes
+- Admin can manually update `app-config.yaml` as emergency fallback
+
+### Plugin Lifecycle Management
+
+**Problem**: Backstage plugins are npm packages installed at build time. How do we manage plugin versions, updates, and removal without breaking production?
+
+**Solution**: Version pinning with documented upgrade process and rollback strategy.
+
+**Version Management:**
+
+1. **Lock File Discipline**:
+```json
+// services/backstage-backend/package.json
+{
+  "dependencies": {
+    "@backstage/plugin-api-docs": "1.20.0",
+    "@backstage-community/plugin-github-actions-backend": "2.0.1",
+    "@backstage-community/plugin-azure-devops-backend": "1.5.0",
+    "@roadiehq/backstage-plugin-argo-cd-backend": "2.3.1",
+    "@vippsas/plugin-azure-resources-backend": "0.8.2"
+  }
+}
+```
+- Pin exact versions (no `^` or `~`)
+- Commit `yarn.lock` to version control
+- Document reason for each plugin version in `CHANGELOG.md`
+
+2. **Plugin Registry Versioning**:
+```typescript
+// orbit-www/src/collections/PluginRegistry.ts - Add version field
+{
+  name: 'pluginVersion',
+  type: 'text',
+  required: true,
+  admin: {
+    description: 'NPM package version (e.g., "1.2.3")',
+  },
+},
+{
+  name: 'backstageVersion',
+  type: 'text',
+  required: true,
+  admin: {
+    description: 'Compatible Backstage core version (e.g., "1.20.x")',
+  },
+},
+```
+
+3. **Dependency Conflict Detection**:
+```bash
+# services/backstage-backend/scripts/check-plugin-compatibility.sh
+#!/bin/bash
+
+echo "Checking plugin compatibility..."
+
+# Extract peer dependencies for all plugins
+for plugin in jira github-actions kubernetes jenkins; do
+  echo "Checking @backstage-community/plugin-$plugin-backend..."
+  npm info "@backstage-community/plugin-$plugin-backend" peerDependencies
+done
+
+# Check for version conflicts
+yarn install --check-files
+
+if [ $? -ne 0 ]; then
+  echo "ERROR: Plugin dependency conflicts detected!"
+  exit 1
+fi
+
+echo "All plugins compatible"
+```
+
+**Plugin Upgrade Process:**
+
+1. **Test in Staging**:
+```bash
+# 1. Update plugin version in separate branch
+cd services/backstage-backend
+yarn add @backstage-community/plugin-jira-backend@1.3.0
+
+# 2. Run compatibility check
+./scripts/check-plugin-compatibility.sh
+
+# 3. Build and test
+yarn build
+yarn test
+
+# 4. Deploy to staging environment
+kubectl apply -f infrastructure/kubernetes/backstage-deployment-staging.yaml
+
+# 5. Run integration tests against staging
+cd ../../
+make test-integration BACKSTAGE_URL=https://staging-backstage.orbit.internal
+
+# 6. Manual verification
+curl https://staging-backstage.orbit.internal/api/jira/projects
+
+# 7. If tests pass, merge to main and deploy to production
+```
+
+2. **Rollback Strategy**:
+```bash
+# If plugin upgrade causes issues in production:
+
+# Option 1: Git revert
+git revert <commit-hash>
+git push origin main
+# Redeploy with previous version
+
+# Option 2: Manual downgrade
+cd services/backstage-backend
+yarn add @backstage-community/plugin-jira-backend@1.2.3
+yarn build
+docker build -t orbit-backstage:rollback .
+kubectl set image deployment/backstage-backend backstage=orbit-backstage:rollback
+```
+
+**Plugin Removal Process:**
+
+When deprecating a plugin:
+
+1. **Disable in Payload** (soft delete):
+```sql
+-- Mark all configs as disabled
+UPDATE plugin_configs
+SET enabled = false
+WHERE plugin_id = (SELECT id FROM plugin_registry WHERE plugin_id = 'deprecated-plugin');
+```
+
+2. **Monitor for 30 days**:
+- Check metrics: `plugins_requests_total{plugin_id="deprecated-plugin"}`
+- If requests = 0 for 30 days, proceed to removal
+
+3. **Remove from codebase**:
+```bash
+cd services/backstage-backend
+yarn remove @backstage-community/plugin-deprecated-backend
+
+# Remove from imports
+# services/backstage-backend/src/index.ts
+# Delete: backend.add(import('@backstage-community/plugin-deprecated-backend'));
+
+yarn build
+yarn test
+```
+
+4. **Delete from registry**:
+```sql
+-- Archive plugin (don't delete for audit trail)
+UPDATE plugin_registry
+SET archived = true, archived_at = NOW()
+WHERE plugin_id = 'deprecated-plugin';
+```
+
+**Plugin Dependency Matrix**:
+
+Maintain compatibility matrix in documentation:
+
+```markdown
+## services/backstage-backend/PLUGINS.md
+
+| Plugin | Version | Backstage Core | Peer Dependencies | Status |
+|--------|---------|----------------|-------------------|--------|
+| API Docs | 1.20.0 | ^1.20.0 | None (core plugin) | Active |
+| GitHub Actions | 2.0.1 | ^1.20.0 | @octokit/rest@^19.0.0 | Active |
+| Azure Pipelines | 1.5.0 | ^1.20.0 | @azure/devops-node-api@^12.0.0 | Active |
+| ArgoCD | 2.3.1 | ^1.20.0 | None | Active |
+| Azure Resources | 0.8.2 | ^1.20.0 | @azure/arm-resources@^5.0.0 | Active |
+
+### Update History
+- 2025-10-19: Initial plugin selection for MVP
+- 2025-10-19: Added Azure Resources plugin v0.8.2
+- 2025-10-19: Added ArgoCD plugin v2.3.1
+```
+
+### Authentication & Authorization Flow
+
+**Problem**: How do we ensure secure authentication across the entire request chain (Frontend → Go → Backstage → External APIs) while maintaining workspace isolation?
+
+**Solution**: JWT-based authentication with workspace claim validation at each layer.
+
+**Complete Authentication Flow:**
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 1. User Login                                                            │
+│    User → Payload Auth → JWT issued with claims:                         │
+│    {                                                                      │
+│      "sub": "user-123",                                                  │
+│      "email": "user@example.com",                                        │
+│      "workspaces": ["ws-abc", "ws-xyz"],  // Workspaces user can access │
+│      "role": "developer",                                                │
+│      "exp": 1735689600                                                   │
+│    }                                                                      │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 2. Frontend gRPC Call                                                    │
+│    React Component calls:                                                │
+│    pluginsClient.proxyPluginRequest({                                   │
+│      workspaceId: "ws-abc",                                             │
+│      pluginId: "jira",                                                  │
+│      endpointPath: "/issues",                                           │
+│    }, {                                                                  │
+│      headers: {                                                          │
+│        authorization: `Bearer ${jwtToken}`  // JWT from login           │
+│      }                                                                   │
+│    })                                                                    │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 3. Go gRPC Service (Plugins Service)                                     │
+│                                                                           │
+│    a) Extract JWT from gRPC metadata:                                    │
+│       md, _ := metadata.FromIncomingContext(ctx)                        │
+│       token := md.Get("authorization")[0]                               │
+│                                                                           │
+│    b) Validate JWT signature:                                            │
+│       claims, err := jwt.Parse(token, secretKey)                        │
+│       if err != nil { return Unauthenticated }                          │
+│                                                                           │
+│    c) Verify workspace access:                                           │
+│       if !claims.Workspaces.Contains(req.WorkspaceId) {                 │
+│         return PermissionDenied                                          │
+│       }                                                                   │
+│                                                                           │
+│    d) Log access for audit:                                              │
+│       log.Info("Plugin access", "user", claims.Sub,                     │
+│                "workspace", req.WorkspaceId, "plugin", req.PluginId)    │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 4. Go → Backstage HTTP Call                                              │
+│                                                                           │
+│    HTTP Request:                                                          │
+│    GET http://backstage:7007/api/jira/issues                           │
+│    Headers:                                                               │
+│      X-Orbit-Workspace-Id: ws-abc        ← CRITICAL for isolation       │
+│      X-Orbit-User-Id: user-123           ← For Backstage logging        │
+│      X-Orbit-Plugin-Id: jira             ← Plugin context               │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 5. Backstage Workspace Isolation Middleware                              │
+│                                                                           │
+│    app.use((req, res, next) => {                                        │
+│      const workspaceId = req.headers['x-orbit-workspace-id'];          │
+│                                                                           │
+│      if (!workspaceId) {                                                │
+│        return res.status(400).json({ error: 'Missing workspace ID' }); │
+│      }                                                                   │
+│                                                                           │
+│      // Attach to request for plugins to use                            │
+│      req.workspaceContext = { workspaceId };                            │
+│      next();                                                             │
+│    });                                                                   │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 6. Backstage Plugin (Jira)                                               │
+│                                                                           │
+│    a) Fetch plugin config for workspace:                                │
+│       const config = await getPluginConfig(req.workspaceContext.workspaceId); │
+│       // Returns: { jiraUrl, apiToken } from Orbit config endpoint      │
+│                                                                           │
+│    b) Make authenticated call to external API:                           │
+│       const response = await fetch(`${config.jiraUrl}/rest/api/3/issue/search`, { │
+│         headers: {                                                        │
+│           'Authorization': `Bearer ${config.apiToken}`                   │
+│         }                                                                │
+│       });                                                                │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 7. External API (Jira Cloud)                                             │
+│                                                                           │
+│    Jira validates API token, returns issues:                             │
+│    {                                                                      │
+│      "issues": [                                                         │
+│        { "key": "PROJ-123", "summary": "Bug fix" }                      │
+│      ]                                                                   │
+│    }                                                                      │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 8. Response Chain (Reverse Flow)                                         │
+│                                                                           │
+│    Jira API → Backstage Plugin → Backstage HTTP Response                │
+│             → Go Service → gRPC Response → Frontend                      │
+│                                                                           │
+│    At each layer, workspace_id is verified in logs/metrics               │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**JWT Claims Structure:**
+
+```typescript
+// orbit-www/src/lib/auth/jwt-types.ts
+interface OrbitJWTClaims {
+  sub: string;              // User ID
+  email: string;            // User email
+  workspaces: string[];     // Array of workspace IDs user has access to
+  role: 'admin' | 'developer' | 'viewer';
+  permissions: {
+    [workspaceId: string]: string[];  // Per-workspace permissions
+  };
+  exp: number;              // Expiration timestamp
+  iat: number;              // Issued at timestamp
+}
+```
+
+**Workspace Access Validation (Go):**
+
+```go
+// services/plugins/internal/auth/jwt.go
+package auth
+
+import (
+    "fmt"
+    "time"
+
+    "github.com/golang-jwt/jwt/v5"
+)
+
+type Claims struct {
+    UserID     string   `json:"sub"`
+    Email      string   `json:"email"`
+    Workspaces []string `json:"workspaces"`
+    Role       string   `json:"role"`
+    jwt.RegisteredClaims
+}
+
+func (c *Claims) HasWorkspaceAccess(workspaceID string) bool {
+    for _, ws := range c.Workspaces {
+        if ws == workspaceID {
+            return true
+        }
+    }
+    return false
+}
+
+func ValidateJWT(tokenString string, secretKey []byte) (*Claims, error) {
+    token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+        // Validate signing method
+        if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+            return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+        }
+        return secretKey, nil
+    })
+
+    if err != nil {
+        return nil, fmt.Errorf("parse token: %w", err)
+    }
+
+    if claims, ok := token.Claims.(*Claims); ok && token.Valid {
+        // Check expiration
+        if claims.ExpiresAt.Before(time.Now()) {
+            return nil, fmt.Errorf("token expired")
+        }
+        return claims, nil
+    }
+
+    return nil, fmt.Errorf("invalid token")
+}
+```
+
+**Multi-Workspace Scenario:**
+
+User belongs to Workspace A and Workspace B:
+
+```
+Request 1: workspace_id=ws-a, JWT.workspaces=[ws-a, ws-b]
+  ✅ Allowed - user has access to ws-a
+
+Request 2: workspace_id=ws-b, JWT.workspaces=[ws-a, ws-b]
+  ✅ Allowed - user has access to ws-b
+
+Request 3: workspace_id=ws-c, JWT.workspaces=[ws-a, ws-b]
+  ❌ Denied - user does NOT have access to ws-c
+  Response: 403 Forbidden
+```
+
+**Security Considerations:**
+
+1. **Token Rotation**: JWTs expire after 24 hours, requiring re-authentication
+2. **Workspace Claim Immutability**: Workspace list is validated against database on each critical operation
+3. **Audit Logging**: All workspace accesses logged with user ID, workspace ID, plugin ID, timestamp
+4. **Rate Limiting**: Per-workspace rate limits prevent abuse (100 req/min per workspace)
+5. **No Direct Backstage Access**: Backstage backend is not publicly accessible, only via Go proxy
+
+**Failure Scenarios:**
+
+| Scenario | HTTP Status | gRPC Code | Response |
+|----------|-------------|-----------|----------|
+| Missing JWT | 401 | Unauthenticated | "Missing authorization header" |
+| Invalid JWT signature | 401 | Unauthenticated | "Invalid token" |
+| Expired JWT | 401 | Unauthenticated | "Token expired" |
+| Workspace not in claims | 403 | PermissionDenied | "Access denied to workspace" |
+| Plugin disabled | 403 | PermissionDenied | "Plugin not enabled for workspace" |
+| Backstage API error | 500 | Internal | "Backstage unavailable" |
+
+### Circuit Breaker & Resilience Patterns
+
+**Problem**: Backstage backend may become unavailable or slow, causing cascading failures in the Go plugins service. How do we prevent total system failure when Backstage is down?
+
+**Solution**: Implement circuit breaker pattern with automatic retries and graceful degradation.
+
+**Circuit Breaker States:**
+
+```
+┌──────────────┐
+│    CLOSED    │  ← Normal operation, requests flow through
+│ (Healthy)    │
+└──────┬───────┘
+       │ Failures exceed threshold (5 failures in 10s)
+       ↓
+┌──────────────┐
+│     OPEN     │  ← Circuit broken, requests fail fast
+│ (Broken)     │     No requests sent to Backstage
+└──────┬───────┘
+       │ After timeout (30s)
+       ↓
+┌──────────────┐
+│  HALF-OPEN   │  ← Testing recovery, allow 1 request
+│ (Testing)    │
+└──────┬───────┘
+       │
+       ├─ Success → Back to CLOSED
+       └─ Failure → Back to OPEN
+```
+
+**Implementation:**
+
+```go
+// services/plugins/internal/backstage/circuit_breaker.go
+package backstage
+
+import (
+    "context"
+    "fmt"
+    "net/http"
+    "sync"
+    "time"
+
+    "github.com/sony/gobreaker"
+)
+
+type ClientWithCircuitBreaker struct {
+    baseClient    *Client
+    circuitBreaker *gobreaker.CircuitBreaker
+}
+
+func NewClientWithCircuitBreaker(baseURL string) *ClientWithCircuitBreaker {
+    settings := gobreaker.Settings{
+        Name:        "backstage-api",
+        MaxRequests: 3,                    // Max requests allowed in HALF-OPEN state
+        Interval:    10 * time.Second,     // Reset failure counter after this duration
+        Timeout:     30 * time.Second,     // Duration to wait before trying HALF-OPEN
+        ReadyToTrip: func(counts gobreaker.Counts) bool {
+            failureRatio := float64(counts.TotalFailures) / float64(counts.Requests)
+            return counts.Requests >= 5 && failureRatio >= 0.6
+        },
+        OnStateChange: func(name string, from gobreaker.State, to gobreaker.State) {
+            log.Warn("Circuit breaker state changed",
+                "service", name,
+                "from", from.String(),
+                "to", to.String(),
+            )
+
+            // Send alert if circuit opens
+            if to == gobreaker.StateOpen {
+                alert.Send("Backstage circuit breaker OPEN - service degraded")
+            }
+        },
+    }
+
+    return &ClientWithCircuitBreaker{
+        baseClient:     NewClient(baseURL),
+        circuitBreaker: gobreaker.NewCircuitBreaker(settings),
+    }
+}
+
+func (c *ClientWithCircuitBreaker) ProxyRequest(
+    ctx context.Context,
+    req *ProxyRequest,
+) (*ProxyResponse, error) {
+    // Execute with circuit breaker
+    result, err := c.circuitBreaker.Execute(func() (interface{}, error) {
+        return c.baseClient.ProxyRequest(ctx, req)
+    })
+
+    if err != nil {
+        // Circuit breaker is open or request failed
+        if err == gobreaker.ErrOpenState {
+            return nil, fmt.Errorf("backstage service unavailable (circuit breaker open)")
+        }
+        return nil, err
+    }
+
+    return result.(*ProxyResponse), nil
+}
+```
+
+**Retry Strategy with Exponential Backoff:**
+
+```go
+// services/plugins/internal/backstage/retry.go
+package backstage
+
+import (
+    "context"
+    "fmt"
+    "time"
+
+    "github.com/cenkalti/backoff/v4"
+)
+
+func (c *Client) executeWithRetry(ctx context.Context, req *http.Request) (*http.Response, error) {
+    var resp *http.Response
+    var err error
+
+    // Configure exponential backoff
+    b := backoff.NewExponentialBackOff()
+    b.InitialInterval = 100 * time.Millisecond
+    b.MaxInterval = 2 * time.Second
+    b.MaxElapsedTime = 10 * time.Second
+    b.Multiplier = 2.0
+
+    retryableFunc := func() error {
+        resp, err = c.httpClient.Do(req)
+        if err != nil {
+            return err // Network error, retry
+        }
+
+        // Retry on 5xx errors and 429 (rate limit)
+        if resp.StatusCode >= 500 || resp.StatusCode == 429 {
+            resp.Body.Close()
+            return fmt.Errorf("server error: %d", resp.StatusCode)
+        }
+
+        return nil // Success or 4xx (non-retryable)
+    }
+
+    // Retry with backoff
+    if err := backoff.Retry(retryableFunc, backoff.WithContext(b, ctx)); err != nil {
+        return nil, fmt.Errorf("retry exhausted: %w", err)
+    }
+
+    return resp, nil
+}
+```
+
+**Fallback Strategy:**
+
+When Backstage is completely unavailable, provide cached or default responses:
+
+```go
+// services/plugins/internal/backstage/fallback.go
+package backstage
+
+import (
+    "context"
+    "encoding/json"
+    "time"
+
+    "github.com/go-redis/redis/v8"
+)
+
+type CacheClient struct {
+    redis      *redis.Client
+    backendClient *ClientWithCircuitBreaker
+}
+
+func (c *CacheClient) ProxyRequestWithFallback(
+    ctx context.Context,
+    req *ProxyRequest,
+) (*ProxyResponse, error) {
+    // Try to fetch from Backstage
+    resp, err := c.backendClient.ProxyRequest(ctx, req)
+    if err == nil {
+        // Success - cache the response
+        c.cacheResponse(ctx, req, resp, 5*time.Minute)
+        return resp, nil
+    }
+
+    // Backstage failed - try cache
+    log.Warn("Backstage unavailable, attempting cache fallback",
+        "plugin", req.PluginID,
+        "workspace", req.WorkspaceID,
+        "error", err,
+    )
+
+    cachedResp, cacheErr := c.getCachedResponse(ctx, req)
+    if cacheErr == nil {
+        log.Info("Serving cached response",
+            "plugin", req.PluginID,
+            "age", cachedResp.CachedAt,
+        )
+        return cachedResp, nil
+    }
+
+    // No cache available - return degraded response
+    return &ProxyResponse{
+        StatusCode:   503,
+        Data:         []byte(`{"error":"Service temporarily unavailable"}`),
+        ErrorMessage: "Backstage unavailable and no cached data",
+    }, fmt.Errorf("backstage unavailable: %w", err)
+}
+
+func (c *CacheClient) cacheResponse(ctx context.Context, req *ProxyRequest, resp *ProxyResponse, ttl time.Duration) {
+    cacheKey := fmt.Sprintf("plugin:%s:%s:%s", req.WorkspaceID, req.PluginID, req.EndpointPath)
+
+    data, _ := json.Marshal(resp)
+    c.redis.Set(ctx, cacheKey, data, ttl)
+}
+```
+
+**Timeout Configuration:**
+
+```go
+// services/plugins/internal/config/timeouts.go
+package config
+
+import "time"
+
+type TimeoutConfig struct {
+    // Backstage HTTP client timeout
+    BackstageRequestTimeout time.Duration
+
+    // Overall gRPC request deadline
+    GRPCRequestDeadline time.Duration
+
+    // Circuit breaker timeout (OPEN → HALF-OPEN)
+    CircuitBreakerTimeout time.Duration
+}
+
+var DefaultTimeouts = TimeoutConfig{
+    BackstageRequestTimeout: 10 * time.Second,
+    GRPCRequestDeadline:     15 * time.Second,
+    CircuitBreakerTimeout:   30 * time.Second,
+}
+```
+
+**Monitoring Circuit Breaker State:**
+
+```go
+// Export circuit breaker metrics for Prometheus
+func (c *ClientWithCircuitBreaker) RegisterMetrics(registry *prometheus.Registry) {
+    stateGauge := prometheus.NewGaugeVec(
+        prometheus.GaugeOpts{
+            Name: "backstage_circuit_breaker_state",
+            Help: "Circuit breaker state (0=closed, 1=open, 2=half-open)",
+        },
+        []string{"service"},
+    )
+
+    registry.MustRegister(stateGauge)
+
+    // Update gauge based on circuit breaker state
+    go func() {
+        ticker := time.NewTicker(5 * time.Second)
+        defer ticker.Stop()
+
+        for range ticker.C {
+            state := c.circuitBreaker.State()
+            var value float64
+            switch state {
+            case gobreaker.StateClosed:
+                value = 0
+            case gobreaker.StateOpen:
+                value = 1
+            case gobreaker.StateHalfOpen:
+                value = 2
+            }
+            stateGauge.WithLabelValues("backstage-api").Set(value)
+        }
+    }()
+}
+```
+
+**Testing Circuit Breaker:**
+
+```go
+// services/plugins/internal/backstage/circuit_breaker_test.go
+func TestCircuitBreakerOpens(t *testing.T) {
+    // Mock server that always returns 500
+    failingServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        w.WriteHeader(500)
+    }))
+    defer failingServer.Close()
+
+    client := NewClientWithCircuitBreaker(failingServer.URL)
+
+    // Make requests until circuit opens
+    for i := 0; i < 10; i++ {
+        _, err := client.ProxyRequest(context.Background(), &ProxyRequest{
+            WorkspaceID:    "ws-test",
+            PluginID:       "jira",
+            PluginBasePath: "/api/jira",
+            EndpointPath:   "/issues",
+            Method:         "GET",
+        })
+
+        // After ~5 failures, circuit should open
+        if i >= 5 {
+            assert.ErrorContains(t, err, "circuit breaker open")
+        }
+    }
+}
+```
+
+**Graceful Degradation UI:**
+
+Frontend should handle circuit breaker errors gracefully:
+
+```typescript
+// orbit-www/src/components/plugins/JiraIssuesList.tsx
+export function JiraIssuesList({ workspaceId }: Props) {
+  const [status, setStatus] = useState<'loading' | 'success' | 'degraded' | 'error'>('loading');
+
+  useEffect(() => {
+    async function fetchIssues() {
+      try {
+        const response = await pluginsClient.proxyPluginRequest({...});
+
+        if (response.statusCode === 503) {
+          setStatus('degraded');
+          // Show cached data or "service temporarily unavailable" message
+        } else {
+          setStatus('success');
+        }
+      } catch (err) {
+        setStatus('error');
+      }
+    }
+
+    fetchIssues();
+  }, [workspaceId]);
+
+  if (status === 'degraded') {
+    return (
+      <div className="bg-yellow-50 border border-yellow-200 rounded p-4">
+        <p className="text-yellow-800">
+          Jira integration is temporarily unavailable. Showing cached data.
+        </p>
+      </div>
+    );
+  }
+
+  // ...rest of component
+}
+```
+
+**Key Resilience Metrics:**
+
+- `backstage_circuit_breaker_state` - Circuit breaker state (0/1/2)
+- `backstage_request_failures_total` - Total failed requests
+- `backstage_request_duration_seconds` - Request latency histogram
+- `backstage_cache_hits_total` - Cache hit rate during degradation
+- `backstage_retry_attempts_total` - Number of retries performed
 
 ### Patterns to Follow
 - gRPC service structure from `.agent/SOPs/adding-grpc-services.md`
 - External API integration patterns from `.agent/SOPs/integrating-apis.md`
 - Workspace isolation patterns from `services/repository/internal/service/`
 - Payload collection patterns from existing collections
+
+## Phase 0: Proof of Concept & Research
+
+### Overview
+Validate Backstage integration assumptions through a minimal proof-of-concept before committing to full production architecture. This phase de-risks the project by confirming plugin behavior, API contracts, and multi-tenancy feasibility.
+
+### Prerequisites
+- [ ] Node.js 18+ installed locally
+- [ ] Docker available for local Backstage instance
+- [ ] Access to test Jira/GitHub accounts for plugin testing
+
+### Research Questions to Answer
+
+**1. Backstage Multi-Tenancy Database Isolation**
+- **Question**: How do we ensure plugin data is isolated by workspace at the database level?
+- **Research Tasks**:
+  - Review Backstage database schema for plugin tables
+  - Test if plugins write directly to shared tables (data leakage risk)
+  - Investigate Backstage's multitenancy support or lack thereof
+  - Document whether we need separate Backstage instances per workspace vs shared instance with middleware filtering
+- **Success Criteria**: Clear architectural decision on single vs multi-instance deployment
+
+**2. Plugin API Contract Discovery**
+- **Question**: What are the actual HTTP API endpoints and response formats for each plugin?
+- **Research Tasks**:
+  - Install Jira plugin, make test API calls, document actual endpoints and responses
+  - Install GitHub Actions plugin, document API format
+  - Compare documented API vs actual behavior (breaking changes?)
+  - Test error responses (404, 500, rate limits)
+- **Success Criteria**: Documented API contracts for 2-3 plugins with example requests/responses
+
+**3. Configuration Sync Mechanism**
+- **Question**: How can we dynamically update Backstage config from Payload CMS without restarts?
+- **Research Tasks**:
+  - Test Backstage config reloading capabilities
+  - Explore dynamic config provider API
+  - Build PoC config loader that fetches from HTTP endpoint (Payload API)
+  - Measure config reload latency
+- **Success Criteria**: Working prototype of dynamic config loading from external source
+
+**4. Plugin Dependency Chains**
+- **Question**: Do plugins have complex dependency trees that complicate version management?
+- **Research Tasks**:
+  - Analyze `package.json` for 5 target plugins
+  - Map peer dependencies and version constraints
+  - Test installing conflicting plugin versions
+  - Document any plugin incompatibilities
+- **Success Criteria**: Dependency matrix showing which plugins can coexist
+
+### Changes Required
+
+#### 1. Minimal Backstage PoC
+
+**Files to Create:**
+- `poc/backstage-test/package.json` - Minimal Backstage with 1-2 plugins
+- `poc/backstage-test/app-config.yaml` - Test configuration
+- `poc/backstage-test/src/index.ts` - Minimal backend
+- `poc/backstage-test/FINDINGS.md` - Research findings document
+
+**Commands to Run:**
+```bash
+# Create PoC directory
+mkdir -p poc/backstage-test
+cd poc/backstage-test
+
+# Initialize minimal Backstage backend
+npx @backstage/create-app --skip-install
+
+# Install only Jira plugin for testing
+yarn add @backstage-community/plugin-jira-backend
+
+# Start Backstage
+yarn dev
+
+# Test API endpoints
+curl http://localhost:7007/api/jira/issues?project=TEST
+
+# Inspect database schema
+psql -h localhost -U postgres -d backstage -c "\dt"
+psql -h localhost -U postgres -d backstage -c "\d+ jira_issues"
+```
+
+**Research Script:**
+```bash
+#!/bin/bash
+# poc/backstage-test/research.sh
+
+echo "=== Backstage Multi-Tenancy Research ==="
+
+# Test 1: Database schema inspection
+echo "1. Inspecting plugin tables..."
+docker exec -it postgres psql -U postgres -d backstage -c "\dt" > db-tables.txt
+
+# Test 2: API endpoint discovery
+echo "2. Testing Jira plugin API..."
+curl -v http://localhost:7007/api/jira/projects > api-response-jira.json
+
+# Test 3: Workspace header injection test
+echo "3. Testing custom header propagation..."
+curl -H "X-Orbit-Workspace-Id: ws-123" http://localhost:7007/api/jira/projects
+
+# Test 4: Config reload test
+echo "4. Testing dynamic config changes..."
+# Modify app-config.yaml
+# Check if Backstage picks up changes without restart
+
+echo "Research complete. See FINDINGS.md for analysis."
+```
+
+#### 2. Document Findings
+
+**File**: `poc/backstage-test/FINDINGS.md`
+
+Template:
+```markdown
+# Backstage Integration PoC Findings
+
+## Date: [YYYY-MM-DD]
+
+### Multi-Tenancy Feasibility
+
+**Database Isolation:**
+- [ ] Plugin tables contain workspace/tenant identifier field
+- [ ] Plugins write to shared tables (RISK: data leakage)
+- [ ] Backstage supports built-in multitenancy: YES/NO
+- [ ] Decision: [Single shared instance with middleware filtering / Separate instances per workspace]
+
+**Justification:**
+[Detailed reasoning based on observations]
+
+### Plugin API Contracts
+
+**Jira Plugin:**
+- Endpoint: `/api/jira/projects`
+- Method: GET
+- Required Headers: [list]
+- Response Format: [paste example JSON]
+- Error Codes: 404 (project not found), 401 (auth failed), 500 (Jira API down)
+
+**GitHub Actions Plugin:**
+- [Similar documentation]
+
+### Configuration Sync
+
+**Current Behavior:**
+- Config changes require: [restart / reload endpoint / automatic detection]
+- Reload latency: [X seconds]
+
+**Proposed Solution:**
+[Description of dynamic config loader approach]
+
+### Plugin Dependencies
+
+**Compatibility Matrix:**
+| Plugin | Version | Peer Dependencies | Conflicts |
+|--------|---------|-------------------|-----------|
+| Jira   | 1.2.0   | @backstage/core ^1.0 | None |
+| GitHub | 2.0.1   | @backstage/core ^1.0 | None |
+
+### Blockers Identified
+
+1. [List any show-stoppers discovered]
+2. [Alternative approaches if needed]
+
+### Recommendations
+
+- [ ] Proceed with original architecture
+- [ ] Modify approach based on findings: [details]
+- [ ] Investigate alternative: [alternative approach]
+```
+
+### Dependencies
+- None (this is Phase 0, foundational research)
+
+### Success Criteria
+
+#### Automated Verification
+- [ ] PoC Backstage instance starts successfully
+- [ ] At least 1 plugin is operational (Jira or GitHub)
+- [ ] API calls return expected data formats
+- [ ] Database tables created by plugins are documented
+
+#### Manual Verification
+- [ ] FINDINGS.md document completed with all sections filled
+- [ ] Multi-tenancy approach validated and documented
+- [ ] Plugin API contracts documented with examples
+- [ ] Configuration sync mechanism identified
+- [ ] Team reviews findings and approves proceeding to Phase 1
+
+### Time Estimate
+**2-3 days** for research, testing, and documentation
+
+### Rollback Plan
+Delete `poc/` directory. No production systems affected.
+
+---
 
 ## Phase 1: Backstage Backend Setup
 
@@ -156,18 +1495,18 @@ const backend = createBackend();
 backend.add(import('@backstage/plugin-app-backend'));
 
 // Initial plugin set - API Catalog category
-backend.add(import('@backstage-community/plugin-api-docs-backend'));
+backend.add(import('@backstage/plugin-api-docs')); // Core Backstage API docs plugin
 backend.add(import('@backstage-community/plugin-graphql-backend'));
 
 // Initial plugin set - CI/CD category
 backend.add(import('@backstage-community/plugin-github-actions-backend'));
-backend.add(import('@backstage-community/plugin-jenkins-backend'));
+backend.add(import('@backstage-community/plugin-azure-devops-backend')); // Azure Pipelines
 
-// Initial plugin set - Infrastructure category
-backend.add(import('@backstage-community/plugin-kubernetes-backend'));
+// Initial plugin set - Infrastructure/Deployment category
+backend.add(import('@roadiehq/backstage-plugin-argo-cd-backend')); // ArgoCD
 
-// Initial plugin set - Project Management category
-backend.add(import('@backstage-community/plugin-jira-backend'));
+// Initial plugin set - Cloud Resources category
+backend.add(import('@vippsas/plugin-azure-resources-backend')); // Azure Resources
 
 // Custom workspace middleware
 backend.add(import('./modules/workspace-isolation'));
@@ -365,14 +1704,13 @@ service PluginsService {
   // ListPlugins returns all available plugins for the workspace
   rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse);
 
-  // GetPluginData fetches data from a specific plugin
-  rpc GetPluginData(GetPluginDataRequest) returns (GetPluginDataResponse);
+  // ProxyPluginRequest is a generic proxy that forwards requests to Backstage
+  // This allows adding new plugins without changing the proto definition
+  rpc ProxyPluginRequest(ProxyPluginRequestMessage) returns (ProxyPluginResponse);
 
-  // ListJiraIssues fetches Jira issues (example plugin endpoint)
-  rpc ListJiraIssues(ListJiraIssuesRequest) returns (ListJiraIssuesResponse);
-
-  // ListGitHubPullRequests fetches GitHub PRs (example plugin endpoint)
-  rpc ListGitHubPullRequests(ListGitHubPullRequestsRequest) returns (ListGitHubPullRequestsResponse);
+  // GetPluginSchema returns the schema for a specific plugin's data
+  // Used by frontend to dynamically render plugin data
+  rpc GetPluginSchema(GetPluginSchemaRequest) returns (GetPluginSchemaResponse);
 }
 
 message ListPluginsRequest {
@@ -386,56 +1724,52 @@ message ListPluginsResponse {
 message Plugin {
   string id = 1;
   string name = 2;
-  string category = 3; // "api-catalog", "ci-cd", "infrastructure", "project-management"
+  string category = 3; // "api-catalog", "ci-cd", "infrastructure", "cloud-resources"
   bool enabled = 4;
   map<string, string> config = 5;
+  string api_base_path = 6; // e.g., "/api/argocd"
 }
 
-message GetPluginDataRequest {
+// Generic proxy pattern - no plugin-specific endpoints needed
+message ProxyPluginRequestMessage {
   string workspace_id = 1;
   string plugin_id = 2;
-  map<string, string> params = 3;
+  string endpoint_path = 3; // e.g., "/projects" or "/issues?project=PROJ"
+  string http_method = 4; // "GET", "POST", "PUT", "DELETE"
+  map<string, string> query_params = 5;
+  map<string, string> headers = 6;
+  bytes body = 7; // For POST/PUT requests
 }
 
-message GetPluginDataResponse {
-  bytes data = 1; // JSON-encoded plugin data
+message ProxyPluginResponse {
+  int32 status_code = 1;
+  bytes data = 2; // Raw JSON from Backstage
+  map<string, string> headers = 3;
+  string error_message = 4; // Only populated if error occurred
 }
 
-message ListJiraIssuesRequest {
-  string workspace_id = 1;
-  string project_key = 2;
-  string status = 3;
+// Plugin schema for dynamic frontend rendering
+message GetPluginSchemaRequest {
+  string plugin_id = 1;
 }
 
-message ListJiraIssuesResponse {
-  repeated JiraIssue issues = 1;
+message GetPluginSchemaResponse {
+  string json_schema = 1; // JSON schema describing the data structure
+  repeated PluginEndpoint endpoints = 2;
 }
 
-message JiraIssue {
-  string key = 1;
-  string summary = 2;
-  string status = 3;
-  string assignee = 4;
-  string created_at = 5;
+message PluginEndpoint {
+  string path = 1;
+  string method = 2;
+  string description = 3;
+  repeated PluginParameter parameters = 4;
 }
 
-message ListGitHubPullRequestsRequest {
-  string workspace_id = 1;
-  string repository = 2;
-  string state = 3; // "open", "closed", "merged"
-}
-
-message ListGitHubPullRequestsResponse {
-  repeated GitHubPullRequest pull_requests = 1;
-}
-
-message GitHubPullRequest {
-  int64 number = 1;
-  string title = 2;
-  string state = 3;
-  string author = 4;
-  string created_at = 5;
-  string url = 6;
+message PluginParameter {
+  string name = 1;
+  string type = 2; // "string", "number", "boolean"
+  bool required = 3;
+  string description = 4;
 }
 ```
 
@@ -477,45 +1811,96 @@ func NewClient(baseURL string) *Client {
     }
 }
 
-// FetchJiraIssues calls Backstage Jira plugin API
-func (c *Client) FetchJiraIssues(ctx context.Context, workspaceID, projectKey string) ([]JiraIssue, error) {
-    url := fmt.Sprintf("%s/api/jira/issues?project=%s", c.baseURL, projectKey)
+// ProxyRequest is a generic proxy that forwards requests to Backstage
+// This allows adding new plugins without modifying the Go service code
+func (c *Client) ProxyRequest(ctx context.Context, req *ProxyRequest) (*ProxyResponse, error) {
+    // Build full URL
+    url := fmt.Sprintf("%s%s%s", c.baseURL, req.PluginBasePath, req.EndpointPath)
 
-    req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+    // Add query parameters
+    if len(req.QueryParams) > 0 {
+        params := url.Values{}
+        for k, v := range req.QueryParams {
+            params.Add(k, v)
+        }
+        url = fmt.Sprintf("%s?%s", url, params.Encode())
+    }
+
+    // Create HTTP request
+    httpReq, err := http.NewRequestWithContext(ctx, req.Method, url, bytes.NewReader(req.Body))
     if err != nil {
         return nil, fmt.Errorf("create request: %w", err)
     }
 
-    // Inject workspace ID for Backstage's isolation middleware
-    req.Header.Set("X-Orbit-Workspace-Id", workspaceID)
+    // Inject workspace ID for Backstage's isolation middleware (CRITICAL)
+    httpReq.Header.Set("X-Orbit-Workspace-Id", req.WorkspaceID)
 
-    resp, err := c.httpClient.Do(req)
+    // Forward additional headers
+    for k, v := range req.Headers {
+        httpReq.Header.Set(k, v)
+    }
+
+    // Execute request with circuit breaker (see Circuit Breaker section)
+    resp, err := c.executeWithCircuitBreaker(httpReq)
     if err != nil {
         return nil, fmt.Errorf("http call: %w", err)
     }
     defer resp.Body.Close()
 
-    if resp.StatusCode != http.StatusOK {
-        return nil, fmt.Errorf("backstage API error: status %d", resp.StatusCode)
+    // Read response body
+    body, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return nil, fmt.Errorf("read response body: %w", err)
     }
 
-    var result struct {
-        Issues []JiraIssue `json:"issues"`
-    }
-
-    if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-        return nil, fmt.Errorf("decode response: %w", err)
-    }
-
-    return result.Issues, nil
+    // Return generic response
+    return &ProxyResponse{
+        StatusCode:   resp.StatusCode,
+        Data:         body,
+        Headers:      convertHeaders(resp.Header),
+        ErrorMessage: getErrorMessage(resp.StatusCode, body),
+    }, nil
 }
 
-type JiraIssue struct {
-    Key       string `json:"key"`
-    Summary   string `json:"summary"`
-    Status    string `json:"status"`
-    Assignee  string `json:"assignee"`
-    CreatedAt string `json:"created_at"`
+type ProxyRequest struct {
+    WorkspaceID    string
+    PluginID       string
+    PluginBasePath string // e.g., "/api/jira"
+    EndpointPath   string // e.g., "/issues"
+    Method         string
+    QueryParams    map[string]string
+    Headers        map[string]string
+    Body           []byte
+}
+
+type ProxyResponse struct {
+    StatusCode   int
+    Data         []byte
+    Headers      map[string]string
+    ErrorMessage string
+}
+
+func getErrorMessage(statusCode int, body []byte) string {
+    if statusCode >= 200 && statusCode < 300 {
+        return ""
+    }
+
+    // Try to extract error message from JSON response
+    var errorResp struct {
+        Error   string `json:"error"`
+        Message string `json:"message"`
+    }
+
+    if err := json.Unmarshal(body, &errorResp); err == nil {
+        if errorResp.Error != "" {
+            return errorResp.Error
+        }
+        if errorResp.Message != "" {
+            return errorResp.Message
+        }
+    }
+
+    return fmt.Sprintf("HTTP %d", statusCode)
 }
 ```
 
@@ -545,36 +1930,76 @@ func NewServer(pluginsService *service.PluginsService) *Server {
     }
 }
 
-func (s *Server) ListJiraIssues(
+// Generic proxy endpoint - works for all plugins
+func (s *Server) ProxyPluginRequest(
     ctx context.Context,
-    req *pluginsv1.ListJiraIssuesRequest,
-) (*pluginsv1.ListJiraIssuesResponse, error) {
-    // Validate workspace ID
+    req *pluginsv1.ProxyPluginRequestMessage,
+) (*pluginsv1.ProxyPluginResponse, error) {
+    // Validate required fields
     if req.WorkspaceId == "" {
         return nil, status.Error(codes.InvalidArgument, "workspace_id is required")
     }
+    if req.PluginId == "" {
+        return nil, status.Error(codes.InvalidArgument, "plugin_id is required")
+    }
+    if req.EndpointPath == "" {
+        return nil, status.Error(codes.InvalidArgument, "endpoint_path is required")
+    }
 
-    // Call service layer
-    issues, err := s.pluginsService.FetchJiraIssues(ctx, req.WorkspaceId, req.ProjectKey, req.Status)
+    // Extract JWT from gRPC metadata and validate workspace ownership
+    if err := s.validateWorkspaceAccess(ctx, req.WorkspaceId); err != nil {
+        return nil, err
+    }
+
+    // Call service layer with generic proxy
+    response, err := s.pluginsService.ProxyPluginRequest(ctx, &service.ProxyRequest{
+        WorkspaceID:  req.WorkspaceId,
+        PluginID:     req.PluginId,
+        EndpointPath: req.EndpointPath,
+        Method:       req.HttpMethod,
+        QueryParams:  req.QueryParams,
+        Headers:      req.Headers,
+        Body:         req.Body,
+    })
     if err != nil {
-        return nil, status.Errorf(codes.Internal, "fetch jira issues: %v", err)
+        return nil, status.Errorf(codes.Internal, "proxy request failed: %v", err)
     }
 
-    // Transform to proto messages
-    protoIssues := make([]*pluginsv1.JiraIssue, len(issues))
-    for i, issue := range issues {
-        protoIssues[i] = &pluginsv1.JiraIssue{
-            Key:       issue.Key,
-            Summary:   issue.Summary,
-            Status:    issue.Status,
-            Assignee:  issue.Assignee,
-            CreatedAt: issue.CreatedAt,
-        }
-    }
-
-    return &pluginsv1.ListJiraIssuesResponse{
-        Issues: protoIssues,
+    return &pluginsv1.ProxyPluginResponse{
+        StatusCode:   int32(response.StatusCode),
+        Data:         response.Data,
+        Headers:      response.Headers,
+        ErrorMessage: response.ErrorMessage,
     }, nil
+}
+
+// validateWorkspaceAccess extracts JWT from metadata and verifies user has access to workspace
+func (s *Server) validateWorkspaceAccess(ctx context.Context, workspaceID string) error {
+    // Extract JWT token from gRPC metadata
+    md, ok := metadata.FromIncomingContext(ctx)
+    if !ok {
+        return status.Error(codes.Unauthenticated, "missing authentication metadata")
+    }
+
+    tokens := md.Get("authorization")
+    if len(tokens) == 0 {
+        return status.Error(codes.Unauthenticated, "missing authorization header")
+    }
+
+    // Parse JWT and extract workspace claim
+    // (Actual JWT validation would use your auth library)
+    token := strings.TrimPrefix(tokens[0], "Bearer ")
+    claims, err := s.pluginsService.ValidateJWT(token)
+    if err != nil {
+        return status.Error(codes.Unauthenticated, "invalid token")
+    }
+
+    // Verify user has access to requested workspace
+    if !claims.HasWorkspaceAccess(workspaceID) {
+        return status.Error(codes.PermissionDenied, "access denied to workspace")
+    }
+
+    return nil
 }
 ```
 
@@ -587,40 +2012,77 @@ import (
     "fmt"
 
     "github.com/drewpayment/orbit/services/plugins/internal/backstage"
+    "github.com/drewpayment/orbit/services/plugins/internal/payload"
 )
 
 type PluginsService struct {
     backstageClient *backstage.Client
+    payloadClient   *payload.Client // For fetching plugin metadata
 }
 
-func NewPluginsService(backstageClient *backstage.Client) *PluginsService {
+func NewPluginsService(backstageClient *backstage.Client, payloadClient *payload.Client) *PluginsService {
     return &PluginsService{
         backstageClient: backstageClient,
+        payloadClient:   payloadClient,
     }
 }
 
-func (s *PluginsService) FetchJiraIssues(
+// ProxyPluginRequest handles generic plugin proxy requests
+func (s *PluginsService) ProxyPluginRequest(
     ctx context.Context,
-    workspaceID, projectKey, statusFilter string,
-) ([]backstage.JiraIssue, error) {
-    // Fetch from Backstage
-    issues, err := s.backstageClient.FetchJiraIssues(ctx, workspaceID, projectKey)
+    req *ProxyRequest,
+) (*ProxyResponse, error) {
+    // 1. Fetch plugin metadata from Payload to get base path
+    plugin, err := s.payloadClient.GetPluginConfig(ctx, req.WorkspaceID, req.PluginID)
     if err != nil {
-        return nil, fmt.Errorf("backstage client: %w", err)
+        return nil, fmt.Errorf("get plugin config: %w", err)
     }
 
-    // Apply additional filtering if needed
-    if statusFilter != "" {
-        filtered := make([]backstage.JiraIssue, 0)
-        for _, issue := range issues {
-            if issue.Status == statusFilter {
-                filtered = append(filtered, issue)
-            }
-        }
-        return filtered, nil
+    if !plugin.Enabled {
+        return nil, fmt.Errorf("plugin %s is not enabled for workspace %s", req.PluginID, req.WorkspaceID)
     }
 
-    return issues, nil
+    // 2. Build Backstage proxy request
+    backstageReq := &backstage.ProxyRequest{
+        WorkspaceID:    req.WorkspaceID,
+        PluginID:       req.PluginID,
+        PluginBasePath: plugin.APIBasePath, // e.g., "/api/jira"
+        EndpointPath:   req.EndpointPath,
+        Method:         req.Method,
+        QueryParams:    req.QueryParams,
+        Headers:        req.Headers,
+        Body:           req.Body,
+    }
+
+    // 3. Execute proxy request with circuit breaker and retries
+    response, err := s.backstageClient.ProxyRequest(ctx, backstageReq)
+    if err != nil {
+        return nil, fmt.Errorf("backstage proxy: %w", err)
+    }
+
+    return &ProxyResponse{
+        StatusCode:   response.StatusCode,
+        Data:         response.Data,
+        Headers:      response.Headers,
+        ErrorMessage: response.ErrorMessage,
+    }, nil
+}
+
+type ProxyRequest struct {
+    WorkspaceID  string
+    PluginID     string
+    EndpointPath string
+    Method       string
+    QueryParams  map[string]string
+    Headers      map[string]string
+    Body         []byte
+}
+
+type ProxyResponse struct {
+    StatusCode   int
+    Data         []byte
+    Headers      map[string]string
+    ErrorMessage string
 }
 ```
 
@@ -755,8 +2217,8 @@ export const PluginRegistry: CollectionConfig = {
       options: [
         { label: 'API Catalog', value: 'api-catalog' },
         { label: 'CI/CD', value: 'ci-cd' },
-        { label: 'Infrastructure', value: 'infrastructure' },
-        { label: 'Project Management', value: 'project-management' },
+        { label: 'Infrastructure/Deployment', value: 'infrastructure' },
+        { label: 'Cloud Resources', value: 'cloud-resources' },
       ],
     },
     {
@@ -1653,18 +3115,40 @@ CREATE INDEX idx_plugin_configs_enabled ON plugin_configs(enabled);
 // Script to seed initial plugins
 const initialPlugins = [
   {
-    pluginId: 'jira',
-    name: 'Jira Integration',
-    category: 'project-management',
-    backstagePackage: '@backstage-community/plugin-jira-backend',
+    pluginId: 'api-docs',
+    name: 'API Documentation',
+    category: 'api-catalog',
+    backstagePackage: '@backstage/plugin-api-docs',
+    apiBasePath: '/api/api-docs',
   },
   {
     pluginId: 'github-actions',
     name: 'GitHub Actions',
     category: 'ci-cd',
     backstagePackage: '@backstage-community/plugin-github-actions-backend',
+    apiBasePath: '/api/github-actions',
   },
-  // ... more plugins
+  {
+    pluginId: 'azure-pipelines',
+    name: 'Azure Pipelines',
+    category: 'ci-cd',
+    backstagePackage: '@backstage-community/plugin-azure-devops-backend',
+    apiBasePath: '/api/azure-devops',
+  },
+  {
+    pluginId: 'argocd',
+    name: 'ArgoCD',
+    category: 'infrastructure',
+    backstagePackage: '@roadiehq/backstage-plugin-argo-cd-backend',
+    apiBasePath: '/api/argocd',
+  },
+  {
+    pluginId: 'azure-resources',
+    name: 'Azure Resources',
+    category: 'infrastructure',
+    backstagePackage: '@vippsas/plugin-azure-resources-backend',
+    apiBasePath: '/api/azure-resources',
+  },
 ]
 
 // Run: node scripts/seed-plugins.ts
@@ -1759,6 +3243,376 @@ DROP DATABASE IF EXISTS backstage;
 - **Dependency Scanning**: Weekly `npm audit` runs in CI/CD
 - **Sandboxing**: Backstage runs in isolated container with limited network access (whitelist external domains)
 - **Updates**: Monitor Backstage security advisories, patch within 48 hours of disclosure
+
+### SSRF (Server-Side Request Forgery) Mitigation
+
+**Attack Vector**: Admin enters malicious URL as "Jira URL" (e.g., `http://internal-service:9200`), causing Backstage to make requests to internal services.
+
+**Impact**: Internal service enumeration, data exfiltration, potential RCE if internal services are vulnerable.
+
+**Mitigation Strategy:**
+
+**1. URL Validation in Payload CMS**
+
+```typescript
+// orbit-www/src/collections/PluginConfig.ts - Add URL validation hook
+{
+  name: 'config',
+  type: 'json',
+  hooks: {
+    beforeChange: [
+      async ({ value, req }) => {
+        // Extract URLs from config
+        const urls = extractURLs(value);
+
+        for (const url of urls) {
+          // Validate URL is external and not internal
+          if (!await isAllowedURL(url)) {
+            throw new ValidationError(
+              `URL ${url} is not allowed. Only external services are permitted.`
+            );
+          }
+        }
+
+        return value;
+      },
+    ],
+  },
+}
+
+async function isAllowedURL(urlString: string): Promise<boolean> {
+  try {
+    const url = new URL(urlString);
+
+    // 1. Reject non-HTTP(S) protocols
+    if (!['http:', 'https:'].includes(url.protocol)) {
+      return false;
+    }
+
+    // 2. Reject private IP ranges (RFC 1918)
+    const hostname = url.hostname;
+
+    // Reject localhost
+    if (['localhost', '127.0.0.1', '::1'].includes(hostname)) {
+      return false;
+    }
+
+    // Reject private IP ranges
+    const privateIPRanges = [
+      /^10\./,                   // 10.0.0.0/8
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./, // 172.16.0.0/12
+      /^192\.168\./,             // 192.168.0.0/16
+      /^169\.254\./,             // Link-local
+      /^fc00:/,                  // IPv6 private
+    ];
+
+    for (const range of privateIPRanges) {
+      if (range.test(hostname)) {
+        return false;
+      }
+    }
+
+    // 3. Resolve DNS and check IP (prevent DNS rebinding attacks)
+    const resolvedIPs = await dns.resolve4(hostname);
+    for (const ip of resolvedIPs) {
+      if (isPrivateIP(ip)) {
+        return false;
+      }
+    }
+
+    // 4. Check against allowlist (recommended for production)
+    const allowedDomains = [
+      'github.com',              // GitHub
+      'api.github.com',          // GitHub API
+      'dev.azure.com',           // Azure DevOps
+      'azure.com',               // Azure services
+      'management.azure.com',    // Azure Resource Manager
+      // ArgoCD instances are typically self-hosted, validate per workspace config
+      // ... other approved domains
+    ];
+
+    const isAllowed = allowedDomains.some(domain =>
+      hostname.endsWith(domain)
+    );
+
+    if (!isAllowed) {
+      // Log for security monitoring
+      await securityLog.warn('Non-allowlisted domain attempted', {
+        url: urlString,
+        user: req.user.id,
+        workspace: req.body.workspace,
+      });
+    }
+
+    return isAllowed;
+  } catch (error) {
+    return false;
+  }
+}
+```
+
+**2. Backstage Network Policies (Kubernetes)**
+
+```yaml
+# infrastructure/kubernetes/backstage-network-policy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backstage-backend-egress
+  namespace: orbit
+spec:
+  podSelector:
+    matchLabels:
+      app: backstage-backend
+  policyTypes:
+  - Egress
+  egress:
+  # Allow DNS
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+
+  # Allow external HTTPS only to specific domains (via egress gateway)
+  - to:
+    - podSelector:
+        matchLabels:
+          app: egress-gateway
+    ports:
+    - protocol: TCP
+      port: 443
+
+  # DENY all other egress traffic
+  # This prevents access to internal cluster services
+```
+
+**3. Egress Gateway with Domain Filtering**
+
+```yaml
+# infrastructure/kubernetes/egress-gateway.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: squid-config
+data:
+  squid.conf: |
+    # Allowlist external domains only
+    acl allowed_domains dstdomain .github.com .dev.azure.com .azure.com .management.azure.com .windows.net
+
+    http_access allow allowed_domains
+    http_access deny all
+
+    # Log denied requests for security monitoring
+    access_log /var/log/squid/access.log
+```
+
+**4. Backstage HTTP Client with Safeguards**
+
+```typescript
+// services/backstage-backend/src/lib/http-client.ts
+import fetch from 'node-fetch';
+import { URL } from 'url';
+
+export async function safeFetch(url: string, options?: RequestInit) {
+  // Additional runtime check (defense in depth)
+  const parsedURL = new URL(url);
+
+  // Reject if IP is private (in case validation was bypassed)
+  if (isPrivateIP(parsedURL.hostname)) {
+    throw new Error(`Access to private IP ${parsedURL.hostname} is forbidden`);
+  }
+
+  // Set timeout to prevent hanging on slow internal services
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      // Follow redirects with caution (max 3 redirects)
+      redirect: 'manual',
+    });
+
+    // If redirect, validate redirect target
+    if (response.status >= 300 && response.status < 400) {
+      const redirectURL = response.headers.get('location');
+      if (redirectURL) {
+        const redirectParsed = new URL(redirectURL, url);
+        if (isPrivateIP(redirectParsed.hostname)) {
+          throw new Error('Redirect to private IP blocked');
+        }
+      }
+    }
+
+    return response;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+```
+
+**5. Security Monitoring & Alerts**
+
+```go
+// services/plugins/internal/security/ssrf_monitor.go
+package security
+
+import (
+    "net/url"
+    "regexp"
+)
+
+type SSRFMonitor struct {
+    alerter *Alert
+}
+
+func (m *SSRFMonitor) CheckURL(rawURL string, userID, workspaceID string) error {
+    u, err := url.Parse(rawURL)
+    if err != nil {
+        return err
+    }
+
+    // Check for suspicious patterns
+    suspiciousPatterns := []string{
+        "localhost",
+        "127.0.0.1",
+        "169.254",    // Link-local
+        "10.",        // Private network
+        "192.168",    // Private network
+        "metadata",   // Cloud metadata endpoints
+        "internal",   // Common internal naming
+    }
+
+    for _, pattern := range suspiciousPatterns {
+        if regexp.MustCompile(pattern).MatchString(u.Host) {
+            // Alert security team
+            m.alerter.Critical("SSRF attempt detected", map[string]interface{}{
+                "user_id":      userID,
+                "workspace_id": workspaceID,
+                "url":          rawURL,
+                "pattern":      pattern,
+            })
+
+            return fmt.Errorf("forbidden URL pattern detected")
+        }
+    }
+
+    return nil
+}
+```
+
+**6. Domain Allowlist Management**
+
+```typescript
+// orbit-www/src/lib/security/allowed-domains.ts
+export const PLUGIN_ALLOWED_DOMAINS = {
+  'api-docs': [
+    // API Docs is a Backstage core plugin, no external URLs needed
+  ],
+  'github-actions': [
+    'github.com',
+    'api.github.com',
+  ],
+  'azure-pipelines': [
+    'dev.azure.com',
+    'azure.com',
+    'visualstudio.com',
+  ],
+  'argocd': [
+    // ArgoCD URLs are typically self-hosted
+    // Validation should check against workspace-configured ArgoCD instance
+    // Pattern: *.argocd.example.com or custom domains
+  ],
+  'azure-resources': [
+    'management.azure.com',
+    'azure.microsoft.com',
+    'windows.net',
+  ],
+} as const;
+
+export function isAllowedForPlugin(
+  pluginId: string,
+  url: string
+): boolean {
+  const allowedDomains = PLUGIN_ALLOWED_DOMAINS[pluginId];
+  if (!allowedDomains) {
+    return false;
+  }
+
+  const hostname = new URL(url).hostname;
+  return allowedDomains.some(domain => hostname.endsWith(domain));
+}
+```
+
+**Testing SSRF Protection:**
+
+```typescript
+// orbit-www/tests/security/ssrf.spec.ts
+import { test, expect } from '@playwright/test';
+
+test('SSRF: Rejects localhost URLs', async ({ page }) => {
+  await page.goto('/admin/collections/plugin-configs');
+  await page.click('text=Create New');
+
+  // Attempt to configure ArgoCD plugin with localhost URL
+  await page.fill('[name="config.argocdUrl"]', 'http://localhost:9200');
+  await page.click('button:has-text("Save")');
+
+  // Should show validation error
+  await expect(page.locator('.error-message')).toContainText(
+    'URL http://localhost:9200 is not allowed'
+  );
+});
+
+test('SSRF: Rejects private IP ranges', async ({ page }) => {
+  const privateIPs = [
+    'http://10.0.0.1',
+    'http://192.168.1.1',
+    'http://172.16.0.1',
+    'http://169.254.169.254', // AWS metadata
+  ];
+
+  for (const ip of privateIPs) {
+    await page.fill('[name="config.argocdUrl"]', ip);
+    await page.click('button:has-text("Save")');
+
+    await expect(page.locator('.error-message')).toBeVisible();
+  }
+});
+```
+
+**AWS/Cloud Metadata Protection:**
+
+Special attention to cloud metadata endpoints:
+
+```typescript
+// Additional check for cloud metadata endpoints
+const CLOUD_METADATA_IPS = [
+  '169.254.169.254',  // AWS, Azure, GCP metadata
+  'fd00:ec2::254',    // AWS IPv6 metadata
+];
+
+function isCloudMetadataIP(hostname: string): boolean {
+  return CLOUD_METADATA_IPS.includes(hostname);
+}
+```
+
+**Security Checklist:**
+
+- [x] URL validation in Payload CMS (frontend)
+- [x] IP range validation (reject RFC 1918)
+- [x] DNS resolution check (prevent rebinding)
+- [x] Domain allowlist enforcement
+- [x] Network policies (Kubernetes)
+- [x] Egress gateway with filtering
+- [x] Runtime checks in Backstage
+- [x] Redirect validation
+- [x] Security monitoring and alerting
+- [x] Cloud metadata IP protection
 
 ## Deployment Strategy
 
