@@ -105,6 +105,7 @@ services:
       - 5433:5432
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./infrastructure/postgres-init:/docker-entrypoint-initdb.d
 
   redis:
     container_name: orbit-redis
@@ -113,6 +114,54 @@ services:
       - 6379:6379
     volumes:
       - redis-data:/data
+
+  # Backstage Backend (Plugin Integration)
+  backstage-backend:
+    container_name: orbit-backstage
+    build:
+      context: ./services/backstage-backend
+      dockerfile: Dockerfile
+    ports:
+      - 7007:7007
+    environment:
+      - NODE_ENV=development
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=orbit
+      - POSTGRES_PASSWORD=orbit
+      - POSTGRES_DATABASE=backstage
+      - ORBIT_API_URL=http://orbit-www:3000
+      - CONFIG_POLL_INTERVAL=60000
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./services/backstage-backend:/app
+      - /app/node_modules
+    restart: unless-stopped
+
+  # Go Plugins Service (Backstage proxy)
+  plugins-service:
+    container_name: orbit-plugins-service
+    build:
+      context: ./services/plugins
+      dockerfile: Dockerfile
+    ports:
+      - "50053:50053"  # gRPC
+      - "8080:8080"    # HTTP (health/metrics)
+    environment:
+      - GRPC_PORT=50053
+      - HTTP_PORT=8080
+      - BACKSTAGE_URL=http://backstage-backend:7007
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-key}
+      - BACKSTAGE_TIMEOUT=10s
+      - GRPC_DEADLINE=15s
+      - CIRCUIT_BREAKER_TIMEOUT=30s
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - backstage-backend
+      - redis
+    restart: unless-stopped
 
   # Go Services (will be added as we implement them)
   # repository-service:

@@ -73,6 +73,8 @@ export interface Config {
     'workspace-members': WorkspaceMember;
     'knowledge-spaces': KnowledgeSpace;
     'knowledge-pages': KnowledgePage;
+    'plugin-registry': PluginRegistry;
+    'plugin-config': PluginConfig;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -85,6 +87,8 @@ export interface Config {
     'workspace-members': WorkspaceMembersSelect<false> | WorkspaceMembersSelect<true>;
     'knowledge-spaces': KnowledgeSpacesSelect<false> | KnowledgeSpacesSelect<true>;
     'knowledge-pages': KnowledgePagesSelect<false> | KnowledgePagesSelect<true>;
+    'plugin-registry': PluginRegistrySelect<false> | PluginRegistrySelect<true>;
+    'plugin-config': PluginConfigSelect<false> | PluginConfigSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -188,21 +192,6 @@ export interface Workspace {
    */
   childWorkspaces?: (string | Workspace)[] | null;
   settings?: {
-    enabledPlugins?:
-      | {
-          pluginId: string;
-          config?:
-            | {
-                [k: string]: unknown;
-              }
-            | unknown[]
-            | string
-            | number
-            | boolean
-            | null;
-          id?: string | null;
-        }[]
-      | null;
     /**
      * Custom theme colors, branding, etc.
      */
@@ -342,6 +331,232 @@ export interface KnowledgePage {
   createdAt: string;
 }
 /**
+ * Manage available Backstage plugins for the platform
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "plugin-registry".
+ */
+export interface PluginRegistry {
+  id: string;
+  /**
+   * Unique identifier for the plugin (e.g., "catalog", "github-actions", "argocd")
+   */
+  pluginId: string;
+  /**
+   * Human-readable name (e.g., "Software Catalog", "GitHub Actions")
+   */
+  name: string;
+  /**
+   * Detailed description of what the plugin does
+   */
+  description: string;
+  /**
+   * Plugin category for organization
+   */
+  category:
+    | 'api-catalog'
+    | 'ci-cd'
+    | 'infrastructure'
+    | 'cloud-resources'
+    | 'security'
+    | 'monitoring'
+    | 'documentation'
+    | 'collaboration'
+    | 'other';
+  /**
+   * If disabled, this plugin cannot be enabled by any workspace
+   */
+  enabled?: boolean | null;
+  metadata: {
+    /**
+     * Plugin version (e.g., "1.2.3")
+     */
+    version?: string | null;
+    /**
+     * NPM package name (e.g., "@backstage/plugin-catalog")
+     */
+    backstagePackage: string;
+    /**
+     * Base path for plugin API endpoints (e.g., "/api/catalog")
+     */
+    apiBasePath: string;
+    /**
+     * Link to plugin documentation
+     */
+    documentationUrl?: string | null;
+    /**
+     * Icon to display in the UI
+     */
+    icon?: (string | null) | Media;
+  };
+  configuration?: {
+    /**
+     * Configuration keys that must be provided when enabling this plugin
+     */
+    requiredConfigKeys?:
+      | {
+          key: string;
+          label: string;
+          description?: string | null;
+          type: 'text' | 'number' | 'boolean' | 'url' | 'secret';
+          defaultValue?: string | null;
+          /**
+           * If checked, this value will be encrypted in the database
+           */
+          isSecret?: boolean | null;
+          id?: string | null;
+        }[]
+      | null;
+    /**
+     * Additional configuration options that are optional
+     */
+    optionalConfigKeys?:
+      | {
+          key: string;
+          label: string;
+          description?: string | null;
+          type: 'text' | 'number' | 'boolean' | 'url' | 'secret';
+          defaultValue?: string | null;
+          id?: string | null;
+        }[]
+      | null;
+    /**
+     * List of features this plugin supports
+     */
+    supportedFeatures?:
+      | {
+          feature: string;
+          id?: string | null;
+        }[]
+      | null;
+  };
+  requirements?: {
+    /**
+     * Minimum Backstage version required (e.g., "1.10.0")
+     */
+    minimumBackstageVersion?: string | null;
+    /**
+     * Other plugins that must be enabled before this one
+     */
+    dependencies?:
+      | {
+          pluginId: string | PluginRegistry;
+          id?: string | null;
+        }[]
+      | null;
+    /**
+     * External services this plugin requires (GitHub, ArgoCD, etc.)
+     */
+    externalDependencies?:
+      | {
+          service: string;
+          description?: string | null;
+          id?: string | null;
+        }[]
+      | null;
+  };
+  status: {
+    stability: 'experimental' | 'beta' | 'stable' | 'deprecated';
+    /**
+     * When this plugin was last verified to work
+     */
+    lastTested?: string | null;
+    /**
+     * Any known issues or limitations with this plugin
+     */
+    knownIssues?: string | null;
+  };
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Manage plugin configurations for workspaces
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "plugin-config".
+ */
+export interface PluginConfig {
+  id: string;
+  /**
+   * The workspace this plugin configuration belongs to
+   */
+  workspace: string | Workspace;
+  /**
+   * The plugin being configured
+   */
+  plugin: string | PluginRegistry;
+  /**
+   * Auto-computed from workspace and plugin names
+   */
+  displayName?: string | null;
+  /**
+   * Whether this plugin is currently active for the workspace
+   */
+  enabled: boolean;
+  /**
+   * Plugin-specific configuration (non-sensitive values)
+   */
+  configuration?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Encrypted sensitive configuration (API keys, tokens, etc.)
+   */
+  secrets?:
+    | {
+        key: string;
+        /**
+         * This value will be encrypted
+         */
+        value: string;
+        description?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  status?: {
+    /**
+     * Current health status from the plugins service
+     */
+    health?: ('healthy' | 'degraded' | 'unhealthy' | 'unknown') | null;
+    /**
+     * When the plugin health was last checked
+     */
+    lastHealthCheck?: string | null;
+    /**
+     * Latest error message if plugin is unhealthy
+     */
+    errorMessage?: string | null;
+    /**
+     * Total number of requests to this plugin
+     */
+    requestCount?: number | null;
+    /**
+     * Total number of errors from this plugin
+     */
+    errorCount?: number | null;
+  };
+  /**
+   * User who enabled this plugin
+   */
+  enabledBy?: (string | null) | User;
+  /**
+   * When this plugin was enabled
+   */
+  enabledAt?: string | null;
+  /**
+   * User who last modified this configuration
+   */
+  lastModifiedBy?: (string | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
@@ -371,6 +586,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'knowledge-pages';
         value: string | KnowledgePage;
+      } | null)
+    | ({
+        relationTo: 'plugin-registry';
+        value: string | PluginRegistry;
+      } | null)
+    | ({
+        relationTo: 'plugin-config';
+        value: string | PluginConfig;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -470,13 +693,6 @@ export interface WorkspacesSelect<T extends boolean = true> {
   settings?:
     | T
     | {
-        enabledPlugins?:
-          | T
-          | {
-              pluginId?: T;
-              config?: T;
-              id?: T;
-            };
         customization?: T;
       };
   updatedAt?: T;
@@ -534,6 +750,117 @@ export interface KnowledgePagesSelect<T extends boolean = true> {
   author?: T;
   lastEditedBy?: T;
   version?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "plugin-registry_select".
+ */
+export interface PluginRegistrySelect<T extends boolean = true> {
+  pluginId?: T;
+  name?: T;
+  description?: T;
+  category?: T;
+  enabled?: T;
+  metadata?:
+    | T
+    | {
+        version?: T;
+        backstagePackage?: T;
+        apiBasePath?: T;
+        documentationUrl?: T;
+        icon?: T;
+      };
+  configuration?:
+    | T
+    | {
+        requiredConfigKeys?:
+          | T
+          | {
+              key?: T;
+              label?: T;
+              description?: T;
+              type?: T;
+              defaultValue?: T;
+              isSecret?: T;
+              id?: T;
+            };
+        optionalConfigKeys?:
+          | T
+          | {
+              key?: T;
+              label?: T;
+              description?: T;
+              type?: T;
+              defaultValue?: T;
+              id?: T;
+            };
+        supportedFeatures?:
+          | T
+          | {
+              feature?: T;
+              id?: T;
+            };
+      };
+  requirements?:
+    | T
+    | {
+        minimumBackstageVersion?: T;
+        dependencies?:
+          | T
+          | {
+              pluginId?: T;
+              id?: T;
+            };
+        externalDependencies?:
+          | T
+          | {
+              service?: T;
+              description?: T;
+              id?: T;
+            };
+      };
+  status?:
+    | T
+    | {
+        stability?: T;
+        lastTested?: T;
+        knownIssues?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "plugin-config_select".
+ */
+export interface PluginConfigSelect<T extends boolean = true> {
+  workspace?: T;
+  plugin?: T;
+  displayName?: T;
+  enabled?: T;
+  configuration?: T;
+  secrets?:
+    | T
+    | {
+        key?: T;
+        value?: T;
+        description?: T;
+        id?: T;
+      };
+  status?:
+    | T
+    | {
+        health?: T;
+        lastHealthCheck?: T;
+        errorMessage?: T;
+        requestCount?: T;
+        errorCount?: T;
+      };
+  enabledBy?: T;
+  enabledAt?: T;
+  lastModifiedBy?: T;
   updatedAt?: T;
   createdAt?: T;
 }

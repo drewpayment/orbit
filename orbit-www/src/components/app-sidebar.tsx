@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
+import { useSession } from "@/lib/auth-client"
 
 import { NavMain } from "@/components/nav-main"
 import { NavProjects } from "@/components/nav-projects"
@@ -27,13 +28,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 
-const data = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
-  },
-  navMain: [
+const navMainData = [
     {
       title: "Dashboard",
       url: "/dashboard",
@@ -76,25 +71,25 @@ const data = {
         },
       ],
     },
-  ],
-  navSecondary: [
-    {
-      title: "Support",
-      url: "#",
-      icon: LifeBuoy,
-    },
-    {
-      title: "Feedback",
-      url: "#",
-      icon: MessageSquare,
-    },
-  ],
-  projects: [],
-}
+]
+
+const navSecondaryData = [
+  {
+    title: "Support",
+    url: "/support",
+    icon: LifeBuoy,
+  },
+  {
+    title: "Feedback",
+    url: "/feedback",
+    icon: MessageSquare,
+  },
+]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
-  
+  const { data: session } = useSession()
+
   // Extract workspace slug from pathname if we're in a workspace route
   const workspaceSlug = React.useMemo(() => {
     const match = pathname?.match(/\/workspaces\/([^\/]+)/)
@@ -103,7 +98,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   // Update Documentation link based on current workspace
   const navMainWithWorkspace = React.useMemo(() => {
-    return data.navMain.map(item => {
+    return navMainData.map(item => {
       if (item.title === 'Documentation') {
         return {
           ...item,
@@ -113,6 +108,31 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       return item
     })
   }, [workspaceSlug])
+
+  // Prepare user data from session
+  const user = React.useMemo(() => {
+    if (!session?.user) {
+      return {
+        name: "Guest",
+        email: "guest@orbit.dev",
+        avatar: "/avatars/default.jpg",
+      }
+    }
+
+    // Get initials from user name for avatar fallback
+    const initials = session.user.name
+      ?.split(' ')
+      .map(n => n[0])
+      .join('')
+      .toUpperCase() || session.user.email?.[0]?.toUpperCase() || 'U'
+
+    return {
+      name: session.user.name || session.user.email || "User",
+      email: session.user.email || "",
+      avatar: session.user.image || `/avatars/${initials}.jpg`,
+      initials,
+    }
+  }, [session])
 
   return (
     <Sidebar variant="inset" {...props}>
@@ -125,8 +145,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <Command className="size-4" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">Orbit Inc</span>
-                  <span className="truncate text-xs">Enterprise</span>
+                  <span className="truncate font-semibold">Orbit IDP</span>
+                  <span className="truncate text-xs">Developer Portal</span>
                 </div>
               </Link>
             </SidebarMenuButton>
@@ -135,11 +155,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={navMainWithWorkspace} />
-        <NavProjects projects={data.projects} />
-        <NavSecondary items={data.navSecondary} className="mt-auto" />
+        <NavProjects projects={[]} />
+        <NavSecondary items={navSecondaryData} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser user={user} />
       </SidebarFooter>
     </Sidebar>
   )

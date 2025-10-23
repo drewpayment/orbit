@@ -81,3 +81,28 @@ install-deps: ## Install development dependencies
 	@go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
 	@echo "Installing frontend dependencies (includes buf CLI)..."
 	@cd orbit-www && pnpm install
+	@echo "Installing Backstage backend dependencies..."
+	@cd services/backstage-backend && yarn install
+
+backstage-dev: ## Start Backstage backend in development mode
+	@echo "Starting Backstage backend..."
+	@cd services/backstage-backend && yarn dev
+
+backstage-build: ## Build Backstage backend
+	@echo "Building Backstage backend..."
+	@cd services/backstage-backend && yarn build
+
+backstage-test: ## Test Backstage backend
+	@echo "Testing Backstage backend..."
+	@cd services/backstage-backend && yarn test
+
+backstage-lint: ## Lint Backstage backend
+	@echo "Linting Backstage backend..."
+	@cd services/backstage-backend && yarn lint
+
+backstage-audit: ## Run security audit on Backstage backend
+	@echo "Auditing Backstage backend..."
+	@cd services/backstage-backend && npm audit --audit-level=high
+
+dev-with-backstage: ## Start full development environment including Backstage
+	docker-compose up -d

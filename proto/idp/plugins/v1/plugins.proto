@@ -1,0 +1,170 @@
+syntax = "proto3";
+
+package idp.plugins.v1;
+
+option go_package = "github.com/drewpayment/orbit/proto/gen/go/idp/plugins/v1;pluginsv1";
+
+// PluginsService provides access to Backstage community plugins
+// This service acts as a proxy between Orbit's frontend and Backstage backend,
+// enforcing workspace isolation and handling authentication.
+service PluginsService {
+  // ListPlugins returns all available plugins for a workspace
+  // Returns both enabled and disabled plugins with their configuration status
+  rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse);
+
+  // GetPlugin returns details for a specific plugin
+  rpc GetPlugin(GetPluginRequest) returns (GetPluginResponse);
+
+  // ProxyPluginRequest is a generic proxy that forwards requests to Backstage
+  // This allows adding new plugins without changing the proto definition
+  // All plugin-specific endpoints are accessed through this single method
+  rpc ProxyPluginRequest(ProxyPluginRequestMessage) returns (ProxyPluginResponse);
+
+  // GetPluginSchema returns the schema for a specific plugin's data
+  // Used by frontend to dynamically render plugin data
+  rpc GetPluginSchema(GetPluginSchemaRequest) returns (GetPluginSchemaResponse);
+
+  // EnablePlugin enables a plugin for a workspace
+  rpc EnablePlugin(EnablePluginRequest) returns (EnablePluginResponse);
+
+  // DisablePlugin disables a plugin for a workspace
+  rpc DisablePlugin(DisablePluginRequest) returns (DisablePluginResponse);
+
+  // UpdatePluginConfig updates the configuration for a plugin
+  rpc UpdatePluginConfig(UpdatePluginConfigRequest) returns (UpdatePluginConfigResponse);
+}
+
+// ListPluginsRequest requests all plugins for a workspace
+message ListPluginsRequest {
+  string workspace_id = 1;
+  // Optional filter by category
+  string category = 2;
+  // Optional filter by enabled status
+  optional bool enabled_only = 3;
+}
+
+message ListPluginsResponse {
+  repeated Plugin plugins = 1;
+}
+
+// GetPluginRequest requests details for a specific plugin
+message GetPluginRequest {
+  string workspace_id = 1;
+  string plugin_id = 2;
+}
+
+message GetPluginResponse {
+  Plugin plugin = 1;
+}
+
+// Plugin represents a Backstage plugin
+message Plugin {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string category = 4; // "api-catalog", "ci-cd", "infrastructure", "cloud-resources"
+  bool enabled = 5;
+  string api_base_path = 6; // e.g., "/api/argocd", "/api/github-actions"
+  map<string, string> config = 7; // Non-sensitive configuration
+  PluginMetadata metadata = 8;
+  PluginStatus status = 9;
+}
+
+message PluginMetadata {
+  string version = 1;
+  string documentation_url = 2;
+  string backstage_package = 3; // NPM package name
+  repeated string required_config_keys = 4;
+  repeated string supported_features = 5;
+}
+
+message PluginStatus {
+  bool healthy = 1;
+  string status_message = 2;
+  int64 last_checked_at = 3; // Unix timestamp
+  int32 request_count = 4; // Total requests to this plugin
+  int32 error_count = 5; // Total errors from this plugin
+}
+
+// Generic proxy pattern - no plugin-specific endpoints needed
+message ProxyPluginRequestMessage {
+  string workspace_id = 1;
+  string plugin_id = 2;
+  string endpoint_path = 3; // e.g., "/projects" or "/issues?project=PROJ"
+  string http_method = 4; // "GET", "POST", "PUT", "DELETE"
+  map<string, string> query_params = 5;
+  map<string, string> headers = 6;
+  bytes body = 7; // For POST/PUT requests
+}
+
+message ProxyPluginResponse {
+  int32 status_code = 1;
+  bytes data = 2; // Raw JSON from Backstage
+  map<string, string> headers = 3;
+  string error_message = 4; // Only populated if error occurred
+  bool from_cache = 5; // True if response was served from cache (circuit breaker open)
+}
+
+// Plugin schema for dynamic frontend rendering
+message GetPluginSchemaRequest {
+  string plugin_id = 1;
+}
+
+message GetPluginSchemaResponse {
+  string json_schema = 1; // JSON schema describing the data structure
+  repeated PluginEndpoint endpoints = 2;
+}
+
+message PluginEndpoint {
+  string path = 1;
+  string method = 2;
+  string description = 3;
+  repeated PluginParameter parameters = 4;
+  string example_response = 5; // JSON example
+}
+
+message PluginParameter {
+  string name = 1;
+  string type = 2; // "string", "number", "boolean"
+  bool required = 3;
+  string description = 4;
+  string default_value = 5;
+}
+
+// EnablePlugin request
+message EnablePluginRequest {
+  string workspace_id = 1;
+  string plugin_id = 2;
+  map<string, string> config = 3; // Initial configuration
+}
+
+message EnablePluginResponse {
+  bool success = 1;
+  string message = 2;
+  Plugin plugin = 3;
+}
+
+// DisablePlugin request
+message DisablePluginRequest {
+  string workspace_id = 1;
+  string plugin_id = 2;
+}
+
+message DisablePluginResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// UpdatePluginConfig request
+message UpdatePluginConfigRequest {
+  string workspace_id = 1;
+  string plugin_id = 2;
+  map<string, string> config = 3;
+  map<string, string> secrets = 4; // Sensitive values (API keys, tokens)
+}
+
+message UpdatePluginConfigResponse {
+  bool success = 1;
+  string message = 2;
+  Plugin plugin = 3;
+}

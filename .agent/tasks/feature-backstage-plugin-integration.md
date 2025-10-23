@@ -1,17 +1,79 @@
 # Feature: Backstage Community Plugin Integration
 
-**Status**: Planned
-**Date**: 2025-10-17
+**Status**: In Progress - Phase 0 Complete ✅
+**Date**: 2025-10-17 (Updated: 2025-10-19 after Phase 0)
 **Estimated Complexity**: High
 **Related Documentation**:
 - See: [.agent/system/project-structure.md](.agent/system/project-structure.md)
 - See: [.agent/system/api-architecture.md](.agent/system/api-architecture.md)
 - See: [.agent/SOPs/adding-grpc-services.md](.agent/SOPs/adding-grpc-services.md)
 - See: [.agent/SOPs/integrating-apis.md](.agent/SOPs/integrating-apis.md)
+- See: [.agent/research/phase-0-backstage-poc/FINDINGS.md](.agent/research/phase-0-backstage-poc/FINDINGS.md) - Phase 0 Research Results
+
+## ⚠️ CRITICAL ARCHITECTURAL CHANGE (Phase 0 Finding)
+
+**Date**: 2025-10-19
+**Status**: ✅ VALIDATED IN PHASE 0 POC
+
+### Finding: Backstage is Single-Tenant by Design
+
+Phase 0 research confirmed that **Backstage has NO built-in multi-tenancy support**. The database schema contains no workspace/tenant identifiers, and all data is globally unique across a single instance.
+
+### Architectural Decision: **Separate Backstage Instances Per Workspace**
+
+Instead of a shared Backstage instance, Orbit will run **one Backstage container per workspace** with isolated databases.
+
+**Revised Architecture:**
+```
+┌─────────────────────────────────────────┐
+│          Orbit Frontend                  │
+└──────────────┬──────────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────────┐
+│    Go "Plugins" gRPC Service             │
+│    (Routes to correct instance)          │
+│    - Manages instance lifecycle          │
+│    - Routes based on workspace_id        │
+└──────┬───────┬───────┬──────────────────┘
+       │       │       │
+       ▼       ▼       ▼
+┌────────┐ ┌────────┐ ┌────────┐
+│Backstage│ │Backstage│ │Backstage│
+│Instance │ │Instance │ │Instance │
+│   A     │ │   B     │ │   C     │
+│(WS-1)   │ │(WS-2)   │ │(WS-3)   │
+└────┬───┘ └────┬───┘ └────┬───┘
+     │          │          │
+     ▼          ▼          ▼
+  ┌────┐    ┌────┐    ┌────┐
+  │DB-A│    │DB-B│    │DB-C│
+  └────┘    └────┘    └────┘
+```
+
+**Benefits:**
+- ✅ Complete data isolation (security)
+- ✅ No workspace filtering needed (simpler proxy)
+- ✅ Plugin failures contained per workspace
+- ✅ Independent scaling per workspace
+
+**Trade-offs:**
+- ⚠️ Higher infrastructure cost (N instances)
+- ⚠️ Instance lifecycle management complexity
+- ⚠️ Database proliferation
+
+**Implementation Impact:**
+- Phase 1 will create a single Backstage instance for MVP testing
+- Phase 2 Go service will include instance management logic
+- Future: Add instance provisioning on workspace creation
+
+See [Phase 0 Research Findings](.agent/research/phase-0-backstage-poc/FINDINGS.md) for detailed analysis.
+
+---
 
 ## Overview
 
-Integrate Backstage community plugins as a third-party integration layer for Orbit IDP, enabling administrators to leverage 60+ pre-built plugins for external services (Jira, GitHub, Kubernetes, Jenkins, etc.) without building proprietary integrations. Backstage will run as a Node.js microservice alongside Orbit's Go services, with a new Go "plugins" service acting as a proxy layer for full data control and workspace isolation.
+Integrate Backstage community plugins as a third-party integration layer for Orbit IDP, enabling administrators to leverage 60+ pre-built plugins for external services (Jira, GitHub, Kubernetes, Jenkins, etc.) without building proprietary integrations. **Backstage will run as separate Node.js instances per workspace** alongside Orbit's Go services, with a new Go "plugins" service acting as a router and proxy layer for full data control and workspace isolation.
 
 ## Requirements (PRD)
 

@@ -1,0 +1,17 @@
+node_modules
+dist
+dist-types
+.git
+.github
+*.log
+.DS_Store
+.env*
+!.env.example
+coverage
+*.md
+!README.md
+.vscode
+.idea
+*.swp
+*.swo
+*~

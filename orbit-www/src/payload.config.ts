@@ -13,6 +13,8 @@ import { Workspaces } from './collections/Workspaces'
 import { WorkspaceMembers } from './collections/WorkspaceMembers'
 import { KnowledgeSpaces } from './collections/KnowledgeSpaces'
 import { KnowledgePages } from './collections/KnowledgePages'
+import { PluginRegistry } from './collections/PluginRegistry'
+import { PluginConfig } from './collections/PluginConfig'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -24,7 +26,16 @@ export default buildConfig({
       baseDir: path.resolve(dirname),
     },
   },
-  collections: [Users, Media, Workspaces, WorkspaceMembers, KnowledgeSpaces, KnowledgePages],
+  collections: [
+    Users,
+    Media,
+    Workspaces,
+    WorkspaceMembers,
+    KnowledgeSpaces,
+    KnowledgePages,
+    PluginRegistry,
+    PluginConfig,
+  ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {

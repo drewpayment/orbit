@@ -1,0 +1,81 @@
+app:
+  title: Orbit Backstage Integration
+  baseUrl: http://localhost:7007
+
+backend:
+  baseUrl: http://localhost:7007
+  listen:
+    port: 7007
+    host: 0.0.0.0
+  cors:
+    origin: http://localhost:3000
+    credentials: true
+  database:
+    client: pg
+    connection:
+      host: ${POSTGRES_HOST:-localhost}
+      port: ${POSTGRES_PORT:-5433}
+      user: ${POSTGRES_USER:-orbit}
+      password: ${POSTGRES_PASSWORD:-orbit}
+      database: ${POSTGRES_DATABASE:-backstage}
+  # For development, use SQLite for quick testing
+  # Uncomment the following lines to use SQLite instead of PostgreSQL
+  # database:
+  #   client: better-sqlite3
+  #   connection: ':memory:'
+
+# Orbit-specific configuration
+orbit:
+  apiUrl: ${ORBIT_API_URL:-http://localhost:3000}
+  configPollInterval: ${CONFIG_POLL_INTERVAL:-60000}
+
+# Plugin configurations (will be dynamically loaded from Orbit API in production)
+# For MVP Phase 1, we use static configuration for testing
+
+# GitHub integration (for GitHub Actions plugin)
+integrations:
+  github:
+    - host: github.com
+      # Token will be provided via environment variable in production
+      # For MVP testing, can be set via GITHUB_TOKEN env var
+      # token: ${GITHUB_TOKEN}
+
+# Software Catalog configuration
+catalog:
+  rules:
+    - allow: [Component, System, API, Resource, Location, Group, User]
+  locations:
+    # Example locations can be added here for testing
+    # - type: url
+    #   target: https://github.com/org/repo/blob/main/catalog-info.yaml
+
+# ArgoCD plugin configuration
+# Configured per ArgoCD instance
+argocd:
+  appLocatorMethods:
+    # For MVP, we'll configure this when connecting to actual ArgoCD instances
+    # Example configuration:
+    # - type: 'config'
+    #   instances:
+    #     - name: argoInstance1
+    #       url: https://argocd.example.com
+    #       token: ${ARGOCD_AUTH_TOKEN}
+
+# GitHub Actions plugin configuration
+# Uses GitHub integration above
+
+# Scaffolder configuration
+scaffolder:
+  # Default author info for scaffolder operations
+  defaultAuthor:
+    name: Orbit Bot
+    email: bot@orbit.dev
+
+# Auth configuration - guest provider for MVP
+auth:
+  environment: development
+  providers:
+    guest:
+      # Guest auth allows unauthenticated access for development
+      # In production, Orbit's JWT will be validated instead
+      dangerouslyAllowOutsideDevelopment: true

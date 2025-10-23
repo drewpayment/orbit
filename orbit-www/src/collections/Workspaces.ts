@@ -102,23 +102,6 @@ export const Workspaces: CollectionConfig = {
       label: 'Workspace Settings',
       fields: [
         {
-          name: 'enabledPlugins',
-          type: 'array',
-          label: 'Enabled Plugins',
-          fields: [
-            {
-              name: 'pluginId',
-              type: 'text',
-              required: true,
-            },
-            {
-              name: 'config',
-              type: 'json',
-              label: 'Plugin Configuration',
-            },
-          ],
-        },
-        {
           name: 'customization',
           type: 'json',
           label: 'UI Customization',
@@ -137,6 +120,19 @@ export const Workspaces: CollectionConfig = {
           Field: {
             path: '/components/admin/fields/WorkspaceKnowledgeField',
             exportName: 'WorkspaceKnowledgeField',
+          },
+        },
+      },
+    },
+    {
+      name: 'plugins',
+      type: 'ui',
+      label: 'Plugins',
+      admin: {
+        components: {
+          Field: {
+            path: '/components/admin/fields/WorkspacePluginsField',
+            exportName: 'WorkspacePluginsField',
           },
         },
       },
