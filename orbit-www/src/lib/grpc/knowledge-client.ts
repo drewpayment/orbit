@@ -1,56 +1,16 @@
-// Temporary mock implementation until proto import issues are resolved
-// TODO: Replace with actual Connect-ES client once proto imports are fixed
+import { createClient } from '@connectrpc/connect';
+import { createConnectTransport } from '@connectrpc/connect-web';
+import { KnowledgeService } from '@/lib/proto/knowledge_connect';
 
-interface KnowledgePage {
-  id: string;
-  title: string;
-  slug: string;
-  spaceId: string;
-  parentId?: string | null;
-  sortOrder: number;
-  status: 'draft' | 'published' | 'archived';
-  content: any;
-}
+/**
+ * Create a transport for the knowledge service
+ * This uses Connect-ES to communicate with the gRPC-Web backend
+ */
+const transport = createConnectTransport({
+  baseUrl: process.env.NEXT_PUBLIC_KNOWLEDGE_URL || 'http://localhost:50053',
+});
 
-interface ReorderPagesRequest {
-  spaceId: string;
-  pageOrders: Array<{
-    pageId: string;
-    sortOrder: number;
-    parentId?: string | null;
-  }>;
-}
-
-interface ReorderPagesResponse {
-  success: boolean;
-}
-
-interface GetSpacePagesRequest {
-  spaceId: string;
-}
-
-interface GetSpacePagesResponse {
-  pages: KnowledgePage[];
-}
-
-class KnowledgeClient {
-  async getSpacePages(req: GetSpacePagesRequest): Promise<GetSpacePagesResponse> {
-    // Mock implementation - replace with actual gRPC call
-    await new Promise(resolve => setTimeout(resolve, 300));
-
-    return {
-      pages: [],
-    };
-  }
-
-  async reorderPages(req: ReorderPagesRequest): Promise<ReorderPagesResponse> {
-    // Mock implementation - replace with actual gRPC call
-    await new Promise(resolve => setTimeout(resolve, 300));
-
-    return {
-      success: true,
-    };
-  }
-}
-
-export const knowledgeClient = new KnowledgeClient();
+/**
+ * Knowledge service client for managing knowledge spaces and pages
+ */
+export const knowledgeClient = createClient(KnowledgeService, transport);
