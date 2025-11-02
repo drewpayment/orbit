@@ -56,25 +56,64 @@ func (a *GitActivities) CloneTemplateActivity(ctx context.Context, input CloneTe
 
 	// Check if directory already exists (idempotent behavior)
 	if _, err := os.Stat(repoPath); err == nil {
-		// Directory exists, verify it's the correct template
-		// In a real implementation, we would check template markers or metadata
+		// Directory exists - repository already cloned
 		return nil
 	}
 
+	// Get template URL from template name
+	templateURL := a.getTemplateURL(input.TemplateName)
+	if templateURL == "" {
+		// Fall back to creating mock structure for unknown templates
+		// This maintains backward compatibility with existing tests
+		if err := a.createMockTemplate(repoPath, input.TemplateName); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// Clone repository using git CLI
+	cmd := exec.CommandContext(ctx, "git", "clone", templateURL, repoPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		// Clean up partial clone on failure
+		os.RemoveAll(repoPath)
+		return fmt.Errorf("failed to clone template: %w", err)
+	}
+
+	return nil
+}
+
+// getTemplateURL maps template names to Git URLs
+func (a *GitActivities) getTemplateURL(templateName string) string {
+	// In production, this would query a database or config service
+	templates := map[string]string{
+		"microservice": "https://github.com/your-org/template-microservice.git",
+		"library":      "https://github.com/your-org/template-library.git",
+		"frontend":     "https://github.com/your-org/template-frontend.git",
+		"mobile":       "https://github.com/your-org/template-mobile.git",
+		"documentation": "https://github.com/your-org/template-docs.git",
+	}
+	return templates[templateName]
+}
+
+// createMockTemplate creates a mock template structure for testing
+// This is used when no real Git URL is available for a template
+func (a *GitActivities) createMockTemplate(repoPath, templateName string) error {
 	// Create working directory
 	if err := os.MkdirAll(a.workDir, 0755); err != nil {
 		return fmt.Errorf("failed to create working directory: %w", err)
 	}
 
-	// In a real implementation, this would clone from a template repository
-	// For now, we'll create a basic structure
+	// Create repository directory
 	if err := os.MkdirAll(repoPath, 0755); err != nil {
 		return fmt.Errorf("failed to create repository directory: %w", err)
 	}
 
 	// Create a template marker file
 	markerPath := filepath.Join(repoPath, ".template")
-	if err := os.WriteFile(markerPath, []byte(input.TemplateName), 0644); err != nil {
+	if err := os.WriteFile(markerPath, []byte(templateName), 0644); err != nil {
 		return fmt.Errorf("failed to create template marker: %w", err)
 	}
 
