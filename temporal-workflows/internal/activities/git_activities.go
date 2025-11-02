@@ -200,7 +200,7 @@ func isBinaryFile(path string) bool {
 }
 
 // InitializeGitActivity initializes a Git repository and adds remote
-// This activity is idempotent - git init can be safely called multiple times
+// This activity is idempotent - can be safely called multiple times
 func (a *GitActivities) InitializeGitActivity(ctx context.Context, input InitializeGitInput) error {
 	if input.GitURL == "" {
 		return errors.New("git URL cannot be empty")
@@ -213,7 +213,14 @@ func (a *GitActivities) InitializeGitActivity(ctx context.Context, input Initial
 		return errors.New("repository directory does not exist")
 	}
 
-	// Initialize Git repository (idempotent)
+	// Check if already initialized (idempotency)
+	gitDir := filepath.Join(repoPath, ".git")
+	if _, err := os.Stat(gitDir); err == nil {
+		// Already initialized - update remote if needed
+		return a.updateRemote(ctx, repoPath, input.GitURL)
+	}
+
+	// Initialize Git repository
 	cmd := exec.CommandContext(ctx, "git", "init")
 	cmd.Dir = repoPath
 	if output, err := cmd.CombinedOutput(); err != nil {
@@ -262,6 +269,25 @@ func (a *GitActivities) InitializeGitActivity(ctx context.Context, input Initial
 		return fmt.Errorf("failed to add remote origin: %w (output: %s)", err, string(output))
 	}
 
+	return nil
+}
+
+// updateRemote updates or adds the remote origin URL
+func (a *GitActivities) updateRemote(ctx context.Context, repoPath, gitURL string) error {
+	// Try to update existing remote first
+	cmd := exec.CommandContext(ctx, "git", "remote", "set-url", "origin", gitURL)
+	cmd.Dir = repoPath
+	if err := cmd.Run(); err != nil {
+		// Remote doesn't exist, add it
+		cmd = exec.CommandContext(ctx, "git", "remote", "add", "origin", gitURL)
+		cmd.Dir = repoPath
+		if output, err := cmd.CombinedOutput(); err != nil {
+			// Ignore "already exists" errors
+			if !strings.Contains(string(output), "already exists") {
+				return fmt.Errorf("failed to add remote: %w (output: %s)", err, string(output))
+			}
+		}
+	}
 	return nil
 }
 
