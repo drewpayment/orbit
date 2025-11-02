@@ -56,10 +56,19 @@ export function RepositoryConfig({ form }: RepositoryConfigProps) {
           <Input
             id="name"
             placeholder="my-awesome-service"
+            aria-invalid={errors.name ? 'true' : 'false'}
+            aria-describedby={errors.name ? 'name-error' : undefined}
             {...register('name', { required: 'Repository name is required' })}
           />
           {errors.name && (
-            <p className="text-sm text-destructive">{errors.name.message}</p>
+            <p
+              id="name-error"
+              className="text-sm text-destructive"
+              role="alert"
+              aria-live="polite"
+            >
+              {errors.name.message}
+            </p>
           )}
         </div>
 
@@ -84,7 +93,7 @@ export function RepositoryConfig({ form }: RepositoryConfigProps) {
           <Label htmlFor="visibility">Visibility</Label>
           <Select
             defaultValue="private"
-            onValueChange={(value) => setValue('visibility', value as any)}
+            onValueChange={(value) => setValue('visibility', value as 'private' | 'internal' | 'public')}
           >
             <SelectTrigger id="visibility">
               <SelectValue />

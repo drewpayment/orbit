@@ -125,6 +125,7 @@ export function GenerationMonitor({
           <CheckCircle2
             className="h-5 w-5 text-green-600"
             data-testid="step-status-completed"
+            aria-hidden="true"
           />
         );
       case WorkflowStatus.RUNNING:
@@ -132,6 +133,7 @@ export function GenerationMonitor({
           <Loader2
             className="h-5 w-5 text-blue-600 animate-spin"
             data-testid="step-status-running"
+            aria-hidden="true"
           />
         );
       case WorkflowStatus.FAILED:
@@ -139,6 +141,7 @@ export function GenerationMonitor({
           <XCircle
             className="h-5 w-5 text-red-600"
             data-testid="step-status-failed"
+            aria-hidden="true"
           />
         );
       case WorkflowStatus.PENDING:
@@ -147,6 +150,7 @@ export function GenerationMonitor({
           <Clock
             className="h-5 w-5 text-gray-400"
             data-testid="step-status-pending"
+            aria-hidden="true"
           />
         );
     }
@@ -165,13 +169,19 @@ export function GenerationMonitor({
     <Card className="w-full">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div
+            className="flex items-center gap-3"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
             <StatusIcon
               className={cn(
                 'h-6 w-6',
                 statusDisplay.color,
                 status?.status === WorkflowStatus.RUNNING && 'animate-spin',
               )}
+              aria-hidden="true"
             />
             <div>
               <CardTitle className="text-lg">Repository Generation</CardTitle>
@@ -190,6 +200,7 @@ export function GenerationMonitor({
               variant="outline"
               size="sm"
               onClick={() => cancel()}
+              aria-label="Cancel repository generation workflow"
             >
               Cancel
             </Button>
@@ -198,7 +209,11 @@ export function GenerationMonitor({
       </CardHeader>
       <CardContent>
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+          <div
+            className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md"
+            role="alert"
+            aria-live="assertive"
+          >
             <p className="text-sm text-red-800">
               Error: {error.message}
             </p>
@@ -206,7 +221,11 @@ export function GenerationMonitor({
         )}
 
         {status?.errorMessage && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+          <div
+            className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md"
+            role="alert"
+            aria-live="assertive"
+          >
             <p className="text-sm text-red-800">{status.errorMessage}</p>
           </div>
         )}
@@ -223,12 +242,20 @@ export function GenerationMonitor({
                   {status.steps.length} steps completed
                 </span>
               </div>
-              <Progress value={progress} className="h-2" />
+              <Progress
+                value={progress}
+                className="h-2"
+                aria-label={`Repository generation progress: ${progress}%`}
+              />
             </div>
 
             <div className="space-y-2">
               <h4 className="text-sm font-medium">Steps</h4>
-              <div className="space-y-2">
+              <div
+                className="space-y-2"
+                role="list"
+                aria-label="Workflow steps"
+              >
                 {status.steps.map((step, index) => (
                   <div
                     key={`${step.stepName}-${index}`}
@@ -239,12 +266,19 @@ export function GenerationMonitor({
                       step.status === WorkflowStatus.FAILED && 'bg-red-50 border-red-200',
                       step.status === WorkflowStatus.PENDING && 'bg-gray-50 border-gray-200',
                     )}
+                    role="listitem"
+                    aria-label={`${step.stepName}: ${getStatusDisplay().text}`}
                   >
                     {getStepIcon(step)}
                     <div className="flex-1">
                       <p className="text-sm font-medium">{step.stepName}</p>
                       {step.errorMessage && (
-                        <p className="text-xs text-red-600 mt-1">{step.errorMessage}</p>
+                        <p
+                          className="text-xs text-red-600 mt-1"
+                          role="alert"
+                        >
+                          {step.errorMessage}
+                        </p>
                       )}
                     </div>
                   </div>

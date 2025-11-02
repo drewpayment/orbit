@@ -154,7 +154,12 @@ export function SchemaEditor({
   };
 
   return (
-    <div className="space-y-4" data-testid="schema-editor">
+    <div
+      className="space-y-4"
+      data-testid="schema-editor"
+      role="region"
+      aria-label="API Schema Editor"
+    >
       <Card>
         <CardHeader>
           <CardTitle>Schema Editor</CardTitle>
@@ -167,7 +172,11 @@ export function SchemaEditor({
           <div className="space-y-2">
             <Label htmlFor="schema-type">Schema Type</Label>
             <Select value={schemaType} onValueChange={handleSchemaTypeChange}>
-              <SelectTrigger id="schema-type" className="w-[200px]">
+              <SelectTrigger
+                id="schema-type"
+                className="w-[200px]"
+                aria-label="Select schema type"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -179,7 +188,12 @@ export function SchemaEditor({
           </div>
 
           {/* Monaco Editor */}
-          <div className="border rounded-md overflow-hidden">
+          <div
+            className="border rounded-md overflow-hidden"
+            role="region"
+            aria-label={`${schemaType} schema code editor`}
+            aria-describedby={!validation.valid ? 'schema-validation-errors' : undefined}
+          >
             <Editor
               height="500px"
               language={SCHEMA_TYPE_LANGUAGES[schemaType]}
@@ -200,7 +214,12 @@ export function SchemaEditor({
 
           {/* Validation Errors */}
           {!validation.valid && validation.errors.length > 0 && (
-            <Alert variant="destructive">
+            <Alert
+              id="schema-validation-errors"
+              variant="destructive"
+              role="alert"
+              aria-live="assertive"
+            >
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
                 <div className="font-semibold mb-2">Validation Error</div>

@@ -140,7 +140,11 @@ export function SpaceNavigator({
               items={pages.map(p => p.id)}
               strategy={verticalListSortingStrategy}
             >
-              <div className="space-y-1">
+              <nav
+                role="tree"
+                aria-label={`${knowledgeSpace.name} knowledge pages`}
+                className="space-y-1"
+              >
                 {tree.map(node => (
                   <PageTreeNode
                     key={node.id}
@@ -153,7 +157,7 @@ export function SpaceNavigator({
                     isDragging={activeId === node.id}
                   />
                 ))}
-              </div>
+              </nav>
             </SortableContext>
             <DragOverlay>
               {activeId ? (

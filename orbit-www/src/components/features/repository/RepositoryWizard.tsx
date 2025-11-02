@@ -83,14 +83,39 @@ export function RepositoryWizard({ workspaceId, onComplete }: RepositoryWizardPr
     }
   };
 
+  const steps: WizardStep[] = ['template', 'config', 'review'];
+  const stepNames = {
+    template: 'Select Template',
+    config: 'Configure Repository',
+    review: 'Review & Create',
+  };
+  const currentStepIndex = steps.indexOf(currentStep);
+  const totalSteps = steps.length;
+
   return (
     <div className="mx-auto max-w-4xl space-y-8">
       {/* Step indicator */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className={`h-2 w-24 rounded ${currentStep === 'template' ? 'bg-primary' : 'bg-muted'}`} />
-          <div className={`h-2 w-24 rounded ${currentStep === 'config' ? 'bg-primary' : 'bg-muted'}`} />
-          <div className={`h-2 w-24 rounded ${currentStep === 'review' ? 'bg-primary' : 'bg-muted'}`} />
+        <div
+          className="flex items-center gap-2"
+          role="progressbar"
+          aria-valuenow={currentStepIndex + 1}
+          aria-valuemin={1}
+          aria-valuemax={totalSteps}
+          aria-label={`Step ${currentStepIndex + 1} of ${totalSteps}: ${stepNames[currentStep]}`}
+        >
+          <div
+            className={`h-2 w-24 rounded ${currentStep === 'template' ? 'bg-primary' : 'bg-muted'}`}
+            aria-label="Step 1: Select Template"
+          />
+          <div
+            className={`h-2 w-24 rounded ${currentStep === 'config' ? 'bg-primary' : 'bg-muted'}`}
+            aria-label="Step 2: Configure Repository"
+          />
+          <div
+            className={`h-2 w-24 rounded ${currentStep === 'review' ? 'bg-primary' : 'bg-muted'}`}
+            aria-label="Step 3: Review & Create"
+          />
         </div>
       </div>
 

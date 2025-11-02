@@ -65,20 +65,26 @@ export function PageTreeNode({
         node.status === 'draft' && 'text-muted-foreground italic'
       )}
       style={{ paddingLeft: `${depth * 12 + 8}px` }}
+      role="treeitem"
+      aria-level={depth + 1}
+      aria-expanded={hasChildren ? isOpen : undefined}
+      aria-selected={isCurrentPage}
+      aria-current={isCurrentPage ? 'page' : undefined}
     >
       <div
         {...listeners}
         {...attributes}
         data-testid={`page-drag-${node.id}`}
         aria-grabbed={isDragging}
+        aria-label={`Drag handle for ${node.title}`}
         className="cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity"
       >
         <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" />
       </div>
       {hasChildren ? (
-        <Folder className="h-4 w-4 shrink-0" />
+        <Folder className="h-4 w-4 shrink-0" aria-hidden="true" />
       ) : (
-        <FileText className="h-4 w-4 shrink-0" />
+        <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />
       )}
       <span className="truncate flex-1">{node.title}</span>
       {node.status === 'draft' && (
@@ -112,12 +118,14 @@ export function PageTreeNode({
                 size="sm"
                 className="h-6 w-6 p-0"
                 style={{ marginLeft: `${depth * 12}px` }}
+                aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${node.title}`}
               >
                 <ChevronRight
                   className={cn(
                     'h-4 w-4 transition-transform',
                     isOpen && 'rotate-90'
                   )}
+                  aria-hidden="true"
                 />
               </Button>
             </CollapsibleTrigger>
