@@ -153,6 +153,11 @@ func (a *GitActivities) ApplyVariablesActivity(ctx context.Context, input ApplyV
 			return nil
 		}
 
+		// Skip binary files (simple heuristic: check extension)
+		if isBinaryFile(path) {
+			return nil
+		}
+
 		// Read file content
 		content, err := os.ReadFile(path)
 		if err != nil {
@@ -177,6 +182,21 @@ func (a *GitActivities) ApplyVariablesActivity(ctx context.Context, input ApplyV
 	})
 
 	return err
+}
+
+// isBinaryFile checks if a file is likely binary based on its extension
+func isBinaryFile(path string) bool {
+	binaryExtensions := []string{
+		".png", ".jpg", ".jpeg", ".gif", ".pdf", ".zip",
+		".tar", ".gz", ".exe", ".so", ".dylib", ".bin",
+	}
+	ext := strings.ToLower(filepath.Ext(path))
+	for _, binExt := range binaryExtensions {
+		if ext == binExt {
+			return true
+		}
+	}
+	return false
 }
 
 // InitializeGitActivity initializes a Git repository and adds remote
