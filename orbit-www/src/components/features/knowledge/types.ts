@@ -16,6 +16,8 @@ export interface SpaceNavigatorProps {
   currentPageId?: string
   onPageSelect?: (pageId: string) => void
   workspaceSlug?: string
+  onReorder?: (pageOrders: Array<{ pageId: string; sortOrder: number; parentId?: string | null }>) => void
+  isLoading?: boolean
 }
 
 export interface PageTreeNodeProps {
@@ -25,4 +27,5 @@ export interface PageTreeNodeProps {
   onPageSelect?: (pageId: string) => void
   workspaceSlug?: string
   spaceSlug?: string
+  isDragging?: boolean
 }
