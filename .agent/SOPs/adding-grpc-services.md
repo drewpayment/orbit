@@ -7,12 +7,37 @@
 ## Purpose
 This SOP documents the complete workflow for adding a new gRPC service to the Orbit monorepo, from protobuf definition to implementation and testing.
 
+## Constitutional Requirements
+
+**MANDATORY BEFORE STARTING:**
+
+1. **brainstorming** (REQUIRED):
+   - Run `/superpowers:brainstorm` to refine service design
+   - Clarify requirements, explore alternatives
+   - NO IMPLEMENTATION without brainstorming first
+
+2. **writing-plans** (REQUIRED):
+   - Run `/superpowers:write-plan` after brainstorming
+   - Creates implementation plan in `../docs/plans/[feature].md`
+   - This SOP provides implementation details; the plan provides task breakdown
+
+3. **test-driven-development** (REQUIRED):
+   - Write tests FIRST, watch them FAIL, then implement
+   - Constitutional requirement for all code
+   - See: Phase 3 for TDD process
+
+4. **code-reviewer** (REQUIRED):
+   - Run `superpowers:code-reviewer` before considering work complete
+   - Must pass review before proceeding
+
 ## Prerequisites
+- **Constitutional**: Completed `/superpowers:brainstorm` and `/superpowers:write-plan`
 - Go 1.21+ installed
 - Node.js 18.20.2+ installed (for buf CLI)
 - `make proto-gen` working (buf installed via orbit-www/node_modules)
 - Understanding of protobuf syntax
 - Familiarity with Go project structure
+- Commitment to TDD (tests first, always)
 
 ## Step-by-Step Process
 
@@ -465,6 +490,13 @@ Add service to `docker-compose.yml`:
 
 ## Verification Checklist
 
+**Constitutional Requirements:**
+- [ ] `/superpowers:brainstorm` completed before starting
+- [ ] `/superpowers:write-plan` completed with plan in `../docs/plans/`
+- [ ] All tests written FIRST and FAILED before implementation (TDD)
+- [ ] `superpowers:code-reviewer` passed before considering complete
+
+**Technical Implementation:**
 - [ ] Proto file follows naming conventions
 - [ ] `make proto-gen` completes without errors
 - [ ] Go module initialized with proto replace
@@ -475,6 +507,11 @@ Add service to `docker-compose.yml`:
 - [ ] gRPC server starts successfully
 - [ ] Frontend can import generated TypeScript client
 - [ ] Makefile includes new service targets
+
+**Before Completion:**
+- [ ] Run `superpowers:verification-before-completion`
+- [ ] Update implementation plan in `../docs/plans/[feature].md`
+- [ ] Document lessons learned via `/update doc save task [feature]`
 
 ## Testing the Service
 

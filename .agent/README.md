@@ -4,62 +4,120 @@
 
 ## Quick Navigation
 
-### 📋 System Documentation
-Read these to understand the codebase architecture:
+### 📋 Active Planning (Superpowers)
+**For new features and major changes - READ FIRST:**
+
+- **[../docs/plans/](../docs/plans/)** - Active implementation plans from `/superpowers:write-plan`
+  - Created after `/superpowers:brainstorm` completes
+  - Contains exact file paths and verification steps
+  - Updated during implementation
+  - **Always read these BEFORE implementing planned features**
+
+### 📋 System Documentation (.agent)
+**For architecture reference during implementation:**
 
 - **[Project Structure](system/project-structure.md)** - Monorepo layout, service organization, and module dependencies
-- **[Database Schema](system/database-schema.md)** - Payload CMS collections and service database schemas
 - **[API Architecture](system/api-architecture.md)** - gRPC service contracts and communication patterns
-- **[Tech Stack](system/tech-stack.md)** - Technologies, versions, and tooling
 
 ### 📚 Standard Operating Procedures (SOPs)
-Read these before performing specific tasks:
+**Read before performing specific tasks:**
 
 - **[Error Handling SOP](SOPs/error-handling.md)** - Go and TypeScript error handling patterns
 - **[Adding gRPC Services SOP](SOPs/adding-grpc-services.md)** - Creating new protobuf services
-- **[Testing Workflow SOP](SOPs/testing-workflow.md)** - Test-driven development across Go and frontend
-- **[Integrating External APIs SOP](SOPs/integrating-apis.md)** - Third-party API integration best practices
 
-### 🎯 Implementation Tasks
-Reference these for similar feature implementations:
+**Note**: All SOPs reference superpowers skills as constitutional requirements.
+
+### 🎯 Completed Features
+**Reference for similar implementations:**
 
 - **[Workspace Management Feature](tasks/feature-workspace-management.md)** - Multi-tenant workspace implementation
-- **[Repository Service Implementation](tasks/feature-repository-service.md)** - gRPC service creation pattern
 - **[Knowledge Management Navigator](tasks/feature-knowledge-management-navigator.md)** - Hierarchical documentation with Payload CMS and Lexical editor
 - **[Backstage Plugin Integration](tasks/feature-backstage-plugin-integration.md)** - Integrating Backstage community plugins as a third-party integration layer
 
 ## When to Read What
 
-### Starting a New Feature
-1. Read relevant system docs to understand current architecture
-2. Check if similar features exist in tasks folder
-3. Review related SOPs for standards (especially adding-grpc-services.md)
-4. Check CLAUDE.md for project-wide conventions
+### Planning a New Feature (MANDATORY)
+1. **Run `/superpowers:brainstorm [feature idea]`** (constitutional requirement)
+2. Complete interactive design refinement
+3. **Run `/superpowers:write-plan`** (constitutional requirement)
+4. Plan created in `../docs/plans/[###-feature].md`
+5. Read `.agent/system/` docs referenced in your plan
+6. Check `.agent/tasks/` for similar implementations
+7. Review `.agent/SOPs/` for applicable procedures
+
+### Implementing a Planned Feature
+1. **ALWAYS read `../docs/plans/[feature].md` FIRST**
+2. Reference `.agent/SOPs/` for step-by-step procedures
+3. Check `.agent/tasks/` for code examples from similar features
+4. **Follow `superpowers:test-driven-development`** (write tests first - MANDATORY)
+5. **Use `superpowers:code-reviewer` before completion** (MANDATORY)
 
 ### Adding a New gRPC Service
-1. **MUST READ**: `SOPs/adding-grpc-services.md` first
-2. Review `system/api-architecture.md` for patterns
-3. Look at `tasks/feature-repository-service.md` for reference implementation
+1. **MUST**: Run `/superpowers:brainstorm` first (constitutional requirement)
+2. **MUST**: Run `/superpowers:write-plan` (constitutional requirement)
+3. **READ**: `SOPs/adding-grpc-services.md` during implementation
+4. **READ**: `system/api-architecture.md` for patterns
+5. **REFERENCE**: `tasks/feature-workspace-management.md` for example
+6. **FOLLOW**: TDD (tests first - constitutional requirement)
 
-### Fixing a Bug
-1. Check if there's an SOP for this error type
-2. Review `SOPs/error-handling.md` for proper patterns
-3. If it's a recurring issue, generate new SOP after fixing
+### Debugging (MANDATORY)
+1. **Use `superpowers:systematic-debugging`** (constitutional requirement)
+2. Check `.agent/SOPs/error-handling.md` for patterns
+3. Document findings in `../docs/plans/[bugfix].md`
 
-### Working with Temporal
-1. Review architecture in `system/project-structure.md`
-2. Check existing workflow implementations in tasks folder
-3. Follow patterns for idempotent activities
+### Before Committing (MANDATORY)
+1. **Run `superpowers:verification-before-completion`** (constitutional requirement)
+2. Run `make lint` and `make test`
+3. Verify protobuf code generation if .proto files changed
+4. Update relevant system docs if architecture changed
 
-### Before Committing
-1. Run `make lint` and `make test` per testing-workflow.md
-2. Verify protobuf code generation if .proto files changed
-3. Update relevant system docs if architecture changed
+### After Completion
+1. **Run `superpowers:code-reviewer`** (constitutional requirement)
+2. Update `../docs/plans/[feature].md` with actual implementation
+3. Create summary: `/update doc save task [feature-name]` → `.agent/tasks/`
+4. Update this README if new docs were added
 
-### After Major Changes
-1. Update relevant system docs using `/update doc update system`
-2. Create/update task documentation with `/update doc save task [name]`
-3. Update this README if new docs were added
+## Documentation System Integration
+
+This project uses a hybrid documentation approach combining superpowers planning with architectural context:
+
+### ../docs/plans/ (Superpowers Planning)
+- **Purpose**: Active implementation plans with bite-sized tasks
+- **Created by**: `/superpowers:write-plan` after `/superpowers:brainstorm`
+- **Format**: Step-by-step implementation with exact file paths and verification steps
+- **When to use**: For ALL new features and major changes (constitutional requirement)
+- **Lifespan**: Created during planning, updated during implementation, archived after completion
+
+### .agent/ (Architectural Context)
+- **Purpose**: High-level architecture and established patterns
+- **Created by**: `/update doc` commands
+- **Format**: System docs, SOPs, feature summaries
+- **When to use**: Reference during planning and implementation
+- **Lifespan**: Long-lived, updated as architecture evolves
+
+### Workflow Integration
+```
+1. Planning Phase:
+   /superpowers:brainstorm → Interactive design refinement
+   /superpowers:write-plan → Creates docs/plans/[feature].md
+
+2. Implementation Phase:
+   Read docs/plans/[feature].md → Detailed tasks
+   Reference .agent/system/*.md → Architecture constraints
+   Reference .agent/SOPs/*.md → Standard procedures
+   Reference .agent/tasks/*.md → Similar implementations
+   Follow superpowers:test-driven-development → Tests first
+
+3. Completion Phase:
+   Run superpowers:code-reviewer → Quality validation
+   Run superpowers:verification-before-completion → Evidence-based claims
+   Update docs/plans/[feature].md → Actual implementation
+   /update doc save task [feature] → Create .agent/tasks/[feature].md summary
+```
+
+### Key Principle
+- **docs/plans/** = WHAT to implement (active plans with tasks)
+- **.agent/** = HOW to implement (architecture and patterns)
 
 ## Documentation Maintenance
 

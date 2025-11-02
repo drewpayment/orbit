@@ -7,10 +7,26 @@
 ## Purpose
 Establish consistent error handling patterns across Go microservices and TypeScript frontend to ensure proper error propagation, logging, and user experience.
 
+## Constitutional Requirements
+
+**MANDATORY FOR DEBUGGING:**
+
+1. **systematic-debugging** (REQUIRED):
+   - Use `superpowers:systematic-debugging` for ANY bug or error investigation
+   - Four-phase framework: root cause → pattern analysis → hypothesis testing → implementation
+   - NO GUESSING at fixes without understanding root cause
+
+2. **test-driven-development** (REQUIRED):
+   - Write error scenario tests FIRST, watch them FAIL
+   - Then implement error handling to make tests pass
+   - Constitutional requirement for all code
+
 ## Prerequisites
+- **Constitutional**: Use `superpowers:systematic-debugging` for error investigation
 - Understanding of Go error handling
 - Familiarity with gRPC status codes
 - Knowledge of TypeScript error types
+- Commitment to TDD for error scenarios
 
 ## Go Service Error Handling
 
@@ -500,6 +516,13 @@ describe('Error Handling', () => {
 
 ## Error Handling Checklist
 
+**Constitutional Requirements:**
+- [ ] Used `superpowers:systematic-debugging` for error investigation
+- [ ] Wrote error scenario tests FIRST (TDD)
+- [ ] Watched tests FAIL before implementing error handling
+- [ ] Run `superpowers:verification-before-completion` before claiming fixes work
+
+**Implementation:**
 - [ ] Domain errors defined as sentinel errors
 - [ ] Validation errors provide field-level details
 - [ ] Service layer wraps errors with context
