@@ -2,14 +2,42 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
+---
+
+## ⚠️ IMPORTANT DEPENDENCY
+
+**This plan depends on GitHub App Installation being implemented first.**
+
+**See**: [`docs/plans/2025-11-13-github-app-installation.md`](./2025-11-13-github-app-installation.md)
+
+**Why**: Tasks 4+ require GitHub App installation tokens for authentication. Before continuing with this plan:
+
+1. ✅ Complete all tasks in GitHub App installation plan (12 tasks)
+2. ✅ Verify GitHub App installed and token refresh working
+3. ✅ Verify workspace access mapping configured
+4. ✅ Then resume this plan at Task 4
+
+**Current Status**: Tasks 1-3 complete (Git clone, variable substitution, git init). Task 4 (push to remote) blocked pending GitHub App implementation.
+
+---
+
 **Goal:** Replace stubbed Temporal activity implementations with real Git operations, code generation tools, and external API integrations.
 
 **Architecture:** Activities use Go standard library exec for Git commands and external tools (protoc, openapi-generator), HTTP clients for external APIs (Confluence, Notion), and proper error handling with idempotency. All activities log operations and handle retries gracefully.
 
+**🔒 AUTHENTICATION ARCHITECTURE (CONSTITUTIONAL REQUIREMENT):**
+- **ALL external operations MUST use user-context authentication** (see `.agent/SOPs/user-driven-authentication.md`)
+- Workflow inputs MUST include `UserID` and `WorkspaceID`
+- Activity inputs MUST include `UserID` and `WorkspaceID`
+- Activities MUST retrieve user OAuth tokens via `CredentialService`
+- Service account credentials (env vars) are PROHIBITED
+- OAuth tokens stored encrypted in `user_oauth_tokens` and `workspace_integrations` tables
+
 **Tech Stack:**
-- Git: `os/exec` with git CLI commands
+- Git: `os/exec` with git CLI commands + user OAuth tokens
 - Code Generation: protoc, openapi-generator, graphql-codegen via exec
-- External APIs: net/http for Confluence/Notion REST APIs
+- External APIs: net/http for Confluence/Notion REST APIs with user/workspace credentials
+- Authentication: CredentialService interface for OAuth token management
 - Storage: S3 client (aws-sdk-go-v2) for artifact uploads
 - File Operations: os, io, filepath packages
 
@@ -481,92 +509,236 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ## Task 4: Implement Push to Remote Activity
 
-**Goal:** Push repository to remote Git provider.
+**Goal:** Push repository to remote Git provider using user's OAuth token.
+
+**🔒 AUTHENTICATION REQUIREMENT:**
+- MUST use user's GitHub OAuth token (from `CredentialService`)
+- MUST NOT use service account or environment variable credentials
+- Repository is created in user's GitHub org, commits show user's identity
+- See: `.agent/SOPs/user-driven-authentication.md`
 
 **Files:**
 - Modify: `temporal-workflows/internal/activities/git_activities.go` (PushToRemoteActivity method)
+- Modify input struct to include `UserID` and `WorkspaceID`
+- Add `CredentialService` dependency to `GitActivities`
 
-### Step 1: Implement Git push
+### Step 1: Update input struct and activity dependencies
+
+```go
+// Update PushToRemoteInput to include user context
+type PushToRemoteInput struct {
+    RepositoryID string
+    UserID       string  // REQUIRED for user-context auth
+    WorkspaceID  string  // REQUIRED for multi-tenancy
+}
+
+// Add CredentialService dependency
+type GitActivities struct {
+    workDir           string
+    credentialService CredentialService  // NEW: Required for OAuth
+}
+
+func NewGitActivities(workDir string, credService CredentialService) *GitActivities {
+    return &GitActivities{
+        workDir:           workDir,
+        credentialService: credService,
+    }
+}
+```
+
+### Step 2: Implement Git push with user OAuth token
 
 ```go
 func (a *GitActivities) PushToRemoteActivity(ctx context.Context, input PushToRemoteInput) error {
+    if input.UserID == "" || input.WorkspaceID == "" {
+        return errors.New("user_id and workspace_id are required")
+    }
+
+    repoPath := filepath.Join(a.workDir, input.RepositoryID)
+
+    // Check if repository exists
+    if _, err := os.Stat(repoPath); os.IsNotExist(err) {
+        return errors.New("repository directory does not exist")
+    }
+
     // Verify remote exists
     cmd := exec.CommandContext(ctx, "git", "remote", "get-url", "origin")
-    cmd.Dir = input.Path
+    cmd.Dir = repoPath
     if err := cmd.Run(); err != nil {
         return fmt.Errorf("no remote configured: %w", err)
     }
 
-    // Push to remote
-    // Note: This requires authentication to be configured
-    // In production, use Git credential helper or SSH keys
+    // REQUIRED: Retrieve user's GitHub OAuth token
+    creds, err := a.credentialService.GetUserCredentials(ctx, input.UserID, "github")
+    if err != nil {
+        return fmt.Errorf("user has not connected GitHub account: %w", err)
+    }
+
+    // Check if token expired, refresh if needed
+    if creds.IsExpired() {
+        creds, err = a.credentialService.RefreshToken(ctx, input.UserID, "github")
+        if err != nil {
+            return fmt.Errorf("failed to refresh GitHub token (user must reconnect): %w", err)
+        }
+    }
+
+    // Create temporary credential helper script
+    // Git will call this script to get the OAuth token
+    credHelper, err := a.createCredentialHelper(creds.AccessToken)
+    if err != nil {
+        return fmt.Errorf("failed to create credential helper: %w", err)
+    }
+    defer os.Remove(credHelper)
+
+    // Push to remote using user's OAuth token
     cmd = exec.CommandContext(ctx, "git", "push", "-u", "origin", "main")
-    cmd.Dir = input.Path
+    cmd.Dir = repoPath
     cmd.Env = append(os.Environ(),
-        // Add any necessary auth env vars
-        // "GIT_USERNAME=...",
-        // "GIT_PASSWORD=...",
+        fmt.Sprintf("GIT_ASKPASS=%s", credHelper),
+        // Optional: Override commit author if not already set
+        "GIT_AUTHOR_NAME="+creds.UserName,
+        "GIT_AUTHOR_EMAIL="+creds.UserEmail,
     )
 
     output, err := cmd.CombinedOutput()
     if err != nil {
         // Check if already pushed (idempotency)
         if strings.Contains(string(output), "Everything up-to-date") {
-            a.logger.Info("Repository already pushed", "path", input.Path)
             return nil
         }
-        return fmt.Errorf("failed to push: %w, output: %s", err, string(output))
+        return fmt.Errorf("failed to push to remote: %w (output: %s)", err, string(output))
     }
 
-    a.logger.Info("Successfully pushed to remote", "path", input.Path)
     return nil
+}
+
+// createCredentialHelper creates a temporary script that provides the OAuth token
+func (a *GitActivities) createCredentialHelper(token string) (string, error) {
+    // Create script that echoes the token when Git asks for password
+    // Git will call this with "Password for 'https://...'"
+    script := fmt.Sprintf("#!/bin/sh\necho %s", token)
+
+    tmpFile, err := os.CreateTemp("", "git-cred-*.sh")
+    if err != nil {
+        return "", err
+    }
+
+    if err := os.WriteFile(tmpFile.Name(), []byte(script), 0700); err != nil {
+        os.Remove(tmpFile.Name())
+        return "", err
+    }
+
+    return tmpFile.Name(), nil
 }
 ```
 
-### Step 2: Add test (mock Git push)
+### Step 3: Add test with mocked credential service
 
 ```go
-func TestGitActivities_PushToRemoteActivity(t *testing.T) {
-    // Note: Real push test requires actual Git server
-    // This test verifies the command would be executed correctly
+// Mock credential service for testing
+type MockCredentialService struct {
+    Credentials map[string]*OAuthCredentials
+    GetUserCredentialsCalled bool
+    RefreshTokenCalled bool
+}
 
+func (m *MockCredentialService) GetUserCredentials(ctx context.Context, userID, provider string) (*OAuthCredentials, error) {
+    m.GetUserCredentialsCalled = true
+    key := fmt.Sprintf("%s:%s", userID, provider)
+    if creds, ok := m.Credentials[key]; ok {
+        return creds, nil
+    }
+    return nil, errors.New("credentials not found")
+}
+
+func (m *MockCredentialService) RefreshToken(ctx context.Context, userID, provider string) (*OAuthCredentials, error) {
+    m.RefreshTokenCalled = true
+    // Return refreshed credentials
+    return m.GetUserCredentials(ctx, userID, provider)
+}
+
+func TestGitActivities_PushToRemoteActivity(t *testing.T) {
     tempDir := t.TempDir()
 
     // Initialize git repo
-    exec.Command("git", "init").Run()
-    exec.Command("git", "remote", "add", "origin", "https://github.com/test/repo.git").Run()
+    exec.Command("git", "init", tempDir).Run()
+    exec.Command("git", "-C", tempDir, "remote", "add", "origin", "https://github.com/test/repo.git").Run()
 
-    activities := &activities.GitActivities{
-        logger: slog.Default(),
+    // Create mock credential service
+    mockCredService := &MockCredentialService{
+        Credentials: map[string]*OAuthCredentials{
+            "user-123:github": {
+                AccessToken:  "ghp_test_token_12345",
+                RefreshToken: "refresh_token",
+                ExpiresAt:    time.Now().Add(24 * time.Hour),
+                UserName:     "testuser",
+                UserEmail:    "test@example.com",
+            },
+        },
     }
 
-    input := activities.PushToRemoteInput{
-        Path: tempDir,
+    activities := NewGitActivities(tempDir, mockCredService)
+
+    input := PushToRemoteInput{
+        RepositoryID: "test-repo",
+        UserID:       "user-123",
+        WorkspaceID:  "workspace-123",
     }
 
-    // This will fail without auth, but we can verify error handling
+    // This will fail because there's no real GitHub remote,
+    // but we can verify the credential service was called
     err := activities.PushToRemoteActivity(context.Background(), input)
 
-    // In test environment without credentials, this should fail
-    // In production with proper Git credentials, this would succeed
-    assert.Error(t, err)
-    assert.Contains(t, err.Error(), "failed to push")
+    // Verify credential service was used
+    assert.True(t, mockCredService.GetUserCredentialsCalled)
+
+    // In test environment without real remote, push will fail
+    // but that's expected - we're testing the auth flow
+    if err != nil {
+        assert.Contains(t, err.Error(), "failed to push")
+    }
+}
+
+func TestGitActivities_PushToRemoteActivity_MissingCredentials(t *testing.T) {
+    tempDir := t.TempDir()
+
+    // Empty credential service (user hasn't connected GitHub)
+    mockCredService := &MockCredentialService{
+        Credentials: map[string]*OAuthCredentials{},
+    }
+
+    activities := NewGitActivities(tempDir, mockCredService)
+
+    input := PushToRemoteInput{
+        RepositoryID: "test-repo",
+        UserID:       "user-999",  // User without GitHub credentials
+        WorkspaceID:  "workspace-123",
+    }
+
+    err := activities.PushToRemoteActivity(context.Background(), input)
+
+    // Should fail with user-friendly error
+    require.Error(t, err)
+    assert.Contains(t, err.Error(), "user has not connected GitHub account")
 }
 ```
 
-### Step 3: Run tests and commit
+### Step 4: Run tests and commit
 
 ```bash
 go test -v -run TestGitActivities_PushToRemoteActivity ./internal/activities/
 git add temporal-workflows/internal/activities/
-git commit -m "feat: implement Git push to remote
+git commit -m "feat: implement Git push with user OAuth authentication
 
-- Push to remote origin with -u flag
-- Handle authentication via environment variables
-- Implement idempotency (skip if already pushed)
-- Add error handling for missing credentials
+- Use user's GitHub OAuth token from CredentialService
+- Add UserID and WorkspaceID to PushToRemoteInput
+- Create temporary credential helper for Git authentication
+- Refresh expired tokens automatically
+- User-friendly errors when credentials missing/expired
+- Idempotent (skip if already pushed)
 
-Note: Requires Git credentials configured in production
+🔒 Constitutional requirement: User-context authentication
+See: .agent/SOPs/user-driven-authentication.md
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
@@ -741,17 +913,27 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Task 6: Generate Code Activity (use protoc, openapi-generator, graphql-codegen)
 - Task 7: Package Artifacts Activity (tar.gz compression)
 - Task 8: Upload Artifacts Activity (S3 client integration)
-- Task 9: Fetch Knowledge Pages Activity (PostgreSQL query)
+- Task 9: Fetch Knowledge Pages Activity (PostgreSQL query with workspace scoping)
 - Task 10: Transform Content Activity (markdown parsers)
-- Task 11: Sync to External System Activity (HTTP clients for APIs)
-- Task 12: Update Sync Status Activity (database write)
+- Task 11: Sync to External System Activity (HTTP clients for APIs) **🔒 AUTH REQUIRED**
+- Task 12: Update Sync Status Activity (database write with workspace scoping)
+
+**🔒 Authentication Requirements for Tasks 9-12:**
+- **Task 9**: Database queries MUST include `WHERE workspace_id = ?` for multi-tenancy
+- **Task 11**: MUST use workspace integration credentials from `workspace_integrations` table
+  - Confluence: Workspace's Confluence API key
+  - Notion: Workspace's Notion integration token
+  - GitHub Pages: User's GitHub OAuth token (same as Task 4)
+- **Task 12**: Database writes MUST be scoped to workspace
 
 **Each task follows same structure:**
-1. Write/enhance tests
-2. Run tests (baseline)
-3. Implement real logic
-4. Run tests (verify pass)
-5. Commit
+1. Update input structs to include `UserID` and `WorkspaceID` (if auth required)
+2. Add `CredentialService` dependency (if auth required)
+3. Write/enhance tests with mocked credentials
+4. Run tests (baseline)
+5. Implement real logic with user-context auth
+6. Run tests (verify pass)
+7. Commit
 
 ---
 
