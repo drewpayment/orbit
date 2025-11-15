@@ -1,6 +1,7 @@
 import React from 'react'
 import { ThemeProvider } from '@/components/theme-provider'
 import { BreadcrumbProvider } from '@/components/breadcrumb-provider'
+import { AuthGuard } from '@/components/auth-guard'
 import '@/app/globals.css'
 
 export default function FrontendLayout({ children }: { children: React.ReactNode }) {
@@ -14,7 +15,9 @@ export default function FrontendLayout({ children }: { children: React.ReactNode
           disableTransitionOnChange
         >
           <BreadcrumbProvider>
-            <main>{children}</main>
+            <AuthGuard>
+              <main>{children}</main>
+            </AuthGuard>
           </BreadcrumbProvider>
         </ThemeProvider>
       </body>
