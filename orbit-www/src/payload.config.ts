@@ -15,6 +15,7 @@ import { KnowledgeSpaces } from './collections/KnowledgeSpaces'
 import { KnowledgePages } from './collections/KnowledgePages'
 import { PluginRegistry } from './collections/PluginRegistry'
 import { PluginConfig } from './collections/PluginConfig'
+import { GitHubInstallations } from './collections/GitHubInstallations'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -35,6 +36,7 @@ export default buildConfig({
     KnowledgePages,
     PluginRegistry,
     PluginConfig,
+    GitHubInstallations,
   ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
