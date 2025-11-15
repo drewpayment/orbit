@@ -23,3 +23,32 @@ export async function closeTemporalClient(): Promise<void> {
     temporalClient = null;
   }
 }
+
+/**
+ * Start GitHub token refresh workflow
+ */
+export async function startGitHubTokenRefreshWorkflow(installationId: string): Promise<string> {
+  const client = await getTemporalClient()
+
+  const workflowId = `github-token-refresh:${installationId}`
+
+  const handle = await client.workflow.start('GitHubTokenRefreshWorkflow', {
+    taskQueue: 'orbit-workflows',
+    args: [{
+      InstallationID: installationId,
+    }],
+    workflowId,
+    // Run indefinitely until cancelled
+  })
+
+  return handle.workflowId
+}
+
+/**
+ * Cancel GitHub token refresh workflow
+ */
+export async function cancelGitHubTokenRefreshWorkflow(workflowId: string): Promise<void> {
+  const client = await getTemporalClient()
+  const handle = client.workflow.getHandle(workflowId)
+  await handle.cancel()
+}

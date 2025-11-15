@@ -3,6 +3,7 @@ import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import { encrypt } from '@/lib/encryption'
 import { getInstallation, createInstallationToken } from '@/lib/github/octokit'
+import { startGitHubTokenRefreshWorkflow } from '@/lib/temporal/client'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -102,11 +103,36 @@ export async function GET(request: NextRequest) {
         status: 'active',
         installedBy: adminUserId,
         installedAt: new Date().toISOString(),
-        temporalWorkflowStatus: 'stopped', // Will be 'running' after workflow starts
+        temporalWorkflowStatus: 'starting',
       },
     })
 
-    // TODO: Start Temporal token refresh workflow (Task 7)
+    // Start Temporal token refresh workflow
+    let workflowId: string
+    try {
+      workflowId = await startGitHubTokenRefreshWorkflow(githubInstallation.id)
+
+      // Update installation with workflow ID
+      await payload.update({
+        collection: 'github-installations',
+        id: githubInstallation.id,
+        data: {
+          temporalWorkflowId: workflowId,
+          temporalWorkflowStatus: 'running',
+        },
+      })
+    } catch (workflowError) {
+      console.error('[GitHub Installation] Failed to start workflow:', workflowError)
+
+      // Mark workflow as failed but don't fail installation
+      await payload.update({
+        collection: 'github-installations',
+        id: githubInstallation.id,
+        data: {
+          temporalWorkflowStatus: 'failed',
+        },
+      })
+    }
 
     // Redirect to workspace configuration page
     return NextResponse.redirect(
