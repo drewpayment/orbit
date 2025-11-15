@@ -233,17 +233,16 @@ export const GitHubInstallations: CollectionConfig = {
       },
     },
 
-    // ===== Multi-Tenancy (Future) =====
-    // TODO: Uncomment when tenants collection is created
-    // {
-    //   name: 'tenant',
-    //   type: 'relationship',
-    //   relationTo: 'tenants',
-    //   admin: {
-    //     description: 'For multi-tenant SaaS (null = default tenant for self-hosted)',
-    //     position: 'sidebar',
-    //   },
-    // },
+    // ===== Multi-Tenancy =====
+    {
+      name: 'tenant',
+      type: 'relationship',
+      relationTo: 'tenants',
+      admin: {
+        description: 'For multi-tenant SaaS (null = default tenant for self-hosted)',
+        position: 'sidebar',
+      },
+    },
   ],
 
   hooks: {
