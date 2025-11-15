@@ -69,6 +69,10 @@ const navMainData = [
           title: "Limits",
           url: "#",
         },
+        {
+          title: "GitHub",
+          url: "/admin/settings/github",
+        },
       ],
     },
 ]
