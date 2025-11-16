@@ -37,10 +37,13 @@ export async function getInstallationOctokit(installationId: number): Promise<Oc
  * Create installation access token
  */
 export async function createInstallationToken(installationId: number) {
-  const octokit = await getInstallationOctokit(installationId)
-  const { data } = await octokit.apps.createInstallationAccessToken({
-    installation_id: installationId,
-  })
+  // Use the App-level octokit to create installation access tokens
+  const { data } = await githubApp.octokit.request(
+    'POST /app/installations/{installation_id}/access_tokens',
+    {
+      installation_id: installationId,
+    },
+  )
 
   return {
     token: data.token,
@@ -52,8 +55,8 @@ export async function createInstallationToken(installationId: number) {
  * Get installation details from GitHub
  */
 export async function getInstallation(installationId: number) {
-  const octokit = await githubApp.getInstallationOctokit(installationId)
-  const { data } = await octokit.apps.getInstallation({
+  // Use the App-level octokit to access the Apps API via request
+  const { data } = await githubApp.octokit.request('GET /app/installations/{installation_id}', {
     installation_id: installationId,
   })
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
 import { Card } from '@/components/ui/card'
@@ -93,10 +93,34 @@ export function GitHubSettingsClient() {
 }
 
 function InstallationCard({ installation }: { installation: Installation }) {
+  const [retrying, setRetrying] = React.useState(false)
+
   const statusColors = {
     active: 'bg-green-100 text-green-800',
     suspended: 'bg-red-100 text-red-800',
     refresh_failed: 'bg-yellow-100 text-yellow-800',
+  }
+
+  async function handleRetryWorkflow() {
+    setRetrying(true)
+    try {
+      const res = await fetch(`/api/github/installations/${installation.id}/retry-workflow`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+
+      if (res.ok) {
+        alert('Workflow started successfully! The page will reload.')
+        window.location.reload()
+      } else {
+        alert(`Failed to start workflow: ${data.error}`)
+      }
+    } catch (error) {
+      console.error('Failed to retry workflow:', error)
+      alert('Failed to start workflow')
+    } finally {
+      setRetrying(false)
+    }
   }
 
   return (
@@ -153,9 +177,21 @@ function InstallationCard({ installation }: { installation: Installation }) {
         </div>
         <div>
           <p className="text-gray-600">Token Status</p>
-          <p className="font-medium">
-            {installation.temporalWorkflowStatus === 'running' ? '✓ Auto-refreshing' : '⚠ Not refreshing'}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="font-medium">
+              {installation.temporalWorkflowStatus === 'running' ? '✓ Auto-refreshing' : '⚠ Not refreshing'}
+            </p>
+            {installation.temporalWorkflowStatus !== 'running' && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleRetryWorkflow}
+                disabled={retrying}
+              >
+                {retrying ? 'Starting...' : 'Retry'}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </Card>

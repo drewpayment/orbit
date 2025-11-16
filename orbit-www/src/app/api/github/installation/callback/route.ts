@@ -4,6 +4,8 @@ import configPromise from '@payload-config'
 import { encrypt } from '@/lib/encryption'
 import { getInstallation, createInstallationToken } from '@/lib/github/octokit'
 import { startGitHubTokenRefreshWorkflow } from '@/lib/temporal/client'
+import { auth } from '@/lib/auth'
+import { headers } from 'next/headers'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -30,6 +32,18 @@ export async function GET(request: NextRequest) {
 
   try {
     const payload = await getPayload({ config: configPromise })
+
+    // Get current user from session
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    })
+
+    if (!session?.user) {
+      return NextResponse.json(
+        { error: 'Unauthorized - please log in first' },
+        { status: 401 }
+      )
+    }
 
     // Get installation details from GitHub
     const installation = await getInstallation(Number(installationId))
@@ -76,10 +90,23 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get current user from session
-    // TODO: Implement proper session management
-    // For now, assume admin user ID is available
-    const adminUserId = 'admin-user-id' // Replace with actual user ID from session
+    // Find the Payload user record for this better-auth user
+    const payloadUser = await payload.find({
+      collection: 'users',
+      where: {
+        email: {
+          equals: session.user.email,
+        },
+      },
+      limit: 1,
+    })
+
+    if (!payloadUser.docs[0]) {
+      return NextResponse.json(
+        { error: 'User not found in Payload CMS' },
+        { status: 404 }
+      )
+    }
 
     // Create new installation record
     const githubInstallation = await payload.create({
@@ -101,9 +128,9 @@ export async function GET(request: NextRequest) {
         })),
         allowedWorkspaces: [], // Admin will configure
         status: 'active',
-        installedBy: adminUserId,
+        installedBy: payloadUser.docs[0].id,
         installedAt: new Date().toISOString(),
-        temporalWorkflowStatus: 'starting',
+        // temporalWorkflowStatus will be set after starting workflow
       },
     })
 
