@@ -5,6 +5,9 @@ import { useParams, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
+import { AppSidebar } from '@/components/app-sidebar'
+import { SiteHeader } from '@/components/site-header'
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 
 interface Workspace {
   id: string
@@ -71,55 +74,73 @@ export default function ConfigureInstallationPage() {
   }
 
   if (!installation) {
-    return <div className="p-6">Loading...</div>
+    return (
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset>
+          <SiteHeader />
+          <div className="flex flex-1 flex-col gap-4 p-8">
+            <div>Loading...</div>
+          </div>
+        </SidebarInset>
+      </SidebarProvider>
+    )
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-2">Configure GitHub Installation</h1>
-      <p className="text-gray-600 mb-6">
-        GitHub Organization: <strong>{installation.accountLogin}</strong>
-      </p>
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset>
+        <SiteHeader />
+        <div className="flex flex-1 flex-col gap-4 p-8">
+          <div className="max-w-2xl">
+            <h1 className="text-2xl font-bold mb-2">Configure GitHub Installation</h1>
+            <p className="text-gray-600 mb-6">
+              GitHub Organization: <strong>{installation.accountLogin}</strong>
+            </p>
 
-      <Card className="p-6">
-        <h2 className="text-lg font-semibold mb-4">Workspace Access</h2>
-        <p className="text-sm text-gray-600 mb-4">
-          Select which Orbit workspaces can use this GitHub installation for repository operations.
-        </p>
+            <Card className="p-6">
+              <h2 className="text-lg font-semibold mb-4">Workspace Access</h2>
+              <p className="text-sm text-gray-600 mb-4">
+                Select which Orbit workspaces can use this GitHub installation for repository operations.
+              </p>
 
-        <div className="space-y-3">
-          {workspaces.map((workspace) => (
-            <label
-              key={workspace.id}
-              className="flex items-center gap-3 p-3 border rounded hover:bg-gray-50 cursor-pointer"
-            >
-              <input
-                type="checkbox"
-                checked={selectedWorkspaces.includes(workspace.id)}
-                onChange={() => toggleWorkspace(workspace.id)}
-                className="w-4 h-4"
-              />
-              <div>
-                <p className="font-medium">{workspace.name}</p>
-                <p className="text-sm text-gray-600">{workspace.slug}</p>
+              <div className="space-y-3">
+                {workspaces.map((workspace) => (
+                  <label
+                    key={workspace.id}
+                    className="flex items-center gap-3 p-3 border rounded hover:bg-gray-50 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedWorkspaces.includes(workspace.id)}
+                      onChange={() => toggleWorkspace(workspace.id)}
+                      className="w-4 h-4"
+                    />
+                    <div>
+                      <p className="font-medium">{workspace.name}</p>
+                      <p className="text-sm text-gray-600">{workspace.slug}</p>
+                    </div>
+                  </label>
+                ))}
               </div>
-            </label>
-          ))}
+
+              {workspaces.length === 0 && (
+                <p className="text-sm text-gray-500 italic">No workspaces available</p>
+              )}
+            </Card>
+
+            <div className="flex gap-3 mt-6">
+              <Button onClick={handleSave} disabled={saving}>
+                {saving ? 'Saving...' : 'Save Configuration'}
+              </Button>
+              <Button variant="secondary" onClick={() => router.back()}>
+                Cancel
+              </Button>
+            </div>
+          </div>
         </div>
-
-        {workspaces.length === 0 && (
-          <p className="text-sm text-gray-500 italic">No workspaces available</p>
-        )}
-      </Card>
-
-      <div className="flex gap-3 mt-6">
-        <Button onClick={handleSave} disabled={saving}>
-          {saving ? 'Saving...' : 'Save Configuration'}
-        </Button>
-        <Button variant="secondary" onClick={() => router.back()}>
-          Cancel
-        </Button>
-      </div>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }

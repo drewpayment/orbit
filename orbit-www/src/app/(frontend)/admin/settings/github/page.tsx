@@ -5,6 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { AppSidebar } from '@/components/app-sidebar'
+import { SiteHeader } from '@/components/site-header'
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 
 const GITHUB_APP_NAME = process.env.NEXT_PUBLIC_GITHUB_APP_NAME || 'orbit-idp-dev'
 
@@ -52,43 +55,59 @@ export default function GitHubSettingsPage() {
   }
 
   if (loading) {
-    return <div className="p-6">Loading...</div>
+    return (
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset>
+          <SiteHeader />
+          <div className="flex flex-1 flex-col gap-4 p-8">
+            <div>Loading...</div>
+          </div>
+        </SidebarInset>
+      </SidebarProvider>
+    )
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">GitHub App Installations</h1>
-          <p className="text-sm text-gray-600 mt-1">
-            Manage GitHub organizations connected to Orbit
-          </p>
-        </div>
-        <Button onClick={handleInstallGitHubApp}>
-          + Install GitHub App
-        </Button>
-      </div>
-
-      {installations.length === 0 ? (
-        <Alert>
-          <div>
-            <p className="font-semibold">No GitHub installations configured</p>
-            <p className="text-sm mt-1 text-gray-600">
-              Install the Orbit IDP GitHub App into your GitHub organization to enable repository operations.
-            </p>
-            <Button className="mt-4" onClick={handleInstallGitHubApp}>
-              Install GitHub App
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset>
+        <SiteHeader />
+        <div className="flex flex-1 flex-col gap-4 p-8">
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h1 className="text-2xl font-bold">GitHub App Installations</h1>
+              <p className="text-sm text-gray-600 mt-1">
+                Manage GitHub organizations connected to Orbit
+              </p>
+            </div>
+            <Button onClick={handleInstallGitHubApp}>
+              + Install GitHub App
             </Button>
           </div>
-        </Alert>
-      ) : (
-        <div className="space-y-4">
-          {installations.map((install) => (
-            <InstallationCard key={install.id} installation={install} />
-          ))}
+
+          {installations.length === 0 ? (
+            <Alert>
+              <div>
+                <p className="font-semibold">No GitHub installations configured</p>
+                <p className="text-sm mt-1 text-gray-600">
+                  Install the Orbit IDP GitHub App into your GitHub organization to enable repository operations.
+                </p>
+                <Button className="mt-4" onClick={handleInstallGitHubApp}>
+                  Install GitHub App
+                </Button>
+              </div>
+            </Alert>
+          ) : (
+            <div className="space-y-4">
+              {installations.map((install) => (
+                <InstallationCard key={install.id} installation={install} />
+              ))}
+            </div>
+          )}
         </div>
-      )}
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
 
