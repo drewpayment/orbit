@@ -136,7 +136,7 @@ export async function GET(request: NextRequest) {
 
     // Redirect to workspace configuration page
     return NextResponse.redirect(
-      new URL(`/admin/settings/github/${githubInstallation.id}/configure`, request.url)
+      new URL(`/settings/github/${githubInstallation.id}/configure`, request.url)
     )
 
   } catch (error) {

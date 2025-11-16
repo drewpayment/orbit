@@ -71,7 +71,7 @@ const navMainData = [
         },
         {
           title: "GitHub",
-          url: "/admin/settings/github",
+          url: "/settings/github",
         },
       ],
     },

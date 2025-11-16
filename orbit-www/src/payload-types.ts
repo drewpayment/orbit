@@ -69,12 +69,14 @@ export interface Config {
   collections: {
     users: User;
     media: Media;
+    tenants: Tenant;
     workspaces: Workspace;
     'workspace-members': WorkspaceMember;
     'knowledge-spaces': KnowledgeSpace;
     'knowledge-pages': KnowledgePage;
     'plugin-registry': PluginRegistry;
     'plugin-config': PluginConfig;
+    'github-installations': GithubInstallation;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -83,12 +85,14 @@ export interface Config {
   collectionsSelect: {
     users: UsersSelect<false> | UsersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
+    tenants: TenantsSelect<false> | TenantsSelect<true>;
     workspaces: WorkspacesSelect<false> | WorkspacesSelect<true>;
     'workspace-members': WorkspaceMembersSelect<false> | WorkspaceMembersSelect<true>;
     'knowledge-spaces': KnowledgeSpacesSelect<false> | KnowledgeSpacesSelect<true>;
     'knowledge-pages': KnowledgePagesSelect<false> | KnowledgePagesSelect<true>;
     'plugin-registry': PluginRegistrySelect<false> | PluginRegistrySelect<true>;
     'plugin-config': PluginConfigSelect<false> | PluginConfigSelect<true>;
+    'github-installations': GithubInstallationsSelect<false> | GithubInstallationsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -169,6 +173,61 @@ export interface Media {
   height?: number | null;
   focalX?: number | null;
   focalY?: number | null;
+}
+/**
+ * Multi-tenant organization management
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "tenants".
+ */
+export interface Tenant {
+  id: string;
+  /**
+   * Organization or company name
+   */
+  name: string;
+  /**
+   * URL-friendly identifier (e.g., "acme-corp")
+   */
+  slug: string;
+  /**
+   * Subscription plan level
+   */
+  plan: 'self-hosted' | 'free' | 'professional' | 'enterprise';
+  /**
+   * Current tenant status
+   */
+  status: 'active' | 'suspended' | 'cancelled';
+  settings?: {
+    /**
+     * Maximum number of workspaces allowed (null = unlimited)
+     */
+    maxWorkspaces?: number | null;
+    /**
+     * Maximum number of users allowed (null = unlimited)
+     */
+    maxUsers?: number | null;
+    /**
+     * Custom domain for this tenant (e.g., "acme.orbit.dev")
+     */
+    customDomain?: string | null;
+  };
+  metadata?: {
+    /**
+     * Primary contact email for this tenant
+     */
+    contactEmail?: string | null;
+    /**
+     * Billing contact email
+     */
+    billingEmail?: string | null;
+    /**
+     * Internal notes about this tenant
+     */
+    notes?: string | null;
+  };
+  updatedAt: string;
+  createdAt: string;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -557,6 +616,102 @@ export interface PluginConfig {
   createdAt: string;
 }
 /**
+ * GitHub App installations for repository operations
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "github-installations".
+ */
+export interface GithubInstallation {
+  id: string;
+  /**
+   * GitHub App installation ID from GitHub API
+   */
+  installationId: number;
+  /**
+   * GitHub organization name (e.g., "mycompany")
+   */
+  accountLogin: string;
+  /**
+   * GitHub account ID
+   */
+  accountId: number;
+  /**
+   * Type of GitHub account (usually Organization)
+   */
+  accountType: 'Organization' | 'User';
+  /**
+   * GitHub organization avatar URL
+   */
+  accountAvatarUrl?: string | null;
+  /**
+   * Encrypted GitHub App installation access token
+   */
+  installationToken: string;
+  /**
+   * When the current token expires (auto-refreshed every 50 min)
+   */
+  tokenExpiresAt: string;
+  /**
+   * Last successful token refresh timestamp
+   */
+  tokenLastRefreshedAt?: string | null;
+  /**
+   * Repository access scope configured during installation
+   */
+  repositorySelection: 'all' | 'selected';
+  /**
+   * Specific repositories if repositorySelection is "selected"
+   */
+  selectedRepositories?:
+    | {
+        /**
+         * Full repo name (e.g., "mycompany/backend")
+         */
+        fullName: string;
+        id: number;
+        private?: boolean | null;
+      }[]
+    | null;
+  /**
+   * Which Orbit workspaces can use this GitHub installation
+   */
+  allowedWorkspaces?: (string | Workspace)[] | null;
+  /**
+   * Installation health status
+   */
+  status: 'active' | 'suspended' | 'refresh_failed';
+  /**
+   * When the installation was suspended
+   */
+  suspendedAt?: string | null;
+  /**
+   * Why the installation was suspended
+   */
+  suspensionReason?: string | null;
+  /**
+   * ID of the token refresh Temporal workflow
+   */
+  temporalWorkflowId?: string | null;
+  /**
+   * Token refresh workflow status
+   */
+  temporalWorkflowStatus?: ('running' | 'stopped' | 'failed') | null;
+  /**
+   * Orbit admin who installed the GitHub App
+   */
+  installedBy: string | User;
+  /**
+   * When the GitHub App was installed
+   */
+  installedAt: string;
+  /**
+   * For multi-tenant SaaS (null = default tenant for self-hosted)
+   */
+  tenant?: (string | null) | Tenant;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
@@ -570,6 +725,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'media';
         value: string | Media;
+      } | null)
+    | ({
+        relationTo: 'tenants';
+        value: string | Tenant;
       } | null)
     | ({
         relationTo: 'workspaces';
@@ -594,6 +753,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'plugin-config';
         value: string | PluginConfig;
+      } | null)
+    | ({
+        relationTo: 'github-installations';
+        value: string | GithubInstallation;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -678,6 +841,32 @@ export interface MediaSelect<T extends boolean = true> {
   height?: T;
   focalX?: T;
   focalY?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "tenants_select".
+ */
+export interface TenantsSelect<T extends boolean = true> {
+  name?: T;
+  slug?: T;
+  plan?: T;
+  status?: T;
+  settings?:
+    | T
+    | {
+        maxWorkspaces?: T;
+        maxUsers?: T;
+        customDomain?: T;
+      };
+  metadata?:
+    | T
+    | {
+        contactEmail?: T;
+        billingEmail?: T;
+        notes?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -861,6 +1050,39 @@ export interface PluginConfigSelect<T extends boolean = true> {
   enabledBy?: T;
   enabledAt?: T;
   lastModifiedBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "github-installations_select".
+ */
+export interface GithubInstallationsSelect<T extends boolean = true> {
+  installationId?: T;
+  accountLogin?: T;
+  accountId?: T;
+  accountType?: T;
+  accountAvatarUrl?: T;
+  installationToken?: T;
+  tokenExpiresAt?: T;
+  tokenLastRefreshedAt?: T;
+  repositorySelection?: T;
+  selectedRepositories?:
+    | T
+    | {
+        fullName?: T;
+        id?: T;
+        private?: T;
+      };
+  allowedWorkspaces?: T;
+  status?: T;
+  suspendedAt?: T;
+  suspensionReason?: T;
+  temporalWorkflowId?: T;
+  temporalWorkflowStatus?: T;
+  installedBy?: T;
+  installedAt?: T;
+  tenant?: T;
   updatedAt?: T;
   createdAt?: T;
 }

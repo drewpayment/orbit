@@ -57,7 +57,7 @@ export default function ConfigureInstallationPage() {
         }),
       })
 
-      router.push('/admin/settings/github')
+      router.push('/settings/github')
     } catch (error) {
       console.error('Failed to save configuration:', error)
     } finally {

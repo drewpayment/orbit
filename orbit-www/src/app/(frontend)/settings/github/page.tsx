@@ -145,7 +145,7 @@ function InstallationCard({ installation }: { installation: Installation }) {
           </Badge>
           <Button
             variant="secondary"
-            onClick={() => window.location.href = `/admin/settings/github/${installation.id}/configure`}
+            onClick={() => window.location.href = `/settings/github/${installation.id}/configure`}
           >
             Configure
           </Button>
