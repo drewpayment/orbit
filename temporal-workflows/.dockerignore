@@ -1,0 +1,19 @@
+# Build artifacts
+bin/
+*.out
+coverage.html
+
+# Tests
+*_test.go
+tests/
+
+# Development files
+.git/
+.github/
+.vscode/
+*.md
+!README.md
+
+# OS files
+.DS_Store
+Thumbs.db

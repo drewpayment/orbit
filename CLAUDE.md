@@ -13,15 +13,17 @@ Orbit is a multi-tenant SaaS Internal Developer Portal (IDP) that provides centr
 
 ## Development Commands
 
+**📘 See [DEV_SETUP.md](./DEV_SETUP.md) for comprehensive development environment setup and troubleshooting.**
+
 ### Starting Development
 
 ```bash
-# Start all infrastructure services (Temporal, PostgreSQL, Redis, etc.)
+# Start complete development environment (all services in Docker with HMR)
 make dev
 
-# Alternative: Start individual services
-docker-compose up -d temporal-postgresql temporal-elasticsearch temporal-server temporal-ui postgres redis
-cd orbit-www && pnpm dev
+# OR: Start infrastructure in Docker, run orbit-www locally (faster iteration)
+make dev-local
+cd orbit-www && bun run dev
 ```
 
 ### Testing

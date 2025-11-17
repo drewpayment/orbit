@@ -1,13 +1,24 @@
 # Orbit Development Makefile
 
-.PHONY: help dev test test-go test-frontend lint lint-go lint-frontend build clean
+.PHONY: help dev dev-docker dev-local test test-go test-frontend lint lint-go lint-frontend build clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
-dev: ## Start development environment
-	docker-compose up -d temporal-postgresql temporal-elasticsearch temporal-server temporal-ui postgres redis
-	cd orbit-www && pnpm dev
+dev: dev-docker ## Start complete development environment in Docker
+
+dev-docker: ## Start all services in Docker (recommended)
+	@./scripts/dev-start.sh
+
+dev-local: ## Start infrastructure in Docker, run orbit-www locally
+	@echo "🚀 Starting infrastructure services..."
+	docker-compose up -d mongo temporal-postgresql temporal-elasticsearch temporal-server temporal-ui temporal-worker postgres redis
+	@echo ""
+	@echo "✅ Infrastructure started!"
+	@echo ""
+	@echo "📝 To start orbit-www locally:"
+	@echo "  cd orbit-www && bun run dev"
+	@echo ""
 
 test: test-go test-frontend ## Run all tests
 

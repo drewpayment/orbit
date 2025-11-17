@@ -131,17 +131,17 @@ Data Layer
 ### Quick Start
 ```bash
 # Clone the repository
-git clone <repository-url>
-cd idp
+git clone git@github.com:drewpayment/orbit.git
+cd orbit
 
 # Start all services
-docker-compose up -d
+make dev-local
 
 # Initialize the database
 make db-migrate
 
 # Start the Payload development server
-cd orbit-www && pnpm dev
+cd orbit-www && bun run dev
 
 # Access the application
 open http://localhost:3000
