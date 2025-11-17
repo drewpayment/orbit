@@ -46,17 +46,29 @@ func GitHubTokenRefreshWorkflow(ctx workflow.Context, input GitHubTokenRefreshWo
 		logger.Info("Initial token refresh succeeded", "expiresAt", result.ExpiresAt)
 	}
 
+	// Setup signal channel for manual refresh triggers
+	refreshSignal := workflow.GetSignalChannel(ctx, "trigger-refresh")
+
 	// Run indefinitely until workflow is cancelled
 	for {
-		// Sleep for 50 minutes (10 min before token expires)
-		err := workflow.Sleep(ctx, 50*time.Minute)
-		if err != nil {
-			// Workflow cancelled (app uninstalled)
-			logger.Info("Workflow cancelled, stopping token refresh", "error", err)
-			return err
-		}
+		// Create selector to wait for either timer or signal
+		selector := workflow.NewSelector(ctx)
 
-		// Refresh token
+		// Add 50-minute timer branch
+		timerFuture := workflow.NewTimer(ctx, 50*time.Minute)
+		selector.AddFuture(timerFuture, func(f workflow.Future) {
+			logger.Info("Timer fired (50 min elapsed), refreshing token")
+		})
+
+		// Add manual refresh signal branch
+		selector.AddReceive(refreshSignal, func(c workflow.ReceiveChannel, more bool) {
+			logger.Info("Manual refresh signal received, triggering immediate refresh")
+		})
+
+		// Wait for either timer or signal
+		selector.Select(ctx)
+
+		// Refresh token (same logic as before)
 		var result RefreshTokenResult
 		err = workflow.ExecuteActivity(ctx, "RefreshGitHubInstallationTokenActivity", input.InstallationID).Get(ctx, &result)
 
