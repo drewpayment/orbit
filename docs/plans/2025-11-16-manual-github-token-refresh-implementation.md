@@ -466,6 +466,97 @@ Create a test summary in the plan:
 
 ---
 
+## Automated Pre-Testing Verification (2025-11-17)
+
+### Build Verification Results
+
+✅ **Workflow Code Compilation**
+- File: `temporal-workflows/internal/workflows/github_token_refresh_workflow.go`
+- Status: Compiles successfully
+- Signal handler: `trigger-refresh` channel configured
+- Selector pattern: Implemented correctly
+
+✅ **Temporal Worker Build**
+- Binary: `temporal-workflows/bin/worker`
+- Status: Builds successfully
+- Location: `/Users/drew.payment/dev/orbit/temporal-workflows/bin/worker`
+
+✅ **Frontend Build**
+- Status: Production build succeeds
+- Warnings: Unrelated protobuf import warnings (pre-existing)
+- API endpoint: `/api/github/installations/[id]/refresh/route.ts` - Created
+- UI component: Updated with manual refresh button
+
+✅ **Implementation Verification**
+- Task 1 (Workflow): Complete (commit b1bda7a)
+- Task 2 (API): Complete (commits 791d48c, 62878e5)
+- Task 3 (UI): Complete (commit ad7ba9e)
+- All code committed with proper messages
+
+### System Status Check
+
+❌ **Temporal Infrastructure**
+- Temporal UI (http://localhost:8080): Not accessible
+- Temporal worker: Not running
+- Docker containers: Only mailhog running
+
+❌ **Frontend Server**
+- Dev server (http://localhost:3000): Not running
+
+### Prerequisites for Manual Testing
+
+Before proceeding with manual testing (Steps 4.2-4.6), you need to:
+
+1. **Start Temporal Infrastructure:**
+   ```bash
+   # From project root
+   make docker-up
+   # OR start Temporal services individually
+   ```
+
+2. **Start Temporal Worker with New Code:**
+   ```bash
+   cd /Users/drew.payment/dev/orbit/temporal-workflows
+   ./bin/worker
+   ```
+   **IMPORTANT:** Worker must be restarted to load the new signal handler code.
+
+3. **Start Frontend Development Server:**
+   ```bash
+   cd /Users/drew.payment/dev/orbit/orbit-www
+   bun run dev
+   ```
+
+4. **Verify GitHub Installation Exists:**
+   - At least one installation must exist in database
+   - Installation must have a running token refresh workflow
+   - Check `temporalWorkflowStatus` field is "running"
+
+### Ready for Manual Testing
+
+**📋 Comprehensive Testing Guide:** See `docs/plans/MANUAL-TESTING-GUIDE-token-refresh.md`
+
+The manual testing guide includes:
+- Step-by-step testing scenarios
+- Troubleshooting common issues
+- Verification checklist
+- Performance benchmarks
+- Success criteria
+
+Quick start for manual testing:
+1. Run verification script: `cd temporal-workflows && ./verify-worker.sh`
+2. Start missing services as indicated
+3. Follow test scenarios in the guide
+
+Once prerequisites are met, proceed with Steps 4.2-4.6 to verify:
+- Manual refresh button appears and is enabled
+- Clicking button triggers signal to Temporal workflow
+- Temporal UI shows SignalReceived event
+- Activity executes and updates database
+- Success/error messages display correctly
+
+---
+
 ## Task 5: Update Documentation
 
 **Files:**

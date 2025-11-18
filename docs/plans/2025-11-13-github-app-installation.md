@@ -3,7 +3,8 @@
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Created**: 2025-11-13
-**Status**: Not Started
+**Last Updated**: 2025-11-16
+**Status**: 🟢 Complete (Tasks 2-8, 10-12) | ⏳ Pending (Task 9) | 📝 User Action (Task 1)
 **Priority**: CRITICAL (Blocks backend activities Task 4+)
 
 ---
@@ -91,8 +92,9 @@
 
 ## Phase 1: Foundation & GitHub App Setup
 
-### Task 1: Register GitHub App
+### Task 1: Register GitHub App ⚠️ USER ACTION REQUIRED
 
+**Status**: External configuration - User must complete this on GitHub
 **Goal**: Create "Orbit IDP" GitHub App on GitHub.
 
 **Files**: N/A (external to codebase)
@@ -158,8 +160,10 @@ curl -H "Authorization: Bearer <JWT_TOKEN>" \
 
 ---
 
-### Task 2: Implement Token Encryption
+### Task 2: Implement Token Encryption ✅ COMPLETE
 
+**Status**: ✅ Complete (2025-11-14)
+**Files**: `orbit-www/src/lib/encryption/index.ts`, `encryption.test.ts`
 **Goal**: Securely encrypt GitHub installation tokens before storing in MongoDB.
 
 **Files**:
@@ -304,8 +308,10 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ---
 
-### Task 3: Create Payload Collection for GitHub Installations
+### Task 3: Create Payload Collection for GitHub Installations ✅ COMPLETE
 
+**Status**: ✅ Complete (2025-11-14)
+**Files**: `orbit-www/src/collections/GitHubInstallations.ts`
 **Goal**: Define `github-installations` Payload collection schema.
 
 **Files**:
@@ -644,8 +650,10 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ## Phase 2: GitHub App Installation Flow (Frontend)
 
-### Task 4: Implement Installation Callback Handler
+### Task 4: Implement Installation Callback Handler ✅ COMPLETE
 
+**Status**: ✅ Complete (2025-11-16)
+**Files**: `orbit-www/src/app/api/github/installation/callback/route.ts`, `lib/github/octokit.ts`
 **Goal**: Handle GitHub App installation callback and store encrypted token.
 
 **Files**:
@@ -889,8 +897,10 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ---
 
-### Task 5: Build Installation Initiation UI
+### Task 5: Build Installation Initiation UI ✅ COMPLETE
 
+**Status**: ✅ Complete (2025-11-16)
+**Files**: `orbit-www/src/app/(frontend)/settings/github/page.tsx`, `[id]/configure/page.tsx`
 **Goal**: Create admin UI to initiate GitHub App installation.
 
 **Files**:
@@ -1244,8 +1254,10 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ## Phase 3: Temporal Token Refresh Workflow
 
-### Task 6: Implement Token Refresh Workflow (Go)
+### Task 6: Implement Token Refresh Workflow (Go) ✅ COMPLETE
 
+**Status**: ✅ Complete (2025-11-14)
+**Files**: `temporal-workflows/internal/workflows/github_token_refresh_workflow.go`, `activities/github_token_activities.go`
 **Goal**: Create long-running Temporal workflow that refreshes GitHub installation tokens every 50 minutes.
 
 **Files**:
@@ -1613,8 +1625,10 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ---
 
-### Task 7: Integrate Workflow Startup with Installation Callback
+### Task 7: Integrate Workflow Startup with Installation Callback ✅ COMPLETE
 
+**Status**: ✅ Complete (2025-11-14)
+**Files**: `orbit-www/src/lib/temporal/client.ts`, modified callback route
 **Goal**: Start Temporal workflow when GitHub App is installed.
 
 **Files**:
@@ -1764,8 +1778,10 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ## Phase 4: Webhook Handling & Lifecycle Management
 
-### Task 8: Implement GitHub App Webhooks
+### Task 8: Implement GitHub App Webhooks ✅ COMPLETE
 
+**Status**: ✅ Complete (2025-11-14)
+**Files**: `orbit-www/src/app/api/github/webhooks/route.ts`, `lib/github/webhooks.ts`
 **Goal**: Handle GitHub App uninstall/suspend events to stop workflows and update status.
 
 **Files**:
@@ -1992,8 +2008,14 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ## Phase 5: Integration with Repository Workflows
 
-### Task 9: Update Git Activities to Use Installation Tokens
+### Task 9: Update Git Activities to Use Installation Tokens ⏳ PENDING
 
+**Status**: ⏳ Not Started - Blocked by finalizing Git activities implementation
+**Next Steps**:
+- Add `WorkspaceID` to activity input structs
+- Implement `findGitHubInstallationForWorkspace()` helper
+- Update `PushToRemoteActivity` to decrypt and use installation token
+- Update `InitializeGitActivity` for commit attribution
 **Goal**: Modify `PushToRemoteActivity` and related Git activities to use GitHub installation tokens.
 
 **Files**:
@@ -2324,8 +2346,10 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ## Phase 6: Documentation & SOPs
 
-### Task 10: Create GitHub App Installation SOP
+### Task 10: Create GitHub App Installation SOP ✅ COMPLETE
 
+**Status**: ✅ Complete (2025-11-13)
+**Files**: `.agent/SOPs/github-app-installation.md`
 **Goal**: Document the GitHub App installation pattern for future development.
 
 **Files**:
@@ -2362,8 +2386,10 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ---
 
-### Task 11: Rename User OAuth SOP
+### Task 11: Rename User OAuth SOP ✅ COMPLETE
 
+**Status**: ✅ Complete (2025-11-13)
+**Files**: `.agent/SOPs/user-oauth-integrations.md` (renamed from user-driven-authentication.md)
 **Goal**: Clarify that existing user OAuth SOP is for personal integrations, not GitHub.
 
 **Files**:
@@ -2429,8 +2455,10 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ---
 
-### Task 12: Update Backend Activities Plan
+### Task 12: Update Backend Activities Plan ✅ COMPLETE
 
+**Status**: ✅ Complete (2025-11-13)
+**Files**: `docs/plans/2025-11-02-backend-activities-implementation.md` (added IMPORTANT DEPENDENCY section)
 **Goal**: Add dependency note to backend activities plan pointing to this plan.
 
 **Files**:
@@ -2504,8 +2532,17 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ## Summary & Next Steps
 
 **Total Tasks**: 12 (across 6 phases)
-**Estimated Time**: 12-16 hours
-**Dependencies**: Payload CMS ✅, Temporal ✅, GitHub App registration ⚠️
+**Completed**: 10/12 tasks (83%)
+**Status**:
+- ✅ Phase 1: Foundation (Tasks 2-3) - **COMPLETE**
+- ⚠️ Phase 1: GitHub App Registration (Task 1) - **USER ACTION REQUIRED**
+- ✅ Phase 2: Installation Flow (Tasks 4-5) - **COMPLETE**
+- ✅ Phase 3: Token Refresh (Tasks 6-7) - **COMPLETE**
+- ✅ Phase 4: Webhooks (Task 8) - **COMPLETE**
+- ⏳ Phase 5: Integration (Task 9) - **PENDING**
+- ✅ Phase 6: Documentation (Tasks 10-12) - **COMPLETE**
+
+**Dependencies**: Payload CMS ✅, Temporal ✅, GitHub App registration ⚠️ (user must register)
 
 ### **Implementation Order**
 
@@ -2534,9 +2571,21 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - SOPs
 - Update plans
 
-### **After Completion**
+### **Remaining Work**
 
-This plan unblocks:
+**Before Full Completion:**
+1. **Task 1 (User Action)**: Register GitHub App on GitHub
+   - Navigate to https://github.com/settings/apps/new
+   - Follow configuration in Task 1 steps
+   - Save credentials to `.env`
+
+2. **Task 9 (Development)**: Update Git activities to use installation tokens
+   - Implement in `temporal-workflows/internal/activities/git_activities.go`
+   - See detailed implementation steps in Task 9
+
+**After Full Completion:**
+
+This plan will unblock:
 - ✅ Backend Activities Plan (Task 4: PushToRemoteActivity)
 - ✅ Repository creation workflows
 - ✅ Future org-level integrations (Confluence, Jira)
