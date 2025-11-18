@@ -79,7 +79,6 @@ services:
       dockerfile: Dockerfile
     depends_on:
       - temporal-server
-      - orbit-www
     environment:
       - TEMPORAL_ADDRESS=temporal-server:7233
       - TEMPORAL_NAMESPACE=default
