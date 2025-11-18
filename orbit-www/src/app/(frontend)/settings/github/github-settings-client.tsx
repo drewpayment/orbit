@@ -94,6 +94,8 @@ export function GitHubSettingsClient() {
 
 function InstallationCard({ installation }: { installation: Installation }) {
   const [retrying, setRetrying] = React.useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [lastRefreshResult, setLastRefreshResult] = useState<string | null>(null)
 
   const statusColors = {
     active: 'bg-green-100 text-green-800',
@@ -120,6 +122,36 @@ function InstallationCard({ installation }: { installation: Installation }) {
       alert('Failed to start workflow')
     } finally {
       setRetrying(false)
+    }
+  }
+
+  async function handleManualRefresh() {
+    setRefreshing(true)
+    setLastRefreshResult(null)
+
+    try {
+      const res = await fetch(`/api/github/installations/${installation.id}/refresh`, {
+        method: 'POST',
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Refresh failed')
+      }
+
+      setLastRefreshResult('✅ Refresh triggered successfully. Check Temporal UI for results.')
+
+      // Refresh installation data after a few seconds
+      setTimeout(() => {
+        window.location.reload()
+      }, 3000)
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      setLastRefreshResult(`❌ Failed: ${errorMessage}`)
+    } finally {
+      setRefreshing(false)
     }
   }
 
@@ -193,6 +225,25 @@ function InstallationCard({ installation }: { installation: Installation }) {
             )}
           </div>
         </div>
+      </div>
+
+      <div className="mt-4 flex items-center gap-3">
+        <Button
+          onClick={handleManualRefresh}
+          disabled={refreshing || installation.temporalWorkflowStatus !== 'running'}
+          variant="secondary"
+          size="sm"
+        >
+          {refreshing ? (
+            <>⏳ Refreshing...</>
+          ) : (
+            <>🔄 Test Refresh Now</>
+          )}
+        </Button>
+
+        {lastRefreshResult && (
+          <span className="text-sm">{lastRefreshResult}</span>
+        )}
       </div>
     </Card>
   )
