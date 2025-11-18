@@ -82,7 +82,7 @@ services:
     environment:
       - TEMPORAL_ADDRESS=temporal-server:7233
       - TEMPORAL_NAMESPACE=default
-      - ORBIT_API_URL=http://orbit-www:3000
+      - ORBIT_API_URL=http://host.docker.internal:3000
     restart: unless-stopped
 
   # Application Services
