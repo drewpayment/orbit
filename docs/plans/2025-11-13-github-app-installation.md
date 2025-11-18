@@ -1254,11 +1254,17 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ## Phase 3: Temporal Token Refresh Workflow
 
-### Task 6: Implement Token Refresh Workflow (Go) ✅ COMPLETE
+### Task 6: Implement Token Refresh Workflow (Go) ✅ COMPLETE + ENHANCED
 
-**Status**: ✅ Complete (2025-11-14)
+**Status**: ✅ Complete (2025-11-14), Enhanced (2025-11-16)
 **Files**: `temporal-workflows/internal/workflows/github_token_refresh_workflow.go`, `activities/github_token_activities.go`
 **Goal**: Create long-running Temporal workflow that refreshes GitHub installation tokens every 50 minutes.
+
+**Enhancement (2025-11-16):** Added manual refresh signal handler
+- See: `docs/plans/2025-11-16-manual-github-token-refresh-implementation.md`
+- Enables on-demand testing via admin UI button
+- No waiting for 50-minute timer during development
+- Workflow now uses Selector pattern to wait for either timer or manual signal
 
 **Files**:
 - Create: `temporal-workflows/internal/workflows/github_token_refresh_workflow.go`
