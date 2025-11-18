@@ -5,8 +5,10 @@ import { getTemporalClient } from '@/lib/temporal/client'
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
+
   try {
     // Get Payload instance
     const payload = await getPayload({ config: configPromise })
@@ -20,7 +22,7 @@ export async function POST(
     // Get installation to verify it exists
     const installation = await payload.findByID({
       collection: 'github-installations',
-      id: params.id,
+      id,
     })
 
     if (!installation) {
@@ -43,7 +45,7 @@ export async function POST(
 
     // Send signal to workflow
     const client = await getTemporalClient()
-    const workflowId = installation.temporalWorkflowId || `github-token-refresh:${params.id}`
+    const workflowId = installation.temporalWorkflowId || `github-token-refresh:${id}`
 
     try {
       const handle = client.workflow.getHandle(workflowId)
@@ -53,13 +55,13 @@ export async function POST(
       return NextResponse.json(
         {
           error: 'Failed to signal workflow',
-          details: workflowError.message
+          details: workflowError instanceof Error ? workflowError.message : 'Unknown error'
         },
         { status: 500 }
       )
     }
 
-    console.log('[GitHub Token Refresh] Manual refresh triggered for installation:', params.id)
+    console.log('[GitHub Token Refresh] Manual refresh triggered for installation:', id)
 
     return NextResponse.json({
       status: 'success',
