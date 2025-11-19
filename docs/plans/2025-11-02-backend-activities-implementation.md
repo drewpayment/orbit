@@ -507,12 +507,21 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ---
 
-## Task 4: Implement Push to Remote Activity
+## Task 4: Implement Push to Remote Activity ✅ COMPLETE
 
-**Goal:** Push repository to remote Git provider using user's OAuth token.
+**Goal:** Push repository to remote Git provider using GitHub App installation token.
+
+**Status:** ✅ Completed (2025-11-18)
+**Implementation:** See `docs/plans/2025-11-18-github-app-repository-integration-implementation.md`
+
+**Changes from original plan:**
+- Replaced user OAuth approach with GitHub App installation tokens
+- Added PrepareGitHubRemoteActivity to handle installation lookup and token decryption
+- PushToRemoteActivity now accepts explicit credentials (no user context needed)
+- InitializeGitActivity updated to use bot identity ("Orbit IDP <bot@orbit.dev>")
 
 **🔒 AUTHENTICATION REQUIREMENT:**
-- MUST use user's GitHub OAuth token (from `CredentialService`)
+- MUST use GitHub App installation token (from `CredentialService`)
 - MUST NOT use service account or environment variable credentials
 - Repository is created in user's GitHub org, commits show user's identity
 - See: `.agent/SOPs/user-driven-authentication.md`

@@ -2014,14 +2014,19 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ## Phase 5: Integration with Repository Workflows
 
-### Task 9: Update Git Activities to Use Installation Tokens ⏳ PENDING
+### Task 9: Update Git Activities to Use Installation Tokens ✅ COMPLETE
 
-**Status**: ⏳ Not Started - Blocked by finalizing Git activities implementation
-**Next Steps**:
-- Add `WorkspaceID` to activity input structs
-- Implement `findGitHubInstallationForWorkspace()` helper
-- Update `PushToRemoteActivity` to decrypt and use installation token
-- Update `InitializeGitActivity` for commit attribution
+**Status**: ✅ Complete (2025-11-18)
+**Implementation**: See `docs/plans/2025-11-18-github-app-repository-integration-implementation.md`
+
+**Completed:**
+- ✅ Created GitHubService with installation lookup, token decryption, repo creation
+- ✅ Updated GitActivities to depend on GitHubService
+- ✅ Implemented PrepareGitHubRemoteActivity
+- ✅ Modified PushToRemoteActivity to use explicit credentials
+- ✅ Updated InitializeGitActivity with bot identity
+- ✅ Integrated into RepositoryWorkflow
+
 **Goal**: Modify `PushToRemoteActivity` and related Git activities to use GitHub installation tokens.
 
 **Files**:
