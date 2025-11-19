@@ -4,21 +4,32 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/drewpayment/orbit/temporal-workflows/internal/services"
 )
 
 // GitActivities provides Git-related operations for repository workflows
 type GitActivities struct {
-	workDir string
+	workDir       string
+	githubService services.GitHubService
+	logger        *slog.Logger
 }
 
 // NewGitActivities creates a new GitActivities instance
-func NewGitActivities(workDir string) *GitActivities {
+func NewGitActivities(
+	workDir string,
+	githubService services.GitHubService,
+	logger *slog.Logger,
+) *GitActivities {
 	return &GitActivities{
-		workDir: workDir,
+		workDir:       workDir,
+		githubService: githubService,
+		logger:        logger,
 	}
 }
 

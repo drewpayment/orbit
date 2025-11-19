@@ -2,11 +2,14 @@ package main
 
 import (
 	"log"
+	"log/slog"
 	"os"
 
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
+	"github.com/drewpayment/orbit/temporal-workflows/internal/activities"
+	"github.com/drewpayment/orbit/temporal-workflows/internal/services"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/workflows"
 	"github.com/drewpayment/orbit/temporal-workflows/pkg/clients"
 )
@@ -26,6 +29,11 @@ func main() {
 	orbitAPIURL := os.Getenv("ORBIT_API_URL")
 	if orbitAPIURL == "" {
 		orbitAPIURL = "http://localhost:3000"
+	}
+
+	workDir := os.Getenv("GIT_WORK_DIR")
+	if workDir == "" {
+		workDir = "/tmp/orbit-repos"
 	}
 
 	// Create Temporal client
@@ -51,10 +59,31 @@ func main() {
 	w.RegisterActivity(activityClients.RefreshGitHubInstallationTokenActivity)
 	w.RegisterActivity(activityClients.UpdateInstallationStatusActivity)
 
+	// TODO: Implement PayloadClient, EncryptionService, and GitHubClient
+	// These will be created in later tasks
+	// For now, using nil to allow compilation
+	var payloadClient services.PayloadClient = nil       // TODO: Implement
+	var encryptionService services.EncryptionService = nil // TODO: Implement
+	var githubClient services.GitHubClient = nil         // TODO: Implement
+
+	// Create GitHub service
+	githubService := services.NewGitHubService(payloadClient, encryptionService, githubClient)
+
+	// Create logger
+	logger := slog.Default()
+
+	// Create and register Git activities
+	gitActivities := activities.NewGitActivities(workDir, githubService, logger)
+	w.RegisterActivity(gitActivities.CloneTemplateActivity)
+	w.RegisterActivity(gitActivities.ApplyVariablesActivity)
+	w.RegisterActivity(gitActivities.InitializeGitActivity)
+	w.RegisterActivity(gitActivities.PushToRemoteActivity)
+
 	log.Println("Starting Temporal worker...")
 	log.Printf("Temporal address: %s", temporalAddress)
 	log.Printf("Temporal namespace: %s", temporalNamespace)
 	log.Printf("Orbit API URL: %s", orbitAPIURL)
+	log.Printf("Git work directory: %s", workDir)
 	log.Println("Task queue: orbit-workflows")
 
 	// Start worker
