@@ -62,11 +62,15 @@ func GitHubTokenRefreshWorkflow(ctx workflow.Context, input GitHubTokenRefreshWo
 
 		// Add manual refresh signal branch
 		selector.AddReceive(refreshSignal, func(c workflow.ReceiveChannel, more bool) {
+			c.Receive(ctx, nil) // Consume the signal from the channel
 			logger.Info("Manual refresh signal received, triggering immediate refresh")
 		})
 
 		// Wait for either timer or signal
 		selector.Select(ctx)
+
+		// Note: If signal was received, the timer will still fire eventually but will be
+		// ignored since we're no longer listening. This is normal Temporal behavior.
 
 		// Refresh token (same logic as before)
 		var result RefreshTokenResult
