@@ -56,6 +56,23 @@ type PushToRemoteInput struct {
 	RepositoryID string
 }
 
+// PrepareGitHubRemoteInput contains parameters for preparing GitHub remote
+type PrepareGitHubRemoteInput struct {
+	WorkspaceID          string
+	GitHubInstallationID string // Optional, empty string = use default
+	GitURL               string // Optional, empty string = create repo
+	RepositoryName       string // Required if GitURL empty
+	Private              bool   // Default true
+}
+
+// PrepareGitHubRemoteOutput contains git URL and credentials
+type PrepareGitHubRemoteOutput struct {
+	GitURL              string
+	AccessToken         string
+	InstallationOrgName string
+	CreatedRepo         bool
+}
+
 // CloneTemplateActivity clones a template repository to a working directory
 // This activity is idempotent - if the directory exists, it verifies the template
 func (a *GitActivities) CloneTemplateActivity(ctx context.Context, input CloneTemplateInput) error {
@@ -300,6 +317,54 @@ func (a *GitActivities) updateRemote(ctx context.Context, repoPath, gitURL strin
 		}
 	}
 	return nil
+}
+
+// PrepareGitHubRemoteActivity finds GitHub installation and prepares credentials for push
+// This activity orchestrates GitHub App installation lookup and token retrieval
+func (a *GitActivities) PrepareGitHubRemoteActivity(
+	ctx context.Context,
+	input PrepareGitHubRemoteInput,
+) (*PrepareGitHubRemoteOutput, error) {
+	// Validate inputs
+	if input.WorkspaceID == "" {
+		return nil, errors.New("workspace_id is required")
+	}
+	if input.GitURL == "" && input.RepositoryName == "" {
+		return nil, errors.New("repository_name required when creating new repo (no git_url provided)")
+	}
+
+	// Convert empty string to nil for optional installationID
+	var installationID *string
+	if input.GitHubInstallationID != "" {
+		installationID = &input.GitHubInstallationID
+	}
+
+	// Call GitHub service
+	serviceInput := services.PrepareRemoteInput{
+		WorkspaceID:          input.WorkspaceID,
+		GitHubInstallationID: installationID,
+		GitURL:               input.GitURL,
+		RepositoryName:       input.RepositoryName,
+		Private:              input.Private,
+	}
+
+	result, err := a.githubService.PrepareRemote(ctx, serviceInput)
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare GitHub remote: %w", err)
+	}
+
+	a.logger.Info("GitHub remote prepared",
+		"gitURL", result.GitURL,
+		"org", result.InstallationOrgName,
+		"created", result.CreatedRepo,
+	)
+
+	return &PrepareGitHubRemoteOutput{
+		GitURL:              result.GitURL,
+		AccessToken:         result.AccessToken,
+		InstallationOrgName: result.InstallationOrgName,
+		CreatedRepo:         result.CreatedRepo,
+	}, nil
 }
 
 // PushToRemoteActivity pushes the repository to the remote Git provider
