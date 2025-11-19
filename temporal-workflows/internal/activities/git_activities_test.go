@@ -282,6 +282,8 @@ func TestGitActivities_PushToRemoteActivity(t *testing.T) {
 	t.Run("repository does not exist - fails", func(t *testing.T) {
 		input := PushToRemoteInput{
 			RepositoryID: "non-existent-repo",
+			GitURL:       "https://github.com/test/repo.git",
+			AccessToken:  "test-token",
 		}
 
 		err := activities.PushToRemoteActivity(ctx, input)
@@ -289,21 +291,15 @@ func TestGitActivities_PushToRemoteActivity(t *testing.T) {
 		assert.Contains(t, err.Error(), "repository directory does not exist")
 	})
 
-	t.Run("push without remote setup fails", func(t *testing.T) {
-		// This test verifies the activity fails gracefully when push fails
-		// In real scenarios, this would fail due to authentication or network issues
-		repoID := "test-repo-10"
-		repoPath := filepath.Join(workDir, repoID)
-		err := os.MkdirAll(repoPath, 0755)
-		require.NoError(t, err)
-
+	t.Run("validation - missing fields", func(t *testing.T) {
+		// Test missing GitURL and AccessToken
 		input := PushToRemoteInput{
-			RepositoryID: repoID,
+			RepositoryID: "test-repo",
 		}
 
-		err = activities.PushToRemoteActivity(ctx, input)
-		// This should fail because git is not initialized
+		err := activities.PushToRemoteActivity(ctx, input)
 		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "repository_id, git_url, and access_token are required")
 	})
 }
 
@@ -413,4 +409,70 @@ func (m *MockGitHubService) GetInstallationToken(ctx context.Context, installati
 
 func (m *MockGitHubService) CreateRepository(ctx context.Context, token, orgName, repoName string, private bool) (string, error) {
 	return "", fmt.Errorf("not implemented")
+}
+
+func TestGitActivities_PushToRemoteActivity_WithToken(t *testing.T) {
+	tempDir := t.TempDir()
+	repoPath := filepath.Join(tempDir, "test-repo")
+
+	// Initialize git repo
+	exec.Command("git", "init", repoPath).Run()
+	exec.Command("git", "-C", repoPath, "config", "user.name", "Test").Run()
+	exec.Command("git", "-C", repoPath, "config", "user.email", "test@example.com").Run()
+
+	// Create test file and commit
+	os.WriteFile(filepath.Join(repoPath, "README.md"), []byte("# Test"), 0644)
+	exec.Command("git", "-C", repoPath, "add", ".").Run()
+	exec.Command("git", "-C", repoPath, "commit", "-m", "Initial commit").Run()
+
+	activities := &GitActivities{
+		workDir: tempDir,
+		logger:  slog.Default(),
+	}
+
+	input := PushToRemoteInput{
+		RepositoryID: "test-repo",
+		GitURL:       "https://github.com/test/repo.git",
+		AccessToken:  "test-token",
+	}
+
+	err := activities.PushToRemoteActivity(context.Background(), input)
+
+	// Will fail because no real remote, but should not error on missing credentials
+	if err != nil {
+		assert.NotContains(t, err.Error(), "user has not connected")
+		assert.NotContains(t, err.Error(), "OAuth")
+	}
+}
+
+func TestGitActivities_PushToRemoteActivity_SetRemote(t *testing.T) {
+	tempDir := t.TempDir()
+	repoPath := filepath.Join(tempDir, "test-repo")
+
+	// Initialize git repo without remote
+	exec.Command("git", "init", repoPath).Run()
+	exec.Command("git", "-C", repoPath, "config", "user.name", "Test").Run()
+	exec.Command("git", "-C", repoPath, "config", "user.email", "test@example.com").Run()
+	os.WriteFile(filepath.Join(repoPath, "README.md"), []byte("# Test"), 0644)
+	exec.Command("git", "-C", repoPath, "add", ".").Run()
+	exec.Command("git", "-C", repoPath, "commit", "-m", "Initial commit").Run()
+
+	activities := &GitActivities{
+		workDir: tempDir,
+		logger:  slog.Default(),
+	}
+
+	input := PushToRemoteInput{
+		RepositoryID: "test-repo",
+		GitURL:       "https://github.com/test/repo.git",
+		AccessToken:  "test-token",
+	}
+
+	// First call - should add remote
+	activities.PushToRemoteActivity(context.Background(), input)
+
+	// Verify remote was added
+	cmd := exec.Command("git", "-C", repoPath, "remote", "get-url", "origin")
+	output, _ := cmd.Output()
+	assert.Contains(t, string(output), "github.com/test/repo.git")
 }

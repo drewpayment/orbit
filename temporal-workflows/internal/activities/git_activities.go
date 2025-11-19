@@ -54,6 +54,8 @@ type InitializeGitInput struct {
 // PushToRemoteInput contains parameters for pushing to a remote repository
 type PushToRemoteInput struct {
 	RepositoryID string
+	GitURL       string // Explicit remote URL
+	AccessToken  string // Explicit token (no lookup)
 }
 
 // PrepareGitHubRemoteInput contains parameters for preparing GitHub remote
@@ -370,6 +372,11 @@ func (a *GitActivities) PrepareGitHubRemoteActivity(
 // PushToRemoteActivity pushes the repository to the remote Git provider
 // This activity should be retried on failure (network issues, etc.)
 func (a *GitActivities) PushToRemoteActivity(ctx context.Context, input PushToRemoteInput) error {
+	// Validate inputs
+	if input.RepositoryID == "" || input.GitURL == "" || input.AccessToken == "" {
+		return errors.New("repository_id, git_url, and access_token are required")
+	}
+
 	repoPath := filepath.Join(a.workDir, input.RepositoryID)
 
 	// Check if repository exists
@@ -377,16 +384,63 @@ func (a *GitActivities) PushToRemoteActivity(ctx context.Context, input PushToRe
 		return errors.New("repository directory does not exist")
 	}
 
-	// Push to remote
-	// In a real implementation, we would need to handle authentication
-	// For now, this will fail if authentication is required
-	cmd := exec.CommandContext(ctx, "git", "push", "-u", "origin", "main")
+	// Set or update remote URL
+	cmd := exec.CommandContext(ctx, "git", "remote", "get-url", "origin")
 	cmd.Dir = repoPath
+	if err := cmd.Run(); err != nil {
+		// Remote doesn't exist, add it
+		cmd = exec.CommandContext(ctx, "git", "remote", "add", "origin", input.GitURL)
+		cmd.Dir = repoPath
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to add remote: %w", err)
+		}
+	} else {
+		// Remote exists, update URL
+		cmd = exec.CommandContext(ctx, "git", "remote", "set-url", "origin", input.GitURL)
+		cmd.Dir = repoPath
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to update remote URL: %w", err)
+		}
+	}
+
+	// Create temporary credential helper script
+	credHelper, err := a.createCredentialHelper(input.AccessToken)
+	if err != nil {
+		return fmt.Errorf("failed to create credential helper: %w", err)
+	}
+	defer os.Remove(credHelper)
+
+	// Push to remote using installation token
+	cmd = exec.CommandContext(ctx, "git", "push", "-u", "origin", "main")
+	cmd.Dir = repoPath
+	cmd.Env = append(os.Environ(), fmt.Sprintf("GIT_ASKPASS=%s", credHelper))
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		// Check if already pushed (idempotency)
+		if strings.Contains(string(output), "Everything up-to-date") {
+			return nil
+		}
 		return fmt.Errorf("failed to push to remote: %w (output: %s)", err, string(output))
 	}
 
+	a.logger.Info("Successfully pushed to remote", "gitURL", input.GitURL)
 	return nil
+}
+
+// createCredentialHelper creates a temporary script that provides the OAuth token
+func (a *GitActivities) createCredentialHelper(token string) (string, error) {
+	script := fmt.Sprintf("#!/bin/sh\necho %s", token)
+
+	tmpFile, err := os.CreateTemp("", "git-cred-*.sh")
+	if err != nil {
+		return "", err
+	}
+
+	if err := os.WriteFile(tmpFile.Name(), []byte(script), 0700); err != nil {
+		os.Remove(tmpFile.Name())
+		return "", err
+	}
+
+	return tmpFile.Name(), nil
 }
