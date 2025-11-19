@@ -2,6 +2,7 @@ package activities
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,7 +18,7 @@ func TestGitActivities_CloneTemplateActivity(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(workDir)
 
-	activities := NewGitActivities(workDir)
+	activities := NewGitActivities(workDir, nil, slog.Default())
 	ctx := context.Background()
 
 	t.Run("successful clone", func(t *testing.T) {
@@ -79,7 +80,7 @@ func TestGitActivities_ApplyVariablesActivity(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(workDir)
 
-	activities := NewGitActivities(workDir)
+	activities := NewGitActivities(workDir, nil, slog.Default())
 	ctx := context.Background()
 
 	t.Run("successful variable replacement", func(t *testing.T) {
@@ -181,7 +182,7 @@ func TestGitActivities_InitializeGitActivity(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(workDir)
 
-	activities := NewGitActivities(workDir)
+	activities := NewGitActivities(workDir, nil, slog.Default())
 	ctx := context.Background()
 
 	t.Run("successful git initialization", func(t *testing.T) {
@@ -273,7 +274,7 @@ func TestGitActivities_PushToRemoteActivity(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(workDir)
 
-	activities := NewGitActivities(workDir)
+	activities := NewGitActivities(workDir, nil, slog.Default())
 	ctx := context.Background()
 
 	t.Run("repository does not exist - fails", func(t *testing.T) {
