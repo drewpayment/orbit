@@ -421,7 +421,8 @@ func (a *GitActivities) PushToRemoteActivity(ctx context.Context, input PushToRe
 		if strings.Contains(string(output), "Everything up-to-date") {
 			return nil
 		}
-		return fmt.Errorf("failed to push to remote: %w (output: %s)", err, string(output))
+		sanitizedOutput := sanitizeGitOutput(string(output))
+		return fmt.Errorf("failed to push to remote: %w (output: %s)", err, sanitizedOutput)
 	}
 
 	a.logger.Info("Successfully pushed to remote", "gitURL", input.GitURL)
@@ -443,4 +444,13 @@ func (a *GitActivities) createCredentialHelper(token string) (string, error) {
 	}
 
 	return tmpFile.Name(), nil
+}
+
+// sanitizeGitOutput removes potential credential information from git command output
+func sanitizeGitOutput(output string) string {
+	// Truncate long output to prevent credential exposure
+	if len(output) > 500 {
+		output = output[:500] + "... (truncated)"
+	}
+	return output
 }
