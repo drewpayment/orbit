@@ -24,6 +24,7 @@ func (s *RepositoryWorkflowTestSuite) SetupTest() {
 	s.env.RegisterActivity(cloneTemplateActivityStub)
 	s.env.RegisterActivity(applyVariablesActivityStub)
 	s.env.RegisterActivity(initializeGitActivityStub)
+	s.env.RegisterActivity(prepareGitHubRemoteActivityStub)
 	s.env.RegisterActivity(pushToRemoteActivityStub)
 }
 
@@ -56,6 +57,16 @@ func (s *RepositoryWorkflowTestSuite) TestRepositoryWorkflow_Success() {
 
 	// Mock InitializeGitActivity
 	s.env.OnActivity(initializeGitActivityStub, mock.Anything, mock.Anything).Return(nil)
+
+	// Mock PrepareGitHubRemoteActivity
+	s.env.OnActivity(prepareGitHubRemoteActivityStub, mock.Anything, mock.Anything).Return(
+		&activities.PrepareGitHubRemoteOutput{
+			GitURL:              input.GitURL,
+			AccessToken:         "test-token",
+			InstallationOrgName: "test-org",
+			CreatedRepo:         false,
+		}, nil,
+	)
 
 	// Mock PushToRemoteActivity
 	s.env.OnActivity(pushToRemoteActivityStub, mock.Anything, mock.Anything).Return(nil)
@@ -107,6 +118,14 @@ func (s *RepositoryWorkflowTestSuite) TestRepositoryWorkflow_GitPushFailed() {
 	s.env.OnActivity(cloneTemplateActivityStub, mock.Anything, mock.Anything).Return(nil)
 	s.env.OnActivity(applyVariablesActivityStub, mock.Anything, mock.Anything).Return(nil)
 	s.env.OnActivity(initializeGitActivityStub, mock.Anything, mock.Anything).Return(nil)
+	s.env.OnActivity(prepareGitHubRemoteActivityStub, mock.Anything, mock.Anything).Return(
+		&activities.PrepareGitHubRemoteOutput{
+			GitURL:              input.GitURL,
+			AccessToken:         "test-token",
+			InstallationOrgName: "test-org",
+			CreatedRepo:         false,
+		}, nil,
+	)
 	s.env.OnActivity(pushToRemoteActivityStub, mock.Anything, mock.Anything).Return(errors.New("push failed"))
 
 	s.env.ExecuteWorkflow(RepositoryWorkflow, input)
@@ -139,6 +158,14 @@ func (s *RepositoryWorkflowTestSuite) TestRepositoryWorkflow_RetryBehavior() {
 	// Mock other activities
 	s.env.OnActivity(applyVariablesActivityStub, mock.Anything, mock.Anything).Return(nil)
 	s.env.OnActivity(initializeGitActivityStub, mock.Anything, mock.Anything).Return(nil)
+	s.env.OnActivity(prepareGitHubRemoteActivityStub, mock.Anything, mock.Anything).Return(
+		&activities.PrepareGitHubRemoteOutput{
+			GitURL:              input.GitURL,
+			AccessToken:         "test-token",
+			InstallationOrgName: "test-org",
+			CreatedRepo:         false,
+		}, nil,
+	)
 	s.env.OnActivity(pushToRemoteActivityStub, mock.Anything, mock.Anything).Return(nil)
 
 	s.env.ExecuteWorkflow(RepositoryWorkflow, input)
@@ -149,5 +176,51 @@ func (s *RepositoryWorkflowTestSuite) TestRepositoryWorkflow_RetryBehavior() {
 	var result RepositoryWorkflowResult
 	err := s.env.GetWorkflowResult(&result)
 	s.NoError(err)
+	s.Equal("completed", result.Status)
+}
+
+// Test GitHub App integration workflow
+func (s *RepositoryWorkflowTestSuite) TestRepositoryWorkflow_WithGitHubAppIntegration() {
+	input := RepositoryWorkflowInput{
+		WorkspaceID:    "workspace-123",
+		RepositoryID:   "repo-123",
+		TemplateName:   "microservice",
+		RepositoryName: "new-repo",
+		Variables: map[string]string{
+			"service_name": "test",
+		},
+	}
+
+	// Mock CloneTemplateActivity
+	s.env.OnActivity(cloneTemplateActivityStub, mock.Anything, mock.Anything).Return(nil)
+
+	// Mock ApplyVariablesActivity
+	s.env.OnActivity(applyVariablesActivityStub, mock.Anything, mock.Anything).Return(nil)
+
+	// Mock InitializeGitActivity
+	s.env.OnActivity(initializeGitActivityStub, mock.Anything, mock.Anything).Return(nil)
+
+	// Mock PrepareGitHubRemoteActivity
+	s.env.OnActivity(prepareGitHubRemoteActivityStub, mock.Anything, mock.Anything).Return(
+		&activities.PrepareGitHubRemoteOutput{
+			GitURL:              "https://github.com/test-org/new-repo.git",
+			AccessToken:         "token123",
+			InstallationOrgName: "test-org",
+			CreatedRepo:         true,
+		}, nil,
+	)
+
+	// Mock PushToRemoteActivity
+	s.env.OnActivity(pushToRemoteActivityStub, mock.Anything, mock.Anything).Return(nil)
+
+	s.env.ExecuteWorkflow(RepositoryWorkflow, input)
+
+	s.True(s.env.IsWorkflowCompleted())
+	s.NoError(s.env.GetWorkflowError())
+
+	var result RepositoryWorkflowResult
+	err := s.env.GetWorkflowResult(&result)
+	s.NoError(err)
+	s.Equal("repo-123", result.RepositoryID)
 	s.Equal("completed", result.Status)
 }

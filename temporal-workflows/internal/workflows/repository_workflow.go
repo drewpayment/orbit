@@ -23,15 +23,20 @@ var (
 	pushToRemoteActivityStub = func(ctx context.Context, input activities.PushToRemoteInput) error {
 		panic("pushToRemoteActivityStub not implemented - register actual activity implementation")
 	}
+	prepareGitHubRemoteActivityStub = func(ctx context.Context, input activities.PrepareGitHubRemoteInput) (*activities.PrepareGitHubRemoteOutput, error) {
+		panic("prepareGitHubRemoteActivityStub not implemented - register actual activity implementation")
+	}
 )
 
 // RepositoryWorkflowInput defines the input parameters for the repository creation workflow
 type RepositoryWorkflowInput struct {
-	WorkspaceID  string
-	RepositoryID string
-	TemplateName string
-	Variables    map[string]string
-	GitURL       string
+	WorkspaceID          string            // REQUIRED - for GitHub installation lookup
+	RepositoryID         string
+	GitHubInstallationID string            // OPTIONAL - override default installation
+	TemplateName         string
+	Variables            map[string]string
+	GitURL               string            // OPTIONAL - if empty, create repo in GitHub
+	RepositoryName       string            // REQUIRED if creating repo (GitURL empty)
 }
 
 // RepositoryWorkflowResult defines the output of the repository creation workflow
@@ -107,10 +112,31 @@ func RepositoryWorkflow(ctx workflow.Context, input RepositoryWorkflowInput) (Re
 		}, err
 	}
 
-	// Step 4: Push to remote repository
-	logger.Info("Step 4: Pushing to remote repository")
+	// Step 4: Prepare GitHub remote (NEW)
+	logger.Info("Step 4: Preparing GitHub remote")
+	var remoteOutput *activities.PrepareGitHubRemoteOutput
+	prepareInput := activities.PrepareGitHubRemoteInput{
+		WorkspaceID:          input.WorkspaceID,
+		GitHubInstallationID: input.GitHubInstallationID,
+		GitURL:               input.GitURL,
+		RepositoryName:       input.RepositoryName,
+		Private:              true, // Default to private repos
+	}
+	err = workflow.ExecuteActivity(ctx, prepareGitHubRemoteActivityStub, prepareInput).Get(ctx, &remoteOutput)
+	if err != nil {
+		logger.Error("Failed to prepare GitHub remote", "Error", err)
+		return RepositoryWorkflowResult{
+			RepositoryID: input.RepositoryID,
+			Status:       "failed",
+		}, err
+	}
+
+	// Step 5: Push to remote repository (UPDATED - use credentials from PrepareGitHubRemoteActivity)
+	logger.Info("Step 5: Pushing to remote repository", "GitURL", remoteOutput.GitURL)
 	pushInput := activities.PushToRemoteInput{
 		RepositoryID: input.RepositoryID,
+		GitURL:       remoteOutput.GitURL,
+		AccessToken:  remoteOutput.AccessToken,
 	}
 	err = workflow.ExecuteActivity(ctx, pushToRemoteActivityStub, pushInput).Get(ctx, nil)
 	if err != nil {
@@ -121,10 +147,14 @@ func RepositoryWorkflow(ctx workflow.Context, input RepositoryWorkflowInput) (Re
 		}, err
 	}
 
-	logger.Info("Repository creation workflow completed successfully")
+	logger.Info("Repository creation workflow completed successfully",
+		"RepositoryID", input.RepositoryID,
+		"GitURL", remoteOutput.GitURL,
+		"CreatedRepo", remoteOutput.CreatedRepo,
+	)
 	return RepositoryWorkflowResult{
 		RepositoryID: input.RepositoryID,
-		GitURL:       input.GitURL,
+		GitURL:       remoteOutput.GitURL,
 		Status:       "completed",
 	}, nil
 }
