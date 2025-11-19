@@ -264,7 +264,7 @@ func (a *GitActivities) InitializeGitActivity(ctx context.Context, input Initial
 		return fmt.Errorf("failed to configure git user.name: %w (output: %s)", err, string(output))
 	}
 
-	configEmail := exec.CommandContext(ctx, "git", "config", "user.email", "noreply@orbit.dev")
+	configEmail := exec.CommandContext(ctx, "git", "config", "user.email", "bot@orbit.dev")
 	configEmail.Dir = repoPath
 	if output, err := configEmail.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to configure git user.email: %w (output: %s)", err, string(output))
