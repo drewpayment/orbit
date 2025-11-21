@@ -74,6 +74,7 @@ export interface Config {
     'workspace-members': WorkspaceMember;
     'knowledge-spaces': KnowledgeSpace;
     'knowledge-pages': KnowledgePage;
+    'page-links': PageLink;
     'plugin-registry': PluginRegistry;
     'plugin-config': PluginConfig;
     'github-installations': GithubInstallation;
@@ -90,6 +91,7 @@ export interface Config {
     'workspace-members': WorkspaceMembersSelect<false> | WorkspaceMembersSelect<true>;
     'knowledge-spaces': KnowledgeSpacesSelect<false> | KnowledgeSpacesSelect<true>;
     'knowledge-pages': KnowledgePagesSelect<false> | KnowledgePagesSelect<true>;
+    'page-links': PageLinksSelect<false> | PageLinksSelect<true>;
     'plugin-registry': PluginRegistrySelect<false> | PluginRegistrySelect<true>;
     'plugin-config': PluginConfigSelect<false> | PluginConfigSelect<true>;
     'github-installations': GithubInstallationsSelect<false> | GithubInstallationsSelect<true>;
@@ -386,6 +388,18 @@ export interface KnowledgePage {
    * Version number (incremented on each edit)
    */
   version: number;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "page-links".
+ */
+export interface PageLink {
+  id: string;
+  fromPage: string | KnowledgePage;
+  toPage: string | KnowledgePage;
+  linkType: 'mention' | 'embed' | 'reference';
   updatedAt: string;
   createdAt: string;
 }
@@ -747,6 +761,10 @@ export interface PayloadLockedDocument {
         value: string | KnowledgePage;
       } | null)
     | ({
+        relationTo: 'page-links';
+        value: string | PageLink;
+      } | null)
+    | ({
         relationTo: 'plugin-registry';
         value: string | PluginRegistry;
       } | null)
@@ -939,6 +957,17 @@ export interface KnowledgePagesSelect<T extends boolean = true> {
   author?: T;
   lastEditedBy?: T;
   version?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "page-links_select".
+ */
+export interface PageLinksSelect<T extends boolean = true> {
+  fromPage?: T;
+  toPage?: T;
+  linkType?: T;
   updatedAt?: T;
   createdAt?: T;
 }

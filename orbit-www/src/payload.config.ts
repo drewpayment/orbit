@@ -17,6 +17,7 @@ import { PluginRegistry } from './collections/PluginRegistry'
 import { PluginConfig } from './collections/PluginConfig'
 import { GitHubInstallations } from './collections/GitHubInstallations'
 import { Tenants } from './collections/Tenants'
+import { PageLinks } from './collections/PageLinks'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -36,6 +37,7 @@ export default buildConfig({
     WorkspaceMembers,
     KnowledgeSpaces,
     KnowledgePages,
+    PageLinks,
     PluginRegistry,
     PluginConfig,
     GitHubInstallations,
