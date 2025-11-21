@@ -161,7 +161,20 @@ export const KnowledgePages: CollectionConfig = {
       required: true,
       label: 'Page Content',
       admin: {
-        description: 'Main content of the knowledge page',
+        description: 'Page content. Stored as Block JSON format compatible with Novel editor.',
+      },
+    },
+    {
+      name: 'contentFormat',
+      type: 'select',
+      defaultValue: 'blocks',
+      options: [
+        { label: 'Block JSON', value: 'blocks' },
+        { label: 'Lexical (Legacy)', value: 'lexical' },
+      ],
+      admin: {
+        position: 'sidebar',
+        readOnly: true,
       },
     },
     {

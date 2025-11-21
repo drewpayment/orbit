@@ -337,7 +337,7 @@ export interface KnowledgePage {
    */
   slug: string;
   /**
-   * Main content of the knowledge page
+   * Page content. Stored as Block JSON format compatible with Novel editor.
    */
   content: {
     root: {
@@ -354,6 +354,7 @@ export interface KnowledgePage {
     };
     [k: string]: unknown;
   };
+  contentFormat?: ('blocks' | 'lexical') | null;
   /**
    * The parent page in the hierarchy (leave empty for root page)
    */
@@ -944,6 +945,7 @@ export interface KnowledgePagesSelect<T extends boolean = true> {
   title?: T;
   slug?: T;
   content?: T;
+  contentFormat?: T;
   parentPage?: T;
   childPages?: T;
   sortOrder?: T;
