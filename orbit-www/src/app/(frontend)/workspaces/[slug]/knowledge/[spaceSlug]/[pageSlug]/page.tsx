@@ -127,6 +127,9 @@ export default async function KnowledgePageView({ params }: PageProps) {
   const author = typeof page.author === 'object' ? page.author : null
   const lastEditedBy = typeof page.lastEditedBy === 'object' ? page.lastEditedBy : null
 
+  // Bind the updatePage server action with the current page's parameters
+  const boundUpdatePage = updatePage.bind(null, page.id, workspace.slug, space.slug as string, page.slug)
+
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -237,10 +240,7 @@ export default async function KnowledgePageView({ params }: PageProps) {
                       <PageEditor
                         page={page}
                         canEdit={true}
-                        onSave={async (content) => {
-                          'use server'
-                          await updatePage(page.id, workspace.slug, space.slug as string, page.slug, content)
-                        }}
+                        onSave={boundUpdatePage}
                       />
 
                       {/* Tags */}
