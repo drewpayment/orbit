@@ -14,6 +14,7 @@ export function DragHandle({ editor }: DragHandleProps) {
 
   useEffect(() => {
     const editorElement = editor.view.dom as HTMLElement
+    const editorWrapper = editorElement.closest('.novel-editor') as HTMLElement
 
     const handleMouseMove = (event: MouseEvent) => {
       const target = event.target as HTMLElement
@@ -27,13 +28,13 @@ export function DragHandle({ editor }: DragHandleProps) {
       const blockElement = target.closest('p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, td, th')
 
       if (blockElement && blockElement instanceof HTMLElement) {
-        const editorRect = editorElement.getBoundingClientRect()
+        const wrapperRect = editorWrapper.getBoundingClientRect()
         const blockRect = blockElement.getBoundingClientRect()
 
         setElement(blockElement)
         setPosition({
-          top: blockRect.top - editorRect.top,
-          left: blockRect.left - editorRect.left - 40,
+          top: blockRect.top - wrapperRect.top,
+          left: blockRect.left - wrapperRect.left - 40,
         })
       }
     }
@@ -86,7 +87,7 @@ export function DragHandle({ editor }: DragHandleProps) {
   return (
     <div
       ref={dragHandleRef}
-      className="drag-handle-wrapper fixed z-50 transition-opacity duration-100"
+      className="drag-handle-wrapper absolute z-50 transition-opacity duration-100"
       style={{
         top: `${position.top}px`,
         left: `${position.left}px`,
