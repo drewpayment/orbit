@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/react'
 
 interface DragHandleProps {
@@ -8,104 +8,120 @@ interface DragHandleProps {
 }
 
 export function DragHandle({ editor }: DragHandleProps) {
+  const [element, setElement] = useState<HTMLElement | null>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
   const dragHandleRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const editorElement = editor.view.dom as HTMLElement
-    const proseMirrorElement = editorElement.querySelector('.ProseMirror') as HTMLElement
 
-    if (!proseMirrorElement || !dragHandleRef.current) return
+    const handleMouseMove = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
 
-    const dragHandle = dragHandleRef.current
+      if (!target.closest) return
 
-    const handleMouseMove = (e: MouseEvent) => {
-      const target = e.target as HTMLElement
-
-      // Find the closest block element
-      let blockElement: HTMLElement | null = null
-      let current: HTMLElement | null = target
-
-      while (current && current !== proseMirrorElement) {
-        if (
-          current.nodeName === 'P' ||
-          current.nodeName.match(/^H[1-6]$/) ||
-          current.nodeName === 'LI' ||
-          current.nodeName === 'BLOCKQUOTE' ||
-          current.nodeName === 'PRE' ||
-          current.nodeName === 'DIV' && current.hasAttribute('data-type')
-        ) {
-          blockElement = current
-          break
-        }
-        current = current.parentElement
+      // Find the closest block-level element
+      const prosemirrorNode = target.closest('.ProseMirror')
+      if (!prosemirrorNode) {
+        setElement(null)
+        return
       }
 
-      if (blockElement && proseMirrorElement.contains(blockElement)) {
-        const rect = blockElement.getBoundingClientRect()
-        const containerRect = proseMirrorElement.getBoundingClientRect()
+      // Find block element
+      const blockElement = target.closest('p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, td, th')
 
-        dragHandle.style.top = `${rect.top - containerRect.top}px`
-        dragHandle.style.opacity = '1'
-        dragHandle.dataset.blockElement = 'true'
-
-        // Store reference to the block for dragging
-        dragHandle.onclick = () => {
-          blockElement?.setAttribute('draggable', 'true')
-          blockElement?.focus()
-        }
+      if (blockElement && blockElement instanceof HTMLElement) {
+        setElement(blockElement)
       } else {
-        dragHandle.style.opacity = '0'
+        setElement(null)
       }
     }
 
     const handleMouseLeave = () => {
-      dragHandle.style.opacity = '0'
+      setElement(null)
     }
 
-    proseMirrorElement.addEventListener('mousemove', handleMouseMove)
-    proseMirrorElement.addEventListener('mouseleave', handleMouseLeave)
+    editorElement.addEventListener('mousemove', handleMouseMove)
+    editorElement.addEventListener('mouseleave', handleMouseLeave)
 
     return () => {
-      proseMirrorElement.removeEventListener('mousemove', handleMouseMove)
-      proseMirrorElement.removeEventListener('mouseleave', handleMouseLeave)
+      editorElement.removeEventListener('mousemove', handleMouseMove)
+      editorElement.removeEventListener('mouseleave', handleMouseLeave)
     }
   }, [editor])
+
+  useEffect(() => {
+    if (element) {
+      element.classList.add('is-hovered')
+    }
+
+    return () => {
+      if (element) {
+        element.classList.remove('is-hovered')
+      }
+    }
+  }, [element])
+
+  if (!element) {
+    return null
+  }
+
+  const editorWrapper = element.closest('.novel-editor')
+  if (!editorWrapper) return null
+
+  const editorRect = editorWrapper.getBoundingClientRect()
+  const elementRect = element.getBoundingClientRect()
+
+  const top = elementRect.top - editorRect.top
+  const left = elementRect.left - editorRect.left - 32
 
   return (
     <div
       ref={dragHandleRef}
-      className="drag-handle-wrapper absolute left-0 opacity-0 transition-opacity pointer-events-auto"
+      className="drag-handle-wrapper absolute z-50"
       style={{
-        top: 0,
-        marginLeft: '-40px',
-        zIndex: 50,
+        top: `${top}px`,
+        left: `${left}px`,
+        pointerEvents: 'auto',
       }}
       contentEditable={false}
+      onMouseDown={(e) => {
+        e.preventDefault()
+        // Make the element draggable
+        element.setAttribute('draggable', 'true')
+        element.ondragstart = (dragEvent) => {
+          dragEvent.dataTransfer!.effectAllowed = 'move'
+          dragEvent.dataTransfer!.setData('text/html', element.outerHTML)
+          element.classList.add('opacity-50')
+        }
+        element.ondragend = () => {
+          element.classList.remove('opacity-50')
+          element.removeAttribute('draggable')
+        }
+      }}
     >
       <button
+        type="button"
         className="
-          drag-handle flex items-center justify-center
-          w-6 h-6 rounded hover:bg-gray-200 dark:hover:bg-gray-700
+          drag-handle-button
+          flex items-center justify-center
+          w-5 h-5
+          rounded
+          hover:bg-gray-200 dark:hover:bg-gray-700
           text-gray-400 hover:text-gray-600 dark:hover:text-gray-300
           cursor-grab active:cursor-grabbing
-          transition-colors
+          transition-all
         "
-        type="button"
-        title="Drag to reorder"
-        draggable
+        title="Drag to move"
       >
         <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 10 10"
           width="12"
           height="12"
-          viewBox="0 0 16 16"
           fill="currentColor"
         >
-          <circle cx="3" cy="3" r="1.5" />
-          <circle cx="3" cy="8" r="1.5" />
-          <circle cx="3" cy="13" r="1.5" />
-          <circle cx="9" cy="3" r="1.5" />
-          <circle cx="9" cy="8" r="1.5" />
-          <circle cx="9" cy="13" r="1.5" />
+          <path d="M3,2 C2.44771525,2 2,1.55228475 2,1 C2,0.44771525 2.44771525,0 3,0 C3.55228475,0 4,0.44771525 4,1 C4,1.55228475 3.55228475,2 3,2 Z M3,6 C2.44771525,6 2,5.55228475 2,5 C2,4.44771525 2.44771525,4 3,4 C3.55228475,4 4,4.44771525 4,5 C4,5.55228475 3.55228475,6 3,6 Z M3,10 C2.44771525,10 2,9.55228475 2,9 C2,8.44771525 2.44771525,8 3,8 C3.55228475,8 4,8.44771525 4,9 C4,9.55228475 3.55228475,10 3,10 Z M7,2 C6.44771525,2 6,1.55228475 6,1 C6,0.44771525 6.44771525,0 7,0 C7.55228475,0 8,0.44771525 8,1 C8,1.55228475 7.55228475,2 7,2 Z M7,6 C6.44771525,6 6,5.55228475 6,5 C6,4.44771525 6.44771525,4 7,4 C7.55228475,4 8,4.44771525 8,5 C8,5.55228475 7.55228475,6 7,6 Z M7,10 C6.44771525,10 6,9.55228475 6,9 C6,8.44771525 6.44771525,8 7,8 C7.55228475,8 8,8.44771525 8,9 C8,9.55228475 7.55228475,10 7,10 Z" />
         </svg>
       </button>
     </div>

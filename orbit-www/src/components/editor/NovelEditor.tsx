@@ -116,7 +116,7 @@ export function NovelEditor({
   }
 
   return (
-    <div className="novel-editor">
+    <div className="novel-editor relative">
       {!readOnly && <BubbleMenu editor={editor} />}
       {!readOnly && <DragHandle editor={editor} />}
       <div
