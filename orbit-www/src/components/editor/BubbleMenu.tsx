@@ -1,6 +1,6 @@
 'use client'
 
-import { BubbleMenu as TiptapBubbleMenu } from '@tiptap/react'
+import { BubbleMenu as TiptapBubbleMenu } from '@tiptap/extension-bubble-menu'
 import type { Editor } from '@tiptap/react'
 
 interface BubbleMenuProps {
