@@ -123,30 +123,11 @@ export function PageEditor({ page, canEdit, onSave }: PageEditorProps) {
   if (isEditing) {
     return (
       <div className="page-editor">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleExit}
-              disabled={isSaving}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-            >
-              Done
-            </button>
-            <button
-              onClick={handleCancel}
-              disabled={isSaving}
-              className="px-4 py-2 text-gray-600 hover:text-gray-900"
-            >
-              Cancel
-            </button>
-            <span className="text-sm text-gray-500">
-              Press Escape to exit
-            </span>
-          </div>
+        <div className="mb-3 flex items-center justify-end">
           <div className="flex items-center gap-2">
             {saveStatus === 'saving' && (
-              <span className="text-sm text-gray-500 flex items-center gap-2">
-                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+              <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
+                <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
@@ -154,15 +135,15 @@ export function PageEditor({ page, canEdit, onSave }: PageEditorProps) {
               </span>
             )}
             {saveStatus === 'saved' && (
-              <span className="text-sm text-green-600 flex items-center gap-1">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <span className="text-xs text-green-600 dark:text-green-500 flex items-center gap-1">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <path d="M20 6L9 17l-5-5" />
                 </svg>
                 Saved
               </span>
             )}
             {saveStatus === 'unsaved' && (
-              <span className="text-sm text-gray-400">
+              <span className="text-xs text-gray-400 dark:text-gray-500">
                 Unsaved changes
               </span>
             )}

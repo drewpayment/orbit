@@ -52,7 +52,7 @@ export function NovelEditor({
       TableCell,
       TableHeader,
       Placeholder.configure({
-        placeholder: 'Start typing or type "/" for commands...',
+        placeholder: 'Type "/" for commands, or start writing... (Press Escape to exit)',
       }),
       SlashCommand.configure({
         suggestion: {
@@ -98,7 +98,7 @@ export function NovelEditor({
   }
 
   return (
-    <div className="novel-editor border border-gray-200 rounded-lg p-4 min-h-[300px] bg-white dark:bg-gray-900 dark:border-gray-700">
+    <div className="novel-editor min-h-[300px]">
       <EditorContent editor={editor} />
     </div>
   )
