@@ -8,6 +8,7 @@ import { Table } from '@tiptap/extension-table'
 import { TableRow } from '@tiptap/extension-table-row'
 import { TableCell } from '@tiptap/extension-table-cell'
 import { TableHeader } from '@tiptap/extension-table-header'
+import Placeholder from '@tiptap/extension-placeholder'
 import { common, createLowlight } from 'lowlight'
 import type { BlockDocument } from '@/lib/blocks/types'
 import { useEffect } from 'react'
@@ -46,10 +47,14 @@ export function NovelEditor({
       TableRow,
       TableCell,
       TableHeader,
+      Placeholder.configure({
+        placeholder: 'Start typing...',
+      }),
     ],
     content: initialContent,
     editable: !readOnly,
     immediatelyRender: false, // Prevent SSR hydration mismatches
+    autofocus: !readOnly, // Auto-focus when editable
     onUpdate: ({ editor }) => {
       if (onChange) {
         const json = editor.getJSON() as BlockDocument
@@ -78,7 +83,7 @@ export function NovelEditor({
   }
 
   return (
-    <div className="novel-editor">
+    <div className="novel-editor border border-gray-200 rounded-lg p-4 min-h-[300px] bg-white dark:bg-gray-900 dark:border-gray-700">
       <EditorContent editor={editor} />
     </div>
   )
