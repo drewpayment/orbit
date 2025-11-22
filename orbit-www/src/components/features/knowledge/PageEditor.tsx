@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { NovelEditor } from '@/components/editor/NovelEditor'
 import { serializeBlocks } from '@/lib/serializers/blocks-to-react'
 import type { BlockDocument } from '@/lib/blocks/types'
@@ -18,6 +18,9 @@ export function PageEditor({ page, canEdit, onSave }: PageEditorProps) {
     page.content as BlockDocument
   )
   const [isSaving, setIsSaving] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved')
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const lastSavedContentRef = useRef<string>(JSON.stringify(page.content))
 
   const handleEdit = useCallback(() => {
     if (canEdit) {
@@ -25,50 +28,147 @@ export function PageEditor({ page, canEdit, onSave }: PageEditorProps) {
     }
   }, [canEdit])
 
-  const handleSave = useCallback(async () => {
+  // Auto-save function
+  const performSave = useCallback(async (contentToSave: BlockDocument) => {
+    const contentString = JSON.stringify(contentToSave)
+
+    // Don't save if content hasn't changed
+    if (contentString === lastSavedContentRef.current) {
+      return
+    }
+
+    setSaveStatus('saving')
     setIsSaving(true)
+
     try {
-      await onSave(content)
-      setIsEditing(false)
+      await onSave(contentToSave)
+      lastSavedContentRef.current = contentString
+      setSaveStatus('saved')
     } catch (error) {
       console.error('Failed to save:', error)
-      alert('Failed to save page. Please try again.')
+      setSaveStatus('unsaved')
+      alert('Failed to save page. Your changes may be lost.')
     } finally {
       setIsSaving(false)
     }
-  }, [content, onSave])
+  }, [onSave])
 
-  const handleCancel = useCallback(() => {
-    setContent(page.content as BlockDocument)
-    setIsEditing(false)
-  }, [page.content])
-
+  // Handle content changes with debounced auto-save
   const handleChange = useCallback((newContent: BlockDocument) => {
     setContent(newContent)
+    setSaveStatus('unsaved')
+
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+
+    // Set new timeout for auto-save (2 seconds)
+    saveTimeoutRef.current = setTimeout(() => {
+      performSave(newContent)
+    }, 2000)
+  }, [performSave])
+
+  // Save on unmount or when exiting edit mode
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+    }
   }, [])
+
+  const handleCancel = useCallback(() => {
+    // Clear any pending saves
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+
+    setContent(page.content as BlockDocument)
+    setIsEditing(false)
+    setSaveStatus('saved')
+  }, [page.content])
+
+  const handleExit = useCallback(async () => {
+    // Save any pending changes before exiting
+    if (saveStatus === 'unsaved') {
+      await performSave(content)
+    }
+    setIsEditing(false)
+  }, [saveStatus, content, performSave])
+
+  // Handle Escape key to exit editing
+  useEffect(() => {
+    if (!isEditing) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleExit()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isEditing, handleExit])
 
   if (isEditing) {
     return (
       <div className="page-editor">
-        <div className="mb-4 flex gap-2">
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-          >
-            {isSaving ? 'Saving...' : 'Save'}
-          </button>
-          <button
-            onClick={handleCancel}
-            disabled={isSaving}
-            className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
-          >
-            Cancel
-          </button>
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleExit}
+              disabled={isSaving}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            >
+              Done
+            </button>
+            <button
+              onClick={handleCancel}
+              disabled={isSaving}
+              className="px-4 py-2 text-gray-600 hover:text-gray-900"
+            >
+              Cancel
+            </button>
+            <span className="text-sm text-gray-500">
+              Press Escape to exit
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {saveStatus === 'saving' && (
+              <span className="text-sm text-gray-500 flex items-center gap-2">
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Saving...
+              </span>
+            )}
+            {saveStatus === 'saved' && (
+              <span className="text-sm text-green-600 flex items-center gap-1">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+                Saved
+              </span>
+            )}
+            {saveStatus === 'unsaved' && (
+              <span className="text-sm text-gray-400">
+                Unsaved changes
+              </span>
+            )}
+          </div>
         </div>
         <NovelEditor
           initialContent={content}
           onChange={handleChange}
+          onBlur={() => {
+            // Save immediately on blur if there are unsaved changes
+            if (saveStatus === 'unsaved' && saveTimeoutRef.current) {
+              clearTimeout(saveTimeoutRef.current)
+              performSave(content)
+            }
+          }}
         />
       </div>
     )

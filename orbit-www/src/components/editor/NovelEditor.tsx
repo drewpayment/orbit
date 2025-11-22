@@ -18,6 +18,7 @@ const lowlight = createLowlight(common)
 interface NovelEditorProps {
   initialContent?: BlockDocument
   onChange?: (content: BlockDocument) => void
+  onBlur?: () => void
   readOnly?: boolean
   className?: string
 }
@@ -25,6 +26,7 @@ interface NovelEditorProps {
 export function NovelEditor({
   initialContent,
   onChange,
+  onBlur,
   readOnly = false,
   className = '',
 }: NovelEditorProps) {
@@ -65,6 +67,11 @@ export function NovelEditor({
       attributes: {
         class: `prose prose-sm sm:prose lg:prose-lg xl:prose-xl focus:outline-none ${className}`,
         role: 'textbox',
+      },
+      onBlur: () => {
+        if (onBlur) {
+          onBlur()
+        }
       },
     },
   })
