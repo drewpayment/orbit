@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { NovelEditor } from '@/components/editor/NovelEditor'
 import { serializeBlocks } from '@/lib/serializers/blocks-to-react'
 import type { BlockDocument } from '@/lib/blocks/types'
@@ -13,15 +13,19 @@ interface PageEditorProps {
 }
 
 export function PageEditor({ page, canEdit, onSave }: PageEditorProps) {
-  const [isEditing, setIsEditing] = useState(false)
-  const [content, setContent] = useState<BlockDocument>(
-    page.content as BlockDocument
+  // Ensure initial content is pure JSON without MongoDB properties
+  const initialContent = useMemo(
+    () => JSON.parse(JSON.stringify(page.content)) as BlockDocument,
+    [page.content]
   )
+
+  const [isEditing, setIsEditing] = useState(false)
+  const [content, setContent] = useState<BlockDocument>(initialContent)
   const [isSaving, setIsSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved')
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const lastSavedContentRef = useRef<string>(JSON.stringify(page.content))
-  const currentContentRef = useRef<BlockDocument>(page.content as BlockDocument)
+  const lastSavedContentRef = useRef<string>(JSON.stringify(initialContent))
+  const currentContentRef = useRef<BlockDocument>(initialContent)
 
   const handleEdit = useCallback(() => {
     if (canEdit) {
@@ -42,7 +46,9 @@ export function PageEditor({ page, canEdit, onSave }: PageEditorProps) {
     setIsSaving(true)
 
     try {
-      await onSave(contentToSave)
+      // Ensure we pass pure JSON without MongoDB-specific properties
+      const pureContent = JSON.parse(contentString) as BlockDocument
+      await onSave(pureContent)
       lastSavedContentRef.current = contentString
       setSaveStatus('saved')
     } catch (error) {
@@ -86,10 +92,11 @@ export function PageEditor({ page, canEdit, onSave }: PageEditorProps) {
       clearTimeout(saveTimeoutRef.current)
     }
 
-    setContent(page.content as BlockDocument)
+    setContent(initialContent)
+    currentContentRef.current = initialContent
     setIsEditing(false)
     setSaveStatus('saved')
-  }, [page.content])
+  }, [initialContent])
 
   const handleExit = useCallback(async () => {
     // Save any pending changes before exiting
