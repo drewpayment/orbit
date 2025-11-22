@@ -16,10 +16,18 @@ export function DragHandle({ editor }: DragHandleProps) {
     const editorElement = editor.view.dom as HTMLElement
     const editorWrapper = editorElement.closest('.novel-editor') as HTMLElement
 
+    let hideTimeout: NodeJS.Timeout | null = null
+
     const handleMouseMove = (event: MouseEvent) => {
       const target = event.target as HTMLElement
 
-      // Don't update if we're hovering over the drag handle itself
+      // Cancel any pending hide
+      if (hideTimeout) {
+        clearTimeout(hideTimeout)
+        hideTimeout = null
+      }
+
+      // Keep visible if hovering over the drag handle itself
       if (dragHandleRef.current?.contains(target)) {
         return
       }
@@ -36,6 +44,12 @@ export function DragHandle({ editor }: DragHandleProps) {
           top: blockRect.top - wrapperRect.top,
           left: blockRect.left - wrapperRect.left - 40,
         })
+      } else if (element) {
+        // If we're not over a block but still have an element visible,
+        // keep it visible for a moment (user might be moving to the handle)
+        hideTimeout = setTimeout(() => {
+          setElement(null)
+        }, 300)
       }
     }
 
@@ -46,7 +60,10 @@ export function DragHandle({ editor }: DragHandleProps) {
         return
       }
 
-      setElement(null)
+      // Hide after a delay to allow moving to the handle
+      hideTimeout = setTimeout(() => {
+        setElement(null)
+      }, 300)
     }
 
     editorElement.addEventListener('mousemove', handleMouseMove)
@@ -55,8 +72,9 @@ export function DragHandle({ editor }: DragHandleProps) {
     return () => {
       editorElement.removeEventListener('mousemove', handleMouseMove)
       editorElement.removeEventListener('mouseleave', handleMouseLeave)
+      if (hideTimeout) clearTimeout(hideTimeout)
     }
-  }, [editor])
+  }, [editor, element])
 
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -96,6 +114,14 @@ export function DragHandle({ editor }: DragHandleProps) {
       }}
       contentEditable={false}
       onMouseDown={handleMouseDown}
+      onMouseEnter={(e) => {
+        e.stopPropagation()
+      }}
+      onMouseLeave={(e) => {
+        e.stopPropagation()
+        // Hide when leaving the handle
+        setTimeout(() => setElement(null), 100)
+      }}
     >
       <button
         type="button"
