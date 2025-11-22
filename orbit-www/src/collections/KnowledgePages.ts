@@ -157,7 +157,7 @@ export const KnowledgePages: CollectionConfig = {
     },
     {
       name: 'content',
-      type: 'richText',
+      type: 'json',
       required: true,
       label: 'Page Content',
       admin: {
