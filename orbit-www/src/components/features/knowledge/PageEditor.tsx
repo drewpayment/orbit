@@ -76,16 +76,33 @@ export function PageEditor({ page, canEdit, onSave }: PageEditorProps) {
 
   return (
     <div
-      className={`page-content ${canEdit ? 'cursor-pointer hover:bg-gray-50 rounded p-4' : ''}`}
-      onClick={handleEdit}
+      className="page-content relative group"
+      onClick={canEdit ? handleEdit : undefined}
     >
       <div className="prose prose-sm sm:prose lg:prose-lg xl:prose-xl max-w-none">
         {serializeBlocks(content)}
       </div>
       {canEdit && (
-        <div className="mt-2 text-sm text-gray-500">
-          Click to edit
-        </div>
+        <button
+          className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity p-2 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100"
+          onClick={handleEdit}
+          aria-label="Edit page"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+            <path d="m15 5 4 4" />
+          </svg>
+        </button>
       )}
     </div>
   )
