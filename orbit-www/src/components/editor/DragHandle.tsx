@@ -16,18 +16,10 @@ export function DragHandle({ editor }: DragHandleProps) {
     const editorElement = editor.view.dom as HTMLElement
     const editorWrapper = editorElement.closest('.novel-editor') as HTMLElement
 
-    let hideTimeout: NodeJS.Timeout | null = null
-
     const handleMouseMove = (event: MouseEvent) => {
       const target = event.target as HTMLElement
 
-      // Cancel any pending hide
-      if (hideTimeout) {
-        clearTimeout(hideTimeout)
-        hideTimeout = null
-      }
-
-      // Keep visible if hovering over the drag handle itself
+      // Don't update position if hovering over the drag handle itself
       if (dragHandleRef.current?.contains(target)) {
         return
       }
@@ -44,37 +36,24 @@ export function DragHandle({ editor }: DragHandleProps) {
           top: blockRect.top - wrapperRect.top,
           left: blockRect.left - wrapperRect.left - 40,
         })
-      } else if (element) {
-        // If we're not over a block but still have an element visible,
-        // keep it visible for a moment (user might be moving to the handle)
-        hideTimeout = setTimeout(() => {
-          setElement(null)
-        }, 300)
       }
+      // If no block found but we're still in the editor, keep the handle visible at its current position
+      // This allows moving from text to the handle without it disappearing
     }
 
-    const handleMouseLeave = (event: MouseEvent) => {
-      // Check if we're leaving to the drag handle
-      const relatedTarget = event.relatedTarget as HTMLElement
-      if (dragHandleRef.current?.contains(relatedTarget)) {
-        return
-      }
-
-      // Hide after a delay to allow moving to the handle
-      hideTimeout = setTimeout(() => {
-        setElement(null)
-      }, 300)
+    const handleMouseLeave = () => {
+      // Only hide when leaving the entire editor
+      setElement(null)
     }
 
-    editorElement.addEventListener('mousemove', handleMouseMove)
-    editorElement.addEventListener('mouseleave', handleMouseLeave)
+    editorWrapper.addEventListener('mousemove', handleMouseMove)
+    editorWrapper.addEventListener('mouseleave', handleMouseLeave)
 
     return () => {
-      editorElement.removeEventListener('mousemove', handleMouseMove)
-      editorElement.removeEventListener('mouseleave', handleMouseLeave)
-      if (hideTimeout) clearTimeout(hideTimeout)
+      editorWrapper.removeEventListener('mousemove', handleMouseMove)
+      editorWrapper.removeEventListener('mouseleave', handleMouseLeave)
     }
-  }, [editor, element])
+  }, [editor])
 
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -114,14 +93,6 @@ export function DragHandle({ editor }: DragHandleProps) {
       }}
       contentEditable={false}
       onMouseDown={handleMouseDown}
-      onMouseEnter={(e) => {
-        e.stopPropagation()
-      }}
-      onMouseLeave={(e) => {
-        e.stopPropagation()
-        // Hide when leaving the handle
-        setTimeout(() => setElement(null), 100)
-      }}
     >
       <button
         type="button"
