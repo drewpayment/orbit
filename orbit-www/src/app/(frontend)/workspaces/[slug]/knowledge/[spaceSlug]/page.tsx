@@ -125,6 +125,7 @@ export default async function KnowledgeSpacePage({ params }: PageProps) {
                             knowledgeSpace={space}
                             pages={pages}
                             workspaceSlug={workspace.slug}
+                            userId={undefined} // TODO: Get from auth session
                           />
                         )}
                       </CardContent>

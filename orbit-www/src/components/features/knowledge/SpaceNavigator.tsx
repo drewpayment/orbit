@@ -8,6 +8,9 @@ import { Plus, Search, FileText, Loader2 } from 'lucide-react'
 import { PageTreeNode } from './PageTreeNode'
 import { buildPageTree } from '@/lib/knowledge/tree-builder'
 import type { SpaceNavigatorProps } from './types'
+import { CreatePageModal } from './CreatePageModal'
+import { createKnowledgePage } from '@/app/actions/knowledge'
+import { useRouter } from 'next/navigation'
 import {
   DndContext,
   closestCenter,
@@ -31,11 +34,14 @@ export function SpaceNavigator({
   currentPageId,
   onPageSelect,
   workspaceSlug,
+  userId,
   onReorder,
   isLoading = false,
 }: SpaceNavigatorProps) {
   const tree = useMemo(() => buildPageTree(pages), [pages])
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const router = useRouter()
 
   const publishedPages = pages.filter(p => p.status === 'published').length
   const draftPages = pages.filter(p => p.status === 'draft').length
@@ -86,6 +92,30 @@ export function SpaceNavigator({
     }
   }
 
+  const handleCreatePage = async (data: {
+    title: string
+    slug: string
+    parentPageId?: string
+  }) => {
+    if (!userId) {
+      alert('You must be logged in to create pages.')
+      return
+    }
+
+    const newPage = await createKnowledgePage({
+      title: data.title,
+      slug: data.slug,
+      knowledgeSpaceId: knowledgeSpace.id,
+      parentPageId: data.parentPageId,
+      userId,
+      workspaceSlug,
+      spaceSlug: knowledgeSpace.slug as string,
+    })
+
+    // Navigate to the new page
+    router.push(`/workspaces/${workspaceSlug}/knowledge/${knowledgeSpace.slug}/${newPage.slug}`)
+  }
+
   if (isLoading) {
     return (
       <Card className="w-full h-full flex flex-col">
@@ -104,9 +134,19 @@ export function SpaceNavigator({
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg">{knowledgeSpace.name}</CardTitle>
-          <Button size="sm" variant="ghost">
-            <Search className="h-4 w-4" />
-          </Button>
+          <div className="flex gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setIsCreateModalOpen(true)}
+              title="Create new page"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+            <Button size="sm" variant="ghost">
+              <Search className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
         {knowledgeSpace.description && (
           <p className="text-sm text-muted-foreground mt-1">
@@ -124,7 +164,7 @@ export function SpaceNavigator({
             <p className="text-sm text-muted-foreground mb-4">
               No pages yet. Create your first page to get started.
             </p>
-            <Button size="sm">
+            <Button size="sm" onClick={() => setIsCreateModalOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
               New Page
             </Button>
@@ -178,6 +218,14 @@ export function SpaceNavigator({
           <span>{draftPages} drafts</span>
         </div>
       </div>
+
+      <CreatePageModal
+        open={isCreateModalOpen}
+        onOpenChange={setIsCreateModalOpen}
+        knowledgeSpaceId={knowledgeSpace.id}
+        pages={pages}
+        onCreatePage={handleCreatePage}
+      />
     </Card>
   )
 }

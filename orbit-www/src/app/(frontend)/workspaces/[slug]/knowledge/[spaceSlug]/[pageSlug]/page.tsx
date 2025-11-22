@@ -162,6 +162,7 @@ export default async function KnowledgePageView({ params }: PageProps) {
                           pages={pages}
                           currentPageId={page.id}
                           workspaceSlug={workspace.slug}
+                          userId={undefined} // TODO: Get from auth session
                         />
                       </CardContent>
                     </Card>

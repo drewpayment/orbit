@@ -15,7 +15,8 @@ export interface SpaceNavigatorProps {
   pages: KnowledgePage[]
   currentPageId?: string
   onPageSelect?: (pageId: string) => void
-  workspaceSlug?: string
+  workspaceSlug: string
+  userId?: string
   onReorder?: (pageOrders: Array<{ pageId: string; sortOrder: number; parentId?: string | null }>) => void
   isLoading?: boolean
 }
