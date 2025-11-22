@@ -53,7 +53,13 @@ export function NovelEditor({
       TableCell,
       TableHeader,
       Placeholder.configure({
-        placeholder: 'Type "/" for commands, or start writing... (Press Escape to exit)',
+        placeholder: ({ node }) => {
+          if (node.type.name === 'heading') {
+            return 'Heading'
+          }
+          return "Press '/' for commands..."
+        },
+        showOnlyWhenEditable: true,
       }),
       SlashCommand.configure({
         suggestion: {
@@ -99,9 +105,22 @@ export function NovelEditor({
   }
 
   return (
-    <div className="novel-editor min-h-[300px]">
+    <div className="novel-editor">
       {!readOnly && <BubbleMenu editor={editor} />}
-      <EditorContent editor={editor} />
+      <div
+        className={`
+          relative rounded-lg border border-gray-200 dark:border-gray-700
+          ${!readOnly ? 'focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20' : ''}
+          transition-all duration-200
+          bg-white dark:bg-gray-900
+          min-h-[500px]
+          ${className}
+        `}
+      >
+        <div className="px-12 py-8">
+          <EditorContent editor={editor} />
+        </div>
+      </div>
     </div>
   )
 }

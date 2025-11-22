@@ -164,17 +164,60 @@ export function PageEditor({ page, canEdit, onSave }: PageEditorProps) {
     )
   }
 
+  // Check if content is empty
+  const isEmpty = !content.content || content.content.length === 0 ||
+    (content.content.length === 1 &&
+     content.content[0].type === 'paragraph' &&
+     (!content.content[0].content || content.content[0].content.length === 0))
+
   return (
     <div
-      className="page-content relative group"
+      className={`
+        page-content relative group
+        rounded-lg border border-transparent
+        transition-all duration-200
+        min-h-[400px]
+        ${canEdit ? 'cursor-pointer hover:border-gray-200 dark:hover:border-gray-700 hover:bg-gray-50/50 dark:hover:bg-gray-800/50' : ''}
+      `}
       onClick={canEdit ? handleEdit : undefined}
     >
-      <div className="prose prose-sm sm:prose lg:prose-lg xl:prose-xl max-w-none">
-        {serializeBlocks(content)}
+      <div className="px-12 py-8">
+        {isEmpty && canEdit ? (
+          <div className="flex flex-col items-center justify-center min-h-[300px] text-center">
+            <div className="mb-4 text-gray-400 dark:text-gray-500">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="48"
+                height="48"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="12" y1="18" x2="12" y2="12" />
+                <line x1="9" y1="15" x2="15" y2="15" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
+              Start writing
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm">
+              Click here to start editing. Press <kbd className="px-2 py-1 text-xs font-semibold bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded">/ </kbd> for commands
+            </p>
+          </div>
+        ) : (
+          <div className="prose prose-sm sm:prose lg:prose-lg xl:prose-xl max-w-none dark:prose-invert">
+            {serializeBlocks(content)}
+          </div>
+        )}
       </div>
-      {canEdit && (
+      {canEdit && !isEmpty && (
         <button
-          className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity p-2 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100"
+          className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
           onClick={handleEdit}
           aria-label="Edit page"
         >
