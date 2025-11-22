@@ -30,6 +30,7 @@
         "@radix-ui/react-slot": "^1.2.3",
         "@radix-ui/react-tooltip": "^1.2.8",
         "@temporalio/client": "^1.13.0",
+        "@tiptap/extension-bubble-menu": "^3.11.0",
         "@tiptap/extension-code-block-lowlight": "^3.11.0",
         "@tiptap/extension-image": "^3.11.0",
         "@tiptap/extension-link": "^3.11.0",

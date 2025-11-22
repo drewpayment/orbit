@@ -13,6 +13,7 @@ import { common, createLowlight } from 'lowlight'
 import type { BlockDocument } from '@/lib/blocks/types'
 import { useEffect } from 'react'
 import { SlashCommand, getSuggestionItems, renderItems } from './slash-command'
+import { BubbleMenu } from './BubbleMenu'
 import 'tippy.js/dist/tippy.css'
 
 const lowlight = createLowlight(common)
@@ -99,6 +100,7 @@ export function NovelEditor({
 
   return (
     <div className="novel-editor min-h-[300px]">
+      {!readOnly && <BubbleMenu editor={editor} />}
       <EditorContent editor={editor} />
     </div>
   )
