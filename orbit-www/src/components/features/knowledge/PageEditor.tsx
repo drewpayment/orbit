@@ -21,6 +21,7 @@ export function PageEditor({ page, canEdit, onSave }: PageEditorProps) {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved')
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastSavedContentRef = useRef<string>(JSON.stringify(page.content))
+  const currentContentRef = useRef<BlockDocument>(page.content as BlockDocument)
 
   const handleEdit = useCallback(() => {
     if (canEdit) {
@@ -56,6 +57,7 @@ export function PageEditor({ page, canEdit, onSave }: PageEditorProps) {
   // Handle content changes with debounced auto-save
   const handleChange = useCallback((newContent: BlockDocument) => {
     setContent(newContent)
+    currentContentRef.current = newContent
     setSaveStatus('unsaved')
 
     // Clear existing timeout
@@ -92,10 +94,10 @@ export function PageEditor({ page, canEdit, onSave }: PageEditorProps) {
   const handleExit = useCallback(async () => {
     // Save any pending changes before exiting
     if (saveStatus === 'unsaved') {
-      await performSave(content)
+      await performSave(currentContentRef.current)
     }
     setIsEditing(false)
-  }, [saveStatus, content, performSave])
+  }, [saveStatus, performSave])
 
   // Handle Escape key to exit editing
   useEffect(() => {
@@ -166,7 +168,7 @@ export function PageEditor({ page, canEdit, onSave }: PageEditorProps) {
             // Save immediately on blur if there are unsaved changes
             if (saveStatus === 'unsaved' && saveTimeoutRef.current) {
               clearTimeout(saveTimeoutRef.current)
-              performSave(content)
+              performSave(currentContentRef.current)
             }
           }}
         />
