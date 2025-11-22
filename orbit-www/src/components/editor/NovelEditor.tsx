@@ -49,6 +49,7 @@ export function NovelEditor({
     ],
     content: initialContent,
     editable: !readOnly,
+    immediatelyRender: false, // Prevent SSR hydration mismatches
     onUpdate: ({ editor }) => {
       if (onChange) {
         const json = editor.getJSON() as BlockDocument
