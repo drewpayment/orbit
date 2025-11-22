@@ -55,30 +55,33 @@ export function DragHandle({ editor }: DragHandleProps) {
     }
   }, [editor])
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault()
+  const handleDragStart = (e: React.DragEvent) => {
     if (!element) return
 
-    // Make the element draggable
-    element.setAttribute('draggable', 'true')
+    const { dataTransfer } = e
 
-    element.ondragstart = (dragEvent) => {
-      if (!dragEvent.dataTransfer) return
+    // Set the drag data
+    dataTransfer.effectAllowed = 'move'
+    dataTransfer.setData('text/html', element.outerHTML)
 
-      dragEvent.dataTransfer.effectAllowed = 'move'
-      dragEvent.dataTransfer.setData('text/html', element.outerHTML)
+    // Create a drag image from the element
+    const dragImage = element.cloneNode(true) as HTMLElement
+    dragImage.style.position = 'absolute'
+    dragImage.style.top = '-9999px'
+    document.body.appendChild(dragImage)
+    dataTransfer.setDragImage(dragImage, 0, 0)
+    setTimeout(() => document.body.removeChild(dragImage), 0)
 
-      // Add visual feedback
-      element.style.opacity = '0.5'
-    }
+    // Add visual feedback to the original element
+    element.style.opacity = '0.5'
+    element.classList.add('dragging')
+  }
 
-    element.ondragend = () => {
-      element.style.opacity = ''
-      element.removeAttribute('draggable')
-    }
+  const handleDragEnd = () => {
+    if (!element) return
 
-    // Trigger drag on the element
-    element.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true }))
+    element.style.opacity = ''
+    element.classList.remove('dragging')
   }
 
   return (
@@ -92,7 +95,9 @@ export function DragHandle({ editor }: DragHandleProps) {
         pointerEvents: element ? 'auto' : 'none',
       }}
       contentEditable={false}
-      onMouseDown={handleMouseDown}
+      draggable={!!element}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
     >
       <button
         type="button"
@@ -107,6 +112,7 @@ export function DragHandle({ editor }: DragHandleProps) {
           transition-colors
         "
         title="Drag to move"
+        draggable={false}
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
