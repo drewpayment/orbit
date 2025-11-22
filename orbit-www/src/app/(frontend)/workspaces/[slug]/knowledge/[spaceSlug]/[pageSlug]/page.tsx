@@ -11,6 +11,9 @@ import { SiteHeader } from '@/components/site-header'
 import { SpaceNavigator } from '@/components/features/knowledge/SpaceNavigator'
 import { Calendar, User, FileText } from 'lucide-react'
 import { serializeLexical } from '@/lib/lexical/serialize'
+import { PageEditor } from '@/components/features/knowledge/PageEditor'
+import { revalidatePath } from 'next/cache'
+import type { BlockDocument } from '@/lib/blocks/types'
 
 interface PageProps {
   params: Promise<{
@@ -18,6 +21,23 @@ interface PageProps {
     spaceSlug: string
     pageSlug: string
   }>
+}
+
+async function updatePage(pageId: string, workspaceSlug: string, spaceSlug: string, pageSlug: string, content: BlockDocument) {
+  'use server'
+
+  const payload = await getPayload({ config })
+
+  await payload.update({
+    collection: 'knowledge-pages',
+    id: pageId,
+    data: {
+      content,
+      contentFormat: 'blocks',
+    },
+  })
+
+  revalidatePath(`/workspaces/${workspaceSlug}/knowledge/${spaceSlug}/${pageSlug}`)
 }
 
 export default async function KnowledgePageView({ params }: PageProps) {
@@ -206,15 +226,14 @@ export default async function KnowledgePageView({ params }: PageProps) {
                       <Separator className="mb-8" />
 
                       {/* Page Content */}
-                      <div className="prose dark:prose-invert max-w-none">
-                        {page.content && typeof page.content === 'object' && 'root' in page.content ? (
-                          serializeLexical(page.content)
-                        ) : (
-                          <p className="text-gray-600 dark:text-gray-400 italic">
-                            No content available.
-                          </p>
-                        )}
-                      </div>
+                      <PageEditor
+                        page={page}
+                        canEdit={true}
+                        onSave={async (content) => {
+                          'use server'
+                          await updatePage(page.id, workspace.slug, space.slug as string, page.slug, content)
+                        }}
+                      />
 
                       {/* Tags */}
                       {page.tags && page.tags.length > 0 && (
