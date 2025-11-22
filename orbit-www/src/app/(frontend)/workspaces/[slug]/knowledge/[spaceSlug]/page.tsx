@@ -112,22 +112,13 @@ export default async function KnowledgeSpacePage({ params }: PageProps) {
                       <CardHeader>
                         <CardTitle className="text-lg">Pages</CardTitle>
                       </CardHeader>
-                      <CardContent>
-                        {pages.length === 0 ? (
-                          <div className="text-center py-8">
-                            <FileText className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                              No pages yet
-                            </p>
-                          </div>
-                        ) : (
-                          <SpaceNavigator
-                            knowledgeSpace={space}
-                            pages={pages}
-                            workspaceSlug={workspace.slug}
-                            userId={undefined} // TODO: Get from auth session
-                          />
-                        )}
+                      <CardContent className="p-0">
+                        <SpaceNavigator
+                          knowledgeSpace={space}
+                          pages={pages}
+                          workspaceSlug={workspace.slug}
+                          userId={undefined} // TODO: Get from auth session
+                        />
                       </CardContent>
                     </Card>
 
