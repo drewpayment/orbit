@@ -38,6 +38,13 @@ export default async function KnowledgeSpacePage({ params }: PageProps) {
 
   const workspace = workspaceResult.docs[0]
 
+  // Fetch a user for temporary auth (TODO: Replace with actual auth session)
+  const usersResult = await payload.find({
+    collection: 'users',
+    limit: 1,
+  })
+  const tempUserId = usersResult.docs[0]?.id
+
   // Fetch knowledge space
   const spaceResult = await payload.find({
     collection: 'knowledge-spaces',
@@ -117,7 +124,7 @@ export default async function KnowledgeSpacePage({ params }: PageProps) {
                           knowledgeSpace={space}
                           pages={pages}
                           workspaceSlug={workspace.slug}
-                          userId="temp-user-id" // TODO: Get from auth session
+                          userId={tempUserId} // TODO: Get from auth session
                         />
                       </CardContent>
                     </Card>
