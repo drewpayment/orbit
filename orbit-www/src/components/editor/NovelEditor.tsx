@@ -12,6 +12,8 @@ import Placeholder from '@tiptap/extension-placeholder'
 import { common, createLowlight } from 'lowlight'
 import type { BlockDocument } from '@/lib/blocks/types'
 import { useEffect } from 'react'
+import { SlashCommand, getSuggestionItems, renderItems } from './slash-command'
+import 'tippy.js/dist/tippy.css'
 
 const lowlight = createLowlight(common)
 
@@ -50,7 +52,13 @@ export function NovelEditor({
       TableCell,
       TableHeader,
       Placeholder.configure({
-        placeholder: 'Start typing...',
+        placeholder: 'Start typing or type "/" for commands...',
+      }),
+      SlashCommand.configure({
+        suggestion: {
+          items: getSuggestionItems,
+          render: renderItems,
+        },
       }),
     ],
     content: initialContent,
