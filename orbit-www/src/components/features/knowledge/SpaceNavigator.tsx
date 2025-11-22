@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
@@ -41,10 +41,16 @@ export function SpaceNavigator({
   const tree = useMemo(() => buildPageTree(pages), [pages])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
   const router = useRouter()
 
   const publishedPages = pages.filter(p => p.status === 'published').length
   const draftPages = pages.filter(p => p.status === 'draft').length
+
+  // Only enable drag-and-drop on client to avoid SSR hydration issues
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -169,7 +175,28 @@ export function SpaceNavigator({
               New Page
             </Button>
           </div>
+        ) : !isMounted ? (
+          // Server-side render without drag-and-drop to avoid hydration issues
+          <nav
+            role="tree"
+            aria-label={`${knowledgeSpace.name} knowledge pages`}
+            className="space-y-1"
+          >
+            {tree.map(node => (
+              <PageTreeNode
+                key={node.id}
+                node={node}
+                currentPageId={currentPageId}
+                depth={0}
+                onPageSelect={onPageSelect}
+                workspaceSlug={workspaceSlug}
+                spaceSlug={knowledgeSpace.slug}
+                isDragging={false}
+              />
+            ))}
+          </nav>
         ) : (
+          // Client-side render with drag-and-drop
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
