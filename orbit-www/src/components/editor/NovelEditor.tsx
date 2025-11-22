@@ -14,6 +14,7 @@ import type { BlockDocument } from '@/lib/blocks/types'
 import { useEffect } from 'react'
 import { SlashCommand, getSuggestionItems, renderItems } from './slash-command'
 import { BubbleMenu } from './BubbleMenu'
+import { DragHandle } from './DragHandle'
 import 'tippy.js/dist/tippy.css'
 
 const lowlight = createLowlight(common)
@@ -88,6 +89,16 @@ export function NovelEditor({
           onBlur()
         }
       },
+      handleDOMEvents: {
+        drop(view, event) {
+          // Enable native drag-and-drop
+          const hasFiles = event.dataTransfer?.files?.length
+          if (hasFiles) {
+            return false
+          }
+          return false
+        },
+      },
     },
   })
 
@@ -107,12 +118,13 @@ export function NovelEditor({
   return (
     <div className="novel-editor">
       {!readOnly && <BubbleMenu editor={editor} />}
+      {!readOnly && <DragHandle editor={editor} />}
       <div
         className={`
-          relative rounded-lg border border-gray-200 dark:border-gray-700
-          ${!readOnly ? 'focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20' : ''}
+          relative rounded-lg border border-gray-700/50 dark:border-gray-700
+          ${!readOnly ? 'focus-within:border-blue-500/50 focus-within:ring-2 focus-within:ring-blue-500/10' : ''}
           transition-all duration-200
-          bg-white dark:bg-gray-900
+          bg-gray-50 dark:bg-gray-900/50
           min-h-[500px]
           ${className}
         `}

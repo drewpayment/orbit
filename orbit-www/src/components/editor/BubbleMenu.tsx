@@ -1,6 +1,6 @@
 'use client'
 
-import { BubbleMenu as TiptapBubbleMenu } from '@tiptap/react'
+import { BubbleMenu as TipTapBubbleMenu } from '@tiptap/react/menus'
 import type { Editor } from '@tiptap/react'
 
 interface BubbleMenuProps {
@@ -134,9 +134,9 @@ export function BubbleMenu({ editor }: BubbleMenuProps) {
   ]
 
   return (
-    <TiptapBubbleMenu
+    <TipTapBubbleMenu
       editor={editor}
-      tippyOptions={{ duration: 100, placement: 'top' }}
+      options={{ placement: 'top' }}
       className="flex items-center gap-1 p-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg"
     >
       {items.map((item) => {
@@ -154,7 +154,7 @@ export function BubbleMenu({ editor }: BubbleMenuProps) {
             key={item.name}
             onClick={item.action}
             className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
-              item.isActive()
+              (item && item.isActive())
                 ? 'bg-gray-100 dark:bg-gray-700 text-blue-600 dark:text-blue-400'
                 : 'text-gray-700 dark:text-gray-300'
             }`}
@@ -165,6 +165,6 @@ export function BubbleMenu({ editor }: BubbleMenuProps) {
           </button>
         )
       })}
-    </TiptapBubbleMenu>
+    </TipTapBubbleMenu>
   )
 }
