@@ -16,6 +16,7 @@ export function DragHandle({ editor }: DragHandleProps) {
 
   useEffect(() => {
     const editorElement = editor.view.dom as HTMLElement
+    const novelEditorWrapper = editorElement.closest('.novel-editor') as HTMLElement
 
     const handleMouseMove = (event: MouseEvent) => {
       const target = event.target as HTMLElement
@@ -37,8 +38,7 @@ export function DragHandle({ editor }: DragHandleProps) {
       // Find the closest block-level element
       const prosemirrorNode = target.closest('.ProseMirror')
       if (!prosemirrorNode) {
-        if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current)
-        hideTimeoutRef.current = setTimeout(() => setElement(null), 100)
+        // Don't hide immediately - user might be moving to the handle
         return
       }
 
@@ -51,25 +51,26 @@ export function DragHandle({ editor }: DragHandleProps) {
           hideTimeoutRef.current = null
         }
         setElement(blockElement)
-      } else if (!isOverHandle) {
-        if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current)
-        hideTimeoutRef.current = setTimeout(() => setElement(null), 100)
       }
     }
 
     const handleMouseLeave = () => {
       if (!isOverHandle) {
         if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current)
-        hideTimeoutRef.current = setTimeout(() => setElement(null), 100)
+        hideTimeoutRef.current = setTimeout(() => {
+          setElement(null)
+          setIsOverHandle(false)
+        }, 500)
       }
     }
 
-    editorElement.addEventListener('mousemove', handleMouseMove)
-    editorElement.addEventListener('mouseleave', handleMouseLeave)
+    // Listen on the whole editor wrapper to catch mouse movement everywhere
+    novelEditorWrapper.addEventListener('mousemove', handleMouseMove)
+    novelEditorWrapper.addEventListener('mouseleave', handleMouseLeave)
 
     return () => {
-      editorElement.removeEventListener('mousemove', handleMouseMove)
-      editorElement.removeEventListener('mouseleave', handleMouseLeave)
+      novelEditorWrapper.removeEventListener('mousemove', handleMouseMove)
+      novelEditorWrapper.removeEventListener('mouseleave', handleMouseLeave)
       if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current)
     }
   }, [editor, isOverHandle])
@@ -118,7 +119,11 @@ export function DragHandle({ editor }: DragHandleProps) {
       }}
       onMouseLeave={() => {
         setIsOverHandle(false)
-        hideTimeoutRef.current = setTimeout(() => setElement(null), 100)
+        if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current)
+        hideTimeoutRef.current = setTimeout(() => {
+          setElement(null)
+          setIsOverHandle(false)
+        }, 500)
       }}
       onMouseDown={(e) => {
         e.preventDefault()
