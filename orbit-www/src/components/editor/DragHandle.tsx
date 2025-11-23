@@ -35,7 +35,7 @@ export function DragHandle({ editor }: DragHandleProps) {
         setElement(blockElement)
         setPosition({
           top: blockRect.top - wrapperRect.top,
-          left: blockRect.left - wrapperRect.left - 40,
+          left: blockRect.left - wrapperRect.left - 28,
         })
       }
       // If no block found but we're still in the editor, keep the handle visible at its current position

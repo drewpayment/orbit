@@ -134,7 +134,7 @@ export default async function KnowledgePageView({ params }: PageProps) {
 
         {/* Main content - immersive full-width layout */}
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-none px-4 sm:px-6 lg:px-8 py-8">
+          <div className="mx-auto max-w-none px-12 py-8">
             <article className="stagger-reveal">
               {/* Page Title & Metadata */}
               <div className="mb-12 stagger-item">
