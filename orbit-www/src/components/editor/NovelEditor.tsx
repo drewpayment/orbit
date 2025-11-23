@@ -91,7 +91,14 @@ export function NovelEditor({
       },
       handleDOMEvents: {
         drop(view, event) {
-          // Enable native drag-and-drop
+          // Check if this is from our custom drag handle
+          const isDragHandle = event.dataTransfer?.types.includes('application/x-drag-handle')
+          if (isDragHandle) {
+            // Let our DragHandle component handle this
+            return true
+          }
+
+          // Enable native drag-and-drop for files
           const hasFiles = event.dataTransfer?.files?.length
           if (hasFiles) {
             return false

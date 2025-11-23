@@ -339,21 +339,15 @@ export interface KnowledgePage {
   /**
    * Page content. Stored as Block JSON format compatible with Novel editor.
    */
-  content: {
-    root: {
-      type: string;
-      children: {
-        type: any;
-        version: number;
+  content:
+    | {
         [k: string]: unknown;
-      }[];
-      direction: ('ltr' | 'rtl') | null;
-      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
-      indent: number;
-      version: number;
-    };
-    [k: string]: unknown;
-  };
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   contentFormat?: ('blocks' | 'lexical') | null;
   /**
    * The parent page in the hierarchy (leave empty for root page)

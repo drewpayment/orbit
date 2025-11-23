@@ -10,6 +10,7 @@ interface DragHandleProps {
 export function DragHandle({ editor }: DragHandleProps) {
   const [element, setElement] = useState<HTMLElement | null>(null)
   const [position, setPosition] = useState({ top: 0, left: 0 })
+  const draggedNodeRef = useRef<{ pos: number; node: any; size: number } | null>(null)
   const dragHandleRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -46,12 +47,58 @@ export function DragHandle({ editor }: DragHandleProps) {
       setElement(null)
     }
 
+    const handleDragOver = (event: DragEvent) => {
+      // Allow dropping by preventing default
+      event.preventDefault()
+      event.dataTransfer!.dropEffect = 'move'
+    }
+
+    const handleDrop = (event: DragEvent) => {
+      event.preventDefault()
+      event.stopPropagation()
+
+      if (!draggedNodeRef.current) return
+
+      const { pos: fromPos, node, size } = draggedNodeRef.current
+
+      // Find the drop position
+      const coordinates = { left: event.clientX, top: event.clientY }
+      const dropPos = editor.view.posAtCoords(coordinates)
+
+      if (!dropPos) return
+
+      // Create a transaction to move the node
+      const { tr } = editor.state
+
+      // Calculate the actual positions considering the deletion
+      let insertPos = dropPos.pos
+
+      // If dropping after the dragged node, adjust for the deletion
+      if (insertPos > fromPos) {
+        insertPos -= size
+      }
+
+      // Delete from original position and insert at new position
+      tr.delete(fromPos, fromPos + size)
+      tr.insert(insertPos, node)
+
+      // Apply the transaction
+      editor.view.dispatch(tr)
+
+      // Clear the dragged node
+      draggedNodeRef.current = null
+    }
+
     editorWrapper.addEventListener('mousemove', handleMouseMove)
     editorWrapper.addEventListener('mouseleave', handleMouseLeave)
+    editorElement.addEventListener('dragover', handleDragOver)
+    editorElement.addEventListener('drop', handleDrop)
 
     return () => {
       editorWrapper.removeEventListener('mousemove', handleMouseMove)
       editorWrapper.removeEventListener('mouseleave', handleMouseLeave)
+      editorElement.removeEventListener('dragover', handleDragOver)
+      editorElement.removeEventListener('drop', handleDrop)
     }
   }, [editor])
 
@@ -60,9 +107,34 @@ export function DragHandle({ editor }: DragHandleProps) {
 
     const { dataTransfer } = e
 
+    // Find the ProseMirror position of this element
+    try {
+      const pos = editor.view.posAtDOM(element, 0)
+      const $pos = editor.state.doc.resolve(pos)
+
+      // Find the parent block node (paragraph, heading, etc.)
+      const depth = $pos.depth
+      const parentPos = depth > 0 ? $pos.before(depth) : pos
+      const node = editor.state.doc.nodeAt(parentPos)
+
+      if (node) {
+        // Store the node info for later deletion
+        draggedNodeRef.current = {
+          pos: parentPos,
+          node,
+          // Store the size to know how much to delete
+          size: node.nodeSize
+        }
+      }
+    } catch (error) {
+      console.error('Failed to find ProseMirror position:', error)
+    }
+
     // Set the drag data
     dataTransfer.effectAllowed = 'move'
     dataTransfer.setData('text/html', element.outerHTML)
+    // Mark this as our custom drag handle so we can prevent ProseMirror from handling it
+    dataTransfer.setData('application/x-drag-handle', 'true')
 
     // Create a drag image from the element
     const dragImage = element.cloneNode(true) as HTMLElement
@@ -82,6 +154,11 @@ export function DragHandle({ editor }: DragHandleProps) {
 
     element.style.opacity = ''
     element.classList.remove('dragging')
+
+    // Clear the dragged node after a short delay to allow drop to complete
+    setTimeout(() => {
+      draggedNodeRef.current = null
+    }, 100)
   }
 
   return (
