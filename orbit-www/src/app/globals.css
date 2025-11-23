@@ -193,3 +193,42 @@
     }
   }
 }
+
+@layer components {
+  /* Editorial typography for editor content */
+  .prose-editorial {
+    @apply prose prose-lg max-w-none;
+  }
+
+  .prose-editorial h1,
+  .prose-editorial h2,
+  .prose-editorial h3,
+  .prose-editorial h4,
+  .prose-editorial h5,
+  .prose-editorial h6 {
+    @apply font-serif-display;
+  }
+
+  .prose-editorial p,
+  .prose-editorial li,
+  .prose-editorial blockquote {
+    @apply font-serif-body text-[1.125rem] leading-[1.7];
+  }
+
+  .prose-editorial pre code {
+    @apply font-mono;
+  }
+
+  .prose-editorial :not(pre) > code {
+    @apply font-mono bg-secondary px-1.5 py-0.5 rounded text-[0.9em];
+  }
+
+  .prose-editorial a {
+    @apply text-primary hover:underline;
+  }
+
+  /* Dark mode adjustments */
+  .dark .prose-editorial {
+    @apply prose-invert;
+  }
+}

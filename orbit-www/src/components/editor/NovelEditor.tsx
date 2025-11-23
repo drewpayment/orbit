@@ -81,7 +81,7 @@ export function NovelEditor({
     },
     editorProps: {
       attributes: {
-        class: `prose prose-sm sm:prose lg:prose-lg xl:prose-xl focus:outline-none ${className}`,
+        class: `prose-editorial focus:outline-none ${className}`,
         role: 'textbox',
       },
       onBlur: () => {
