@@ -77,12 +77,6 @@ export function PageEditor({ page, canEdit, onSave }: PageEditorProps) {
     }
   }, [])
 
-  // Check if content is empty
-  const isEmpty = !content.content || content.content.length === 0 ||
-    (content.content.length === 1 &&
-      content.content[0].type === 'paragraph' &&
-      (!content.content[0].content || content.content[0].content.length === 0))
-
   // If user can't edit, show read-only view
   if (!canEdit) {
     return (
@@ -125,51 +119,18 @@ export function PageEditor({ page, canEdit, onSave }: PageEditorProps) {
         </div>
       </div>
 
-      {/* Editor or empty state */}
-      {isEmpty ? (
-        <div className="flex flex-col items-center justify-center min-h-[300px] text-center rounded-lg border border-dashed border-border">
-          <div className="mb-4 text-muted-foreground">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="48"
-              height="48"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-              <polyline points="14 2 14 8 20 8" />
-              <line x1="12" y1="18" x2="12" y2="12" />
-              <line x1="9" y1="15" x2="15" y2="15" />
-            </svg>
-          </div>
-          <h3 className="text-lg font-medium mb-2">
-            Start writing
-          </h3>
-          <p className="text-sm text-muted-foreground max-w-sm">
-            Click to start editing. Press{' '}
-            <kbd className="px-2 py-1 text-xs font-semibold bg-secondary border border-border rounded">
-              /
-            </kbd>{' '}
-            for commands
-          </p>
-        </div>
-      ) : (
-        <NovelEditor
-          initialContent={content}
-          onChange={handleChange}
-          onBlur={() => {
-            // Save immediately on blur if there are unsaved changes
-            if (saveStatus === 'unsaved' && saveTimeoutRef.current) {
-              clearTimeout(saveTimeoutRef.current)
-              performSave(currentContentRef.current)
-            }
-          }}
-        />
-      )}
+      {/* Always-on editor */}
+      <NovelEditor
+        initialContent={content}
+        onChange={handleChange}
+        onBlur={() => {
+          // Save immediately on blur if there are unsaved changes
+          if (saveStatus === 'unsaved' && saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current)
+            performSave(currentContentRef.current)
+          }
+        }}
+      />
     </div>
   )
 }

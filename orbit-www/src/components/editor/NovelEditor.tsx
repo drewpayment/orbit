@@ -126,7 +126,7 @@ export function NovelEditor({
     <div className="novel-editor relative">
       {!readOnly && <BubbleMenu editor={editor} />}
       {!readOnly && <DragHandle editor={editor} />}
-      <div className={`relative min-h-[400px] py-4 ${className}`}>
+      <div className={`relative min-h-[400px] px-8 py-4 ${className}`}>
         <EditorContent editor={editor} />
       </div>
     </div>
