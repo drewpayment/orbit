@@ -1,16 +1,11 @@
 import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import Link from 'next/link'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
-import { SpaceNavigator } from '@/components/features/knowledge/SpaceNavigator'
-import { Calendar, User, FileText } from 'lucide-react'
-import { serializeLexical } from '@/lib/lexical/serialize'
 import { PageEditor } from '@/components/features/knowledge/PageEditor'
 import { revalidatePath } from 'next/cache'
 import type { BlockDocument } from '@/lib/blocks/types'
@@ -135,174 +130,149 @@ export default async function KnowledgePageView({ params }: PageProps) {
       <AppSidebar />
       <SidebarInset>
         <SiteHeader />
-        <div className="flex flex-1 flex-col gap-4 p-8">
-          <div className="container mx-auto">
-                {/* Breadcrumb */}
-                <div className="mb-6 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                  <Link
-                    href={`/workspaces/${workspace.slug}/knowledge`}
-                    className="hover:text-gray-900 dark:hover:text-gray-100"
-                  >
-                    Knowledge Base
-                  </Link>
-                  <span>/</span>
-                  <Link
-                    href={`/workspaces/${workspace.slug}/knowledge/${space.slug}`}
-                    className="hover:text-gray-900 dark:hover:text-gray-100"
-                  >
-                    {space.name}
-                  </Link>
-                  <span>/</span>
-                  <span className="text-gray-900 dark:text-gray-100">{page.title}</span>
-                </div>
 
-                <div className="grid gap-8 lg:grid-cols-[300px_1fr]">
-                  {/* Left Sidebar - Page Navigation */}
-                  <div className="space-y-4">
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <div className="flex items-center gap-2">
-                          {space.icon && <span className="text-xl">{space.icon}</span>}
-                          <span className="font-semibold">{space.name}</span>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <SpaceNavigator
-                          knowledgeSpace={space}
-                          pages={pages}
-                          currentPageId={page.id}
-                          workspaceSlug={workspace.slug}
-                          userId={tempUserId} // TODO: Get from auth session
-                        />
-                      </CardContent>
-                    </Card>
+        {/* Slim header with breadcrumbs - 40px height */}
+        <div className="sticky top-0 z-10 flex h-10 items-center justify-between border-b border-border bg-background px-8">
+          {/* Breadcrumb */}
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Link
+              href={`/workspaces/${workspace.slug}/knowledge`}
+              className="hover:text-foreground transition-colors"
+            >
+              Knowledge Base
+            </Link>
+            <span>/</span>
+            <Link
+              href={`/workspaces/${workspace.slug}/knowledge/${space.slug}`}
+              className="hover:text-foreground transition-colors"
+            >
+              {space.name}
+            </Link>
+            <span>/</span>
+            <span className="text-foreground">{page.title}</span>
+          </div>
+        </div>
+
+        {/* Main content - full width with generous padding */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-none px-6 sm:px-12 lg:px-24 xl:px-48 py-8 sm:py-12 lg:py-16">
+            <article className="stagger-reveal">
+              {/* Page Title & Metadata */}
+              <div className="mb-12 stagger-item">
+                {/* Status badges */}
+                {(page.status === 'draft' || page.status === 'archived') && (
+                  <div className="mb-4">
+                    {page.status === 'draft' && (
+                      <Badge
+                        variant="secondary"
+                        className="bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-100"
+                      >
+                        Draft
+                      </Badge>
+                    )}
+                    {page.status === 'archived' && (
+                      <Badge
+                        variant="secondary"
+                        className="bg-muted text-muted-foreground"
+                      >
+                        Archived
+                      </Badge>
+                    )}
                   </div>
+                )}
 
-                  {/* Main Content */}
-                  <div>
-                    <article>
-                      {/* Page Header */}
-                      <div className="mb-8">
-                        <div className="flex items-center gap-2 mb-4">
-                          {page.status === 'draft' && (
-                            <Badge
-                              variant="secondary"
-                              className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
-                            >
-                              Draft
-                            </Badge>
-                          )}
-                          {page.status === 'archived' && (
-                            <Badge
-                              variant="secondary"
-                              className="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200"
-                            >
-                              Archived
-                            </Badge>
-                          )}
-                        </div>
-                        <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
-                          {page.title}
-                        </h1>
+                {/* Title - large serif, will be first editable block in editor */}
+                <h1 className="text-[3.5rem] font-bold font-serif-display leading-tight mb-8">
+                  {page.title}
+                </h1>
 
-                        {/* Meta Info */}
-                        <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-                          {author && (
-                            <div className="flex items-center gap-2">
-                              <User className="h-4 w-4" />
-                              <span>By {author.name || author.email}</span>
-                            </div>
-                          )}
-                          {page.updatedAt && (
-                            <div className="flex items-center gap-2">
-                              <Calendar className="h-4 w-4" />
-                              <span>
-                                Updated{' '}
-                                {new Date(page.updatedAt).toLocaleDateString('en-US', {
-                                  year: 'numeric',
-                                  month: 'long',
-                                  day: 'numeric',
-                                })}
-                              </span>
-                            </div>
-                          )}
-                          {lastEditedBy && lastEditedBy.id !== author?.id && (
-                            <div className="flex items-center gap-2">
-                              <span>Last edited by {lastEditedBy.name || lastEditedBy.email}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <Separator className="mb-8" />
-
-                      {/* Page Content */}
-                      <PageEditor
-                        page={page}
-                        canEdit={true}
-                        onSave={boundUpdatePage}
-                      />
-
-                      {/* Tags */}
-                      {page.tags && page.tags.length > 0 && (
-                        <>
-                          <Separator className="my-8" />
-                          <div>
-                            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
-                              Tags
-                            </h3>
-                            <div className="flex flex-wrap gap-2">
-                              {page.tags.map((tag, index) => (
-                                <Badge key={index} variant="secondary">
-                                  {typeof tag === 'string' ? tag : tag.tag}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        </>
-                      )}
-
-                      {/* Child Pages */}
-                      {page.childPages && page.childPages.length > 0 && (
-                        <>
-                          <Separator className="my-8" />
-                          <div>
-                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                              Sub-pages
-                            </h3>
-                            <div className="grid gap-3">
-                              {page.childPages.map((childPage) => {
-                                const child = typeof childPage === 'object' ? childPage : null
-                                if (!child) return null
-
-                                return (
-                                  <Link
-                                    key={child.id}
-                                    href={`/workspaces/${workspace.slug}/knowledge/${space.slug}/${child.slug}`}
-                                    className="flex items-center gap-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                                  >
-                                    <FileText className="h-5 w-5 text-gray-400" />
-                                    <div className="flex-1">
-                                      <div className="font-medium text-gray-900 dark:text-white">
-                                        {child.title}
-                                      </div>
-                                      {child.status === 'draft' && (
-                                        <span className="text-xs text-gray-500">Draft</span>
-                                      )}
-                                    </div>
-                                  </Link>
-                                )
-                              })}
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </article>
-                  </div>
+                {/* Metadata line - inline, subtle */}
+                <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground font-medium">
+                  {author && <span>By {author.name || author.email}</span>}
+                  {author && page.updatedAt && <span>·</span>}
+                  {page.updatedAt && (
+                    <span>
+                      Updated{' '}
+                      {new Date(page.updatedAt).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                      })}
+                    </span>
+                  )}
+                  {lastEditedBy && lastEditedBy.id !== author?.id && (
+                    <>
+                      <span>·</span>
+                      <span>Last edited by {lastEditedBy.name || lastEditedBy.email}</span>
+                    </>
+                  )}
                 </div>
               </div>
-            </div>
-          </SidebarInset>
-      </SidebarProvider>
+
+              {/* Page Content - always-on editor */}
+              <div className="mb-16 stagger-item">
+                <PageEditor
+                  page={page}
+                  canEdit={true}
+                  onSave={boundUpdatePage}
+                />
+              </div>
+
+              {/* Tags - inline presentation */}
+              {page.tags && page.tags.length > 0 && (
+                <div className="mb-16 stagger-item">
+                  <div className="text-sm text-muted-foreground mb-3">Tagged with</div>
+                  <div className="flex flex-wrap gap-2">
+                    {page.tags.map((tag, index) => (
+                      <Badge
+                        key={index}
+                        variant="secondary"
+                        className="rounded-full px-4 py-1"
+                      >
+                        {typeof tag === 'string' ? tag : tag.tag}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Child Pages - clean list */}
+              {page.childPages && page.childPages.length > 0 && (
+                <div className="stagger-item">
+                  <h3 className="text-xl font-semibold font-serif-display mb-6">
+                    Pages within {page.title}
+                  </h3>
+                  <div className="space-y-4">
+                    {page.childPages.map((childPage) => {
+                      const child = typeof childPage === 'object' ? childPage : null
+                      if (!child) return null
+
+                      return (
+                        <Link
+                          key={child.id}
+                          href={`/workspaces/${workspace.slug}/knowledge/${space.slug}/${child.slug}`}
+                          className="block group"
+                        >
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-foreground font-serif-body group-hover:underline">
+                              {child.title}
+                            </span>
+                            {child.status === 'draft' && (
+                              <span className="text-xs text-muted-foreground">
+                                (Draft)
+                              </span>
+                            )}
+                          </div>
+                        </Link>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </article>
+          </div>
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
