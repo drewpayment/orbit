@@ -56,13 +56,6 @@ export default async function KnowledgePageView({ params }: PageProps) {
 
   const workspace = workspaceResult.docs[0]
 
-  // Fetch a user for temporary auth (TODO: Replace with actual auth session)
-  const usersResult = await payload.find({
-    collection: 'users',
-    limit: 1,
-  })
-  const tempUserId = usersResult.docs[0]?.id
-
   // Fetch knowledge space
   const spaceResult = await payload.find({
     collection: 'knowledge-spaces',
@@ -103,20 +96,6 @@ export default async function KnowledgePageView({ params }: PageProps) {
   }
 
   const page = pageResult.docs[0]
-
-  // Fetch all pages for navigation
-  const pagesResult = await payload.find({
-    collection: 'knowledge-pages',
-    where: {
-      knowledgeSpace: {
-        equals: space.id,
-      },
-    },
-    limit: 1000,
-    sort: 'sortOrder',
-  })
-
-  const pages = pagesResult.docs
 
   // Get author info
   const author = typeof page.author === 'object' ? page.author : null
