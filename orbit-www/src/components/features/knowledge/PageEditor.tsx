@@ -5,6 +5,7 @@ import { NovelEditor } from '@/components/editor/NovelEditor'
 import { serializeBlocks } from '@/lib/serializers/blocks-to-react'
 import type { BlockDocument } from '@/lib/blocks/types'
 import type { KnowledgePage } from '@/payload-types'
+import { toast } from 'sonner'
 
 interface PageEditorProps {
   page: KnowledgePage
@@ -44,6 +45,9 @@ export function PageEditor({ page, canEdit, onSave }: PageEditorProps) {
     } catch (error) {
       console.error('Failed to save:', error)
       setSaveStatus('unsaved')
+      toast.error('Failed to save page', {
+        description: error instanceof Error ? error.message : 'Please try again or your changes may be lost.',
+      })
     }
   }, [onSave])
 
