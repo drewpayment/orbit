@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
-import { PageEditor } from '@/components/features/knowledge/PageEditor'
+import { PageContent } from '@/components/features/knowledge/PageContent'
 import { revalidatePath } from 'next/cache'
 import type { BlockDocument } from '@/lib/blocks/types'
 
@@ -136,66 +136,12 @@ export default async function KnowledgePageView({ params }: PageProps) {
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-none px-12 py-8">
             <article className="stagger-reveal">
-              {/* Page Title & Metadata */}
-              <div className="mb-12 stagger-item">
-                {/* Status badges */}
-                {(page.status === 'draft' || page.status === 'archived') && (
-                  <div className="mb-4">
-                    {page.status === 'draft' && (
-                      <Badge
-                        variant="secondary"
-                        className="bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-100"
-                      >
-                        Draft
-                      </Badge>
-                    )}
-                    {page.status === 'archived' && (
-                      <Badge
-                        variant="secondary"
-                        className="bg-muted text-muted-foreground"
-                      >
-                        Archived
-                      </Badge>
-                    )}
-                  </div>
-                )}
-
-                {/* Title - large serif, will be first editable block in editor */}
-                <h1 className="text-[3.5rem] font-bold font-serif-display leading-tight mb-8">
-                  {page.title}
-                </h1>
-
-                {/* Metadata line - inline, subtle */}
-                <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground font-medium">
-                  {author && <span>By {author.name || author.email}</span>}
-                  {author && page.updatedAt && <span>·</span>}
-                  {page.updatedAt && (
-                    <span>
-                      Updated{' '}
-                      {new Date(page.updatedAt).toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                      })}
-                    </span>
-                  )}
-                  {lastEditedBy && lastEditedBy.id !== author?.id && (
-                    <>
-                      <span>·</span>
-                      <span>Last edited by {lastEditedBy.name || lastEditedBy.email}</span>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Page Content - always-on editor */}
-              <div className="mb-16 stagger-item">
-                <PageEditor
-                  page={page}
-                  canEdit={true}
-                  onSave={boundUpdatePage}
-                />
-              </div>
+              <PageContent
+                page={page}
+                author={author}
+                lastEditedBy={lastEditedBy}
+                onSave={boundUpdatePage}
+              />
 
               {/* Tags - inline presentation */}
               {page.tags && page.tags.length > 0 && (
