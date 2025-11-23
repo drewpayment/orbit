@@ -210,10 +210,31 @@
     @apply font-serif-display;
   }
 
+  /* Tighter spacing between headings */
+  .prose-editorial h1 {
+    @apply mb-3 mt-6;
+  }
+
+  .prose-editorial h2 {
+    @apply mb-2 mt-5;
+  }
+
+  .prose-editorial h3,
+  .prose-editorial h4,
+  .prose-editorial h5,
+  .prose-editorial h6 {
+    @apply mb-2 mt-4;
+  }
+
+  /* First heading should have no top margin */
+  .prose-editorial > :first-child {
+    @apply mt-0;
+  }
+
   .prose-editorial p,
   .prose-editorial li,
   .prose-editorial blockquote {
-    @apply font-serif-body text-[1.125rem] leading-[1.7];
+    @apply font-serif-body text-[1.125rem] leading-[1.5] mb-3;
   }
 
   .prose-editorial pre code {
