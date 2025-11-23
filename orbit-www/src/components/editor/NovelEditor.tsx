@@ -126,19 +126,8 @@ export function NovelEditor({
     <div className="novel-editor relative">
       {!readOnly && <BubbleMenu editor={editor} />}
       {!readOnly && <DragHandle editor={editor} />}
-      <div
-        className={`
-          relative rounded-lg border border-gray-700/50 dark:border-gray-700
-          ${!readOnly ? 'focus-within:border-blue-500/50 focus-within:ring-2 focus-within:ring-blue-500/10' : ''}
-          transition-all duration-200
-          bg-gray-50 dark:bg-gray-900/50
-          min-h-[500px]
-          ${className}
-        `}
-      >
-        <div className="px-12 py-8">
-          <EditorContent editor={editor} />
-        </div>
+      <div className={`relative ${className}`}>
+        <EditorContent editor={editor} />
       </div>
     </div>
   )
