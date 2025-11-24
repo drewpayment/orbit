@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { Badge } from '@/components/ui/badge'
 import { PageEditor } from './PageEditor'
 import type { KnowledgePage } from '@/payload-types'
 import type { BlockDocument } from '@/lib/blocks/types'
@@ -20,28 +19,6 @@ export function PageContent({ page, author, lastEditedBy, onSave }: PageContentP
     <>
       {/* Page Title & Metadata */}
       <div className="mb-8 pb-8 border-b border-border/40 stagger-item">
-        {/* Status badges */}
-        {(page.status === 'draft' || page.status === 'archived') && (
-          <div className="mb-4">
-            {page.status === 'draft' && (
-              <Badge
-                variant="secondary"
-                className="bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-100"
-              >
-                Draft
-              </Badge>
-            )}
-            {page.status === 'archived' && (
-              <Badge
-                variant="secondary"
-                className="bg-muted text-muted-foreground"
-              >
-                Archived
-              </Badge>
-            )}
-          </div>
-        )}
-
         {/* Title */}
         <h1 className="text-[3.5rem] font-bold font-serif-display leading-tight mb-8">
           {page.title}

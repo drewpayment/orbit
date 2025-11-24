@@ -1,14 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { ChevronRight, FileText, Folder, GripVertical } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Button } from '@/components/ui/button'
+import { PageContextMenu } from './PageContextMenu'
 import type { PageTreeNodeProps } from './types'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { renamePage } from '@/app/actions/knowledge'
 
 export function PageTreeNode({
   node,
@@ -18,10 +20,19 @@ export function PageTreeNode({
   workspaceSlug,
   spaceSlug,
   isDragging = false,
+  onMoveClick,
+  onDeleteClick,
+  onDuplicateClick,
+  onAddSubPageClick,
 }: PageTreeNodeProps) {
   const hasChildren = node.children.length > 0
   const isCurrentPage = node.id === currentPageId
   const [isOpen, setIsOpen] = useState(false)
+
+  // Inline rename state
+  const [isRenaming, setIsRenaming] = useState(false)
+  const [newTitle, setNewTitle] = useState(node.title)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const {
     attributes,
@@ -45,11 +56,48 @@ export function PageTreeNode({
     }
   }, [currentPageId, isCurrentPage, node.children])
 
+  // Focus input when renaming starts
+  useEffect(() => {
+    if (isRenaming && inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [isRenaming])
+
   const handleClick = (e: React.MouseEvent) => {
     if (onPageSelect) {
       e.preventDefault()
       onPageSelect(node.id)
     }
+  }
+
+  // Context menu handlers
+  const handleRename = (pageId: string) => {
+    setIsRenaming(true)
+    setNewTitle(node.title)
+  }
+
+  const saveRename = async () => {
+    if (newTitle.trim() && newTitle !== node.title) {
+      await renamePage(node.id, newTitle, workspaceSlug, spaceSlug as string)
+    }
+    setIsRenaming(false)
+  }
+
+  const handleMove = (pageId: string) => {
+    onMoveClick?.(pageId)
+  }
+
+  const handleAddSubPage = (pageId: string) => {
+    onAddSubPageClick?.(pageId)
+  }
+
+  const handleDuplicate = async (pageId: string) => {
+    await onDuplicateClick?.(pageId)
+  }
+
+  const handleDelete = (pageId: string) => {
+    onDeleteClick?.(pageId)
   }
 
   // Build the page URL
@@ -61,8 +109,7 @@ export function PageTreeNode({
     <div
       className={cn(
         'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-accent transition-colors group',
-        isCurrentPage && 'bg-accent font-medium',
-        node.status === 'draft' && 'text-muted-foreground italic'
+        isCurrentPage && 'bg-accent font-medium'
       )}
       style={{ paddingLeft: `${depth * 12 + 8}px` }}
       role="treeitem"
@@ -86,9 +133,25 @@ export function PageTreeNode({
       ) : (
         <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />
       )}
-      <span className="truncate flex-1">{node.title}</span>
-      {node.status === 'draft' && (
-        <span className="text-xs text-muted-foreground">(draft)</span>
+      {isRenaming ? (
+        <input
+          ref={inputRef}
+          type="text"
+          value={newTitle}
+          onChange={(e) => setNewTitle(e.target.value)}
+          onBlur={saveRename}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') saveRename()
+            if (e.key === 'Escape') {
+              setIsRenaming(false)
+              setNewTitle(node.title)
+            }
+          }}
+          className="px-2 py-1 text-sm bg-background border border-border rounded flex-1 min-w-0"
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <span className="truncate flex-1">{node.title}</span>
       )}
     </div>
   )
@@ -96,13 +159,22 @@ export function PageTreeNode({
   if (!hasChildren) {
     return (
       <div ref={setNodeRef} style={style}>
-        <Link
-          href={pageUrl}
-          onClick={handleClick}
-          className="block"
+        <PageContextMenu
+          page={node as any}
+          onRename={handleRename}
+          onMove={handleMove}
+          onAddSubPage={handleAddSubPage}
+          onDuplicate={handleDuplicate}
+          onDelete={handleDelete}
         >
-          {content}
-        </Link>
+          <Link
+            href={pageUrl}
+            onClick={handleClick}
+            className="block"
+          >
+            {content}
+          </Link>
+        </PageContextMenu>
       </div>
     )
   }
@@ -129,13 +201,22 @@ export function PageTreeNode({
                 />
               </Button>
             </CollapsibleTrigger>
-            <Link
-              href={pageUrl}
-              onClick={handleClick}
-              className="flex-1"
+            <PageContextMenu
+              page={node as any}
+              onRename={handleRename}
+              onMove={handleMove}
+              onAddSubPage={handleAddSubPage}
+              onDuplicate={handleDuplicate}
+              onDelete={handleDelete}
             >
-              {content}
-            </Link>
+              <Link
+                href={pageUrl}
+                onClick={handleClick}
+                className="flex-1"
+              >
+                {content}
+              </Link>
+            </PageContextMenu>
           </div>
           <CollapsibleContent>
             <div className="space-y-1">
@@ -149,6 +230,10 @@ export function PageTreeNode({
                   workspaceSlug={workspaceSlug}
                   spaceSlug={spaceSlug}
                   isDragging={isDragging}
+                  onMoveClick={onMoveClick}
+                  onDeleteClick={onDeleteClick}
+                  onDuplicateClick={onDuplicateClick}
+                  onAddSubPageClick={onAddSubPageClick}
                 />
               ))}
             </div>

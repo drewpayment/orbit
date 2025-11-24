@@ -66,7 +66,6 @@ export default async function KnowledgePage({ params }: PageProps) {
       return {
         spaceId: space.id,
         total: pagesResult.docs.length,
-        published: pagesResult.docs.filter((p) => p.status === 'published').length,
       }
     })
   )
@@ -76,7 +75,7 @@ export default async function KnowledgePage({ params }: PageProps) {
       acc[stat.spaceId] = stat
       return acc
     },
-    {} as Record<string, { total: number; published: number }>
+    {} as Record<string, { total: number }>
   )
 
   const getVisibilityIcon = (visibility: string) => {
@@ -144,7 +143,7 @@ export default async function KnowledgePage({ params }: PageProps) {
                 {spaces.length > 0 && (
                   <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                     {spaces.map((space) => {
-                      const stats = statsMap[space.id] || { total: 0, published: 0 }
+                      const stats = statsMap[space.id] || { total: 0 }
 
                       return (
                         <Link
@@ -182,12 +181,6 @@ export default async function KnowledgePage({ params }: PageProps) {
                                     {stats.total} {stats.total === 1 ? 'page' : 'pages'}
                                   </span>
                                 </div>
-                                {stats.published > 0 && (
-                                  <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                                    <span className="font-semibold">{stats.published}</span>
-                                    <span>published</span>
-                                  </div>
-                                )}
                               </div>
                             </CardContent>
                           </Card>

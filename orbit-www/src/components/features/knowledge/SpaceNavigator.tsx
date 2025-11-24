@@ -44,9 +44,6 @@ export function SpaceNavigator({
   const [isMounted, setIsMounted] = useState(false)
   const router = useRouter()
 
-  const publishedPages = pages.filter(p => p.status === 'published').length
-  const draftPages = pages.filter(p => p.status === 'draft').length
-
   // Only enable drag-and-drop on client to avoid SSR hydration issues
   useEffect(() => {
     setIsMounted(true)
@@ -236,15 +233,6 @@ export function SpaceNavigator({
           </DndContext>
         )}
       </CardContent>
-
-      <Separator />
-
-      <div className="p-3">
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>{publishedPages} published</span>
-          <span>{draftPages} drafts</span>
-        </div>
-      </div>
 
       <CreatePageModal
         open={isCreateModalOpen}

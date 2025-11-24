@@ -47,3 +47,86 @@ export async function createKnowledgePage(data: {
 
   return page
 }
+
+export async function renamePage(
+  pageId: string,
+  newTitle: string,
+  workspaceSlug: string,
+  spaceSlug: string
+) {
+  const payload = await getPayload({ config })
+
+  await payload.update({
+    collection: 'knowledge-pages',
+    id: pageId,
+    data: {
+      title: newTitle,
+    },
+  })
+
+  revalidatePath(`/workspaces/${workspaceSlug}/knowledge/${spaceSlug}`)
+}
+
+export async function movePage(
+  pageId: string,
+  newParentId: string | null,
+  workspaceSlug: string,
+  spaceSlug: string
+) {
+  const payload = await getPayload({ config })
+
+  await payload.update({
+    collection: 'knowledge-pages',
+    id: pageId,
+    data: {
+      parentPage: newParentId,
+    },
+  })
+
+  revalidatePath(`/workspaces/${workspaceSlug}/knowledge/${spaceSlug}`)
+}
+
+export async function duplicatePage(
+  pageId: string,
+  workspaceSlug: string,
+  spaceSlug: string
+) {
+  const payload = await getPayload({ config })
+
+  // Get original page
+  const original = await payload.findByID({
+    collection: 'knowledge-pages',
+    id: pageId,
+  })
+
+  // Create duplicate
+  const duplicate = await payload.create({
+    collection: 'knowledge-pages',
+    data: {
+      title: `${original.title} (Copy)`,
+      content: original.content,
+      knowledgeSpace: original.knowledgeSpace,
+      parentPage: original.parentPage,
+      author: original.author,
+      status: 'draft',
+    },
+  })
+
+  revalidatePath(`/workspaces/${workspaceSlug}/knowledge/${spaceSlug}`)
+  return duplicate
+}
+
+export async function deletePage(
+  pageId: string,
+  workspaceSlug: string,
+  spaceSlug: string
+) {
+  const payload = await getPayload({ config })
+
+  await payload.delete({
+    collection: 'knowledge-pages',
+    id: pageId,
+  })
+
+  revalidatePath(`/workspaces/${workspaceSlug}/knowledge/${spaceSlug}`)
+}

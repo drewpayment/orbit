@@ -7,6 +7,7 @@ import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { PageContent } from '@/components/features/knowledge/PageContent'
+import { KnowledgeBreadcrumbs } from '@/components/features/knowledge/KnowledgeBreadcrumbs'
 import { revalidatePath } from 'next/cache'
 import type { BlockDocument } from '@/lib/blocks/types'
 
@@ -110,27 +111,8 @@ export default async function KnowledgePageView({ params }: PageProps) {
       <SidebarInset>
         <SiteHeader />
 
-        {/* Slim header with breadcrumbs - 40px height */}
-        <div className="sticky top-0 z-10 flex h-10 items-center justify-between border-b border-border bg-background px-8">
-          {/* Breadcrumb */}
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Link
-              href={`/workspaces/${workspace.slug}/knowledge`}
-              className="hover:text-foreground transition-colors"
-            >
-              Knowledge Base
-            </Link>
-            <span>/</span>
-            <Link
-              href={`/workspaces/${workspace.slug}/knowledge/${space.slug}`}
-              className="hover:text-foreground transition-colors"
-            >
-              {space.name}
-            </Link>
-            <span>/</span>
-            <span className="text-foreground">{page.title}</span>
-          </div>
-        </div>
+        {/* Breadcrumbs with current page */}
+        <KnowledgeBreadcrumbs workspace={workspace} space={space} currentPage={page} />
 
         {/* Main content - immersive full-width layout */}
         <div className="flex-1 overflow-y-auto">
@@ -178,16 +160,9 @@ export default async function KnowledgePageView({ params }: PageProps) {
                           href={`/workspaces/${workspace.slug}/knowledge/${space.slug}/${child.slug}`}
                           className="block group"
                         >
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-foreground font-serif-body group-hover:underline">
-                              {child.title}
-                            </span>
-                            {child.status === 'draft' && (
-                              <span className="text-xs text-muted-foreground">
-                                (Draft)
-                              </span>
-                            )}
-                          </div>
+                          <span className="text-foreground font-serif-body group-hover:underline">
+                            {child.title}
+                          </span>
                         </Link>
                       )
                     })}

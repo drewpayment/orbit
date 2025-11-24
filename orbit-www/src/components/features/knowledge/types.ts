@@ -29,4 +29,8 @@ export interface PageTreeNodeProps {
   workspaceSlug?: string
   spaceSlug?: string
   isDragging?: boolean
+  onMoveClick?: (pageId: string) => void
+  onDeleteClick?: (pageId: string) => void
+  onDuplicateClick?: (pageId: string) => Promise<void>
+  onAddSubPageClick?: (pageId: string) => void
 }
