@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { ChevronRight, FileText, Folder, GripVertical } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -10,6 +10,7 @@ import { PageContextMenu } from './PageContextMenu'
 import type { PageTreeNodeProps } from './types'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { renamePage } from '@/app/actions/knowledge'
 
 export function PageTreeNode({
   node,
@@ -23,6 +24,11 @@ export function PageTreeNode({
   const hasChildren = node.children.length > 0
   const isCurrentPage = node.id === currentPageId
   const [isOpen, setIsOpen] = useState(false)
+
+  // Inline rename state
+  const [isRenaming, setIsRenaming] = useState(false)
+  const [newTitle, setNewTitle] = useState(node.title)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const {
     attributes,
@@ -46,6 +52,14 @@ export function PageTreeNode({
     }
   }, [currentPageId, isCurrentPage, node.children])
 
+  // Focus input when renaming starts
+  useEffect(() => {
+    if (isRenaming && inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [isRenaming])
+
   const handleClick = (e: React.MouseEvent) => {
     if (onPageSelect) {
       e.preventDefault()
@@ -53,9 +67,17 @@ export function PageTreeNode({
     }
   }
 
-  // Context menu handlers (placeholder implementations)
+  // Context menu handlers
   const handleRename = (pageId: string) => {
-    console.log('Rename:', pageId)
+    setIsRenaming(true)
+    setNewTitle(node.title)
+  }
+
+  const saveRename = async () => {
+    if (newTitle.trim() && newTitle !== node.title) {
+      await renamePage(node.id, newTitle, workspaceSlug, spaceSlug as string)
+    }
+    setIsRenaming(false)
   }
 
   const handleMove = (pageId: string) => {
@@ -107,7 +129,26 @@ export function PageTreeNode({
       ) : (
         <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />
       )}
-      <span className="truncate flex-1">{node.title}</span>
+      {isRenaming ? (
+        <input
+          ref={inputRef}
+          type="text"
+          value={newTitle}
+          onChange={(e) => setNewTitle(e.target.value)}
+          onBlur={saveRename}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') saveRename()
+            if (e.key === 'Escape') {
+              setIsRenaming(false)
+              setNewTitle(node.title)
+            }
+          }}
+          className="px-2 py-1 text-sm bg-background border border-border rounded flex-1 min-w-0"
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <span className="truncate flex-1">{node.title}</span>
+      )}
     </div>
   )
 
