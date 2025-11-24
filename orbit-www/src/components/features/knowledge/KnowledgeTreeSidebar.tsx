@@ -10,6 +10,7 @@ import { MovePageModal } from './MovePageModal'
 import { DeletePageDialog } from './DeletePageDialog'
 import { createKnowledgePage, movePage, duplicatePage, deletePage } from '@/app/actions/knowledge'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import type { KnowledgePage, KnowledgeSpace } from '@/payload-types'
 
 export interface KnowledgeTreeSidebarProps {
@@ -59,18 +60,36 @@ export function KnowledgeTreeSidebar({
   }
 
   const handleMove = async (pageId: string, newParentId: string | null) => {
-    await movePage(pageId, newParentId, workspaceSlug, space.slug as string)
-    router.refresh()
+    try {
+      await movePage(pageId, newParentId, workspaceSlug, space.slug as string)
+      router.refresh()
+      toast.success('Page moved successfully')
+    } catch (error) {
+      console.error('Failed to move page:', error)
+      toast.error('Failed to move page. Please try again.')
+    }
   }
 
   const handleDuplicate = async (pageId: string) => {
-    const duplicate = await duplicatePage(pageId, workspaceSlug, space.slug as string)
-    router.push(`/workspaces/${workspaceSlug}/knowledge/${space.slug}/${duplicate.slug}`)
+    try {
+      const duplicate = await duplicatePage(pageId, workspaceSlug, space.slug as string)
+      router.push(`/workspaces/${workspaceSlug}/knowledge/${space.slug}/${duplicate.slug}`)
+      toast.success('Page duplicated successfully')
+    } catch (error) {
+      console.error('Failed to duplicate page:', error)
+      toast.error('Failed to duplicate page. Please try again.')
+    }
   }
 
   const handleDelete = async (pageId: string) => {
-    await deletePage(pageId, workspaceSlug, space.slug as string)
-    router.push(`/workspaces/${workspaceSlug}/knowledge/${space.slug}`)
+    try {
+      await deletePage(pageId, workspaceSlug, space.slug as string)
+      router.push(`/workspaces/${workspaceSlug}/knowledge/${space.slug}`)
+      toast.success('Page deleted successfully')
+    } catch (error) {
+      console.error('Failed to delete page:', error)
+      toast.error('Failed to delete page. Please try again.')
+    }
   }
 
   const handleAddSubPage = (pageId: string) => {
