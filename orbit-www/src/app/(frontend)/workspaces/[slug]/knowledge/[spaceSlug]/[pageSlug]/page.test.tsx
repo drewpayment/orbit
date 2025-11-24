@@ -1,5 +1,5 @@
-import { render } from '@testing-library/react'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, cleanup } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // Mock Next.js modules
 vi.mock('next/navigation', () => ({
@@ -63,6 +63,10 @@ vi.mock('@/components/features/knowledge/KnowledgeBreadcrumbs', () => ({
 describe('KnowledgePageView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    cleanup()
   })
 
   it('should render breadcrumbs with current page', async () => {
@@ -175,10 +179,10 @@ describe('KnowledgePageView', () => {
 
     const { default: KnowledgePageView } = await import('./page')
 
-    const { getByTestId } = render(await KnowledgePageView({ params }))
+    const { getAllByTestId } = render(await KnowledgePageView({ params }))
 
-    // Should render page content
-    const pageContent = getByTestId('page-content')
+    // Should render page content (use getAllByTestId to handle potential multiple renders)
+    const pageContent = getAllByTestId('page-content')[0]
     expect(pageContent).toBeTruthy()
     expect(pageContent.getAttribute('data-page-title')).toBe('Test Page Title')
   })

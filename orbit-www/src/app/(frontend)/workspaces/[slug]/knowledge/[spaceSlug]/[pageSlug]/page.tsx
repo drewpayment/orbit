@@ -160,16 +160,9 @@ export default async function KnowledgePageView({ params }: PageProps) {
                           href={`/workspaces/${workspace.slug}/knowledge/${space.slug}/${child.slug}`}
                           className="block group"
                         >
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-foreground font-serif-body group-hover:underline">
-                              {child.title}
-                            </span>
-                            {child.status === 'draft' && (
-                              <span className="text-xs text-muted-foreground">
-                                (Draft)
-                              </span>
-                            )}
-                          </div>
+                          <span className="text-foreground font-serif-body group-hover:underline">
+                            {child.title}
+                          </span>
                         </Link>
                       )
                     })}
