@@ -1,5 +1,13 @@
 import Link from 'next/link'
 import type { Workspace, KnowledgeSpace, KnowledgePage } from '@/payload-types'
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb'
 
 interface KnowledgeBreadcrumbsProps {
   workspace: Workspace
@@ -14,27 +22,37 @@ export function KnowledgeBreadcrumbs({
 }: KnowledgeBreadcrumbsProps) {
   return (
     <div className="sticky top-0 z-10 flex h-10 items-center border-b border-border bg-background px-8">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Link
-          href={`/workspaces/${workspace.slug}/knowledge`}
-          className="hover:text-foreground transition-colors"
-        >
-          Knowledge Base
-        </Link>
-        <span>/</span>
-        <Link
-          href={`/workspaces/${workspace.slug}/knowledge/${space.slug}`}
-          className="hover:text-foreground transition-colors"
-        >
-          {space.name}
-        </Link>
-        {currentPage && (
-          <>
-            <span>/</span>
-            <span className="text-foreground">{currentPage.title}</span>
-          </>
-        )}
-      </div>
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href={`/workspaces/${workspace.slug}/knowledge`}>
+                Knowledge Base
+              </Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            {currentPage ? (
+              <BreadcrumbLink asChild>
+                <Link href={`/workspaces/${workspace.slug}/knowledge/${space.slug}`}>
+                  {space.name}
+                </Link>
+              </BreadcrumbLink>
+            ) : (
+              <BreadcrumbPage>{space.name}</BreadcrumbPage>
+            )}
+          </BreadcrumbItem>
+          {currentPage && (
+            <>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>{currentPage.title}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </>
+          )}
+        </BreadcrumbList>
+      </Breadcrumb>
     </div>
   )
 }
