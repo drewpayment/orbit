@@ -39,6 +39,14 @@ vi.mock('@/components/features/knowledge/KnowledgeTreeSidebar', () => ({
   ),
 }))
 
+vi.mock('@/components/features/knowledge/KnowledgeBreadcrumbs', () => ({
+  KnowledgeBreadcrumbs: ({ workspace, space, currentPage }: any) => (
+    <div data-testid="knowledge-breadcrumbs" data-workspace={workspace.slug} data-space={space.slug}>
+      Knowledge Breadcrumbs
+    </div>
+  ),
+}))
+
 describe('KnowledgeSpaceLayout', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -51,6 +59,7 @@ describe('KnowledgeSpaceLayout', () => {
     mockGetPayload.mockResolvedValue({
       find: vi.fn()
         .mockResolvedValueOnce({ docs: [{ id: '1', slug: 'test-workspace', name: 'Test' }] })
+        .mockResolvedValueOnce({ docs: [{ id: 'user-1' }] })
         .mockResolvedValueOnce({ docs: [{ id: '2', slug: 'test-space', name: 'Test Space' }] })
         .mockResolvedValueOnce({ docs: [] }),
     })
@@ -77,6 +86,7 @@ describe('KnowledgeSpaceLayout', () => {
     mockGetPayload.mockResolvedValue({
       find: vi.fn()
         .mockResolvedValueOnce({ docs: [{ id: '1', slug: 'test-workspace', name: 'Test Workspace' }] })
+        .mockResolvedValueOnce({ docs: [{ id: 'user-1' }] })
         .mockResolvedValueOnce({ docs: [{ id: '2', slug: 'test-space', name: 'Test Space' }] })
         .mockResolvedValueOnce({ docs: [] }),
     })
@@ -94,5 +104,33 @@ describe('KnowledgeSpaceLayout', () => {
     const treeSidebars = document.querySelectorAll('[data-testid="knowledge-tree-sidebar"]')
     expect(treeSidebars.length).toBeGreaterThan(0)
     expect(treeSidebars[0].getAttribute('data-space-name')).toBe('Test Space')
+  })
+
+  it('should render KnowledgeBreadcrumbs with correct props', async () => {
+    const { getPayload } = await import('payload')
+    const mockGetPayload = getPayload as any
+
+    mockGetPayload.mockResolvedValue({
+      find: vi.fn()
+        .mockResolvedValueOnce({ docs: [{ id: '1', slug: 'test-workspace', name: 'Test Workspace' }] })
+        .mockResolvedValueOnce({ docs: [{ id: 'user-1' }] })
+        .mockResolvedValueOnce({ docs: [{ id: '2', slug: 'test-space', name: 'Test Space' }] })
+        .mockResolvedValueOnce({ docs: [] }),
+    })
+
+    const KnowledgeSpaceLayout = (await import('./layout')).default
+
+    render(
+      await KnowledgeSpaceLayout({
+        children: <div>Test Content</div>,
+        params: Promise.resolve({ slug: 'test-workspace', spaceSlug: 'test-space' }),
+      })
+    )
+
+    // Should render KnowledgeBreadcrumbs
+    const breadcrumbs = document.querySelectorAll('[data-testid="knowledge-breadcrumbs"]')
+    expect(breadcrumbs.length).toBeGreaterThan(0)
+    expect(breadcrumbs[0].getAttribute('data-workspace')).toBe('test-workspace')
+    expect(breadcrumbs[0].getAttribute('data-space')).toBe('test-space')
   })
 })

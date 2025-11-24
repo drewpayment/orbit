@@ -5,6 +5,7 @@ import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { KnowledgeTreeSidebar } from '@/components/features/knowledge/KnowledgeTreeSidebar'
+import { KnowledgeBreadcrumbs } from '@/components/features/knowledge/KnowledgeBreadcrumbs'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -79,10 +80,7 @@ export default async function KnowledgeSpaceLayout({ children, params }: LayoutP
           />
 
           <div className="flex-1 flex flex-col">
-            {/* TODO: Add KnowledgeBreadcrumbs */}
-            <div className="h-10 border-b border-border">
-              Breadcrumbs placeholder
-            </div>
+            <KnowledgeBreadcrumbs workspace={workspace} space={space} />
 
             <div className="flex-1 overflow-y-auto">
               {children}
