@@ -11,6 +11,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { toast } from 'sonner'
 import type { KnowledgePage } from '@/payload-types'
 
 interface DeletePageDialogProps {
@@ -54,6 +55,9 @@ export function DeletePageDialog({
     try {
       await onDelete(page.id)
       onOpenChange(false)
+    } catch (error) {
+      console.error('Failed to delete page:', error)
+      toast.error('Failed to delete page. Please try again.')
     } finally {
       setIsDeleting(false)
     }
@@ -68,7 +72,7 @@ export function DeletePageDialog({
           </AlertDialogTitle>
           <AlertDialogDescription className="space-y-2">
             <span className="block">
-              Are you sure you want to delete "{page.title}"?
+              Are you sure you want to delete <strong>{page.title}</strong>?
             </span>
             <span className="block text-sm">
               This action cannot be undone. The page will be permanently deleted.

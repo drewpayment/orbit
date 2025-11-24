@@ -138,7 +138,7 @@ describe('DeletePageDialog', () => {
 
   it('should disable delete button during operation', async () => {
     const user = userEvent.setup()
-    const mockOnDelete = vi.fn(() => new Promise(resolve => setTimeout(resolve, 100)))
+    const mockOnDelete = vi.fn((): Promise<void> => new Promise(resolve => setTimeout(resolve, 100)))
 
     render(
       <DeletePageDialog
