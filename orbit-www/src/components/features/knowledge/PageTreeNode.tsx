@@ -6,6 +6,7 @@ import { ChevronRight, FileText, Folder, GripVertical } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Button } from '@/components/ui/button'
+import { PageContextMenu } from './PageContextMenu'
 import type { PageTreeNodeProps } from './types'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -52,6 +53,27 @@ export function PageTreeNode({
     }
   }
 
+  // Context menu handlers (placeholder implementations)
+  const handleRename = (pageId: string) => {
+    console.log('Rename:', pageId)
+  }
+
+  const handleMove = (pageId: string) => {
+    console.log('Move:', pageId)
+  }
+
+  const handleAddSubPage = (pageId: string) => {
+    console.log('Add sub-page:', pageId)
+  }
+
+  const handleDuplicate = async (pageId: string) => {
+    console.log('Duplicate:', pageId)
+  }
+
+  const handleDelete = (pageId: string) => {
+    console.log('Delete:', pageId)
+  }
+
   // Build the page URL
   const pageUrl = workspaceSlug && spaceSlug
     ? `/workspaces/${workspaceSlug}/knowledge/${spaceSlug}/${node.slug}`
@@ -92,13 +114,22 @@ export function PageTreeNode({
   if (!hasChildren) {
     return (
       <div ref={setNodeRef} style={style}>
-        <Link
-          href={pageUrl}
-          onClick={handleClick}
-          className="block"
+        <PageContextMenu
+          page={node as any}
+          onRename={handleRename}
+          onMove={handleMove}
+          onAddSubPage={handleAddSubPage}
+          onDuplicate={handleDuplicate}
+          onDelete={handleDelete}
         >
-          {content}
-        </Link>
+          <Link
+            href={pageUrl}
+            onClick={handleClick}
+            className="block"
+          >
+            {content}
+          </Link>
+        </PageContextMenu>
       </div>
     )
   }
@@ -125,13 +156,22 @@ export function PageTreeNode({
                 />
               </Button>
             </CollapsibleTrigger>
-            <Link
-              href={pageUrl}
-              onClick={handleClick}
-              className="flex-1"
+            <PageContextMenu
+              page={node as any}
+              onRename={handleRename}
+              onMove={handleMove}
+              onAddSubPage={handleAddSubPage}
+              onDuplicate={handleDuplicate}
+              onDelete={handleDelete}
             >
-              {content}
-            </Link>
+              <Link
+                href={pageUrl}
+                onClick={handleClick}
+                className="flex-1"
+              >
+                {content}
+              </Link>
+            </PageContextMenu>
           </div>
           <CollapsibleContent>
             <div className="space-y-1">
