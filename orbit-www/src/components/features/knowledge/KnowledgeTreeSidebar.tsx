@@ -1,0 +1,128 @@
+'use client'
+
+import { useMemo, useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Plus, FileText } from 'lucide-react'
+import { PageTreeNode } from './PageTreeNode'
+import { buildPageTree } from '@/lib/knowledge/tree-builder'
+import { CreatePageModal } from './CreatePageModal'
+import { createKnowledgePage } from '@/app/actions/knowledge'
+import { useRouter } from 'next/navigation'
+import type { KnowledgePage, KnowledgeSpace } from '@/payload-types'
+
+export interface KnowledgeTreeSidebarProps {
+  space: KnowledgeSpace
+  pages: KnowledgePage[]
+  currentPageId?: string
+  workspaceSlug: string
+  userId?: string
+}
+
+export function KnowledgeTreeSidebar({
+  space,
+  pages,
+  currentPageId,
+  workspaceSlug,
+  userId,
+}: KnowledgeTreeSidebarProps) {
+  const tree = useMemo(() => buildPageTree(pages), [pages])
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const router = useRouter()
+
+  const handleCreatePage = async (data: {
+    title: string
+    slug: string
+    parentPageId?: string
+  }) => {
+    if (!userId) {
+      alert('You must be logged in to create pages.')
+      return
+    }
+
+    const newPage = await createKnowledgePage({
+      title: data.title,
+      slug: data.slug,
+      knowledgeSpaceId: space.id,
+      parentPageId: data.parentPageId,
+      userId,
+      workspaceSlug,
+      spaceSlug: space.slug as string,
+    })
+
+    // Navigate to the new page
+    router.push(`/workspaces/${workspaceSlug}/knowledge/${space.slug}/${newPage.slug}`)
+  }
+
+  return (
+    <aside className="w-64 border-r border-border bg-background flex flex-col">
+      {/* Header with space info */}
+      <div className="p-4 border-b border-border/40">
+        <div className="flex items-center gap-2 mb-2">
+          {space.icon && <span className="text-2xl">{space.icon}</span>}
+          <h2 className="font-serif-display font-semibold text-lg">
+            {space.name}
+          </h2>
+        </div>
+        {space.description && (
+          <p className="text-xs text-muted-foreground">
+            {space.description}
+          </p>
+        )}
+      </div>
+
+      {/* Tree navigation */}
+      <nav
+        className="flex-1 overflow-y-auto p-2"
+        role="tree"
+        aria-label={`${space.name} knowledge pages`}
+      >
+        {tree.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center p-4">
+            <FileText className="h-12 w-12 text-muted-foreground mb-2" />
+            <p className="text-sm text-muted-foreground mb-4">
+              No pages yet. Create your first page to get started.
+            </p>
+            <Button size="sm" onClick={() => setIsCreateModalOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              New Page
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {tree.map(node => (
+              <PageTreeNode
+                key={node.id}
+                node={node}
+                currentPageId={currentPageId}
+                depth={0}
+                workspaceSlug={workspaceSlug}
+                spaceSlug={space.slug}
+                isDragging={false}
+              />
+            ))}
+          </div>
+        )}
+      </nav>
+
+      {/* Bottom actions */}
+      <div className="p-2 border-t border-border/40">
+        <Button
+          variant="ghost"
+          className="w-full justify-start"
+          onClick={() => setIsCreateModalOpen(true)}
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          New Page
+        </Button>
+      </div>
+
+      <CreatePageModal
+        open={isCreateModalOpen}
+        onOpenChange={setIsCreateModalOpen}
+        knowledgeSpaceId={space.id}
+        pages={pages}
+        onCreatePage={handleCreatePage}
+      />
+    </aside>
+  )
+}

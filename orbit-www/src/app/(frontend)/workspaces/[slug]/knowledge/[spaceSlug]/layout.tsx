@@ -4,6 +4,7 @@ import config from '@payload-config'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
+import { KnowledgeTreeSidebar } from '@/components/features/knowledge/KnowledgeTreeSidebar'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -63,10 +64,11 @@ export default async function KnowledgeSpaceLayout({ children, params }: LayoutP
         <SiteHeader />
 
         <div className="flex h-[calc(100vh-64px)]">
-          {/* TODO: Add KnowledgeTreeSidebar */}
-          <div className="w-64 border-r border-border bg-background">
-            Sidebar placeholder
-          </div>
+          <KnowledgeTreeSidebar
+            space={space}
+            pages={pages}
+            workspaceSlug={slug}
+          />
 
           <div className="flex-1 flex flex-col">
             {/* TODO: Add KnowledgeBreadcrumbs */}
