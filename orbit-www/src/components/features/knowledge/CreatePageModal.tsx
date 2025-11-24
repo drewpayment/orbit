@@ -146,13 +146,11 @@ export function CreatePageModal({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">No parent (root page)</SelectItem>
-                  {pages
-                    .filter((p) => p.status === 'published')
-                    .map((page) => (
-                      <SelectItem key={page.id} value={page.id}>
-                        {page.title}
-                      </SelectItem>
-                    ))}
+                  {pages.map((page) => (
+                    <SelectItem key={page.id} value={page.id}>
+                      {page.title}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-gray-500">

@@ -31,6 +31,13 @@ export default async function KnowledgeSpaceLayout({ children, params }: LayoutP
 
   const workspace = workspaceResult.docs[0]
 
+  // Fetch a user for temporary auth (TODO: Replace with actual auth session)
+  const usersResult = await payload.find({
+    collection: 'users',
+    limit: 1,
+  })
+  const tempUserId = usersResult.docs[0]?.id
+
   // Fetch knowledge space
   const spaceResult = await payload.find({
     collection: 'knowledge-spaces',
@@ -68,6 +75,7 @@ export default async function KnowledgeSpaceLayout({ children, params }: LayoutP
             space={space}
             pages={pages}
             workspaceSlug={slug}
+            userId={tempUserId}
           />
 
           <div className="flex-1 flex flex-col">

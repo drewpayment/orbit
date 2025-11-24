@@ -61,8 +61,7 @@ export function PageTreeNode({
     <div
       className={cn(
         'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-accent transition-colors group',
-        isCurrentPage && 'bg-accent font-medium',
-        node.status === 'draft' && 'text-muted-foreground italic'
+        isCurrentPage && 'bg-accent font-medium'
       )}
       style={{ paddingLeft: `${depth * 12 + 8}px` }}
       role="treeitem"
@@ -87,9 +86,6 @@ export function PageTreeNode({
         <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />
       )}
       <span className="truncate flex-1">{node.title}</span>
-      {node.status === 'draft' && (
-        <span className="text-xs text-muted-foreground">(draft)</span>
-      )}
     </div>
   )
 
