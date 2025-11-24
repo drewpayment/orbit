@@ -3,6 +3,13 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { SpaceNavigator } from './SpaceNavigator';
 import type { KnowledgeSpace, KnowledgePage } from '@/payload-types';
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: vi.fn(),
+    refresh: vi.fn(),
+  }),
+}))
+
 describe('SpaceNavigator', () => {
   const mockWorkspaceSlug = 'test-workspace';
   const mockKnowledgeSpace: KnowledgeSpace = {
@@ -196,13 +203,13 @@ describe('SpaceNavigator', () => {
     expect(screen.getByTestId('space-navigator-loading')).toBeInTheDocument();
   });
 
-  it('displays published and draft counts correctly', () => {
+  it('does not display status badges or counts', () => {
     const pagesWithDrafts: KnowledgePage[] = [
       ...mockPages,
       {
         id: 'page-4',
-        title: 'Draft Page',
-        slug: 'draft-page',
+        title: 'Another Page',
+        slug: 'another-page',
         status: 'draft',
         sortOrder: 2,
         spaceId: 'space-1',
@@ -221,8 +228,9 @@ describe('SpaceNavigator', () => {
       />
     );
 
-    // Look for the count text in the footer section
-    expect(screen.getAllByText('3 published')[0]).toBeInTheDocument();
-    expect(screen.getAllByText('1 drafts')[0]).toBeInTheDocument();
+    // Verify no status counts are displayed (like "3 published" or "1 drafts")
+    expect(screen.queryByText(/\d+ published/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\d+ draft/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\d+ archived/i)).not.toBeInTheDocument();
   });
 });
