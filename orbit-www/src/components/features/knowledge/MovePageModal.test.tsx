@@ -1,5 +1,6 @@
-import { render, screen, cleanup } from '@testing-library/react'
+import { render, screen, cleanup, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, afterEach } from 'vitest'
+import userEvent from '@testing-library/user-event'
 import { MovePageModal } from './MovePageModal'
 
 describe('MovePageModal', () => {
@@ -96,5 +97,122 @@ describe('MovePageModal', () => {
     expect(screen.queryByText('Grandchild')).not.toBeInTheDocument()
     // Should show other pages
     expect(screen.getByText('Other')).toBeInTheDocument()
+  })
+
+  it('should allow selecting a parent page', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <MovePageModal
+        open={true}
+        onOpenChange={vi.fn()}
+        currentPage={mockPages[0] as any}
+        pages={mockPages as any}
+        onMove={vi.fn()}
+      />
+    )
+
+    const page2Button = screen.getByText('Page 2')
+    await user.click(page2Button)
+
+    // Button should show selected state (has bg-accent class)
+    expect(page2Button.className).toContain('bg-accent')
+  })
+
+  it('should call onMove with selected parent when Move button clicked', async () => {
+    const user = userEvent.setup()
+    const mockOnMove = vi.fn().mockResolvedValue(undefined)
+
+    render(
+      <MovePageModal
+        open={true}
+        onOpenChange={vi.fn()}
+        currentPage={mockPages[0] as any}
+        pages={mockPages as any}
+        onMove={mockOnMove}
+      />
+    )
+
+    // Select Page 2 as parent
+    await user.click(screen.getByText('Page 2'))
+
+    // Click Move Page button
+    await user.click(screen.getByRole('button', { name: 'Move Page' }))
+
+    // Should call onMove with current page ID and selected parent ID
+    await waitFor(() => {
+      expect(mockOnMove).toHaveBeenCalledWith('1', '2')
+    })
+  })
+
+  it('should disable move button during operation', async () => {
+    const user = userEvent.setup()
+    const mockOnMove = vi.fn(() => new Promise(resolve => setTimeout(resolve, 100)))
+
+    render(
+      <MovePageModal
+        open={true}
+        onOpenChange={vi.fn()}
+        currentPage={mockPages[0] as any}
+        pages={mockPages as any}
+        onMove={mockOnMove}
+      />
+    )
+
+    // Select a parent
+    await user.click(screen.getByText('Page 2'))
+
+    // Click Move Page button
+    const moveButton = screen.getByRole('button', { name: 'Move Page' })
+    await user.click(moveButton)
+
+    // Button should be disabled and show "Moving..." text
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Moving...' })).toBeDisabled()
+    })
+  })
+
+  it('should close modal after successful move', async () => {
+    const user = userEvent.setup()
+    const mockOnMove = vi.fn().mockResolvedValue(undefined)
+    const mockOnOpenChange = vi.fn()
+
+    render(
+      <MovePageModal
+        open={true}
+        onOpenChange={mockOnOpenChange}
+        currentPage={mockPages[0] as any}
+        pages={mockPages as any}
+        onMove={mockOnMove}
+      />
+    )
+
+    // Select a parent and move
+    await user.click(screen.getByText('Page 2'))
+    await user.click(screen.getByRole('button', { name: 'Move Page' }))
+
+    // Should close modal after successful move
+    await waitFor(() => {
+      expect(mockOnOpenChange).toHaveBeenCalledWith(false)
+    })
+  })
+
+  it('should call onOpenChange when Cancel clicked', async () => {
+    const user = userEvent.setup()
+    const mockOnOpenChange = vi.fn()
+
+    render(
+      <MovePageModal
+        open={true}
+        onOpenChange={mockOnOpenChange}
+        currentPage={mockPages[0] as any}
+        pages={mockPages as any}
+        onMove={vi.fn()}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(mockOnOpenChange).toHaveBeenCalledWith(false)
   })
 })

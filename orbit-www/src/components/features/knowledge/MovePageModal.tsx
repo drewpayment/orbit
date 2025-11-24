@@ -4,11 +4,13 @@ import { useState } from 'react'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import type { KnowledgePage } from '@/payload-types'
 
 interface MovePageModalProps {
@@ -75,16 +77,21 @@ export function MovePageModal({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-serif-display">Move Page</DialogTitle>
+          <DialogDescription>
+            Select a new parent page for "{currentPage.title}"
+          </DialogDescription>
         </DialogHeader>
 
         <div className="py-4">
-          <p className="text-sm text-muted-foreground mb-4">
-            Select a new parent page for "{currentPage.title}"
-          </p>
-
-          <div className="h-64 border border-border/40 rounded-md overflow-y-auto">
-            <div className="p-2">
+          <ScrollArea className="h-64">
+            <div
+              className="p-2"
+              role="listbox"
+              aria-label="Available parent pages"
+            >
               <button
+                role="option"
+                aria-selected={selectedParentId === null}
                 onClick={() => setSelectedParentId(null)}
                 className={`w-full text-left px-3 py-2 rounded hover:bg-accent transition-colors ${
                   selectedParentId === null ? 'bg-accent' : ''
@@ -96,6 +103,8 @@ export function MovePageModal({
               {availablePages.map((page) => (
                 <button
                   key={page.id}
+                  role="option"
+                  aria-selected={selectedParentId === page.id}
                   onClick={() => setSelectedParentId(page.id)}
                   className={`w-full text-left px-3 py-2 rounded hover:bg-accent transition-colors ${
                     selectedParentId === page.id ? 'bg-accent' : ''
@@ -105,7 +114,7 @@ export function MovePageModal({
                 </button>
               ))}
             </div>
-          </div>
+          </ScrollArea>
         </div>
 
         <DialogFooter>
