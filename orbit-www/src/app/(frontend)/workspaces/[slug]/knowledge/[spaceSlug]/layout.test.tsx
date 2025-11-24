@@ -39,13 +39,6 @@ vi.mock('@/components/features/knowledge/KnowledgeTreeSidebar', () => ({
   ),
 }))
 
-vi.mock('@/components/features/knowledge/KnowledgeBreadcrumbs', () => ({
-  KnowledgeBreadcrumbs: ({ workspace, space, currentPage }: any) => (
-    <div data-testid="knowledge-breadcrumbs" data-workspace={workspace.slug} data-space={space.slug}>
-      Knowledge Breadcrumbs
-    </div>
-  ),
-}))
 
 describe('KnowledgeSpaceLayout', () => {
   beforeEach(() => {
@@ -106,7 +99,7 @@ describe('KnowledgeSpaceLayout', () => {
     expect(treeSidebars[0].getAttribute('data-space-name')).toBe('Test Space')
   })
 
-  it('should render KnowledgeBreadcrumbs with correct props', async () => {
+  it('should render children content', async () => {
     const { getPayload } = await import('payload')
     const mockGetPayload = getPayload as any
 
@@ -120,17 +113,16 @@ describe('KnowledgeSpaceLayout', () => {
 
     const KnowledgeSpaceLayout = (await import('./layout')).default
 
-    render(
+    const { container } = render(
       await KnowledgeSpaceLayout({
-        children: <div>Test Content</div>,
+        children: <div data-testid="layout-children">Test Content</div>,
         params: Promise.resolve({ slug: 'test-workspace', spaceSlug: 'test-space' }),
       })
     )
 
-    // Should render KnowledgeBreadcrumbs
-    const breadcrumbs = document.querySelectorAll('[data-testid="knowledge-breadcrumbs"]')
-    expect(breadcrumbs.length).toBeGreaterThan(0)
-    expect(breadcrumbs[0].getAttribute('data-workspace')).toBe('test-workspace')
-    expect(breadcrumbs[0].getAttribute('data-space')).toBe('test-space')
+    // Should render children content (breadcrumbs are now in the page, not layout)
+    const childContent = container.querySelector('[data-testid="layout-children"]')
+    expect(childContent).toBeInTheDocument()
+    expect(childContent?.textContent).toBe('Test Content')
   })
 })
