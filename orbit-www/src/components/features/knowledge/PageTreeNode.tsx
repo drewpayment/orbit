@@ -20,6 +20,10 @@ export function PageTreeNode({
   workspaceSlug,
   spaceSlug,
   isDragging = false,
+  onMoveClick,
+  onDeleteClick,
+  onDuplicateClick,
+  onAddSubPageClick,
 }: PageTreeNodeProps) {
   const hasChildren = node.children.length > 0
   const isCurrentPage = node.id === currentPageId
@@ -81,19 +85,19 @@ export function PageTreeNode({
   }
 
   const handleMove = (pageId: string) => {
-    console.log('Move:', pageId)
+    onMoveClick?.(pageId)
   }
 
   const handleAddSubPage = (pageId: string) => {
-    console.log('Add sub-page:', pageId)
+    onAddSubPageClick?.(pageId)
   }
 
   const handleDuplicate = async (pageId: string) => {
-    console.log('Duplicate:', pageId)
+    await onDuplicateClick?.(pageId)
   }
 
   const handleDelete = (pageId: string) => {
-    console.log('Delete:', pageId)
+    onDeleteClick?.(pageId)
   }
 
   // Build the page URL
@@ -226,6 +230,10 @@ export function PageTreeNode({
                   workspaceSlug={workspaceSlug}
                   spaceSlug={spaceSlug}
                   isDragging={isDragging}
+                  onMoveClick={onMoveClick}
+                  onDeleteClick={onDeleteClick}
+                  onDuplicateClick={onDuplicateClick}
+                  onAddSubPageClick={onAddSubPageClick}
                 />
               ))}
             </div>

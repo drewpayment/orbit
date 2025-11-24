@@ -6,7 +6,9 @@ import { Plus, FileText } from 'lucide-react'
 import { PageTreeNode } from './PageTreeNode'
 import { buildPageTree } from '@/lib/knowledge/tree-builder'
 import { CreatePageModal } from './CreatePageModal'
-import { createKnowledgePage } from '@/app/actions/knowledge'
+import { MovePageModal } from './MovePageModal'
+import { DeletePageDialog } from './DeletePageDialog'
+import { createKnowledgePage, movePage, duplicatePage, deletePage } from '@/app/actions/knowledge'
 import { useRouter } from 'next/navigation'
 import type { KnowledgePage, KnowledgeSpace } from '@/payload-types'
 
@@ -27,6 +29,9 @@ export function KnowledgeTreeSidebar({
 }: KnowledgeTreeSidebarProps) {
   const tree = useMemo(() => buildPageTree(pages), [pages])
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [createModalParentId, setCreateModalParentId] = useState<string | undefined>(undefined)
+  const [movePageId, setMovePageId] = useState<string | null>(null)
+  const [deletePageId, setDeletePageId] = useState<string | null>(null)
   const router = useRouter()
 
   const handleCreatePage = async (data: {
@@ -51,6 +56,26 @@ export function KnowledgeTreeSidebar({
 
     // Navigate to the new page
     router.push(`/workspaces/${workspaceSlug}/knowledge/${space.slug}/${newPage.slug}`)
+  }
+
+  const handleMove = async (pageId: string, newParentId: string | null) => {
+    await movePage(pageId, newParentId, workspaceSlug, space.slug as string)
+    router.refresh()
+  }
+
+  const handleDuplicate = async (pageId: string) => {
+    const duplicate = await duplicatePage(pageId, workspaceSlug, space.slug as string)
+    router.push(`/workspaces/${workspaceSlug}/knowledge/${space.slug}/${duplicate.slug}`)
+  }
+
+  const handleDelete = async (pageId: string) => {
+    await deletePage(pageId, workspaceSlug, space.slug as string)
+    router.push(`/workspaces/${workspaceSlug}/knowledge/${space.slug}`)
+  }
+
+  const handleAddSubPage = (pageId: string) => {
+    setCreateModalParentId(pageId)
+    setIsCreateModalOpen(true)
   }
 
   return (
@@ -98,6 +123,10 @@ export function KnowledgeTreeSidebar({
                 workspaceSlug={workspaceSlug}
                 spaceSlug={space.slug}
                 isDragging={false}
+                onMoveClick={setMovePageId}
+                onDeleteClick={setDeletePageId}
+                onDuplicateClick={handleDuplicate}
+                onAddSubPageClick={handleAddSubPage}
               />
             ))}
           </div>
@@ -118,11 +147,33 @@ export function KnowledgeTreeSidebar({
 
       <CreatePageModal
         open={isCreateModalOpen}
-        onOpenChange={setIsCreateModalOpen}
+        onOpenChange={(open) => {
+          setIsCreateModalOpen(open)
+          if (!open) setCreateModalParentId(undefined)
+        }}
         knowledgeSpaceId={space.id}
         pages={pages}
         onCreatePage={handleCreatePage}
       />
+
+      {movePageId && pages.find(p => p.id === movePageId) && (
+        <MovePageModal
+          open={!!movePageId}
+          onOpenChange={() => setMovePageId(null)}
+          currentPage={pages.find(p => p.id === movePageId)!}
+          pages={pages}
+          onMove={handleMove}
+        />
+      )}
+
+      {deletePageId && pages.find(p => p.id === deletePageId) && (
+        <DeletePageDialog
+          open={!!deletePageId}
+          onOpenChange={() => setDeletePageId(null)}
+          page={pages.find(p => p.id === deletePageId)!}
+          onDelete={handleDelete}
+        />
+      )}
     </aside>
   )
 }
