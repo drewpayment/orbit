@@ -111,6 +111,7 @@ export function KnowledgeTreeSidebar({
   const handleMove = async (pageId: string, newParentId: string | null) => {
     try {
       await movePage(pageId, newParentId, workspaceSlug, space.slug as string)
+      setMovePageId(null) // Close modal before refresh
       router.refresh()
       toast.success('Page moved successfully')
     } catch (error) {
