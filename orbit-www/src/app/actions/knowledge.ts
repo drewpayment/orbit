@@ -141,7 +141,7 @@ export async function updatePageSortOrder(
 
   const payload = await getPayload({ config })
 
-  // Fetch both pages
+  // Fetch both pages to get their parent
   const activePage = await payload.findByID({
     collection: 'knowledge-pages',
     id: activePageId,
@@ -152,21 +152,49 @@ export async function updatePageSortOrder(
     id: overPageId,
   })
 
-  // Swap sort orders
-  const activeSortOrder = activePage.sortOrder || 0
-  const overSortOrder = overPage.sortOrder || 0
+  // Get parent ID (handle both string and object formats)
+  const getParentId = (page: any): string | null => {
+    if (!page.parentPage) return null
+    if (typeof page.parentPage === 'string') return page.parentPage
+    if (typeof page.parentPage === 'object' && page.parentPage.id) return page.parentPage.id
+    return null
+  }
 
-  await payload.update({
+  const parentId = getParentId(activePage)
+
+  // Get all sibling pages (same parent)
+  const siblings = await payload.find({
     collection: 'knowledge-pages',
-    id: activePageId,
-    data: { sortOrder: overSortOrder },
+    where: {
+      knowledgeSpace: { equals: activePage.knowledgeSpace },
+      parentPage: parentId ? { equals: parentId } : { exists: false },
+    },
+    sort: 'sortOrder',
+    limit: 1000,
   })
 
-  await payload.update({
-    collection: 'knowledge-pages',
-    id: overPageId,
-    data: { sortOrder: activeSortOrder },
-  })
+  // Reorder: remove active page and insert at over page's position
+  const siblingList = siblings.docs.filter(p => p.id !== activePageId)
+  const overIndex = siblingList.findIndex(p => p.id === overPageId)
+
+  if (overIndex === -1) {
+    // Over page not found, append to end
+    siblingList.push(activePage)
+  } else {
+    // Insert before the over page
+    siblingList.splice(overIndex, 0, activePage)
+  }
+
+  // Update sort orders for all siblings
+  await Promise.all(
+    siblingList.map((page, index) =>
+      payload.update({
+        collection: 'knowledge-pages',
+        id: page.id,
+        data: { sortOrder: index },
+      })
+    )
+  )
 
   revalidatePath(`/workspaces/${workspaceSlug}/knowledge/${spaceSlug}`)
 }
