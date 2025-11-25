@@ -135,20 +135,21 @@ export function KnowledgeTreeSidebar({
     }
 
     // Prevent moving a page under itself or its descendants
-    const isDescendant = (parentId: string, childId: string): boolean => {
-      const parent = pages.find(p => p.id === parentId)
-      if (!parent) return false
+    const isDescendant = (checkNodeId: string, potentialAncestorId: string): boolean => {
+      const node = pages.find(p => p.id === checkNodeId)
+      if (!node) return false
 
-      const parentPageId = typeof parent.parentPage === 'object' && parent.parentPage
-        ? parent.parentPage.id
-        : parent.parentPage
+      const nodeParentId = typeof node.parentPage === 'object' && node.parentPage
+        ? node.parentPage.id
+        : node.parentPage
 
-      if (!parentPageId) return false
-      if (parentPageId === childId) return true
-      return isDescendant(parentPageId, childId)
+      if (!nodeParentId) return false
+      if (nodeParentId === potentialAncestorId) return true
+      return isDescendant(nodeParentId, potentialAncestorId)
     }
 
-    if (isDescendant(active.id as string, over.id as string)) {
+    // Check if we're trying to move a page under its own descendant (circular reference)
+    if (isDescendant(over.id as string, active.id as string)) {
       toast.error('Cannot move a page under itself or its descendants')
       return
     }
