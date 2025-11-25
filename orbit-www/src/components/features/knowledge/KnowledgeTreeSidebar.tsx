@@ -82,6 +82,10 @@ export function KnowledgeTreeSidebar({
   useEffect(() => {
     if (!movePageId && shouldRefresh.current) {
       shouldRefresh.current = false
+
+      // Manually remove pointer-events that Dialog leaves stuck on body
+      document.body.style.pointerEvents = ''
+
       // Use setTimeout to ensure modal portal is fully cleaned up
       setTimeout(() => {
         router.refresh()
