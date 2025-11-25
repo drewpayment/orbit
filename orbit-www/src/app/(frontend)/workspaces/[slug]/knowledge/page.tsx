@@ -104,6 +104,26 @@ export default async function KnowledgePage({ params }: PageProps) {
     }
   }
 
+  const getIconEmoji = (icon: string | undefined) => {
+    if (!icon) return '📚'
+
+    // If already an emoji, return as-is
+    if (icon.length <= 2) return icon
+
+    // Map common icon names to emojis
+    const iconMap: Record<string, string> = {
+      'book': '📖',
+      'docs': '📚',
+      'guide': '📘',
+      'wiki': '📝',
+      'notes': '📓',
+      'folder': '📁',
+      'document': '📄',
+    }
+
+    return iconMap[icon.toLowerCase()] || '📚'
+  }
+
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -154,7 +174,7 @@ export default async function KnowledgePage({ params }: PageProps) {
                             <CardHeader>
                               <div className="flex items-start justify-between mb-2">
                                 <div className="flex items-center gap-2">
-                                  {space.icon && <span className="text-2xl">{space.icon}</span>}
+                                  <span className="text-2xl">{getIconEmoji(space.icon)}</span>
                                   <CardTitle className="text-xl">{space.name}</CardTitle>
                                 </div>
                                 <Badge
