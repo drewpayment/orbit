@@ -38,7 +38,7 @@ export interface KnowledgeTreeSidebarProps {
   userId?: string
 }
 
-// Root level drop zone component
+// Root level drop zone component - invisible until dragging over it
 function RootDropZone() {
   const { setNodeRef, isOver } = useDroppable({
     id: 'root-drop-zone',
@@ -47,13 +47,17 @@ function RootDropZone() {
   return (
     <div
       ref={setNodeRef}
-      className={`mb-2 p-3 border-2 border-dashed rounded-md text-center text-xs transition-colors ${
+      className={`min-h-[50px] flex-1 transition-colors ${
         isOver
-          ? 'border-primary bg-primary/10 text-primary'
-          : 'border-border/40 text-muted-foreground hover:border-border hover:bg-accent/50'
+          ? 'bg-primary/10 border-2 border-dashed border-primary rounded-md mx-2 mb-2'
+          : ''
       }`}
     >
-      {isOver ? 'Drop to move to root level' : 'Drag here to move to root level'}
+      {isOver && (
+        <div className="flex items-center justify-center h-full text-xs text-primary font-medium">
+          Drop to move to root level
+        </div>
+      )}
     </div>
   )
 }
@@ -224,7 +228,7 @@ export function KnowledgeTreeSidebar({
         onDragEnd={handleDragEnd}
       >
         <nav
-          className="flex-1 overflow-y-auto p-2"
+          className="flex-1 overflow-y-auto flex flex-col p-2"
           role="tree"
           aria-label={`${space.name} knowledge pages`}
         >
@@ -240,34 +244,37 @@ export function KnowledgeTreeSidebar({
               </Button>
             </div>
           ) : (
-            <SortableContext
-              items={pages.map(p => p.id)}
-              strategy={verticalListSortingStrategy}
-            >
-              <div className="space-y-1">
-                {tree.map(node => (
-                  <PageTreeNode
-                    key={node.id}
-                    node={node}
-                    currentPageId={currentPageId}
-                    depth={0}
-                    workspaceSlug={workspaceSlug}
-                    spaceSlug={space.slug}
-                    onMoveClick={setMovePageId}
-                    onDeleteClick={setDeletePageId}
-                    onDuplicateClick={handleDuplicate}
-                    onAddSubPageClick={handleAddSubPage}
-                  />
-                ))}
-              </div>
-            </SortableContext>
+            <>
+              <SortableContext
+                items={pages.map(p => p.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-1">
+                  {tree.map(node => (
+                    <PageTreeNode
+                      key={node.id}
+                      node={node}
+                      currentPageId={currentPageId}
+                      depth={0}
+                      workspaceSlug={workspaceSlug}
+                      spaceSlug={space.slug}
+                      onMoveClick={setMovePageId}
+                      onDeleteClick={setDeletePageId}
+                      onDuplicateClick={handleDuplicate}
+                      onAddSubPageClick={handleAddSubPage}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+              {/* Empty space below pages acts as drop zone for moving to root level */}
+              <RootDropZone />
+            </>
           )}
         </nav>
       </DndContext>
 
-      {/* Bottom actions with drop zone for root level */}
+      {/* Bottom actions */}
       <div className="p-2 border-t border-border/40">
-        <RootDropZone />
         <Button
           variant="ghost"
           className="w-full justify-start"
