@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useMemo, useState, useTransition, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Plus, FileText } from 'lucide-react'
 import { PageTreeNode } from './PageTreeNode'
@@ -75,7 +75,19 @@ export function KnowledgeTreeSidebar({
   const [movePageId, setMovePageId] = useState<string | null>(null)
   const [deletePageId, setDeletePageId] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const shouldRefresh = useRef(false)
   const router = useRouter()
+
+  // Handle refresh after modal closes
+  useEffect(() => {
+    if (!movePageId && shouldRefresh.current) {
+      shouldRefresh.current = false
+      // Use setTimeout to ensure modal portal is fully cleaned up
+      setTimeout(() => {
+        router.refresh()
+      }, 50)
+    }
+  }, [movePageId, router])
 
   // Drag-and-drop sensors
   const sensors = useSensors(
@@ -113,11 +125,9 @@ export function KnowledgeTreeSidebar({
     try {
       await movePage(pageId, newParentId, workspaceSlug, space.slug as string)
 
-      // Use startTransition to ensure React properly handles the state update and refresh
-      startTransition(() => {
-        setMovePageId(null) // Close modal
-        router.refresh()
-      })
+      // Set flag and close modal - useEffect will handle refresh after modal cleanup
+      shouldRefresh.current = true
+      setMovePageId(null)
 
       toast.success('Page moved successfully')
     } catch (error) {
@@ -324,10 +334,10 @@ export function KnowledgeTreeSidebar({
         onCreatePage={handleCreatePage}
       />
 
-      {movePageId && pages.find(p => p.id === movePageId) && (
+      {movePageId && (
         <MovePageModal
           key={movePageId} // Force remount when page changes
-          open={!!movePageId}
+          open={true}
           onOpenChange={() => setMovePageId(null)}
           currentPage={pages.find(p => p.id === movePageId)!}
           pages={pages}
