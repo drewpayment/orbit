@@ -5,7 +5,7 @@ export function buildPageTree(pages: KnowledgePage[]): PageTreeNode[] {
   // Create lookup map
   const pageMap = new Map<string, PageTreeNode>()
   const rootNodes: PageTreeNode[] = []
-  
+
   // First pass: create all nodes
   pages.forEach(page => {
     // Handle both string IDs and populated objects for parentPage
@@ -29,13 +29,37 @@ export function buildPageTree(pages: KnowledgePage[]): PageTreeNode[] {
     }
     pageMap.set(page.id, node)
   })
-  
-  // Second pass: build hierarchy
+
+  // Second pass: build hierarchy with circular reference detection
+  const processedNodes = new Set<string>()
+
   pageMap.forEach(node => {
-    if (node.parentId && pageMap.has(node.parentId)) {
+    // Detect circular references
+    const visited = new Set<string>()
+    let currentId: string | null = node.parentId
+    let isCircular = false
+
+    while (currentId) {
+      if (visited.has(currentId)) {
+        isCircular = true
+        console.error(`Circular reference detected for page ${node.id} (${node.title})`)
+        break
+      }
+      visited.add(currentId)
+      const parent = pageMap.get(currentId)
+      currentId = parent?.parentId || null
+    }
+
+    // If parent exists and no circular reference, add to parent's children
+    // Otherwise, add to root
+    if (!isCircular && node.parentId && pageMap.has(node.parentId)) {
       const parent = pageMap.get(node.parentId)!
       parent.children.push(node)
     } else {
+      if (isCircular) {
+        // Reset parent to null for circular references
+        node.parentId = null
+      }
       rootNodes.push(node)
     }
   })

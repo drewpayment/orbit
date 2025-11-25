@@ -124,6 +124,10 @@ export function PageTreeNode({
         aria-grabbed={isSortableDragging}
         aria-label={`Drag handle for ${node.title}`}
         className="cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity"
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData('text/plain', node.id)
+        }}
       >
         <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" />
       </div>

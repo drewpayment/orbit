@@ -127,6 +127,32 @@ export function KnowledgeTreeSidebar({
       return
     }
 
+    const activePage = pages.find(p => p.id === active.id)
+    const overPage = pages.find(p => p.id === over.id)
+
+    if (!activePage || !overPage) {
+      return
+    }
+
+    // Prevent moving a page under itself or its descendants
+    const isDescendant = (parentId: string, childId: string): boolean => {
+      const parent = pages.find(p => p.id === parentId)
+      if (!parent) return false
+
+      const parentPageId = typeof parent.parentPage === 'object' && parent.parentPage
+        ? parent.parentPage.id
+        : parent.parentPage
+
+      if (!parentPageId) return false
+      if (parentPageId === childId) return true
+      return isDescendant(parentPageId, childId)
+    }
+
+    if (isDescendant(active.id as string, over.id as string)) {
+      toast.error('Cannot move a page under itself or its descendants')
+      return
+    }
+
     // Dragging onto another page makes it a child of that page
     try {
       await movePage(active.id as string, over.id as string, workspaceSlug, space.slug as string)
@@ -203,8 +229,36 @@ export function KnowledgeTreeSidebar({
         </nav>
       </DndContext>
 
-      {/* Bottom actions */}
+      {/* Bottom actions with drop zone for root level */}
       <div className="p-2 border-t border-border/40">
+        <div
+          className="mb-2 p-2 border-2 border-dashed border-border/40 rounded-md text-center text-xs text-muted-foreground hover:border-border hover:bg-accent/50 transition-colors"
+          onDragOver={(e) => {
+            e.preventDefault()
+            e.currentTarget.classList.add('border-primary', 'bg-primary/10')
+          }}
+          onDragLeave={(e) => {
+            e.currentTarget.classList.remove('border-primary', 'bg-primary/10')
+          }}
+          onDrop={async (e) => {
+            e.preventDefault()
+            e.currentTarget.classList.remove('border-primary', 'bg-primary/10')
+
+            const pageId = e.dataTransfer?.getData('text/plain')
+            if (pageId) {
+              try {
+                await movePage(pageId, null, workspaceSlug, space.slug as string)
+                router.refresh()
+                toast.success('Page moved to root level')
+              } catch (error) {
+                console.error('Failed to move page:', error)
+                toast.error('Failed to move page')
+              }
+            }
+          }}
+        >
+          Drop here to move to root level
+        </div>
         <Button
           variant="ghost"
           className="w-full justify-start"
