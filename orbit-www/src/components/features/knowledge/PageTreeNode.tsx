@@ -107,7 +107,7 @@ export function PageTreeNode({
   const content = (
     <div
       className={cn(
-        'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-accent transition-colors group',
+        'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-accent transition-colors group select-none',
         isCurrentPage && 'bg-accent font-medium'
       )}
       style={{ paddingLeft: `${depth * 12 + 8}px` }}
