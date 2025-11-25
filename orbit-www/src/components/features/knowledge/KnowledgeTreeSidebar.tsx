@@ -38,6 +38,27 @@ export interface KnowledgeTreeSidebarProps {
   userId?: string
 }
 
+// Helper to convert icon text names to emojis
+function getIconEmoji(icon: string | undefined) {
+  if (!icon) return '📚'
+
+  // If already an emoji, return as-is
+  if (icon.length <= 2) return icon
+
+  // Map common icon names to emojis
+  const iconMap: Record<string, string> = {
+    'book': '📖',
+    'docs': '📚',
+    'guide': '📘',
+    'wiki': '📝',
+    'notes': '📓',
+    'folder': '📁',
+    'document': '📄',
+  }
+
+  return iconMap[icon.toLowerCase()] || '📚'
+}
+
 // Root level drop zone component - invisible until dragging over it
 function RootDropZone() {
   const { setNodeRef, isOver } = useDroppable({
@@ -250,7 +271,7 @@ export function KnowledgeTreeSidebar({
       {/* Header with space info */}
       <div className="p-4 border-b border-border/40">
         <div className="flex items-center gap-2 mb-2">
-          {space.icon && <span className="text-2xl">{space.icon}</span>}
+          <span className="text-2xl">{getIconEmoji(space.icon)}</span>
           <h2 className="font-serif-display font-semibold text-lg">
             {space.name}
           </h2>
