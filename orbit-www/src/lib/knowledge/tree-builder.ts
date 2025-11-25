@@ -8,6 +8,16 @@ export function buildPageTree(pages: KnowledgePage[]): PageTreeNode[] {
   
   // First pass: create all nodes
   pages.forEach(page => {
+    // Handle both string IDs and populated objects for parentPage
+    let parentId: string | null = null
+    if (page.parentPage) {
+      if (typeof page.parentPage === 'string') {
+        parentId = page.parentPage
+      } else if (typeof page.parentPage === 'object' && page.parentPage.id) {
+        parentId = page.parentPage.id
+      }
+    }
+
     const node: PageTreeNode = {
       id: page.id,
       title: page.title,
@@ -15,7 +25,7 @@ export function buildPageTree(pages: KnowledgePage[]): PageTreeNode[] {
       status: page.status,
       sortOrder: page.sortOrder || 0,
       children: [],
-      parentId: typeof page.parentPage === 'string' ? page.parentPage : null,
+      parentId,
     }
     pageMap.set(page.id, node)
   })

@@ -8,10 +8,25 @@ import { buildPageTree } from '@/lib/knowledge/tree-builder'
 import { CreatePageModal } from './CreatePageModal'
 import { MovePageModal } from './MovePageModal'
 import { DeletePageDialog } from './DeletePageDialog'
-import { createKnowledgePage, movePage, duplicatePage, deletePage } from '@/app/actions/knowledge'
+import { createKnowledgePage, movePage, duplicatePage, deletePage, updatePageSortOrder } from '@/app/actions/knowledge'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import type { KnowledgePage, KnowledgeSpace } from '@/payload-types'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
 
 export interface KnowledgeTreeSidebarProps {
   space: KnowledgeSpace
@@ -34,6 +49,14 @@ export function KnowledgeTreeSidebar({
   const [movePageId, setMovePageId] = useState<string | null>(null)
   const [deletePageId, setDeletePageId] = useState<string | null>(null)
   const router = useRouter()
+
+  // Drag-and-drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
 
   const handleCreatePage = async (data: {
     title: string
@@ -97,6 +120,47 @@ export function KnowledgeTreeSidebar({
     setIsCreateModalOpen(true)
   }
 
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+
+    if (!over || active.id === over.id) {
+      return
+    }
+
+    // Find the pages being reordered (only within same level)
+    const activeIndex = pages.findIndex(p => p.id === active.id)
+    const overIndex = pages.findIndex(p => p.id === over.id)
+
+    if (activeIndex === -1 || overIndex === -1) {
+      return
+    }
+
+    const activePage = pages[activeIndex]
+    const overPage = pages[overIndex]
+
+    // Only allow reordering within the same parent
+    const activeParentId = typeof activePage.parentPage === 'object' && activePage.parentPage
+      ? activePage.parentPage.id
+      : activePage.parentPage
+    const overParentId = typeof overPage.parentPage === 'object' && overPage.parentPage
+      ? overPage.parentPage.id
+      : overPage.parentPage
+
+    if (activeParentId !== overParentId) {
+      toast.error('Cannot reorder pages with different parents. Use "Move to..." instead.')
+      return
+    }
+
+    try {
+      // Update sort order on backend
+      await updatePageSortOrder(active.id as string, over.id as string, workspaceSlug, space.slug as string)
+      router.refresh()
+    } catch (error) {
+      console.error('Failed to reorder pages:', error)
+      toast.error('Failed to reorder pages. Please try again.')
+    }
+  }
+
   return (
     <aside className="w-64 border-r border-border bg-background flex flex-col">
       {/* Header with space info */}
@@ -115,42 +179,53 @@ export function KnowledgeTreeSidebar({
       </div>
 
       {/* Tree navigation */}
-      <nav
-        className="flex-1 overflow-y-auto p-2"
-        role="tree"
-        aria-label={`${space.name} knowledge pages`}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
       >
-        {tree.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center p-4">
-            <FileText className="h-12 w-12 text-muted-foreground mb-2" />
-            <p className="text-sm text-muted-foreground mb-4">
-              No pages yet. Create your first page to get started.
-            </p>
-            <Button size="sm" onClick={() => setIsCreateModalOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              New Page
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {tree.map(node => (
-              <PageTreeNode
-                key={node.id}
-                node={node}
-                currentPageId={currentPageId}
-                depth={0}
-                workspaceSlug={workspaceSlug}
-                spaceSlug={space.slug}
-                isDragging={false}
-                onMoveClick={setMovePageId}
-                onDeleteClick={setDeletePageId}
-                onDuplicateClick={handleDuplicate}
-                onAddSubPageClick={handleAddSubPage}
-              />
-            ))}
-          </div>
-        )}
-      </nav>
+        <nav
+          className="flex-1 overflow-y-auto p-2"
+          role="tree"
+          aria-label={`${space.name} knowledge pages`}
+        >
+          {tree.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-center p-4">
+              <FileText className="h-12 w-12 text-muted-foreground mb-2" />
+              <p className="text-sm text-muted-foreground mb-4">
+                No pages yet. Create your first page to get started.
+              </p>
+              <Button size="sm" onClick={() => setIsCreateModalOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                New Page
+              </Button>
+            </div>
+          ) : (
+            <SortableContext
+              items={pages.map(p => p.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="space-y-1">
+                {tree.map(node => (
+                  <PageTreeNode
+                    key={node.id}
+                    node={node}
+                    currentPageId={currentPageId}
+                    depth={0}
+                    workspaceSlug={workspaceSlug}
+                    spaceSlug={space.slug}
+                    isDragging={false}
+                    onMoveClick={setMovePageId}
+                    onDeleteClick={setDeletePageId}
+                    onDuplicateClick={handleDuplicate}
+                    onAddSubPageClick={handleAddSubPage}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          )}
+        </nav>
+      </DndContext>
 
       {/* Bottom actions */}
       <div className="p-2 border-t border-border/40">
@@ -172,6 +247,7 @@ export function KnowledgeTreeSidebar({
         }}
         knowledgeSpaceId={space.id}
         pages={pages}
+        preselectedParentId={createModalParentId}
         onCreatePage={handleCreatePage}
       />
 

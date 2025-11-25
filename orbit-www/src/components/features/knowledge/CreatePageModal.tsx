@@ -26,6 +26,7 @@ interface CreatePageModalProps {
   onOpenChange: (open: boolean) => void
   knowledgeSpaceId: string
   pages: KnowledgePage[]
+  preselectedParentId?: string
   onCreatePage: (data: {
     title: string
     slug: string
@@ -38,13 +39,21 @@ export function CreatePageModal({
   onOpenChange,
   knowledgeSpaceId,
   pages,
+  preselectedParentId,
   onCreatePage,
 }: CreatePageModalProps) {
   const [title, setTitle] = useState('')
   const [slug, setSlug] = useState('')
-  const [parentPageId, setParentPageId] = useState<string | undefined>()
+  const [parentPageId, setParentPageId] = useState<string | undefined>(preselectedParentId)
   const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Update parentPageId when preselectedParentId changes
+  useEffect(() => {
+    if (preselectedParentId) {
+      setParentPageId(preselectedParentId)
+    }
+  }, [preselectedParentId])
 
   // Auto-generate slug from title
   useEffect(() => {

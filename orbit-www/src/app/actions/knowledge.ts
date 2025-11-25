@@ -130,3 +130,43 @@ export async function deletePage(
 
   revalidatePath(`/workspaces/${workspaceSlug}/knowledge/${spaceSlug}`)
 }
+
+export async function updatePageSortOrder(
+  activePageId: string,
+  overPageId: string,
+  workspaceSlug: string,
+  spaceSlug: string
+) {
+  'use server'
+
+  const payload = await getPayload({ config })
+
+  // Fetch both pages
+  const activePage = await payload.findByID({
+    collection: 'knowledge-pages',
+    id: activePageId,
+  })
+
+  const overPage = await payload.findByID({
+    collection: 'knowledge-pages',
+    id: overPageId,
+  })
+
+  // Swap sort orders
+  const activeSortOrder = activePage.sortOrder || 0
+  const overSortOrder = overPage.sortOrder || 0
+
+  await payload.update({
+    collection: 'knowledge-pages',
+    id: activePageId,
+    data: { sortOrder: overSortOrder },
+  })
+
+  await payload.update({
+    collection: 'knowledge-pages',
+    id: overPageId,
+    data: { sortOrder: activeSortOrder },
+  })
+
+  revalidatePath(`/workspaces/${workspaceSlug}/knowledge/${spaceSlug}`)
+}
