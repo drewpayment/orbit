@@ -334,14 +334,16 @@ export function KnowledgeTreeSidebar({
         onCreatePage={handleCreatePage}
       />
 
-      <MovePageModal
-        key={movePageId || 'closed'} // Force remount when page changes
-        open={!!movePageId && !!pages.find(p => p.id === movePageId)}
-        onOpenChange={() => setMovePageId(null)}
-        currentPage={movePageId ? pages.find(p => p.id === movePageId) || pages[0] : pages[0]}
-        pages={pages}
-        onMove={handleMove}
-      />
+      {movePageId && (
+        <MovePageModal
+          key={movePageId} // Force remount when page changes
+          open={true}
+          onOpenChange={() => setMovePageId(null)}
+          currentPage={pages.find(p => p.id === movePageId)!}
+          pages={pages}
+          onMove={handleMove}
+        />
+      )}
 
       {deletePageId && pages.find(p => p.id === deletePageId) && (
         <DeletePageDialog
