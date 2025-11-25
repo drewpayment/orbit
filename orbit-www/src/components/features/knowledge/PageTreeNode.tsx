@@ -128,6 +128,7 @@ export function PageTreeNode({
         onDragStart={(e) => {
           e.dataTransfer.setData('text/plain', node.id)
         }}
+        suppressHydrationWarning
       >
         <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" />
       </div>
@@ -161,7 +162,7 @@ export function PageTreeNode({
 
   if (!hasChildren) {
     return (
-      <div ref={setNodeRef} style={style}>
+      <div ref={setNodeRef} style={style} suppressHydrationWarning>
         <PageContextMenu
           page={node as any}
           onRename={handleRename}
@@ -183,7 +184,7 @@ export function PageTreeNode({
   }
 
   return (
-    <div ref={setNodeRef} style={style}>
+    <div ref={setNodeRef} style={style} suppressHydrationWarning>
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <div className="space-y-1">
           <div className="flex items-center">
