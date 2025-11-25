@@ -193,11 +193,31 @@ export function KnowledgeTreeSidebar({
       return
     }
 
-    // Dragging onto another page makes it a child of that page
+    // Extract parent IDs for both pages
+    const getParentId = (page: KnowledgePage): string | null => {
+      if (!page.parentPage) return null
+      if (typeof page.parentPage === 'string') return page.parentPage
+      if (typeof page.parentPage === 'object' && page.parentPage.id) return page.parentPage.id
+      return null
+    }
+
+    const activeParentId = getParentId(activePage)
+    const overParentId = getParentId(overPage)
+
+    // If pages have the same parent, reorder them as siblings
+    // Otherwise, nest the active page under the over page
     try {
-      await movePage(active.id as string, over.id as string, workspaceSlug, space.slug as string)
-      router.refresh()
-      toast.success('Page moved successfully')
+      if (activeParentId === overParentId) {
+        // Reorder siblings - swap their sort orders
+        await updatePageSortOrder(active.id as string, over.id as string, workspaceSlug, space.slug as string)
+        router.refresh()
+        toast.success('Pages reordered')
+      } else {
+        // Different parents - nest active page under over page
+        await movePage(active.id as string, over.id as string, workspaceSlug, space.slug as string)
+        router.refresh()
+        toast.success('Page moved successfully')
+      }
     } catch (error) {
       console.error('Failed to move page:', error)
       toast.error('Failed to move page. Please try again.')
