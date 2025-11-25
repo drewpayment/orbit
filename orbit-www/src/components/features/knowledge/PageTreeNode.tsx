@@ -19,7 +19,6 @@ export function PageTreeNode({
   onPageSelect,
   workspaceSlug,
   spaceSlug,
-  isDragging = false,
   onMoveClick,
   onDeleteClick,
   onDuplicateClick,
@@ -122,7 +121,7 @@ export function PageTreeNode({
         {...listeners}
         {...attributes}
         data-testid={`page-drag-${node.id}`}
-        aria-grabbed={isDragging}
+        aria-grabbed={isSortableDragging}
         aria-label={`Drag handle for ${node.title}`}
         className="cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity"
       >
@@ -229,7 +228,6 @@ export function PageTreeNode({
                   onPageSelect={onPageSelect}
                   workspaceSlug={workspaceSlug}
                   spaceSlug={spaceSlug}
-                  isDragging={isDragging}
                   onMoveClick={onMoveClick}
                   onDeleteClick={onDeleteClick}
                   onDuplicateClick={onDuplicateClick}

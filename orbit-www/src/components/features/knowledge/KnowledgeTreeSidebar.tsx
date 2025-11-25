@@ -127,37 +127,14 @@ export function KnowledgeTreeSidebar({
       return
     }
 
-    // Find the pages being reordered (only within same level)
-    const activeIndex = pages.findIndex(p => p.id === active.id)
-    const overIndex = pages.findIndex(p => p.id === over.id)
-
-    if (activeIndex === -1 || overIndex === -1) {
-      return
-    }
-
-    const activePage = pages[activeIndex]
-    const overPage = pages[overIndex]
-
-    // Only allow reordering within the same parent
-    const activeParentId = typeof activePage.parentPage === 'object' && activePage.parentPage
-      ? activePage.parentPage.id
-      : activePage.parentPage
-    const overParentId = typeof overPage.parentPage === 'object' && overPage.parentPage
-      ? overPage.parentPage.id
-      : overPage.parentPage
-
-    if (activeParentId !== overParentId) {
-      toast.error('Cannot reorder pages with different parents. Use "Move to..." instead.')
-      return
-    }
-
+    // Dragging onto another page makes it a child of that page
     try {
-      // Update sort order on backend
-      await updatePageSortOrder(active.id as string, over.id as string, workspaceSlug, space.slug as string)
+      await movePage(active.id as string, over.id as string, workspaceSlug, space.slug as string)
       router.refresh()
+      toast.success('Page moved successfully')
     } catch (error) {
-      console.error('Failed to reorder pages:', error)
-      toast.error('Failed to reorder pages. Please try again.')
+      console.error('Failed to move page:', error)
+      toast.error('Failed to move page. Please try again.')
     }
   }
 
@@ -214,7 +191,6 @@ export function KnowledgeTreeSidebar({
                     depth={0}
                     workspaceSlug={workspaceSlug}
                     spaceSlug={space.slug}
-                    isDragging={false}
                     onMoveClick={setMovePageId}
                     onDeleteClick={setDeletePageId}
                     onDuplicateClick={handleDuplicate}
