@@ -20,6 +20,8 @@ import {
   useSensor,
   useSensors,
   DragEndEvent,
+  useDroppable,
+  DragOverlay,
 } from '@dnd-kit/core'
 import {
   arrayMove,
@@ -34,6 +36,26 @@ export interface KnowledgeTreeSidebarProps {
   currentPageId?: string
   workspaceSlug: string
   userId?: string
+}
+
+// Root level drop zone component
+function RootDropZone() {
+  const { setNodeRef, isOver } = useDroppable({
+    id: 'root-drop-zone',
+  })
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`mb-2 p-3 border-2 border-dashed rounded-md text-center text-xs transition-colors ${
+        isOver
+          ? 'border-primary bg-primary/10 text-primary'
+          : 'border-border/40 text-muted-foreground hover:border-border hover:bg-accent/50'
+      }`}
+    >
+      {isOver ? 'Drop to move to root level' : 'Drag here to move to root level'}
+    </div>
+  )
 }
 
 export function KnowledgeTreeSidebar({
@@ -124,6 +146,19 @@ export function KnowledgeTreeSidebar({
     const { active, over } = event
 
     if (!over || active.id === over.id) {
+      return
+    }
+
+    // Special case: dropping on the root level zone
+    if (over.id === 'root-drop-zone') {
+      try {
+        await movePage(active.id as string, null, workspaceSlug, space.slug as string)
+        router.refresh()
+        toast.success('Page moved to root level')
+      } catch (error) {
+        console.error('Failed to move page:', error)
+        toast.error('Failed to move page. Please try again.')
+      }
       return
     }
 
@@ -232,34 +267,7 @@ export function KnowledgeTreeSidebar({
 
       {/* Bottom actions with drop zone for root level */}
       <div className="p-2 border-t border-border/40">
-        <div
-          className="mb-2 p-2 border-2 border-dashed border-border/40 rounded-md text-center text-xs text-muted-foreground hover:border-border hover:bg-accent/50 transition-colors"
-          onDragOver={(e) => {
-            e.preventDefault()
-            e.currentTarget.classList.add('border-primary', 'bg-primary/10')
-          }}
-          onDragLeave={(e) => {
-            e.currentTarget.classList.remove('border-primary', 'bg-primary/10')
-          }}
-          onDrop={async (e) => {
-            e.preventDefault()
-            e.currentTarget.classList.remove('border-primary', 'bg-primary/10')
-
-            const pageId = e.dataTransfer?.getData('text/plain')
-            if (pageId) {
-              try {
-                await movePage(pageId, null, workspaceSlug, space.slug as string)
-                router.refresh()
-                toast.success('Page moved to root level')
-              } catch (error) {
-                console.error('Failed to move page:', error)
-                toast.error('Failed to move page')
-              }
-            }
-          }}
-        >
-          Drop here to move to root level
-        </div>
+        <RootDropZone />
         <Button
           variant="ghost"
           className="w-full justify-start"
