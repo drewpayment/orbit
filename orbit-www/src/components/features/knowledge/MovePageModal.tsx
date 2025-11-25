@@ -66,7 +66,7 @@ export function MovePageModal({
     setIsMoving(true)
     try {
       await onMove(currentPage.id, selectedParentId)
-      onOpenChange(false)
+      // Don't call onOpenChange here - let parent handle modal state
     } finally {
       setIsMoving(false)
     }
