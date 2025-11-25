@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
 import { Plus, FileText } from 'lucide-react'
 import { PageTreeNode } from './PageTreeNode'
@@ -74,6 +74,7 @@ export function KnowledgeTreeSidebar({
   const [createModalParentId, setCreateModalParentId] = useState<string | undefined>(undefined)
   const [movePageId, setMovePageId] = useState<string | null>(null)
   const [deletePageId, setDeletePageId] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
   const router = useRouter()
 
   // Drag-and-drop sensors
@@ -111,10 +112,13 @@ export function KnowledgeTreeSidebar({
   const handleMove = async (pageId: string, newParentId: string | null) => {
     try {
       await movePage(pageId, newParentId, workspaceSlug, space.slug as string)
-      setMovePageId(null) // Close modal
-      // Small delay to allow modal to fully unmount before refresh
-      await new Promise(resolve => setTimeout(resolve, 100))
-      router.refresh()
+
+      // Use startTransition to ensure React properly handles the state update and refresh
+      startTransition(() => {
+        setMovePageId(null) // Close modal
+        router.refresh()
+      })
+
       toast.success('Page moved successfully')
     } catch (error) {
       console.error('Failed to move page:', error)
@@ -322,6 +326,7 @@ export function KnowledgeTreeSidebar({
 
       {movePageId && pages.find(p => p.id === movePageId) && (
         <MovePageModal
+          key={movePageId} // Force remount when page changes
           open={!!movePageId}
           onOpenChange={() => setMovePageId(null)}
           currentPage={pages.find(p => p.id === movePageId)!}
