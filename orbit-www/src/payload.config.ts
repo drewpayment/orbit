@@ -18,6 +18,7 @@ import { PluginConfig } from './collections/PluginConfig'
 import { GitHubInstallations } from './collections/GitHubInstallations'
 import { Tenants } from './collections/Tenants'
 import { PageLinks } from './collections/PageLinks'
+import { Permissions } from './collections/Permissions'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -41,6 +42,7 @@ export default buildConfig({
     PluginRegistry,
     PluginConfig,
     GitHubInstallations,
+    Permissions,
   ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
