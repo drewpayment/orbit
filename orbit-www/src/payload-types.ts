@@ -78,6 +78,10 @@ export interface Config {
     'plugin-registry': PluginRegistry;
     'plugin-config': PluginConfig;
     'github-installations': GithubInstallation;
+    permissions: Permission;
+    roles: Role;
+    'user-workspace-roles': UserWorkspaceRole;
+    templates: Template;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -95,6 +99,10 @@ export interface Config {
     'plugin-registry': PluginRegistrySelect<false> | PluginRegistrySelect<true>;
     'plugin-config': PluginConfigSelect<false> | PluginConfigSelect<true>;
     'github-installations': GithubInstallationsSelect<false> | GithubInstallationsSelect<true>;
+    permissions: PermissionsSelect<false> | PermissionsSelect<true>;
+    roles: RolesSelect<false> | RolesSelect<true>;
+    'user-workspace-roles': UserWorkspaceRolesSelect<false> | UserWorkspaceRolesSelect<true>;
+    templates: TemplatesSelect<false> | TemplatesSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -722,6 +730,157 @@ export interface GithubInstallation {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "permissions".
+ */
+export interface Permission {
+  id: string;
+  /**
+   * Unique identifier (e.g., "template:create", "repository:delete")
+   */
+  slug: string;
+  /**
+   * Human-readable name (e.g., "Create Templates")
+   */
+  name: string;
+  /**
+   * What this permission allows
+   */
+  description?: string | null;
+  /**
+   * Category for grouping permissions
+   */
+  category: 'template' | 'repository' | 'workspace' | 'knowledge' | 'admin';
+  /**
+   * Where this permission applies
+   */
+  scope: 'platform' | 'workspace';
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "roles".
+ */
+export interface Role {
+  id: string;
+  /**
+   * Unique identifier (e.g., "workspace-admin")
+   */
+  slug: string;
+  name: string;
+  description?: string | null;
+  scope: 'platform' | 'workspace';
+  /**
+   * Permissions granted by this role
+   */
+  permissions?: (string | Permission)[] | null;
+  /**
+   * Auto-assigned to new workspace members
+   */
+  isDefault?: boolean | null;
+  /**
+   * Built-in role that cannot be deleted
+   */
+  isSystem?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "user-workspace-roles".
+ */
+export interface UserWorkspaceRole {
+  id: string;
+  user: string | User;
+  /**
+   * Leave empty for platform-level roles
+   */
+  workspace?: (string | null) | Workspace;
+  role: string | Role;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "templates".
+ */
+export interface Template {
+  id: string;
+  name: string;
+  slug: string;
+  /**
+   * Supports markdown
+   */
+  description?: string | null;
+  workspace: string | Workspace;
+  visibility: 'workspace' | 'shared' | 'public';
+  /**
+   * Workspaces that can use this template
+   */
+  sharedWith?: (string | Workspace)[] | null;
+  gitProvider: 'github' | 'azure_devops' | 'gitlab' | 'bitbucket';
+  /**
+   * Full URL to the GitHub repository
+   */
+  repoUrl: string;
+  defaultBranch?: string | null;
+  /**
+   * Is this repo marked as a Template in GitHub?
+   */
+  isGitHubTemplate?: boolean | null;
+  /**
+   * Primary language (e.g., typescript, go, python)
+   */
+  language?: string | null;
+  /**
+   * Framework used (e.g., nextjs, express, fastapi)
+   */
+  framework?: string | null;
+  categories?:
+    | (
+        | 'api-service'
+        | 'frontend-app'
+        | 'backend-service'
+        | 'cli-tool'
+        | 'library'
+        | 'mobile-app'
+        | 'infrastructure'
+        | 'documentation'
+        | 'monorepo'
+      )[]
+    | null;
+  tags?:
+    | {
+        tag: string;
+        id?: string | null;
+      }[]
+    | null;
+  complexity?: ('starter' | 'intermediate' | 'production-ready') | null;
+  manifestPath?: string | null;
+  lastSyncedAt?: string | null;
+  syncStatus?: ('synced' | 'error' | 'pending') | null;
+  syncError?: string | null;
+  /**
+   * Parsed from orbit-template.yaml
+   */
+  variables?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  webhookId?: string | null;
+  webhookSecret?: string | null;
+  usageCount?: number | null;
+  createdBy?: (string | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
 export interface PayloadLockedDocument {
@@ -770,6 +929,22 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'github-installations';
         value: string | GithubInstallation;
+      } | null)
+    | ({
+        relationTo: 'permissions';
+        value: string | Permission;
+      } | null)
+    | ({
+        relationTo: 'roles';
+        value: string | Role;
+      } | null)
+    | ({
+        relationTo: 'user-workspace-roles';
+        value: string | UserWorkspaceRole;
+      } | null)
+    | ({
+        relationTo: 'templates';
+        value: string | Template;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -1108,6 +1283,82 @@ export interface GithubInstallationsSelect<T extends boolean = true> {
   installedBy?: T;
   installedAt?: T;
   tenant?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "permissions_select".
+ */
+export interface PermissionsSelect<T extends boolean = true> {
+  slug?: T;
+  name?: T;
+  description?: T;
+  category?: T;
+  scope?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "roles_select".
+ */
+export interface RolesSelect<T extends boolean = true> {
+  slug?: T;
+  name?: T;
+  description?: T;
+  scope?: T;
+  permissions?: T;
+  isDefault?: T;
+  isSystem?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "user-workspace-roles_select".
+ */
+export interface UserWorkspaceRolesSelect<T extends boolean = true> {
+  user?: T;
+  workspace?: T;
+  role?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "templates_select".
+ */
+export interface TemplatesSelect<T extends boolean = true> {
+  name?: T;
+  slug?: T;
+  description?: T;
+  workspace?: T;
+  visibility?: T;
+  sharedWith?: T;
+  gitProvider?: T;
+  repoUrl?: T;
+  defaultBranch?: T;
+  isGitHubTemplate?: T;
+  language?: T;
+  framework?: T;
+  categories?: T;
+  tags?:
+    | T
+    | {
+        tag?: T;
+        id?: T;
+      };
+  complexity?: T;
+  manifestPath?: T;
+  lastSyncedAt?: T;
+  syncStatus?: T;
+  syncError?: T;
+  variables?: T;
+  webhookId?: T;
+  webhookSecret?: T;
+  usageCount?: T;
+  createdBy?: T;
   updatedAt?: T;
   createdAt?: T;
 }

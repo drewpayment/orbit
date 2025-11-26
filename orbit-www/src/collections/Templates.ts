@@ -1,5 +1,5 @@
 // orbit-www/src/collections/Templates.ts
-import type { CollectionConfig } from 'payload'
+import type { CollectionConfig, Where } from 'payload'
 
 export const Templates: CollectionConfig = {
   slug: 'templates',
@@ -25,7 +25,7 @@ export const Templates: CollectionConfig = {
       })
 
       const workspaceIds = memberships.docs.map(m =>
-        typeof m.workspace === 'string' ? m.workspace : m.workspace.id
+        String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
       )
 
       // Return query constraint: public OR in user's workspaces OR shared with user's workspaces
@@ -35,7 +35,7 @@ export const Templates: CollectionConfig = {
           { workspace: { in: workspaceIds } },
           { sharedWith: { in: workspaceIds } },
         ],
-      }
+      } as Where
     },
     // Create: Users with template:create permission
     create: ({ req: { user } }) => !!user,
@@ -295,6 +295,35 @@ export const Templates: CollectionConfig = {
         readOnly: true,
         condition: (data) => data?.syncStatus === 'error',
       },
+    },
+    {
+      name: 'syncHistory',
+      type: 'array',
+      label: 'Sync History',
+      maxRows: 10, // Keep last 10 sync attempts
+      admin: {
+        readOnly: true,
+      },
+      fields: [
+        {
+          name: 'timestamp',
+          type: 'date',
+          required: true,
+        },
+        {
+          name: 'status',
+          type: 'select',
+          required: true,
+          options: [
+            { label: 'Success', value: 'success' },
+            { label: 'Error', value: 'error' },
+          ],
+        },
+        {
+          name: 'error',
+          type: 'text',
+        },
+      ],
     },
 
     // Variables (from manifest)
