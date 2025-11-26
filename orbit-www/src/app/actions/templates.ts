@@ -6,7 +6,7 @@ import config from '@payload-config'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
 import { parseManifest } from '@/lib/template-manifest'
-import { parseGitHubUrl, fetchRepoInfo, fetchManifestContent, generateWebhookSecret } from '@/lib/github-manifest'
+import { parseGitHubUrl, fetchRepoInfo, fetchManifestContent, generateWebhookSecret, fileExists } from '@/lib/github-manifest'
 import { revalidatePath } from 'next/cache'
 import { Octokit } from '@octokit/rest'
 import { decrypt } from '@/lib/encryption'
@@ -34,6 +34,209 @@ function filterValidCategories(categories?: string[]): CategoryValue[] {
   return categories.filter((c): c is CategoryValue =>
     VALID_CATEGORIES.includes(c as CategoryValue)
   )
+}
+
+export interface CheckManifestResult {
+  exists: boolean
+  repoInfo?: {
+    owner: string
+    repo: string
+    defaultBranch: string
+    description: string | null
+    isTemplate: boolean
+  }
+  error?: string
+}
+
+/**
+ * Check if a manifest exists in the repository
+ */
+export async function checkManifestExists(
+  repoUrl: string,
+  workspaceId: string,
+  manifestPath?: string
+): Promise<CheckManifestResult> {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+
+  if (!session?.user) {
+    return { exists: false, error: 'Not authenticated' }
+  }
+
+  const payload = await getPayload({ config })
+
+  // Parse GitHub URL
+  const parsed = parseGitHubUrl(repoUrl)
+  if (!parsed) {
+    return { exists: false, error: 'Invalid GitHub URL' }
+  }
+
+  // Check workspace membership
+  const membership = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { workspace: { equals: workspaceId } },
+        { user: { equals: session.user.id } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    limit: 1,
+  })
+
+  if (membership.docs.length === 0) {
+    return { exists: false, error: 'Not a member of this workspace' }
+  }
+
+  // Get GitHub installation token for this workspace
+  const installation = await payload.find({
+    collection: 'github-installations',
+    where: {
+      allowedWorkspaces: { contains: workspaceId },
+      status: { equals: 'active' },
+    },
+    limit: 1,
+  })
+
+  if (installation.docs.length === 0) {
+    return { exists: false, error: 'No GitHub App installation found for this workspace' }
+  }
+
+  // Get decrypted token
+  const accessToken = decrypt(installation.docs[0].installationToken as string)
+  if (!accessToken) {
+    return { exists: false, error: 'GitHub access token not available' }
+  }
+
+  // Fetch repo info
+  const repoInfo = await fetchRepoInfo(repoUrl, accessToken)
+  if (!repoInfo) {
+    return { exists: false, error: 'Could not access repository. Check permissions.' }
+  }
+
+  // Check if manifest file exists
+  const path = manifestPath || 'orbit-template.yaml'
+  const exists = await fileExists(
+    repoInfo.owner,
+    repoInfo.repo,
+    repoInfo.defaultBranch,
+    path,
+    accessToken
+  )
+
+  return {
+    exists,
+    repoInfo,
+  }
+}
+
+/**
+ * Commit a manifest file to a GitHub repository
+ */
+export async function commitManifestToRepo(input: {
+  repoUrl: string
+  workspaceId: string
+  manifestContent: string
+  manifestPath?: string
+  commitMessage?: string
+}): Promise<{ success: boolean; error?: string }> {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+
+  if (!session?.user) {
+    return { success: false, error: 'Not authenticated' }
+  }
+
+  const payload = await getPayload({ config })
+
+  // Parse GitHub URL
+  const parsed = parseGitHubUrl(input.repoUrl)
+  if (!parsed) {
+    return { success: false, error: 'Invalid GitHub URL' }
+  }
+
+  // Check workspace membership
+  const membership = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { workspace: { equals: input.workspaceId } },
+        { user: { equals: session.user.id } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    limit: 1,
+  })
+
+  if (membership.docs.length === 0) {
+    return { success: false, error: 'Not a member of this workspace' }
+  }
+
+  // Get GitHub installation token for this workspace
+  const installation = await payload.find({
+    collection: 'github-installations',
+    where: {
+      allowedWorkspaces: { contains: input.workspaceId },
+      status: { equals: 'active' },
+    },
+    limit: 1,
+  })
+
+  if (installation.docs.length === 0) {
+    return { success: false, error: 'No GitHub App installation found for this workspace' }
+  }
+
+  // Get decrypted token
+  const accessToken = decrypt(installation.docs[0].installationToken as string)
+  if (!accessToken) {
+    return { success: false, error: 'GitHub access token not available' }
+  }
+
+  // Fetch repo info to get default branch
+  const repoInfo = await fetchRepoInfo(input.repoUrl, accessToken)
+  if (!repoInfo) {
+    return { success: false, error: 'Could not access repository. Check permissions.' }
+  }
+
+  // Create or update file using Octokit
+  const octokit = new Octokit({ auth: accessToken })
+  const path = input.manifestPath || 'orbit-template.yaml'
+
+  try {
+    // Check if file exists to get its SHA (needed for updates)
+    let sha: string | undefined
+    try {
+      const { data: existingFile } = await octokit.repos.getContent({
+        owner: parsed.owner,
+        repo: parsed.repo,
+        path,
+        ref: repoInfo.defaultBranch,
+      })
+      if ('sha' in existingFile) {
+        sha = existingFile.sha
+      }
+    } catch {
+      // File doesn't exist, which is fine
+    }
+
+    await octokit.repos.createOrUpdateFileContents({
+      owner: parsed.owner,
+      repo: parsed.repo,
+      path,
+      message: input.commitMessage || 'Add orbit-template.yaml manifest',
+      content: Buffer.from(input.manifestContent).toString('base64'),
+      branch: repoInfo.defaultBranch,
+      sha, // Include SHA if file exists
+    })
+
+    return { success: true }
+  } catch (error: unknown) {
+    console.error('[commitManifestToRepo] Error committing file:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    return { success: false, error: `Failed to commit manifest: ${errorMessage}` }
+  }
 }
 
 export interface ImportTemplateInput {

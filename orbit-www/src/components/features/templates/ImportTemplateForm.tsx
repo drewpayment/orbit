@@ -15,7 +15,8 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Loader2, AlertCircle, CheckCircle2, AlertTriangle } from 'lucide-react'
-import { importTemplate } from '@/app/actions/templates'
+import { importTemplate, checkManifestExists, CheckManifestResult } from '@/app/actions/templates'
+import { ManifestBuilderForm } from './ManifestBuilderForm'
 
 interface Workspace {
   id: string
@@ -35,9 +36,10 @@ export function ImportTemplateForm({ workspaces }: ImportTemplateFormProps) {
   const [error, setError] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
   const [success, setSuccess] = useState(false)
+  const [step, setStep] = useState<'input' | 'wizard' | 'import'>('input')
+  const [repoInfo, setRepoInfo] = useState<CheckManifestResult['repoInfo'] | null>(null)
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleImport = async () => {
     setError(null)
     setWarnings([])
     setSuccess(false)
@@ -67,6 +69,63 @@ export function ImportTemplateForm({ workspaces }: ImportTemplateFormProps) {
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setWarnings([])
+    setSuccess(false)
+    setIsSubmitting(true)
+
+    try {
+      // First check if manifest exists
+      const result = await checkManifestExists(repoUrl, workspaceId, manifestPath || undefined)
+
+      if (result.error) {
+        setError(result.error)
+        setIsSubmitting(false)
+        return
+      }
+
+      setRepoInfo(result.repoInfo || null)
+
+      if (result.exists) {
+        // Manifest exists, proceed to import
+        await handleImport()
+      } else {
+        // Show wizard
+        setStep('wizard')
+        setIsSubmitting(false)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleManifestCreated = () => {
+    // Reset to input step and auto-trigger import
+    setStep('input')
+    handleImport()
+  }
+
+  const handleCancel = () => {
+    setStep('input')
+    setRepoInfo(null)
+  }
+
+  // Render wizard if no manifest exists
+  if (step === 'wizard' && repoInfo) {
+    return (
+      <ManifestBuilderForm
+        repoUrl={repoUrl}
+        workspaceId={workspaceId}
+        repoInfo={repoInfo}
+        onManifestCreated={handleManifestCreated}
+        onCancel={handleCancel}
+      />
+    )
   }
 
   return (

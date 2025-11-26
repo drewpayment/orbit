@@ -154,3 +154,50 @@ export function parseManifest(content: string): {
 
   return { manifest, errors: [] }
 }
+
+export interface ManifestFormData {
+  name: string
+  description?: string
+  language: string
+  framework?: string
+  categories: string[]
+  tags?: string[]
+  complexity?: 'starter' | 'intermediate' | 'production-ready'
+  variables?: Array<{
+    key: string
+    type: 'string' | 'number' | 'boolean' | 'select' | 'multiselect'
+    required: boolean
+    description?: string
+    default?: string | number | boolean
+    options?: Array<{ label: string; value: string }>
+  }>
+}
+
+/**
+ * Generate YAML manifest from form data
+ */
+export function generateManifestYaml(data: ManifestFormData): string {
+  const manifest: TemplateManifest = {
+    apiVersion: 'orbit/v1',
+    kind: 'Template',
+    metadata: {
+      name: data.name,
+      description: data.description,
+      language: data.language,
+      framework: data.framework,
+      categories: data.categories,
+      tags: data.tags,
+      complexity: data.complexity,
+    },
+    variables: data.variables,
+  }
+
+  // Clean up undefined values
+  if (!manifest.metadata.description) delete manifest.metadata.description
+  if (!manifest.metadata.framework) delete manifest.metadata.framework
+  if (!manifest.metadata.tags?.length) delete manifest.metadata.tags
+  if (!manifest.metadata.complexity) delete manifest.metadata.complexity
+  if (!manifest.variables?.length) delete manifest.variables
+
+  return yaml.stringify(manifest, { indent: 2 })
+}
