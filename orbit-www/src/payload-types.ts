@@ -860,6 +860,14 @@ export interface Template {
   lastSyncedAt?: string | null;
   syncStatus?: ('synced' | 'error' | 'pending') | null;
   syncError?: string | null;
+  syncHistory?:
+    | {
+        timestamp: string;
+        status: 'success' | 'error';
+        error?: string | null;
+        id?: string | null;
+      }[]
+    | null;
   /**
    * Parsed from orbit-template.yaml
    */
@@ -1354,6 +1362,14 @@ export interface TemplatesSelect<T extends boolean = true> {
   lastSyncedAt?: T;
   syncStatus?: T;
   syncError?: T;
+  syncHistory?:
+    | T
+    | {
+        timestamp?: T;
+        status?: T;
+        error?: T;
+        id?: T;
+      };
   variables?: T;
   webhookId?: T;
   webhookSecret?: T;

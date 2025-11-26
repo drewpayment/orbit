@@ -9,6 +9,7 @@ import { parseManifest } from '@/lib/template-manifest'
 import { parseGitHubUrl, fetchRepoInfo, fetchManifestContent, generateWebhookSecret } from '@/lib/github-manifest'
 import { revalidatePath } from 'next/cache'
 import { Octokit } from '@octokit/rest'
+import { decrypt } from '@/lib/encryption'
 
 // Valid category values that match the Templates collection
 const VALID_CATEGORIES = [
@@ -101,7 +102,7 @@ export async function importTemplate(input: ImportTemplateInput): Promise<Import
   }
 
   // Get decrypted token (simplified - actual implementation uses encryption service)
-  const accessToken = installation.docs[0].installationToken as string
+  const accessToken = decrypt(installation.docs[0].installationToken as string)
   if (!accessToken) {
     return { success: false, error: 'GitHub access token not available' }
   }
@@ -255,7 +256,7 @@ async function syncTemplateManifestInternal(templateId: string): Promise<ImportT
     return { success: false, error: 'No GitHub App installation found' }
   }
 
-  const accessToken = installation.docs[0].installationToken as string
+  const accessToken = decrypt(installation.docs[0].installationToken as string)
   const parsed = parseGitHubUrl(template.repoUrl)
 
   if (!parsed) {
@@ -757,7 +758,7 @@ export async function registerTemplateWebhook(templateId: string): Promise<{ suc
     return { success: false, error: 'No GitHub App installation found for this workspace' }
   }
 
-  const accessToken = installation.docs[0].installationToken as string
+  const accessToken = decrypt(installation.docs[0].installationToken as string)
   if (!accessToken) {
     return { success: false, error: 'GitHub access token not available' }
   }
@@ -879,7 +880,7 @@ export async function unregisterTemplateWebhook(templateId: string): Promise<{ s
     return { success: false, error: 'No GitHub App installation found for this workspace' }
   }
 
-  const accessToken = installation.docs[0].installationToken as string
+  const accessToken = decrypt(installation.docs[0].installationToken as string)
   if (!accessToken) {
     return { success: false, error: 'GitHub access token not available' }
   }
