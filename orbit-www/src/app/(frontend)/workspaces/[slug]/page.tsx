@@ -13,6 +13,7 @@ import { checkMembershipStatus } from './actions'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
 import { WorkspaceKnowledgeSection } from '@/components/features/workspace/WorkspaceKnowledgeSection'
+import { WorkspaceTemplatesSection } from '@/components/features/workspace/WorkspaceTemplatesSection'
 
 interface PageProps {
   params: Promise<{
@@ -122,9 +123,38 @@ export default async function WorkspacePage({ params }: PageProps) {
     })
   )
 
+  // Fetch templates for this workspace
+  const templatesResult = await payload.find({
+    collection: 'templates',
+    where: {
+      workspace: {
+        equals: workspace.id,
+      },
+    },
+    limit: 10,
+    sort: '-usageCount',
+  })
+
+  const workspaceTemplates = templatesResult.docs.map((template) => ({
+    id: template.id as string,
+    name: template.name,
+    slug: template.slug,
+    description: template.description || undefined,
+    language: template.language || undefined,
+    framework: template.framework || undefined,
+    visibility: template.visibility as 'workspace' | 'shared' | 'public',
+    usageCount: template.usageCount || 0,
+    categories: template.categories as string[] | undefined,
+  }))
+
   // Check if user can manage knowledge spaces
-  const canManageKnowledge = membershipStatus?.role 
+  const canManageKnowledge = membershipStatus?.role
     ? ['owner', 'admin', 'contributor'].includes(membershipStatus.role)
+    : false
+
+  // Check if user can manage templates (owner/admin only)
+  const canManageTemplates = membershipStatus?.role
+    ? ['owner', 'admin'].includes(membershipStatus.role)
     : false
 
   return (
@@ -186,6 +216,14 @@ export default async function WorkspacePage({ params }: PageProps) {
                       workspaceSlug={workspace.slug}
                       spaces={knowledgeSpaces}
                       canManage={canManageKnowledge}
+                    />
+
+                    {/* Templates Section */}
+                    <WorkspaceTemplatesSection
+                      workspaceSlug={workspace.slug}
+                      workspaceId={workspace.id}
+                      templates={workspaceTemplates}
+                      canManage={canManageTemplates}
                     />
                   </div>
 
