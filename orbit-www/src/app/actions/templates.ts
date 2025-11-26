@@ -1024,6 +1024,188 @@ export async function registerTemplateWebhook(templateId: string): Promise<{ suc
 /**
  * Unregister a GitHub webhook for a template
  */
+export interface AdminTemplate {
+  id: string
+  name: string
+  slug: string
+  description?: string
+  workspace: {
+    id: string
+    name: string
+    slug: string
+  }
+  visibility: 'workspace' | 'shared' | 'public'
+  language?: string
+  framework?: string
+  usageCount: number
+  syncStatus?: string
+  syncError?: string
+  lastSyncedAt?: string
+  repoUrl: string
+  createdAt: string
+}
+
+/**
+ * Get all templates across all workspaces (admin only)
+ * Requires user to be owner/admin in at least one workspace
+ */
+export async function getAllTemplatesForAdmin(): Promise<{
+  templates: AdminTemplate[]
+  error?: string
+}> {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+
+  if (!session?.user) {
+    return { templates: [], error: 'Not authenticated' }
+  }
+
+  const payload = await getPayload({ config })
+
+  // Debug: Log user ID
+  console.log('[getAllTemplatesForAdmin] User ID from session:', session.user.id)
+
+  // Get workspaces where user is owner/admin
+  const memberships = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { user: { equals: session.user.id } },
+        { role: { in: ['owner', 'admin'] } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    limit: 100,
+    overrideAccess: true, // Bypass collection access control since we already authenticated
+  })
+
+  // Debug: Log memberships found
+  console.log('[getAllTemplatesForAdmin] Memberships found:', memberships.docs.length)
+  console.log('[getAllTemplatesForAdmin] Membership details:', memberships.docs.map(m => ({
+    id: m.id,
+    user: m.user,
+    role: m.role,
+    status: m.status,
+    workspace: typeof m.workspace === 'object' ? m.workspace.id : m.workspace,
+  })))
+
+  if (memberships.docs.length === 0) {
+    // Debug: Check if there are ANY memberships for this user
+    const allUserMemberships = await payload.find({
+      collection: 'workspace-members',
+      where: {
+        user: { equals: session.user.id },
+      },
+      limit: 100,
+      overrideAccess: true,
+    })
+    console.log('[getAllTemplatesForAdmin] All user memberships (any role/status):', allUserMemberships.docs.length)
+    console.log('[getAllTemplatesForAdmin] All membership details:', allUserMemberships.docs.map(m => ({
+      id: m.id,
+      role: m.role,
+      status: m.status,
+    })))
+
+    return { templates: [], error: 'You must be an admin or owner in at least one workspace' }
+  }
+
+  // Get workspace IDs where user is admin/owner
+  const adminWorkspaceIds = memberships.docs.map((m) =>
+    typeof m.workspace === 'string' ? m.workspace : m.workspace.id
+  )
+
+  // Get all templates from those workspaces
+  const templatesResult = await payload.find({
+    collection: 'templates',
+    where: {
+      workspace: { in: adminWorkspaceIds },
+    },
+    limit: 500,
+    sort: '-createdAt',
+    depth: 1,
+    overrideAccess: true, // Bypass collection access control since we already verified admin membership
+  })
+
+  const templates: AdminTemplate[] = templatesResult.docs.map((t) => {
+    const workspace = typeof t.workspace === 'object' ? t.workspace : null
+    return {
+      id: t.id as string,
+      name: t.name,
+      slug: t.slug,
+      description: t.description || undefined,
+      workspace: workspace
+        ? {
+            id: workspace.id as string,
+            name: workspace.name,
+            slug: workspace.slug,
+          }
+        : { id: '', name: 'Unknown', slug: '' },
+      visibility: t.visibility as 'workspace' | 'shared' | 'public',
+      language: t.language || undefined,
+      framework: t.framework || undefined,
+      usageCount: t.usageCount || 0,
+      syncStatus: t.syncStatus || undefined,
+      syncError: t.syncError || undefined,
+      lastSyncedAt: t.lastSyncedAt || undefined,
+      repoUrl: t.repoUrl,
+      createdAt: t.createdAt,
+    }
+  })
+
+  return { templates }
+}
+
+/**
+ * Force sync a template manifest (admin only)
+ */
+export async function forceSyncTemplate(templateId: string): Promise<ImportTemplateResult> {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+
+  if (!session?.user) {
+    return { success: false, error: 'Not authenticated' }
+  }
+
+  const payload = await getPayload({ config })
+
+  // Get the template
+  const template = await payload.findByID({
+    collection: 'templates',
+    id: templateId,
+  })
+
+  if (!template) {
+    return { success: false, error: 'Template not found' }
+  }
+
+  const workspaceId = typeof template.workspace === 'string'
+    ? template.workspace
+    : template.workspace.id
+
+  // Check if user is admin/owner in the template's workspace
+  const membership = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { workspace: { equals: workspaceId } },
+        { user: { equals: session.user.id } },
+        { role: { in: ['owner', 'admin'] } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    limit: 1,
+  })
+
+  if (membership.docs.length === 0) {
+    return { success: false, error: 'Permission denied. You must be an admin or owner of this workspace.' }
+  }
+
+  // Perform the sync
+  return syncTemplateManifestInternal(templateId)
+}
+
 export async function unregisterTemplateWebhook(templateId: string): Promise<{ success: boolean; error?: string }> {
   const session = await auth.api.getSession({
     headers: await headers(),

@@ -80,6 +80,10 @@ const navMainData = [
           title: "GitHub",
           url: "/settings/github",
         },
+        {
+          title: "Templates",
+          url: "/settings/templates",
+        },
       ],
     },
 ]

@@ -1,16 +1,16 @@
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
-import { GitHubSettingsClient } from './github-settings-client'
+import { TemplatesSettingsClient } from './templates-settings-client'
 
-export default function GitHubSettingsPage() {
+export default async function TemplatesSettingsPage() {
   return (
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
         <SiteHeader />
         <div className="flex flex-1 flex-col gap-4 p-8">
-          <GitHubSettingsClient />
+          <TemplatesSettingsClient />
         </div>
       </SidebarInset>
     </SidebarProvider>
