@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -26,8 +26,64 @@ interface ManifestBuilderFormProps {
   onCancel: () => void
 }
 
-const LANGUAGES = ['typescript', 'javascript', 'go', 'python', 'rust', 'java', 'ruby', 'php', 'csharp', 'kotlin']
-const FRAMEWORKS = ['nextjs', 'react', 'vue', 'angular', 'express', 'fastapi', 'gin', 'rails', 'laravel', 'spring']
+const LANGUAGE_GROUPS = [
+  {
+    label: 'Programming Languages',
+    options: [
+      { value: 'typescript', label: 'TypeScript' },
+      { value: 'javascript', label: 'JavaScript' },
+      { value: 'go', label: 'Go' },
+      { value: 'python', label: 'Python' },
+      { value: 'rust', label: 'Rust' },
+      { value: 'java', label: 'Java' },
+      { value: 'ruby', label: 'Ruby' },
+      { value: 'php', label: 'PHP' },
+      { value: 'csharp', label: 'C#' },
+      { value: 'kotlin', label: 'Kotlin' },
+      { value: 'swift', label: 'Swift' },
+      { value: 'scala', label: 'Scala' },
+    ],
+  },
+  {
+    label: 'Infrastructure & DevOps',
+    options: [
+      { value: 'kubernetes', label: 'Kubernetes (YAML)' },
+      { value: 'terraform', label: 'Terraform (HCL)' },
+      { value: 'ansible', label: 'Ansible' },
+      { value: 'helm', label: 'Helm Charts' },
+      { value: 'pulumi', label: 'Pulumi' },
+      { value: 'cloudformation', label: 'CloudFormation' },
+      { value: 'docker', label: 'Dockerfile' },
+      { value: 'kustomize', label: 'Kustomize' },
+    ],
+  },
+  {
+    label: 'Configuration & Data',
+    options: [
+      { value: 'yaml', label: 'YAML/Config' },
+      { value: 'json', label: 'JSON' },
+      { value: 'markdown', label: 'Markdown/Docs' },
+      { value: 'shell', label: 'Shell Scripts' },
+    ],
+  },
+  {
+    label: 'Other',
+    options: [
+      { value: 'other', label: 'Other (specify below)' },
+    ],
+  },
+]
+
+const FRAMEWORKS = [
+  // Web Frameworks
+  'nextjs', 'react', 'vue', 'angular', 'svelte', 'astro',
+  // Backend
+  'express', 'fastapi', 'django', 'flask', 'gin', 'fiber', 'rails', 'laravel', 'spring', 'nestjs',
+  // Mobile
+  'react-native', 'flutter', 'expo',
+  // Infrastructure
+  'flux', 'argocd', 'crossplane',
+]
 const CATEGORIES = [
   { value: 'api-service', label: 'API Service' },
   { value: 'frontend-app', label: 'Frontend App' },
@@ -45,6 +101,7 @@ export function ManifestBuilderForm({ repoUrl, workspaceId, repoInfo, onManifest
   const [name, setName] = useState(repoInfo.repo)
   const [description, setDescription] = useState(repoInfo.description || '')
   const [language, setLanguage] = useState('')
+  const [customLanguage, setCustomLanguage] = useState('')
   const [framework, setFramework] = useState('')
   const [categories, setCategories] = useState<string[]>([])
   const [tags, setTags] = useState<string[]>([])
@@ -57,12 +114,15 @@ export function ManifestBuilderForm({ repoUrl, workspaceId, repoInfo, onManifest
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Get effective language (use custom if "other" selected)
+  const effectiveLanguage = language === 'other' ? customLanguage : language
+
   // Generate YAML from current form state
   const generateYaml = () => {
     const data: ManifestFormData = {
       name,
       description: description || undefined,
-      language,
+      language: effectiveLanguage,
       framework: framework || undefined,
       categories,
       tags: tags.length > 0 ? tags : undefined,
@@ -75,7 +135,7 @@ export function ManifestBuilderForm({ repoUrl, workspaceId, repoInfo, onManifest
   const yamlContent = generateYaml()
 
   // Validation
-  const isValid = name && language && categories.length > 0
+  const isValid = name && effectiveLanguage && categories.length > 0
 
   // Handle commit to repo
   const handleCommit = async () => {
@@ -165,17 +225,30 @@ export function ManifestBuilderForm({ repoUrl, workspaceId, repoInfo, onManifest
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="language">Language *</Label>
+              <Label htmlFor="language">Language / Type *</Label>
               <Select value={language} onValueChange={setLanguage}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select language" />
+                  <SelectValue placeholder="Select language or type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {LANGUAGES.map(lang => (
-                    <SelectItem key={lang} value={lang}>{lang}</SelectItem>
+                  {LANGUAGE_GROUPS.map(group => (
+                    <SelectGroup key={group.label}>
+                      <SelectLabel>{group.label}</SelectLabel>
+                      {group.options.map(opt => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectGroup>
                   ))}
                 </SelectContent>
               </Select>
+              {language === 'other' && (
+                <Input
+                  placeholder="Enter custom language/type..."
+                  value={customLanguage}
+                  onChange={(e) => setCustomLanguage(e.target.value)}
+                  className="mt-2"
+                />
+              )}
             </div>
           </div>
 
