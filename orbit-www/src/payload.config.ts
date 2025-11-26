@@ -21,6 +21,7 @@ import { PageLinks } from './collections/PageLinks'
 import { Permissions } from './collections/Permissions'
 import { Roles } from './collections/Roles'
 import { UserWorkspaceRoles } from './collections/UserWorkspaceRoles'
+import { Templates } from './collections/Templates'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -47,6 +48,7 @@ export default buildConfig({
     Permissions,
     Roles,
     UserWorkspaceRoles,
+    Templates,
   ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
