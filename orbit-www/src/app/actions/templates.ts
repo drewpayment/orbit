@@ -112,7 +112,10 @@ export async function checkManifestExists(
   // Fetch repo info
   const repoInfo = await fetchRepoInfo(repoUrl, accessToken)
   if (!repoInfo) {
-    return { exists: false, error: 'Could not access repository. Check permissions.' }
+    return {
+      exists: false,
+      error: 'Could not access repository. Ensure the GitHub App has access to this repo and the URL is correct.'
+    }
   }
 
   // Check if manifest file exists

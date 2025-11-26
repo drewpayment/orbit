@@ -54,8 +54,15 @@ export async function fetchRepoInfo(
       isTemplate: data.is_template ?? false,
       description: data.description,
     }
-  } catch (error) {
-    console.error('Error fetching repo info:', error)
+  } catch (error: unknown) {
+    // Log detailed error for debugging
+    if (error && typeof error === 'object' && 'status' in error) {
+      const status = (error as { status: number }).status
+      const message = 'message' in error ? (error as { message: string }).message : 'Unknown error'
+      console.error(`GitHub API error (${status}): ${message}`)
+    } else {
+      console.error('Error fetching repo info:', error)
+    }
     return null
   }
 }
