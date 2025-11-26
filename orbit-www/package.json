@@ -13,6 +13,7 @@
     "generate:proto": "cd ../proto && ../orbit-www/node_modules/.bin/buf generate",
     "lint": "cross-env NODE_OPTIONS=--no-deprecation next lint",
     "payload": "cross-env NODE_OPTIONS=--no-deprecation payload",
+    "seed:permissions": "tsx src/scripts/seed-permissions.ts",
     "start": "cross-env NODE_OPTIONS=--no-deprecation next start",
     "test": "bun run test:int && bun run test:e2e",
     "test:e2e": "cross-env NODE_OPTIONS=\"--no-deprecation --no-experimental-strip-types\" bun exec playwright test",
