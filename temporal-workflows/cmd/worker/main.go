@@ -36,6 +36,11 @@ func main() {
 		workDir = "/tmp/orbit-repos"
 	}
 
+	templateWorkDir := os.Getenv("TEMPLATE_WORK_DIR")
+	if templateWorkDir == "" {
+		templateWorkDir = "/tmp/orbit-templates"
+	}
+
 	// Create Temporal client
 	c, err := client.Dial(client.Options{
 		HostPort:  temporalAddress,
@@ -51,6 +56,7 @@ func main() {
 
 	// Register workflows
 	w.RegisterWorkflow(workflows.GitHubTokenRefreshWorkflow)
+	w.RegisterWorkflow(workflows.TemplateInstantiationWorkflow)
 
 	// Initialize HTTP client for activities
 	activityClients := clients.NewHTTPActivityClients(orbitAPIURL)
@@ -79,11 +85,30 @@ func main() {
 	w.RegisterActivity(gitActivities.InitializeGitActivity)
 	w.RegisterActivity(gitActivities.PushToRemoteActivity)
 
+	// Create GitHub template client (token will be passed per-workflow)
+	githubTemplateClient := services.NewGitHubTemplateClient("", "")
+
+	// Create and register template activities
+	templateActivities := activities.NewTemplateActivities(
+		githubTemplateClient,
+		templateWorkDir,
+		logger,
+	)
+	w.RegisterActivity(templateActivities.ValidateInstantiationInput)
+	w.RegisterActivity(templateActivities.CreateRepoFromTemplate)
+	w.RegisterActivity(templateActivities.CreateEmptyRepo)
+	w.RegisterActivity(templateActivities.CloneTemplateRepo)
+	w.RegisterActivity(templateActivities.ApplyTemplateVariables)
+	w.RegisterActivity(templateActivities.PushToNewRepo)
+	w.RegisterActivity(templateActivities.CleanupWorkDir)
+	w.RegisterActivity(templateActivities.FinalizeInstantiation)
+
 	log.Println("Starting Temporal worker...")
 	log.Printf("Temporal address: %s", temporalAddress)
 	log.Printf("Temporal namespace: %s", temporalNamespace)
 	log.Printf("Orbit API URL: %s", orbitAPIURL)
 	log.Printf("Git work directory: %s", workDir)
+	log.Printf("Template work directory: %s", templateWorkDir)
 	log.Println("Task queue: orbit-workflows")
 
 	// Start worker
