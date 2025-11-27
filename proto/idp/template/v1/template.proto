@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package idp.template.v1;
+
+option go_package = "github.com/drewpayment/orbit/proto/gen/go/idp/template/v1;templatev1";
+
+// TemplateService handles template instantiation operations
+service TemplateService {
+  // Start a new template instantiation workflow
+  rpc StartInstantiation(StartInstantiationRequest) returns (StartInstantiationResponse);
+
+  // Get current progress of an instantiation
+  rpc GetInstantiationProgress(GetProgressRequest) returns (GetProgressResponse);
+
+  // Cancel an in-progress instantiation
+  rpc CancelInstantiation(CancelRequest) returns (CancelResponse);
+
+  // List available GitHub organizations for a workspace
+  rpc ListAvailableOrgs(ListAvailableOrgsRequest) returns (ListAvailableOrgsResponse);
+}
+
+message StartInstantiationRequest {
+  string template_id = 1;
+  string workspace_id = 2;
+  string target_org = 3;
+  string repository_name = 4;
+  string description = 5;
+  bool is_private = 6;
+  map<string, string> variables = 7;
+  string user_id = 8;
+}
+
+message StartInstantiationResponse {
+  string workflow_id = 1;
+}
+
+message GetProgressRequest {
+  string workflow_id = 1;
+}
+
+message GetProgressResponse {
+  string workflow_id = 1;
+  WorkflowStatus status = 2;
+  string current_step = 3;
+  int32 progress_percent = 4;
+  string error_message = 5;
+  string result_repo_url = 6;
+  string result_repo_name = 7;
+}
+
+enum WorkflowStatus {
+  WORKFLOW_STATUS_UNSPECIFIED = 0;
+  WORKFLOW_STATUS_PENDING = 1;
+  WORKFLOW_STATUS_RUNNING = 2;
+  WORKFLOW_STATUS_COMPLETED = 3;
+  WORKFLOW_STATUS_FAILED = 4;
+  WORKFLOW_STATUS_CANCELLED = 5;
+}
+
+message CancelRequest {
+  string workflow_id = 1;
+}
+
+message CancelResponse {
+  bool success = 1;
+}
+
+message ListAvailableOrgsRequest {
+  string workspace_id = 1;
+}
+
+message GitHubOrg {
+  string name = 1;
+  string avatar_url = 2;
+  string installation_id = 3;
+}
+
+message ListAvailableOrgsResponse {
+  repeated GitHubOrg orgs = 1;
+}
