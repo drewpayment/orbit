@@ -1063,9 +1063,6 @@ export async function getAllTemplatesForAdmin(): Promise<{
 
   const payload = await getPayload({ config })
 
-  // Debug: Log user ID
-  console.log('[getAllTemplatesForAdmin] User ID from session:', session.user.id)
-
   // Get workspaces where user is owner/admin
   const memberships = await payload.find({
     collection: 'workspace-members',
@@ -1080,33 +1077,7 @@ export async function getAllTemplatesForAdmin(): Promise<{
     overrideAccess: true, // Bypass collection access control since we already authenticated
   })
 
-  // Debug: Log memberships found
-  console.log('[getAllTemplatesForAdmin] Memberships found:', memberships.docs.length)
-  console.log('[getAllTemplatesForAdmin] Membership details:', memberships.docs.map(m => ({
-    id: m.id,
-    user: m.user,
-    role: m.role,
-    status: m.status,
-    workspace: typeof m.workspace === 'object' ? m.workspace.id : m.workspace,
-  })))
-
   if (memberships.docs.length === 0) {
-    // Debug: Check if there are ANY memberships for this user
-    const allUserMemberships = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        user: { equals: session.user.id },
-      },
-      limit: 100,
-      overrideAccess: true,
-    })
-    console.log('[getAllTemplatesForAdmin] All user memberships (any role/status):', allUserMemberships.docs.length)
-    console.log('[getAllTemplatesForAdmin] All membership details:', allUserMemberships.docs.map(m => ({
-      id: m.id,
-      role: m.role,
-      status: m.status,
-    })))
-
     return { templates: [], error: 'You must be an admin or owner in at least one workspace' }
   }
 
@@ -1204,6 +1175,215 @@ export async function forceSyncTemplate(templateId: string): Promise<ImportTempl
 
   // Perform the sync
   return syncTemplateManifestInternal(templateId)
+}
+
+// Types for new instantiation flow
+export interface GitHubOrg {
+  name: string
+  avatarUrl?: string
+  installationId: string
+}
+
+export interface StartInstantiationInput {
+  templateId: string
+  workspaceId: string
+  targetOrg: string
+  repositoryName: string
+  description?: string
+  isPrivate: boolean
+  variables: Record<string, string>
+}
+
+export interface StartInstantiationResult {
+  success: boolean
+  workflowId?: string
+  error?: string
+}
+
+export interface ProgressResult {
+  progress?: {
+    status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+    currentStep: string
+    progressPercent: number
+    errorMessage?: string
+    resultRepoUrl?: string
+    resultRepoName?: string
+  }
+  error?: string
+}
+
+/**
+ * Get available GitHub organizations for a workspace
+ */
+export async function getAvailableOrgs(workspaceId: string): Promise<{
+  orgs: GitHubOrg[]
+  error?: string
+}> {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+
+  if (!session?.user) {
+    return { orgs: [], error: 'Not authenticated' }
+  }
+
+  const payload = await getPayload({ config })
+
+  // Check workspace membership
+  const membership = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { workspace: { equals: workspaceId } },
+        { user: { equals: session.user.id } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    limit: 1,
+  })
+
+  if (membership.docs.length === 0) {
+    return { orgs: [], error: 'Not a member of this workspace' }
+  }
+
+  // Get GitHub installations for this workspace
+  const installations = await payload.find({
+    collection: 'github-installations',
+    where: {
+      and: [
+        { allowedWorkspaces: { contains: workspaceId } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    limit: 100,
+  })
+
+  const orgs: GitHubOrg[] = installations.docs.map(inst => ({
+    name: inst.accountLogin,
+    avatarUrl: inst.accountAvatarUrl || undefined,
+    installationId: String(inst.id),
+  }))
+
+  return { orgs }
+}
+
+/**
+ * Start template instantiation
+ * TODO: Replace mock implementation with actual gRPC call to template service
+ */
+export async function startInstantiation(input: StartInstantiationInput): Promise<StartInstantiationResult> {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+
+  if (!session?.user) {
+    return { success: false, error: 'Not authenticated' }
+  }
+
+  const payload = await getPayload({ config })
+
+  // Validate template exists
+  const template = await payload.findByID({
+    collection: 'templates',
+    id: input.templateId,
+  })
+
+  if (!template) {
+    return { success: false, error: 'Template not found' }
+  }
+
+  // Validate workspace membership
+  const membership = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { workspace: { equals: input.workspaceId } },
+        { user: { equals: session.user.id } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    limit: 1,
+  })
+
+  if (membership.docs.length === 0) {
+    return { success: false, error: 'Not a member of this workspace' }
+  }
+
+  // Validate required variables
+  const templateVars = (template.variables as Array<{ key: string; required: boolean }>) || []
+  for (const v of templateVars) {
+    if (v.required && !input.variables[v.key]) {
+      return { success: false, error: `Missing required variable: ${v.key}` }
+    }
+  }
+
+  // TODO: Call gRPC template service to start instantiation workflow
+  // For now, generate a mock workflow ID
+  const workflowId = `wf-${Date.now()}-${Math.random().toString(36).substring(7)}`
+
+  // Increment usage count
+  await payload.update({
+    collection: 'templates',
+    id: input.templateId,
+    data: {
+      usageCount: (template.usageCount || 0) + 1,
+    },
+  })
+
+  return {
+    success: true,
+    workflowId,
+  }
+}
+
+/**
+ * Get instantiation progress
+ * TODO: Replace mock implementation with actual gRPC call to Temporal
+ */
+export async function getInstantiationProgress(workflowId: string): Promise<ProgressResult> {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+
+  if (!session?.user) {
+    return { error: 'Not authenticated' }
+  }
+
+  // TODO: Call Temporal gRPC API to get workflow progress
+  // For now, return mock progress based on time elapsed
+  const timestamp = parseInt(workflowId.split('-')[1] || '0', 10)
+  const elapsed = Date.now() - timestamp
+
+  // Simulate progress over 30 seconds
+  const progressPercent = Math.min(Math.floor((elapsed / 30000) * 100), 100)
+
+  let status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' = 'running'
+  let currentStep = 'Initializing...'
+
+  if (progressPercent < 20) {
+    currentStep = 'Validating template...'
+  } else if (progressPercent < 40) {
+    currentStep = 'Cloning repository...'
+  } else if (progressPercent < 60) {
+    currentStep = 'Processing variables...'
+  } else if (progressPercent < 80) {
+    currentStep = 'Creating new repository...'
+  } else if (progressPercent < 100) {
+    currentStep = 'Finalizing...'
+  } else {
+    status = 'completed'
+    currentStep = 'Complete'
+  }
+
+  return {
+    progress: {
+      status,
+      currentStep,
+      progressPercent,
+      resultRepoUrl: status === 'completed' ? 'https://github.com/example/repo' : undefined,
+      resultRepoName: status === 'completed' ? 'example/repo' : undefined,
+    },
+  }
 }
 
 export async function unregisterTemplateWebhook(templateId: string): Promise<{ success: boolean; error?: string }> {
