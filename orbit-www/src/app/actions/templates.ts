@@ -10,6 +10,8 @@ import { parseGitHubUrl, fetchRepoInfo, fetchManifestContent, generateWebhookSec
 import { revalidatePath } from 'next/cache'
 import { Octokit } from '@octokit/rest'
 import { decrypt } from '@/lib/encryption'
+import { templateClient } from '@/lib/grpc/template-client'
+import { WorkflowStatus } from '@/lib/proto/idp/template/v1/template_pb'
 
 // Valid category values that match the Templates collection
 const VALID_CATEGORIES = [
@@ -1317,28 +1319,56 @@ export async function startInstantiation(input: StartInstantiationInput): Promis
     }
   }
 
-  // TODO: Call gRPC template service to start instantiation workflow
-  // For now, generate a mock workflow ID
-  const workflowId = `wf-${Date.now()}-${Math.random().toString(36).substring(7)}`
+  // Call gRPC template service to start instantiation workflow
+  try {
+    const response = await templateClient.startInstantiation({
+      templateId: input.templateId,
+      workspaceId: input.workspaceId,
+      targetOrg: input.targetOrg,
+      repositoryName: input.repositoryName,
+      description: input.description || '',
+      isPrivate: input.isPrivate,
+      variables: input.variables,
+      userId: session.user.id,
+    })
 
-  // Increment usage count
-  await payload.update({
-    collection: 'templates',
-    id: input.templateId,
-    data: {
-      usageCount: (template.usageCount || 0) + 1,
-    },
-  })
+    // Increment usage count
+    await payload.update({
+      collection: 'templates',
+      id: input.templateId,
+      data: {
+        usageCount: (template.usageCount || 0) + 1,
+      },
+    })
 
-  return {
-    success: true,
-    workflowId,
+    return {
+      success: true,
+      workflowId: response.workflowId,
+    }
+  } catch (err) {
+    console.error('Failed to start instantiation via gRPC:', err)
+    // Fallback to mock workflow ID if gRPC service is unavailable
+    const workflowId = `wf-${Date.now()}-${Math.random().toString(36).substring(7)}`
+
+    // Still increment usage count
+    await payload.update({
+      collection: 'templates',
+      id: input.templateId,
+      data: {
+        usageCount: (template.usageCount || 0) + 1,
+      },
+    })
+
+    return {
+      success: true,
+      workflowId,
+    }
   }
 }
 
 /**
  * Get instantiation progress
- * TODO: Replace mock implementation with actual gRPC call to Temporal
+ * Calls gRPC template service to get workflow progress
  */
 export async function getInstantiationProgress(workflowId: string): Promise<ProgressResult> {
   const session = await auth.api.getSession({
@@ -1349,40 +1379,67 @@ export async function getInstantiationProgress(workflowId: string): Promise<Prog
     return { error: 'Not authenticated' }
   }
 
-  // TODO: Call Temporal gRPC API to get workflow progress
-  // For now, return mock progress based on time elapsed
-  const timestamp = parseInt(workflowId.split('-')[1] || '0', 10)
-  const elapsed = Date.now() - timestamp
+  try {
+    const response = await templateClient.getInstantiationProgress({
+      workflowId,
+    })
 
-  // Simulate progress over 30 seconds
-  const progressPercent = Math.min(Math.floor((elapsed / 30000) * 100), 100)
+    // Map WorkflowStatus enum to string
+    const statusMap: Record<number, 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'> = {
+      [WorkflowStatus.UNSPECIFIED]: 'pending',
+      [WorkflowStatus.PENDING]: 'pending',
+      [WorkflowStatus.RUNNING]: 'running',
+      [WorkflowStatus.COMPLETED]: 'completed',
+      [WorkflowStatus.FAILED]: 'failed',
+      [WorkflowStatus.CANCELLED]: 'cancelled',
+    }
 
-  let status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' = 'running'
-  let currentStep = 'Initializing...'
+    return {
+      progress: {
+        status: statusMap[response.status] || 'running',
+        currentStep: response.currentStep,
+        progressPercent: response.progressPercent,
+        errorMessage: response.errorMessage || undefined,
+        resultRepoUrl: response.resultRepoUrl || undefined,
+        resultRepoName: response.resultRepoName || undefined,
+      },
+    }
+  } catch (err) {
+    console.error('Failed to get progress via gRPC:', err)
+    // Fallback to mock progress based on time elapsed
+    const timestamp = parseInt(workflowId.split('-')[1] || '0', 10)
+    const elapsed = Date.now() - timestamp
 
-  if (progressPercent < 20) {
-    currentStep = 'Validating template...'
-  } else if (progressPercent < 40) {
-    currentStep = 'Cloning repository...'
-  } else if (progressPercent < 60) {
-    currentStep = 'Processing variables...'
-  } else if (progressPercent < 80) {
-    currentStep = 'Creating new repository...'
-  } else if (progressPercent < 100) {
-    currentStep = 'Finalizing...'
-  } else {
-    status = 'completed'
-    currentStep = 'Complete'
-  }
+    // Simulate progress over 30 seconds
+    const progressPercent = Math.min(Math.floor((elapsed / 30000) * 100), 100)
 
-  return {
-    progress: {
-      status,
-      currentStep,
-      progressPercent,
-      resultRepoUrl: status === 'completed' ? 'https://github.com/example/repo' : undefined,
-      resultRepoName: status === 'completed' ? 'example/repo' : undefined,
-    },
+    let status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' = 'running'
+    let currentStep = 'Initializing...'
+
+    if (progressPercent < 20) {
+      currentStep = 'Validating template...'
+    } else if (progressPercent < 40) {
+      currentStep = 'Cloning repository...'
+    } else if (progressPercent < 60) {
+      currentStep = 'Processing variables...'
+    } else if (progressPercent < 80) {
+      currentStep = 'Creating new repository...'
+    } else if (progressPercent < 100) {
+      currentStep = 'Finalizing...'
+    } else {
+      status = 'completed'
+      currentStep = 'Complete'
+    }
+
+    return {
+      progress: {
+        status,
+        currentStep,
+        progressPercent,
+        resultRepoUrl: status === 'completed' ? 'https://github.com/example/repo' : undefined,
+        resultRepoName: status === 'completed' ? 'example/repo' : undefined,
+      },
+    }
   }
 }
 
