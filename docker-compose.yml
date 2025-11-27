@@ -97,11 +97,13 @@ services:
       - DATABASE_URI=mongodb://mongo:27017/orbit-www
       - TEMPORAL_NAMESPACE=default
       - TEMPORAL_ADDRESS=temporal-server:7233
+      - NEXT_PUBLIC_REPOSITORY_URL=http://repository-service:50051
     env_file:
       - ./orbit-www/.env
     depends_on:
       - mongo
       - temporal-server
+      - repository-service
     volumes:
       - ./orbit-www:/app
     restart: unless-stopped
@@ -186,23 +188,23 @@ services:
       - redis
     restart: unless-stopped
 
-  # Go Services (will be added as we implement them)
-  # repository-service:
-  #   container_name: orbit-repository-service
-  #   build:
-  #     context: ./services/repository
-  #     dockerfile: Dockerfile
-  #   ports:
-  #     - 8001:8001
-  #   environment:
-  #     - DATABASE_URI=postgresql://orbit:orbit@postgres:5432/orbit_dev
-  #     - REDIS_URI=redis://redis:6379
-  #     - TEMPORAL_NAMESPACE=default
-  #     - TEMPORAL_ADDRESS=temporal-server:7233
-  #   depends_on:
-  #     - postgres
-  #     - redis
-  #     - temporal-server
+  # Go Services
+  repository-service:
+    container_name: orbit-repository-service
+    build:
+      context: .
+      dockerfile: services/repository/Dockerfile
+    ports:
+      - "50051:50051"  # gRPC
+      - "8081:8081"    # HTTP (health/metrics)
+    environment:
+      - GRPC_PORT=50051
+      - HTTP_PORT=8081
+      - TEMPORAL_HOST=temporal-server:7233
+      - TEMPLATE_WORK_DIR=/tmp/orbit-templates
+    depends_on:
+      - temporal-server
+    restart: unless-stopped
 
 volumes:
   temporal-postgresql:
