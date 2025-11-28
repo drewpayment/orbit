@@ -1,7 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
-import { getGitHubHealth, type GitHubHealthStatus } from '@/app/actions/templates'
+import { getGitHubHealth, triggerTokenRefresh, type GitHubHealthStatus } from '@/app/actions/templates'
 
 const POLL_INTERVAL = 5 * 60 * 1000 // 5 minutes
 const STORAGE_KEY = 'orbit:github-health-dismissed'
@@ -9,6 +9,7 @@ const STORAGE_KEY = 'orbit:github-health-dismissed'
 interface GitHubHealthContextType {
   health: GitHubHealthStatus | null
   isLoading: boolean
+  isRefreshing: boolean
   lastChecked: Date | null
   dismissedUntil: Date | null
   dismiss: (duration: 'session' | '1hour' | '24hours') => void
@@ -33,6 +34,7 @@ interface GitHubHealthProviderProps {
 export function GitHubHealthProvider({ children, workspaceIds }: GitHubHealthProviderProps) {
   const [health, setHealth] = useState<GitHubHealthStatus | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [lastChecked, setLastChecked] = useState<Date | null>(null)
   const [dismissedUntil, setDismissedUntil] = useState<Date | null>(null)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -100,11 +102,35 @@ export function GitHubHealthProvider({ children, workspaceIds }: GitHubHealthPro
   }, [])
 
   const refresh = useCallback(async () => {
-    // Clear dismissal and force refresh
+    // Clear dismissal
     setDismissedUntil(null)
     sessionStorage.removeItem(STORAGE_KEY)
+
+    // If we have invalid installations, trigger token refresh workflow
+    if (health && !health.healthy) {
+      const invalidInstallations = health.installations.filter(inst => !inst.tokenValid)
+      if (invalidInstallations.length > 0) {
+        setIsRefreshing(true)
+        try {
+          const installationIds = invalidInstallations.map(inst => inst.id)
+          console.log('[GitHubHealth] Triggering token refresh for:', invalidInstallations.map(i => i.accountLogin))
+
+          const result = await triggerTokenRefresh(installationIds)
+          console.log('[GitHubHealth] Token refresh result:', result)
+
+          // Wait a moment for the workflow to start and do initial refresh
+          await new Promise(resolve => setTimeout(resolve, 2000))
+        } catch (error) {
+          console.error('[GitHubHealth] Failed to trigger token refresh:', error)
+        } finally {
+          setIsRefreshing(false)
+        }
+      }
+    }
+
+    // Re-check health status
     await checkHealth()
-  }, [checkHealth])
+  }, [health, checkHealth])
 
   // Initial check and polling
   useEffect(() => {
@@ -128,6 +154,7 @@ export function GitHubHealthProvider({ children, workspaceIds }: GitHubHealthPro
       value={{
         health,
         isLoading,
+        isRefreshing,
         lastChecked,
         dismissedUntil,
         dismiss,

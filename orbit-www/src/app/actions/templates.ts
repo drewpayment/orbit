@@ -1382,6 +1382,93 @@ export async function getGitHubHealth(workspaceIds: string | string[]): Promise<
   }
 }
 
+export interface TriggerTokenRefreshResult {
+  success: boolean
+  results: Array<{
+    installationId: string
+    accountLogin: string
+    success: boolean
+    error?: string
+  }>
+}
+
+/**
+ * Trigger token refresh for installations with invalid tokens
+ * Calls the restart-workflow API for each invalid installation
+ */
+export async function triggerTokenRefresh(installationIds: string[]): Promise<TriggerTokenRefreshResult> {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+
+  if (!session?.user) {
+    return { success: false, results: [] }
+  }
+
+  const payload = await getPayload({ config })
+  const results: TriggerTokenRefreshResult['results'] = []
+
+  for (const installationId of installationIds) {
+    try {
+      // Verify installation exists
+      const installation = await payload.findByID({
+        collection: 'github-installations',
+        id: installationId,
+      })
+
+      if (!installation) {
+        results.push({
+          installationId,
+          accountLogin: 'unknown',
+          success: false,
+          error: 'Installation not found',
+        })
+        continue
+      }
+
+      // Call the restart-workflow API endpoint
+      const baseUrl = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000'
+      const response = await fetch(`${baseUrl}/api/github/installations/${installationId}/restart-workflow`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Forward cookies for auth (internal call)
+          Cookie: (await headers()).get('cookie') || '',
+        },
+      })
+
+      if (response.ok) {
+        results.push({
+          installationId,
+          accountLogin: installation.accountLogin,
+          success: true,
+        })
+        console.log(`[triggerTokenRefresh] Successfully restarted workflow for ${installation.accountLogin}`)
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+        results.push({
+          installationId,
+          accountLogin: installation.accountLogin,
+          success: false,
+          error: errorData.error || `HTTP ${response.status}`,
+        })
+        console.error(`[triggerTokenRefresh] Failed for ${installation.accountLogin}:`, errorData)
+      }
+    } catch (error) {
+      console.error(`[triggerTokenRefresh] Error for installation ${installationId}:`, error)
+      results.push({
+        installationId,
+        accountLogin: 'unknown',
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      })
+    }
+  }
+
+  const allSucceeded = results.length > 0 && results.every(r => r.success)
+  return { success: allSucceeded, results }
+}
+
 /**
  * Start template instantiation
  * TODO: Replace mock implementation with actual gRPC call to template service

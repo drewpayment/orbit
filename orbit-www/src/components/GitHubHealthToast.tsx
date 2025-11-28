@@ -15,7 +15,7 @@ import { AlertTriangle, ChevronDown, ExternalLink, RefreshCw } from 'lucide-reac
 const TOAST_ID = 'github-health-toast'
 
 export function GitHubHealthToast() {
-  const { health, dismissedUntil, dismiss, refresh } = useGitHubHealth()
+  const { health, dismissedUntil, dismiss, refresh, isRefreshing } = useGitHubHealth()
   const toastShownRef = useRef(false)
 
   useEffect(() => {
@@ -72,14 +72,15 @@ export function GitHubHealthToast() {
                     size="sm"
                     variant="outline"
                     className="h-7 text-xs border-amber-300 dark:border-amber-700"
-                    onClick={() => {
-                      refresh()
+                    disabled={isRefreshing}
+                    onClick={async () => {
+                      await refresh()
                       toast.dismiss(t)
                       toastShownRef.current = false
                     }}
                   >
-                    <RefreshCw className="h-3 w-3 mr-1" />
-                    Refresh
+                    <RefreshCw className={`h-3 w-3 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
+                    {isRefreshing ? 'Refreshing...' : 'Refresh'}
                   </Button>
 
                   <Button
@@ -141,7 +142,7 @@ export function GitHubHealthToast() {
         }
       )
     }
-  }, [health, dismissedUntil, dismiss, refresh])
+  }, [health, dismissedUntil, dismiss, refresh, isRefreshing])
 
   return null
 }
