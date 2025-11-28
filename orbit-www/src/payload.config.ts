@@ -22,6 +22,7 @@ import { Permissions } from './collections/Permissions'
 import { Roles } from './collections/Roles'
 import { UserWorkspaceRoles } from './collections/UserWorkspaceRoles'
 import { Templates } from './collections/Templates'
+import { Apps } from './collections/Apps'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -49,6 +50,7 @@ export default buildConfig({
     Roles,
     UserWorkspaceRoles,
     Templates,
+    Apps,
   ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
