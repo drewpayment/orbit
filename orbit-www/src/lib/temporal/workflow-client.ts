@@ -4,9 +4,9 @@ import {
   CancelWorkflowRequestSchema,
   type GetWorkflowStatusResponse,
   type CancelWorkflowResponse,
+  WorkflowService,
 } from '@/lib/proto/temporal_pb';
-import { WorkflowService } from '@/lib/proto/temporal_connect';
-import { createPromiseClient } from '@connectrpc/connect';
+import { createClient } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-web';
 
 /**
@@ -20,7 +20,7 @@ const transport = createConnectTransport({
 /**
  * Create the workflow service client
  */
-const client = createPromiseClient(WorkflowService, transport);
+const client = createClient(WorkflowService, transport);
 
 /**
  * Workflow client for interacting with Temporal workflows

@@ -2,6 +2,7 @@
 
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
+import { getInstantiationProgress } from './templates'
 
 export interface WorkflowStep {
   name: string
@@ -34,8 +35,8 @@ const WORKFLOW_STEPS = [
 ]
 
 /**
- * Get workflow status
- * TODO: Connect to actual Temporal API when backend is ready
+ * Get workflow status from gRPC service
+ * Falls back to mock progress if service unavailable
  */
 export async function getWorkflowStatus(workflowId: string): Promise<WorkflowStatus | null> {
   const session = await auth.api.getSession({
@@ -46,48 +47,60 @@ export async function getWorkflowStatus(workflowId: string): Promise<WorkflowSta
     return null
   }
 
-  // TODO: Connect to Temporal gRPC service to get actual status
-  // For now, simulate progress based on workflow ID
-  // In production, this would call the WorkflowService.GetWorkflowStatus RPC
+  // Call the real gRPC service via getInstantiationProgress
+  const progressResult = await getInstantiationProgress(workflowId)
 
-  // Simulate workflow progress for demo purposes
-  const createdTime = parseInt(workflowId.replace('placeholder-', ''), 10) || Date.now()
-  const elapsed = Date.now() - createdTime
-  const stepDuration = 3000 // 3 seconds per step for demo
-  const currentStep = Math.min(Math.floor(elapsed / stepDuration), WORKFLOW_STEPS.length)
+  if (progressResult.progress) {
+    const progress = progressResult.progress
 
-  const isComplete = currentStep >= WORKFLOW_STEPS.length
-  const steps: WorkflowStep[] = WORKFLOW_STEPS.map((step, index) => {
-    if (index < currentStep) {
-      return {
-        name: step.name,
-        status: 'completed' as const,
-        startedAt: new Date(createdTime + index * stepDuration).toISOString(),
-        completedAt: new Date(createdTime + (index + 1) * stepDuration).toISOString(),
+    // Map progress to workflow steps
+    const completedPercent = progress.progressPercent
+    const completedSteps = Math.floor((completedPercent / 100) * WORKFLOW_STEPS.length)
+
+    const steps: WorkflowStep[] = WORKFLOW_STEPS.map((step, index) => {
+      if (index < completedSteps) {
+        return {
+          name: step.name,
+          status: 'completed' as const,
+          completedAt: new Date().toISOString(),
+        }
+      } else if (index === completedSteps && progress.status === 'running') {
+        return {
+          name: step.name,
+          status: 'running' as const,
+          startedAt: new Date().toISOString(),
+        }
+      } else {
+        return {
+          name: step.name,
+          status: 'pending' as const,
+        }
       }
-    } else if (index === currentStep && !isComplete) {
-      return {
-        name: step.name,
-        status: 'running' as const,
-        startedAt: new Date(createdTime + index * stepDuration).toISOString(),
-      }
-    } else {
-      return {
-        name: step.name,
-        status: 'pending' as const,
+    })
+
+    // If failed, mark the current step as failed
+    if (progress.status === 'failed' && completedSteps < WORKFLOW_STEPS.length) {
+      steps[completedSteps] = {
+        ...steps[completedSteps],
+        status: 'failed',
+        error: progress.errorMessage,
       }
     }
-  })
 
-  return {
-    workflowId,
-    status: isComplete ? 'completed' : 'running',
-    steps,
-    result: isComplete ? {
-      repositoryId: 'new-repo-id',
-      gitUrl: 'https://github.com/org/new-repo',
-    } : undefined,
-    startedAt: new Date(createdTime).toISOString(),
-    completedAt: isComplete ? new Date(createdTime + WORKFLOW_STEPS.length * stepDuration).toISOString() : undefined,
+    return {
+      workflowId,
+      status: progress.status,
+      steps,
+      result: progress.status === 'completed' ? {
+        repositoryId: progress.resultRepoName,
+        gitUrl: progress.resultRepoUrl,
+      } : undefined,
+      error: progress.errorMessage,
+      startedAt: new Date().toISOString(),
+      completedAt: progress.status === 'completed' ? new Date().toISOString() : undefined,
+    }
   }
+
+  // Fallback to mock if gRPC fails (shouldn't happen with proper error handling in getInstantiationProgress)
+  return null
 }

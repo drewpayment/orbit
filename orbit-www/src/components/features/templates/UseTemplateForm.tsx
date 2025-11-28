@@ -17,7 +17,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Loader2, AlertCircle, CheckCircle2, Info, ExternalLink } from 'lucide-react'
-import { instantiateTemplate, type GitHubInstallationHealth } from '@/app/actions/templates'
+import { startInstantiation, type GitHubInstallationHealth } from '@/app/actions/templates'
 import Link from 'next/link'
 
 interface TemplateVariable {
@@ -93,14 +93,20 @@ export function UseTemplateForm({
     setIsSubmitting(true)
 
     try {
-      const result = await instantiateTemplate({
+      // Convert variable values to strings for the gRPC call
+      const stringVariables: Record<string, string> = {}
+      for (const [key, value] of Object.entries(variableValues)) {
+        stringVariables[key] = String(value)
+      }
+
+      const result = await startInstantiation({
         templateId,
-        repoName,
-        repoDescription,
         workspaceId,
-        githubOrg,
+        targetOrg: githubOrg,
+        repositoryName: repoName,
+        description: repoDescription,
         isPrivate,
-        variables: variableValues,
+        variables: stringVariables,
       })
 
       if (result.success) {

@@ -73,9 +73,10 @@ export default async function UseTemplatePage({ params }: PageProps) {
     .filter((ws): ws is { id: string; name: string } => ws !== null)
 
   // Get GitHub health status and available orgs
-  const firstWorkspaceId = workspaces[0]?.id
-  const githubHealth = firstWorkspaceId
-    ? await getGitHubHealth(firstWorkspaceId)
+  // Pass ALL workspace IDs the user has access to, so we show orgs linked to any of them
+  const workspaceIds = workspaces.map(ws => ws.id)
+  const githubHealth = workspaceIds.length > 0
+    ? await getGitHubHealth(workspaceIds)
     : { healthy: true, installations: [], availableOrgs: [] }
 
   const githubOrgs = githubHealth.availableOrgs.map((org) => ({

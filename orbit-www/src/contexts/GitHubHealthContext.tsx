@@ -27,10 +27,10 @@ export function useGitHubHealth() {
 
 interface GitHubHealthProviderProps {
   children: React.ReactNode
-  workspaceId: string | null
+  workspaceIds: string[]
 }
 
-export function GitHubHealthProvider({ children, workspaceId }: GitHubHealthProviderProps) {
+export function GitHubHealthProvider({ children, workspaceIds }: GitHubHealthProviderProps) {
   const [health, setHealth] = useState<GitHubHealthStatus | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [lastChecked, setLastChecked] = useState<Date | null>(null)
@@ -57,7 +57,7 @@ export function GitHubHealthProvider({ children, workspaceId }: GitHubHealthProv
   }, [])
 
   const checkHealth = useCallback(async () => {
-    if (!workspaceId) return
+    if (workspaceIds.length === 0) return
 
     // Skip if dismissed
     if (dismissedUntil && dismissedUntil > new Date()) {
@@ -66,7 +66,7 @@ export function GitHubHealthProvider({ children, workspaceId }: GitHubHealthProv
 
     setIsLoading(true)
     try {
-      const result = await getGitHubHealth(workspaceId)
+      const result = await getGitHubHealth(workspaceIds)
       setHealth(result)
       setLastChecked(new Date())
 
@@ -80,7 +80,7 @@ export function GitHubHealthProvider({ children, workspaceId }: GitHubHealthProv
     } finally {
       setIsLoading(false)
     }
-  }, [workspaceId, dismissedUntil])
+  }, [workspaceIds, dismissedUntil])
 
   const dismiss = useCallback((duration: 'session' | '1hour' | '24hours') => {
     let until: Date
@@ -108,7 +108,7 @@ export function GitHubHealthProvider({ children, workspaceId }: GitHubHealthProv
 
   // Initial check and polling
   useEffect(() => {
-    if (!workspaceId) return
+    if (workspaceIds.length === 0) return
 
     // Initial check
     checkHealth()
@@ -121,7 +121,7 @@ export function GitHubHealthProvider({ children, workspaceId }: GitHubHealthProv
         clearInterval(intervalRef.current)
       }
     }
-  }, [workspaceId, checkHealth])
+  }, [workspaceIds, checkHealth])
 
   return (
     <GitHubHealthContext.Provider

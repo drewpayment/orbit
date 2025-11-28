@@ -3,19 +3,19 @@
 import { useEffect, useState } from 'react'
 import { GitHubHealthProvider } from '@/contexts/GitHubHealthContext'
 import { GitHubHealthToast } from '@/components/GitHubHealthToast'
-import { getCurrentWorkspaceId } from '@/lib/workspace'
+import { getAllWorkspaceIds } from '@/lib/workspace'
 
 interface GitHubHealthProviderWrapperProps {
   children: React.ReactNode
 }
 
 export function GitHubHealthProviderWrapper({ children }: GitHubHealthProviderWrapperProps) {
-  const [workspaceId, setWorkspaceId] = useState<string | null>(null)
+  const [workspaceIds, setWorkspaceIds] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    getCurrentWorkspaceId()
-      .then(setWorkspaceId)
+    getAllWorkspaceIds()
+      .then(setWorkspaceIds)
       .finally(() => setIsLoading(false))
   }, [])
 
@@ -25,7 +25,7 @@ export function GitHubHealthProviderWrapper({ children }: GitHubHealthProviderWr
   }
 
   return (
-    <GitHubHealthProvider workspaceId={workspaceId}>
+    <GitHubHealthProvider workspaceIds={workspaceIds}>
       {children}
       <GitHubHealthToast />
     </GitHubHealthProvider>

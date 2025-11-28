@@ -35,3 +35,32 @@ export async function getCurrentWorkspaceId(): Promise<string | null> {
   const workspace = membership.docs[0].workspace
   return typeof workspace === 'string' ? workspace : workspace.id
 }
+
+export async function getAllWorkspaceIds(): Promise<string[]> {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+
+  if (!session?.user) {
+    return []
+  }
+
+  const payload = await getPayload({ config })
+
+  // Get all active workspace memberships for user
+  const memberships = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { user: { equals: session.user.id } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    limit: 100,
+  })
+
+  return memberships.docs.map(m => {
+    const workspace = m.workspace
+    return typeof workspace === 'string' ? workspace : workspace.id
+  })
+}
