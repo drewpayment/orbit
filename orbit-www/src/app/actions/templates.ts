@@ -1286,7 +1286,7 @@ export async function getAvailableOrgs(workspaceId: string): Promise<{
   return { orgs }
 }
 
-export async function getGitHubHealth(workspaceId: string): Promise<GitHubHealthStatus> {
+export async function getGitHubHealth(workspaceIds: string | string[]): Promise<GitHubHealthStatus> {
   try {
     const session = await auth.api.getSession({
       headers: await headers(),
@@ -1298,12 +1298,19 @@ export async function getGitHubHealth(workspaceId: string): Promise<GitHubHealth
 
     const payload = await getPayload({ config })
 
-    // Check workspace membership
+    // Normalize to array
+    const workspaceIdArray = Array.isArray(workspaceIds) ? workspaceIds : [workspaceIds]
+
+    if (workspaceIdArray.length === 0) {
+      return { healthy: true, installations: [], availableOrgs: [] }
+    }
+
+    // Verify user has access to at least one of these workspaces
     const membership = await payload.find({
       collection: 'workspace-members',
       where: {
         and: [
-          { workspace: { equals: workspaceId } },
+          { workspace: { in: workspaceIdArray } },
           { user: { equals: session.user.id } },
           { status: { equals: 'active' } },
         ],
@@ -1334,7 +1341,8 @@ export async function getGitHubHealth(workspaceId: string): Promise<GitHubHealth
       const allowedWorkspaceIds = (inst.allowedWorkspaces || []).map((w: any) =>
         typeof w === 'string' ? w : w.id
       )
-      const workspaceLinked = allowedWorkspaceIds.includes(workspaceId)
+      // Check if installation is linked to ANY of the provided workspaces
+      const workspaceLinked = workspaceIdArray.some(wsId => allowedWorkspaceIds.includes(wsId))
 
       return {
         id: inst.id as string,
@@ -1348,12 +1356,12 @@ export async function getGitHubHealth(workspaceId: string): Promise<GitHubHealth
       }
     })
 
-    // Only check installations that are linked to the workspace
+    // Only check installations that are linked to any of the workspaces
     const hasInvalidToken = installations.some(
       inst => inst.workspaceLinked && !inst.tokenValid
     )
 
-    // Available orgs are only those with valid tokens AND linked to workspace
+    // Available orgs are only those with valid tokens AND linked to any workspace
     const availableOrgs: GitHubOrg[] = installations
       .filter(inst => inst.tokenValid && inst.workspaceLinked)
       .map(inst => ({
@@ -1424,6 +1432,31 @@ export async function startInstantiation(input: StartInstantiationInput): Promis
     }
   }
 
+  // Look up installation ID for the target org
+  const installations = await payload.find({
+    collection: 'github-installations',
+    where: {
+      accountLogin: { equals: input.targetOrg },
+      status: { equals: 'active' },
+    },
+    limit: 1,
+    overrideAccess: true,
+  })
+
+  if (installations.docs.length === 0) {
+    return { success: false, error: `No active GitHub installation found for org: ${input.targetOrg}` }
+  }
+
+  const installation = installations.docs[0]
+  const installationId = String(installation.installationId)
+
+  // Parse template source repo owner and name from URL
+  // URL format: https://github.com/owner/repo or https://github.com/owner/repo.git
+  const repoUrl = template.repoUrl || ''
+  const urlMatch = repoUrl.match(/github\.com\/([^/]+)\/([^/.]+)/)
+  const sourceRepoOwner = urlMatch ? urlMatch[1] : ''
+  const sourceRepoName = urlMatch ? urlMatch[2] : ''
+
   // Call gRPC template service to start instantiation workflow
   try {
     const response = await templateClient.startInstantiation({
@@ -1435,6 +1468,13 @@ export async function startInstantiation(input: StartInstantiationInput): Promis
       isPrivate: input.isPrivate,
       variables: input.variables,
       userId: session.user.id,
+      // Template source info
+      sourceRepoUrl: repoUrl,
+      isGithubTemplate: template.isGitHubTemplate || false,
+      sourceRepoOwner,
+      sourceRepoName,
+      // GitHub authentication
+      githubInstallationId: installationId,
     })
 
     // Increment usage count
