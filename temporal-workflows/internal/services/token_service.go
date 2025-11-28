@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 // TokenService defines the interface for fetching GitHub installation tokens
@@ -27,7 +28,9 @@ func NewPayloadTokenService(orbitAPIURL, apiKey string) *PayloadTokenService {
 	return &PayloadTokenService{
 		orbitAPIURL: orbitAPIURL,
 		apiKey:      apiKey,
-		httpClient:  &http.Client{},
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
 	}
 }
 
@@ -92,7 +95,9 @@ func (s *PayloadTokenService) GetInstallationToken(ctx context.Context, installa
 
 	default:
 		var errResp errorResponse
-		json.Unmarshal(body, &errResp)
+		if err := json.Unmarshal(body, &errResp); err != nil {
+			return "", fmt.Errorf("API error (status %d): failed to parse error response", resp.StatusCode)
+		}
 		return "", fmt.Errorf("API error (status %d): %s", resp.StatusCode, errResp.Error)
 	}
 }
