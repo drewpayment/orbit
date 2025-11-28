@@ -396,7 +396,7 @@ func (a *TemplateActivities) runGitCommand(ctx context.Context, dir string, args
 	cmd.Dir = dir
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("git %v failed: %w (output: %s)", args, err, string(output))
+		return fmt.Errorf("git %v failed: %w (output: %s)", args, err, sanitizeGitOutput(string(output)))
 	}
 	return nil
 }

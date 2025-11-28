@@ -449,13 +449,17 @@ func (a *GitActivities) createCredentialHelper(token string) (string, error) {
 
 // sanitizeGitOutput removes potential credential information from git command output
 func sanitizeGitOutput(output string) string {
-	// Remove anything that looks like a token in URLs
+	// Remove tokens from HTTPS URLs (x-access-token:TOKEN@)
 	re := regexp.MustCompile(`https://[^:]+:[^@]+@`)
-	output = re.ReplaceAllString(output, "https://***@")
+	sanitized := re.ReplaceAllString(output, "https://***@")
+
+	// Remove anything that looks like a GitHub token (ghs_, ghp_, etc.)
+	reToken := regexp.MustCompile(`gh[a-z]_[A-Za-z0-9]{36,}`)
+	sanitized = reToken.ReplaceAllString(sanitized, "gh*_***")
 
 	// Truncate long output to prevent credential exposure
-	if len(output) > 500 {
-		output = output[:500] + "... (truncated)"
+	if len(sanitized) > 500 {
+		sanitized = sanitized[:500] + "..."
 	}
-	return output
+	return sanitized
 }
