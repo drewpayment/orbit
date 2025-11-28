@@ -1,5 +1,5 @@
 import { createClient } from '@connectrpc/connect';
-import { createConnectTransport } from '@connectrpc/connect-web';
+import { createGrpcTransport } from '@connectrpc/connect-node';
 import {
   TemplateService,
   type StartInstantiationRequest,
@@ -9,11 +9,12 @@ import {
 } from '@/lib/proto/idp/template/v1/template_pb';
 
 /**
- * Create a transport for the template service
- * Uses the same URL as repository service since TemplateService is hosted there
+ * Create a gRPC transport for the template service (server-side)
+ * Uses REPOSITORY_SERVICE_URL for Docker networking, falls back to localhost
  */
-const transport = createConnectTransport({
-  baseUrl: process.env.NEXT_PUBLIC_REPOSITORY_URL || 'http://localhost:50051',
+const transport = createGrpcTransport({
+  baseUrl: process.env.REPOSITORY_SERVICE_URL || 'http://localhost:50051',
+  httpVersion: '2',
 });
 
 /**
@@ -26,5 +27,6 @@ export interface TemplateClient {
 
 /**
  * Template service client for template instantiation operations
+ * This client uses gRPC transport and should only be used server-side (server actions, API routes)
  */
 export const templateClient = createClient(TemplateService, transport) as unknown as TemplateClient;

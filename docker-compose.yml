@@ -91,6 +91,7 @@ services:
       - TEMPORAL_NAMESPACE=default
       - TEMPORAL_ADDRESS=temporal-server:7233
       - NEXT_PUBLIC_REPOSITORY_URL=http://repository-service:50051
+      - REPOSITORY_SERVICE_URL=http://repository-service:50051
       - ORBIT_INTERNAL_API_KEY=${ORBIT_INTERNAL_API_KEY:-orbit-internal-dev-key}
     env_file:
       - ./orbit-www/.env
