@@ -1186,6 +1186,21 @@ export interface GitHubOrg {
   installationId: string
 }
 
+export interface GitHubInstallationHealth {
+  id: string
+  accountLogin: string
+  accountType: 'User' | 'Organization'
+  avatarUrl?: string
+  tokenValid: boolean
+  workspaceLinked: boolean
+}
+
+export interface GitHubHealthStatus {
+  healthy: boolean
+  installations: GitHubInstallationHealth[]
+  availableOrgs: GitHubOrg[]
+}
+
 export interface StartInstantiationInput {
   templateId: string
   workspaceId: string
@@ -1267,6 +1282,82 @@ export async function getAvailableOrgs(workspaceId: string): Promise<{
   }))
 
   return { orgs }
+}
+
+export async function getGitHubHealth(workspaceId: string): Promise<GitHubHealthStatus> {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+
+  if (!session?.user) {
+    return { healthy: true, installations: [], availableOrgs: [] }
+  }
+
+  const payload = await getPayload({ config })
+
+  // Check workspace membership
+  const membership = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { workspace: { equals: workspaceId } },
+        { user: { equals: session.user.id } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    limit: 1,
+  })
+
+  if (membership.docs.length === 0) {
+    return { healthy: true, installations: [], availableOrgs: [] }
+  }
+
+  // Get ALL GitHub installations (not filtered by workspace)
+  const allInstallations = await payload.find({
+    collection: 'github-installations',
+    where: {
+      status: { not_equals: 'suspended' },
+    },
+    limit: 100,
+  })
+
+  const now = new Date()
+  const installations: GitHubInstallationHealth[] = allInstallations.docs.map(inst => {
+    const tokenExpiresAt = inst.tokenExpiresAt ? new Date(inst.tokenExpiresAt) : null
+    const tokenValid = inst.status === 'active' && tokenExpiresAt !== null && tokenExpiresAt > now
+
+    const allowedWorkspaceIds = (inst.allowedWorkspaces || []).map((w: any) =>
+      typeof w === 'string' ? w : w.id
+    )
+    const workspaceLinked = allowedWorkspaceIds.includes(workspaceId)
+
+    return {
+      id: inst.id as string,
+      accountLogin: inst.accountLogin,
+      accountType: inst.accountType as 'User' | 'Organization',
+      avatarUrl: inst.accountAvatarUrl || undefined,
+      tokenValid,
+      workspaceLinked,
+    }
+  })
+
+  // Check if any installation has invalid token
+  const hasInvalidToken = installations.some(inst => !inst.tokenValid)
+
+  // Available orgs are only those with valid tokens AND linked to workspace
+  const availableOrgs: GitHubOrg[] = installations
+    .filter(inst => inst.tokenValid && inst.workspaceLinked)
+    .map(inst => ({
+      name: inst.accountLogin,
+      avatarUrl: inst.avatarUrl,
+      installationId: inst.id,
+    }))
+
+  return {
+    healthy: !hasInvalidToken,
+    installations,
+    availableOrgs,
+  }
 }
 
 /**
