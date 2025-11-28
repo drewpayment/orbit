@@ -9,6 +9,7 @@ import { SiteHeader } from '@/components/site-header'
 import { UseTemplateForm } from '@/components/features/templates/UseTemplateForm'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { getGitHubHealth } from '@/app/actions/templates'
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -71,19 +72,15 @@ export default async function UseTemplatePage({ params }: PageProps) {
     })
     .filter((ws): ws is { id: string; name: string } => ws !== null)
 
-  // Get GitHub organizations from installations
-  // For now, we'll create a placeholder - in production this would query github-installations
-  const installations = await payload.find({
-    collection: 'github-installations',
-    where: {
-      status: { equals: 'active' },
-    },
-    limit: 100,
-  })
+  // Get GitHub health status and available orgs
+  const firstWorkspaceId = workspaces[0]?.id
+  const githubHealth = firstWorkspaceId
+    ? await getGitHubHealth(firstWorkspaceId)
+    : { healthy: true, installations: [], availableOrgs: [] }
 
-  const githubOrgs = installations.docs.map((inst) => ({
-    login: inst.accountLogin || 'unknown',
-    name: inst.accountLogin || 'Unknown Organization',
+  const githubOrgs = githubHealth.availableOrgs.map((org) => ({
+    login: org.name,
+    name: org.name,
   }))
 
   // Parse variables from template
@@ -143,6 +140,7 @@ export default async function UseTemplatePage({ params }: PageProps) {
             variables={variables}
             workspaces={workspaces}
             githubOrgs={githubOrgs}
+            githubInstallations={githubHealth.installations}
           />
         </div>
       </SidebarInset>

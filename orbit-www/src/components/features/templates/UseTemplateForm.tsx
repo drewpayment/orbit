@@ -16,8 +16,9 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Loader2, AlertCircle, CheckCircle2, Info } from 'lucide-react'
-import { instantiateTemplate } from '@/app/actions/templates'
+import { Loader2, AlertCircle, CheckCircle2, Info, ExternalLink } from 'lucide-react'
+import { instantiateTemplate, type GitHubInstallationHealth } from '@/app/actions/templates'
+import Link from 'next/link'
 
 interface TemplateVariable {
   key: string
@@ -44,6 +45,7 @@ interface UseTemplateFormProps {
   variables: TemplateVariable[]
   workspaces: Workspace[]
   githubOrgs: GitHubOrg[]
+  githubInstallations: GitHubInstallationHealth[]
 }
 
 export function UseTemplateForm({
@@ -52,6 +54,7 @@ export function UseTemplateForm({
   variables,
   workspaces,
   githubOrgs,
+  githubInstallations,
 }: UseTemplateFormProps) {
   const router = useRouter()
   const [repoName, setRepoName] = useState('')
@@ -194,6 +197,49 @@ export function UseTemplateForm({
     }
   }
 
+  // Determine diagnostic message for when no orgs are available
+  const getDiagnosticMessage = () => {
+    if (githubOrgs.length > 0) return null
+
+    // No installations at all
+    if (githubInstallations.length === 0) {
+      return {
+        title: 'No GitHub App Installed',
+        description: 'Install the Orbit GitHub App to create repositories from templates.',
+        action: { label: 'Install GitHub App', href: '/settings/github/install' },
+      }
+    }
+
+    // Check if any installation has expired token
+    const hasExpiredToken = githubInstallations.some(inst => inst.tokenExpired || inst.refreshFailed)
+    if (hasExpiredToken) {
+      return {
+        title: 'GitHub Token Expired',
+        description: 'Your GitHub token has expired and needs to be refreshed.',
+        action: { label: 'Go to Settings', href: '/settings/github' },
+      }
+    }
+
+    // Check if no installations are linked to workspace
+    const hasUnlinkedInstallations = githubInstallations.some(inst => !inst.workspaceLinked)
+    if (hasUnlinkedInstallations) {
+      return {
+        title: 'GitHub Not Linked to Workspace',
+        description: 'Your GitHub installation is not linked to this workspace.',
+        action: { label: 'Configure', href: '/settings/github' },
+      }
+    }
+
+    // Generic fallback
+    return {
+      title: 'No GitHub Organizations Available',
+      description: 'Please configure your GitHub connection to create repositories.',
+      action: { label: 'Go to Settings', href: '/settings/github' },
+    }
+  }
+
+  const diagnosticMessage = getDiagnosticMessage()
+
   return (
     <form onSubmit={handleSubmit} className="space-y-8 max-w-2xl mx-auto">
       {/* Error Alert */}
@@ -212,6 +258,24 @@ export function UseTemplateForm({
           <AlertTitle className="text-green-600">Creating Repository...</AlertTitle>
           <AlertDescription className="text-green-600">
             Your repository is being created from {templateName}. Redirecting...
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Diagnostic Message for No Orgs */}
+      {diagnosticMessage && !success && (
+        <Alert variant="default" className="border-blue-500 bg-blue-50 dark:bg-blue-950">
+          <Info className="h-4 w-4 text-blue-600" />
+          <AlertTitle className="text-blue-600">{diagnosticMessage.title}</AlertTitle>
+          <AlertDescription className="text-blue-600">
+            {diagnosticMessage.description}
+            <Link
+              href={diagnosticMessage.action.href}
+              className="ml-2 inline-flex items-center gap-1 underline hover:no-underline"
+            >
+              {diagnosticMessage.action.label}
+              <ExternalLink className="h-3 w-3" />
+            </Link>
           </AlertDescription>
         </Alert>
       )}
