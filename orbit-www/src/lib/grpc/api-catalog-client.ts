@@ -1,6 +1,6 @@
 import { createClient } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-web';
-import { APICatalogService } from '@/lib/proto/api_catalog_connect';
+import { APICatalogService } from '@/lib/proto/api_catalog_pb';
 
 // Re-export types from proto for convenience
 export { SchemaType } from '@/lib/proto/api_catalog_pb';

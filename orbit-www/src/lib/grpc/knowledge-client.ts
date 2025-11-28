@@ -1,6 +1,6 @@
 import { createClient } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-web';
-import { KnowledgeService } from '@/lib/proto/knowledge_connect';
+import { KnowledgeService } from '@/lib/proto/knowledge_pb';
 
 /**
  * Create a transport for the knowledge service

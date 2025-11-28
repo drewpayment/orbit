@@ -1,6 +1,6 @@
 import { createClient } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-web';
-import { RepositoryService } from '@/lib/proto/repository_connect';
+import { RepositoryService } from '@/lib/proto/repository_pb';
 
 /**
  * Create a transport for the repository service

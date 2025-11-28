@@ -5,19 +5,19 @@
  * Once your backend services are running, replace workspace-client.ts with this pattern.
  */
 
-import { createPromiseClient } from '@connectrpc/connect'
+import { createClient } from '@connectrpc/connect'
 import { createConnectTransport } from '@connectrpc/connect-web'
-import { WorkspaceService } from '@/lib/proto/workspace_connect'
-import type {
-  Workspace,
-  WorkspaceMember,
-  CreateWorkspaceRequest,
-  UpdateWorkspaceRequest,
-  ListWorkspacesRequest,
-  AddMemberRequest,
-  UpdateMemberRoleRequest,
+import {
+  WorkspaceService,
+  WorkspaceRole,
+  type Workspace,
+  type WorkspaceMember,
+  type CreateWorkspaceRequest,
+  type UpdateWorkspaceRequest,
+  type ListWorkspacesRequest,
+  type AddMemberRequest,
+  type UpdateMemberRoleRequest,
 } from '@/lib/proto/workspace_pb'
-import { WorkspaceRole } from '@/lib/proto/workspace_pb'
 
 /**
  * Create the gRPC transport
@@ -31,7 +31,7 @@ const transport = createConnectTransport({
 /**
  * Create the typed client
  */
-const client = createPromiseClient(WorkspaceService, transport)
+const client = createClient(WorkspaceService, transport)
 
 /**
  * Workspace Service Client

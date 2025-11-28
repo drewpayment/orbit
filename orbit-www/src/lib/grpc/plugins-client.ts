@@ -14,7 +14,7 @@
 
 import { createClient } from '@connectrpc/connect'
 import { createConnectTransport } from '@connectrpc/connect-web'
-import { PluginsService } from '@/lib/proto/idp/plugins/v1/plugins_connect'
+import { PluginsService } from '@/lib/proto/idp/plugins/v1/plugins_pb'
 
 /**
  * Transport configuration for the Plugins gRPC service.

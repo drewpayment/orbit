@@ -1,11 +1,11 @@
-import { createClient, type Client } from '@connectrpc/connect';
+import { createClient } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-web';
-import { TemplateService } from '@/lib/proto/idp/template/v1/template_connect';
-import type {
-  StartInstantiationRequest,
-  StartInstantiationResponse,
-  GetProgressRequest,
-  GetProgressResponse,
+import {
+  TemplateService,
+  type StartInstantiationRequest,
+  type StartInstantiationResponse,
+  type GetProgressRequest,
+  type GetProgressResponse,
 } from '@/lib/proto/idp/template/v1/template_pb';
 
 /**
@@ -26,6 +26,5 @@ export interface TemplateClient {
 
 /**
  * Template service client for template instantiation operations
- * @ts-expect-error - Connect-ES type compatibility issue with bufbuild/protobuf v2
  */
 export const templateClient = createClient(TemplateService, transport) as unknown as TemplateClient;
