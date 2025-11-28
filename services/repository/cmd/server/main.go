@@ -81,15 +81,21 @@ func (tc *TemporalClient) StartTemplateWorkflow(ctx context.Context, input inter
 	}
 
 	workflowInput := types.TemplateInstantiationInput{
-		TemplateID:     req.TemplateId,
-		WorkspaceID:    req.WorkspaceId,
-		TargetOrg:      req.TargetOrg,
-		RepositoryName: req.RepositoryName,
-		Description:    req.Description,
-		IsPrivate:      req.IsPrivate,
-		Variables:      req.Variables,
-		UserID:         req.UserId,
-		// TODO: Fetch template details to set IsGitHubTemplate, SourceRepoOwner, etc.
+		TemplateID:       req.TemplateId,
+		WorkspaceID:      req.WorkspaceId,
+		TargetOrg:        req.TargetOrg,
+		RepositoryName:   req.RepositoryName,
+		Description:      req.Description,
+		IsPrivate:        req.IsPrivate,
+		Variables:        req.Variables,
+		UserID:           req.UserId,
+		// Template source info from request
+		IsGitHubTemplate: req.IsGithubTemplate,
+		SourceRepoOwner:  req.SourceRepoOwner,
+		SourceRepoName:   req.SourceRepoName,
+		SourceRepoURL:    req.SourceRepoUrl,
+		// GitHub authentication
+		InstallationID:   req.GithubInstallationId,
 	}
 
 	workflowID := fmt.Sprintf("template-instantiation-%s-%d", req.RepositoryName, time.Now().Unix())
