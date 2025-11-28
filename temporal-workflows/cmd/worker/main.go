@@ -41,6 +41,11 @@ func main() {
 		templateWorkDir = "/tmp/orbit-templates"
 	}
 
+	orbitInternalAPIKey := os.Getenv("ORBIT_INTERNAL_API_KEY")
+	if orbitInternalAPIKey == "" {
+		log.Println("Warning: ORBIT_INTERNAL_API_KEY not set, GitHub operations will fail")
+	}
+
 	// Create Temporal client
 	c, err := client.Dial(client.Options{
 		HostPort:  temporalAddress,
@@ -85,12 +90,12 @@ func main() {
 	w.RegisterActivity(gitActivities.InitializeGitActivity)
 	w.RegisterActivity(gitActivities.PushToRemoteActivity)
 
-	// Create GitHub template client (token will be passed per-workflow)
-	githubTemplateClient := services.NewGitHubTemplateClient("", "")
+	// Create token service for GitHub authentication
+	tokenService := services.NewPayloadTokenService(orbitAPIURL, orbitInternalAPIKey)
 
 	// Create and register template activities
 	templateActivities := activities.NewTemplateActivities(
-		githubTemplateClient,
+		tokenService,
 		templateWorkDir,
 		logger,
 	)
