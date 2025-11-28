@@ -2,6 +2,7 @@ import React from 'react'
 import { ThemeProvider } from '@/components/theme-provider'
 import { BreadcrumbProvider } from '@/components/breadcrumb-provider'
 import { AuthGuard } from '@/components/auth-guard'
+import { GitHubHealthProviderWrapper } from '@/components/providers/GitHubHealthProviderWrapper'
 import { Crimson_Pro, Source_Serif_4 } from 'next/font/google'
 import '@/app/globals.css'
 
@@ -31,7 +32,9 @@ export default function FrontendLayout({ children }: { children: React.ReactNode
         >
           <BreadcrumbProvider>
             <AuthGuard>
-              <main>{children}</main>
+              <GitHubHealthProviderWrapper>
+                <main>{children}</main>
+              </GitHubHealthProviderWrapper>
             </AuthGuard>
           </BreadcrumbProvider>
         </ThemeProvider>
