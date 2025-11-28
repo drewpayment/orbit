@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/drewpayment/orbit/temporal-workflows/internal/services"
 )
 
 // TemplateInstantiationInput contains all parameters needed for template instantiation
@@ -27,6 +29,7 @@ type TemplateInstantiationInput struct {
 	SourceRepoURL    string            // Full URL of source repo (for non-GitHub templates)
 	Variables        map[string]string // Template variables to substitute
 	UserID           string            // ID of user initiating instantiation
+	InstallationID   string            // GitHub App installation ID for authentication
 }
 
 // CreateRepoResult contains information about a created repository
@@ -43,8 +46,9 @@ type ApplyTemplateVariablesActivityInput struct {
 
 // PushToNewRepoActivityInput contains parameters for pushing to new repository
 type PushToNewRepoActivityInput struct {
-	WorkDir string
-	RepoURL string
+	WorkDir        string
+	RepoURL        string
+	InstallationID string // GitHub App installation ID for authentication
 }
 
 // FinalizeInstantiationActivityInput contains parameters for finalization
@@ -54,6 +58,11 @@ type FinalizeInstantiationActivityInput struct {
 	RepoURL     string
 	RepoName    string
 	UserID      string
+}
+
+// TokenService defines the interface for fetching GitHub tokens
+type TokenService interface {
+	GetInstallationToken(ctx context.Context, installationID string) (string, error)
 }
 
 // GitHubTemplateClient defines the interface for GitHub template operations
@@ -67,18 +76,18 @@ type GitHubTemplateClient interface {
 
 // TemplateActivities holds the dependencies for template instantiation activities
 type TemplateActivities struct {
-	githubClient GitHubTemplateClient
+	tokenService TokenService
 	workDir      string
 	logger       *slog.Logger
 }
 
 // NewTemplateActivities creates a new instance of TemplateActivities
-func NewTemplateActivities(githubClient GitHubTemplateClient, workDir string, logger *slog.Logger) *TemplateActivities {
+func NewTemplateActivities(tokenService TokenService, workDir string, logger *slog.Logger) *TemplateActivities {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &TemplateActivities{
-		githubClient: githubClient,
+		tokenService: tokenService,
 		workDir:      workDir,
 		logger:       logger,
 	}
@@ -132,7 +141,16 @@ func (a *TemplateActivities) CreateRepoFromTemplate(ctx context.Context, input T
 		"targetOrg", input.TargetOrg,
 		"targetName", input.RepositoryName)
 
-	repoURL, err := a.githubClient.CreateRepoFromTemplate(
+	// Fetch token for this installation
+	token, err := a.tokenService.GetInstallationToken(ctx, input.InstallationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get GitHub token: %w", err)
+	}
+
+	// Create client with token
+	client := services.NewGitHubTemplateClient("", token)
+
+	repoURL, err := client.CreateRepoFromTemplate(
 		ctx,
 		input.SourceRepoOwner,
 		input.SourceRepoName,
@@ -157,7 +175,16 @@ func (a *TemplateActivities) CreateEmptyRepo(ctx context.Context, input Template
 		"org", input.TargetOrg,
 		"name", input.RepositoryName)
 
-	repoURL, err := a.githubClient.CreateRepository(
+	// Fetch token for this installation
+	token, err := a.tokenService.GetInstallationToken(ctx, input.InstallationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get GitHub token: %w", err)
+	}
+
+	// Create client with token
+	client := services.NewGitHubTemplateClient("", token)
+
+	repoURL, err := client.CreateRepository(
 		ctx,
 		input.TargetOrg,
 		input.RepositoryName,
@@ -184,13 +211,27 @@ func (a *TemplateActivities) CloneTemplateRepo(ctx context.Context, input Templa
 		return "", fmt.Errorf("failed to create work directory: %w", err)
 	}
 
+	// Build clone URL with authentication if we have an installation ID
+	cloneURL := input.SourceRepoURL
+	if input.InstallationID != "" {
+		token, err := a.tokenService.GetInstallationToken(ctx, input.InstallationID)
+		if err != nil {
+			a.logger.Warn("Failed to get token for clone, attempting unauthenticated", "error", err)
+		} else {
+			// Insert token into URL for authenticated clone
+			cloneURL = strings.Replace(cloneURL, "https://", fmt.Sprintf("https://x-access-token:%s@", token), 1)
+		}
+	}
+
 	// Clone the repository
-	cmd := exec.CommandContext(ctx, "git", "clone", input.SourceRepoURL, workDir)
+	cmd := exec.CommandContext(ctx, "git", "clone", cloneURL, workDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		// Clean up on failure
 		_ = os.RemoveAll(workDir)
-		return "", fmt.Errorf("failed to clone repository: %w (output: %s)", err, string(output))
+		// Sanitize output to remove any tokens
+		sanitizedOutput := sanitizeGitOutput(string(output))
+		return "", fmt.Errorf("failed to clone repository: %w (output: %s)", err, sanitizedOutput)
 	}
 
 	// Remove .git directory to start fresh
@@ -280,6 +321,10 @@ func (a *TemplateActivities) PushToNewRepo(ctx context.Context, input PushToNewR
 		return fmt.Errorf("failed to initialize git: %w", err)
 	}
 
+	// Configure git
+	_ = a.runGitCommand(ctx, input.WorkDir, "config", "user.name", "Orbit IDP")
+	_ = a.runGitCommand(ctx, input.WorkDir, "config", "user.email", "bot@orbit.dev")
+
 	// Add all files
 	if err := a.runGitCommand(ctx, input.WorkDir, "add", "."); err != nil {
 		return fmt.Errorf("failed to add files: %w", err)
@@ -290,9 +335,20 @@ func (a *TemplateActivities) PushToNewRepo(ctx context.Context, input PushToNewR
 		return fmt.Errorf("failed to commit: %w", err)
 	}
 
+	// Build remote URL with authentication if we have installation ID
+	remoteURL := input.RepoURL
+	if input.InstallationID != "" {
+		token, err := a.tokenService.GetInstallationToken(ctx, input.InstallationID)
+		if err != nil {
+			return fmt.Errorf("failed to get GitHub token for push: %w", err)
+		}
+		remoteURL = strings.Replace(remoteURL, "https://", fmt.Sprintf("https://x-access-token:%s@", token), 1)
+	}
+
 	// Add remote
-	if err := a.runGitCommand(ctx, input.WorkDir, "remote", "add", "origin", input.RepoURL); err != nil {
-		return fmt.Errorf("failed to add remote: %w", err)
+	if err := a.runGitCommand(ctx, input.WorkDir, "remote", "add", "origin", remoteURL); err != nil {
+		// Remote might already exist, try setting URL instead
+		_ = a.runGitCommand(ctx, input.WorkDir, "remote", "set-url", "origin", remoteURL)
 	}
 
 	// Push to main branch

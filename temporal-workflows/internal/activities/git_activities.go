@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/drewpayment/orbit/temporal-workflows/internal/services"
@@ -448,6 +449,10 @@ func (a *GitActivities) createCredentialHelper(token string) (string, error) {
 
 // sanitizeGitOutput removes potential credential information from git command output
 func sanitizeGitOutput(output string) string {
+	// Remove anything that looks like a token in URLs
+	re := regexp.MustCompile(`https://[^:]+:[^@]+@`)
+	output = re.ReplaceAllString(output, "https://***@")
+
 	// Truncate long output to prevent credential exposure
 	if len(output) > 500 {
 		output = output[:500] + "... (truncated)"
