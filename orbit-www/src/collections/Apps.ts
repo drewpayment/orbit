@@ -1,4 +1,4 @@
-import type { CollectionConfig } from 'payload'
+import type { CollectionConfig, Where } from 'payload'
 
 export const Apps: CollectionConfig = {
   slug: 'apps',
@@ -8,19 +8,90 @@ export const Apps: CollectionConfig = {
     defaultColumns: ['name', 'status', 'workspace', 'updatedAt'],
   },
   access: {
-    read: ({ req: { user } }) => {
+    // Read: Based on workspace membership
+    read: async ({ req: { user, payload } }) => {
       if (!user) return false
-      return {
-        'workspace.id': {
-          in: user.workspaces?.map((w: { workspace: { id: string } }) =>
-            typeof w.workspace === 'object' ? w.workspace.id : w.workspace
-          ) || [],
+
+      // Get user's workspace memberships
+      const memberships = await payload.find({
+        collection: 'workspace-members',
+        where: {
+          user: { equals: user.id },
+          status: { equals: 'active' },
         },
-      }
+        limit: 1000,
+        overrideAccess: true,
+      })
+
+      const workspaceIds = memberships.docs.map(m =>
+        String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
+      )
+
+      // Return query constraint: in user's workspaces
+      return {
+        workspace: { in: workspaceIds },
+      } as Where
     },
+    // Create: Users with app:create permission (workspace membership checked by workspace field)
     create: ({ req: { user } }) => !!user,
-    update: ({ req: { user } }) => !!user,
-    delete: ({ req: { user } }) => !!user,
+    // Update: Workspace members (owner, admin, or member role)
+    update: async ({ req: { user, payload }, id }) => {
+      if (!user || !id) return false
+
+      const app = await payload.findByID({
+        collection: 'apps',
+        id,
+        overrideAccess: true,
+      })
+
+      const workspaceId = typeof app.workspace === 'string'
+        ? app.workspace
+        : app.workspace.id
+
+      const members = await payload.find({
+        collection: 'workspace-members',
+        where: {
+          and: [
+            { workspace: { equals: workspaceId } },
+            { user: { equals: user.id } },
+            { role: { in: ['owner', 'admin', 'member'] } },
+            { status: { equals: 'active' } },
+          ],
+        },
+        overrideAccess: true,
+      })
+
+      return members.docs.length > 0
+    },
+    // Delete: Workspace owners and admins only
+    delete: async ({ req: { user, payload }, id }) => {
+      if (!user || !id) return false
+
+      const app = await payload.findByID({
+        collection: 'apps',
+        id,
+        overrideAccess: true,
+      })
+
+      const workspaceId = typeof app.workspace === 'string'
+        ? app.workspace
+        : app.workspace.id
+
+      const members = await payload.find({
+        collection: 'workspace-members',
+        where: {
+          and: [
+            { workspace: { equals: workspaceId } },
+            { user: { equals: user.id } },
+            { role: { in: ['owner', 'admin'] } },
+            { status: { equals: 'active' } },
+          ],
+        },
+        overrideAccess: true,
+      })
+
+      return members.docs.length > 0
+    },
   },
   fields: [
     {
