@@ -50,16 +50,8 @@ services:
     volumes:
       - ./infrastructure/temporal/dynamicconfig:/etc/temporal/config/dynamicconfig
 
-  temporal-admin-tools:
-    container_name: temporal-admin-tools
-    depends_on:
-      - temporal-server
-    environment:
-      - TEMPORAL_ADDRESS=temporal-server:7233
-      - TEMPORAL_CLI_ADDRESS=temporal-server:7233
-    image: temporalio/admin-tools:1.25.1
-    stdin_open: true
-    tty: true
+  # temporal-admin-tools moved to docker-compose.debug.yml
+  # Usage: docker compose -f docker-compose.yml -f docker-compose.debug.yml up -d temporal-admin-tools
 
   temporal-ui:
     container_name: temporal-ui
@@ -106,6 +98,7 @@ services:
       - repository-service
     volumes:
       - ./orbit-www:/app
+      - /app/node_modules
     restart: unless-stopped
 
   mongo:
@@ -169,11 +162,11 @@ services:
   plugins-service:
     container_name: orbit-plugins-service
     build:
-      context: ./services/plugins
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/plugins/Dockerfile
     ports:
       - "50053:50053"  # gRPC
-      - "8080:8080"    # HTTP (health/metrics)
+      - "8082:8080"    # HTTP (health/metrics) - remapped to avoid conflict with temporal-ui
     environment:
       - GRPC_PORT=50053
       - HTTP_PORT=8080

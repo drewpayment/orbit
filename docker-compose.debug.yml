@@ -1,0 +1,16 @@
+# Debug tools - use with: docker compose -f docker-compose.yml -f docker-compose.debug.yml up -d
+# Or for just the debug tools: docker compose -f docker-compose.debug.yml up -d temporal-admin-tools
+
+services:
+  temporal-admin-tools:
+    container_name: temporal-admin-tools
+    depends_on:
+      - temporal-server
+    environment:
+      - TEMPORAL_ADDRESS=temporal-server:7233
+      - TEMPORAL_CLI_ADDRESS=temporal-server:7233
+    image: temporalio/admin-tools:latest
+    stdin_open: true
+    tty: true
+    profiles:
+      - debug

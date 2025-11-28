@@ -2,3 +2,7 @@
 .claude/.DS_Store
 .DS_Store
 .worktrees/
+
+# Go binaries
+temporal-workflows/worker
+services/*/bin/
