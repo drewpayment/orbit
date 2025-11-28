@@ -1,7 +1,6 @@
 package workflows
 
 import (
-	"context"
 	"time"
 
 	"go.temporal.io/sdk/temporal"
@@ -73,7 +72,7 @@ type PushToNewRepoActivityInput struct {
 	RepoURL string
 }
 
-type CleanupWorkDirActivityInput struct {
+type ActivityCleanupWorkDirInput struct {
 	WorkDir string
 }
 
@@ -85,32 +84,16 @@ type FinalizeInstantiationActivityInput struct {
 	UserID      string
 }
 
-// Activity function stubs - these will be replaced with actual implementations when registering with worker
-var (
-	ValidateInstantiationInputActivity = func(ctx context.Context, input TemplateInstantiationInput) error {
-		panic("ValidateInstantiationInputActivity not implemented - register actual activity implementation")
-	}
-	CreateRepoFromTemplateActivity = func(ctx context.Context, input TemplateInstantiationInput) (*CreateRepoResult, error) {
-		panic("CreateRepoFromTemplateActivity not implemented - register actual activity implementation")
-	}
-	CreateEmptyRepoActivity = func(ctx context.Context, input TemplateInstantiationInput) (*CreateRepoResult, error) {
-		panic("CreateEmptyRepoActivity not implemented - register actual activity implementation")
-	}
-	CloneTemplateRepoActivity = func(ctx context.Context, input TemplateInstantiationInput) (string, error) {
-		panic("CloneTemplateRepoActivity not implemented - register actual activity implementation")
-	}
-	ApplyTemplateVariablesActivity = func(ctx context.Context, input ApplyTemplateVariablesActivityInput) error {
-		panic("ApplyTemplateVariablesActivity not implemented - register actual activity implementation")
-	}
-	PushToNewRepoActivity = func(ctx context.Context, input PushToNewRepoActivityInput) error {
-		panic("PushToNewRepoActivity not implemented - register actual activity implementation")
-	}
-	CleanupWorkDirActivity = func(ctx context.Context, workDir string) error {
-		panic("CleanupWorkDirActivity not implemented - register actual activity implementation")
-	}
-	FinalizeInstantiationActivity = func(ctx context.Context, input FinalizeInstantiationActivityInput) error {
-		panic("FinalizeInstantiationActivity not implemented - register actual activity implementation")
-	}
+// Activity names - these must match the method names registered with the worker
+const (
+	ActivityValidateInstantiationInput = "ValidateInstantiationInput"
+	ActivityCreateRepoFromTemplate     = "CreateRepoFromTemplate"
+	ActivityCreateEmptyRepo            = "CreateEmptyRepo"
+	ActivityCloneTemplateRepo          = "CloneTemplateRepo"
+	ActivityApplyTemplateVariables     = "ApplyTemplateVariables"
+	ActivityPushToNewRepo              = "PushToNewRepo"
+	ActivityCleanupWorkDir             = "CleanupWorkDir"
+	ActivityFinalizeInstantiation      = "FinalizeInstantiation"
 )
 
 // TemplateInstantiationWorkflow orchestrates repository creation from templates
@@ -155,7 +138,7 @@ func TemplateInstantiationWorkflow(ctx workflow.Context, input TemplateInstantia
 	progress.StepsCurrent = 1
 	progress.Message = "Validating template instantiation parameters"
 
-	err = workflow.ExecuteActivity(ctx, ValidateInstantiationInputActivity, input).Get(ctx, nil)
+	err = workflow.ExecuteActivity(ctx, ActivityValidateInstantiationInput, input).Get(ctx, nil)
 	if err != nil {
 		logger.Error("Input validation failed", "error", err)
 		return &TemplateInstantiationResult{
@@ -173,7 +156,7 @@ func TemplateInstantiationWorkflow(ctx workflow.Context, input TemplateInstantia
 		progress.StepsCurrent = 2
 		progress.Message = "Creating repository from GitHub template"
 
-		err = workflow.ExecuteActivity(ctx, CreateRepoFromTemplateActivity, input).Get(ctx, &repoResult)
+		err = workflow.ExecuteActivity(ctx, ActivityCreateRepoFromTemplate, input).Get(ctx, &repoResult)
 		if err != nil {
 			logger.Error("Failed to create repo from template", "error", err)
 			return &TemplateInstantiationResult{
@@ -190,7 +173,7 @@ func TemplateInstantiationWorkflow(ctx workflow.Context, input TemplateInstantia
 		progress.Message = "Creating empty repository"
 
 		// Step 2: Create empty repository
-		err = workflow.ExecuteActivity(ctx, CreateEmptyRepoActivity, input).Get(ctx, &repoResult)
+		err = workflow.ExecuteActivity(ctx, ActivityCreateEmptyRepo, input).Get(ctx, &repoResult)
 		if err != nil {
 			logger.Error("Failed to create empty repo", "error", err)
 			return &TemplateInstantiationResult{
@@ -205,7 +188,7 @@ func TemplateInstantiationWorkflow(ctx workflow.Context, input TemplateInstantia
 		progress.Message = "Cloning template repository"
 
 		var workDir string
-		err = workflow.ExecuteActivity(ctx, CloneTemplateRepoActivity, input).Get(ctx, &workDir)
+		err = workflow.ExecuteActivity(ctx, ActivityCloneTemplateRepo, input).Get(ctx, &workDir)
 		if err != nil {
 			logger.Error("Failed to clone template", "error", err)
 			return &TemplateInstantiationResult{
@@ -223,11 +206,11 @@ func TemplateInstantiationWorkflow(ctx workflow.Context, input TemplateInstantia
 			WorkDir:   workDir,
 			Variables: input.Variables,
 		}
-		err = workflow.ExecuteActivity(ctx, ApplyTemplateVariablesActivity, applyInput).Get(ctx, nil)
+		err = workflow.ExecuteActivity(ctx, ActivityApplyTemplateVariables, applyInput).Get(ctx, nil)
 		if err != nil {
 			logger.Error("Failed to apply variables", "error", err)
 			// Clean up work directory
-			_ = workflow.ExecuteActivity(ctx, CleanupWorkDirActivity, workDir).Get(ctx, nil)
+			_ = workflow.ExecuteActivity(ctx, ActivityCleanupWorkDir, workDir).Get(ctx, nil)
 			return &TemplateInstantiationResult{
 				Status: "failed",
 				Error:  "failed to apply template variables: " + err.Error(),
@@ -243,11 +226,11 @@ func TemplateInstantiationWorkflow(ctx workflow.Context, input TemplateInstantia
 			WorkDir: workDir,
 			RepoURL: repoResult.RepoURL,
 		}
-		err = workflow.ExecuteActivity(ctx, PushToNewRepoActivity, pushInput).Get(ctx, nil)
+		err = workflow.ExecuteActivity(ctx, ActivityPushToNewRepo, pushInput).Get(ctx, nil)
 		if err != nil {
 			logger.Error("Failed to push to repo", "error", err)
 			// Clean up work directory
-			_ = workflow.ExecuteActivity(ctx, CleanupWorkDirActivity, workDir).Get(ctx, nil)
+			_ = workflow.ExecuteActivity(ctx, ActivityCleanupWorkDir, workDir).Get(ctx, nil)
 			return &TemplateInstantiationResult{
 				Status: "failed",
 				Error:  "failed to push to new repository: " + err.Error(),
@@ -255,7 +238,7 @@ func TemplateInstantiationWorkflow(ctx workflow.Context, input TemplateInstantia
 		}
 
 		// Clean up work directory
-		_ = workflow.ExecuteActivity(ctx, CleanupWorkDirActivity, workDir).Get(ctx, nil)
+		_ = workflow.ExecuteActivity(ctx, ActivityCleanupWorkDir, workDir).Get(ctx, nil)
 	}
 
 	// Final step: Finalize instantiation (record in database, send notifications, etc.)
@@ -269,7 +252,7 @@ func TemplateInstantiationWorkflow(ctx workflow.Context, input TemplateInstantia
 		RepoName:    repoResult.RepoName,
 		UserID:      input.UserID,
 	}
-	err = workflow.ExecuteActivity(ctx, FinalizeInstantiationActivity, finalizeInput).Get(ctx, nil)
+	err = workflow.ExecuteActivity(ctx, ActivityFinalizeInstantiation, finalizeInput).Get(ctx, nil)
 	if err != nil {
 		logger.Error("Failed to finalize instantiation", "error", err)
 		return &TemplateInstantiationResult{
