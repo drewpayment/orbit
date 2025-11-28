@@ -28,6 +28,13 @@ message StartInstantiationRequest {
   bool is_private = 6;
   map<string, string> variables = 7;
   string user_id = 8;
+  // Template source info
+  string source_repo_url = 9;        // Full URL of the template repository
+  bool is_github_template = 10;      // True if repo is marked as GitHub template
+  string source_repo_owner = 11;     // Owner/org of template repo (parsed from URL)
+  string source_repo_name = 12;      // Name of template repo (parsed from URL)
+  // GitHub installation for authentication
+  string github_installation_id = 13;  // ID of the GitHub App installation to use
 }
 
 message StartInstantiationResponse {

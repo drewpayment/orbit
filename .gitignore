@@ -5,4 +5,6 @@
 
 # Go binaries
 temporal-workflows/worker
+temporal-workflows/*.test
 services/*/bin/
+services/*/server

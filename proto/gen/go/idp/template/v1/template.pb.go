@@ -89,8 +89,15 @@ type StartInstantiationRequest struct {
 	IsPrivate      bool                   `protobuf:"varint,6,opt,name=is_private,json=isPrivate,proto3" json:"is_private,omitempty"`
 	Variables      map[string]string      `protobuf:"bytes,7,rep,name=variables,proto3" json:"variables,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	UserId         string                 `protobuf:"bytes,8,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Template source info
+	SourceRepoUrl    string `protobuf:"bytes,9,opt,name=source_repo_url,json=sourceRepoUrl,proto3" json:"source_repo_url,omitempty"`            // Full URL of the template repository
+	IsGithubTemplate bool   `protobuf:"varint,10,opt,name=is_github_template,json=isGithubTemplate,proto3" json:"is_github_template,omitempty"` // True if repo is marked as GitHub template
+	SourceRepoOwner  string `protobuf:"bytes,11,opt,name=source_repo_owner,json=sourceRepoOwner,proto3" json:"source_repo_owner,omitempty"`     // Owner/org of template repo (parsed from URL)
+	SourceRepoName   string `protobuf:"bytes,12,opt,name=source_repo_name,json=sourceRepoName,proto3" json:"source_repo_name,omitempty"`        // Name of template repo (parsed from URL)
+	// GitHub installation for authentication
+	GithubInstallationId string `protobuf:"bytes,13,opt,name=github_installation_id,json=githubInstallationId,proto3" json:"github_installation_id,omitempty"` // ID of the GitHub App installation to use
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *StartInstantiationRequest) Reset() {
@@ -175,6 +182,41 @@ func (x *StartInstantiationRequest) GetVariables() map[string]string {
 func (x *StartInstantiationRequest) GetUserId() string {
 	if x != nil {
 		return x.UserId
+	}
+	return ""
+}
+
+func (x *StartInstantiationRequest) GetSourceRepoUrl() string {
+	if x != nil {
+		return x.SourceRepoUrl
+	}
+	return ""
+}
+
+func (x *StartInstantiationRequest) GetIsGithubTemplate() bool {
+	if x != nil {
+		return x.IsGithubTemplate
+	}
+	return false
+}
+
+func (x *StartInstantiationRequest) GetSourceRepoOwner() string {
+	if x != nil {
+		return x.SourceRepoOwner
+	}
+	return ""
+}
+
+func (x *StartInstantiationRequest) GetSourceRepoName() string {
+	if x != nil {
+		return x.SourceRepoName
+	}
+	return ""
+}
+
+func (x *StartInstantiationRequest) GetGithubInstallationId() string {
+	if x != nil {
+		return x.GithubInstallationId
 	}
 	return ""
 }
@@ -599,7 +641,7 @@ var File_idp_template_v1_template_proto protoreflect.FileDescriptor
 
 const file_idp_template_v1_template_proto_rawDesc = "" +
 	"\n" +
-	"\x1eidp/template/v1/template.proto\x12\x0fidp.template.v1\"\x98\x03\n" +
+	"\x1eidp/template/v1/template.proto\x12\x0fidp.template.v1\"\xfa\x04\n" +
 	"\x19StartInstantiationRequest\x12\x1f\n" +
 	"\vtemplate_id\x18\x01 \x01(\tR\n" +
 	"templateId\x12!\n" +
@@ -611,7 +653,13 @@ const file_idp_template_v1_template_proto_rawDesc = "" +
 	"\n" +
 	"is_private\x18\x06 \x01(\bR\tisPrivate\x12W\n" +
 	"\tvariables\x18\a \x03(\v29.idp.template.v1.StartInstantiationRequest.VariablesEntryR\tvariables\x12\x17\n" +
-	"\auser_id\x18\b \x01(\tR\x06userId\x1a<\n" +
+	"\auser_id\x18\b \x01(\tR\x06userId\x12&\n" +
+	"\x0fsource_repo_url\x18\t \x01(\tR\rsourceRepoUrl\x12,\n" +
+	"\x12is_github_template\x18\n" +
+	" \x01(\bR\x10isGithubTemplate\x12*\n" +
+	"\x11source_repo_owner\x18\v \x01(\tR\x0fsourceRepoOwner\x12(\n" +
+	"\x10source_repo_name\x18\f \x01(\tR\x0esourceRepoName\x124\n" +
+	"\x16github_installation_id\x18\r \x01(\tR\x14githubInstallationId\x1a<\n" +
 	"\x0eVariablesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"=\n" +
