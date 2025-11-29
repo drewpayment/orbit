@@ -1,12 +1,43 @@
 package workflows
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
 )
+
+// Stub activity functions for testing
+func stubValidateInstantiationInput(ctx context.Context, input TemplateInstantiationInput) error {
+	return nil
+}
+
+func stubCreateRepoFromTemplate(ctx context.Context, input TemplateInstantiationInput) (*CreateRepoResult, error) {
+	return &CreateRepoResult{}, nil
+}
+
+func stubCreateEmptyRepo(ctx context.Context, input TemplateInstantiationInput) (*CreateRepoResult, error) {
+	return &CreateRepoResult{}, nil
+}
+
+func stubCloneTemplateRepo(ctx context.Context, input TemplateInstantiationInput) (string, error) {
+	return "", nil
+}
+
+func stubApplyTemplateVariables(ctx context.Context, input ApplyTemplateVariablesActivityInput) error {
+	return nil
+}
+
+func stubPushToNewRepo(ctx context.Context, input PushToNewRepoActivityInput) error {
+	return nil
+}
+
+func stubFinalizeInstantiation(ctx context.Context, input FinalizeInstantiationActivityInput) error {
+	return nil
+}
 
 type TemplateInstantiationWorkflowTestSuite struct {
 	suite.Suite
@@ -17,15 +48,31 @@ type TemplateInstantiationWorkflowTestSuite struct {
 func (s *TemplateInstantiationWorkflowTestSuite) SetupTest() {
 	s.env = s.NewTestWorkflowEnvironment()
 
-	// Register stub activities for testing
-	s.env.RegisterActivity(ValidateInstantiationInputActivity)
-	s.env.RegisterActivity(CreateRepoFromTemplateActivity)
-	s.env.RegisterActivity(CreateEmptyRepoActivity)
-	s.env.RegisterActivity(CloneTemplateRepoActivity)
-	s.env.RegisterActivity(ApplyTemplateVariablesActivity)
-	s.env.RegisterActivity(PushToNewRepoActivity)
-	s.env.RegisterActivity(CleanupWorkDirActivity)
-	s.env.RegisterActivity(FinalizeInstantiationActivity)
+	// Register stub activities with names matching workflow constants
+	s.env.RegisterActivityWithOptions(stubValidateInstantiationInput, activity.RegisterOptions{
+		Name: ActivityValidateInstantiationInput,
+	})
+	s.env.RegisterActivityWithOptions(stubCreateRepoFromTemplate, activity.RegisterOptions{
+		Name: ActivityCreateRepoFromTemplate,
+	})
+	s.env.RegisterActivityWithOptions(stubCreateEmptyRepo, activity.RegisterOptions{
+		Name: ActivityCreateEmptyRepo,
+	})
+	s.env.RegisterActivityWithOptions(stubCloneTemplateRepo, activity.RegisterOptions{
+		Name: ActivityCloneTemplateRepo,
+	})
+	s.env.RegisterActivityWithOptions(stubApplyTemplateVariables, activity.RegisterOptions{
+		Name: ActivityApplyTemplateVariables,
+	})
+	s.env.RegisterActivityWithOptions(stubPushToNewRepo, activity.RegisterOptions{
+		Name: ActivityPushToNewRepo,
+	})
+	s.env.RegisterActivityWithOptions(stubCleanupWorkDir, activity.RegisterOptions{
+		Name: ActivityCleanupWorkDir,
+	})
+	s.env.RegisterActivityWithOptions(stubFinalizeInstantiation, activity.RegisterOptions{
+		Name: ActivityFinalizeInstantiation,
+	})
 }
 
 func (s *TemplateInstantiationWorkflowTestSuite) AfterTest(suiteName, testName string) {
@@ -48,12 +95,12 @@ func (s *TemplateInstantiationWorkflowTestSuite) TestTemplateInstantiation_GitHu
 	}
 
 	// Mock activities
-	s.env.OnActivity(ValidateInstantiationInputActivity, mock.Anything, mock.Anything).Return(nil)
-	s.env.OnActivity(CreateRepoFromTemplateActivity, mock.Anything, mock.Anything).Return(&CreateRepoResult{
+	s.env.OnActivity(stubValidateInstantiationInput, mock.Anything, mock.Anything).Return(nil)
+	s.env.OnActivity(stubCreateRepoFromTemplate, mock.Anything, mock.Anything).Return(&CreateRepoResult{
 		RepoURL:  "https://github.com/my-org/new-service",
 		RepoName: "new-service",
 	}, nil)
-	s.env.OnActivity(FinalizeInstantiationActivity, mock.Anything, mock.Anything).Return(nil)
+	s.env.OnActivity(stubFinalizeInstantiation, mock.Anything, mock.Anything).Return(nil)
 
 	s.env.ExecuteWorkflow(TemplateInstantiationWorkflow, input)
 
@@ -83,16 +130,16 @@ func (s *TemplateInstantiationWorkflowTestSuite) TestTemplateInstantiation_Clone
 	}
 
 	// Mock activities for clone fallback path
-	s.env.OnActivity(ValidateInstantiationInputActivity, mock.Anything, mock.Anything).Return(nil)
-	s.env.OnActivity(CreateEmptyRepoActivity, mock.Anything, mock.Anything).Return(&CreateRepoResult{
+	s.env.OnActivity(stubValidateInstantiationInput, mock.Anything, mock.Anything).Return(nil)
+	s.env.OnActivity(stubCreateEmptyRepo, mock.Anything, mock.Anything).Return(&CreateRepoResult{
 		RepoURL:  "https://github.com/my-org/new-service",
 		RepoName: "new-service",
 	}, nil)
-	s.env.OnActivity(CloneTemplateRepoActivity, mock.Anything, mock.Anything).Return("/tmp/work/new-service", nil)
-	s.env.OnActivity(ApplyTemplateVariablesActivity, mock.Anything, mock.Anything).Return(nil)
-	s.env.OnActivity(PushToNewRepoActivity, mock.Anything, mock.Anything).Return(nil)
-	s.env.OnActivity(CleanupWorkDirActivity, mock.Anything, mock.Anything).Return(nil)
-	s.env.OnActivity(FinalizeInstantiationActivity, mock.Anything, mock.Anything).Return(nil)
+	s.env.OnActivity(stubCloneTemplateRepo, mock.Anything, mock.Anything).Return("/tmp/work/new-service", nil)
+	s.env.OnActivity(stubApplyTemplateVariables, mock.Anything, mock.Anything).Return(nil)
+	s.env.OnActivity(stubPushToNewRepo, mock.Anything, mock.Anything).Return(nil)
+	s.env.OnActivity(stubCleanupWorkDir, mock.Anything, mock.Anything).Return(nil)
+	s.env.OnActivity(stubFinalizeInstantiation, mock.Anything, mock.Anything).Return(nil)
 
 	s.env.ExecuteWorkflow(TemplateInstantiationWorkflow, input)
 
