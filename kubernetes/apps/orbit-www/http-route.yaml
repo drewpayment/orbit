@@ -1,0 +1,22 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: orbit-www-route
+  namespace: orbit-www
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: "orbit.hoytlabs.app"
+spec:
+  parentRefs:
+    - name: gateway-external
+      namespace: gateway
+  hostnames:
+    - "orbit.hoytlabs.app"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: orbit-www
+          port: 80
+          weight: 1

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: orbit-mongo
+  labels:
+    app.kubernetes.io/name: mongo
+    app.kubernetes.io/part-of: orbit

@@ -1,0 +1,47 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: orbit-applications
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/drewpayment/orbit.git
+        revision: HEAD
+        directories:
+          - path: kubernetes/apps/*
+          - path: kubernetes/apps/*/*
+          - exclude: true
+            path: kubernetes/apps/appset.yaml
+  template:
+    metadata:
+      name: 'orbit-{{path.basename}}'
+      labels:
+        type: application
+        app.kubernetes.io/part-of: orbit
+    spec:
+      project: orbit
+      source:
+        plugin:
+          name: kustomize-build-with-helm
+        repoURL: https://github.com/drewpayment/orbit.git
+        targetRevision: HEAD
+        path: '{{path}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: 'orbit-{{path.basename}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        retry:
+          limit: 2
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
