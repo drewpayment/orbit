@@ -7,6 +7,7 @@ import {
   Command,
   LayoutDashboard,
   LayoutTemplate,
+  Layers,
   LifeBuoy,
   MessageSquare,
   Settings2,
@@ -47,6 +48,12 @@ const navMainData = [
       title: "Templates",
       url: "/templates",
       icon: LayoutTemplate,
+      items: [],
+    },
+    {
+      title: "Applications",
+      url: "/apps",
+      icon: Layers,
       items: [],
     },
     {
