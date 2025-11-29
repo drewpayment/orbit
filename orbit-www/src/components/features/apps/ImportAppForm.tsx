@@ -76,7 +76,8 @@ export function ImportAppForm({ workspaces }: ImportAppFormProps) {
     form.setValue('repositoryUrl', url)
     const match = url.match(/github\.com\/[^/]+\/([^/]+)/)
     if (match && !form.getValues('name')) {
-      form.setValue('name', match[1])
+      // Remove .git suffix from auto-filled name
+      form.setValue('name', match[1].replace(/\.git$/, ''))
     }
   }
 
