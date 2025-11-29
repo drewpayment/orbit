@@ -8,10 +8,12 @@ import { WorkflowProgress } from '@/components/features/templates/WorkflowProgre
 
 interface PageProps {
   params: Promise<{ workflowId: string }>
+  searchParams: Promise<{ templateId?: string; workspaceId?: string; githubOrg?: string }>
 }
 
-export default async function WorkflowProgressPage({ params }: PageProps) {
+export default async function WorkflowProgressPage({ params, searchParams }: PageProps) {
   const { workflowId } = await params
+  const { templateId, workspaceId, githubOrg } = await searchParams
 
   const session = await auth.api.getSession({
     headers: await headers(),
@@ -32,7 +34,13 @@ export default async function WorkflowProgressPage({ params }: PageProps) {
         <SiteHeader />
         <div className="flex-1 p-8">
           <div className="max-w-2xl mx-auto">
-            <WorkflowProgress workflowId={workflowId} templateName={templateName} />
+            <WorkflowProgress
+              workflowId={workflowId}
+              templateName={templateName}
+              templateId={templateId}
+              workspaceId={workspaceId}
+              installationId={githubOrg}
+            />
           </div>
         </div>
       </SidebarInset>

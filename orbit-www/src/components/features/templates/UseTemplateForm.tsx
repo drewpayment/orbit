@@ -114,7 +114,13 @@ export function UseTemplateForm({
         // Redirect to the new repository or progress page
         setTimeout(() => {
           if (result.workflowId) {
-            router.push(`/templates/progress/${result.workflowId}`)
+            // Pass templateId, workspaceId, and githubOrg as query params for "Add to Catalog" feature
+            const params = new URLSearchParams({
+              templateId,
+              workspaceId,
+              githubOrg,
+            })
+            router.push(`/templates/progress/${result.workflowId}?${params.toString()}`)
           } else {
             router.push('/repositories')
           }

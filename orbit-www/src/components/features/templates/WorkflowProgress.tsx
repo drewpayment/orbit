@@ -12,21 +12,28 @@ import {
   XCircle,
   ExternalLink,
   ArrowRight,
-  AlertCircle
+  AlertCircle,
+  Plus
 } from 'lucide-react'
 import { getWorkflowStatus, type WorkflowStatus, type WorkflowStep } from '@/app/actions/workflows'
+import { createAppFromTemplate } from '@/app/actions/apps'
 import { cn } from '@/lib/utils'
 
 interface WorkflowProgressProps {
   workflowId: string
   templateName: string
+  templateId?: string
+  workspaceId?: string
+  installationId?: string
 }
 
-export function WorkflowProgress({ workflowId, templateName }: WorkflowProgressProps) {
+export function WorkflowProgress({ workflowId, templateName, templateId, workspaceId, installationId }: WorkflowProgressProps) {
   const router = useRouter()
   const [status, setStatus] = useState<WorkflowStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isPolling, setIsPolling] = useState(true)
+  const [isCreatingApp, setIsCreatingApp] = useState(false)
+  const [appCreated, setAppCreated] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -88,6 +95,39 @@ export function WorkflowProgress({ workflowId, templateName }: WorkflowProgressP
     if (!status) return 0
     const completed = status.steps.filter(s => s.status === 'completed').length
     return Math.round((completed / status.steps.length) * 100)
+  }
+
+  const handleAddToCatalog = async () => {
+    if (!status?.result?.gitUrl || !templateId || !workspaceId) return
+
+    setIsCreatingApp(true)
+    try {
+      // Extract owner/repo from gitUrl
+      const match = status.result.gitUrl.match(/github\.com\/([^/]+)\/([^/]+)/)
+      if (!match) throw new Error('Invalid repository URL')
+
+      const [, owner, repo] = match
+      const repoName = repo.replace(/\.git$/, '')
+
+      const result = await createAppFromTemplate({
+        name: status.result.repositoryId || repoName,
+        repositoryOwner: owner,
+        repositoryName: repoName,
+        repositoryUrl: status.result.gitUrl,
+        templateId: templateId,
+        workspaceId: workspaceId,
+        installationId: installationId,
+      })
+
+      if (result.success) {
+        setAppCreated(true)
+        router.push(`/apps/${result.appId}`)
+      }
+    } catch (error) {
+      console.error('Failed to create app:', error)
+    } finally {
+      setIsCreatingApp(false)
+    }
   }
 
   if (error) {
@@ -179,24 +219,59 @@ export function WorkflowProgress({ workflowId, templateName }: WorkflowProgressP
       </Card>
 
       {/* Success Result */}
-      {status.status === 'completed' && status.result && (
+      {status.status === 'completed' && status.result && !appCreated && (
         <Alert className="border-green-500 bg-green-50 dark:bg-green-950">
           <CheckCircle2 className="h-4 w-4 text-green-600" />
           <AlertTitle className="text-green-600">Repository Created Successfully!</AlertTitle>
           <AlertDescription>
-            <div className="flex items-center gap-4 mt-2">
-              {status.result.gitUrl && (
-                <Button variant="outline" size="sm" asChild>
-                  <a href={status.result.gitUrl} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    View on GitHub
-                  </a>
+            <div className="space-y-4 mt-2">
+              <div className="flex items-center gap-4">
+                {status.result.gitUrl && (
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={status.result.gitUrl} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      View on GitHub
+                    </a>
+                  </Button>
+                )}
+                <Button size="sm" onClick={() => router.push('/repositories')}>
+                  <ArrowRight className="mr-2 h-4 w-4" />
+                  Go to Repositories
                 </Button>
+              </div>
+              {templateId && workspaceId && (
+                <div className="border-t pt-4">
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Ready to deploy? Add this app to your catalog and set up deployments.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => router.push('/templates')}
+                    >
+                      Skip for now
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleAddToCatalog}
+                      disabled={isCreatingApp}
+                    >
+                      {isCreatingApp ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Adding...
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="mr-2 h-4 w-4" />
+                          Add to Catalog
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
               )}
-              <Button size="sm" onClick={() => router.push('/repositories')}>
-                <ArrowRight className="mr-2 h-4 w-4" />
-                Go to Repositories
-              </Button>
             </div>
           </AlertDescription>
         </Alert>
