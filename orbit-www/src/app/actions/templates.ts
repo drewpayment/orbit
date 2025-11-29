@@ -1494,6 +1494,14 @@ export async function startInstantiation(input: StartInstantiationInput): Promis
     return { success: false, error: 'Template not found' }
   }
 
+  // Debug logging for template source data
+  console.log('[startInstantiation] Template source info:', {
+    id: template.id,
+    name: template.name,
+    repoUrl: template.repoUrl,
+    isGitHubTemplate: template.isGitHubTemplate,
+  })
+
   // Validate workspace membership
   const membership = await payload.find({
     collection: 'workspace-members',

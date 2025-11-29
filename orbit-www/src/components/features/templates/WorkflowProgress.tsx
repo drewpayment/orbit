@@ -193,9 +193,9 @@ export function WorkflowProgress({ workflowId, templateName }: WorkflowProgressP
                   </a>
                 </Button>
               )}
-              <Button size="sm" onClick={() => router.push('/repositories')}>
+              <Button size="sm" onClick={() => router.push('/templates')}>
                 <ArrowRight className="mr-2 h-4 w-4" />
-                Go to Repositories
+                Back to Templates
               </Button>
             </div>
           </AlertDescription>

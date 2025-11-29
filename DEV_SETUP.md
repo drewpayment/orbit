@@ -17,6 +17,15 @@ cd orbit-www
 bun run dev
 ```
 
+**Important:** When using the hybrid setup, ensure your `orbit-www/.env` includes:
+
+```bash
+# Required for Temporal activities to authenticate with GitHub
+ORBIT_INTERNAL_API_KEY=orbit-internal-dev-key
+```
+
+This key must match the one used by the temporal-worker in Docker (default: `orbit-internal-dev-key`).
+
 ### Option 2: Full Docker Setup
 
 Start everything with a single command:
@@ -111,12 +120,16 @@ DATABASE_URI=mongodb://127.0.0.1:27017/orbit-www
 PAYLOAD_SECRET=f0441e9d911d3bad9c9d087d
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 
+# GitHub App credentials
 GITHUB_APP_ID=...
 GITHUB_APP_CLIENT_ID=...
 GITHUB_APP_CLIENT_SECRET=...
 GITHUB_APP_WEBHOOK_SECRET=...
 GITHUB_APP_PRIVATE_KEY_BASE64=...
 ENCRYPTION_KEY=...
+
+# Internal API key for Temporal worker communication (must match temporal-worker)
+ORBIT_INTERNAL_API_KEY=orbit-internal-dev-key
 ```
 
 **Note**: When running in Docker, the container can access MongoDB at `mongo:27017` (Docker network). The `DATABASE_URI` is overridden in docker-compose.yml.
