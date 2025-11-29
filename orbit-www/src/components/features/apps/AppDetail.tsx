@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -24,6 +25,7 @@ import {
   Settings,
 } from 'lucide-react'
 import type { App, Deployment, Template } from '@/payload-types'
+import { AddDeploymentModal } from './AddDeploymentModal'
 
 interface AppDetailProps {
   app: App
@@ -45,6 +47,7 @@ const deploymentStatusColors = {
 }
 
 export function AppDetail({ app, deployments }: AppDetailProps) {
+  const [showAddDeployment, setShowAddDeployment] = useState(false)
   const status = app.status || 'unknown'
   const StatusIcon = statusConfig[status].icon
   const template = app.origin?.template as Template | undefined
@@ -141,7 +144,7 @@ export function AppDetail({ app, deployments }: AppDetailProps) {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Deployments</CardTitle>
-            <Button size="sm">
+            <Button size="sm" onClick={() => setShowAddDeployment(true)}>
               <Plus className="mr-2 h-4 w-4" />
               Add Deployment
             </Button>
@@ -203,6 +206,13 @@ export function AppDetail({ app, deployments }: AppDetailProps) {
           )}
         </CardContent>
       </Card>
+
+      <AddDeploymentModal
+        open={showAddDeployment}
+        onOpenChange={setShowAddDeployment}
+        appId={app.id}
+        appName={app.name}
+      />
     </div>
   )
 }
