@@ -1,4 +1,4 @@
-import type { CollectionConfig } from 'payload'
+import type { CollectionConfig, Where } from 'payload'
 
 export const DeploymentGenerators: CollectionConfig = {
   slug: 'deployment-generators',
@@ -8,8 +8,33 @@ export const DeploymentGenerators: CollectionConfig = {
     defaultColumns: ['name', 'type', 'isBuiltIn', 'updatedAt'],
   },
   access: {
-    // Read: Anyone authenticated can read generators
-    read: ({ req: { user } }) => !!user,
+    // Read: Users can read generators in their workspaces OR built-in generators
+    read: async ({ req: { user, payload } }) => {
+      if (!user) return false
+
+      // Get user's workspace memberships
+      const memberships = await payload.find({
+        collection: 'workspace-members',
+        where: {
+          user: { equals: user.id },
+          status: { equals: 'active' },
+        },
+        limit: 1000,
+        overrideAccess: true,
+      })
+
+      const workspaceIds = memberships.docs.map(m =>
+        String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
+      )
+
+      // Return generators in user's workspaces OR built-in generators (no workspace)
+      return {
+        or: [
+          { workspace: { in: workspaceIds } },
+          { workspace: { exists: false } },
+        ],
+      } as Where
+    },
     // Create: Only for custom generators, workspace admins
     create: async ({ req: { user, payload }, data }) => {
       if (!user) return false
@@ -179,6 +204,7 @@ export const DeploymentGenerators: CollectionConfig = {
       name: 'workspace',
       type: 'relationship',
       relationTo: 'workspaces',
+      index: true,
       admin: {
         position: 'sidebar',
         condition: (data) => !data?.isBuiltIn,
