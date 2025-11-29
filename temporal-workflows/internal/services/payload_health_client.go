@@ -9,12 +9,12 @@ import (
 	"time"
 )
 
-// HealthCheckResult contains the result of a health check
-// This is duplicated from activities to avoid circular dependency
+// HealthCheckResult is a local type matching activities.HealthCheckResult
+// to avoid circular dependency
 type HealthCheckResult struct {
-	Status       string `json:"status"` // healthy, degraded, down
+	Status       string `json:"status"`
 	StatusCode   int    `json:"statusCode"`
-	ResponseTime int64  `json:"responseTime"` // milliseconds
+	ResponseTime int64  `json:"responseTime"`
 	Error        string `json:"error"`
 }
 
@@ -72,28 +72,15 @@ func (c *PayloadHealthClientImpl) UpdateAppStatus(ctx context.Context, appID, st
 }
 
 // CreateHealthCheck creates a new health check record
-// Accepts any struct with the same fields as HealthCheckResult
-func (c *PayloadHealthClientImpl) CreateHealthCheck(ctx context.Context, appID string, result interface{}) error {
+func (c *PayloadHealthClientImpl) CreateHealthCheck(ctx context.Context, appID string, result HealthCheckResult) error {
 	url := fmt.Sprintf("%s/api/health-checks", c.baseURL)
-
-	// Convert result to a map for flexible handling
-	// This works with both services.HealthCheckResult and activities.HealthCheckResult
-	resultBytes, err := json.Marshal(result)
-	if err != nil {
-		return fmt.Errorf("failed to marshal result: %w", err)
-	}
-
-	var resultMap map[string]interface{}
-	if err := json.Unmarshal(resultBytes, &resultMap); err != nil {
-		return fmt.Errorf("failed to unmarshal result: %w", err)
-	}
 
 	body := map[string]interface{}{
 		"app":          appID,
-		"status":       resultMap["status"],
-		"statusCode":   resultMap["statusCode"],
-		"responseTime": resultMap["responseTime"],
-		"error":        resultMap["error"],
+		"status":       result.Status,
+		"statusCode":   result.StatusCode,
+		"responseTime": result.ResponseTime,
+		"error":        result.Error,
 		"checkedAt":    time.Now().Format(time.RFC3339),
 	}
 	jsonBody, err := json.Marshal(body)

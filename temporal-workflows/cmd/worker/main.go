@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"log/slog"
 	"os"
@@ -13,6 +14,25 @@ import (
 	"github.com/drewpayment/orbit/temporal-workflows/internal/workflows"
 	"github.com/drewpayment/orbit/temporal-workflows/pkg/clients"
 )
+
+// healthClientAdapter adapts services.PayloadHealthClientImpl to activities.PayloadHealthClient
+type healthClientAdapter struct {
+	impl *services.PayloadHealthClientImpl
+}
+
+func (a *healthClientAdapter) UpdateAppStatus(ctx context.Context, appID, status string) error {
+	return a.impl.UpdateAppStatus(ctx, appID, status)
+}
+
+func (a *healthClientAdapter) CreateHealthCheck(ctx context.Context, appID string, result activities.HealthCheckResult) error {
+	// Convert activities.HealthCheckResult to services.HealthCheckResult
+	return a.impl.CreateHealthCheck(ctx, appID, services.HealthCheckResult{
+		Status:       result.Status,
+		StatusCode:   result.StatusCode,
+		ResponseTime: result.ResponseTime,
+		Error:        result.Error,
+	})
+}
 
 func main() {
 	// Get configuration from environment
@@ -126,6 +146,16 @@ func main() {
 	w.RegisterActivity(deploymentActivities.PrepareGeneratorContext)
 	w.RegisterActivity(deploymentActivities.ExecuteGenerator)
 	w.RegisterActivity(deploymentActivities.UpdateDeploymentStatus)
+
+	// Create and register health check activities
+	payloadHealthClientImpl := services.NewPayloadHealthClient(orbitAPIURL, orbitInternalAPIKey)
+	payloadHealthClient := &healthClientAdapter{impl: payloadHealthClientImpl}
+	healthCheckActivities := activities.NewHealthCheckActivities(payloadHealthClient)
+	w.RegisterActivity(healthCheckActivities.PerformHealthCheckActivity)
+	w.RegisterActivity(healthCheckActivities.RecordHealthResultActivity)
+
+	// Register health check workflow
+	w.RegisterWorkflow(workflows.HealthCheckWorkflow)
 
 	log.Println("Starting Temporal worker...")
 	log.Printf("Temporal address: %s", temporalAddress)
