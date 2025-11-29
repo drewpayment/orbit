@@ -41,6 +41,11 @@ func main() {
 		templateWorkDir = "/tmp/orbit-templates"
 	}
 
+	deploymentWorkDir := os.Getenv("DEPLOYMENT_WORK_DIR")
+	if deploymentWorkDir == "" {
+		deploymentWorkDir = "/tmp/orbit-deployments"
+	}
+
 	orbitInternalAPIKey := os.Getenv("ORBIT_INTERNAL_API_KEY")
 	if orbitInternalAPIKey == "" {
 		log.Println("Warning: ORBIT_INTERNAL_API_KEY not set, GitHub operations will fail")
@@ -62,6 +67,7 @@ func main() {
 	// Register workflows
 	w.RegisterWorkflow(workflows.GitHubTokenRefreshWorkflow)
 	w.RegisterWorkflow(workflows.TemplateInstantiationWorkflow)
+	w.RegisterWorkflow(workflows.DeploymentWorkflow)
 
 	// Initialize HTTP client for activities
 	activityClients := clients.NewHTTPActivityClients(orbitAPIURL)
@@ -108,12 +114,26 @@ func main() {
 	w.RegisterActivity(templateActivities.CleanupWorkDir)
 	w.RegisterActivity(templateActivities.FinalizeInstantiation)
 
+	// Create and register deployment activities
+	// TODO: Create PayloadDeploymentClient when implementing full integration
+	var deploymentPayloadClient activities.PayloadDeploymentClient = nil
+	deploymentActivities := activities.NewDeploymentActivities(
+		deploymentWorkDir,
+		deploymentPayloadClient,
+		logger,
+	)
+	w.RegisterActivity(deploymentActivities.ValidateDeploymentConfig)
+	w.RegisterActivity(deploymentActivities.PrepareGeneratorContext)
+	w.RegisterActivity(deploymentActivities.ExecuteGenerator)
+	w.RegisterActivity(deploymentActivities.UpdateDeploymentStatus)
+
 	log.Println("Starting Temporal worker...")
 	log.Printf("Temporal address: %s", temporalAddress)
 	log.Printf("Temporal namespace: %s", temporalNamespace)
 	log.Printf("Orbit API URL: %s", orbitAPIURL)
 	log.Printf("Git work directory: %s", workDir)
 	log.Printf("Template work directory: %s", templateWorkDir)
+	log.Printf("Deployment work directory: %s", deploymentWorkDir)
 	log.Println("Task queue: orbit-workflows")
 
 	// Start worker
