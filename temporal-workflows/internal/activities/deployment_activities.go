@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"text/template"
 )
@@ -121,7 +122,13 @@ func (a *DeploymentActivities) validateDockerComposeConfig(config map[string]int
 	var missing []string
 
 	for _, field := range required {
-		if _, ok := config[field]; !ok {
+		val, ok := config[field]
+		if !ok {
+			missing = append(missing, field)
+			continue
+		}
+		// Check if value is an empty string
+		if strVal, isString := val.(string); isString && strings.TrimSpace(strVal) == "" {
 			missing = append(missing, field)
 		}
 	}
@@ -265,8 +272,38 @@ func (a *DeploymentActivities) ExecuteGenerator(ctx context.Context, input Execu
 }
 
 func (a *DeploymentActivities) executeDockerCompose(ctx context.Context, input ExecuteGeneratorInput) (*ExecuteGeneratorResult, error) {
+	// Parse config to extract port
+	composeFilePath := filepath.Join(input.WorkDir, "docker-compose.yml")
+	composeData, err := os.ReadFile(composeFilePath)
+	if err != nil {
+		return &ExecuteGeneratorResult{
+			Success: false,
+			Error:   fmt.Sprintf("failed to read docker-compose.yml: %v", err),
+		}, nil
+	}
+
+	// Extract port from docker-compose file (simple parsing looking for port mapping)
+	// Format: "port:port" in ports section
+	port := 3000 // Default port
+	lines := strings.Split(string(composeData), "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "- \"") && strings.Contains(trimmed, ":") {
+			// Extract port from format: - "3000:3000"
+			portStr := strings.TrimPrefix(trimmed, "- \"")
+			portStr = strings.TrimSuffix(portStr, "\"")
+			parts := strings.Split(portStr, ":")
+			if len(parts) == 2 {
+				if p, err := strconv.Atoi(parts[0]); err == nil {
+					port = p
+				}
+			}
+			break
+		}
+	}
+
 	// Build docker-compose command
-	args := []string{"compose", "-f", filepath.Join(input.WorkDir, "docker-compose.yml")}
+	args := []string{"compose", "-f", composeFilePath}
 
 	// Add host if specified
 	if input.Target.HostURL != "" {
@@ -289,8 +326,8 @@ func (a *DeploymentActivities) executeDockerCompose(ctx context.Context, input E
 
 	a.logger.Info("Docker compose executed successfully")
 
-	// For local deployments, return localhost URL
-	deploymentURL := "http://localhost:3000"
+	// For local deployments, return localhost URL with parsed port
+	deploymentURL := fmt.Sprintf("http://localhost:%d", port)
 	if input.Target.HostURL != "" && !strings.HasPrefix(input.Target.HostURL, "unix://") {
 		// Extract host from URL
 		host := strings.TrimPrefix(input.Target.HostURL, "ssh://")
@@ -301,7 +338,7 @@ func (a *DeploymentActivities) executeDockerCompose(ctx context.Context, input E
 		if idx := strings.Index(host, ":"); idx != -1 {
 			host = host[:idx]
 		}
-		deploymentURL = fmt.Sprintf("http://%s:3000", host)
+		deploymentURL = fmt.Sprintf("http://%s:%d", host, port)
 	}
 
 	return &ExecuteGeneratorResult{
