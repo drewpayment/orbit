@@ -53,6 +53,8 @@ export function AppCard({ app }: AppCardProps) {
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           {app.origin?.type === 'template' && template ? (
             <Badge variant="secondary">Template: {template.name}</Badge>
+          ) : app.origin?.type === 'manual' ? (
+            <Badge variant="outline">Manual</Badge>
           ) : (
             <Badge variant="outline">Imported</Badge>
           )}

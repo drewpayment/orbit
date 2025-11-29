@@ -38,14 +38,12 @@ type PayloadHealthClient interface {
 // HealthCheckActivities holds dependencies for health check activities
 type HealthCheckActivities struct {
 	payloadClient PayloadHealthClient
-	httpClient    *http.Client
 }
 
 // NewHealthCheckActivities creates a new instance of HealthCheckActivities
 func NewHealthCheckActivities(payloadClient PayloadHealthClient) *HealthCheckActivities {
 	return &HealthCheckActivities{
 		payloadClient: payloadClient,
-		httpClient:    &http.Client{},
 	}
 }
 

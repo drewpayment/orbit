@@ -8,9 +8,13 @@ export const Apps: CollectionConfig = {
     defaultColumns: ['name', 'status', 'workspace', 'updatedAt'],
   },
   access: {
-    // Read: Based on workspace membership
+    // Read: Admins see all, others see workspace-scoped
     read: async ({ req: { user, payload } }) => {
       if (!user) return false
+
+      // Payload admin users can see all apps (user.collection indicates Payload auth)
+      // TODO: Add proper role-based check when roles are implemented
+      if (user.collection === 'users') return true
 
       // Get user's workspace memberships
       const memberships = await payload.find({
@@ -34,9 +38,12 @@ export const Apps: CollectionConfig = {
     },
     // Create: Users with app:create permission (workspace membership checked by workspace field)
     create: ({ req: { user } }) => !!user,
-    // Update: Workspace members (owner, admin, or member role)
+    // Update: Admins or workspace members (owner, admin, or member role)
     update: async ({ req: { user, payload }, id }) => {
       if (!user || !id) return false
+
+      // Payload admin users can update all apps
+      if (user.collection === 'users') return true
 
       const app = await payload.findByID({
         collection: 'apps',
@@ -63,9 +70,12 @@ export const Apps: CollectionConfig = {
 
       return members.docs.length > 0
     },
-    // Delete: Workspace owners and admins only
+    // Delete: System admins or workspace owners/admins only
     delete: async ({ req: { user, payload }, id }) => {
       if (!user || !id) return false
+
+      // Payload admin users can delete all apps
+      if (user.collection === 'users') return true
 
       const app = await payload.findByID({
         collection: 'apps',
@@ -114,26 +124,28 @@ export const Apps: CollectionConfig = {
     {
       name: 'repository',
       type: 'group',
+      admin: {
+        description: 'Optional - link to a Git repository',
+      },
       fields: [
         {
           name: 'owner',
           type: 'text',
-          required: true,
         },
         {
           name: 'name',
           type: 'text',
-          required: true,
         },
         {
           name: 'url',
           type: 'text',
-          required: true,
         },
         {
           name: 'installationId',
           type: 'text',
-          required: true,
+          admin: {
+            description: 'GitHub App installation ID',
+          },
         },
       ],
     },
@@ -145,9 +157,11 @@ export const Apps: CollectionConfig = {
           name: 'type',
           type: 'select',
           required: true,
+          defaultValue: 'manual',
           options: [
             { label: 'Template', value: 'template' },
             { label: 'Imported', value: 'imported' },
+            { label: 'Manual', value: 'manual' },
           ],
         },
         {
@@ -187,26 +201,49 @@ export const Apps: CollectionConfig = {
     {
       name: 'healthConfig',
       type: 'group',
+      admin: {
+        description: 'Configure health monitoring for this application',
+      },
       fields: [
         {
-          name: 'endpoint',
+          name: 'url',
           type: 'text',
-          defaultValue: '/health',
+          admin: {
+            description: 'Full URL to monitor (e.g., https://api.example.com/health)',
+          },
         },
         {
           name: 'interval',
           type: 'number',
           defaultValue: 60,
           admin: {
-            description: 'Check interval in seconds',
+            description: 'Check interval in seconds (minimum 30)',
           },
         },
         {
           name: 'timeout',
           type: 'number',
-          defaultValue: 5,
+          defaultValue: 10,
           admin: {
-            description: 'Timeout in seconds',
+            description: 'Request timeout in seconds',
+          },
+        },
+        {
+          name: 'method',
+          type: 'select',
+          defaultValue: 'GET',
+          options: [
+            { label: 'GET', value: 'GET' },
+            { label: 'HEAD', value: 'HEAD' },
+            { label: 'POST', value: 'POST' },
+          ],
+        },
+        {
+          name: 'expectedStatus',
+          type: 'number',
+          defaultValue: 200,
+          admin: {
+            description: 'Expected HTTP status code',
           },
         },
       ],

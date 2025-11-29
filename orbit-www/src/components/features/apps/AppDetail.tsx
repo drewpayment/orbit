@@ -97,6 +97,8 @@ export function AppDetail({ app, deployments }: AppDetailProps) {
                     : 'from template'}
                 </div>
               </div>
+            ) : app.origin?.type === 'manual' ? (
+              <div className="font-medium">Manually Created</div>
             ) : (
               <div className="font-medium">Imported Repository</div>
             )}
@@ -108,18 +110,24 @@ export function AppDetail({ app, deployments }: AppDetailProps) {
             <CardDescription>Repository</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center gap-2">
-              <GitBranch className="h-4 w-4 text-muted-foreground" />
-              <a
-                href={app.repository?.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-medium hover:underline flex items-center gap-1"
-              >
-                {app.repository?.owner}/{app.repository?.name}
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
+            {app.repository?.url ? (
+              <div className="flex items-center gap-2">
+                <GitBranch className="h-4 w-4 text-muted-foreground" />
+                <a
+                  href={app.repository.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium hover:underline flex items-center gap-1"
+                >
+                  {app.repository.owner && app.repository.name
+                    ? `${app.repository.owner}/${app.repository.name}`
+                    : app.repository.url}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            ) : (
+              <div className="text-muted-foreground">No repository linked</div>
+            )}
           </CardContent>
         </Card>
 
@@ -132,9 +140,16 @@ export function AppDetail({ app, deployments }: AppDetailProps) {
               <StatusIcon className={`h-5 w-5 ${statusConfig[status].color}`} />
               <span className="font-medium capitalize">{status}</span>
             </div>
-            <div className="text-sm text-muted-foreground mt-1">
-              {app.healthConfig?.endpoint || '/health'} every {app.healthConfig?.interval || 60}s
-            </div>
+            {app.healthConfig?.url ? (
+              <div className="text-sm text-muted-foreground mt-1">
+                <span className="font-mono text-xs">{app.healthConfig.method || 'GET'}</span>{' '}
+                {app.healthConfig.url} every {app.healthConfig.interval || 60}s
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground mt-1">
+                No health check URL configured
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
