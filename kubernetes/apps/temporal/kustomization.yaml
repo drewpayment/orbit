@@ -1,0 +1,30 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: orbit-temporal
+
+resources:
+  - namespace.yaml
+  - externalsecret.yaml
+  - configmap.yaml
+  - postgresql.yaml
+  - elasticsearch.yaml
+  - server.yaml
+  - ui.yaml
+  - worker.yaml
+  - http-route.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: orbit
+  app.kubernetes.io/managed-by: argocd
+
+images:
+  - name: temporalio/auto-setup
+    newTag: "1.25.1"
+  - name: temporalio/ui
+    newTag: "2.30.0"
+  - name: postgres
+    newName: postgres
+    newTag: "15-alpine"
+  - name: elasticsearch
+    newTag: "7.16.2"

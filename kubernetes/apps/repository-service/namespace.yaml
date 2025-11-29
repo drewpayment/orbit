@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: orbit-repository-service
+  labels:
+    app.kubernetes.io/name: repository-service
+    app.kubernetes.io/part-of: orbit

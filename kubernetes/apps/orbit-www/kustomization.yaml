@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: orbit-www
+
+resources:
+  - namespace.yaml
+  - externalsecret.yaml
+  - serviceaccount.yaml
+  - service.yaml
+  - deployment.yaml
+  - http-route.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: orbit
+  app.kubernetes.io/managed-by: argocd
+
+images:
+  - name: ghcr.io/drewpayment/orbit/orbit-www
+    newTag: latest
