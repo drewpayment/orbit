@@ -84,6 +84,8 @@ export interface Config {
     templates: Template;
     apps: App;
     deployments: Deployment;
+    'deployment-generators': DeploymentGenerator;
+    'health-checks': HealthCheck;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -107,6 +109,8 @@ export interface Config {
     templates: TemplatesSelect<false> | TemplatesSelect<true>;
     apps: AppsSelect<false> | AppsSelect<true>;
     deployments: DeploymentsSelect<false> | DeploymentsSelect<true>;
+    'deployment-generators': DeploymentGeneratorsSelect<false> | DeploymentGeneratorsSelect<true>;
+    'health-checks': HealthChecksSelect<false> | HealthChecksSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -900,14 +904,20 @@ export interface App {
   name: string;
   description?: string | null;
   workspace: string | Workspace;
-  repository: {
-    owner: string;
-    name: string;
-    url: string;
-    installationId: string;
+  /**
+   * Optional - link to a Git repository
+   */
+  repository?: {
+    owner?: string | null;
+    name?: string | null;
+    url?: string | null;
+    /**
+     * GitHub App installation ID
+     */
+    installationId?: string | null;
   };
   origin: {
-    type: 'template' | 'imported';
+    type: 'template' | 'imported' | 'manual';
     template?: (string | null) | Template;
     instantiatedAt?: string | null;
   };
@@ -916,16 +926,27 @@ export interface App {
    * SHA of last synced .orbit.yaml
    */
   manifestSha?: string | null;
+  /**
+   * Configure health monitoring for this application
+   */
   healthConfig?: {
-    endpoint?: string | null;
     /**
-     * Check interval in seconds
+     * Full URL to monitor (e.g., https://api.example.com/health)
+     */
+    url?: string | null;
+    /**
+     * Check interval in seconds (minimum 30)
      */
     interval?: number | null;
     /**
-     * Timeout in seconds
+     * Request timeout in seconds
      */
     timeout?: number | null;
+    method?: ('GET' | 'HEAD' | 'POST') | null;
+    /**
+     * Expected HTTP status code
+     */
+    expectedStatus?: number | null;
   };
   status?: ('healthy' | 'degraded' | 'down' | 'unknown') | null;
   updatedAt: string;
@@ -977,6 +998,85 @@ export interface Deployment {
    */
   workflowId?: string | null;
   deploymentError?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "deployment-generators".
+ */
+export interface DeploymentGenerator {
+  id: string;
+  /**
+   * Display name for this generator
+   */
+  name: string;
+  /**
+   * Unique identifier (e.g., docker-compose-basic)
+   */
+  slug: string;
+  description?: string | null;
+  type: 'docker-compose' | 'terraform' | 'helm' | 'custom';
+  /**
+   * JSON Schema for validating generator config
+   */
+  configSchema?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * IaC template files for this generator
+   */
+  templateFiles?:
+    | {
+        /**
+         * File path (e.g., docker-compose.yml)
+         */
+        path: string;
+        /**
+         * Template content with variable placeholders
+         */
+        content: string;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * Built-in generators cannot be modified
+   */
+  isBuiltIn?: boolean | null;
+  /**
+   * Workspace for custom generators (null = global)
+   */
+  workspace?: (string | null) | Workspace;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "health-checks".
+ */
+export interface HealthCheck {
+  id: string;
+  app: string | App;
+  status: 'healthy' | 'degraded' | 'down';
+  /**
+   * HTTP response status code
+   */
+  statusCode?: number | null;
+  /**
+   * Response time in milliseconds
+   */
+  responseTime?: number | null;
+  /**
+   * Error message if check failed
+   */
+  error?: string | null;
+  checkedAt: string;
   updatedAt: string;
   createdAt: string;
 }
@@ -1054,6 +1154,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'deployments';
         value: string | Deployment;
+      } | null)
+    | ({
+        relationTo: 'deployment-generators';
+        value: string | DeploymentGenerator;
+      } | null)
+    | ({
+        relationTo: 'health-checks';
+        value: string | HealthCheck;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -1507,9 +1615,11 @@ export interface AppsSelect<T extends boolean = true> {
   healthConfig?:
     | T
     | {
-        endpoint?: T;
+        url?: T;
         interval?: T;
         timeout?: T;
+        method?: T;
+        expectedStatus?: T;
       };
   status?: T;
   updatedAt?: T;
@@ -1539,6 +1649,42 @@ export interface DeploymentsSelect<T extends boolean = true> {
   healthLastChecked?: T;
   workflowId?: T;
   deploymentError?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "deployment-generators_select".
+ */
+export interface DeploymentGeneratorsSelect<T extends boolean = true> {
+  name?: T;
+  slug?: T;
+  description?: T;
+  type?: T;
+  configSchema?: T;
+  templateFiles?:
+    | T
+    | {
+        path?: T;
+        content?: T;
+        id?: T;
+      };
+  isBuiltIn?: T;
+  workspace?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "health-checks_select".
+ */
+export interface HealthChecksSelect<T extends boolean = true> {
+  app?: T;
+  status?: T;
+  statusCode?: T;
+  responseTime?: T;
+  error?: T;
+  checkedAt?: T;
   updatedAt?: T;
   createdAt?: T;
 }
