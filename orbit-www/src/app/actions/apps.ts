@@ -2,7 +2,8 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getCurrentUser } from '@/lib/auth/session'
+import { auth } from '@/lib/auth'
+import { headers } from 'next/headers'
 
 interface CreateAppFromTemplateInput {
   name: string
@@ -16,12 +17,32 @@ interface CreateAppFromTemplateInput {
 }
 
 export async function createAppFromTemplate(input: CreateAppFromTemplateInput) {
-  const user = await getCurrentUser()
-  if (!user) {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+
+  if (!session?.user) {
     return { success: false, error: 'Unauthorized' }
   }
 
   const payload = await getPayload({ config })
+
+  // Check workspace membership
+  const membership = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { workspace: { equals: input.workspaceId } },
+        { user: { equals: session.user.id } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    limit: 1,
+  })
+
+  if (membership.docs.length === 0) {
+    return { success: false, error: 'Not a member of this workspace' }
+  }
 
   try {
     const app = await payload.create({
@@ -49,6 +70,7 @@ export async function createAppFromTemplate(input: CreateAppFromTemplateInput) {
     return { success: true, appId: app.id }
   } catch (error) {
     console.error('Failed to create app:', error)
-    return { success: false, error: 'Failed to create app' }
+    const errorMessage = error instanceof Error ? error.message : 'Failed to create app'
+    return { success: false, error: errorMessage }
   }
 }

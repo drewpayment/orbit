@@ -34,6 +34,7 @@ export function WorkflowProgress({ workflowId, templateName, templateId, workspa
   const [isPolling, setIsPolling] = useState(true)
   const [isCreatingApp, setIsCreatingApp] = useState(false)
   const [appCreated, setAppCreated] = useState(false)
+  const [appCreateError, setAppCreateError] = useState<string | null>(null)
 
   useEffect(() => {
     let mounted = true
@@ -101,6 +102,7 @@ export function WorkflowProgress({ workflowId, templateName, templateId, workspa
     if (!status?.result?.gitUrl || !templateId || !workspaceId) return
 
     setIsCreatingApp(true)
+    setAppCreateError(null)
     try {
       // Extract owner/repo from gitUrl
       const match = status.result.gitUrl.match(/github\.com\/([^/]+)\/([^/]+)/)
@@ -122,9 +124,12 @@ export function WorkflowProgress({ workflowId, templateName, templateId, workspa
       if (result.success) {
         setAppCreated(true)
         router.push(`/apps/${result.appId}`)
+      } else {
+        setAppCreateError(result.error || 'Failed to create app')
       }
     } catch (error) {
       console.error('Failed to create app:', error)
+      setAppCreateError(error instanceof Error ? error.message : 'An unexpected error occurred')
     } finally {
       setIsCreatingApp(false)
     }
@@ -244,6 +249,13 @@ export function WorkflowProgress({ workflowId, templateName, templateId, workspa
                   <p className="text-sm text-muted-foreground mb-2">
                     Ready to deploy? Add this app to your catalog and set up deployments.
                   </p>
+                  {appCreateError && (
+                    <Alert variant="destructive" className="mb-2">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Error</AlertTitle>
+                      <AlertDescription>{appCreateError}</AlertDescription>
+                    </Alert>
+                  )}
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
