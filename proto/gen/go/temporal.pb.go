@@ -1830,6 +1830,764 @@ func (x *WorkflowExecution) GetMetadata() map[string]string {
 	return nil
 }
 
+// Deployment Workflow
+type DeploymentWorkflowRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	DeploymentId  string                 `protobuf:"bytes,2,opt,name=deployment_id,json=deploymentId,proto3" json:"deployment_id,omitempty"`
+	AppId         string                 `protobuf:"bytes,3,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
+	WorkspaceId   string                 `protobuf:"bytes,4,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,5,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	GeneratorType string                 `protobuf:"bytes,6,opt,name=generator_type,json=generatorType,proto3" json:"generator_type,omitempty"` // docker-compose, terraform, helm
+	GeneratorSlug string                 `protobuf:"bytes,7,opt,name=generator_slug,json=generatorSlug,proto3" json:"generator_slug,omitempty"` // specific generator (e.g., docker-compose-basic)
+	Config        []byte                 `protobuf:"bytes,8,opt,name=config,proto3" json:"config,omitempty"`                                    // JSON-encoded generator config
+	Target        *DeploymentTarget      `protobuf:"bytes,9,opt,name=target,proto3" json:"target,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeploymentWorkflowRequest) Reset() {
+	*x = DeploymentWorkflowRequest{}
+	mi := &file_temporal_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeploymentWorkflowRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeploymentWorkflowRequest) ProtoMessage() {}
+
+func (x *DeploymentWorkflowRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeploymentWorkflowRequest.ProtoReflect.Descriptor instead.
+func (*DeploymentWorkflowRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *DeploymentWorkflowRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *DeploymentWorkflowRequest) GetDeploymentId() string {
+	if x != nil {
+		return x.DeploymentId
+	}
+	return ""
+}
+
+func (x *DeploymentWorkflowRequest) GetAppId() string {
+	if x != nil {
+		return x.AppId
+	}
+	return ""
+}
+
+func (x *DeploymentWorkflowRequest) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *DeploymentWorkflowRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *DeploymentWorkflowRequest) GetGeneratorType() string {
+	if x != nil {
+		return x.GeneratorType
+	}
+	return ""
+}
+
+func (x *DeploymentWorkflowRequest) GetGeneratorSlug() string {
+	if x != nil {
+		return x.GeneratorSlug
+	}
+	return ""
+}
+
+func (x *DeploymentWorkflowRequest) GetConfig() []byte {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
+func (x *DeploymentWorkflowRequest) GetTarget() *DeploymentTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+type DeploymentTarget struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"` // kubernetes, aws-ecs, docker-host
+	Region        string                 `protobuf:"bytes,2,opt,name=region,proto3" json:"region,omitempty"`
+	Cluster       string                 `protobuf:"bytes,3,opt,name=cluster,proto3" json:"cluster,omitempty"`
+	HostUrl       string                 `protobuf:"bytes,4,opt,name=host_url,json=hostUrl,proto3" json:"host_url,omitempty"` // For docker-compose: ssh://user@host
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeploymentTarget) Reset() {
+	*x = DeploymentTarget{}
+	mi := &file_temporal_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeploymentTarget) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeploymentTarget) ProtoMessage() {}
+
+func (x *DeploymentTarget) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeploymentTarget.ProtoReflect.Descriptor instead.
+func (*DeploymentTarget) Descriptor() ([]byte, []int) {
+	return file_temporal_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *DeploymentTarget) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *DeploymentTarget) GetRegion() string {
+	if x != nil {
+		return x.Region
+	}
+	return ""
+}
+
+func (x *DeploymentTarget) GetCluster() string {
+	if x != nil {
+		return x.Cluster
+	}
+	return ""
+}
+
+func (x *DeploymentTarget) GetHostUrl() string {
+	if x != nil {
+		return x.HostUrl
+	}
+	return ""
+}
+
+type DeploymentWorkflowResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	DeploymentId  string                 `protobuf:"bytes,2,opt,name=deployment_id,json=deploymentId,proto3" json:"deployment_id,omitempty"`
+	Status        WorkflowStatus         `protobuf:"varint,3,opt,name=status,proto3,enum=idp.temporal.v1.WorkflowStatus" json:"status,omitempty"`
+	DeploymentUrl string                 `protobuf:"bytes,4,opt,name=deployment_url,json=deploymentUrl,proto3" json:"deployment_url,omitempty"`
+	Steps         []*WorkflowStep        `protobuf:"bytes,5,rep,name=steps,proto3" json:"steps,omitempty"`
+	ErrorMessage  *string                `protobuf:"bytes,6,opt,name=error_message,json=errorMessage,proto3,oneof" json:"error_message,omitempty"`
+	CompletedAt   *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=completed_at,json=completedAt,proto3" json:"completed_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeploymentWorkflowResponse) Reset() {
+	*x = DeploymentWorkflowResponse{}
+	mi := &file_temporal_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeploymentWorkflowResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeploymentWorkflowResponse) ProtoMessage() {}
+
+func (x *DeploymentWorkflowResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeploymentWorkflowResponse.ProtoReflect.Descriptor instead.
+func (*DeploymentWorkflowResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *DeploymentWorkflowResponse) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *DeploymentWorkflowResponse) GetDeploymentId() string {
+	if x != nil {
+		return x.DeploymentId
+	}
+	return ""
+}
+
+func (x *DeploymentWorkflowResponse) GetStatus() WorkflowStatus {
+	if x != nil {
+		return x.Status
+	}
+	return WorkflowStatus_WORKFLOW_STATUS_UNSPECIFIED
+}
+
+func (x *DeploymentWorkflowResponse) GetDeploymentUrl() string {
+	if x != nil {
+		return x.DeploymentUrl
+	}
+	return ""
+}
+
+func (x *DeploymentWorkflowResponse) GetSteps() []*WorkflowStep {
+	if x != nil {
+		return x.Steps
+	}
+	return nil
+}
+
+func (x *DeploymentWorkflowResponse) GetErrorMessage() string {
+	if x != nil && x.ErrorMessage != nil {
+		return *x.ErrorMessage
+	}
+	return ""
+}
+
+func (x *DeploymentWorkflowResponse) GetCompletedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CompletedAt
+	}
+	return nil
+}
+
+// Deployment Activities
+type ValidateDeploymentConfigActivityRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GeneratorType string                 `protobuf:"bytes,1,opt,name=generator_type,json=generatorType,proto3" json:"generator_type,omitempty"`
+	Config        []byte                 `protobuf:"bytes,2,opt,name=config,proto3" json:"config,omitempty"`
+	ConfigSchema  []byte                 `protobuf:"bytes,3,opt,name=config_schema,json=configSchema,proto3" json:"config_schema,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ValidateDeploymentConfigActivityRequest) Reset() {
+	*x = ValidateDeploymentConfigActivityRequest{}
+	mi := &file_temporal_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidateDeploymentConfigActivityRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidateDeploymentConfigActivityRequest) ProtoMessage() {}
+
+func (x *ValidateDeploymentConfigActivityRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidateDeploymentConfigActivityRequest.ProtoReflect.Descriptor instead.
+func (*ValidateDeploymentConfigActivityRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ValidateDeploymentConfigActivityRequest) GetGeneratorType() string {
+	if x != nil {
+		return x.GeneratorType
+	}
+	return ""
+}
+
+func (x *ValidateDeploymentConfigActivityRequest) GetConfig() []byte {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
+func (x *ValidateDeploymentConfigActivityRequest) GetConfigSchema() []byte {
+	if x != nil {
+		return x.ConfigSchema
+	}
+	return nil
+}
+
+type ValidateDeploymentConfigActivityResponse struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Valid            bool                   `protobuf:"varint,1,opt,name=valid,proto3" json:"valid,omitempty"`
+	ValidationErrors []string               `protobuf:"bytes,2,rep,name=validation_errors,json=validationErrors,proto3" json:"validation_errors,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ValidateDeploymentConfigActivityResponse) Reset() {
+	*x = ValidateDeploymentConfigActivityResponse{}
+	mi := &file_temporal_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidateDeploymentConfigActivityResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidateDeploymentConfigActivityResponse) ProtoMessage() {}
+
+func (x *ValidateDeploymentConfigActivityResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidateDeploymentConfigActivityResponse.ProtoReflect.Descriptor instead.
+func (*ValidateDeploymentConfigActivityResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ValidateDeploymentConfigActivityResponse) GetValid() bool {
+	if x != nil {
+		return x.Valid
+	}
+	return false
+}
+
+func (x *ValidateDeploymentConfigActivityResponse) GetValidationErrors() []string {
+	if x != nil {
+		return x.ValidationErrors
+	}
+	return nil
+}
+
+type PrepareGeneratorContextActivityRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DeploymentId  string                 `protobuf:"bytes,1,opt,name=deployment_id,json=deploymentId,proto3" json:"deployment_id,omitempty"`
+	AppId         string                 `protobuf:"bytes,2,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
+	GeneratorSlug string                 `protobuf:"bytes,3,opt,name=generator_slug,json=generatorSlug,proto3" json:"generator_slug,omitempty"`
+	Config        []byte                 `protobuf:"bytes,4,opt,name=config,proto3" json:"config,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PrepareGeneratorContextActivityRequest) Reset() {
+	*x = PrepareGeneratorContextActivityRequest{}
+	mi := &file_temporal_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrepareGeneratorContextActivityRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrepareGeneratorContextActivityRequest) ProtoMessage() {}
+
+func (x *PrepareGeneratorContextActivityRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrepareGeneratorContextActivityRequest.ProtoReflect.Descriptor instead.
+func (*PrepareGeneratorContextActivityRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *PrepareGeneratorContextActivityRequest) GetDeploymentId() string {
+	if x != nil {
+		return x.DeploymentId
+	}
+	return ""
+}
+
+func (x *PrepareGeneratorContextActivityRequest) GetAppId() string {
+	if x != nil {
+		return x.AppId
+	}
+	return ""
+}
+
+func (x *PrepareGeneratorContextActivityRequest) GetGeneratorSlug() string {
+	if x != nil {
+		return x.GeneratorSlug
+	}
+	return ""
+}
+
+func (x *PrepareGeneratorContextActivityRequest) GetConfig() []byte {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
+type PrepareGeneratorContextActivityResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	WorkDir       string                 `protobuf:"bytes,1,opt,name=work_dir,json=workDir,proto3" json:"work_dir,omitempty"`
+	Success       bool                   `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
+	ErrorMessage  *string                `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3,oneof" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PrepareGeneratorContextActivityResponse) Reset() {
+	*x = PrepareGeneratorContextActivityResponse{}
+	mi := &file_temporal_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrepareGeneratorContextActivityResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrepareGeneratorContextActivityResponse) ProtoMessage() {}
+
+func (x *PrepareGeneratorContextActivityResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrepareGeneratorContextActivityResponse.ProtoReflect.Descriptor instead.
+func (*PrepareGeneratorContextActivityResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *PrepareGeneratorContextActivityResponse) GetWorkDir() string {
+	if x != nil {
+		return x.WorkDir
+	}
+	return ""
+}
+
+func (x *PrepareGeneratorContextActivityResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *PrepareGeneratorContextActivityResponse) GetErrorMessage() string {
+	if x != nil && x.ErrorMessage != nil {
+		return *x.ErrorMessage
+	}
+	return ""
+}
+
+type ExecuteGeneratorActivityRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DeploymentId  string                 `protobuf:"bytes,1,opt,name=deployment_id,json=deploymentId,proto3" json:"deployment_id,omitempty"`
+	GeneratorType string                 `protobuf:"bytes,2,opt,name=generator_type,json=generatorType,proto3" json:"generator_type,omitempty"`
+	WorkDir       string                 `protobuf:"bytes,3,opt,name=work_dir,json=workDir,proto3" json:"work_dir,omitempty"`
+	Target        *DeploymentTarget      `protobuf:"bytes,4,opt,name=target,proto3" json:"target,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExecuteGeneratorActivityRequest) Reset() {
+	*x = ExecuteGeneratorActivityRequest{}
+	mi := &file_temporal_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExecuteGeneratorActivityRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExecuteGeneratorActivityRequest) ProtoMessage() {}
+
+func (x *ExecuteGeneratorActivityRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExecuteGeneratorActivityRequest.ProtoReflect.Descriptor instead.
+func (*ExecuteGeneratorActivityRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *ExecuteGeneratorActivityRequest) GetDeploymentId() string {
+	if x != nil {
+		return x.DeploymentId
+	}
+	return ""
+}
+
+func (x *ExecuteGeneratorActivityRequest) GetGeneratorType() string {
+	if x != nil {
+		return x.GeneratorType
+	}
+	return ""
+}
+
+func (x *ExecuteGeneratorActivityRequest) GetWorkDir() string {
+	if x != nil {
+		return x.WorkDir
+	}
+	return ""
+}
+
+func (x *ExecuteGeneratorActivityRequest) GetTarget() *DeploymentTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+type ExecuteGeneratorActivityResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	DeploymentUrl string                 `protobuf:"bytes,2,opt,name=deployment_url,json=deploymentUrl,proto3" json:"deployment_url,omitempty"`
+	Outputs       map[string]string      `protobuf:"bytes,3,rep,name=outputs,proto3" json:"outputs,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	ErrorMessage  *string                `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3,oneof" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExecuteGeneratorActivityResponse) Reset() {
+	*x = ExecuteGeneratorActivityResponse{}
+	mi := &file_temporal_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExecuteGeneratorActivityResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExecuteGeneratorActivityResponse) ProtoMessage() {}
+
+func (x *ExecuteGeneratorActivityResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExecuteGeneratorActivityResponse.ProtoReflect.Descriptor instead.
+func (*ExecuteGeneratorActivityResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *ExecuteGeneratorActivityResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *ExecuteGeneratorActivityResponse) GetDeploymentUrl() string {
+	if x != nil {
+		return x.DeploymentUrl
+	}
+	return ""
+}
+
+func (x *ExecuteGeneratorActivityResponse) GetOutputs() map[string]string {
+	if x != nil {
+		return x.Outputs
+	}
+	return nil
+}
+
+func (x *ExecuteGeneratorActivityResponse) GetErrorMessage() string {
+	if x != nil && x.ErrorMessage != nil {
+		return *x.ErrorMessage
+	}
+	return ""
+}
+
+type UpdateDeploymentStatusActivityRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DeploymentId  string                 `protobuf:"bytes,1,opt,name=deployment_id,json=deploymentId,proto3" json:"deployment_id,omitempty"`
+	Status        string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"` // pending, deploying, deployed, failed
+	DeploymentUrl *string                `protobuf:"bytes,3,opt,name=deployment_url,json=deploymentUrl,proto3,oneof" json:"deployment_url,omitempty"`
+	ErrorMessage  *string                `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3,oneof" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateDeploymentStatusActivityRequest) Reset() {
+	*x = UpdateDeploymentStatusActivityRequest{}
+	mi := &file_temporal_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateDeploymentStatusActivityRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateDeploymentStatusActivityRequest) ProtoMessage() {}
+
+func (x *UpdateDeploymentStatusActivityRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateDeploymentStatusActivityRequest.ProtoReflect.Descriptor instead.
+func (*UpdateDeploymentStatusActivityRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *UpdateDeploymentStatusActivityRequest) GetDeploymentId() string {
+	if x != nil {
+		return x.DeploymentId
+	}
+	return ""
+}
+
+func (x *UpdateDeploymentStatusActivityRequest) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *UpdateDeploymentStatusActivityRequest) GetDeploymentUrl() string {
+	if x != nil && x.DeploymentUrl != nil {
+		return *x.DeploymentUrl
+	}
+	return ""
+}
+
+func (x *UpdateDeploymentStatusActivityRequest) GetErrorMessage() string {
+	if x != nil && x.ErrorMessage != nil {
+		return *x.ErrorMessage
+	}
+	return ""
+}
+
+type UpdateDeploymentStatusActivityResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateDeploymentStatusActivityResponse) Reset() {
+	*x = UpdateDeploymentStatusActivityResponse{}
+	mi := &file_temporal_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateDeploymentStatusActivityResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateDeploymentStatusActivityResponse) ProtoMessage() {}
+
+func (x *UpdateDeploymentStatusActivityResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateDeploymentStatusActivityResponse.ProtoReflect.Descriptor instead.
+func (*UpdateDeploymentStatusActivityResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *UpdateDeploymentStatusActivityResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
 // Repository Activities
 type CreateRepositoryActivityRequest struct {
 	state          protoimpl.MessageState   `protogen:"open.v1"`
@@ -1844,7 +2602,7 @@ type CreateRepositoryActivityRequest struct {
 
 func (x *CreateRepositoryActivityRequest) Reset() {
 	*x = CreateRepositoryActivityRequest{}
-	mi := &file_temporal_proto_msgTypes[21]
+	mi := &file_temporal_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1856,7 +2614,7 @@ func (x *CreateRepositoryActivityRequest) String() string {
 func (*CreateRepositoryActivityRequest) ProtoMessage() {}
 
 func (x *CreateRepositoryActivityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_proto_msgTypes[21]
+	mi := &file_temporal_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1869,7 +2627,7 @@ func (x *CreateRepositoryActivityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateRepositoryActivityRequest.ProtoReflect.Descriptor instead.
 func (*CreateRepositoryActivityRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_proto_rawDescGZIP(), []int{21}
+	return file_temporal_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *CreateRepositoryActivityRequest) GetWorkspaceId() string {
@@ -1918,7 +2676,7 @@ type CreateRepositoryActivityResponse struct {
 
 func (x *CreateRepositoryActivityResponse) Reset() {
 	*x = CreateRepositoryActivityResponse{}
-	mi := &file_temporal_proto_msgTypes[22]
+	mi := &file_temporal_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1930,7 +2688,7 @@ func (x *CreateRepositoryActivityResponse) String() string {
 func (*CreateRepositoryActivityResponse) ProtoMessage() {}
 
 func (x *CreateRepositoryActivityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_proto_msgTypes[22]
+	mi := &file_temporal_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1943,7 +2701,7 @@ func (x *CreateRepositoryActivityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateRepositoryActivityResponse.ProtoReflect.Descriptor instead.
 func (*CreateRepositoryActivityResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_proto_rawDescGZIP(), []int{22}
+	return file_temporal_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *CreateRepositoryActivityResponse) GetRepositoryId() string {
@@ -1977,7 +2735,7 @@ type InitializeGitActivityRequest struct {
 
 func (x *InitializeGitActivityRequest) Reset() {
 	*x = InitializeGitActivityRequest{}
-	mi := &file_temporal_proto_msgTypes[23]
+	mi := &file_temporal_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1989,7 +2747,7 @@ func (x *InitializeGitActivityRequest) String() string {
 func (*InitializeGitActivityRequest) ProtoMessage() {}
 
 func (x *InitializeGitActivityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_proto_msgTypes[23]
+	mi := &file_temporal_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2002,7 +2760,7 @@ func (x *InitializeGitActivityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InitializeGitActivityRequest.ProtoReflect.Descriptor instead.
 func (*InitializeGitActivityRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_proto_rawDescGZIP(), []int{23}
+	return file_temporal_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *InitializeGitActivityRequest) GetRepositoryId() string {
@@ -2030,7 +2788,7 @@ type InitializeGitActivityResponse struct {
 
 func (x *InitializeGitActivityResponse) Reset() {
 	*x = InitializeGitActivityResponse{}
-	mi := &file_temporal_proto_msgTypes[24]
+	mi := &file_temporal_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2042,7 +2800,7 @@ func (x *InitializeGitActivityResponse) String() string {
 func (*InitializeGitActivityResponse) ProtoMessage() {}
 
 func (x *InitializeGitActivityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_proto_msgTypes[24]
+	mi := &file_temporal_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2055,7 +2813,7 @@ func (x *InitializeGitActivityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InitializeGitActivityResponse.ProtoReflect.Descriptor instead.
 func (*InitializeGitActivityResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_proto_rawDescGZIP(), []int{24}
+	return file_temporal_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *InitializeGitActivityResponse) GetGitUrl() string {
@@ -2091,7 +2849,7 @@ type GenerateCodeActivityRequest struct {
 
 func (x *GenerateCodeActivityRequest) Reset() {
 	*x = GenerateCodeActivityRequest{}
-	mi := &file_temporal_proto_msgTypes[25]
+	mi := &file_temporal_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2103,7 +2861,7 @@ func (x *GenerateCodeActivityRequest) String() string {
 func (*GenerateCodeActivityRequest) ProtoMessage() {}
 
 func (x *GenerateCodeActivityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_proto_msgTypes[25]
+	mi := &file_temporal_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2116,7 +2874,7 @@ func (x *GenerateCodeActivityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GenerateCodeActivityRequest.ProtoReflect.Descriptor instead.
 func (*GenerateCodeActivityRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_proto_rawDescGZIP(), []int{25}
+	return file_temporal_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *GenerateCodeActivityRequest) GetSchemaId() string {
@@ -2151,7 +2909,7 @@ type GenerateCodeActivityResponse struct {
 
 func (x *GenerateCodeActivityResponse) Reset() {
 	*x = GenerateCodeActivityResponse{}
-	mi := &file_temporal_proto_msgTypes[26]
+	mi := &file_temporal_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2163,7 +2921,7 @@ func (x *GenerateCodeActivityResponse) String() string {
 func (*GenerateCodeActivityResponse) ProtoMessage() {}
 
 func (x *GenerateCodeActivityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_proto_msgTypes[26]
+	mi := &file_temporal_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2176,7 +2934,7 @@ func (x *GenerateCodeActivityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GenerateCodeActivityResponse.ProtoReflect.Descriptor instead.
 func (*GenerateCodeActivityResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_proto_rawDescGZIP(), []int{26}
+	return file_temporal_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *GenerateCodeActivityResponse) GetArtifact() *GeneratedArtifact {
@@ -2211,7 +2969,7 @@ type ValidateSchemaActivityRequest struct {
 
 func (x *ValidateSchemaActivityRequest) Reset() {
 	*x = ValidateSchemaActivityRequest{}
-	mi := &file_temporal_proto_msgTypes[27]
+	mi := &file_temporal_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2223,7 +2981,7 @@ func (x *ValidateSchemaActivityRequest) String() string {
 func (*ValidateSchemaActivityRequest) ProtoMessage() {}
 
 func (x *ValidateSchemaActivityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_proto_msgTypes[27]
+	mi := &file_temporal_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2236,7 +2994,7 @@ func (x *ValidateSchemaActivityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateSchemaActivityRequest.ProtoReflect.Descriptor instead.
 func (*ValidateSchemaActivityRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_proto_rawDescGZIP(), []int{27}
+	return file_temporal_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *ValidateSchemaActivityRequest) GetSchemaId() string {
@@ -2271,7 +3029,7 @@ type ValidateSchemaActivityResponse struct {
 
 func (x *ValidateSchemaActivityResponse) Reset() {
 	*x = ValidateSchemaActivityResponse{}
-	mi := &file_temporal_proto_msgTypes[28]
+	mi := &file_temporal_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2283,7 +3041,7 @@ func (x *ValidateSchemaActivityResponse) String() string {
 func (*ValidateSchemaActivityResponse) ProtoMessage() {}
 
 func (x *ValidateSchemaActivityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_proto_msgTypes[28]
+	mi := &file_temporal_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2296,7 +3054,7 @@ func (x *ValidateSchemaActivityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateSchemaActivityResponse.ProtoReflect.Descriptor instead.
 func (*ValidateSchemaActivityResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_proto_rawDescGZIP(), []int{28}
+	return file_temporal_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *ValidateSchemaActivityResponse) GetValid() bool {
@@ -2333,7 +3091,7 @@ type SyncKnowledgePageActivityRequest struct {
 
 func (x *SyncKnowledgePageActivityRequest) Reset() {
 	*x = SyncKnowledgePageActivityRequest{}
-	mi := &file_temporal_proto_msgTypes[29]
+	mi := &file_temporal_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2345,7 +3103,7 @@ func (x *SyncKnowledgePageActivityRequest) String() string {
 func (*SyncKnowledgePageActivityRequest) ProtoMessage() {}
 
 func (x *SyncKnowledgePageActivityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_proto_msgTypes[29]
+	mi := &file_temporal_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2358,7 +3116,7 @@ func (x *SyncKnowledgePageActivityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncKnowledgePageActivityRequest.ProtoReflect.Descriptor instead.
 func (*SyncKnowledgePageActivityRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_proto_rawDescGZIP(), []int{29}
+	return file_temporal_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *SyncKnowledgePageActivityRequest) GetKnowledgeSpaceId() string {
@@ -2401,7 +3159,7 @@ type SyncKnowledgePageActivityResponse struct {
 
 func (x *SyncKnowledgePageActivityResponse) Reset() {
 	*x = SyncKnowledgePageActivityResponse{}
-	mi := &file_temporal_proto_msgTypes[30]
+	mi := &file_temporal_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2413,7 +3171,7 @@ func (x *SyncKnowledgePageActivityResponse) String() string {
 func (*SyncKnowledgePageActivityResponse) ProtoMessage() {}
 
 func (x *SyncKnowledgePageActivityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_proto_msgTypes[30]
+	mi := &file_temporal_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2426,7 +3184,7 @@ func (x *SyncKnowledgePageActivityResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use SyncKnowledgePageActivityResponse.ProtoReflect.Descriptor instead.
 func (*SyncKnowledgePageActivityResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_proto_rawDescGZIP(), []int{30}
+	return file_temporal_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *SyncKnowledgePageActivityResponse) GetSuccess() bool {
@@ -2471,7 +3229,7 @@ type SendNotificationActivityRequest struct {
 
 func (x *SendNotificationActivityRequest) Reset() {
 	*x = SendNotificationActivityRequest{}
-	mi := &file_temporal_proto_msgTypes[31]
+	mi := &file_temporal_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2483,7 +3241,7 @@ func (x *SendNotificationActivityRequest) String() string {
 func (*SendNotificationActivityRequest) ProtoMessage() {}
 
 func (x *SendNotificationActivityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_proto_msgTypes[31]
+	mi := &file_temporal_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2496,7 +3254,7 @@ func (x *SendNotificationActivityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendNotificationActivityRequest.ProtoReflect.Descriptor instead.
 func (*SendNotificationActivityRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_proto_rawDescGZIP(), []int{31}
+	return file_temporal_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *SendNotificationActivityRequest) GetUserId() string {
@@ -2545,7 +3303,7 @@ type SendNotificationActivityResponse struct {
 
 func (x *SendNotificationActivityResponse) Reset() {
 	*x = SendNotificationActivityResponse{}
-	mi := &file_temporal_proto_msgTypes[32]
+	mi := &file_temporal_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2557,7 +3315,7 @@ func (x *SendNotificationActivityResponse) String() string {
 func (*SendNotificationActivityResponse) ProtoMessage() {}
 
 func (x *SendNotificationActivityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_proto_msgTypes[32]
+	mi := &file_temporal_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2570,7 +3328,7 @@ func (x *SendNotificationActivityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendNotificationActivityResponse.ProtoReflect.Descriptor instead.
 func (*SendNotificationActivityResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_proto_rawDescGZIP(), []int{32}
+	return file_temporal_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *SendNotificationActivityResponse) GetSuccess() bool {
@@ -2775,7 +3533,73 @@ const file_temporal_proto_rawDesc = "" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x0f\n" +
-	"\r_completed_at\"\xf1\x02\n" +
+	"\r_completed_at\"\xd3\x02\n" +
+	"\x19DeploymentWorkflowRequest\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12#\n" +
+	"\rdeployment_id\x18\x02 \x01(\tR\fdeploymentId\x12\x15\n" +
+	"\x06app_id\x18\x03 \x01(\tR\x05appId\x12!\n" +
+	"\fworkspace_id\x18\x04 \x01(\tR\vworkspaceId\x12\x17\n" +
+	"\auser_id\x18\x05 \x01(\tR\x06userId\x12%\n" +
+	"\x0egenerator_type\x18\x06 \x01(\tR\rgeneratorType\x12%\n" +
+	"\x0egenerator_slug\x18\a \x01(\tR\rgeneratorSlug\x12\x16\n" +
+	"\x06config\x18\b \x01(\fR\x06config\x129\n" +
+	"\x06target\x18\t \x01(\v2!.idp.temporal.v1.DeploymentTargetR\x06target\"s\n" +
+	"\x10DeploymentTarget\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x16\n" +
+	"\x06region\x18\x02 \x01(\tR\x06region\x12\x18\n" +
+	"\acluster\x18\x03 \x01(\tR\acluster\x12\x19\n" +
+	"\bhost_url\x18\x04 \x01(\tR\ahostUrl\"\xf0\x02\n" +
+	"\x1aDeploymentWorkflowResponse\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12#\n" +
+	"\rdeployment_id\x18\x02 \x01(\tR\fdeploymentId\x127\n" +
+	"\x06status\x18\x03 \x01(\x0e2\x1f.idp.temporal.v1.WorkflowStatusR\x06status\x12%\n" +
+	"\x0edeployment_url\x18\x04 \x01(\tR\rdeploymentUrl\x123\n" +
+	"\x05steps\x18\x05 \x03(\v2\x1d.idp.temporal.v1.WorkflowStepR\x05steps\x12(\n" +
+	"\rerror_message\x18\x06 \x01(\tH\x00R\ferrorMessage\x88\x01\x01\x12=\n" +
+	"\fcompleted_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\vcompletedAtB\x10\n" +
+	"\x0e_error_message\"\x8d\x01\n" +
+	"'ValidateDeploymentConfigActivityRequest\x12%\n" +
+	"\x0egenerator_type\x18\x01 \x01(\tR\rgeneratorType\x12\x16\n" +
+	"\x06config\x18\x02 \x01(\fR\x06config\x12#\n" +
+	"\rconfig_schema\x18\x03 \x01(\fR\fconfigSchema\"m\n" +
+	"(ValidateDeploymentConfigActivityResponse\x12\x14\n" +
+	"\x05valid\x18\x01 \x01(\bR\x05valid\x12+\n" +
+	"\x11validation_errors\x18\x02 \x03(\tR\x10validationErrors\"\xa3\x01\n" +
+	"&PrepareGeneratorContextActivityRequest\x12#\n" +
+	"\rdeployment_id\x18\x01 \x01(\tR\fdeploymentId\x12\x15\n" +
+	"\x06app_id\x18\x02 \x01(\tR\x05appId\x12%\n" +
+	"\x0egenerator_slug\x18\x03 \x01(\tR\rgeneratorSlug\x12\x16\n" +
+	"\x06config\x18\x04 \x01(\fR\x06config\"\x9a\x01\n" +
+	"'PrepareGeneratorContextActivityResponse\x12\x19\n" +
+	"\bwork_dir\x18\x01 \x01(\tR\aworkDir\x12\x18\n" +
+	"\asuccess\x18\x02 \x01(\bR\asuccess\x12(\n" +
+	"\rerror_message\x18\x03 \x01(\tH\x00R\ferrorMessage\x88\x01\x01B\x10\n" +
+	"\x0e_error_message\"\xc3\x01\n" +
+	"\x1fExecuteGeneratorActivityRequest\x12#\n" +
+	"\rdeployment_id\x18\x01 \x01(\tR\fdeploymentId\x12%\n" +
+	"\x0egenerator_type\x18\x02 \x01(\tR\rgeneratorType\x12\x19\n" +
+	"\bwork_dir\x18\x03 \x01(\tR\aworkDir\x129\n" +
+	"\x06target\x18\x04 \x01(\v2!.idp.temporal.v1.DeploymentTargetR\x06target\"\xb5\x02\n" +
+	" ExecuteGeneratorActivityResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12%\n" +
+	"\x0edeployment_url\x18\x02 \x01(\tR\rdeploymentUrl\x12X\n" +
+	"\aoutputs\x18\x03 \x03(\v2>.idp.temporal.v1.ExecuteGeneratorActivityResponse.OutputsEntryR\aoutputs\x12(\n" +
+	"\rerror_message\x18\x04 \x01(\tH\x00R\ferrorMessage\x88\x01\x01\x1a:\n" +
+	"\fOutputsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x10\n" +
+	"\x0e_error_message\"\xdf\x01\n" +
+	"%UpdateDeploymentStatusActivityRequest\x12#\n" +
+	"\rdeployment_id\x18\x01 \x01(\tR\fdeploymentId\x12\x16\n" +
+	"\x06status\x18\x02 \x01(\tR\x06status\x12*\n" +
+	"\x0edeployment_url\x18\x03 \x01(\tH\x00R\rdeploymentUrl\x88\x01\x01\x12(\n" +
+	"\rerror_message\x18\x04 \x01(\tH\x01R\ferrorMessage\x88\x01\x01B\x11\n" +
+	"\x0f_deployment_urlB\x10\n" +
+	"\x0e_error_message\"B\n" +
+	"&UpdateDeploymentStatusActivityResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"\xf1\x02\n" +
 	"\x1fCreateRepositoryActivityRequest\x12!\n" +
 	"\fworkspace_id\x18\x01 \x01(\tR\vworkspaceId\x12'\n" +
 	"\x0frepository_name\x18\x02 \x01(\tR\x0erepositoryName\x12#\n" +
@@ -2863,11 +3687,12 @@ const file_temporal_proto_rawDesc = "" +
 	"!NOTIFICATION_TYPE_WORKFLOW_FAILED\x10\x02\x12$\n" +
 	" NOTIFICATION_TYPE_CODE_GENERATED\x10\x03\x12(\n" +
 	"$NOTIFICATION_TYPE_REPOSITORY_CREATED\x10\x04\x12$\n" +
-	" NOTIFICATION_TYPE_SYNC_COMPLETED\x10\x052\xa3\x05\n" +
+	" NOTIFICATION_TYPE_SYNC_COMPLETED\x10\x052\x8e\x06\n" +
 	"\x0fWorkflowService\x12}\n" +
 	"\x19StartRepositoryGeneration\x124.idp.temporal.v1.RepositoryGenerationWorkflowRequest\x1a*.idp.temporal.v1.WorkflowExecutionResponse\x12q\n" +
 	"\x13StartCodeGeneration\x12..idp.temporal.v1.CodeGenerationWorkflowRequest\x1a*.idp.temporal.v1.WorkflowExecutionResponse\x12o\n" +
-	"\x12StartKnowledgeSync\x12-.idp.temporal.v1.KnowledgeSyncWorkflowRequest\x1a*.idp.temporal.v1.WorkflowExecutionResponse\x12j\n" +
+	"\x12StartKnowledgeSync\x12-.idp.temporal.v1.KnowledgeSyncWorkflowRequest\x1a*.idp.temporal.v1.WorkflowExecutionResponse\x12i\n" +
+	"\x0fStartDeployment\x12*.idp.temporal.v1.DeploymentWorkflowRequest\x1a*.idp.temporal.v1.WorkflowExecutionResponse\x12j\n" +
 	"\x11GetWorkflowStatus\x12).idp.temporal.v1.GetWorkflowStatusRequest\x1a*.idp.temporal.v1.GetWorkflowStatusResponse\x12a\n" +
 	"\x0eCancelWorkflow\x12&.idp.temporal.v1.CancelWorkflowRequest\x1a'.idp.temporal.v1.CancelWorkflowResponse\x12^\n" +
 	"\rListWorkflows\x12%.idp.temporal.v1.ListWorkflowsRequest\x1a&.idp.temporal.v1.ListWorkflowsResponseBFZDgithub.com/drewpayment/orbit/proto/gen/go/idp/temporal/v1;temporalv1b\x06proto3"
@@ -2885,119 +3710,139 @@ func file_temporal_proto_rawDescGZIP() []byte {
 }
 
 var file_temporal_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_temporal_proto_msgTypes = make([]protoimpl.MessageInfo, 40)
+var file_temporal_proto_msgTypes = make([]protoimpl.MessageInfo, 52)
 var file_temporal_proto_goTypes = []any{
-	(SyncOperation)(0),                           // 0: idp.temporal.v1.SyncOperation
-	(WorkflowStatus)(0),                          // 1: idp.temporal.v1.WorkflowStatus
-	(NotificationType)(0),                        // 2: idp.temporal.v1.NotificationType
-	(*RepositoryGenerationWorkflowRequest)(nil),  // 3: idp.temporal.v1.RepositoryGenerationWorkflowRequest
-	(*RepositoryConfiguration)(nil),              // 4: idp.temporal.v1.RepositoryConfiguration
-	(*GitConfiguration)(nil),                     // 5: idp.temporal.v1.GitConfiguration
-	(*RepositoryGenerationWorkflowResponse)(nil), // 6: idp.temporal.v1.RepositoryGenerationWorkflowResponse
-	(*CodeGenerationWorkflowRequest)(nil),        // 7: idp.temporal.v1.CodeGenerationWorkflowRequest
-	(*CodeGenerationOptions)(nil),                // 8: idp.temporal.v1.CodeGenerationOptions
-	(*CodeGenerationWorkflowResponse)(nil),       // 9: idp.temporal.v1.CodeGenerationWorkflowResponse
-	(*GeneratedArtifact)(nil),                    // 10: idp.temporal.v1.GeneratedArtifact
-	(*KnowledgeSyncWorkflowRequest)(nil),         // 11: idp.temporal.v1.KnowledgeSyncWorkflowRequest
-	(*KnowledgeSyncOptions)(nil),                 // 12: idp.temporal.v1.KnowledgeSyncOptions
-	(*KnowledgeSyncWorkflowResponse)(nil),        // 13: idp.temporal.v1.KnowledgeSyncWorkflowResponse
-	(*KnowledgeSyncResult)(nil),                  // 14: idp.temporal.v1.KnowledgeSyncResult
-	(*WorkflowStep)(nil),                         // 15: idp.temporal.v1.WorkflowStep
-	(*WorkflowExecutionResponse)(nil),            // 16: idp.temporal.v1.WorkflowExecutionResponse
-	(*GetWorkflowStatusRequest)(nil),             // 17: idp.temporal.v1.GetWorkflowStatusRequest
-	(*GetWorkflowStatusResponse)(nil),            // 18: idp.temporal.v1.GetWorkflowStatusResponse
-	(*CancelWorkflowRequest)(nil),                // 19: idp.temporal.v1.CancelWorkflowRequest
-	(*CancelWorkflowResponse)(nil),               // 20: idp.temporal.v1.CancelWorkflowResponse
-	(*ListWorkflowsRequest)(nil),                 // 21: idp.temporal.v1.ListWorkflowsRequest
-	(*ListWorkflowsResponse)(nil),                // 22: idp.temporal.v1.ListWorkflowsResponse
-	(*WorkflowExecution)(nil),                    // 23: idp.temporal.v1.WorkflowExecution
-	(*CreateRepositoryActivityRequest)(nil),      // 24: idp.temporal.v1.CreateRepositoryActivityRequest
-	(*CreateRepositoryActivityResponse)(nil),     // 25: idp.temporal.v1.CreateRepositoryActivityResponse
-	(*InitializeGitActivityRequest)(nil),         // 26: idp.temporal.v1.InitializeGitActivityRequest
-	(*InitializeGitActivityResponse)(nil),        // 27: idp.temporal.v1.InitializeGitActivityResponse
-	(*GenerateCodeActivityRequest)(nil),          // 28: idp.temporal.v1.GenerateCodeActivityRequest
-	(*GenerateCodeActivityResponse)(nil),         // 29: idp.temporal.v1.GenerateCodeActivityResponse
-	(*ValidateSchemaActivityRequest)(nil),        // 30: idp.temporal.v1.ValidateSchemaActivityRequest
-	(*ValidateSchemaActivityResponse)(nil),       // 31: idp.temporal.v1.ValidateSchemaActivityResponse
-	(*SyncKnowledgePageActivityRequest)(nil),     // 32: idp.temporal.v1.SyncKnowledgePageActivityRequest
-	(*SyncKnowledgePageActivityResponse)(nil),    // 33: idp.temporal.v1.SyncKnowledgePageActivityResponse
-	(*SendNotificationActivityRequest)(nil),      // 34: idp.temporal.v1.SendNotificationActivityRequest
-	(*SendNotificationActivityResponse)(nil),     // 35: idp.temporal.v1.SendNotificationActivityResponse
-	nil,                                          // 36: idp.temporal.v1.RepositoryGenerationWorkflowRequest.VariablesEntry
-	nil,                                          // 37: idp.temporal.v1.RepositoryConfiguration.CustomizationsEntry
-	nil,                                          // 38: idp.temporal.v1.CodeGenerationOptions.LanguageConfigsEntry
-	nil,                                          // 39: idp.temporal.v1.WorkflowStep.MetadataEntry
-	nil,                                          // 40: idp.temporal.v1.WorkflowExecution.MetadataEntry
-	nil,                                          // 41: idp.temporal.v1.CreateRepositoryActivityRequest.VariablesEntry
-	nil,                                          // 42: idp.temporal.v1.SendNotificationActivityRequest.MetadataEntry
-	(*timestamppb.Timestamp)(nil),                // 43: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),                  // 44: google.protobuf.Duration
+	(SyncOperation)(0),                               // 0: idp.temporal.v1.SyncOperation
+	(WorkflowStatus)(0),                              // 1: idp.temporal.v1.WorkflowStatus
+	(NotificationType)(0),                            // 2: idp.temporal.v1.NotificationType
+	(*RepositoryGenerationWorkflowRequest)(nil),      // 3: idp.temporal.v1.RepositoryGenerationWorkflowRequest
+	(*RepositoryConfiguration)(nil),                  // 4: idp.temporal.v1.RepositoryConfiguration
+	(*GitConfiguration)(nil),                         // 5: idp.temporal.v1.GitConfiguration
+	(*RepositoryGenerationWorkflowResponse)(nil),     // 6: idp.temporal.v1.RepositoryGenerationWorkflowResponse
+	(*CodeGenerationWorkflowRequest)(nil),            // 7: idp.temporal.v1.CodeGenerationWorkflowRequest
+	(*CodeGenerationOptions)(nil),                    // 8: idp.temporal.v1.CodeGenerationOptions
+	(*CodeGenerationWorkflowResponse)(nil),           // 9: idp.temporal.v1.CodeGenerationWorkflowResponse
+	(*GeneratedArtifact)(nil),                        // 10: idp.temporal.v1.GeneratedArtifact
+	(*KnowledgeSyncWorkflowRequest)(nil),             // 11: idp.temporal.v1.KnowledgeSyncWorkflowRequest
+	(*KnowledgeSyncOptions)(nil),                     // 12: idp.temporal.v1.KnowledgeSyncOptions
+	(*KnowledgeSyncWorkflowResponse)(nil),            // 13: idp.temporal.v1.KnowledgeSyncWorkflowResponse
+	(*KnowledgeSyncResult)(nil),                      // 14: idp.temporal.v1.KnowledgeSyncResult
+	(*WorkflowStep)(nil),                             // 15: idp.temporal.v1.WorkflowStep
+	(*WorkflowExecutionResponse)(nil),                // 16: idp.temporal.v1.WorkflowExecutionResponse
+	(*GetWorkflowStatusRequest)(nil),                 // 17: idp.temporal.v1.GetWorkflowStatusRequest
+	(*GetWorkflowStatusResponse)(nil),                // 18: idp.temporal.v1.GetWorkflowStatusResponse
+	(*CancelWorkflowRequest)(nil),                    // 19: idp.temporal.v1.CancelWorkflowRequest
+	(*CancelWorkflowResponse)(nil),                   // 20: idp.temporal.v1.CancelWorkflowResponse
+	(*ListWorkflowsRequest)(nil),                     // 21: idp.temporal.v1.ListWorkflowsRequest
+	(*ListWorkflowsResponse)(nil),                    // 22: idp.temporal.v1.ListWorkflowsResponse
+	(*WorkflowExecution)(nil),                        // 23: idp.temporal.v1.WorkflowExecution
+	(*DeploymentWorkflowRequest)(nil),                // 24: idp.temporal.v1.DeploymentWorkflowRequest
+	(*DeploymentTarget)(nil),                         // 25: idp.temporal.v1.DeploymentTarget
+	(*DeploymentWorkflowResponse)(nil),               // 26: idp.temporal.v1.DeploymentWorkflowResponse
+	(*ValidateDeploymentConfigActivityRequest)(nil),  // 27: idp.temporal.v1.ValidateDeploymentConfigActivityRequest
+	(*ValidateDeploymentConfigActivityResponse)(nil), // 28: idp.temporal.v1.ValidateDeploymentConfigActivityResponse
+	(*PrepareGeneratorContextActivityRequest)(nil),   // 29: idp.temporal.v1.PrepareGeneratorContextActivityRequest
+	(*PrepareGeneratorContextActivityResponse)(nil),  // 30: idp.temporal.v1.PrepareGeneratorContextActivityResponse
+	(*ExecuteGeneratorActivityRequest)(nil),          // 31: idp.temporal.v1.ExecuteGeneratorActivityRequest
+	(*ExecuteGeneratorActivityResponse)(nil),         // 32: idp.temporal.v1.ExecuteGeneratorActivityResponse
+	(*UpdateDeploymentStatusActivityRequest)(nil),    // 33: idp.temporal.v1.UpdateDeploymentStatusActivityRequest
+	(*UpdateDeploymentStatusActivityResponse)(nil),   // 34: idp.temporal.v1.UpdateDeploymentStatusActivityResponse
+	(*CreateRepositoryActivityRequest)(nil),          // 35: idp.temporal.v1.CreateRepositoryActivityRequest
+	(*CreateRepositoryActivityResponse)(nil),         // 36: idp.temporal.v1.CreateRepositoryActivityResponse
+	(*InitializeGitActivityRequest)(nil),             // 37: idp.temporal.v1.InitializeGitActivityRequest
+	(*InitializeGitActivityResponse)(nil),            // 38: idp.temporal.v1.InitializeGitActivityResponse
+	(*GenerateCodeActivityRequest)(nil),              // 39: idp.temporal.v1.GenerateCodeActivityRequest
+	(*GenerateCodeActivityResponse)(nil),             // 40: idp.temporal.v1.GenerateCodeActivityResponse
+	(*ValidateSchemaActivityRequest)(nil),            // 41: idp.temporal.v1.ValidateSchemaActivityRequest
+	(*ValidateSchemaActivityResponse)(nil),           // 42: idp.temporal.v1.ValidateSchemaActivityResponse
+	(*SyncKnowledgePageActivityRequest)(nil),         // 43: idp.temporal.v1.SyncKnowledgePageActivityRequest
+	(*SyncKnowledgePageActivityResponse)(nil),        // 44: idp.temporal.v1.SyncKnowledgePageActivityResponse
+	(*SendNotificationActivityRequest)(nil),          // 45: idp.temporal.v1.SendNotificationActivityRequest
+	(*SendNotificationActivityResponse)(nil),         // 46: idp.temporal.v1.SendNotificationActivityResponse
+	nil,                                              // 47: idp.temporal.v1.RepositoryGenerationWorkflowRequest.VariablesEntry
+	nil,                                              // 48: idp.temporal.v1.RepositoryConfiguration.CustomizationsEntry
+	nil,                                              // 49: idp.temporal.v1.CodeGenerationOptions.LanguageConfigsEntry
+	nil,                                              // 50: idp.temporal.v1.WorkflowStep.MetadataEntry
+	nil,                                              // 51: idp.temporal.v1.WorkflowExecution.MetadataEntry
+	nil,                                              // 52: idp.temporal.v1.ExecuteGeneratorActivityResponse.OutputsEntry
+	nil,                                              // 53: idp.temporal.v1.CreateRepositoryActivityRequest.VariablesEntry
+	nil,                                              // 54: idp.temporal.v1.SendNotificationActivityRequest.MetadataEntry
+	(*timestamppb.Timestamp)(nil),                    // 55: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),                      // 56: google.protobuf.Duration
 }
 var file_temporal_proto_depIdxs = []int32{
-	36, // 0: idp.temporal.v1.RepositoryGenerationWorkflowRequest.variables:type_name -> idp.temporal.v1.RepositoryGenerationWorkflowRequest.VariablesEntry
+	47, // 0: idp.temporal.v1.RepositoryGenerationWorkflowRequest.variables:type_name -> idp.temporal.v1.RepositoryGenerationWorkflowRequest.VariablesEntry
 	4,  // 1: idp.temporal.v1.RepositoryGenerationWorkflowRequest.config:type_name -> idp.temporal.v1.RepositoryConfiguration
 	5,  // 2: idp.temporal.v1.RepositoryConfiguration.git_config:type_name -> idp.temporal.v1.GitConfiguration
-	37, // 3: idp.temporal.v1.RepositoryConfiguration.customizations:type_name -> idp.temporal.v1.RepositoryConfiguration.CustomizationsEntry
+	48, // 3: idp.temporal.v1.RepositoryConfiguration.customizations:type_name -> idp.temporal.v1.RepositoryConfiguration.CustomizationsEntry
 	1,  // 4: idp.temporal.v1.RepositoryGenerationWorkflowResponse.status:type_name -> idp.temporal.v1.WorkflowStatus
 	15, // 5: idp.temporal.v1.RepositoryGenerationWorkflowResponse.steps:type_name -> idp.temporal.v1.WorkflowStep
-	43, // 6: idp.temporal.v1.RepositoryGenerationWorkflowResponse.completed_at:type_name -> google.protobuf.Timestamp
+	55, // 6: idp.temporal.v1.RepositoryGenerationWorkflowResponse.completed_at:type_name -> google.protobuf.Timestamp
 	8,  // 7: idp.temporal.v1.CodeGenerationWorkflowRequest.options:type_name -> idp.temporal.v1.CodeGenerationOptions
-	38, // 8: idp.temporal.v1.CodeGenerationOptions.language_configs:type_name -> idp.temporal.v1.CodeGenerationOptions.LanguageConfigsEntry
+	49, // 8: idp.temporal.v1.CodeGenerationOptions.language_configs:type_name -> idp.temporal.v1.CodeGenerationOptions.LanguageConfigsEntry
 	1,  // 9: idp.temporal.v1.CodeGenerationWorkflowResponse.status:type_name -> idp.temporal.v1.WorkflowStatus
 	10, // 10: idp.temporal.v1.CodeGenerationWorkflowResponse.artifacts:type_name -> idp.temporal.v1.GeneratedArtifact
 	15, // 11: idp.temporal.v1.CodeGenerationWorkflowResponse.steps:type_name -> idp.temporal.v1.WorkflowStep
-	43, // 12: idp.temporal.v1.CodeGenerationWorkflowResponse.completed_at:type_name -> google.protobuf.Timestamp
+	55, // 12: idp.temporal.v1.CodeGenerationWorkflowResponse.completed_at:type_name -> google.protobuf.Timestamp
 	0,  // 13: idp.temporal.v1.KnowledgeSyncWorkflowRequest.operation:type_name -> idp.temporal.v1.SyncOperation
 	12, // 14: idp.temporal.v1.KnowledgeSyncWorkflowRequest.options:type_name -> idp.temporal.v1.KnowledgeSyncOptions
 	1,  // 15: idp.temporal.v1.KnowledgeSyncWorkflowResponse.status:type_name -> idp.temporal.v1.WorkflowStatus
 	14, // 16: idp.temporal.v1.KnowledgeSyncWorkflowResponse.sync_result:type_name -> idp.temporal.v1.KnowledgeSyncResult
 	15, // 17: idp.temporal.v1.KnowledgeSyncWorkflowResponse.steps:type_name -> idp.temporal.v1.WorkflowStep
-	43, // 18: idp.temporal.v1.KnowledgeSyncWorkflowResponse.completed_at:type_name -> google.protobuf.Timestamp
+	55, // 18: idp.temporal.v1.KnowledgeSyncWorkflowResponse.completed_at:type_name -> google.protobuf.Timestamp
 	1,  // 19: idp.temporal.v1.WorkflowStep.status:type_name -> idp.temporal.v1.WorkflowStatus
-	43, // 20: idp.temporal.v1.WorkflowStep.started_at:type_name -> google.protobuf.Timestamp
-	43, // 21: idp.temporal.v1.WorkflowStep.completed_at:type_name -> google.protobuf.Timestamp
-	39, // 22: idp.temporal.v1.WorkflowStep.metadata:type_name -> idp.temporal.v1.WorkflowStep.MetadataEntry
+	55, // 20: idp.temporal.v1.WorkflowStep.started_at:type_name -> google.protobuf.Timestamp
+	55, // 21: idp.temporal.v1.WorkflowStep.completed_at:type_name -> google.protobuf.Timestamp
+	50, // 22: idp.temporal.v1.WorkflowStep.metadata:type_name -> idp.temporal.v1.WorkflowStep.MetadataEntry
 	1,  // 23: idp.temporal.v1.WorkflowExecutionResponse.status:type_name -> idp.temporal.v1.WorkflowStatus
-	43, // 24: idp.temporal.v1.WorkflowExecutionResponse.started_at:type_name -> google.protobuf.Timestamp
+	55, // 24: idp.temporal.v1.WorkflowExecutionResponse.started_at:type_name -> google.protobuf.Timestamp
 	1,  // 25: idp.temporal.v1.GetWorkflowStatusResponse.status:type_name -> idp.temporal.v1.WorkflowStatus
-	43, // 26: idp.temporal.v1.GetWorkflowStatusResponse.started_at:type_name -> google.protobuf.Timestamp
-	43, // 27: idp.temporal.v1.GetWorkflowStatusResponse.completed_at:type_name -> google.protobuf.Timestamp
+	55, // 26: idp.temporal.v1.GetWorkflowStatusResponse.started_at:type_name -> google.protobuf.Timestamp
+	55, // 27: idp.temporal.v1.GetWorkflowStatusResponse.completed_at:type_name -> google.protobuf.Timestamp
 	15, // 28: idp.temporal.v1.GetWorkflowStatusResponse.steps:type_name -> idp.temporal.v1.WorkflowStep
 	1,  // 29: idp.temporal.v1.ListWorkflowsRequest.status_filter:type_name -> idp.temporal.v1.WorkflowStatus
-	43, // 30: idp.temporal.v1.ListWorkflowsRequest.start_time:type_name -> google.protobuf.Timestamp
-	43, // 31: idp.temporal.v1.ListWorkflowsRequest.end_time:type_name -> google.protobuf.Timestamp
+	55, // 30: idp.temporal.v1.ListWorkflowsRequest.start_time:type_name -> google.protobuf.Timestamp
+	55, // 31: idp.temporal.v1.ListWorkflowsRequest.end_time:type_name -> google.protobuf.Timestamp
 	23, // 32: idp.temporal.v1.ListWorkflowsResponse.workflows:type_name -> idp.temporal.v1.WorkflowExecution
 	1,  // 33: idp.temporal.v1.WorkflowExecution.status:type_name -> idp.temporal.v1.WorkflowStatus
-	43, // 34: idp.temporal.v1.WorkflowExecution.started_at:type_name -> google.protobuf.Timestamp
-	43, // 35: idp.temporal.v1.WorkflowExecution.completed_at:type_name -> google.protobuf.Timestamp
-	44, // 36: idp.temporal.v1.WorkflowExecution.duration:type_name -> google.protobuf.Duration
-	40, // 37: idp.temporal.v1.WorkflowExecution.metadata:type_name -> idp.temporal.v1.WorkflowExecution.MetadataEntry
-	41, // 38: idp.temporal.v1.CreateRepositoryActivityRequest.variables:type_name -> idp.temporal.v1.CreateRepositoryActivityRequest.VariablesEntry
-	4,  // 39: idp.temporal.v1.CreateRepositoryActivityRequest.config:type_name -> idp.temporal.v1.RepositoryConfiguration
-	5,  // 40: idp.temporal.v1.InitializeGitActivityRequest.git_config:type_name -> idp.temporal.v1.GitConfiguration
-	8,  // 41: idp.temporal.v1.GenerateCodeActivityRequest.options:type_name -> idp.temporal.v1.CodeGenerationOptions
-	10, // 42: idp.temporal.v1.GenerateCodeActivityResponse.artifact:type_name -> idp.temporal.v1.GeneratedArtifact
-	0,  // 43: idp.temporal.v1.SyncKnowledgePageActivityRequest.operation:type_name -> idp.temporal.v1.SyncOperation
-	12, // 44: idp.temporal.v1.SyncKnowledgePageActivityRequest.options:type_name -> idp.temporal.v1.KnowledgeSyncOptions
-	2,  // 45: idp.temporal.v1.SendNotificationActivityRequest.notification_type:type_name -> idp.temporal.v1.NotificationType
-	42, // 46: idp.temporal.v1.SendNotificationActivityRequest.metadata:type_name -> idp.temporal.v1.SendNotificationActivityRequest.MetadataEntry
-	3,  // 47: idp.temporal.v1.WorkflowService.StartRepositoryGeneration:input_type -> idp.temporal.v1.RepositoryGenerationWorkflowRequest
-	7,  // 48: idp.temporal.v1.WorkflowService.StartCodeGeneration:input_type -> idp.temporal.v1.CodeGenerationWorkflowRequest
-	11, // 49: idp.temporal.v1.WorkflowService.StartKnowledgeSync:input_type -> idp.temporal.v1.KnowledgeSyncWorkflowRequest
-	17, // 50: idp.temporal.v1.WorkflowService.GetWorkflowStatus:input_type -> idp.temporal.v1.GetWorkflowStatusRequest
-	19, // 51: idp.temporal.v1.WorkflowService.CancelWorkflow:input_type -> idp.temporal.v1.CancelWorkflowRequest
-	21, // 52: idp.temporal.v1.WorkflowService.ListWorkflows:input_type -> idp.temporal.v1.ListWorkflowsRequest
-	16, // 53: idp.temporal.v1.WorkflowService.StartRepositoryGeneration:output_type -> idp.temporal.v1.WorkflowExecutionResponse
-	16, // 54: idp.temporal.v1.WorkflowService.StartCodeGeneration:output_type -> idp.temporal.v1.WorkflowExecutionResponse
-	16, // 55: idp.temporal.v1.WorkflowService.StartKnowledgeSync:output_type -> idp.temporal.v1.WorkflowExecutionResponse
-	18, // 56: idp.temporal.v1.WorkflowService.GetWorkflowStatus:output_type -> idp.temporal.v1.GetWorkflowStatusResponse
-	20, // 57: idp.temporal.v1.WorkflowService.CancelWorkflow:output_type -> idp.temporal.v1.CancelWorkflowResponse
-	22, // 58: idp.temporal.v1.WorkflowService.ListWorkflows:output_type -> idp.temporal.v1.ListWorkflowsResponse
-	53, // [53:59] is the sub-list for method output_type
-	47, // [47:53] is the sub-list for method input_type
-	47, // [47:47] is the sub-list for extension type_name
-	47, // [47:47] is the sub-list for extension extendee
-	0,  // [0:47] is the sub-list for field type_name
+	55, // 34: idp.temporal.v1.WorkflowExecution.started_at:type_name -> google.protobuf.Timestamp
+	55, // 35: idp.temporal.v1.WorkflowExecution.completed_at:type_name -> google.protobuf.Timestamp
+	56, // 36: idp.temporal.v1.WorkflowExecution.duration:type_name -> google.protobuf.Duration
+	51, // 37: idp.temporal.v1.WorkflowExecution.metadata:type_name -> idp.temporal.v1.WorkflowExecution.MetadataEntry
+	25, // 38: idp.temporal.v1.DeploymentWorkflowRequest.target:type_name -> idp.temporal.v1.DeploymentTarget
+	1,  // 39: idp.temporal.v1.DeploymentWorkflowResponse.status:type_name -> idp.temporal.v1.WorkflowStatus
+	15, // 40: idp.temporal.v1.DeploymentWorkflowResponse.steps:type_name -> idp.temporal.v1.WorkflowStep
+	55, // 41: idp.temporal.v1.DeploymentWorkflowResponse.completed_at:type_name -> google.protobuf.Timestamp
+	25, // 42: idp.temporal.v1.ExecuteGeneratorActivityRequest.target:type_name -> idp.temporal.v1.DeploymentTarget
+	52, // 43: idp.temporal.v1.ExecuteGeneratorActivityResponse.outputs:type_name -> idp.temporal.v1.ExecuteGeneratorActivityResponse.OutputsEntry
+	53, // 44: idp.temporal.v1.CreateRepositoryActivityRequest.variables:type_name -> idp.temporal.v1.CreateRepositoryActivityRequest.VariablesEntry
+	4,  // 45: idp.temporal.v1.CreateRepositoryActivityRequest.config:type_name -> idp.temporal.v1.RepositoryConfiguration
+	5,  // 46: idp.temporal.v1.InitializeGitActivityRequest.git_config:type_name -> idp.temporal.v1.GitConfiguration
+	8,  // 47: idp.temporal.v1.GenerateCodeActivityRequest.options:type_name -> idp.temporal.v1.CodeGenerationOptions
+	10, // 48: idp.temporal.v1.GenerateCodeActivityResponse.artifact:type_name -> idp.temporal.v1.GeneratedArtifact
+	0,  // 49: idp.temporal.v1.SyncKnowledgePageActivityRequest.operation:type_name -> idp.temporal.v1.SyncOperation
+	12, // 50: idp.temporal.v1.SyncKnowledgePageActivityRequest.options:type_name -> idp.temporal.v1.KnowledgeSyncOptions
+	2,  // 51: idp.temporal.v1.SendNotificationActivityRequest.notification_type:type_name -> idp.temporal.v1.NotificationType
+	54, // 52: idp.temporal.v1.SendNotificationActivityRequest.metadata:type_name -> idp.temporal.v1.SendNotificationActivityRequest.MetadataEntry
+	3,  // 53: idp.temporal.v1.WorkflowService.StartRepositoryGeneration:input_type -> idp.temporal.v1.RepositoryGenerationWorkflowRequest
+	7,  // 54: idp.temporal.v1.WorkflowService.StartCodeGeneration:input_type -> idp.temporal.v1.CodeGenerationWorkflowRequest
+	11, // 55: idp.temporal.v1.WorkflowService.StartKnowledgeSync:input_type -> idp.temporal.v1.KnowledgeSyncWorkflowRequest
+	24, // 56: idp.temporal.v1.WorkflowService.StartDeployment:input_type -> idp.temporal.v1.DeploymentWorkflowRequest
+	17, // 57: idp.temporal.v1.WorkflowService.GetWorkflowStatus:input_type -> idp.temporal.v1.GetWorkflowStatusRequest
+	19, // 58: idp.temporal.v1.WorkflowService.CancelWorkflow:input_type -> idp.temporal.v1.CancelWorkflowRequest
+	21, // 59: idp.temporal.v1.WorkflowService.ListWorkflows:input_type -> idp.temporal.v1.ListWorkflowsRequest
+	16, // 60: idp.temporal.v1.WorkflowService.StartRepositoryGeneration:output_type -> idp.temporal.v1.WorkflowExecutionResponse
+	16, // 61: idp.temporal.v1.WorkflowService.StartCodeGeneration:output_type -> idp.temporal.v1.WorkflowExecutionResponse
+	16, // 62: idp.temporal.v1.WorkflowService.StartKnowledgeSync:output_type -> idp.temporal.v1.WorkflowExecutionResponse
+	16, // 63: idp.temporal.v1.WorkflowService.StartDeployment:output_type -> idp.temporal.v1.WorkflowExecutionResponse
+	18, // 64: idp.temporal.v1.WorkflowService.GetWorkflowStatus:output_type -> idp.temporal.v1.GetWorkflowStatusResponse
+	20, // 65: idp.temporal.v1.WorkflowService.CancelWorkflow:output_type -> idp.temporal.v1.CancelWorkflowResponse
+	22, // 66: idp.temporal.v1.WorkflowService.ListWorkflows:output_type -> idp.temporal.v1.ListWorkflowsResponse
+	60, // [60:67] is the sub-list for method output_type
+	53, // [53:60] is the sub-list for method input_type
+	53, // [53:53] is the sub-list for extension type_name
+	53, // [53:53] is the sub-list for extension extendee
+	0,  // [0:53] is the sub-list for field type_name
 }
 
 func init() { file_temporal_proto_init() }
@@ -3012,18 +3857,22 @@ func file_temporal_proto_init() {
 	file_temporal_proto_msgTypes[15].OneofWrappers = []any{}
 	file_temporal_proto_msgTypes[18].OneofWrappers = []any{}
 	file_temporal_proto_msgTypes[20].OneofWrappers = []any{}
-	file_temporal_proto_msgTypes[22].OneofWrappers = []any{}
-	file_temporal_proto_msgTypes[24].OneofWrappers = []any{}
-	file_temporal_proto_msgTypes[26].OneofWrappers = []any{}
+	file_temporal_proto_msgTypes[23].OneofWrappers = []any{}
+	file_temporal_proto_msgTypes[27].OneofWrappers = []any{}
+	file_temporal_proto_msgTypes[29].OneofWrappers = []any{}
 	file_temporal_proto_msgTypes[30].OneofWrappers = []any{}
-	file_temporal_proto_msgTypes[32].OneofWrappers = []any{}
+	file_temporal_proto_msgTypes[33].OneofWrappers = []any{}
+	file_temporal_proto_msgTypes[35].OneofWrappers = []any{}
+	file_temporal_proto_msgTypes[37].OneofWrappers = []any{}
+	file_temporal_proto_msgTypes[41].OneofWrappers = []any{}
+	file_temporal_proto_msgTypes[43].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_proto_rawDesc), len(file_temporal_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   40,
+			NumMessages:   52,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

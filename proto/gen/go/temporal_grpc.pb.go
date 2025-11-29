@@ -22,6 +22,7 @@ const (
 	WorkflowService_StartRepositoryGeneration_FullMethodName = "/idp.temporal.v1.WorkflowService/StartRepositoryGeneration"
 	WorkflowService_StartCodeGeneration_FullMethodName       = "/idp.temporal.v1.WorkflowService/StartCodeGeneration"
 	WorkflowService_StartKnowledgeSync_FullMethodName        = "/idp.temporal.v1.WorkflowService/StartKnowledgeSync"
+	WorkflowService_StartDeployment_FullMethodName           = "/idp.temporal.v1.WorkflowService/StartDeployment"
 	WorkflowService_GetWorkflowStatus_FullMethodName         = "/idp.temporal.v1.WorkflowService/GetWorkflowStatus"
 	WorkflowService_CancelWorkflow_FullMethodName            = "/idp.temporal.v1.WorkflowService/CancelWorkflow"
 	WorkflowService_ListWorkflows_FullMethodName             = "/idp.temporal.v1.WorkflowService/ListWorkflows"
@@ -39,6 +40,8 @@ type WorkflowServiceClient interface {
 	StartCodeGeneration(ctx context.Context, in *CodeGenerationWorkflowRequest, opts ...grpc.CallOption) (*WorkflowExecutionResponse, error)
 	// Start knowledge synchronization workflow
 	StartKnowledgeSync(ctx context.Context, in *KnowledgeSyncWorkflowRequest, opts ...grpc.CallOption) (*WorkflowExecutionResponse, error)
+	// Start deployment workflow
+	StartDeployment(ctx context.Context, in *DeploymentWorkflowRequest, opts ...grpc.CallOption) (*WorkflowExecutionResponse, error)
 	// Get workflow status
 	GetWorkflowStatus(ctx context.Context, in *GetWorkflowStatusRequest, opts ...grpc.CallOption) (*GetWorkflowStatusResponse, error)
 	// Cancel workflow
@@ -79,6 +82,16 @@ func (c *workflowServiceClient) StartKnowledgeSync(ctx context.Context, in *Know
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(WorkflowExecutionResponse)
 	err := c.cc.Invoke(ctx, WorkflowService_StartKnowledgeSync_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowServiceClient) StartDeployment(ctx context.Context, in *DeploymentWorkflowRequest, opts ...grpc.CallOption) (*WorkflowExecutionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WorkflowExecutionResponse)
+	err := c.cc.Invoke(ctx, WorkflowService_StartDeployment_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -127,6 +140,8 @@ type WorkflowServiceServer interface {
 	StartCodeGeneration(context.Context, *CodeGenerationWorkflowRequest) (*WorkflowExecutionResponse, error)
 	// Start knowledge synchronization workflow
 	StartKnowledgeSync(context.Context, *KnowledgeSyncWorkflowRequest) (*WorkflowExecutionResponse, error)
+	// Start deployment workflow
+	StartDeployment(context.Context, *DeploymentWorkflowRequest) (*WorkflowExecutionResponse, error)
 	// Get workflow status
 	GetWorkflowStatus(context.Context, *GetWorkflowStatusRequest) (*GetWorkflowStatusResponse, error)
 	// Cancel workflow
@@ -151,6 +166,9 @@ func (UnimplementedWorkflowServiceServer) StartCodeGeneration(context.Context, *
 }
 func (UnimplementedWorkflowServiceServer) StartKnowledgeSync(context.Context, *KnowledgeSyncWorkflowRequest) (*WorkflowExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StartKnowledgeSync not implemented")
+}
+func (UnimplementedWorkflowServiceServer) StartDeployment(context.Context, *DeploymentWorkflowRequest) (*WorkflowExecutionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StartDeployment not implemented")
 }
 func (UnimplementedWorkflowServiceServer) GetWorkflowStatus(context.Context, *GetWorkflowStatusRequest) (*GetWorkflowStatusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetWorkflowStatus not implemented")
@@ -236,6 +254,24 @@ func _WorkflowService_StartKnowledgeSync_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WorkflowService_StartDeployment_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeploymentWorkflowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowServiceServer).StartDeployment(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkflowService_StartDeployment_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowServiceServer).StartDeployment(ctx, req.(*DeploymentWorkflowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _WorkflowService_GetWorkflowStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetWorkflowStatusRequest)
 	if err := dec(in); err != nil {
@@ -308,6 +344,10 @@ var WorkflowService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "StartKnowledgeSync",
 			Handler:    _WorkflowService_StartKnowledgeSync_Handler,
+		},
+		{
+			MethodName: "StartDeployment",
+			Handler:    _WorkflowService_StartDeployment_Handler,
 		},
 		{
 			MethodName: "GetWorkflowStatus",

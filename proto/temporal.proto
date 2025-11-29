@@ -148,19 +148,22 @@ message WorkflowStep {
 service WorkflowService {
   // Start repository generation workflow
   rpc StartRepositoryGeneration(RepositoryGenerationWorkflowRequest) returns (WorkflowExecutionResponse);
-  
+
   // Start code generation workflow
   rpc StartCodeGeneration(CodeGenerationWorkflowRequest) returns (WorkflowExecutionResponse);
-  
+
   // Start knowledge synchronization workflow
   rpc StartKnowledgeSync(KnowledgeSyncWorkflowRequest) returns (WorkflowExecutionResponse);
-  
+
+  // Start deployment workflow
+  rpc StartDeployment(DeploymentWorkflowRequest) returns (WorkflowExecutionResponse);
+
   // Get workflow status
   rpc GetWorkflowStatus(GetWorkflowStatusRequest) returns (GetWorkflowStatusResponse);
-  
+
   // Cancel workflow
   rpc CancelWorkflow(CancelWorkflowRequest) returns (CancelWorkflowResponse);
-  
+
   // List workflows for workspace
   rpc ListWorkflows(ListWorkflowsRequest) returns (ListWorkflowsResponse);
 }
@@ -223,6 +226,86 @@ message WorkflowExecution {
   google.protobuf.Duration duration = 7;
   string initiated_by = 8;
   map<string, string> metadata = 9;
+}
+
+// Deployment Workflow
+message DeploymentWorkflowRequest {
+  string request_id = 1;
+  string deployment_id = 2;
+  string app_id = 3;
+  string workspace_id = 4;
+  string user_id = 5;
+  string generator_type = 6;  // docker-compose, terraform, helm
+  string generator_slug = 7;  // specific generator (e.g., docker-compose-basic)
+  bytes config = 8;           // JSON-encoded generator config
+  DeploymentTarget target = 9;
+}
+
+message DeploymentTarget {
+  string type = 1;     // kubernetes, aws-ecs, docker-host
+  string region = 2;
+  string cluster = 3;
+  string host_url = 4; // For docker-compose: ssh://user@host
+}
+
+message DeploymentWorkflowResponse {
+  string request_id = 1;
+  string deployment_id = 2;
+  WorkflowStatus status = 3;
+  string deployment_url = 4;
+  repeated WorkflowStep steps = 5;
+  optional string error_message = 6;
+  google.protobuf.Timestamp completed_at = 7;
+}
+
+// Deployment Activities
+message ValidateDeploymentConfigActivityRequest {
+  string generator_type = 1;
+  bytes config = 2;
+  bytes config_schema = 3;
+}
+
+message ValidateDeploymentConfigActivityResponse {
+  bool valid = 1;
+  repeated string validation_errors = 2;
+}
+
+message PrepareGeneratorContextActivityRequest {
+  string deployment_id = 1;
+  string app_id = 2;
+  string generator_slug = 3;
+  bytes config = 4;
+}
+
+message PrepareGeneratorContextActivityResponse {
+  string work_dir = 1;
+  bool success = 2;
+  optional string error_message = 3;
+}
+
+message ExecuteGeneratorActivityRequest {
+  string deployment_id = 1;
+  string generator_type = 2;
+  string work_dir = 3;
+  DeploymentTarget target = 4;
+}
+
+message ExecuteGeneratorActivityResponse {
+  bool success = 1;
+  string deployment_url = 2;
+  map<string, string> outputs = 3;
+  optional string error_message = 4;
+}
+
+message UpdateDeploymentStatusActivityRequest {
+  string deployment_id = 1;
+  string status = 2;  // pending, deploying, deployed, failed
+  optional string deployment_url = 3;
+  optional string error_message = 4;
+}
+
+message UpdateDeploymentStatusActivityResponse {
+  bool success = 1;
 }
 
 // Activity Messages for Temporal Activities

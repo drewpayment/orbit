@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CancelWorkflowRequest, CancelWorkflowResponse, CodeGenerationWorkflowRequest, GetWorkflowStatusRequest, GetWorkflowStatusResponse, KnowledgeSyncWorkflowRequest, ListWorkflowsRequest, ListWorkflowsResponse, RepositoryGenerationWorkflowRequest, WorkflowExecutionResponse } from "./temporal_pb.js";
+import { CancelWorkflowRequest, CancelWorkflowResponse, CodeGenerationWorkflowRequest, DeploymentWorkflowRequest, GetWorkflowStatusRequest, GetWorkflowStatusResponse, KnowledgeSyncWorkflowRequest, ListWorkflowsRequest, ListWorkflowsResponse, RepositoryGenerationWorkflowRequest, WorkflowExecutionResponse } from "./temporal_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -44,6 +44,17 @@ export const WorkflowService = {
     startKnowledgeSync: {
       name: "StartKnowledgeSync",
       I: KnowledgeSyncWorkflowRequest,
+      O: WorkflowExecutionResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Start deployment workflow
+     *
+     * @generated from rpc idp.temporal.v1.WorkflowService.StartDeployment
+     */
+    startDeployment: {
+      name: "StartDeployment",
+      I: DeploymentWorkflowRequest,
       O: WorkflowExecutionResponse,
       kind: MethodKind.Unary,
     },
