@@ -23,7 +23,7 @@ import {
   Plus,
   Settings,
 } from 'lucide-react'
-import type { App, Deployment, Template, Workspace } from '@/payload-types'
+import type { App, Deployment, Template } from '@/payload-types'
 
 interface AppDetailProps {
   app: App
@@ -48,7 +48,6 @@ export function AppDetail({ app, deployments }: AppDetailProps) {
   const status = app.status || 'unknown'
   const StatusIcon = statusConfig[status].icon
   const template = app.origin?.template as Template | undefined
-  const workspace = app.workspace as Workspace
 
   return (
     <div className="container mx-auto py-8 px-4 space-y-6">
