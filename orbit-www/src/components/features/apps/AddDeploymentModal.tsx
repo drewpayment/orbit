@@ -100,6 +100,7 @@ export function AddDeploymentModal({
       })
 
       if (result.success && result.deploymentId) {
+        form.reset()
         onOpenChange(false)
         router.refresh()
       } else {
