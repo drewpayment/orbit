@@ -24,6 +24,7 @@ import { UserWorkspaceRoles } from './collections/UserWorkspaceRoles'
 import { Templates } from './collections/Templates'
 import { Apps } from './collections/Apps'
 import { Deployments } from './collections/Deployments'
+import { DeploymentGenerators } from './collections/DeploymentGenerators'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -53,6 +54,7 @@ export default buildConfig({
     Templates,
     Apps,
     Deployments,
+    DeploymentGenerators,
   ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
