@@ -74,3 +74,75 @@ export async function createAppFromTemplate(input: CreateAppFromTemplateInput) {
     return { success: false, error: errorMessage }
   }
 }
+
+interface ImportRepositoryInput {
+  workspaceId: string
+  repositoryUrl: string
+  name: string
+  description?: string
+}
+
+export async function importRepository(input: ImportRepositoryInput) {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+
+  if (!session?.user) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  const payload = await getPayload({ config })
+
+  // Check workspace membership
+  const membership = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { workspace: { equals: input.workspaceId } },
+        { user: { equals: session.user.id } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    limit: 1,
+  })
+
+  if (membership.docs.length === 0) {
+    return { success: false, error: 'Not a member of this workspace' }
+  }
+
+  // Parse repository URL
+  const match = input.repositoryUrl.match(/github\.com\/([^/]+)\/([^/]+)/)
+  if (!match) {
+    return { success: false, error: 'Invalid GitHub repository URL' }
+  }
+
+  const [, owner, repoName] = match
+
+  try {
+    const app = await payload.create({
+      collection: 'apps',
+      data: {
+        name: input.name,
+        description: input.description,
+        workspace: input.workspaceId,
+        repository: {
+          owner,
+          name: repoName.replace(/\.git$/, ''),
+          url: input.repositoryUrl,
+          installationId: '', // Will be set when user connects GitHub
+        },
+        origin: {
+          type: 'imported',
+        },
+        status: 'unknown',
+        syncMode: 'orbit-primary',
+      },
+    })
+
+    return { success: true, appId: app.id }
+  } catch (error) {
+    console.error('Failed to import repository:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to import repository'
+    return { success: false, error: errorMessage }
+  }
+}
