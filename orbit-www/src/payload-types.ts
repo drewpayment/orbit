@@ -82,6 +82,8 @@ export interface Config {
     roles: Role;
     'user-workspace-roles': UserWorkspaceRole;
     templates: Template;
+    apps: App;
+    deployments: Deployment;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -103,6 +105,8 @@ export interface Config {
     roles: RolesSelect<false> | RolesSelect<true>;
     'user-workspace-roles': UserWorkspaceRolesSelect<false> | UserWorkspaceRolesSelect<true>;
     templates: TemplatesSelect<false> | TemplatesSelect<true>;
+    apps: AppsSelect<false> | AppsSelect<true>;
+    deployments: DeploymentsSelect<false> | DeploymentsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -889,6 +893,95 @@ export interface Template {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "apps".
+ */
+export interface App {
+  id: string;
+  name: string;
+  description?: string | null;
+  workspace: string | Workspace;
+  repository: {
+    owner: string;
+    name: string;
+    url: string;
+    installationId: string;
+  };
+  origin: {
+    type: 'template' | 'imported';
+    template?: (string | null) | Template;
+    instantiatedAt?: string | null;
+  };
+  syncMode?: ('orbit-primary' | 'manifest-primary') | null;
+  /**
+   * SHA of last synced .orbit.yaml
+   */
+  manifestSha?: string | null;
+  healthConfig?: {
+    endpoint?: string | null;
+    /**
+     * Check interval in seconds
+     */
+    interval?: number | null;
+    /**
+     * Timeout in seconds
+     */
+    timeout?: number | null;
+  };
+  status?: ('healthy' | 'degraded' | 'down' | 'unknown') | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "deployments".
+ */
+export interface Deployment {
+  id: string;
+  /**
+   * e.g., production, staging, development
+   */
+  name: string;
+  app: string | App;
+  generator: 'docker-compose' | 'terraform' | 'helm' | 'custom';
+  /**
+   * Generator-specific configuration
+   */
+  config?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  target: {
+    /**
+     * e.g., kubernetes, aws-ecs, docker-host
+     */
+    type: string;
+    region?: string | null;
+    cluster?: string | null;
+    /**
+     * Deployment URL after successful deploy
+     */
+    url?: string | null;
+  };
+  status?: ('pending' | 'deploying' | 'deployed' | 'failed') | null;
+  lastDeployedAt?: string | null;
+  lastDeployedBy?: (string | null) | User;
+  healthStatus?: ('healthy' | 'degraded' | 'down' | 'unknown') | null;
+  healthLastChecked?: string | null;
+  /**
+   * Active Temporal workflow ID
+   */
+  workflowId?: string | null;
+  deploymentError?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
 export interface PayloadLockedDocument {
@@ -953,6 +1046,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'templates';
         value: string | Template;
+      } | null)
+    | ({
+        relationTo: 'apps';
+        value: string | App;
+      } | null)
+    | ({
+        relationTo: 'deployments';
+        value: string | Deployment;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -1375,6 +1476,69 @@ export interface TemplatesSelect<T extends boolean = true> {
   webhookSecret?: T;
   usageCount?: T;
   createdBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "apps_select".
+ */
+export interface AppsSelect<T extends boolean = true> {
+  name?: T;
+  description?: T;
+  workspace?: T;
+  repository?:
+    | T
+    | {
+        owner?: T;
+        name?: T;
+        url?: T;
+        installationId?: T;
+      };
+  origin?:
+    | T
+    | {
+        type?: T;
+        template?: T;
+        instantiatedAt?: T;
+      };
+  syncMode?: T;
+  manifestSha?: T;
+  healthConfig?:
+    | T
+    | {
+        endpoint?: T;
+        interval?: T;
+        timeout?: T;
+      };
+  status?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "deployments_select".
+ */
+export interface DeploymentsSelect<T extends boolean = true> {
+  name?: T;
+  app?: T;
+  generator?: T;
+  config?: T;
+  target?:
+    | T
+    | {
+        type?: T;
+        region?: T;
+        cluster?: T;
+        url?: T;
+      };
+  status?: T;
+  lastDeployedAt?: T;
+  lastDeployedBy?: T;
+  healthStatus?: T;
+  healthLastChecked?: T;
+  workflowId?: T;
+  deploymentError?: T;
   updatedAt?: T;
   createdAt?: T;
 }
