@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
+import { builtInGenerators } from '@/lib/seeds/deployment-generators'
 
 interface CreateAppFromTemplateInput {
   name: string
@@ -143,6 +144,45 @@ export async function importRepository(input: ImportRepositoryInput) {
   } catch (error) {
     console.error('Failed to import repository:', error)
     const errorMessage = error instanceof Error ? error.message : 'Failed to import repository'
+    return { success: false, error: errorMessage }
+  }
+}
+
+export async function seedBuiltInGenerators() {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+
+  if (!session?.user) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  const payload = await getPayload({ config })
+
+  try {
+    for (const generator of builtInGenerators) {
+      // Check if already exists
+      const existing = await payload.find({
+        collection: 'deployment-generators',
+        where: { slug: { equals: generator.slug } },
+        limit: 1,
+      })
+
+      if (existing.docs.length === 0) {
+        await payload.create({
+          collection: 'deployment-generators',
+          data: generator,
+        })
+        console.log(`Created built-in generator: ${generator.name}`)
+      } else {
+        console.log(`Built-in generator already exists: ${generator.name}`)
+      }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to seed built-in generators:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to seed generators'
     return { success: false, error: errorMessage }
   }
 }
