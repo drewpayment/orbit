@@ -9,7 +9,6 @@ async function getHealthServiceClient() {
 
   const transport = createGrpcTransport({
     baseUrl: process.env.REPOSITORY_SERVICE_URL || 'http://localhost:50051',
-    httpVersion: '2',
   })
   return createClient(HealthService, transport)
 }
