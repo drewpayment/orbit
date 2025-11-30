@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -24,8 +24,9 @@ import {
   Plus,
   Settings,
 } from 'lucide-react'
-import type { App, Deployment, Template } from '@/payload-types'
+import type { App, Deployment, Template, HealthCheck } from '@/payload-types'
 import { AddDeploymentModal } from './AddDeploymentModal'
+import { getHealthHistory } from '@/app/actions/apps'
 
 interface AppDetailProps {
   app: App
@@ -48,9 +49,24 @@ const deploymentStatusColors = {
 
 export function AppDetail({ app, deployments }: AppDetailProps) {
   const [showAddDeployment, setShowAddDeployment] = useState(false)
+  const [healthHistory, setHealthHistory] = useState<HealthCheck[]>([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
   const status = app.status || 'unknown'
   const StatusIcon = statusConfig[status].icon
   const template = app.origin?.template as Template | undefined
+
+  useEffect(() => {
+    if (app.healthConfig?.url) {
+      setLoadingHistory(true)
+      getHealthHistory({ appId: app.id, limit: 10 })
+        .then(result => {
+          if (result.success) {
+            setHealthHistory(result.data as HealthCheck[])
+          }
+        })
+        .finally(() => setLoadingHistory(false))
+    }
+  }, [app.id, app.healthConfig?.url])
 
   return (
     <div className="container mx-auto py-8 px-4 space-y-6">
@@ -221,6 +237,60 @@ export function AppDetail({ app, deployments }: AppDetailProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Health History */}
+      {app.healthConfig?.url && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Health History</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loadingHistory ? (
+              <div className="text-center py-4 text-muted-foreground">Loading...</div>
+            ) : healthHistory.length === 0 ? (
+              <div className="text-center py-4 text-muted-foreground">
+                No health checks recorded yet
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Time</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Response Time</TableHead>
+                    <TableHead>Status Code</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {healthHistory.map((check) => {
+                    const checkStatus = check.status || 'unknown'
+                    const CheckIcon = statusConfig[checkStatus as keyof typeof statusConfig]?.icon || HelpCircle
+                    return (
+                      <TableRow key={check.id}>
+                        <TableCell>
+                          {check.checkedAt
+                            ? new Date(check.checkedAt).toLocaleString()
+                            : '-'}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <CheckIcon className={`h-4 w-4 ${statusConfig[checkStatus as keyof typeof statusConfig]?.color || 'text-gray-400'}`} />
+                            <span className="capitalize">{checkStatus}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {check.responseTime ? `${check.responseTime}ms` : '-'}
+                        </TableCell>
+                        <TableCell>{check.statusCode || '-'}</TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <AddDeploymentModal
         open={showAddDeployment}
