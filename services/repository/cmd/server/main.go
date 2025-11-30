@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 
+	healthv1 "github.com/drewpayment/orbit/proto/gen/go/idp/health/v1"
 	templatev1 "github.com/drewpayment/orbit/proto/gen/go/idp/template/v1"
 	grpcserver "github.com/drewpayment/orbit/services/repository/internal/grpc"
 	"github.com/drewpayment/orbit/temporal-workflows/pkg/types"
@@ -203,6 +204,16 @@ func main() {
 	templateServer := grpcserver.NewTemplateServer(templateTemporal, payloadClient)
 	templatev1.RegisterTemplateServiceServer(grpcSrv, templateServer)
 	log.Println("TemplateService registered")
+
+	// Register HealthService
+	if temporalClient != nil {
+		temporalScheduleClient := grpcserver.NewTemporalScheduleClient(temporalClient.client)
+		healthService := grpcserver.NewHealthService(temporalScheduleClient)
+		healthv1.RegisterHealthServiceServer(grpcSrv, healthService)
+		log.Println("HealthService registered")
+	} else {
+		log.Println("HealthService not registered (Temporal client unavailable)")
+	}
 
 	// Register health check
 	healthServer := health.NewServer()
