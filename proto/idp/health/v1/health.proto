@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package idp.health.v1;
+
+option go_package = "github.com/drewpayment/orbit/proto/gen/go/idp/health/v1;healthv1";
+
+service HealthService {
+  // ManageSchedule creates, updates, or deletes a health check schedule for an app
+  rpc ManageSchedule(ManageScheduleRequest) returns (ManageScheduleResponse);
+
+  // DeleteSchedule removes a health check schedule for an app
+  rpc DeleteSchedule(DeleteScheduleRequest) returns (DeleteScheduleResponse);
+}
+
+message HealthConfig {
+  string url = 1;
+  string method = 2;
+  int32 expected_status = 3;
+  int32 interval = 4;
+  int32 timeout = 5;
+}
+
+message ManageScheduleRequest {
+  string app_id = 1;
+  HealthConfig health_config = 2;
+}
+
+message ManageScheduleResponse {
+  bool success = 1;
+  string schedule_id = 2;
+  string error = 3;
+}
+
+message DeleteScheduleRequest {
+  string app_id = 1;
+}
+
+message DeleteScheduleResponse {
+  bool success = 1;
+  string error = 2;
+}
