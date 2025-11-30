@@ -1,9 +1,36 @@
 import type { CollectionConfig, Where } from 'payload'
 
-// TODO: Re-enable health schedule management hooks
-// The gRPC client (@connectrpc/connect-node) causes bundling issues with Next.js.
-// Need to implement via HTTP API endpoint instead of direct gRPC in collection hooks.
-// For now, health schedules must be managed manually or via the repository service API.
+// Helper to call internal health schedule API
+// Uses HTTP instead of gRPC to avoid Next.js bundling issues with @connectrpc/connect-node
+async function manageHealthSchedule(appId: string, healthConfig?: {
+  url?: string
+  method?: string
+  expectedStatus?: number
+  interval?: number
+  timeout?: number
+}) {
+  const baseUrl = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000'
+  try {
+    await fetch(`${baseUrl}/api/internal/health-schedules`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ appId, healthConfig }),
+    })
+  } catch (error) {
+    console.error('Failed to manage health schedule:', error)
+  }
+}
+
+async function deleteHealthSchedule(appId: string) {
+  const baseUrl = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000'
+  try {
+    await fetch(`${baseUrl}/api/internal/health-schedules?appId=${appId}`, {
+      method: 'DELETE',
+    })
+  } catch (error) {
+    console.error('Failed to delete health schedule:', error)
+  }
+}
 
 export const Apps: CollectionConfig = {
   slug: 'apps',
@@ -11,6 +38,31 @@ export const Apps: CollectionConfig = {
     useAsTitle: 'name',
     group: 'Catalog',
     defaultColumns: ['name', 'status', 'workspace', 'updatedAt'],
+  },
+  hooks: {
+    afterChange: [
+      async ({ doc, previousDoc, operation }) => {
+        // Only manage schedules when healthConfig changes
+        const healthConfigChanged =
+          doc.healthConfig?.url !== previousDoc?.healthConfig?.url ||
+          doc.healthConfig?.interval !== previousDoc?.healthConfig?.interval
+
+        if (!healthConfigChanged && operation === 'update') {
+          return doc
+        }
+
+        // Fire and forget - don't block the save
+        manageHealthSchedule(doc.id, doc.healthConfig)
+
+        return doc
+      },
+    ],
+    afterDelete: [
+      async ({ doc }) => {
+        // Fire and forget - don't block the delete
+        deleteHealthSchedule(doc.id)
+      },
+    ],
   },
   access: {
     // Read: Admins see all, others see workspace-scoped
