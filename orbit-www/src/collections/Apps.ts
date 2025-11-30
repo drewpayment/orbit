@@ -1,4 +1,7 @@
 import type { CollectionConfig, Where } from 'payload'
+import { createClient } from '@connectrpc/connect'
+import { createGrpcTransport } from '@connectrpc/connect-node'
+import { HealthService } from '@/lib/proto/idp/health/v1/health_pb'
 
 export const Apps: CollectionConfig = {
   slug: 'apps',
@@ -6,6 +9,62 @@ export const Apps: CollectionConfig = {
     useAsTitle: 'name',
     group: 'Catalog',
     defaultColumns: ['name', 'status', 'workspace', 'updatedAt'],
+  },
+  hooks: {
+    afterChange: [
+      async ({ doc, previousDoc, operation }) => {
+        // Only manage schedules when healthConfig changes
+        const healthConfigChanged =
+          doc.healthConfig?.url !== previousDoc?.healthConfig?.url ||
+          doc.healthConfig?.interval !== previousDoc?.healthConfig?.interval
+
+        if (!healthConfigChanged && operation === 'update') {
+          return doc
+        }
+
+        try {
+          const transport = createGrpcTransport({
+            baseUrl: process.env.REPOSITORY_SERVICE_URL || 'http://localhost:50051',
+            httpVersion: '2',
+          })
+          const client = createClient(HealthService, transport)
+
+          if (doc.healthConfig?.url) {
+            await client.manageSchedule({
+              appId: doc.id,
+              healthConfig: {
+                url: doc.healthConfig.url,
+                method: doc.healthConfig.method || 'GET',
+                expectedStatus: doc.healthConfig.expectedStatus || 200,
+                interval: doc.healthConfig.interval || 60,
+                timeout: doc.healthConfig.timeout || 10,
+              },
+            })
+          } else {
+            await client.deleteSchedule({ appId: doc.id })
+          }
+        } catch (error) {
+          console.error('Failed to manage health schedule:', error)
+          // Don't fail the save - schedule management is async
+        }
+
+        return doc
+      },
+    ],
+    afterDelete: [
+      async ({ doc }) => {
+        try {
+          const transport = createGrpcTransport({
+            baseUrl: process.env.REPOSITORY_SERVICE_URL || 'http://localhost:50051',
+            httpVersion: '2',
+          })
+          const client = createClient(HealthService, transport)
+          await client.deleteSchedule({ appId: doc.id })
+        } catch (error) {
+          console.error('Failed to delete health schedule:', error)
+        }
+      },
+    ],
   },
   access: {
     // Read: Admins see all, others see workspace-scoped
