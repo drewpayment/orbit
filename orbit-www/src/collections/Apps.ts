@@ -1,7 +1,18 @@
 import type { CollectionConfig, Where } from 'payload'
-import { createClient } from '@connectrpc/connect'
-import { createGrpcTransport } from '@connectrpc/connect-node'
-import { HealthService } from '@/lib/proto/idp/health/v1/health_pb'
+
+// Helper function to lazily create gRPC client for health schedule management
+// Uses dynamic imports to avoid module loading issues with Payload
+async function getHealthServiceClient() {
+  const { createClient } = await import('@connectrpc/connect')
+  const { createGrpcTransport } = await import('@connectrpc/connect-node')
+  const { HealthService } = await import('@/lib/proto/idp/health/v1/health_pb')
+
+  const transport = createGrpcTransport({
+    baseUrl: process.env.REPOSITORY_SERVICE_URL || 'http://localhost:50051',
+    httpVersion: '2',
+  })
+  return createClient(HealthService, transport)
+}
 
 export const Apps: CollectionConfig = {
   slug: 'apps',
@@ -23,11 +34,7 @@ export const Apps: CollectionConfig = {
         }
 
         try {
-          const transport = createGrpcTransport({
-            baseUrl: process.env.REPOSITORY_SERVICE_URL || 'http://localhost:50051',
-            httpVersion: '2',
-          })
-          const client = createClient(HealthService, transport)
+          const client = await getHealthServiceClient()
 
           if (doc.healthConfig?.url) {
             await client.manageSchedule({
@@ -54,11 +61,7 @@ export const Apps: CollectionConfig = {
     afterDelete: [
       async ({ doc }) => {
         try {
-          const transport = createGrpcTransport({
-            baseUrl: process.env.REPOSITORY_SERVICE_URL || 'http://localhost:50051',
-            httpVersion: '2',
-          })
-          const client = createClient(HealthService, transport)
+          const client = await getHealthServiceClient()
           await client.deleteSchedule({ appId: doc.id })
         } catch (error) {
           console.error('Failed to delete health schedule:', error)
