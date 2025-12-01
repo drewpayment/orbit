@@ -1,9 +1,5 @@
 import type { CollectionConfig, Where } from 'payload'
-
-// TODO: Re-enable health schedule management hooks
-// The gRPC client (@connectrpc/connect-node) causes bundling issues with Next.js.
-// Need to implement via HTTP API endpoint instead of direct gRPC in collection hooks.
-// For now, health schedules must be managed manually or via the repository service API.
+import { healthClient } from '@/lib/grpc/health-client'
 
 export const Apps: CollectionConfig = {
   slug: 'apps',
@@ -11,6 +7,41 @@ export const Apps: CollectionConfig = {
     useAsTitle: 'name',
     group: 'Catalog',
     defaultColumns: ['name', 'status', 'workspace', 'updatedAt'],
+  },
+  hooks: {
+    afterChange: [
+      async ({ doc, previousDoc, operation }) => {
+        // Only manage schedules when healthConfig changes
+        const healthConfigChanged =
+          doc.healthConfig?.url !== previousDoc?.healthConfig?.url ||
+          doc.healthConfig?.interval !== previousDoc?.healthConfig?.interval
+
+        if (!healthConfigChanged && operation === 'update') {
+          return doc
+        }
+
+        // Fire and forget - don't block the save
+        healthClient.manageSchedule({
+          appId: doc.id,
+          healthConfig: doc.healthConfig?.url ? {
+            url: doc.healthConfig.url,
+            method: doc.healthConfig.method || 'GET',
+            expectedStatus: doc.healthConfig.expectedStatus || 200,
+            interval: doc.healthConfig.interval || 60,
+            timeout: doc.healthConfig.timeout || 10,
+          } : undefined,
+        }).catch(err => console.error('Failed to manage health schedule:', err))
+
+        return doc
+      },
+    ],
+    afterDelete: [
+      async ({ doc }) => {
+        // Fire and forget - don't block the delete
+        healthClient.deleteSchedule({ appId: doc.id })
+          .catch(err => console.error('Failed to delete health schedule:', err))
+      },
+    ],
   },
   access: {
     // Read: Admins see all, others see workspace-scoped
