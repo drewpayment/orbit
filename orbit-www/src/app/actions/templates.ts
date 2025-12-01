@@ -10,8 +10,10 @@ import { parseGitHubUrl, fetchRepoInfo, fetchManifestContent, generateWebhookSec
 import { revalidatePath } from 'next/cache'
 import { Octokit } from '@octokit/rest'
 import { decrypt } from '@/lib/encryption'
-import { templateClient } from '@/lib/grpc/template-client'
-import { WorkflowStatus } from '@/lib/proto/idp/template/v1/template_pb'
+
+// NOTE: gRPC client removed - @connectrpc/connect-node breaks Next.js webpack bundling
+// Template instantiation will use mock workflow IDs until we implement a different architecture
+// (e.g., calling Go service via HTTP REST endpoint instead of gRPC from Next.js)
 
 // Valid category values that match the Templates collection
 const VALID_CATEGORIES = [
@@ -1542,73 +1544,28 @@ export async function startInstantiation(input: StartInstantiationInput): Promis
     return { success: false, error: `No active GitHub installation found for org: ${input.targetOrg}` }
   }
 
-  const installation = installations.docs[0]
-  const installationId = String(installation.installationId)
+  // TODO: Implement actual workflow start via HTTP REST to Go service
+  // For now, use mock workflow ID - gRPC client breaks Next.js bundling
+  const workflowId = `wf-${Date.now()}-${Math.random().toString(36).substring(7)}`
 
-  // Parse template source repo owner and name from URL
-  // URL format: https://github.com/owner/repo or https://github.com/owner/repo.git
-  const repoUrl = template.repoUrl || ''
-  const urlMatch = repoUrl.match(/github\.com\/([^/]+)\/([^/.]+)/)
-  const sourceRepoOwner = urlMatch ? urlMatch[1] : ''
-  const sourceRepoName = urlMatch ? urlMatch[2] : ''
+  // Increment usage count
+  await payload.update({
+    collection: 'templates',
+    id: input.templateId,
+    data: {
+      usageCount: (template.usageCount || 0) + 1,
+    },
+  })
 
-  // Call gRPC template service to start instantiation workflow
-  try {
-    const response = await templateClient.startInstantiation({
-      templateId: input.templateId,
-      workspaceId: input.workspaceId,
-      targetOrg: input.targetOrg,
-      repositoryName: input.repositoryName,
-      description: input.description || '',
-      isPrivate: input.isPrivate,
-      variables: input.variables,
-      userId: session.user.id,
-      // Template source info
-      sourceRepoUrl: repoUrl,
-      isGithubTemplate: template.isGitHubTemplate || false,
-      sourceRepoOwner,
-      sourceRepoName,
-      // GitHub authentication
-      githubInstallationId: installationId,
-    })
-
-    // Increment usage count
-    await payload.update({
-      collection: 'templates',
-      id: input.templateId,
-      data: {
-        usageCount: (template.usageCount || 0) + 1,
-      },
-    })
-
-    return {
-      success: true,
-      workflowId: response.workflowId,
-    }
-  } catch (err) {
-    console.error('Failed to start instantiation via gRPC:', err)
-    // Fallback to mock workflow ID if gRPC service is unavailable
-    const workflowId = `wf-${Date.now()}-${Math.random().toString(36).substring(7)}`
-
-    // Still increment usage count
-    await payload.update({
-      collection: 'templates',
-      id: input.templateId,
-      data: {
-        usageCount: (template.usageCount || 0) + 1,
-      },
-    })
-
-    return {
-      success: true,
-      workflowId,
-    }
+  return {
+    success: true,
+    workflowId,
   }
 }
 
 /**
  * Get instantiation progress
- * Calls gRPC template service to get workflow progress
+ * TODO: Implement via HTTP REST to Go service - gRPC client breaks Next.js bundling
  */
 export async function getInstantiationProgress(workflowId: string): Promise<ProgressResult> {
   const session = await auth.api.getSession({
@@ -1619,67 +1576,40 @@ export async function getInstantiationProgress(workflowId: string): Promise<Prog
     return { error: 'Not authenticated' }
   }
 
-  try {
-    const response = await templateClient.getInstantiationProgress({
-      workflowId,
-    })
+  // Mock progress based on time elapsed
+  // TODO: Replace with actual HTTP call to Go service
+  const timestamp = parseInt(workflowId.split('-')[1] || '0', 10)
+  const elapsed = Date.now() - timestamp
 
-    // Map WorkflowStatus enum to string
-    const statusMap: Record<number, 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'> = {
-      [WorkflowStatus.UNSPECIFIED]: 'pending',
-      [WorkflowStatus.PENDING]: 'pending',
-      [WorkflowStatus.RUNNING]: 'running',
-      [WorkflowStatus.COMPLETED]: 'completed',
-      [WorkflowStatus.FAILED]: 'failed',
-      [WorkflowStatus.CANCELLED]: 'cancelled',
-    }
+  // Simulate progress over 30 seconds
+  const progressPercent = Math.min(Math.floor((elapsed / 30000) * 100), 100)
 
-    return {
-      progress: {
-        status: statusMap[response.status] || 'running',
-        currentStep: response.currentStep,
-        progressPercent: response.progressPercent,
-        errorMessage: response.errorMessage || undefined,
-        resultRepoUrl: response.resultRepoUrl || undefined,
-        resultRepoName: response.resultRepoName || undefined,
-      },
-    }
-  } catch (err) {
-    console.error('Failed to get progress via gRPC:', err)
-    // Fallback to mock progress based on time elapsed
-    const timestamp = parseInt(workflowId.split('-')[1] || '0', 10)
-    const elapsed = Date.now() - timestamp
+  let status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' = 'running'
+  let currentStep = 'Initializing...'
 
-    // Simulate progress over 30 seconds
-    const progressPercent = Math.min(Math.floor((elapsed / 30000) * 100), 100)
+  if (progressPercent < 20) {
+    currentStep = 'Validating template...'
+  } else if (progressPercent < 40) {
+    currentStep = 'Cloning repository...'
+  } else if (progressPercent < 60) {
+    currentStep = 'Processing variables...'
+  } else if (progressPercent < 80) {
+    currentStep = 'Creating new repository...'
+  } else if (progressPercent < 100) {
+    currentStep = 'Finalizing...'
+  } else {
+    status = 'completed'
+    currentStep = 'Complete'
+  }
 
-    let status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' = 'running'
-    let currentStep = 'Initializing...'
-
-    if (progressPercent < 20) {
-      currentStep = 'Validating template...'
-    } else if (progressPercent < 40) {
-      currentStep = 'Cloning repository...'
-    } else if (progressPercent < 60) {
-      currentStep = 'Processing variables...'
-    } else if (progressPercent < 80) {
-      currentStep = 'Creating new repository...'
-    } else if (progressPercent < 100) {
-      currentStep = 'Finalizing...'
-    } else {
-      status = 'completed'
-      currentStep = 'Complete'
-    }
-
-    return {
-      progress: {
-        status,
-        currentStep,
-        progressPercent,
-        resultRepoUrl: status === 'completed' ? 'https://github.com/example/repo' : undefined,
-        resultRepoName: status === 'completed' ? 'example/repo' : undefined,
-      },
-    }
+  return {
+    progress: {
+      status,
+      currentStep,
+      progressPercent,
+      resultRepoUrl: status === 'completed' ? 'https://github.com/example/repo' : undefined,
+      resultRepoName: status === 'completed' ? 'example/repo' : undefined,
+    },
   }
 }
 
