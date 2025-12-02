@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,13 +11,12 @@ import (
 	"time"
 
 	"go.temporal.io/sdk/client"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/health"
-	"google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/reflection"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 
-	healthv1 "github.com/drewpayment/orbit/proto/gen/go/idp/health/v1"
+	"github.com/drewpayment/orbit/proto/gen/go/idp/health/v1/healthv1connect"
 	templatev1 "github.com/drewpayment/orbit/proto/gen/go/idp/template/v1"
+	"github.com/drewpayment/orbit/proto/gen/go/idp/template/v1/templatev1connect"
 	grpcserver "github.com/drewpayment/orbit/services/repository/internal/grpc"
 	"github.com/drewpayment/orbit/temporal-workflows/pkg/types"
 )
@@ -175,7 +173,7 @@ func (s *StubPayloadClient) ListWorkspaceInstallations(ctx context.Context, work
 }
 
 func main() {
-	log.Println("Starting Orbit Repository gRPC Service...")
+	log.Println("Starting Orbit Repository Service (Connect + gRPC)...")
 
 	cfg := loadConfig()
 	log.Printf("Configuration: gRPC Port=%d, HTTP Port=%d, Temporal=%s", cfg.GRPCPort, cfg.HTTPPort, cfg.TemporalHost)
@@ -193,52 +191,44 @@ func main() {
 	// Create stub Payload client (TODO: implement real client)
 	payloadClient := &StubPayloadClient{}
 
-	// Create gRPC server
-	grpcSrv := grpc.NewServer()
+	// Create HTTP mux for Connect handlers
+	mux := http.NewServeMux()
 
-	// Register TemplateService
+	// Register TemplateService (Connect handler)
 	var templateTemporal grpcserver.TemporalClientInterface
 	if temporalClient != nil {
 		templateTemporal = temporalClient
 	}
 	templateServer := grpcserver.NewTemplateServer(templateTemporal, payloadClient)
-	templatev1.RegisterTemplateServiceServer(grpcSrv, templateServer)
-	log.Println("TemplateService registered")
+	templatePath, templateHandler := templatev1connect.NewTemplateServiceHandler(templateServer)
+	mux.Handle(templatePath, templateHandler)
+	log.Println("TemplateService registered (Connect)")
 
-	// Register HealthService
+	// Register HealthService (Connect handler)
 	if temporalClient != nil {
 		temporalScheduleClient := grpcserver.NewTemporalScheduleClient(temporalClient.client)
 		healthService := grpcserver.NewHealthService(temporalScheduleClient)
-		healthv1.RegisterHealthServiceServer(grpcSrv, healthService)
-		log.Println("HealthService registered")
+		healthPath, healthHandler := healthv1connect.NewHealthServiceHandler(healthService)
+		mux.Handle(healthPath, healthHandler)
+		log.Println("HealthService registered (Connect)")
 	} else {
 		log.Println("HealthService not registered (Temporal client unavailable)")
 	}
 
-	// Register health check
-	healthServer := health.NewServer()
-	grpc_health_v1.RegisterHealthServer(grpcSrv, healthServer)
-	healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
-	log.Println("Health check service registered")
-
-	// Enable reflection
-	reflection.Register(grpcSrv)
-	log.Println("gRPC reflection enabled")
-
-	// Start gRPC server
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.GRPCPort))
-	if err != nil {
-		log.Fatalf("Failed to listen on port %d: %v", cfg.GRPCPort, err)
-	}
-
-	// Start HTTP health server
+	// Start HTTP health server on separate port
 	go startHTTPServer(cfg.HTTPPort)
 
-	// Start gRPC server
+	// Create HTTP server with h2c support (HTTP/2 cleartext for gRPC compatibility)
+	srv := &http.Server{
+		Addr:    fmt.Sprintf(":%d", cfg.GRPCPort),
+		Handler: h2c.NewHandler(mux, &http2.Server{}),
+	}
+
+	// Start Connect server
 	go func() {
-		log.Printf("gRPC server listening on :%d", cfg.GRPCPort)
-		if err := grpcSrv.Serve(lis); err != nil {
-			log.Fatalf("Failed to serve gRPC: %v", err)
+		log.Printf("Connect/gRPC server listening on :%d", cfg.GRPCPort)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Failed to serve: %v", err)
 		}
 	}()
 
@@ -248,7 +238,9 @@ func main() {
 	<-quit
 
 	log.Println("Shutting down server...")
-	grpcSrv.GracefulStop()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	srv.Shutdown(ctx)
 	log.Println("Server stopped")
 }
 

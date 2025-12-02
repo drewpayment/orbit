@@ -10,27 +10,29 @@ export const Apps: CollectionConfig = {
   },
   hooks: {
     afterChange: [
-      async ({ doc, previousDoc, operation }) => {
-        // Only manage schedules when healthConfig changes
-        const healthConfigChanged =
-          doc.healthConfig?.url !== previousDoc?.healthConfig?.url ||
-          doc.healthConfig?.interval !== previousDoc?.healthConfig?.interval
+      async ({ doc }) => {
+        // Always call manageSchedule - it's idempotent (deletes and recreates)
+        // This ensures schedule exists even after manual deletion or service restart
+        const healthConfig = doc.healthConfig?.url ? {
+          url: doc.healthConfig.url,
+          method: doc.healthConfig.method || 'GET',
+          expectedStatus: doc.healthConfig.expectedStatus || 200,
+          interval: doc.healthConfig.interval || 60,
+          timeout: doc.healthConfig.timeout || 10,
+        } : undefined
 
-        if (!healthConfigChanged && operation === 'update') {
-          return doc
-        }
+        console.log('[Apps Hook] Calling manageSchedule:', {
+          appId: doc.id,
+          hasUrl: !!doc.healthConfig?.url,
+        })
 
         // Fire and forget - don't block the save
         healthClient.manageSchedule({
           appId: doc.id,
-          healthConfig: doc.healthConfig?.url ? {
-            url: doc.healthConfig.url,
-            method: doc.healthConfig.method || 'GET',
-            expectedStatus: doc.healthConfig.expectedStatus || 200,
-            interval: doc.healthConfig.interval || 60,
-            timeout: doc.healthConfig.timeout || 10,
-          } : undefined,
-        }).catch(err => console.error('Failed to manage health schedule:', err))
+          healthConfig,
+        }).then(response => {
+          console.log('[Apps Hook] manageSchedule success:', response)
+        }).catch(err => console.error('[Apps Hook] Failed to manage health schedule:', err))
 
         return doc
       },

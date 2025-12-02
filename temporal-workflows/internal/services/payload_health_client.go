@@ -36,9 +36,9 @@ func NewPayloadHealthClient(baseURL, apiKey string) *PayloadHealthClientImpl {
 	}
 }
 
-// UpdateAppStatus updates the status field on an App document
+// UpdateAppStatus updates the status field on an App document via internal API
 func (c *PayloadHealthClientImpl) UpdateAppStatus(ctx context.Context, appID, status string) error {
-	url := fmt.Sprintf("%s/api/apps/%s", c.baseURL, appID)
+	url := fmt.Sprintf("%s/api/internal/apps/%s/status", c.baseURL, appID)
 
 	body := map[string]interface{}{
 		"status": status,
@@ -55,7 +55,7 @@ func (c *PayloadHealthClientImpl) UpdateAppStatus(ctx context.Context, appID, st
 
 	req.Header.Set("Content-Type", "application/json")
 	if c.apiKey != "" {
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiKey))
+		req.Header.Set("X-API-Key", c.apiKey)
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -71,9 +71,9 @@ func (c *PayloadHealthClientImpl) UpdateAppStatus(ctx context.Context, appID, st
 	return nil
 }
 
-// CreateHealthCheck creates a new health check record
+// CreateHealthCheck creates a new health check record via internal API
 func (c *PayloadHealthClientImpl) CreateHealthCheck(ctx context.Context, appID string, result HealthCheckResult) error {
-	url := fmt.Sprintf("%s/api/health-checks", c.baseURL)
+	url := fmt.Sprintf("%s/api/internal/health-checks", c.baseURL)
 
 	body := map[string]interface{}{
 		"app":          appID,
@@ -95,7 +95,7 @@ func (c *PayloadHealthClientImpl) CreateHealthCheck(ctx context.Context, appID s
 
 	req.Header.Set("Content-Type", "application/json")
 	if c.apiKey != "" {
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiKey))
+		req.Header.Set("X-API-Key", c.apiKey)
 	}
 
 	resp, err := c.httpClient.Do(req)

@@ -3,9 +3,10 @@ package grpc
 import (
 	"context"
 
+	"connectrpc.com/connect"
+
 	templatev1 "github.com/drewpayment/orbit/proto/gen/go/idp/template/v1"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	"github.com/drewpayment/orbit/proto/gen/go/idp/template/v1/templatev1connect"
 )
 
 // TemporalClientInterface defines the interface for Temporal workflow operations
@@ -36,9 +37,9 @@ type InstallationData struct {
 	InstallationID string
 }
 
-// TemplateServer implements the TemplateService gRPC server
+// TemplateServer implements the TemplateService Connect/gRPC server
 type TemplateServer struct {
-	templatev1.UnimplementedTemplateServiceServer
+	templatev1connect.UnimplementedTemplateServiceHandler
 	temporalClient TemporalClientInterface
 	payloadClient  PayloadClientInterface
 }
@@ -52,53 +53,55 @@ func NewTemplateServer(temporalClient TemporalClientInterface, payloadClient Pay
 }
 
 // StartInstantiation initiates a new template instantiation workflow
-func (s *TemplateServer) StartInstantiation(ctx context.Context, req *templatev1.StartInstantiationRequest) (*templatev1.StartInstantiationResponse, error) {
+func (s *TemplateServer) StartInstantiation(ctx context.Context, req *connect.Request[templatev1.StartInstantiationRequest]) (*connect.Response[templatev1.StartInstantiationResponse], error) {
+	msg := req.Msg
 	// Validate required fields
-	if req.TemplateId == "" {
-		return nil, status.Error(codes.InvalidArgument, "template_id is required")
+	if msg.TemplateId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, nil)
 	}
-	if req.WorkspaceId == "" {
-		return nil, status.Error(codes.InvalidArgument, "workspace_id is required")
+	if msg.WorkspaceId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, nil)
 	}
-	if req.TargetOrg == "" {
-		return nil, status.Error(codes.InvalidArgument, "target_org is required")
+	if msg.TargetOrg == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, nil)
 	}
-	if req.RepositoryName == "" {
-		return nil, status.Error(codes.InvalidArgument, "repository_name is required")
+	if msg.RepositoryName == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, nil)
 	}
 
 	// Start the Temporal workflow
-	workflowID, err := s.temporalClient.StartTemplateWorkflow(ctx, req)
+	workflowID, err := s.temporalClient.StartTemplateWorkflow(ctx, msg)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to start workflow: %v", err)
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	return &templatev1.StartInstantiationResponse{
+	return connect.NewResponse(&templatev1.StartInstantiationResponse{
 		WorkflowId: workflowID,
-	}, nil
+	}), nil
 }
 
 // GetInstantiationProgress retrieves the current progress of an instantiation workflow
-func (s *TemplateServer) GetInstantiationProgress(ctx context.Context, req *templatev1.GetProgressRequest) (*templatev1.GetProgressResponse, error) {
+func (s *TemplateServer) GetInstantiationProgress(ctx context.Context, req *connect.Request[templatev1.GetProgressRequest]) (*connect.Response[templatev1.GetProgressResponse], error) {
+	msg := req.Msg
 	// Validate required fields
-	if req.WorkflowId == "" {
-		return nil, status.Error(codes.InvalidArgument, "workflow_id is required")
+	if msg.WorkflowId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, nil)
 	}
 
 	// Query the workflow for progress
-	result, err := s.temporalClient.QueryWorkflow(ctx, req.WorkflowId, "progress")
+	result, err := s.temporalClient.QueryWorkflow(ctx, msg.WorkflowId, "progress")
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to query workflow: %v", err)
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
 	// Parse the result
 	progressData, ok := result.(map[string]interface{})
 	if !ok {
-		return nil, status.Error(codes.Internal, "invalid progress data format")
+		return nil, connect.NewError(connect.CodeInternal, nil)
 	}
 
 	resp := &templatev1.GetProgressResponse{
-		WorkflowId: req.WorkflowId,
+		WorkflowId: msg.WorkflowId,
 	}
 
 	// Extract current step
@@ -131,38 +134,40 @@ func (s *TemplateServer) GetInstantiationProgress(ctx context.Context, req *temp
 		resp.ResultRepoName = repoName
 	}
 
-	return resp, nil
+	return connect.NewResponse(resp), nil
 }
 
 // CancelInstantiation cancels an in-progress instantiation workflow
-func (s *TemplateServer) CancelInstantiation(ctx context.Context, req *templatev1.CancelRequest) (*templatev1.CancelResponse, error) {
+func (s *TemplateServer) CancelInstantiation(ctx context.Context, req *connect.Request[templatev1.CancelRequest]) (*connect.Response[templatev1.CancelResponse], error) {
+	msg := req.Msg
 	// Validate required fields
-	if req.WorkflowId == "" {
-		return nil, status.Error(codes.InvalidArgument, "workflow_id is required")
+	if msg.WorkflowId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, nil)
 	}
 
 	// Cancel the workflow
-	err := s.temporalClient.CancelWorkflow(ctx, req.WorkflowId)
+	err := s.temporalClient.CancelWorkflow(ctx, msg.WorkflowId)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to cancel workflow: %v", err)
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	return &templatev1.CancelResponse{
+	return connect.NewResponse(&templatev1.CancelResponse{
 		Success: true,
-	}, nil
+	}), nil
 }
 
 // ListAvailableOrgs lists available GitHub organizations for a workspace
-func (s *TemplateServer) ListAvailableOrgs(ctx context.Context, req *templatev1.ListAvailableOrgsRequest) (*templatev1.ListAvailableOrgsResponse, error) {
+func (s *TemplateServer) ListAvailableOrgs(ctx context.Context, req *connect.Request[templatev1.ListAvailableOrgsRequest]) (*connect.Response[templatev1.ListAvailableOrgsResponse], error) {
+	msg := req.Msg
 	// Validate required fields
-	if req.WorkspaceId == "" {
-		return nil, status.Error(codes.InvalidArgument, "workspace_id is required")
+	if msg.WorkspaceId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, nil)
 	}
 
 	// Get installations from Payload
-	installations, err := s.payloadClient.ListWorkspaceInstallations(ctx, req.WorkspaceId)
+	installations, err := s.payloadClient.ListWorkspaceInstallations(ctx, msg.WorkspaceId)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to list installations: %v", err)
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
 	// Convert to response format
@@ -175,9 +180,9 @@ func (s *TemplateServer) ListAvailableOrgs(ctx context.Context, req *templatev1.
 		}
 	}
 
-	return &templatev1.ListAvailableOrgsResponse{
+	return connect.NewResponse(&templatev1.ListAvailableOrgsResponse{
 		Orgs: orgs,
-	}, nil
+	}), nil
 }
 
 // parseWorkflowStatus converts a status string to WorkflowStatus enum
