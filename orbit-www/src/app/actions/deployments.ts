@@ -298,3 +298,39 @@ export async function getDeploymentWorkflowProgress(workflowId: string) {
     return { success: false, error: errorMessage }
   }
 }
+
+export async function getDeploymentGenerators() {
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session?.user) {
+    return { success: false, error: 'Unauthorized', generators: [] }
+  }
+
+  const payload = await getPayload({ config })
+
+  try {
+    const generators = await payload.find({
+      collection: 'deployment-generators',
+      where: {
+        or: [
+          { isBuiltIn: { equals: true } },
+        ],
+      },
+      limit: 100,
+    })
+
+    return {
+      success: true,
+      generators: generators.docs.map(g => ({
+        id: g.id,
+        name: g.name,
+        slug: g.slug,
+        type: g.type,
+        description: g.description,
+        configSchema: g.configSchema,
+      })),
+    }
+  } catch (error) {
+    console.error('Failed to fetch generators:', error)
+    return { success: false, error: 'Failed to fetch generators', generators: [] }
+  }
+}
