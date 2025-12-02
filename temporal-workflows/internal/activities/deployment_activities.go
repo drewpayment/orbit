@@ -77,15 +77,18 @@ type DeploymentTargetInput struct {
 type ExecuteGeneratorInput struct {
 	DeploymentID  string                `json:"deploymentId"`
 	GeneratorType string                `json:"generatorType"`
+	GeneratorSlug string                `json:"generatorSlug"`
 	WorkDir       string                `json:"workDir"`
 	Target        DeploymentTargetInput `json:"target"`
+	Mode          string                `json:"mode"` // "generate" or "execute"
 }
 
 type ExecuteGeneratorResult struct {
-	Success       bool              `json:"success"`
-	DeploymentURL string            `json:"deploymentUrl"`
-	Outputs       map[string]string `json:"outputs"`
-	Error         string            `json:"error,omitempty"`
+	Success        bool              `json:"success"`
+	DeploymentURL  string            `json:"deploymentUrl"`
+	Outputs        map[string]string `json:"outputs"`
+	Error          string            `json:"error,omitempty"`
+	GeneratedFiles []GeneratedFile   `json:"generatedFiles,omitempty"` // For generate mode
 }
 
 type UpdateDeploymentStatusInput struct {
@@ -291,7 +294,6 @@ func (a *DeploymentActivities) ExecuteGenerator(ctx context.Context, input Execu
 }
 
 func (a *DeploymentActivities) executeDockerCompose(ctx context.Context, input ExecuteGeneratorInput) (*ExecuteGeneratorResult, error) {
-	// Parse config to extract port
 	composeFilePath := filepath.Join(input.WorkDir, "docker-compose.yml")
 	composeData, err := os.ReadFile(composeFilePath)
 	if err != nil {
@@ -301,14 +303,33 @@ func (a *DeploymentActivities) executeDockerCompose(ctx context.Context, input E
 		}, nil
 	}
 
-	// Extract port from docker-compose file (simple parsing looking for port mapping)
-	// Format: "port:port" in ports section
-	port := 3000 // Default port
+	// Generate mode: return the files without executing
+	if input.Mode == "generate" {
+		a.logger.Info("Docker Compose generate mode - returning files for commit")
+		return &ExecuteGeneratorResult{
+			Success: true,
+			GeneratedFiles: []GeneratedFile{
+				{
+					Path:    "docker-compose.yml",
+					Content: string(composeData),
+				},
+			},
+			Outputs: map[string]string{
+				"mode": "generate",
+				"file": "docker-compose.yml",
+			},
+		}, nil
+	}
+
+	// Execute mode: run docker compose (existing behavior)
+	a.logger.Info("Docker Compose execute mode - running docker compose up")
+
+	// Extract port from docker-compose file
+	port := 3000
 	lines := strings.Split(string(composeData), "\n")
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "- \"") && strings.Contains(trimmed, ":") {
-			// Extract port from format: - "3000:3000"
 			portStr := strings.TrimPrefix(trimmed, "- \"")
 			portStr = strings.TrimSuffix(portStr, "\"")
 			parts := strings.Split(portStr, ":")
@@ -323,32 +344,23 @@ func (a *DeploymentActivities) executeDockerCompose(ctx context.Context, input E
 
 	// Build docker-compose command
 	args := []string{"compose", "-f", composeFilePath}
-
-	// Add host if specified
 	if input.Target.HostURL != "" {
 		args = append([]string{"-H", input.Target.HostURL}, args...)
 	}
-
 	args = append(args, "up", "-d")
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		a.logger.Error("Docker compose failed",
-			"error", err,
-			"output", string(output))
+		a.logger.Error("Docker compose failed", "error", err, "output", string(output))
 		return &ExecuteGeneratorResult{
 			Success: false,
 			Error:   fmt.Sprintf("docker compose failed: %s", string(output)),
 		}, nil
 	}
 
-	a.logger.Info("Docker compose executed successfully")
-
-	// For local deployments, return localhost URL with parsed port
 	deploymentURL := fmt.Sprintf("http://localhost:%d", port)
 	if input.Target.HostURL != "" && !strings.HasPrefix(input.Target.HostURL, "unix://") {
-		// Extract host from URL
 		host := strings.TrimPrefix(input.Target.HostURL, "ssh://")
 		host = strings.TrimPrefix(host, "tcp://")
 		if idx := strings.Index(host, "@"); idx != -1 {
