@@ -146,6 +146,7 @@ func main() {
 	w.RegisterActivity(deploymentActivities.PrepareGeneratorContext)
 	w.RegisterActivity(deploymentActivities.ExecuteGenerator)
 	w.RegisterActivity(deploymentActivities.UpdateDeploymentStatus)
+	w.RegisterActivity(deploymentActivities.CommitToRepo)
 
 	// Create and register health check activities
 	payloadHealthClientImpl := services.NewPayloadHealthClient(orbitAPIURL, orbitInternalAPIKey)
