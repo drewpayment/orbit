@@ -195,6 +195,7 @@ export const Deployments: CollectionConfig = {
       options: [
         { label: 'Pending', value: 'pending' },
         { label: 'Deploying', value: 'deploying' },
+        { label: 'Generated', value: 'generated' },
         { label: 'Deployed', value: 'deployed' },
         { label: 'Failed', value: 'failed' },
       ],
