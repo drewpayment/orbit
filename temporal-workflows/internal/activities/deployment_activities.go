@@ -95,6 +95,25 @@ type UpdateDeploymentStatusInput struct {
 	ErrorMessage  string `json:"errorMessage,omitempty"`
 }
 
+type CommitToRepoInput struct {
+	DeploymentID  string          `json:"deploymentId"`
+	AppID         string          `json:"appId"`
+	WorkspaceID   string          `json:"workspaceId"`
+	Files         []GeneratedFile `json:"files"`
+	CommitMessage string          `json:"commitMessage"`
+}
+
+type GeneratedFile struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
+type CommitToRepoResult struct {
+	Success   bool   `json:"success"`
+	CommitSHA string `json:"commitSha"`
+	Error     string `json:"error,omitempty"`
+}
+
 // ValidateDeploymentConfig validates the deployment configuration
 func (a *DeploymentActivities) ValidateDeploymentConfig(ctx context.Context, input ValidateDeploymentConfigInput) error {
 	a.logger.Info("Validating deployment config", "generatorType", input.GeneratorType)
@@ -367,4 +386,19 @@ func (a *DeploymentActivities) UpdateDeploymentStatus(ctx context.Context, input
 		input.DeploymentURL,
 		input.ErrorMessage,
 	)
+}
+
+// CommitToRepo commits generated files to the app's repository
+func (a *DeploymentActivities) CommitToRepo(ctx context.Context, input CommitToRepoInput) (*CommitToRepoResult, error) {
+	a.logger.Info("Committing files to repository",
+		"deploymentID", input.DeploymentID,
+		"appID", input.AppID,
+		"fileCount", len(input.Files))
+
+	// For now, return success - will implement GitHub commit in next task
+	// This is a placeholder that allows the workflow to complete
+	return &CommitToRepoResult{
+		Success:   true,
+		CommitSHA: "placeholder-sha",
+	}, nil
 }
