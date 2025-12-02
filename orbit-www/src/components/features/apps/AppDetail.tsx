@@ -27,6 +27,10 @@ import {
 import type { App, Deployment, Template, HealthCheck } from '@/payload-types'
 import { AddDeploymentModal } from './AddDeploymentModal'
 import { getHealthHistory } from '@/app/actions/apps'
+import { DeploymentRow } from './DeploymentRow'
+import { startDeployment } from '@/app/actions/deployments'
+import { toast } from 'sonner'
+import { useRouter } from 'next/navigation'
 
 interface AppDetailProps {
   app: App
@@ -49,12 +53,31 @@ const deploymentStatusColors: Record<string, string> = {
 }
 
 export function AppDetail({ app, deployments }: AppDetailProps) {
+  const router = useRouter()
   const [showAddDeployment, setShowAddDeployment] = useState(false)
   const [healthHistory, setHealthHistory] = useState<HealthCheck[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
   const status = app.status || 'unknown'
   const StatusIcon = statusConfig[status].icon
   const template = app.origin?.template as Template | undefined
+
+  const handleDeploy = async (deploymentId: string) => {
+    const result = await startDeployment(deploymentId)
+    if (result.success) {
+      toast.success('Deployment started')
+      router.refresh()
+    } else {
+      toast.error(result.error || 'Failed to start deployment')
+    }
+  }
+
+  const handleEditDeployment = (deploymentId: string) => {
+    console.log('Edit deployment:', deploymentId)
+  }
+
+  const handleDeleteDeployment = (deploymentId: string) => {
+    console.log('Delete deployment:', deploymentId)
+  }
 
   useEffect(() => {
     if (app.healthConfig?.url) {
@@ -191,6 +214,7 @@ export function AppDetail({ app, deployments }: AppDetailProps) {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-8"></TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Generator</TableHead>
                   <TableHead>Target</TableHead>
@@ -201,38 +225,15 @@ export function AppDetail({ app, deployments }: AppDetailProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {deployments.map((deployment) => {
-                  const healthStatus = deployment.healthStatus || 'unknown'
-                  const HealthIcon = statusConfig[healthStatus].icon
-                  return (
-                    <TableRow key={deployment.id}>
-                      <TableCell className="font-medium">{deployment.name}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{deployment.generator}</Badge>
-                      </TableCell>
-                      <TableCell>{deployment.target?.type || '-'}</TableCell>
-                      <TableCell>
-                        <Badge className={deploymentStatusColors[deployment.status || 'pending']}>
-                          {deployment.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <HealthIcon className={`h-4 w-4 ${statusConfig[healthStatus].color}`} />
-                          <span className="capitalize">{healthStatus}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {deployment.lastDeployedAt
-                          ? new Date(deployment.lastDeployedAt).toLocaleString()
-                          : 'Never'}
-                      </TableCell>
-                      <TableCell>
-                        <Button variant="ghost" size="sm">View</Button>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
+                {deployments.map((deployment) => (
+                  <DeploymentRow
+                    key={deployment.id}
+                    deployment={deployment}
+                    onDeploy={handleDeploy}
+                    onEdit={handleEditDeployment}
+                    onDelete={handleDeleteDeployment}
+                  />
+                ))}
               </TableBody>
             </Table>
           )}
