@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package idp.deployment.v1;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/drewpayment/orbit/proto/gen/go/idp/deployment/v1;deploymentv1";
+
+// DeploymentService handles deployment workflow operations
+service DeploymentService {
+  // Start a new deployment workflow
+  rpc StartDeploymentWorkflow(StartDeploymentWorkflowRequest) returns (StartDeploymentWorkflowResponse);
+
+  // Get current progress of a deployment
+  rpc GetDeploymentProgress(GetDeploymentProgressRequest) returns (GetDeploymentProgressResponse);
+}
+
+message DeploymentTarget {
+  string type = 1;
+  string region = 2;
+  string cluster = 3;
+  string host_url = 4;
+}
+
+message StartDeploymentWorkflowRequest {
+  string deployment_id = 1;
+  string app_id = 2;
+  string workspace_id = 3;
+  string user_id = 4;
+  string generator_type = 5;
+  string generator_slug = 6;
+  google.protobuf.Struct config = 7;
+  DeploymentTarget target = 8;
+  string mode = 9;
+}
+
+message StartDeploymentWorkflowResponse {
+  string workflow_id = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message GetDeploymentProgressRequest {
+  string workflow_id = 1;
+}
+
+message GetDeploymentProgressResponse {
+  string current_step = 1;
+  int32 steps_total = 2;
+  int32 steps_current = 3;
+  string message = 4;
+  string status = 5;
+}
