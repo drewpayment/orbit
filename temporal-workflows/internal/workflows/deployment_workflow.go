@@ -1,6 +1,7 @@
 package workflows
 
 import (
+	"fmt"
 	"time"
 
 	"go.temporal.io/sdk/temporal"
@@ -17,6 +18,7 @@ type DeploymentWorkflowInput struct {
 	GeneratorSlug string                `json:"generatorSlug"`
 	Config        []byte                `json:"config"`
 	Target        DeploymentTargetInput `json:"target"`
+	Mode          string                `json:"mode"` // "generate" or "execute", defaults to "execute"
 }
 
 // DeploymentTargetInput contains deployment target information
@@ -44,10 +46,33 @@ type DeploymentProgress struct {
 
 // ExecuteGeneratorResult contains generator execution result
 type ExecuteGeneratorResult struct {
-	Success       bool              `json:"success"`
-	DeploymentURL string            `json:"deploymentUrl"`
-	Outputs       map[string]string `json:"outputs"`
-	Error         string            `json:"error,omitempty"`
+	Success        bool              `json:"success"`
+	DeploymentURL  string            `json:"deploymentUrl"`
+	Outputs        map[string]string `json:"outputs"`
+	Error          string            `json:"error,omitempty"`
+	GeneratedFiles []GeneratedFile   `json:"generatedFiles,omitempty"` // For generate mode
+}
+
+// CommitToRepoInput contains input for committing generated files
+type CommitToRepoInput struct {
+	DeploymentID  string          `json:"deploymentId"`
+	AppID         string          `json:"appId"`
+	WorkspaceID   string          `json:"workspaceId"`
+	Files         []GeneratedFile `json:"files"`
+	CommitMessage string          `json:"commitMessage"`
+}
+
+// GeneratedFile represents a generated file to commit
+type GeneratedFile struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
+// CommitToRepoResult contains result of committing files
+type CommitToRepoResult struct {
+	Success   bool   `json:"success"`
+	CommitSHA string `json:"commitSha"`
+	Error     string `json:"error,omitempty"`
 }
 
 // Activity names
@@ -56,6 +81,7 @@ const (
 	ActivityPrepareGeneratorContext  = "PrepareGeneratorContext"
 	ActivityExecuteGenerator         = "ExecuteGenerator"
 	ActivityUpdateDeploymentStatus   = "UpdateDeploymentStatus"
+	ActivityCommitToRepo             = "CommitToRepo"
 	// ActivityCleanupWorkDir is already defined in template_instantiation_workflow.go
 )
 
@@ -168,11 +194,19 @@ func DeploymentWorkflow(ctx workflow.Context, input DeploymentWorkflowInput) (*D
 	progress.StepsCurrent = 4
 	progress.Message = "Executing deployment"
 
+	// Default mode to "execute" if not specified
+	mode := input.Mode
+	if mode == "" {
+		mode = "execute"
+	}
+
 	executeInput := ExecuteGeneratorInput{
 		DeploymentID:  input.DeploymentID,
 		GeneratorType: input.GeneratorType,
+		GeneratorSlug: input.GeneratorSlug,
 		WorkDir:       workDir,
 		Target:        input.Target,
+		Mode:          mode,
 	}
 	var executeResult ExecuteGeneratorResult
 	err = workflow.ExecuteActivity(ctx, ActivityExecuteGenerator, executeInput).Get(ctx, &executeResult)
@@ -195,14 +229,50 @@ func DeploymentWorkflow(ctx workflow.Context, input DeploymentWorkflowInput) (*D
 		}, nil
 	}
 
-	// Step 5: Update status to deployed
+	// Step 4b: If generate mode, commit files to repo
+	if mode == "generate" && len(executeResult.GeneratedFiles) > 0 {
+		progress.CurrentStep = "committing"
+		progress.Message = "Committing generated files to repository"
+
+		commitInput := CommitToRepoInput{
+			DeploymentID:  input.DeploymentID,
+			AppID:         input.AppID,
+			WorkspaceID:   input.WorkspaceID,
+			Files:         executeResult.GeneratedFiles,
+			CommitMessage: fmt.Sprintf("chore(orbit): add deployment config via %s generator", input.GeneratorType),
+		}
+		var commitResult CommitToRepoResult
+		err = workflow.ExecuteActivity(ctx, ActivityCommitToRepo, commitInput).Get(ctx, &commitResult)
+		if err != nil || !commitResult.Success {
+			errMsg := "failed to commit files to repository"
+			if err != nil {
+				errMsg = err.Error()
+			} else if commitResult.Error != "" {
+				errMsg = commitResult.Error
+			}
+			logger.Error("Commit failed", "error", errMsg)
+			updateStatusOnFailure(errMsg)
+			return &DeploymentWorkflowResult{
+				Status: "failed",
+				Error:  errMsg,
+			}, nil
+		}
+	}
+
+	// Step 5: Update status
 	progress.CurrentStep = "finalizing"
 	progress.StepsCurrent = 5
 	progress.Message = "Finalizing deployment"
 
+	// Set final status based on mode
+	finalStatus := "deployed"
+	if mode == "generate" {
+		finalStatus = "generated"
+	}
+
 	statusInput = UpdateDeploymentStatusInput{
 		DeploymentID:  input.DeploymentID,
-		Status:        "deployed",
+		Status:        finalStatus,
 		DeploymentURL: executeResult.DeploymentURL,
 	}
 	err = workflow.ExecuteActivity(ctx, ActivityUpdateDeploymentStatus, statusInput).Get(ctx, nil)
@@ -239,8 +309,10 @@ type PrepareGeneratorContextInput struct {
 type ExecuteGeneratorInput struct {
 	DeploymentID  string                `json:"deploymentId"`
 	GeneratorType string                `json:"generatorType"`
+	GeneratorSlug string                `json:"generatorSlug"`
 	WorkDir       string                `json:"workDir"`
 	Target        DeploymentTargetInput `json:"target"`
+	Mode          string                `json:"mode"`
 }
 
 type UpdateDeploymentStatusInput struct {
