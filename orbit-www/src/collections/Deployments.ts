@@ -249,6 +249,14 @@ export const Deployments: CollectionConfig = {
         condition: (data) => data?.status === 'failed',
       },
     },
+    {
+      name: 'generatedFiles',
+      type: 'json',
+      admin: {
+        readOnly: true,
+        description: 'Generated deployment files awaiting commit',
+      },
+    },
   ],
   timestamps: true,
 }
