@@ -4,6 +4,8 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { headers } from 'next/headers'
 import { auth } from '@/lib/auth'
+import { startDeploymentWorkflow } from '@/lib/clients/deployment-client'
+import type { JsonObject } from '@bufbuild/protobuf'
 
 interface CreateDeploymentInput {
   appId: string
@@ -144,22 +146,61 @@ export async function startDeployment(deploymentId: string) {
   }
 
   try {
-    // Update status to deploying
+    // Extract deployment config and target
+    const deploymentConfig = deployment.config as JsonObject || {}
+    const deploymentTarget = {
+      type: deployment.target?.type || '',
+      region: deployment.target?.region || undefined,
+      cluster: deployment.target?.cluster || undefined,
+      hostUrl: deployment.target?.url || undefined,
+    }
+
+    // Start the Temporal workflow via gRPC
+    const response = await startDeploymentWorkflow({
+      deploymentId,
+      appId,
+      workspaceId,
+      userId: session.user.id,
+      generatorType: deployment.generator,
+      generatorSlug: deployment.generator, // Using generator type as slug for now
+      config: deploymentConfig,
+      target: deploymentTarget,
+      mode: 'execute', // Default to execute mode
+    })
+
+    if (!response.success) {
+      return { success: false, error: response.error || 'Failed to start workflow' }
+    }
+
+    // Update deployment record with workflow ID and status
     await payload.update({
       collection: 'deployments',
       id: deploymentId,
       data: {
         status: 'deploying',
+        workflowId: response.workflowId,
       },
     })
 
-    // TODO: Start Temporal workflow via gRPC
-    // For now, simulate with a placeholder workflow ID
-
-    return { success: true, workflowId: `deploy-${deploymentId}` }
+    return { success: true, workflowId: response.workflowId }
   } catch (error) {
     console.error('Failed to start deployment:', error)
     const errorMessage = error instanceof Error ? error.message : 'Failed to start deployment'
+
+    // Update deployment status to failed
+    try {
+      await payload.update({
+        collection: 'deployments',
+        id: deploymentId,
+        data: {
+          status: 'failed',
+          deploymentError: errorMessage,
+        },
+      })
+    } catch (updateError) {
+      console.error('Failed to update deployment status:', updateError)
+    }
+
     return { success: false, error: errorMessage }
   }
 }
