@@ -1,4 +1,4 @@
-// Package types provides shared types for template instantiation workflows
+// Package types provides shared types for workflows
 package types
 
 // TemplateInstantiationInput contains all parameters needed for template instantiation
@@ -32,4 +32,33 @@ type InstantiationProgress struct {
 	StepsTotal   int
 	StepsCurrent int
 	Message      string
+}
+
+// DeploymentWorkflowInput contains all parameters for deployment
+type DeploymentWorkflowInput struct {
+	DeploymentID  string                `json:"deploymentId"`
+	AppID         string                `json:"appId"`
+	WorkspaceID   string                `json:"workspaceId"`
+	UserID        string                `json:"userId"`
+	GeneratorType string                `json:"generatorType"`
+	GeneratorSlug string                `json:"generatorSlug"`
+	Config        []byte                `json:"config"`
+	Target        DeploymentTargetInput `json:"target"`
+	Mode          string                `json:"mode"` // "generate" or "execute", defaults to "execute"
+}
+
+// DeploymentTargetInput contains deployment target information
+type DeploymentTargetInput struct {
+	Type    string `json:"type"`
+	Region  string `json:"region,omitempty"`
+	Cluster string `json:"cluster,omitempty"`
+	HostURL string `json:"hostUrl,omitempty"`
+}
+
+// DeploymentProgress tracks deployment workflow progress
+type DeploymentProgress struct {
+	CurrentStep  string `json:"currentStep"`
+	StepsTotal   int    `json:"stepsTotal"`
+	StepsCurrent int    `json:"stepsCurrent"`
+	Message      string `json:"message"`
 }

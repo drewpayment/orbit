@@ -14,6 +14,7 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
+	"github.com/drewpayment/orbit/proto/gen/go/idp/deployment/v1/deploymentv1connect"
 	"github.com/drewpayment/orbit/proto/gen/go/idp/health/v1/healthv1connect"
 	templatev1 "github.com/drewpayment/orbit/proto/gen/go/idp/template/v1"
 	"github.com/drewpayment/orbit/proto/gen/go/idp/template/v1/templatev1connect"
@@ -154,6 +155,37 @@ func (tc *TemporalClient) CancelWorkflow(ctx context.Context, workflowID string)
 	return tc.client.CancelWorkflow(ctx, workflowID, "")
 }
 
+// StartDeploymentWorkflow starts a deployment workflow
+func (tc *TemporalClient) StartDeploymentWorkflow(ctx context.Context, input *types.DeploymentWorkflowInput) (string, error) {
+	workflowID := fmt.Sprintf("deployment-%s", input.DeploymentID)
+
+	we, err := tc.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: "orbit-workflows",
+	}, "DeploymentWorkflow", input)
+
+	if err != nil {
+		return "", fmt.Errorf("failed to start deployment workflow: %w", err)
+	}
+
+	return we.GetID(), nil
+}
+
+// QueryDeploymentWorkflow queries a deployment workflow for progress
+func (tc *TemporalClient) QueryDeploymentWorkflow(ctx context.Context, workflowID, queryType string) (*types.DeploymentProgress, error) {
+	resp, err := tc.client.QueryWorkflow(ctx, workflowID, "", queryType)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query deployment workflow: %w", err)
+	}
+
+	var progress types.DeploymentProgress
+	if err := resp.Get(&progress); err != nil {
+		return nil, fmt.Errorf("failed to decode deployment progress: %w", err)
+	}
+
+	return &progress, nil
+}
+
 // StubPayloadClient is a placeholder for Payload CMS operations
 // TODO: Implement real Payload client
 type StubPayloadClient struct{}
@@ -203,6 +235,17 @@ func main() {
 	templatePath, templateHandler := templatev1connect.NewTemplateServiceHandler(templateServer)
 	mux.Handle(templatePath, templateHandler)
 	log.Println("TemplateService registered (Connect)")
+
+	// Register DeploymentService (Connect handler)
+	if temporalClient != nil {
+		var deploymentTemporal grpcserver.DeploymentClientInterface = temporalClient
+		deploymentServer := grpcserver.NewDeploymentServer(deploymentTemporal)
+		deploymentPath, deploymentHandler := deploymentv1connect.NewDeploymentServiceHandler(deploymentServer)
+		mux.Handle(deploymentPath, deploymentHandler)
+		log.Println("DeploymentService registered (Connect)")
+	} else {
+		log.Println("DeploymentService not registered (Temporal client unavailable)")
+	}
 
 	// Register HealthService (Connect handler)
 	if temporalClient != nil {
