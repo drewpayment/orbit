@@ -40,9 +40,10 @@ const statusConfig = {
   unknown: { icon: HelpCircle, color: 'text-gray-400', label: 'Unknown' },
 }
 
-const deploymentStatusColors = {
+const deploymentStatusColors: Record<string, string> = {
   pending: 'bg-gray-100 text-gray-800',
   deploying: 'bg-blue-100 text-blue-800',
+  generated: 'bg-purple-100 text-purple-800',
   deployed: 'bg-green-100 text-green-800',
   failed: 'bg-red-100 text-red-800',
 }
