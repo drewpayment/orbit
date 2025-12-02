@@ -4,7 +4,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { headers } from 'next/headers'
 import { auth } from '@/lib/auth'
-import { startDeploymentWorkflow } from '@/lib/clients/deployment-client'
+import { startDeploymentWorkflow, getDeploymentProgress } from '@/lib/clients/deployment-client'
 import type { JsonObject } from '@bufbuild/protobuf'
 
 interface CreateDeploymentInput {
@@ -272,5 +272,29 @@ export async function getDeploymentStatus(deploymentId: string) {
   } catch (error) {
     console.error('Failed to get deployment status:', error)
     return null
+  }
+}
+
+export async function getDeploymentWorkflowProgress(workflowId: string) {
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session?.user) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  try {
+    const progress = await getDeploymentProgress(workflowId)
+
+    return {
+      success: true,
+      currentStep: progress.currentStep,
+      stepsTotal: progress.stepsTotal,
+      stepsCurrent: progress.stepsCurrent,
+      message: progress.message,
+      status: progress.status,
+    }
+  } catch (error) {
+    console.error('Failed to get deployment workflow progress:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to get deployment progress'
+    return { success: false, error: errorMessage }
   }
 }
