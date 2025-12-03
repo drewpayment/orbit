@@ -9,7 +9,10 @@ import {
   getGeneratedFiles,
   getRepoBranches,
   commitGeneratedFiles,
+  syncDeploymentStatusFromWorkflow,
+  skipCommitAndComplete,
 } from '@/app/actions/deployments'
+import { useRouter } from 'next/navigation'
 import { AlertCircle, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { Deployment } from '@/payload-types'
@@ -26,6 +29,7 @@ interface ProgressData {
   stepsCurrent: number
   message: string
   status: string
+  generatedFiles?: Array<{ path: string; content: string }>
 }
 
 export function DeploymentProgressPanel({
@@ -33,12 +37,13 @@ export function DeploymentProgressPanel({
   isExpanded,
   onRetry,
 }: DeploymentProgressPanelProps) {
+  const router = useRouter()
   const [progress, setProgress] = useState<ProgressData | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [isPolling, setIsPolling] = useState(false)
   const [files, setFiles] = useState<Array<{ path: string; content: string }>>([])
   const [branches, setBranches] = useState<string[]>(['main'])
   const [defaultBranch, setDefaultBranch] = useState('main')
+  const [hasSynced, setHasSynced] = useState(false)
 
   const status = deployment.status || 'pending'
   const workflowId = deployment.workflowId
@@ -55,6 +60,7 @@ export function DeploymentProgressPanel({
           stepsCurrent: result.stepsCurrent || 0,
           message: result.message || '',
           status: result.status || 'running',
+          generatedFiles: result.generatedFiles,
         })
         setError(null)
       } else {
@@ -69,16 +75,38 @@ export function DeploymentProgressPanel({
     if (!isExpanded || !workflowId) return
     if (status !== 'deploying') return
 
-    setIsPolling(true)
     fetchProgress()
-
     const interval = setInterval(fetchProgress, 2000)
 
     return () => {
       clearInterval(interval)
-      setIsPolling(false)
     }
   }, [isExpanded, workflowId, status, fetchProgress])
+
+  // Sync deployment status when workflow completes
+  useEffect(() => {
+    if (!progress || hasSynced) return
+    if (progress.status !== 'completed' && progress.status !== 'failed') return
+
+    // Workflow finished but Payload status may not be updated
+    // (Temporal worker has nil PayloadDeploymentClient)
+    const syncStatus = async () => {
+      setHasSynced(true)
+      try {
+        await syncDeploymentStatusFromWorkflow(
+          deployment.id,
+          progress.status,
+          progress.status === 'failed' ? progress.message : undefined,
+          progress.generatedFiles
+        )
+        // Refresh to get updated deployment status
+        router.refresh()
+      } catch (err) {
+        console.error('Failed to sync deployment status:', err)
+      }
+    }
+    syncStatus()
+  }, [progress, hasSynced, deployment.id, router])
 
   useEffect(() => {
     if (status === 'generated' && isExpanded) {
@@ -180,6 +208,13 @@ export function DeploymentProgressPanel({
           branches={branches}
           defaultBranch={defaultBranch}
           onCommit={handleCommit}
+          onSkip={async () => {
+            const result = await skipCommitAndComplete(deployment.id)
+            if (!result.success) {
+              throw new Error(result.error)
+            }
+            router.refresh()
+          }}
         />
       </div>
     )

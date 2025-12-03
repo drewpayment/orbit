@@ -155,6 +155,10 @@ export async function startDeployment(deploymentId: string) {
       hostUrl: deployment.target?.url || undefined,
     }
 
+    // Determine mode based on generator type
+    // docker-compose uses generate mode to let user review files before commit
+    const mode = deployment.generator === 'docker-compose' ? 'generate' : 'execute'
+
     // Start the Temporal workflow via gRPC
     const response = await startDeploymentWorkflow({
       deploymentId,
@@ -165,7 +169,7 @@ export async function startDeployment(deploymentId: string) {
       generatorSlug: deployment.generator, // Using generator type as slug for now
       config: deploymentConfig,
       target: deploymentTarget,
-      mode: 'execute', // Default to execute mode
+      mode,
     })
 
     if (!response.success) {
@@ -291,6 +295,10 @@ export async function getDeploymentWorkflowProgress(workflowId: string) {
       stepsCurrent: progress.stepsCurrent,
       message: progress.message,
       status: progress.status,
+      generatedFiles: progress.generatedFiles?.map(f => ({
+        path: f.path,
+        content: f.content,
+      })) || [],
     }
   } catch (error) {
     console.error('Failed to get deployment workflow progress:', error)
@@ -423,5 +431,160 @@ export async function commitGeneratedFiles(input: {
   } catch (error) {
     console.error('Failed to commit files:', error)
     return { success: false, error: 'Failed to commit files' }
+  }
+}
+
+/**
+ * Mark deployment as complete without committing to repository.
+ * Used when user copies the generated files manually.
+ */
+export async function skipCommitAndComplete(deploymentId: string) {
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session?.user) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  const payload = await getPayload({ config })
+
+  try {
+    await payload.update({
+      collection: 'deployments',
+      id: deploymentId,
+      data: {
+        status: 'deployed',
+        lastDeployedAt: new Date().toISOString(),
+      },
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to complete deployment:', error)
+    return { success: false, error: 'Failed to complete deployment' }
+  }
+}
+
+/**
+ * Sync deployment status from workflow progress.
+ * Called by frontend when workflow completes but Payload status hasn't been updated
+ * (workaround for missing PayloadDeploymentClient in Temporal worker)
+ */
+export async function syncDeploymentStatusFromWorkflow(
+  deploymentId: string,
+  workflowStatus: string,
+  errorMessage?: string,
+  generatedFiles?: Array<{ path: string; content: string }>
+) {
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session?.user) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  const payload = await getPayload({ config })
+
+  try {
+    // Map workflow status to deployment status
+    let newStatus: 'pending' | 'deploying' | 'generated' | 'deployed' | 'failed'
+    switch (workflowStatus) {
+      case 'completed':
+        // Check if this was a generate-mode workflow by looking at current status
+        const deployment = await payload.findByID({
+          collection: 'deployments',
+          id: deploymentId,
+        })
+        // If generator is docker-compose, it's generate mode -> status should be 'generated'
+        if (deployment?.generator === 'docker-compose') {
+          newStatus = 'generated'
+        } else {
+          newStatus = 'deployed'
+        }
+        break
+      case 'failed':
+        newStatus = 'failed'
+        break
+      default:
+        // Don't update for running or other statuses
+        return { success: true }
+    }
+
+    await payload.update({
+      collection: 'deployments',
+      id: deploymentId,
+      data: {
+        status: newStatus,
+        ...(newStatus === 'failed' && errorMessage ? { deploymentError: errorMessage } : {}),
+        ...(newStatus === 'deployed' ? { lastDeployedAt: new Date().toISOString() } : {}),
+        ...(newStatus === 'generated' && generatedFiles?.length ? { generatedFiles } : {}),
+      },
+    })
+
+    return { success: true, newStatus }
+  } catch (error) {
+    console.error('Failed to sync deployment status:', error)
+    return { success: false, error: 'Failed to sync status' }
+  }
+}
+
+export async function deleteDeployment(deploymentId: string) {
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session?.user) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  const payload = await getPayload({ config })
+
+  try {
+    const deployment = await payload.findByID({
+      collection: 'deployments',
+      id: deploymentId,
+      depth: 2,
+    })
+
+    if (!deployment) {
+      return { success: false, error: 'Deployment not found' }
+    }
+
+    // Verify access through workspace membership
+    const appId = typeof deployment.app === 'string'
+      ? deployment.app
+      : deployment.app.id
+
+    const app = await payload.findByID({
+      collection: 'apps',
+      id: appId,
+      depth: 1,
+    })
+
+    if (!app) {
+      return { success: false, error: 'App not found' }
+    }
+
+    const workspaceId = typeof app.workspace === 'string'
+      ? app.workspace
+      : app.workspace.id
+
+    const members = await payload.find({
+      collection: 'workspace-members',
+      where: {
+        and: [
+          { workspace: { equals: workspaceId } },
+          { user: { equals: session.user.id } },
+          { status: { equals: 'active' } },
+        ],
+      },
+    })
+
+    if (members.docs.length === 0) {
+      return { success: false, error: 'Not a member of this workspace' }
+    }
+
+    await payload.delete({
+      collection: 'deployments',
+      id: deploymentId,
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to delete deployment:', error)
+    return { success: false, error: 'Failed to delete deployment' }
   }
 }

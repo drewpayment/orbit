@@ -37,11 +37,7 @@ import { createDeployment, getDeploymentGenerators } from '@/app/actions/deploym
 const formSchema = z.object({
   name: z.string().min(1, 'Name is required').max(50),
   generator: z.enum(['docker-compose', 'terraform', 'helm', 'custom']),
-  targetType: z.string().min(1, 'Target type is required'),
-  hostUrl: z.string().optional(),
   serviceName: z.string().min(1, 'Service name is required'),
-  imageRepository: z.string().min(1, 'Image repository is required'),
-  imageTag: z.string().default('latest'),
   port: z.coerce.number().min(1).max(65535).default(3000),
 })
 
@@ -76,11 +72,7 @@ export function AddDeploymentModal({
     defaultValues: {
       name: 'production',
       generator: 'docker-compose',
-      targetType: 'docker-host',
-      hostUrl: 'unix:///var/run/docker.sock',
       serviceName: appName.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
-      imageRepository: '',
-      imageTag: 'latest',
       port: 3000,
     },
   })
@@ -106,11 +98,9 @@ export function AddDeploymentModal({
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true)
     try {
+      // Image will be derived from app's repository in the backend
       const config = {
-        hostUrl: data.hostUrl,
         serviceName: data.serviceName,
-        imageRepository: data.imageRepository,
-        imageTag: data.imageTag,
         port: data.port,
       }
 
@@ -120,8 +110,7 @@ export function AddDeploymentModal({
         generator: data.generator,
         config,
         target: {
-          type: data.targetType,
-          hostUrl: data.hostUrl,
+          type: 'repository', // Generate files for repository commit
         },
       })
 
@@ -199,74 +188,8 @@ export function AddDeploymentModal({
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="targetType"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Target Type</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select target" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="docker-host">Docker Host</SelectItem>
-                      <SelectItem value="kubernetes" disabled>Kubernetes (Coming Soon)</SelectItem>
-                      <SelectItem value="aws-ecs" disabled>AWS ECS (Coming Soon)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="hostUrl"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Docker Host URL</FormLabel>
-                  <FormControl>
-                    <Input placeholder="unix:///var/run/docker.sock" {...field} />
-                  </FormControl>
-                  <FormDescription>
-                    Local socket or remote host (ssh://user@host)
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="imageRepository"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Image Repository</FormLabel>
-                    <FormControl>
-                      <Input placeholder="ghcr.io/org/app" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="imageTag"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Image Tag</FormLabel>
-                    <FormControl>
-                      <Input placeholder="latest" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            <div className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
+              This will generate a <code className="font-mono text-xs">docker-compose.yml</code> file using your app's repository image that you can review and commit.
             </div>
 
             <div className="grid grid-cols-2 gap-4">

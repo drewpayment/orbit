@@ -39,6 +39,7 @@ interface CommitToRepoFormProps {
   branches: string[]
   defaultBranch: string
   onCommit: (data: { branch: string; newBranch?: string; message: string }) => Promise<void>
+  onSkip?: () => Promise<void>
 }
 
 export function CommitToRepoForm({
@@ -46,8 +47,10 @@ export function CommitToRepoForm({
   branches,
   defaultBranch,
   onCommit,
+  onSkip,
 }: CommitToRepoFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSkipping, setIsSkipping] = useState(false)
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -157,16 +160,45 @@ export function CommitToRepoForm({
             )}
           />
 
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Committing...
-              </>
-            ) : (
-              'Commit to Repository'
+          <div className="flex gap-2">
+            <Button type="submit" disabled={isSubmitting || isSkipping}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Committing...
+                </>
+              ) : (
+                'Commit to Repository'
+              )}
+            </Button>
+            {onSkip && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSubmitting || isSkipping}
+                onClick={async () => {
+                  setIsSkipping(true)
+                  try {
+                    await onSkip()
+                    toast.success('Deployment marked as complete')
+                  } catch (error) {
+                    toast.error('Failed to complete deployment')
+                  } finally {
+                    setIsSkipping(false)
+                  }
+                }}
+              >
+                {isSkipping ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Completing...
+                  </>
+                ) : (
+                  "I'll copy it manually"
+                )}
+              </Button>
             )}
-          </Button>
+          </div>
         </form>
       </Form>
     </div>

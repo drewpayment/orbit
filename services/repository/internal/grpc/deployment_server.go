@@ -122,6 +122,17 @@ func (s *DeploymentServer) GetDeploymentProgress(ctx context.Context, req *conne
 		Status:       getDeploymentStatusString(progress),
 	}
 
+	// Include generated files if available
+	if len(progress.GeneratedFiles) > 0 {
+		resp.GeneratedFiles = make([]*deploymentv1.GeneratedFile, len(progress.GeneratedFiles))
+		for i, f := range progress.GeneratedFiles {
+			resp.GeneratedFiles[i] = &deploymentv1.GeneratedFile{
+				Path:    f.Path,
+				Content: f.Content,
+			}
+		}
+	}
+
 	return connect.NewResponse(resp), nil
 }
 

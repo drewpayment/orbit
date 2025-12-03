@@ -44,10 +44,16 @@ message GetDeploymentProgressRequest {
   string workflow_id = 1;
 }
 
+message GeneratedFile {
+  string path = 1;
+  string content = 2;
+}
+
 message GetDeploymentProgressResponse {
   string current_step = 1;
   int32 steps_total = 2;
   int32 steps_current = 3;
   string message = 4;
   string status = 5;
+  repeated GeneratedFile generated_files = 6;
 }

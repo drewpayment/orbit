@@ -141,7 +141,9 @@ func (a *DeploymentActivities) ValidateDeploymentConfig(ctx context.Context, inp
 }
 
 func (a *DeploymentActivities) validateDockerComposeConfig(config map[string]interface{}) error {
-	required := []string{"hostUrl", "serviceName"}
+	// Required fields for generating docker-compose.yml
+	// Image is derived from app's repository, so only serviceName is required
+	required := []string{"serviceName"}
 	var missing []string
 
 	for _, field := range required {
@@ -248,12 +250,14 @@ func (a *DeploymentActivities) prepareDefaultDockerCompose(workDir string, confi
 	}
 
 	imageTag := "latest"
-	if it, ok := config["imageTag"].(string); ok {
+	if it, ok := config["imageTag"].(string); ok && it != "" {
 		imageTag = it
 	}
 
-	imageRepo := "your-image"
-	if ir, ok := config["imageRepository"].(string); ok {
+	// Use service name as image name for ghcr.io pattern
+	// TODO: In future, derive from app's linked repository
+	imageRepo := fmt.Sprintf("ghcr.io/your-org/%s", serviceName)
+	if ir, ok := config["imageRepository"].(string); ok && ir != "" {
 		imageRepo = ir
 	}
 
@@ -265,6 +269,7 @@ services:
     ports:
       - "%d:%d"
     restart: unless-stopped
+    # TODO: Add environment variables, volumes, etc. as needed
 `, serviceName, imageRepo, imageTag, port, port)
 
 	composePath := filepath.Join(workDir, "docker-compose.yml")

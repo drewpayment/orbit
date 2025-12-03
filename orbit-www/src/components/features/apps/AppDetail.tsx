@@ -28,7 +28,7 @@ import type { App, Deployment, Template, HealthCheck } from '@/payload-types'
 import { AddDeploymentModal } from './AddDeploymentModal'
 import { getHealthHistory } from '@/app/actions/apps'
 import { DeploymentRow } from './DeploymentRow'
-import { startDeployment } from '@/app/actions/deployments'
+import { startDeployment, deleteDeployment } from '@/app/actions/deployments'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 
@@ -75,8 +75,17 @@ export function AppDetail({ app, deployments }: AppDetailProps) {
     console.log('Edit deployment:', deploymentId)
   }
 
-  const handleDeleteDeployment = (deploymentId: string) => {
-    console.log('Delete deployment:', deploymentId)
+  const handleDeleteDeployment = async (deploymentId: string) => {
+    if (!confirm('Are you sure you want to delete this deployment?')) {
+      return
+    }
+    const result = await deleteDeployment(deploymentId)
+    if (result.success) {
+      toast.success('Deployment deleted')
+      router.refresh()
+    } else {
+      toast.error(result.error || 'Failed to delete deployment')
+    }
   }
 
   useEffect(() => {

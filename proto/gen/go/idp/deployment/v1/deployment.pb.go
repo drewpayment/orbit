@@ -302,20 +302,73 @@ func (x *GetDeploymentProgressRequest) GetWorkflowId() string {
 	return ""
 }
 
-type GetDeploymentProgressResponse struct {
+type GeneratedFile struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	CurrentStep   string                 `protobuf:"bytes,1,opt,name=current_step,json=currentStep,proto3" json:"current_step,omitempty"`
-	StepsTotal    int32                  `protobuf:"varint,2,opt,name=steps_total,json=stepsTotal,proto3" json:"steps_total,omitempty"`
-	StepsCurrent  int32                  `protobuf:"varint,3,opt,name=steps_current,json=stepsCurrent,proto3" json:"steps_current,omitempty"`
-	Message       string                 `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
-	Status        string                 `protobuf:"bytes,5,opt,name=status,proto3" json:"status,omitempty"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Content       string                 `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
+func (x *GeneratedFile) Reset() {
+	*x = GeneratedFile{}
+	mi := &file_idp_deployment_v1_deployment_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GeneratedFile) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GeneratedFile) ProtoMessage() {}
+
+func (x *GeneratedFile) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_deployment_v1_deployment_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GeneratedFile.ProtoReflect.Descriptor instead.
+func (*GeneratedFile) Descriptor() ([]byte, []int) {
+	return file_idp_deployment_v1_deployment_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *GeneratedFile) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *GeneratedFile) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+type GetDeploymentProgressResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	CurrentStep    string                 `protobuf:"bytes,1,opt,name=current_step,json=currentStep,proto3" json:"current_step,omitempty"`
+	StepsTotal     int32                  `protobuf:"varint,2,opt,name=steps_total,json=stepsTotal,proto3" json:"steps_total,omitempty"`
+	StepsCurrent   int32                  `protobuf:"varint,3,opt,name=steps_current,json=stepsCurrent,proto3" json:"steps_current,omitempty"`
+	Message        string                 `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
+	Status         string                 `protobuf:"bytes,5,opt,name=status,proto3" json:"status,omitempty"`
+	GeneratedFiles []*GeneratedFile       `protobuf:"bytes,6,rep,name=generated_files,json=generatedFiles,proto3" json:"generated_files,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
 func (x *GetDeploymentProgressResponse) Reset() {
 	*x = GetDeploymentProgressResponse{}
-	mi := &file_idp_deployment_v1_deployment_proto_msgTypes[4]
+	mi := &file_idp_deployment_v1_deployment_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -327,7 +380,7 @@ func (x *GetDeploymentProgressResponse) String() string {
 func (*GetDeploymentProgressResponse) ProtoMessage() {}
 
 func (x *GetDeploymentProgressResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_deployment_v1_deployment_proto_msgTypes[4]
+	mi := &file_idp_deployment_v1_deployment_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -340,7 +393,7 @@ func (x *GetDeploymentProgressResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDeploymentProgressResponse.ProtoReflect.Descriptor instead.
 func (*GetDeploymentProgressResponse) Descriptor() ([]byte, []int) {
-	return file_idp_deployment_v1_deployment_proto_rawDescGZIP(), []int{4}
+	return file_idp_deployment_v1_deployment_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *GetDeploymentProgressResponse) GetCurrentStep() string {
@@ -378,6 +431,13 @@ func (x *GetDeploymentProgressResponse) GetStatus() string {
 	return ""
 }
 
+func (x *GetDeploymentProgressResponse) GetGeneratedFiles() []*GeneratedFile {
+	if x != nil {
+		return x.GeneratedFiles
+	}
+	return nil
+}
+
 var File_idp_deployment_v1_deployment_proto protoreflect.FileDescriptor
 
 const file_idp_deployment_v1_deployment_proto_rawDesc = "" +
@@ -405,14 +465,18 @@ const file_idp_deployment_v1_deployment_proto_rawDesc = "" +
 	"\x05error\x18\x03 \x01(\tR\x05error\"?\n" +
 	"\x1cGetDeploymentProgressRequest\x12\x1f\n" +
 	"\vworkflow_id\x18\x01 \x01(\tR\n" +
-	"workflowId\"\xba\x01\n" +
+	"workflowId\"=\n" +
+	"\rGeneratedFile\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
+	"\acontent\x18\x02 \x01(\tR\acontent\"\x85\x02\n" +
 	"\x1dGetDeploymentProgressResponse\x12!\n" +
 	"\fcurrent_step\x18\x01 \x01(\tR\vcurrentStep\x12\x1f\n" +
 	"\vsteps_total\x18\x02 \x01(\x05R\n" +
 	"stepsTotal\x12#\n" +
 	"\rsteps_current\x18\x03 \x01(\x05R\fstepsCurrent\x12\x18\n" +
 	"\amessage\x18\x04 \x01(\tR\amessage\x12\x16\n" +
-	"\x06status\x18\x05 \x01(\tR\x06status2\x92\x02\n" +
+	"\x06status\x18\x05 \x01(\tR\x06status\x12I\n" +
+	"\x0fgenerated_files\x18\x06 \x03(\v2 .idp.deployment.v1.GeneratedFileR\x0egeneratedFiles2\x92\x02\n" +
 	"\x11DeploymentService\x12\x80\x01\n" +
 	"\x17StartDeploymentWorkflow\x121.idp.deployment.v1.StartDeploymentWorkflowRequest\x1a2.idp.deployment.v1.StartDeploymentWorkflowResponse\x12z\n" +
 	"\x15GetDeploymentProgress\x12/.idp.deployment.v1.GetDeploymentProgressRequest\x1a0.idp.deployment.v1.GetDeploymentProgressResponseBJZHgithub.com/drewpayment/orbit/proto/gen/go/idp/deployment/v1;deploymentv1b\x06proto3"
@@ -429,27 +493,29 @@ func file_idp_deployment_v1_deployment_proto_rawDescGZIP() []byte {
 	return file_idp_deployment_v1_deployment_proto_rawDescData
 }
 
-var file_idp_deployment_v1_deployment_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_idp_deployment_v1_deployment_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_idp_deployment_v1_deployment_proto_goTypes = []any{
 	(*DeploymentTarget)(nil),                // 0: idp.deployment.v1.DeploymentTarget
 	(*StartDeploymentWorkflowRequest)(nil),  // 1: idp.deployment.v1.StartDeploymentWorkflowRequest
 	(*StartDeploymentWorkflowResponse)(nil), // 2: idp.deployment.v1.StartDeploymentWorkflowResponse
 	(*GetDeploymentProgressRequest)(nil),    // 3: idp.deployment.v1.GetDeploymentProgressRequest
-	(*GetDeploymentProgressResponse)(nil),   // 4: idp.deployment.v1.GetDeploymentProgressResponse
-	(*structpb.Struct)(nil),                 // 5: google.protobuf.Struct
+	(*GeneratedFile)(nil),                   // 4: idp.deployment.v1.GeneratedFile
+	(*GetDeploymentProgressResponse)(nil),   // 5: idp.deployment.v1.GetDeploymentProgressResponse
+	(*structpb.Struct)(nil),                 // 6: google.protobuf.Struct
 }
 var file_idp_deployment_v1_deployment_proto_depIdxs = []int32{
-	5, // 0: idp.deployment.v1.StartDeploymentWorkflowRequest.config:type_name -> google.protobuf.Struct
+	6, // 0: idp.deployment.v1.StartDeploymentWorkflowRequest.config:type_name -> google.protobuf.Struct
 	0, // 1: idp.deployment.v1.StartDeploymentWorkflowRequest.target:type_name -> idp.deployment.v1.DeploymentTarget
-	1, // 2: idp.deployment.v1.DeploymentService.StartDeploymentWorkflow:input_type -> idp.deployment.v1.StartDeploymentWorkflowRequest
-	3, // 3: idp.deployment.v1.DeploymentService.GetDeploymentProgress:input_type -> idp.deployment.v1.GetDeploymentProgressRequest
-	2, // 4: idp.deployment.v1.DeploymentService.StartDeploymentWorkflow:output_type -> idp.deployment.v1.StartDeploymentWorkflowResponse
-	4, // 5: idp.deployment.v1.DeploymentService.GetDeploymentProgress:output_type -> idp.deployment.v1.GetDeploymentProgressResponse
-	4, // [4:6] is the sub-list for method output_type
-	2, // [2:4] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	4, // 2: idp.deployment.v1.GetDeploymentProgressResponse.generated_files:type_name -> idp.deployment.v1.GeneratedFile
+	1, // 3: idp.deployment.v1.DeploymentService.StartDeploymentWorkflow:input_type -> idp.deployment.v1.StartDeploymentWorkflowRequest
+	3, // 4: idp.deployment.v1.DeploymentService.GetDeploymentProgress:input_type -> idp.deployment.v1.GetDeploymentProgressRequest
+	2, // 5: idp.deployment.v1.DeploymentService.StartDeploymentWorkflow:output_type -> idp.deployment.v1.StartDeploymentWorkflowResponse
+	5, // 6: idp.deployment.v1.DeploymentService.GetDeploymentProgress:output_type -> idp.deployment.v1.GetDeploymentProgressResponse
+	5, // [5:7] is the sub-list for method output_type
+	3, // [3:5] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_idp_deployment_v1_deployment_proto_init() }
@@ -463,7 +529,7 @@ func file_idp_deployment_v1_deployment_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_idp_deployment_v1_deployment_proto_rawDesc), len(file_idp_deployment_v1_deployment_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

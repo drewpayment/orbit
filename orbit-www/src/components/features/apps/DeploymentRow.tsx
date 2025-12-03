@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { TableCell, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible'
 import {
   CheckCircle2,
   AlertTriangle,
@@ -68,74 +67,72 @@ export function DeploymentRow({
   const canDeploy = status === 'pending' || status === 'failed' || status === 'generated'
 
   return (
-    <Collapsible open={isExpanded} onOpenChange={setIsExpanded} asChild>
-      <>
-        <TableRow className="cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
-          <TableCell className="w-8">
-            {isExpanded ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
+    <>
+      <TableRow className="cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
+        <TableCell className="w-8">
+          {isExpanded ? (
+            <ChevronDown className="h-4 w-4" />
+          ) : (
+            <ChevronRight className="h-4 w-4" />
+          )}
+        </TableCell>
+        <TableCell className="font-medium">{deployment.name}</TableCell>
+        <TableCell>
+          <Badge variant="outline">{deployment.generator}</Badge>
+        </TableCell>
+        <TableCell>{deployment.target?.type || '-'}</TableCell>
+        <TableCell>
+          <Badge className={deploymentStatusColors[status]}>
+            {status}
+          </Badge>
+        </TableCell>
+        <TableCell>
+          <div className="flex items-center gap-1">
+            <HealthIcon className={`h-4 w-4 ${statusConfig[healthStatus].color}`} />
+            <span className="capitalize">{healthStatus}</span>
+          </div>
+        </TableCell>
+        <TableCell>
+          {deployment.lastDeployedAt
+            ? new Date(deployment.lastDeployedAt).toLocaleString()
+            : 'Never'}
+        </TableCell>
+        <TableCell onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-1">
+            {canDeploy && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDeploy}
+                disabled={isDeploying}
+              >
+                {isDeploying ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+              </Button>
             )}
-          </TableCell>
-          <TableCell className="font-medium">{deployment.name}</TableCell>
-          <TableCell>
-            <Badge variant="outline">{deployment.generator}</Badge>
-          </TableCell>
-          <TableCell>{deployment.target?.type || '-'}</TableCell>
-          <TableCell>
-            <Badge className={deploymentStatusColors[status]}>
-              {status}
-            </Badge>
-          </TableCell>
-          <TableCell>
-            <div className="flex items-center gap-1">
-              <HealthIcon className={`h-4 w-4 ${statusConfig[healthStatus].color}`} />
-              <span className="capitalize">{healthStatus}</span>
-            </div>
-          </TableCell>
-          <TableCell>
-            {deployment.lastDeployedAt
-              ? new Date(deployment.lastDeployedAt).toLocaleString()
-              : 'Never'}
-          </TableCell>
-          <TableCell onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-1">
-              {canDeploy && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleDeploy}
-                  disabled={isDeploying}
-                >
-                  {isDeploying ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Play className="h-4 w-4" />
-                  )}
-                </Button>
-              )}
-              <Button variant="ghost" size="sm" onClick={() => onEdit(deployment.id)}>
-                <Pencil className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => onDelete(deployment.id)}>
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
+            <Button variant="ghost" size="sm" onClick={() => onEdit(deployment.id)}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => onDelete(deployment.id)}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </TableCell>
+      </TableRow>
+      {isExpanded && (
+        <TableRow>
+          <TableCell colSpan={8} className="bg-muted/50 p-0">
+            <DeploymentProgressPanel
+              deployment={deployment}
+              isExpanded={isExpanded}
+              onRetry={handleDeploy}
+            />
           </TableCell>
         </TableRow>
-        <CollapsibleContent asChild>
-          <TableRow>
-            <TableCell colSpan={8} className="bg-muted/50 p-0">
-              <DeploymentProgressPanel
-                deployment={deployment}
-                isExpanded={isExpanded}
-                onRetry={handleDeploy}
-              />
-            </TableCell>
-          </TableRow>
-        </CollapsibleContent>
-      </>
-    </Collapsible>
+      )}
+    </>
   )
 }

@@ -11,7 +11,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file idp/deployment/v1/deployment.proto.
  */
 export const file_idp_deployment_v1_deployment: GenFile = /*@__PURE__*/
-  fileDesc("CiJpZHAvZGVwbG95bWVudC92MS9kZXBsb3ltZW50LnByb3RvEhFpZHAuZGVwbG95bWVudC52MSJTChBEZXBsb3ltZW50VGFyZ2V0EgwKBHR5cGUYASABKAkSDgoGcmVnaW9uGAIgASgJEg8KB2NsdXN0ZXIYAyABKAkSEAoIaG9zdF91cmwYBCABKAkiigIKHlN0YXJ0RGVwbG95bWVudFdvcmtmbG93UmVxdWVzdBIVCg1kZXBsb3ltZW50X2lkGAEgASgJEg4KBmFwcF9pZBgCIAEoCRIUCgx3b3Jrc3BhY2VfaWQYAyABKAkSDwoHdXNlcl9pZBgEIAEoCRIWCg5nZW5lcmF0b3JfdHlwZRgFIAEoCRIWCg5nZW5lcmF0b3Jfc2x1ZxgGIAEoCRInCgZjb25maWcYByABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EjMKBnRhcmdldBgIIAEoCzIjLmlkcC5kZXBsb3ltZW50LnYxLkRlcGxveW1lbnRUYXJnZXQSDAoEbW9kZRgJIAEoCSJWCh9TdGFydERlcGxveW1lbnRXb3JrZmxvd1Jlc3BvbnNlEhMKC3dvcmtmbG93X2lkGAEgASgJEg8KB3N1Y2Nlc3MYAiABKAgSDQoFZXJyb3IYAyABKAkiMwocR2V0RGVwbG95bWVudFByb2dyZXNzUmVxdWVzdBITCgt3b3JrZmxvd19pZBgBIAEoCSKCAQodR2V0RGVwbG95bWVudFByb2dyZXNzUmVzcG9uc2USFAoMY3VycmVudF9zdGVwGAEgASgJEhMKC3N0ZXBzX3RvdGFsGAIgASgFEhUKDXN0ZXBzX2N1cnJlbnQYAyABKAUSDwoHbWVzc2FnZRgEIAEoCRIOCgZzdGF0dXMYBSABKAkykgIKEURlcGxveW1lbnRTZXJ2aWNlEoABChdTdGFydERlcGxveW1lbnRXb3JrZmxvdxIxLmlkcC5kZXBsb3ltZW50LnYxLlN0YXJ0RGVwbG95bWVudFdvcmtmbG93UmVxdWVzdBoyLmlkcC5kZXBsb3ltZW50LnYxLlN0YXJ0RGVwbG95bWVudFdvcmtmbG93UmVzcG9uc2USegoVR2V0RGVwbG95bWVudFByb2dyZXNzEi8uaWRwLmRlcGxveW1lbnQudjEuR2V0RGVwbG95bWVudFByb2dyZXNzUmVxdWVzdBowLmlkcC5kZXBsb3ltZW50LnYxLkdldERlcGxveW1lbnRQcm9ncmVzc1Jlc3BvbnNlQkpaSGdpdGh1Yi5jb20vZHJld3BheW1lbnQvb3JiaXQvcHJvdG8vZ2VuL2dvL2lkcC9kZXBsb3ltZW50L3YxO2RlcGxveW1lbnR2MWIGcHJvdG8z", [file_google_protobuf_struct]);
+  fileDesc("CiJpZHAvZGVwbG95bWVudC92MS9kZXBsb3ltZW50LnByb3RvEhFpZHAuZGVwbG95bWVudC52MSJTChBEZXBsb3ltZW50VGFyZ2V0EgwKBHR5cGUYASABKAkSDgoGcmVnaW9uGAIgASgJEg8KB2NsdXN0ZXIYAyABKAkSEAoIaG9zdF91cmwYBCABKAkiigIKHlN0YXJ0RGVwbG95bWVudFdvcmtmbG93UmVxdWVzdBIVCg1kZXBsb3ltZW50X2lkGAEgASgJEg4KBmFwcF9pZBgCIAEoCRIUCgx3b3Jrc3BhY2VfaWQYAyABKAkSDwoHdXNlcl9pZBgEIAEoCRIWCg5nZW5lcmF0b3JfdHlwZRgFIAEoCRIWCg5nZW5lcmF0b3Jfc2x1ZxgGIAEoCRInCgZjb25maWcYByABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EjMKBnRhcmdldBgIIAEoCzIjLmlkcC5kZXBsb3ltZW50LnYxLkRlcGxveW1lbnRUYXJnZXQSDAoEbW9kZRgJIAEoCSJWCh9TdGFydERlcGxveW1lbnRXb3JrZmxvd1Jlc3BvbnNlEhMKC3dvcmtmbG93X2lkGAEgASgJEg8KB3N1Y2Nlc3MYAiABKAgSDQoFZXJyb3IYAyABKAkiMwocR2V0RGVwbG95bWVudFByb2dyZXNzUmVxdWVzdBITCgt3b3JrZmxvd19pZBgBIAEoCSIuCg1HZW5lcmF0ZWRGaWxlEgwKBHBhdGgYASABKAkSDwoHY29udGVudBgCIAEoCSK9AQodR2V0RGVwbG95bWVudFByb2dyZXNzUmVzcG9uc2USFAoMY3VycmVudF9zdGVwGAEgASgJEhMKC3N0ZXBzX3RvdGFsGAIgASgFEhUKDXN0ZXBzX2N1cnJlbnQYAyABKAUSDwoHbWVzc2FnZRgEIAEoCRIOCgZzdGF0dXMYBSABKAkSOQoPZ2VuZXJhdGVkX2ZpbGVzGAYgAygLMiAuaWRwLmRlcGxveW1lbnQudjEuR2VuZXJhdGVkRmlsZTKSAgoRRGVwbG95bWVudFNlcnZpY2USgAEKF1N0YXJ0RGVwbG95bWVudFdvcmtmbG93EjEuaWRwLmRlcGxveW1lbnQudjEuU3RhcnREZXBsb3ltZW50V29ya2Zsb3dSZXF1ZXN0GjIuaWRwLmRlcGxveW1lbnQudjEuU3RhcnREZXBsb3ltZW50V29ya2Zsb3dSZXNwb25zZRJ6ChVHZXREZXBsb3ltZW50UHJvZ3Jlc3MSLy5pZHAuZGVwbG95bWVudC52MS5HZXREZXBsb3ltZW50UHJvZ3Jlc3NSZXF1ZXN0GjAuaWRwLmRlcGxveW1lbnQudjEuR2V0RGVwbG95bWVudFByb2dyZXNzUmVzcG9uc2VCSlpIZ2l0aHViLmNvbS9kcmV3cGF5bWVudC9vcmJpdC9wcm90by9nZW4vZ28vaWRwL2RlcGxveW1lbnQvdjE7ZGVwbG95bWVudHYxYgZwcm90bzM", [file_google_protobuf_struct]);
 
 /**
  * @generated from message idp.deployment.v1.DeploymentTarget
@@ -147,6 +147,28 @@ export const GetDeploymentProgressRequestSchema: GenMessage<GetDeploymentProgres
   messageDesc(file_idp_deployment_v1_deployment, 3);
 
 /**
+ * @generated from message idp.deployment.v1.GeneratedFile
+ */
+export type GeneratedFile = Message<"idp.deployment.v1.GeneratedFile"> & {
+  /**
+   * @generated from field: string path = 1;
+   */
+  path: string;
+
+  /**
+   * @generated from field: string content = 2;
+   */
+  content: string;
+};
+
+/**
+ * Describes the message idp.deployment.v1.GeneratedFile.
+ * Use `create(GeneratedFileSchema)` to create a new message.
+ */
+export const GeneratedFileSchema: GenMessage<GeneratedFile> = /*@__PURE__*/
+  messageDesc(file_idp_deployment_v1_deployment, 4);
+
+/**
  * @generated from message idp.deployment.v1.GetDeploymentProgressResponse
  */
 export type GetDeploymentProgressResponse = Message<"idp.deployment.v1.GetDeploymentProgressResponse"> & {
@@ -174,6 +196,11 @@ export type GetDeploymentProgressResponse = Message<"idp.deployment.v1.GetDeploy
    * @generated from field: string status = 5;
    */
   status: string;
+
+  /**
+   * @generated from field: repeated idp.deployment.v1.GeneratedFile generated_files = 6;
+   */
+  generatedFiles: GeneratedFile[];
 };
 
 /**
@@ -181,7 +208,7 @@ export type GetDeploymentProgressResponse = Message<"idp.deployment.v1.GetDeploy
  * Use `create(GetDeploymentProgressResponseSchema)` to create a new message.
  */
 export const GetDeploymentProgressResponseSchema: GenMessage<GetDeploymentProgressResponse> = /*@__PURE__*/
-  messageDesc(file_idp_deployment_v1_deployment, 4);
+  messageDesc(file_idp_deployment_v1_deployment, 5);
 
 /**
  * DeploymentService handles deployment workflow operations

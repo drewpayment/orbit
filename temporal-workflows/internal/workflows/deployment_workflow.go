@@ -37,10 +37,11 @@ type DeploymentWorkflowResult struct {
 
 // DeploymentProgress tracks workflow progress
 type DeploymentProgress struct {
-	CurrentStep  string `json:"currentStep"`
-	StepsTotal   int    `json:"stepsTotal"`
-	StepsCurrent int    `json:"stepsCurrent"`
-	Message      string `json:"message"`
+	CurrentStep    string          `json:"currentStep"`
+	StepsTotal     int             `json:"stepsTotal"`
+	StepsCurrent   int             `json:"stepsCurrent"`
+	Message        string          `json:"message"`
+	GeneratedFiles []GeneratedFile `json:"generatedFiles,omitempty"`
 }
 
 // ExecuteGeneratorResult contains generator execution result
@@ -232,6 +233,7 @@ func DeploymentWorkflow(ctx workflow.Context, input DeploymentWorkflowInput) (*D
 	if mode == "generate" && len(executeResult.GeneratedFiles) > 0 {
 		progress.CurrentStep = "storing"
 		progress.Message = "Storing generated files for review"
+		progress.GeneratedFiles = executeResult.GeneratedFiles // Store in progress for query access
 
 		// Store files via status update - the frontend will handle commit
 		// with user-specified branch and commit message
