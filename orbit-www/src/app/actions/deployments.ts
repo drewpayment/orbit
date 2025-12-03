@@ -334,3 +334,94 @@ export async function getDeploymentGenerators() {
     return { success: false, error: 'Failed to fetch generators', generators: [] }
   }
 }
+
+export async function getGeneratedFiles(deploymentId: string) {
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session?.user) {
+    return { success: false, error: 'Unauthorized', files: [] }
+  }
+
+  const payload = await getPayload({ config })
+
+  try {
+    const deployment = await payload.findByID({
+      collection: 'deployments',
+      id: deploymentId,
+      depth: 0,
+    })
+
+    if (!deployment) {
+      return { success: false, error: 'Deployment not found', files: [] }
+    }
+
+    const files = (deployment.generatedFiles as Array<{ path: string; content: string }>) || []
+    return { success: true, files }
+  } catch (error) {
+    console.error('Failed to get generated files:', error)
+    return { success: false, error: 'Failed to get generated files', files: [] }
+  }
+}
+
+export async function getRepoBranches(appId: string) {
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session?.user) {
+    return { success: false, error: 'Unauthorized', branches: [] }
+  }
+
+  // For now, return default branches
+  // TODO: Implement actual GitHub API call to fetch branches
+  return {
+    success: true,
+    branches: ['main', 'develop'],
+    defaultBranch: 'main',
+  }
+}
+
+export async function commitGeneratedFiles(input: {
+  deploymentId: string
+  branch: string
+  newBranch?: string
+  message: string
+}) {
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session?.user) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  const payload = await getPayload({ config })
+
+  try {
+    const deployment = await payload.findByID({
+      collection: 'deployments',
+      id: input.deploymentId,
+      depth: 1,
+    })
+
+    if (!deployment) {
+      return { success: false, error: 'Deployment not found' }
+    }
+
+    // TODO: Implement actual commit via gRPC to repository service
+    // For now, simulate success
+    console.log('Would commit files:', {
+      deploymentId: input.deploymentId,
+      branch: input.newBranch || input.branch,
+      message: input.message,
+    })
+
+    // Update deployment status
+    await payload.update({
+      collection: 'deployments',
+      id: input.deploymentId,
+      data: {
+        status: 'deployed',
+        lastDeployedAt: new Date().toISOString(),
+      },
+    })
+
+    return { success: true, commitSha: 'placeholder-sha' }
+  } catch (error) {
+    console.error('Failed to commit files:', error)
+    return { success: false, error: 'Failed to commit files' }
+  }
+}
