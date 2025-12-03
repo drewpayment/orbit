@@ -2,7 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { ProgressSteps } from './ProgressSteps'
-import { getDeploymentWorkflowProgress } from '@/app/actions/deployments'
+import { GeneratedFilesView } from './GeneratedFilesView'
+import { CommitToRepoForm } from './CommitToRepoForm'
+import {
+  getDeploymentWorkflowProgress,
+  getGeneratedFiles,
+  getRepoBranches,
+  commitGeneratedFiles,
+} from '@/app/actions/deployments'
 import { AlertCircle, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { Deployment } from '@/payload-types'
@@ -29,6 +36,9 @@ export function DeploymentProgressPanel({
   const [progress, setProgress] = useState<ProgressData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isPolling, setIsPolling] = useState(false)
+  const [files, setFiles] = useState<Array<{ path: string; content: string }>>([])
+  const [branches, setBranches] = useState<string[]>(['main'])
+  const [defaultBranch, setDefaultBranch] = useState('main')
 
   const status = deployment.status || 'pending'
   const workflowId = deployment.workflowId
@@ -69,6 +79,38 @@ export function DeploymentProgressPanel({
       setIsPolling(false)
     }
   }, [isExpanded, workflowId, status, fetchProgress])
+
+  useEffect(() => {
+    if (status === 'generated' && isExpanded) {
+      getGeneratedFiles(deployment.id).then((result) => {
+        if (result.success) {
+          setFiles(result.files)
+        }
+      })
+
+      const appId = typeof deployment.app === 'string' ? deployment.app : deployment.app?.id
+      if (appId) {
+        getRepoBranches(appId).then((result) => {
+          if (result.success) {
+            setBranches(result.branches)
+            if (result.defaultBranch) {
+              setDefaultBranch(result.defaultBranch)
+            }
+          }
+        })
+      }
+    }
+  }, [status, isExpanded, deployment.id, deployment.app])
+
+  const handleCommit = async (data: { branch: string; newBranch?: string; message: string }) => {
+    const result = await commitGeneratedFiles({
+      deploymentId: deployment.id,
+      ...data,
+    })
+    if (!result.success) {
+      throw new Error(result.error)
+    }
+  }
 
   // No workflow yet
   if (!workflowId && status === 'pending') {
@@ -123,14 +165,22 @@ export function DeploymentProgressPanel({
   // Generated state - will add file preview in Phase 4
   if (status === 'generated') {
     return (
-      <div className="p-4">
+      <div className="p-4 space-y-4">
         <div className="rounded-md bg-purple-50 p-4">
           <p className="font-medium text-purple-800">Files Generated</p>
           <p className="text-sm text-purple-700 mt-1">
             Deployment files have been generated. Review and commit below.
           </p>
         </div>
-        {/* GeneratedFilesView will go here */}
+
+        <GeneratedFilesView files={files} />
+
+        <CommitToRepoForm
+          deploymentId={deployment.id}
+          branches={branches}
+          defaultBranch={defaultBranch}
+          onCommit={handleCommit}
+        />
       </div>
     )
   }
