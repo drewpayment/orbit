@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -32,7 +32,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Loader2 } from 'lucide-react'
-import { createDeployment } from '@/app/actions/deployments'
+import { createDeployment, getDeploymentGenerators } from '@/app/actions/deployments'
 
 const formSchema = z.object({
   name: z.string().min(1, 'Name is required').max(50),
@@ -62,6 +62,14 @@ export function AddDeploymentModal({
 }: AddDeploymentModalProps) {
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [generators, setGenerators] = useState<Array<{
+    id: string
+    name: string
+    slug: string
+    type: 'docker-compose' | 'terraform' | 'helm' | 'custom'
+    description?: string
+  }>>([])
+  const [loadingGenerators, setLoadingGenerators] = useState(true)
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -76,6 +84,24 @@ export function AddDeploymentModal({
       port: 3000,
     },
   })
+
+  useEffect(() => {
+    if (open) {
+      setLoadingGenerators(true)
+      getDeploymentGenerators().then((result) => {
+        if (result.success) {
+          setGenerators(result.generators.map(g => ({
+            id: g.id,
+            name: g.name,
+            slug: g.slug,
+            type: g.type,
+            description: g.description ?? undefined,
+          })))
+        }
+        setLoadingGenerators(false)
+      })
+    }
+  }, [open])
 
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true)
@@ -151,13 +177,21 @@ export function AddDeploymentModal({
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select method" />
+                        <SelectValue placeholder={loadingGenerators ? "Loading..." : "Select method"} />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="docker-compose">Docker Compose</SelectItem>
-                      <SelectItem value="terraform" disabled>Terraform (Coming Soon)</SelectItem>
-                      <SelectItem value="helm" disabled>Helm (Coming Soon)</SelectItem>
+                      {loadingGenerators ? (
+                        <SelectItem value="loading" disabled>Loading generators...</SelectItem>
+                      ) : generators.length > 0 ? (
+                        generators.map((gen) => (
+                          <SelectItem key={gen.id} value={gen.type}>
+                            {gen.name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="docker-compose">Docker Compose</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                   <FormMessage />

@@ -988,7 +988,7 @@ export interface Deployment {
      */
     url?: string | null;
   };
-  status?: ('pending' | 'deploying' | 'deployed' | 'failed') | null;
+  status?: ('pending' | 'deploying' | 'generated' | 'deployed' | 'failed') | null;
   lastDeployedAt?: string | null;
   lastDeployedBy?: (string | null) | User;
   healthStatus?: ('healthy' | 'degraded' | 'down' | 'unknown') | null;
@@ -998,6 +998,18 @@ export interface Deployment {
    */
   workflowId?: string | null;
   deploymentError?: string | null;
+  /**
+   * Generated deployment files awaiting commit
+   */
+  generatedFiles?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -1649,6 +1661,7 @@ export interface DeploymentsSelect<T extends boolean = true> {
   healthLastChecked?: T;
   workflowId?: T;
   deploymentError?: T;
+  generatedFiles?: T;
   updatedAt?: T;
   createdAt?: T;
 }
