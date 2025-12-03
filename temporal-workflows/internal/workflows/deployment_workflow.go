@@ -1,7 +1,6 @@
 package workflows
 
 import (
-	"fmt"
 	"time"
 
 	"go.temporal.io/sdk/temporal"
@@ -229,50 +228,51 @@ func DeploymentWorkflow(ctx workflow.Context, input DeploymentWorkflowInput) (*D
 		}, nil
 	}
 
-	// Step 4b: If generate mode, commit files to repo
+	// Step 4b: If generate mode, store files for user to review/commit later
 	if mode == "generate" && len(executeResult.GeneratedFiles) > 0 {
-		progress.CurrentStep = "committing"
-		progress.Message = "Committing generated files to repository"
+		progress.CurrentStep = "storing"
+		progress.Message = "Storing generated files for review"
 
-		commitInput := CommitToRepoInput{
-			DeploymentID:  input.DeploymentID,
-			AppID:         input.AppID,
-			WorkspaceID:   input.WorkspaceID,
-			Files:         executeResult.GeneratedFiles,
-			CommitMessage: fmt.Sprintf("chore(orbit): add deployment config via %s generator", input.GeneratorType),
+		// Store files via status update - the frontend will handle commit
+		// with user-specified branch and commit message
+		statusInput = UpdateDeploymentStatusInput{
+			DeploymentID:   input.DeploymentID,
+			Status:         "generated",
+			GeneratedFiles: executeResult.GeneratedFiles,
 		}
-		var commitResult CommitToRepoResult
-		err = workflow.ExecuteActivity(ctx, ActivityCommitToRepo, commitInput).Get(ctx, &commitResult)
-		if err != nil || !commitResult.Success {
-			errMsg := "failed to commit files to repository"
-			if err != nil {
-				errMsg = err.Error()
-			} else if commitResult.Error != "" {
-				errMsg = commitResult.Error
-			}
-			logger.Error("Commit failed", "error", errMsg)
-			updateStatusOnFailure(errMsg)
+		err = workflow.ExecuteActivity(ctx, ActivityUpdateDeploymentStatus, statusInput).Get(ctx, nil)
+		if err != nil {
+			logger.Error("Failed to store generated files", "error", err)
+			updateStatusOnFailure("failed to store generated files: " + err.Error())
 			return &DeploymentWorkflowResult{
 				Status: "failed",
-				Error:  errMsg,
+				Error:  "failed to store generated files: " + err.Error(),
 			}, nil
 		}
+
+		// For generate mode, we're done - user will commit via UI
+		progress.CurrentStep = "completed"
+		progress.StepsCurrent = 5
+		progress.Message = "Files generated successfully - ready for review"
+
+		logger.Info("Deployment workflow completed (generate mode)",
+			"deploymentID", input.DeploymentID,
+			"filesCount", len(executeResult.GeneratedFiles))
+
+		return &DeploymentWorkflowResult{
+			Status: "completed",
+		}, nil
 	}
 
-	// Step 5: Update status
+	// Step 5: Update status (execute mode only)
 	progress.CurrentStep = "finalizing"
 	progress.StepsCurrent = 5
 	progress.Message = "Finalizing deployment"
 
-	// Set final status based on mode
-	finalStatus := "deployed"
-	if mode == "generate" {
-		finalStatus = "generated"
-	}
-
+	// Execute mode: update status to deployed
 	statusInput = UpdateDeploymentStatusInput{
 		DeploymentID:  input.DeploymentID,
-		Status:        finalStatus,
+		Status:        "deployed",
 		DeploymentURL: executeResult.DeploymentURL,
 	}
 	err = workflow.ExecuteActivity(ctx, ActivityUpdateDeploymentStatus, statusInput).Get(ctx, nil)
@@ -316,8 +316,9 @@ type ExecuteGeneratorInput struct {
 }
 
 type UpdateDeploymentStatusInput struct {
-	DeploymentID  string `json:"deploymentId"`
-	Status        string `json:"status"`
-	DeploymentURL string `json:"deploymentUrl,omitempty"`
-	ErrorMessage  string `json:"errorMessage,omitempty"`
+	DeploymentID   string          `json:"deploymentId"`
+	Status         string          `json:"status"`
+	DeploymentURL  string          `json:"deploymentUrl,omitempty"`
+	ErrorMessage   string          `json:"errorMessage,omitempty"`
+	GeneratedFiles []GeneratedFile `json:"generatedFiles,omitempty"`
 }
