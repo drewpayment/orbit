@@ -18,6 +18,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import type { Deployment } from '@/payload-types'
+import { DeploymentProgressPanel } from './DeploymentProgressPanel'
 
 const statusConfig = {
   healthy: { icon: CheckCircle2, color: 'text-green-500' },
@@ -125,16 +126,12 @@ export function DeploymentRow({
         </TableRow>
         <CollapsibleContent asChild>
           <TableRow>
-            <TableCell colSpan={8} className="bg-muted/50 p-4">
-              {/* Progress panel will go here in next task */}
-              <div className="text-sm text-muted-foreground">
-                Deployment details for {deployment.name}
-                {deployment.workflowId && (
-                  <span className="ml-2 font-mono text-xs">
-                    Workflow: {deployment.workflowId}
-                  </span>
-                )}
-              </div>
+            <TableCell colSpan={8} className="bg-muted/50 p-0">
+              <DeploymentProgressPanel
+                deployment={deployment}
+                isExpanded={isExpanded}
+                onRetry={handleDeploy}
+              />
             </TableCell>
           </TableRow>
         </CollapsibleContent>
