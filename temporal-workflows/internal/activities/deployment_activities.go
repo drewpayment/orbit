@@ -17,7 +17,7 @@ import (
 // PayloadDeploymentClient defines interface for Payload CMS operations
 type PayloadDeploymentClient interface {
 	GetGeneratorBySlug(ctx context.Context, slug string) (*GeneratorData, error)
-	UpdateDeploymentStatus(ctx context.Context, deploymentID, status, url, errorMsg string) error
+	UpdateDeploymentStatus(ctx context.Context, deploymentID, status, url, errorMsg string, generatedFiles []GeneratedFile) error
 }
 
 // GeneratorData represents a deployment generator from Payload
@@ -92,10 +92,11 @@ type ExecuteGeneratorResult struct {
 }
 
 type UpdateDeploymentStatusInput struct {
-	DeploymentID  string `json:"deploymentId"`
-	Status        string `json:"status"`
-	DeploymentURL string `json:"deploymentUrl,omitempty"`
-	ErrorMessage  string `json:"errorMessage,omitempty"`
+	DeploymentID   string          `json:"deploymentId"`
+	Status         string          `json:"status"`
+	DeploymentURL  string          `json:"deploymentUrl,omitempty"`
+	ErrorMessage   string          `json:"errorMessage,omitempty"`
+	GeneratedFiles []GeneratedFile `json:"generatedFiles,omitempty"`
 }
 
 type CommitToRepoInput struct {
@@ -383,7 +384,8 @@ func (a *DeploymentActivities) executeDockerCompose(ctx context.Context, input E
 func (a *DeploymentActivities) UpdateDeploymentStatus(ctx context.Context, input UpdateDeploymentStatusInput) error {
 	a.logger.Info("Updating deployment status",
 		"deploymentID", input.DeploymentID,
-		"status", input.Status)
+		"status", input.Status,
+		"filesCount", len(input.GeneratedFiles))
 
 	if a.payloadClient == nil {
 		// Log and return success if no client (for testing)
@@ -397,6 +399,7 @@ func (a *DeploymentActivities) UpdateDeploymentStatus(ctx context.Context, input
 		input.Status,
 		input.DeploymentURL,
 		input.ErrorMessage,
+		input.GeneratedFiles,
 	)
 }
 
