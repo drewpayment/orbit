@@ -158,6 +158,28 @@ func main() {
 	// Register health check workflow
 	w.RegisterWorkflow(workflows.HealthCheckWorkflow)
 
+	// Build service address
+	buildServiceAddr := os.Getenv("BUILD_SERVICE_ADDRESS")
+	if buildServiceAddr == "" {
+		buildServiceAddr = "localhost:50053"
+	}
+
+	// Register build workflow
+	w.RegisterWorkflow(workflows.BuildWorkflow)
+
+	// Create and register build activities
+	// TODO: Create PayloadBuildClient when implementing full integration
+	var buildPayloadClient activities.PayloadBuildClient = nil
+	buildActivities := activities.NewBuildActivities(
+		buildPayloadClient,
+		logger,
+	)
+	w.RegisterActivity(buildActivities.AnalyzeRepository)
+	w.RegisterActivity(buildActivities.BuildAndPushImage)
+	w.RegisterActivity(buildActivities.UpdateBuildStatus)
+
+	log.Printf("Build service address: %s", buildServiceAddr)
+
 	log.Println("Starting Temporal worker...")
 	log.Printf("Temporal address: %s", temporalAddress)
 	log.Printf("Temporal namespace: %s", temporalNamespace)
