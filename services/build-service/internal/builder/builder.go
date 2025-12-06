@@ -163,7 +163,10 @@ func (b *Builder) cloneRepo(ctx context.Context, req *BuildRequest, buildDir str
 	if req.InstallationToken != "" {
 		// Create a credential helper script that outputs the token
 		// For GitHub App installation tokens, use x-access-token as username
-		helperScript := fmt.Sprintf("#!/bin/sh\necho '%s'\n", req.InstallationToken)
+		// Escape single quotes in the token for shell safety
+		// Replace ' with '\'' (end quote, escaped quote, start quote)
+		escapedToken := strings.ReplaceAll(req.InstallationToken, "'", "'\\''")
+		helperScript := fmt.Sprintf("#!/bin/sh\necho '%s'\n", escapedToken)
 		helperPath = filepath.Join(os.TempDir(), fmt.Sprintf("git-askpass-%s", req.RequestID))
 
 		if err := os.WriteFile(helperPath, []byte(helperScript), 0700); err != nil {
