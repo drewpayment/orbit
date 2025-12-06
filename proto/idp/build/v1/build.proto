@@ -1,0 +1,116 @@
+// proto/idp/build/v1/build.proto
+syntax = "proto3";
+
+package idp.build.v1;
+
+option go_package = "github.com/drewpayment/orbit/proto/gen/go/idp/build/v1;buildv1";
+
+// BuildService handles container image building via Railpack
+service BuildService {
+  // Analyze a repository to detect build configuration
+  rpc AnalyzeRepository(AnalyzeRepositoryRequest) returns (AnalyzeRepositoryResponse);
+
+  // Build and push a container image
+  rpc BuildImage(BuildImageRequest) returns (BuildImageResponse);
+
+  // Stream build logs in real-time
+  rpc StreamBuildLogs(StreamBuildLogsRequest) returns (stream StreamBuildLogsResponse);
+}
+
+// AnalyzeRepositoryRequest contains parameters for repository analysis
+message AnalyzeRepositoryRequest {
+  string repo_url = 1;           // e.g., https://github.com/org/repo
+  string ref = 2;                // Branch, tag, or commit SHA
+  string installation_token = 3; // GitHub App installation token for private repos
+}
+
+// AnalyzeRepositoryResponse contains the analysis results
+message AnalyzeRepositoryResponse {
+  bool detected = 1;                    // Whether Railpack could detect the project
+  DetectedBuildConfig config = 2;       // Detected configuration (if detected=true)
+  string error = 3;                     // Error message (if detected=false)
+  repeated string detected_files = 4;   // Files that triggered detection
+}
+
+// DetectedBuildConfig contains Railpack-detected build settings
+message DetectedBuildConfig {
+  string language = 1;           // e.g., "nodejs", "python", "go"
+  string language_version = 2;   // e.g., "22", "3.12", "1.22"
+  string framework = 3;          // e.g., "nextjs", "fastapi", "gin"
+  string build_command = 4;      // e.g., "npm run build"
+  string start_command = 5;      // e.g., "npm start"
+}
+
+// BuildImageRequest contains parameters for building an image
+message BuildImageRequest {
+  string request_id = 1;              // Unique request identifier
+  string app_id = 2;                  // Orbit App ID
+  string repo_url = 3;                // Repository URL
+  string ref = 4;                     // Branch, tag, or commit SHA
+  string installation_token = 5;      // GitHub App installation token
+
+  // Build configuration (can override detected values)
+  optional string language_version = 6;
+  optional string build_command = 7;
+  optional string start_command = 8;
+  map<string, string> build_env = 9;  // Environment variables for build
+
+  // Registry configuration
+  RegistryConfig registry = 10;
+  string image_tag = 11;              // Tag for the built image
+}
+
+// RegistryConfig contains container registry authentication
+message RegistryConfig {
+  RegistryType type = 1;
+  string url = 2;                     // Registry URL (e.g., ghcr.io, myregistry.azurecr.io)
+  string repository = 3;              // Image repository path (e.g., org/app-name)
+  string token = 4;                   // Auth token (installation token for GHCR, ACR token for ACR)
+  optional string username = 5;       // Username (for ACR)
+}
+
+// RegistryType enum
+enum RegistryType {
+  REGISTRY_TYPE_UNSPECIFIED = 0;
+  REGISTRY_TYPE_GHCR = 1;
+  REGISTRY_TYPE_ACR = 2;
+}
+
+// BuildImageResponse contains the build results
+message BuildImageResponse {
+  bool success = 1;
+  string image_url = 2;               // Full image URL (e.g., ghcr.io/org/app:tag)
+  string image_digest = 3;            // Image digest (sha256:...)
+  string error = 4;                   // Error message if failed
+  repeated BuildStep steps = 5;       // Build steps for progress tracking
+}
+
+// BuildStep represents a step in the build process
+message BuildStep {
+  string name = 1;
+  BuildStepStatus status = 2;
+  string message = 3;
+  int64 duration_ms = 4;
+}
+
+// BuildStepStatus enum
+enum BuildStepStatus {
+  BUILD_STEP_STATUS_UNSPECIFIED = 0;
+  BUILD_STEP_STATUS_PENDING = 1;
+  BUILD_STEP_STATUS_RUNNING = 2;
+  BUILD_STEP_STATUS_COMPLETED = 3;
+  BUILD_STEP_STATUS_FAILED = 4;
+}
+
+// StreamBuildLogsRequest for streaming build output
+message StreamBuildLogsRequest {
+  string request_id = 1;
+}
+
+// StreamBuildLogsResponse represents a single log line
+message StreamBuildLogsResponse {
+  int64 timestamp = 1;
+  string level = 2;                   // "info", "warn", "error"
+  string message = 3;
+  string step = 4;                    // Which build step this belongs to
+}
