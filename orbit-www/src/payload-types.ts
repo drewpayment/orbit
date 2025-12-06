@@ -86,6 +86,7 @@ export interface Config {
     deployments: Deployment;
     'deployment-generators': DeploymentGenerator;
     'health-checks': HealthCheck;
+    'registry-configs': RegistryConfig;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -111,6 +112,7 @@ export interface Config {
     deployments: DeploymentsSelect<false> | DeploymentsSelect<true>;
     'deployment-generators': DeploymentGeneratorsSelect<false> | DeploymentGeneratorsSelect<true>;
     'health-checks': HealthChecksSelect<false> | HealthChecksSelect<true>;
+    'registry-configs': RegistryConfigsSelect<false> | RegistryConfigsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -948,7 +950,103 @@ export interface App {
      */
     expectedStatus?: number | null;
   };
+  /**
+   * Railpack build configuration
+   */
+  buildConfig?: {
+    /**
+     * Detected language (e.g., nodejs, python, go)
+     */
+    language?: string | null;
+    /**
+     * Language version (e.g., 22, 3.12)
+     */
+    languageVersion?: string | null;
+    /**
+     * Detected framework (e.g., nextjs, fastapi)
+     */
+    framework?: string | null;
+    /**
+     * Build command override
+     */
+    buildCommand?: string | null;
+    /**
+     * Start command override
+     */
+    startCommand?: string | null;
+    /**
+     * Path to Dockerfile (if Railpack detection fails)
+     */
+    dockerfilePath?: string | null;
+  };
+  /**
+   * Information about the most recent build
+   */
+  latestBuild?: {
+    /**
+     * Full image URL (e.g., ghcr.io/org/app:tag)
+     */
+    imageUrl?: string | null;
+    /**
+     * Image digest (sha256:...)
+     */
+    imageDigest?: string | null;
+    /**
+     * Image tag used
+     */
+    imageTag?: string | null;
+    builtAt?: string | null;
+    builtBy?: (string | null) | User;
+    /**
+     * Temporal workflow ID for the build
+     */
+    buildWorkflowId?: string | null;
+    status?: ('none' | 'analyzing' | 'building' | 'success' | 'failed') | null;
+    /**
+     * Error message if build failed
+     */
+    error?: string | null;
+  };
+  /**
+   * Container registry for built images (uses workspace default if not set)
+   */
+  registryConfig?: (string | null) | RegistryConfig;
   status?: ('healthy' | 'degraded' | 'down' | 'unknown') | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "registry-configs".
+ */
+export interface RegistryConfig {
+  id: string;
+  /**
+   * Display name (e.g., "Production GHCR", "Dev ACR")
+   */
+  name: string;
+  workspace: string | Workspace;
+  type: 'ghcr' | 'acr';
+  /**
+   * Use as default registry for this workspace
+   */
+  isDefault?: boolean | null;
+  /**
+   * GitHub owner/org for GHCR (e.g., "drewpayment")
+   */
+  ghcrOwner?: string | null;
+  /**
+   * ACR login server (e.g., "myregistry.azurecr.io")
+   */
+  acrLoginServer?: string | null;
+  /**
+   * ACR token name or username
+   */
+  acrUsername?: string | null;
+  /**
+   * ACR repository-scoped token
+   */
+  acrToken?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -1174,6 +1272,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'health-checks';
         value: string | HealthCheck;
+      } | null)
+    | ({
+        relationTo: 'registry-configs';
+        value: string | RegistryConfig;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -1633,6 +1735,29 @@ export interface AppsSelect<T extends boolean = true> {
         method?: T;
         expectedStatus?: T;
       };
+  buildConfig?:
+    | T
+    | {
+        language?: T;
+        languageVersion?: T;
+        framework?: T;
+        buildCommand?: T;
+        startCommand?: T;
+        dockerfilePath?: T;
+      };
+  latestBuild?:
+    | T
+    | {
+        imageUrl?: T;
+        imageDigest?: T;
+        imageTag?: T;
+        builtAt?: T;
+        builtBy?: T;
+        buildWorkflowId?: T;
+        status?: T;
+        error?: T;
+      };
+  registryConfig?: T;
   status?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -1698,6 +1823,22 @@ export interface HealthChecksSelect<T extends boolean = true> {
   responseTime?: T;
   error?: T;
   checkedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "registry-configs_select".
+ */
+export interface RegistryConfigsSelect<T extends boolean = true> {
+  name?: T;
+  workspace?: T;
+  type?: T;
+  isDefault?: T;
+  ghcrOwner?: T;
+  acrLoginServer?: T;
+  acrUsername?: T;
+  acrToken?: T;
   updatedAt?: T;
   createdAt?: T;
 }
