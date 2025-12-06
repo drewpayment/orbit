@@ -286,6 +286,151 @@ export const Apps: CollectionConfig = {
         },
       ],
     },
+    // Build configuration (detected or user-specified)
+    {
+      name: 'buildConfig',
+      type: 'group',
+      admin: {
+        description: 'Railpack build configuration',
+      },
+      fields: [
+        {
+          name: 'language',
+          type: 'text',
+          admin: {
+            description: 'Detected language (e.g., nodejs, python, go)',
+            readOnly: true,
+          },
+        },
+        {
+          name: 'languageVersion',
+          type: 'text',
+          admin: {
+            description: 'Language version (e.g., 22, 3.12)',
+          },
+        },
+        {
+          name: 'framework',
+          type: 'text',
+          admin: {
+            description: 'Detected framework (e.g., nextjs, fastapi)',
+            readOnly: true,
+          },
+        },
+        {
+          name: 'buildCommand',
+          type: 'text',
+          admin: {
+            description: 'Build command override',
+          },
+        },
+        {
+          name: 'startCommand',
+          type: 'text',
+          admin: {
+            description: 'Start command override',
+          },
+        },
+        {
+          name: 'dockerfilePath',
+          type: 'text',
+          admin: {
+            description: 'Path to Dockerfile (if Railpack detection fails)',
+          },
+        },
+      ],
+    },
+    // Latest build information
+    {
+      name: 'latestBuild',
+      type: 'group',
+      admin: {
+        description: 'Information about the most recent build',
+      },
+      fields: [
+        {
+          name: 'imageUrl',
+          type: 'text',
+          admin: {
+            description: 'Full image URL (e.g., ghcr.io/org/app:tag)',
+            readOnly: true,
+          },
+        },
+        {
+          name: 'imageDigest',
+          type: 'text',
+          admin: {
+            description: 'Image digest (sha256:...)',
+            readOnly: true,
+          },
+        },
+        {
+          name: 'imageTag',
+          type: 'text',
+          admin: {
+            description: 'Image tag used',
+            readOnly: true,
+          },
+        },
+        {
+          name: 'builtAt',
+          type: 'date',
+          admin: {
+            readOnly: true,
+          },
+        },
+        {
+          name: 'builtBy',
+          type: 'relationship',
+          relationTo: 'users',
+          admin: {
+            readOnly: true,
+          },
+        },
+        {
+          name: 'buildWorkflowId',
+          type: 'text',
+          admin: {
+            description: 'Temporal workflow ID for the build',
+            readOnly: true,
+          },
+        },
+        {
+          name: 'status',
+          type: 'select',
+          options: [
+            { label: 'Never Built', value: 'none' },
+            { label: 'Analyzing', value: 'analyzing' },
+            { label: 'Building', value: 'building' },
+            { label: 'Success', value: 'success' },
+            { label: 'Failed', value: 'failed' },
+          ],
+          defaultValue: 'none',
+          admin: {
+            readOnly: true,
+          },
+        },
+        {
+          name: 'error',
+          type: 'textarea',
+          admin: {
+            description: 'Error message if build failed',
+            readOnly: true,
+            condition: (data) => data?.latestBuild?.status === 'failed',
+          },
+        },
+      ],
+    },
+    // Registry configuration for this app
+    {
+      name: 'registryConfig',
+      type: 'relationship',
+      relationTo: 'registry-configs',
+      admin: {
+        description: 'Container registry for built images (uses workspace default if not set)',
+        position: 'sidebar',
+      },
+    },
     {
       name: 'status',
       type: 'select',
