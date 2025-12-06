@@ -26,6 +26,7 @@ import { Apps } from './collections/Apps'
 import { Deployments } from './collections/Deployments'
 import { DeploymentGenerators } from './collections/DeploymentGenerators'
 import { HealthChecks } from './collections/HealthChecks'
+import { RegistryConfigs } from './collections/RegistryConfigs'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -57,6 +58,7 @@ export default buildConfig({
     Deployments,
     DeploymentGenerators,
     HealthChecks,
+    RegistryConfigs,
   ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
