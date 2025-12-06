@@ -78,6 +78,23 @@ services:
       - ORBIT_INTERNAL_API_KEY=${ORBIT_INTERNAL_API_KEY:-orbit-internal-dev-key}
     restart: unless-stopped
 
+  build-service:
+    container_name: orbit-build-service
+    build:
+      context: .
+      dockerfile: services/build-service/Dockerfile
+    ports:
+      - "50054:50054"
+    environment:
+      - BUILD_SERVICE_PORT=50054
+      - BUILD_WORK_DIR=/tmp/orbit-builds
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - build-workdir:/tmp/orbit-builds
+    depends_on:
+      - temporal-server
+    restart: unless-stopped
+
   # Application Services
   orbit-www:
     container_name: orbit-www
@@ -209,3 +226,4 @@ volumes:
     external: true
   postgres-data:
   redis-data:
+  build-workdir:
