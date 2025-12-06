@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import type { App, Deployment, Template, HealthCheck } from '@/payload-types'
 import { AddDeploymentModal } from './AddDeploymentModal'
+import { BuildSection } from './BuildSection'
 import { getHealthHistory } from '@/app/actions/apps'
 import { DeploymentRow } from './DeploymentRow'
 import { startDeployment, deleteDeployment } from '@/app/actions/deployments'
@@ -202,6 +203,14 @@ export function AppDetail({ app, deployments }: AppDetailProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Build Section */}
+      <BuildSection
+        appId={app.id}
+        appName={app.name}
+        hasRepository={!!app.repository?.url}
+        hasRegistryConfig={!!app.registryConfig}
+      />
 
       {/* Deployments */}
       <Card>
