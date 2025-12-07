@@ -197,6 +197,12 @@ func (b *Builder) buildImage(ctx context.Context, req *BuildRequest, buildDir, i
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 	}
 
+	// Pass package manager to Railpack if specified
+	if req.PackageManager != "" {
+		b.logger.Info("Using specified package manager", "pm", req.PackageManager)
+		cmd.Env = append(cmd.Env, fmt.Sprintf("RAILPACK_PACKAGE_MANAGER=%s", req.PackageManager))
+	}
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		outputStr := string(output)
@@ -310,19 +316,44 @@ func extractBuildErrorSummary(output string) string {
 			continue
 		}
 
-		// Check for specific error messages
+		// Lockfile errors
 		if strings.Contains(line, "Lockfile not found") {
-			return "Lockfile not found. Please commit yarn.lock, package-lock.json, or pnpm-lock.yaml to your repository."
+			return "Lockfile not found. Please commit a lockfile or ensure package manager was selected."
 		}
+
+		// npm errors
 		if strings.Contains(line, "npm ERR!") {
 			return "npm install failed: " + line
 		}
-		if strings.Contains(line, "yarn error") {
+
+		// yarn errors (classic and berry)
+		if strings.Contains(line, "error ") && strings.Contains(strings.ToLower(output), "yarn") {
 			return "yarn install failed: " + line
 		}
-		if strings.Contains(line, "COPY failed") {
-			return "COPY failed: " + line
+		if strings.HasPrefix(line, "YN") && strings.Contains(line, "Error") {
+			return "yarn install failed: " + line
 		}
+
+		// pnpm errors
+		if strings.Contains(line, "ERR_PNPM") {
+			return "pnpm install failed: " + line
+		}
+
+		// bun errors
+		if strings.Contains(line, "error:") && strings.Contains(strings.ToLower(output), "bun") {
+			return "bun install failed: " + line
+		}
+
+		// Node.js version errors
+		if strings.Contains(line, "Unsupported engine") || strings.Contains(line, `engine "node"`) {
+			return "Node.js version mismatch: " + line
+		}
+
+		// COPY failed (common Docker error)
+		if strings.Contains(line, "COPY failed") {
+			return line
+		}
+
 		if strings.Contains(line, "returned a non-zero code") {
 			// Get the command that failed from the previous line
 			if i > 0 {
@@ -346,5 +377,5 @@ func extractBuildErrorSummary(output string) string {
 		}
 	}
 
-	return "build failed with unknown error"
+	return "Build failed. Check logs for details."
 }
