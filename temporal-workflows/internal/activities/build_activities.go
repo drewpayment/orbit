@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	buildv1 "github.com/drewpayment/orbit/proto/gen/go/idp/build/v1"
+	"github.com/drewpayment/orbit/temporal-workflows/pkg/types"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -41,12 +42,20 @@ type BuildActivities struct {
 
 // NewBuildActivities creates a new instance
 func NewBuildActivities(payloadClient PayloadBuildClient, logger *slog.Logger) *BuildActivities {
+	return NewBuildActivitiesWithAddr(payloadClient, logger, "")
+}
+
+// NewBuildActivitiesWithAddr creates a new instance with custom address
+func NewBuildActivitiesWithAddr(payloadClient PayloadBuildClient, logger *slog.Logger, buildServiceAddr string) *BuildActivities {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	if buildServiceAddr == "" {
+		buildServiceAddr = "build-service:50054" // Docker service name and port
+	}
 	return &BuildActivities{
 		payloadClient:    payloadClient,
-		buildServiceAddr: "localhost:50053", // TODO: Make configurable
+		buildServiceAddr: buildServiceAddr,
 		logger:           logger,
 	}
 }
@@ -58,15 +67,7 @@ type AnalyzeRepositoryInput struct {
 	InstallationToken string `json:"installationToken"`
 }
 
-type AnalyzeRepositoryResult struct {
-	Detected        bool   `json:"detected"`
-	Language        string `json:"language"`
-	LanguageVersion string `json:"languageVersion"`
-	Framework       string `json:"framework"`
-	BuildCommand    string `json:"buildCommand"`
-	StartCommand    string `json:"startCommand"`
-	Error           string `json:"error,omitempty"`
-}
+// AnalyzeRepositoryResult is now imported from types package
 
 type BuildRegistryConfig struct {
 	Type       string `json:"type"` // "ghcr" or "acr"
@@ -88,6 +89,7 @@ type BuildAndPushInput struct {
 	BuildEnv          map[string]string   `json:"buildEnv"`
 	Registry          BuildRegistryConfig `json:"registry"`
 	ImageTag          string              `json:"imageTag"`
+	PackageManager    string              `json:"packageManager,omitempty"` // "npm", "yarn", "pnpm", "bun", or "" for auto
 }
 
 type BuildAndPushResult struct {
@@ -115,7 +117,7 @@ type UpdateBuildStatusInput struct {
 }
 
 // AnalyzeRepository calls build service gRPC to analyze repository
-func (a *BuildActivities) AnalyzeRepository(ctx context.Context, input AnalyzeRepositoryInput) (*AnalyzeRepositoryResult, error) {
+func (a *BuildActivities) AnalyzeRepository(ctx context.Context, input AnalyzeRepositoryInput) (*types.AnalyzeRepositoryResult, error) {
 	a.logger.Info("Analyzing repository",
 		"repoURL", input.RepoURL,
 		"ref", input.Ref)
@@ -150,7 +152,7 @@ func (a *BuildActivities) AnalyzeRepository(ctx context.Context, input AnalyzeRe
 	}
 
 	// Convert proto response to workflow result
-	result := &AnalyzeRepositoryResult{
+	result := &types.AnalyzeRepositoryResult{
 		Detected: resp.Detected,
 		Error:    resp.Error,
 	}
@@ -161,6 +163,19 @@ func (a *BuildActivities) AnalyzeRepository(ctx context.Context, input AnalyzeRe
 		result.Framework = resp.Config.Framework
 		result.BuildCommand = resp.Config.BuildCommand
 		result.StartCommand = resp.Config.StartCommand
+
+		// Map package manager info
+		if resp.Config.PackageManager != nil {
+			result.PackageManager = &types.PackageManagerInfo{
+				Detected:         resp.Config.PackageManager.Detected,
+				Name:             resp.Config.PackageManager.Name,
+				Source:           resp.Config.PackageManager.Source,
+				Lockfile:         resp.Config.PackageManager.Lockfile,
+				RequestedVersion: resp.Config.PackageManager.RequestedVersion,
+				VersionSupported: resp.Config.PackageManager.VersionSupported,
+				SupportedRange:   resp.Config.PackageManager.SupportedRange,
+			}
+		}
 	}
 
 	a.logger.Info("Repository analysis complete",
@@ -235,7 +250,8 @@ func (a *BuildActivities) BuildAndPushImage(ctx context.Context, input BuildAndP
 			Token:      input.Registry.Token,
 			Username:   &input.Registry.Username,
 		},
-		ImageTag: input.ImageTag,
+		ImageTag:       input.ImageTag,
+		PackageManager: input.PackageManager,
 	}
 
 	// Set optional overrides
