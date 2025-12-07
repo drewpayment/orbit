@@ -19,7 +19,7 @@ type BuildServiceClient interface {
 
 // PayloadBuildClient interface for Payload CMS operations
 type PayloadBuildClient interface {
-	UpdateAppBuildStatus(ctx context.Context, appID string, status string, imageURL string, imageDigest string, errorMsg string, buildConfig *DetectedBuildConfig) error
+	UpdateAppBuildStatus(ctx context.Context, appID string, status string, imageURL string, imageDigest string, errorMsg string, buildConfig *types.DetectedBuildConfig) error
 	GetGitHubInstallationToken(ctx context.Context, workspaceID string) (string, error)
 	GetRegistryConfig(ctx context.Context, registryID string) (*RegistryConfigData, error)
 }
@@ -99,21 +99,14 @@ type BuildAndPushResult struct {
 	Error       string `json:"error,omitempty"`
 }
 
-type DetectedBuildConfig struct {
-	Language        string `json:"language"`
-	LanguageVersion string `json:"languageVersion"`
-	Framework       string `json:"framework"`
-	BuildCommand    string `json:"buildCommand"`
-	StartCommand    string `json:"startCommand"`
-}
-
 type UpdateBuildStatusInput struct {
-	AppID       string               `json:"appId"`
-	Status      string               `json:"status"`
-	ImageURL    string               `json:"imageUrl,omitempty"`
-	ImageDigest string               `json:"imageDigest,omitempty"`
-	Error       string               `json:"error,omitempty"`
-	BuildConfig *DetectedBuildConfig `json:"buildConfig,omitempty"`
+	AppID            string                     `json:"appId"`
+	Status           string                     `json:"status"`
+	ImageURL         string                     `json:"imageUrl,omitempty"`
+	ImageDigest      string                     `json:"imageDigest,omitempty"`
+	Error            string                     `json:"error,omitempty"`
+	BuildConfig      *types.DetectedBuildConfig `json:"buildConfig,omitempty"`
+	AvailableChoices []string                   `json:"availableChoices,omitempty"`
 }
 
 // AnalyzeRepository calls build service gRPC to analyze repository

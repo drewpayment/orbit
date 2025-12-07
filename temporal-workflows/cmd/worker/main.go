@@ -13,6 +13,7 @@ import (
 	"github.com/drewpayment/orbit/temporal-workflows/internal/services"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/workflows"
 	"github.com/drewpayment/orbit/temporal-workflows/pkg/clients"
+	"github.com/drewpayment/orbit/temporal-workflows/pkg/types"
 )
 
 // healthClientAdapter adapts services.PayloadHealthClientImpl to activities.PayloadHealthClient
@@ -32,6 +33,43 @@ func (a *healthClientAdapter) CreateHealthCheck(ctx context.Context, appID strin
 		ResponseTime: result.ResponseTime,
 		Error:        result.Error,
 	})
+}
+
+// buildClientAdapter adapts services.PayloadBuildClientImpl to activities.PayloadBuildClient
+type buildClientAdapter struct {
+	impl *services.PayloadBuildClientImpl
+}
+
+func (a *buildClientAdapter) UpdateAppBuildStatus(ctx context.Context, appID, status, imageURL, imageDigest, errorMsg string, buildConfig *types.DetectedBuildConfig) error {
+	var svcBuildConfig *services.DetectedBuildConfig
+	if buildConfig != nil {
+		svcBuildConfig = &services.DetectedBuildConfig{
+			Language:        buildConfig.Language,
+			LanguageVersion: buildConfig.LanguageVersion,
+			Framework:       buildConfig.Framework,
+			BuildCommand:    buildConfig.BuildCommand,
+			StartCommand:    buildConfig.StartCommand,
+		}
+	}
+	return a.impl.UpdateAppBuildStatus(ctx, appID, status, imageURL, imageDigest, errorMsg, svcBuildConfig)
+}
+
+func (a *buildClientAdapter) GetGitHubInstallationToken(ctx context.Context, workspaceID string) (string, error) {
+	return a.impl.GetGitHubInstallationToken(ctx, workspaceID)
+}
+
+func (a *buildClientAdapter) GetRegistryConfig(ctx context.Context, registryID string) (*activities.RegistryConfigData, error) {
+	result, err := a.impl.GetRegistryConfig(ctx, registryID)
+	if err != nil {
+		return nil, err
+	}
+	return &activities.RegistryConfigData{
+		Type:           result.Type,
+		GHCROwner:      result.GHCROwner,
+		ACRLoginServer: result.ACRLoginServer,
+		ACRUsername:    result.ACRUsername,
+		ACRToken:       result.ACRToken,
+	}, nil
 }
 
 func main() {
@@ -161,18 +199,19 @@ func main() {
 	// Build service address
 	buildServiceAddr := os.Getenv("BUILD_SERVICE_ADDRESS")
 	if buildServiceAddr == "" {
-		buildServiceAddr = "localhost:50053"
+		buildServiceAddr = "build-service:50054"
 	}
 
 	// Register build workflow
 	w.RegisterWorkflow(workflows.BuildWorkflow)
 
 	// Create and register build activities
-	// TODO: Create PayloadBuildClient when implementing full integration
-	var buildPayloadClient activities.PayloadBuildClient = nil
-	buildActivities := activities.NewBuildActivities(
+	payloadBuildClientImpl := services.NewPayloadBuildClient(orbitAPIURL, orbitInternalAPIKey)
+	buildPayloadClient := &buildClientAdapter{impl: payloadBuildClientImpl}
+	buildActivities := activities.NewBuildActivitiesWithAddr(
 		buildPayloadClient,
 		logger,
+		buildServiceAddr,
 	)
 	w.RegisterActivity(buildActivities.AnalyzeRepository)
 	w.RegisterActivity(buildActivities.BuildAndPushImage)
