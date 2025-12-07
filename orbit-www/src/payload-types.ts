@@ -917,6 +917,10 @@ export interface App {
      * GitHub App installation ID
      */
     installationId?: string | null;
+    /**
+     * Branch to build from (default: main)
+     */
+    branch?: string | null;
   };
   origin: {
     type: 'template' | 'imported' | 'manual';
@@ -1001,7 +1005,19 @@ export interface App {
      * Temporal workflow ID for the build
      */
     buildWorkflowId?: string | null;
-    status?: ('none' | 'analyzing' | 'building' | 'success' | 'failed') | null;
+    status?: ('none' | 'analyzing' | 'awaiting_input' | 'building' | 'success' | 'failed') | null;
+    /**
+     * Available package manager choices when awaiting_input
+     */
+    availableChoices?:
+      | {
+          [k: string]: unknown;
+        }
+      | unknown[]
+      | string
+      | number
+      | boolean
+      | null;
     /**
      * Error message if build failed
      */
@@ -1716,6 +1732,7 @@ export interface AppsSelect<T extends boolean = true> {
         name?: T;
         url?: T;
         installationId?: T;
+        branch?: T;
       };
   origin?:
     | T
@@ -1755,6 +1772,7 @@ export interface AppsSelect<T extends boolean = true> {
         builtBy?: T;
         buildWorkflowId?: T;
         status?: T;
+        availableChoices?: T;
         error?: T;
       };
   registryConfig?: T;

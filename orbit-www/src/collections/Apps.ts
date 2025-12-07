@@ -185,6 +185,14 @@ export const Apps: CollectionConfig = {
             description: 'GitHub App installation ID',
           },
         },
+        {
+          name: 'branch',
+          type: 'text',
+          defaultValue: 'main',
+          admin: {
+            description: 'Branch to build from (default: main)',
+          },
+        },
       ],
     },
     {
@@ -401,6 +409,7 @@ export const Apps: CollectionConfig = {
           options: [
             { label: 'Never Built', value: 'none' },
             { label: 'Analyzing', value: 'analyzing' },
+            { label: 'Awaiting Input', value: 'awaiting_input' },
             { label: 'Building', value: 'building' },
             { label: 'Success', value: 'success' },
             { label: 'Failed', value: 'failed' },
@@ -408,6 +417,15 @@ export const Apps: CollectionConfig = {
           defaultValue: 'none',
           admin: {
             readOnly: true,
+          },
+        },
+        {
+          name: 'availableChoices',
+          type: 'json',
+          admin: {
+            description: 'Available package manager choices when awaiting_input',
+            readOnly: true,
+            condition: (data) => data?.latestBuild?.status === 'awaiting_input',
           },
         },
         {
