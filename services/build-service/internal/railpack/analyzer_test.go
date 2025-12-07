@@ -221,3 +221,86 @@ func TestAnalyzer_DetectsPackageManagerFromLockfile(t *testing.T) {
 		})
 	}
 }
+
+func TestAnalyzer_DetectsPackageManagerFromField(t *testing.T) {
+	tests := []struct {
+		name          string
+		packageJSON   string
+		wantPM        string
+		wantVersion   string
+		wantSupported bool
+	}{
+		{
+			name:          "npm from packageManager field",
+			packageJSON:   `{"name": "test", "packageManager": "npm@10.2.0"}`,
+			wantPM:        "npm",
+			wantVersion:   "10.2.0",
+			wantSupported: true,
+		},
+		{
+			name:          "pnpm with corepack hash",
+			packageJSON:   `{"name": "test", "packageManager": "pnpm@8.15.0+sha256.abc123"}`,
+			wantPM:        "pnpm",
+			wantVersion:   "8.15.0",
+			wantSupported: true,
+		},
+		{
+			name:          "yarn classic",
+			packageJSON:   `{"name": "test", "packageManager": "yarn@1.22.19"}`,
+			wantPM:        "yarn",
+			wantVersion:   "1.22.19",
+			wantSupported: true,
+		},
+		{
+			name:          "unsupported npm version",
+			packageJSON:   `{"name": "test", "packageManager": "npm@6.14.0"}`,
+			wantPM:        "npm",
+			wantVersion:   "6.14.0",
+			wantSupported: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(tt.packageJSON), 0644)
+			require.NoError(t, err)
+
+			analyzer := NewAnalyzer(slog.Default())
+			result, err := analyzer.Analyze(context.Background(), tmpDir)
+
+			require.NoError(t, err)
+			require.NotNil(t, result.PackageManager)
+			assert.True(t, result.PackageManager.Detected)
+			assert.Equal(t, tt.wantPM, result.PackageManager.Name)
+			assert.Equal(t, "packageManager", result.PackageManager.Source)
+			assert.Equal(t, tt.wantVersion, result.PackageManager.RequestedVersion)
+			assert.Equal(t, tt.wantSupported, result.PackageManager.VersionSupported)
+		})
+	}
+}
+
+func TestAnalyzer_PackageManagerFieldTakesPrecedence(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create package.json with packageManager field specifying pnpm
+	packageJSON := `{"name": "test", "packageManager": "pnpm@8.15.0"}`
+	err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(packageJSON), 0644)
+	require.NoError(t, err)
+
+	// Create a conflicting lockfile (yarn.lock)
+	err = os.WriteFile(filepath.Join(tmpDir, "yarn.lock"), []byte(""), 0644)
+	require.NoError(t, err)
+
+	analyzer := NewAnalyzer(slog.Default())
+	result, err := analyzer.Analyze(context.Background(), tmpDir)
+
+	require.NoError(t, err)
+	require.NotNil(t, result.PackageManager)
+	assert.True(t, result.PackageManager.Detected)
+	// Should use packageManager field (pnpm) instead of lockfile (yarn)
+	assert.Equal(t, "pnpm", result.PackageManager.Name)
+	assert.Equal(t, "packageManager", result.PackageManager.Source)
+	assert.Equal(t, "8.15.0", result.PackageManager.RequestedVersion)
+	assert.True(t, result.PackageManager.VersionSupported)
+}
