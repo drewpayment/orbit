@@ -95,6 +95,19 @@ func (s *BuildServer) AnalyzeRepository(ctx context.Context, req *buildv1.Analyz
 			BuildCommand:    result.BuildCommand,
 			StartCommand:    result.StartCommand,
 		}
+
+		// Add package manager info if available
+		if result.PackageManager != nil {
+			response.Config.PackageManager = &buildv1.PackageManagerInfo{
+				Detected:         result.PackageManager.Detected,
+				Name:             result.PackageManager.Name,
+				Source:           result.PackageManager.Source,
+				Lockfile:         result.PackageManager.Lockfile,
+				RequestedVersion: result.PackageManager.RequestedVersion,
+				VersionSupported: result.PackageManager.VersionSupported,
+				SupportedRange:   result.PackageManager.SupportedRange,
+			}
+		}
 	}
 
 	return response, nil
@@ -128,6 +141,7 @@ func (s *BuildServer) BuildImage(
 		InstallationToken: req.InstallationToken,
 		BuildEnv:          req.BuildEnv,
 		ImageTag:          req.ImageTag,
+		PackageManager:    req.PackageManager,
 	}
 
 	// Handle optional fields
@@ -234,39 +248,43 @@ func generateRequestID() string {
 
 // cloneForAnalysis clones a repository for analysis
 func cloneForAnalysis(ctx context.Context, logger *slog.Logger, req *buildv1.AnalyzeRepositoryRequest, cloneDir string, requestID string) error {
-	logger.Info("Cloning repository for analysis", "url", req.RepoUrl, "ref", req.Ref)
+	// DEBUG: Log token presence (not the actual token for security)
+	tokenLen := len(req.InstallationToken)
+	logger.Info("Cloning repository for analysis",
+		"url", req.RepoUrl,
+		"ref", req.Ref,
+		"hasToken", tokenLen > 0,
+		"tokenLength", tokenLen,
+	)
+
+	// Determine clone URL - embed credentials for private repos
+	cloneURL := req.RepoUrl
+	if req.InstallationToken != "" {
+		// For GitHub, use x-access-token as username with the token
+		// Convert https://github.com/owner/repo to https://x-access-token:TOKEN@github.com/owner/repo
+		cloneURL = strings.Replace(req.RepoUrl, "https://github.com/",
+			fmt.Sprintf("https://x-access-token:%s@github.com/", req.InstallationToken), 1)
+		logger.Info("URL transformed for auth", "hasCredentials", strings.Contains(cloneURL, "@github.com"))
+	}
 
 	// Build git clone command
 	cmd := exec.CommandContext(ctx, "git", "clone", "--depth", "1", "--single-branch")
 	if req.Ref != "" {
 		cmd.Args = append(cmd.Args, "--branch", req.Ref)
 	}
-	cmd.Args = append(cmd.Args, req.RepoUrl, cloneDir)
+	cmd.Args = append(cmd.Args, cloneURL, cloneDir)
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 
-	// If token is provided, use git credential helper via GIT_ASKPASS
-	var helperPath string
-	if req.InstallationToken != "" {
-		// Create a credential helper script that outputs the token
-		// Escape single quotes in the token for shell safety
-		// Replace ' with '\'' (end quote, escaped quote, start quote)
-		escapedToken := strings.ReplaceAll(req.InstallationToken, "'", "'\\''")
-		helperScript := fmt.Sprintf("#!/bin/sh\necho '%s'\n", escapedToken)
-		helperPath = filepath.Join(os.TempDir(), fmt.Sprintf("git-askpass-%s", requestID))
-
-		if err := os.WriteFile(helperPath, []byte(helperScript), 0700); err != nil {
-			return fmt.Errorf("failed to create credential helper: %w", err)
-		}
-		defer os.Remove(helperPath)
-
-		cmd.Env = append(cmd.Env, fmt.Sprintf("GIT_ASKPASS=%s", helperPath))
-		cmd.Env = append(cmd.Env, "GIT_USERNAME=x-access-token")
-	}
-
-	// Run the clone command
-	if err := cmd.Run(); err != nil {
-		logger.Error("Git clone failed", "error", err)
-		return fmt.Errorf("git clone failed: %w", err)
+	// Run the clone command and capture output for debugging
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		// Log full output for debugging (may contain useful error info)
+		logger.Error("Git clone failed",
+			"error", err,
+			"output", string(output),
+			"cloneDir", cloneDir,
+		)
+		return fmt.Errorf("git clone failed: %w (output: %s)", err, string(output))
 	}
 
 	logger.Info("Repository cloned successfully")

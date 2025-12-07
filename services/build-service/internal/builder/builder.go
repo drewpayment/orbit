@@ -40,6 +40,7 @@ type BuildRequest struct {
 	BuildEnv          map[string]string
 	Registry          RegistryConfig
 	ImageTag          string // Optional - auto-generated if empty
+	PackageManager    string // "npm", "yarn", "pnpm", "bun", or "" for auto
 }
 
 // BuildResult contains the results of a build
@@ -149,34 +150,22 @@ func (b *Builder) validateRequest(req *BuildRequest) error {
 func (b *Builder) cloneRepo(ctx context.Context, req *BuildRequest, buildDir string) error {
 	b.logger.Info("Cloning repository", "url", req.RepoURL, "ref", req.Ref)
 
+	// Determine clone URL - embed credentials for private repos
+	cloneURL := req.RepoURL
+	if req.InstallationToken != "" {
+		// For GitHub, use x-access-token as username with the token
+		// Convert https://github.com/owner/repo to https://x-access-token:TOKEN@github.com/owner/repo
+		cloneURL = strings.Replace(req.RepoURL, "https://github.com/",
+			fmt.Sprintf("https://x-access-token:%s@github.com/", req.InstallationToken), 1)
+	}
+
 	// Clone the repository
 	cmd := exec.CommandContext(ctx, "git", "clone", "--depth", "1", "--single-branch")
 	if req.Ref != "" {
 		cmd.Args = append(cmd.Args, "--branch", req.Ref)
 	}
-	cmd.Args = append(cmd.Args, req.RepoURL, buildDir)
+	cmd.Args = append(cmd.Args, cloneURL, buildDir)
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-
-	// If token is provided, use git credential helper via GIT_ASKPASS
-	// This avoids exposing the token in process listings
-	var helperPath string
-	if req.InstallationToken != "" {
-		// Create a credential helper script that outputs the token
-		// For GitHub App installation tokens, use x-access-token as username
-		// Escape single quotes in the token for shell safety
-		// Replace ' with '\'' (end quote, escaped quote, start quote)
-		escapedToken := strings.ReplaceAll(req.InstallationToken, "'", "'\\''")
-		helperScript := fmt.Sprintf("#!/bin/sh\necho '%s'\n", escapedToken)
-		helperPath = filepath.Join(os.TempDir(), fmt.Sprintf("git-askpass-%s", req.RequestID))
-
-		if err := os.WriteFile(helperPath, []byte(helperScript), 0700); err != nil {
-			return fmt.Errorf("failed to create credential helper: %w", err)
-		}
-		defer os.Remove(helperPath)
-
-		cmd.Env = append(cmd.Env, fmt.Sprintf("GIT_ASKPASS=%s", helperPath))
-		cmd.Env = append(cmd.Env, "GIT_USERNAME=x-access-token")
-	}
 
 	// Run the clone command
 	// Note: We don't log output as it may contain credentials in error messages
@@ -210,8 +199,9 @@ func (b *Builder) buildImage(ctx context.Context, req *BuildRequest, buildDir, i
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		b.logger.Error("Railpack build failed", "error", err, "output", string(output))
-		return "", fmt.Errorf("railpack build failed: %w", err)
+		outputStr := string(output)
+		b.logger.Error("Railpack build failed", "error", err, "output", outputStr)
+		return "", fmt.Errorf("railpack build failed: %s", extractBuildErrorSummary(outputStr))
 	}
 
 	// TODO: Parse digest from Railpack output
@@ -229,8 +219,10 @@ func (b *Builder) buildWithDocker(ctx context.Context, req *BuildRequest, buildD
 	cmd := exec.CommandContext(ctx, "docker", "build", "-t", imageURL, buildDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		b.logger.Error("Docker build failed", "error", err, "output", string(output))
-		return "", fmt.Errorf("docker build failed: %w", err)
+		outputStr := string(output)
+		b.logger.Error("Docker build failed", "error", err, "output", outputStr)
+		// Include relevant parts of output in error for frontend parsing
+		return "", fmt.Errorf("docker build failed: %s", extractBuildErrorSummary(outputStr))
 	}
 
 	// Get image digest
@@ -305,4 +297,54 @@ func generateImageTag(req *BuildRequest) string {
 	}
 
 	return fmt.Sprintf("%s/%s:%s", req.Registry.URL, req.Registry.Repository, tag)
+}
+
+// extractBuildErrorSummary extracts the meaningful error from docker build output
+func extractBuildErrorSummary(output string) string {
+	lines := strings.Split(output, "\n")
+
+	// Look for common error patterns
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+
+		// Check for specific error messages
+		if strings.Contains(line, "Lockfile not found") {
+			return "Lockfile not found. Please commit yarn.lock, package-lock.json, or pnpm-lock.yaml to your repository."
+		}
+		if strings.Contains(line, "npm ERR!") {
+			return "npm install failed: " + line
+		}
+		if strings.Contains(line, "yarn error") {
+			return "yarn install failed: " + line
+		}
+		if strings.Contains(line, "COPY failed") {
+			return "COPY failed: " + line
+		}
+		if strings.Contains(line, "returned a non-zero code") {
+			// Get the command that failed from the previous line
+			if i > 0 {
+				prevLine := strings.TrimSpace(lines[i-1])
+				if prevLine != "" {
+					return prevLine
+				}
+			}
+			return line
+		}
+	}
+
+	// If no specific error found, return last non-empty line (truncated)
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line != "" && !strings.HasPrefix(line, "DEPRECATED") {
+			if len(line) > 200 {
+				return line[:200] + "..."
+			}
+			return line
+		}
+	}
+
+	return "build failed with unknown error"
 }
