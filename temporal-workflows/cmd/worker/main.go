@@ -40,7 +40,7 @@ type buildClientAdapter struct {
 	impl *services.PayloadBuildClientImpl
 }
 
-func (a *buildClientAdapter) UpdateAppBuildStatus(ctx context.Context, appID, status, imageURL, imageDigest, errorMsg string, buildConfig *types.DetectedBuildConfig) error {
+func (a *buildClientAdapter) UpdateAppBuildStatus(ctx context.Context, appID, status, imageURL, imageDigest, errorMsg string, buildConfig *types.DetectedBuildConfig, availableChoices []string) error {
 	var svcBuildConfig *services.DetectedBuildConfig
 	if buildConfig != nil {
 		svcBuildConfig = &services.DetectedBuildConfig{
@@ -51,7 +51,7 @@ func (a *buildClientAdapter) UpdateAppBuildStatus(ctx context.Context, appID, st
 			StartCommand:    buildConfig.StartCommand,
 		}
 	}
-	return a.impl.UpdateAppBuildStatus(ctx, appID, status, imageURL, imageDigest, errorMsg, svcBuildConfig)
+	return a.impl.UpdateAppBuildStatus(ctx, appID, status, imageURL, imageDigest, errorMsg, svcBuildConfig, availableChoices)
 }
 
 func (a *buildClientAdapter) GetGitHubInstallationToken(ctx context.Context, workspaceID string) (string, error) {

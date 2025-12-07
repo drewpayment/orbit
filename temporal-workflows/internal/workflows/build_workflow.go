@@ -248,6 +248,20 @@ func BuildWorkflow(ctx workflow.Context, input BuildWorkflowInput) (*BuildWorkfl
 		var selectedPM string
 		signalChan.Receive(ctx, &selectedPM)
 
+		// Validate that the selected package manager is one of the available choices
+		isValid := false
+		for _, choice := range state.AvailableChoices {
+			if selectedPM == choice {
+				isValid = true
+				break
+			}
+		}
+		if !isValid {
+			errMsg := fmt.Sprintf("Invalid package manager selected: %s. Must be one of: %v", selectedPM, state.AvailableChoices)
+			logger.Error("Invalid package manager selection", "selectedPM", selectedPM, "availableChoices", state.AvailableChoices)
+			return failWorkflow(ctx, input.AppID, state, errMsg)
+		}
+
 		logger.Info("Received package manager selection", "pm", selectedPM)
 		state.SelectedPM = selectedPM
 		packageManager = selectedPM

@@ -19,7 +19,7 @@ type BuildServiceClient interface {
 
 // PayloadBuildClient interface for Payload CMS operations
 type PayloadBuildClient interface {
-	UpdateAppBuildStatus(ctx context.Context, appID string, status string, imageURL string, imageDigest string, errorMsg string, buildConfig *types.DetectedBuildConfig) error
+	UpdateAppBuildStatus(ctx context.Context, appID string, status string, imageURL string, imageDigest string, errorMsg string, buildConfig *types.DetectedBuildConfig, availableChoices []string) error
 	GetGitHubInstallationToken(ctx context.Context, workspaceID string) (string, error)
 	GetRegistryConfig(ctx context.Context, registryID string) (*RegistryConfigData, error)
 }
@@ -309,6 +309,7 @@ func (a *BuildActivities) UpdateBuildStatus(ctx context.Context, input UpdateBui
 		input.ImageDigest,
 		input.Error,
 		input.BuildConfig,
+		input.AvailableChoices,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update build status: %w", err)
