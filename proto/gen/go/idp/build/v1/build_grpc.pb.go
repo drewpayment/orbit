@@ -21,9 +21,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	BuildService_AnalyzeRepository_FullMethodName = "/idp.build.v1.BuildService/AnalyzeRepository"
-	BuildService_BuildImage_FullMethodName        = "/idp.build.v1.BuildService/BuildImage"
-	BuildService_StreamBuildLogs_FullMethodName   = "/idp.build.v1.BuildService/StreamBuildLogs"
+	BuildService_AnalyzeRepository_FullMethodName  = "/idp.build.v1.BuildService/AnalyzeRepository"
+	BuildService_BuildImage_FullMethodName         = "/idp.build.v1.BuildService/BuildImage"
+	BuildService_StreamBuildLogs_FullMethodName    = "/idp.build.v1.BuildService/StreamBuildLogs"
+	BuildService_StartBuildWorkflow_FullMethodName = "/idp.build.v1.BuildService/StartBuildWorkflow"
+	BuildService_GetBuildProgress_FullMethodName   = "/idp.build.v1.BuildService/GetBuildProgress"
 )
 
 // BuildServiceClient is the client API for BuildService service.
@@ -38,6 +40,10 @@ type BuildServiceClient interface {
 	BuildImage(ctx context.Context, in *BuildImageRequest, opts ...grpc.CallOption) (*BuildImageResponse, error)
 	// Stream build logs in real-time
 	StreamBuildLogs(ctx context.Context, in *StreamBuildLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamBuildLogsResponse], error)
+	// Start a build workflow via Temporal
+	StartBuildWorkflow(ctx context.Context, in *StartBuildWorkflowRequest, opts ...grpc.CallOption) (*StartBuildWorkflowResponse, error)
+	// Get the progress of a build workflow
+	GetBuildProgress(ctx context.Context, in *GetBuildProgressRequest, opts ...grpc.CallOption) (*GetBuildProgressResponse, error)
 }
 
 type buildServiceClient struct {
@@ -87,6 +93,26 @@ func (c *buildServiceClient) StreamBuildLogs(ctx context.Context, in *StreamBuil
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type BuildService_StreamBuildLogsClient = grpc.ServerStreamingClient[StreamBuildLogsResponse]
 
+func (c *buildServiceClient) StartBuildWorkflow(ctx context.Context, in *StartBuildWorkflowRequest, opts ...grpc.CallOption) (*StartBuildWorkflowResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StartBuildWorkflowResponse)
+	err := c.cc.Invoke(ctx, BuildService_StartBuildWorkflow_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *buildServiceClient) GetBuildProgress(ctx context.Context, in *GetBuildProgressRequest, opts ...grpc.CallOption) (*GetBuildProgressResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetBuildProgressResponse)
+	err := c.cc.Invoke(ctx, BuildService_GetBuildProgress_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BuildServiceServer is the server API for BuildService service.
 // All implementations must embed UnimplementedBuildServiceServer
 // for forward compatibility.
@@ -99,6 +125,10 @@ type BuildServiceServer interface {
 	BuildImage(context.Context, *BuildImageRequest) (*BuildImageResponse, error)
 	// Stream build logs in real-time
 	StreamBuildLogs(*StreamBuildLogsRequest, grpc.ServerStreamingServer[StreamBuildLogsResponse]) error
+	// Start a build workflow via Temporal
+	StartBuildWorkflow(context.Context, *StartBuildWorkflowRequest) (*StartBuildWorkflowResponse, error)
+	// Get the progress of a build workflow
+	GetBuildProgress(context.Context, *GetBuildProgressRequest) (*GetBuildProgressResponse, error)
 	mustEmbedUnimplementedBuildServiceServer()
 }
 
@@ -117,6 +147,12 @@ func (UnimplementedBuildServiceServer) BuildImage(context.Context, *BuildImageRe
 }
 func (UnimplementedBuildServiceServer) StreamBuildLogs(*StreamBuildLogsRequest, grpc.ServerStreamingServer[StreamBuildLogsResponse]) error {
 	return status.Error(codes.Unimplemented, "method StreamBuildLogs not implemented")
+}
+func (UnimplementedBuildServiceServer) StartBuildWorkflow(context.Context, *StartBuildWorkflowRequest) (*StartBuildWorkflowResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method StartBuildWorkflow not implemented")
+}
+func (UnimplementedBuildServiceServer) GetBuildProgress(context.Context, *GetBuildProgressRequest) (*GetBuildProgressResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetBuildProgress not implemented")
 }
 func (UnimplementedBuildServiceServer) mustEmbedUnimplementedBuildServiceServer() {}
 func (UnimplementedBuildServiceServer) testEmbeddedByValue()                      {}
@@ -186,6 +222,42 @@ func _BuildService_StreamBuildLogs_Handler(srv interface{}, stream grpc.ServerSt
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type BuildService_StreamBuildLogsServer = grpc.ServerStreamingServer[StreamBuildLogsResponse]
 
+func _BuildService_StartBuildWorkflow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartBuildWorkflowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BuildServiceServer).StartBuildWorkflow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BuildService_StartBuildWorkflow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BuildServiceServer).StartBuildWorkflow(ctx, req.(*StartBuildWorkflowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BuildService_GetBuildProgress_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetBuildProgressRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BuildServiceServer).GetBuildProgress(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BuildService_GetBuildProgress_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BuildServiceServer).GetBuildProgress(ctx, req.(*GetBuildProgressRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BuildService_ServiceDesc is the grpc.ServiceDesc for BuildService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -200,6 +272,14 @@ var BuildService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "BuildImage",
 			Handler:    _BuildService_BuildImage_Handler,
+		},
+		{
+			MethodName: "StartBuildWorkflow",
+			Handler:    _BuildService_StartBuildWorkflow_Handler,
+		},
+		{
+			MethodName: "GetBuildProgress",
+			Handler:    _BuildService_GetBuildProgress_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

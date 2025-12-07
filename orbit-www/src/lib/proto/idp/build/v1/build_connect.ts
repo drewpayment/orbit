@@ -5,7 +5,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AnalyzeRepositoryRequest, AnalyzeRepositoryResponse, BuildImageRequest, BuildImageResponse, StreamBuildLogsRequest, StreamBuildLogsResponse } from "./build_pb.js";
+import { AnalyzeRepositoryRequest, AnalyzeRepositoryResponse, BuildImageRequest, BuildImageResponse, GetBuildProgressRequest, GetBuildProgressResponse, StartBuildWorkflowRequest, StartBuildWorkflowResponse, StreamBuildLogsRequest, StreamBuildLogsResponse } from "./build_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -48,6 +48,28 @@ export const BuildService = {
       I: StreamBuildLogsRequest,
       O: StreamBuildLogsResponse,
       kind: MethodKind.ServerStreaming,
+    },
+    /**
+     * Start a build workflow via Temporal
+     *
+     * @generated from rpc idp.build.v1.BuildService.StartBuildWorkflow
+     */
+    startBuildWorkflow: {
+      name: "StartBuildWorkflow",
+      I: StartBuildWorkflowRequest,
+      O: StartBuildWorkflowResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Get the progress of a build workflow
+     *
+     * @generated from rpc idp.build.v1.BuildService.GetBuildProgress
+     */
+    getBuildProgress: {
+      name: "GetBuildProgress",
+      I: GetBuildProgressRequest,
+      O: GetBuildProgressResponse,
+      kind: MethodKind.Unary,
     },
   }
 } as const;

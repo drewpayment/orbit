@@ -43,6 +43,12 @@ const (
 	// BuildServiceStreamBuildLogsProcedure is the fully-qualified name of the BuildService's
 	// StreamBuildLogs RPC.
 	BuildServiceStreamBuildLogsProcedure = "/idp.build.v1.BuildService/StreamBuildLogs"
+	// BuildServiceStartBuildWorkflowProcedure is the fully-qualified name of the BuildService's
+	// StartBuildWorkflow RPC.
+	BuildServiceStartBuildWorkflowProcedure = "/idp.build.v1.BuildService/StartBuildWorkflow"
+	// BuildServiceGetBuildProgressProcedure is the fully-qualified name of the BuildService's
+	// GetBuildProgress RPC.
+	BuildServiceGetBuildProgressProcedure = "/idp.build.v1.BuildService/GetBuildProgress"
 )
 
 // BuildServiceClient is a client for the idp.build.v1.BuildService service.
@@ -53,6 +59,10 @@ type BuildServiceClient interface {
 	BuildImage(context.Context, *connect.Request[v1.BuildImageRequest]) (*connect.Response[v1.BuildImageResponse], error)
 	// Stream build logs in real-time
 	StreamBuildLogs(context.Context, *connect.Request[v1.StreamBuildLogsRequest]) (*connect.ServerStreamForClient[v1.StreamBuildLogsResponse], error)
+	// Start a build workflow via Temporal
+	StartBuildWorkflow(context.Context, *connect.Request[v1.StartBuildWorkflowRequest]) (*connect.Response[v1.StartBuildWorkflowResponse], error)
+	// Get the progress of a build workflow
+	GetBuildProgress(context.Context, *connect.Request[v1.GetBuildProgressRequest]) (*connect.Response[v1.GetBuildProgressResponse], error)
 }
 
 // NewBuildServiceClient constructs a client for the idp.build.v1.BuildService service. By default,
@@ -84,14 +94,28 @@ func NewBuildServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(buildServiceMethods.ByName("StreamBuildLogs")),
 			connect.WithClientOptions(opts...),
 		),
+		startBuildWorkflow: connect.NewClient[v1.StartBuildWorkflowRequest, v1.StartBuildWorkflowResponse](
+			httpClient,
+			baseURL+BuildServiceStartBuildWorkflowProcedure,
+			connect.WithSchema(buildServiceMethods.ByName("StartBuildWorkflow")),
+			connect.WithClientOptions(opts...),
+		),
+		getBuildProgress: connect.NewClient[v1.GetBuildProgressRequest, v1.GetBuildProgressResponse](
+			httpClient,
+			baseURL+BuildServiceGetBuildProgressProcedure,
+			connect.WithSchema(buildServiceMethods.ByName("GetBuildProgress")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // buildServiceClient implements BuildServiceClient.
 type buildServiceClient struct {
-	analyzeRepository *connect.Client[v1.AnalyzeRepositoryRequest, v1.AnalyzeRepositoryResponse]
-	buildImage        *connect.Client[v1.BuildImageRequest, v1.BuildImageResponse]
-	streamBuildLogs   *connect.Client[v1.StreamBuildLogsRequest, v1.StreamBuildLogsResponse]
+	analyzeRepository  *connect.Client[v1.AnalyzeRepositoryRequest, v1.AnalyzeRepositoryResponse]
+	buildImage         *connect.Client[v1.BuildImageRequest, v1.BuildImageResponse]
+	streamBuildLogs    *connect.Client[v1.StreamBuildLogsRequest, v1.StreamBuildLogsResponse]
+	startBuildWorkflow *connect.Client[v1.StartBuildWorkflowRequest, v1.StartBuildWorkflowResponse]
+	getBuildProgress   *connect.Client[v1.GetBuildProgressRequest, v1.GetBuildProgressResponse]
 }
 
 // AnalyzeRepository calls idp.build.v1.BuildService.AnalyzeRepository.
@@ -109,6 +133,16 @@ func (c *buildServiceClient) StreamBuildLogs(ctx context.Context, req *connect.R
 	return c.streamBuildLogs.CallServerStream(ctx, req)
 }
 
+// StartBuildWorkflow calls idp.build.v1.BuildService.StartBuildWorkflow.
+func (c *buildServiceClient) StartBuildWorkflow(ctx context.Context, req *connect.Request[v1.StartBuildWorkflowRequest]) (*connect.Response[v1.StartBuildWorkflowResponse], error) {
+	return c.startBuildWorkflow.CallUnary(ctx, req)
+}
+
+// GetBuildProgress calls idp.build.v1.BuildService.GetBuildProgress.
+func (c *buildServiceClient) GetBuildProgress(ctx context.Context, req *connect.Request[v1.GetBuildProgressRequest]) (*connect.Response[v1.GetBuildProgressResponse], error) {
+	return c.getBuildProgress.CallUnary(ctx, req)
+}
+
 // BuildServiceHandler is an implementation of the idp.build.v1.BuildService service.
 type BuildServiceHandler interface {
 	// Analyze a repository to detect build configuration
@@ -117,6 +151,10 @@ type BuildServiceHandler interface {
 	BuildImage(context.Context, *connect.Request[v1.BuildImageRequest]) (*connect.Response[v1.BuildImageResponse], error)
 	// Stream build logs in real-time
 	StreamBuildLogs(context.Context, *connect.Request[v1.StreamBuildLogsRequest], *connect.ServerStream[v1.StreamBuildLogsResponse]) error
+	// Start a build workflow via Temporal
+	StartBuildWorkflow(context.Context, *connect.Request[v1.StartBuildWorkflowRequest]) (*connect.Response[v1.StartBuildWorkflowResponse], error)
+	// Get the progress of a build workflow
+	GetBuildProgress(context.Context, *connect.Request[v1.GetBuildProgressRequest]) (*connect.Response[v1.GetBuildProgressResponse], error)
 }
 
 // NewBuildServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -144,6 +182,18 @@ func NewBuildServiceHandler(svc BuildServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(buildServiceMethods.ByName("StreamBuildLogs")),
 		connect.WithHandlerOptions(opts...),
 	)
+	buildServiceStartBuildWorkflowHandler := connect.NewUnaryHandler(
+		BuildServiceStartBuildWorkflowProcedure,
+		svc.StartBuildWorkflow,
+		connect.WithSchema(buildServiceMethods.ByName("StartBuildWorkflow")),
+		connect.WithHandlerOptions(opts...),
+	)
+	buildServiceGetBuildProgressHandler := connect.NewUnaryHandler(
+		BuildServiceGetBuildProgressProcedure,
+		svc.GetBuildProgress,
+		connect.WithSchema(buildServiceMethods.ByName("GetBuildProgress")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/idp.build.v1.BuildService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case BuildServiceAnalyzeRepositoryProcedure:
@@ -152,6 +202,10 @@ func NewBuildServiceHandler(svc BuildServiceHandler, opts ...connect.HandlerOpti
 			buildServiceBuildImageHandler.ServeHTTP(w, r)
 		case BuildServiceStreamBuildLogsProcedure:
 			buildServiceStreamBuildLogsHandler.ServeHTTP(w, r)
+		case BuildServiceStartBuildWorkflowProcedure:
+			buildServiceStartBuildWorkflowHandler.ServeHTTP(w, r)
+		case BuildServiceGetBuildProgressProcedure:
+			buildServiceGetBuildProgressHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -171,4 +225,12 @@ func (UnimplementedBuildServiceHandler) BuildImage(context.Context, *connect.Req
 
 func (UnimplementedBuildServiceHandler) StreamBuildLogs(context.Context, *connect.Request[v1.StreamBuildLogsRequest], *connect.ServerStream[v1.StreamBuildLogsResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("idp.build.v1.BuildService.StreamBuildLogs is not implemented"))
+}
+
+func (UnimplementedBuildServiceHandler) StartBuildWorkflow(context.Context, *connect.Request[v1.StartBuildWorkflowRequest]) (*connect.Response[v1.StartBuildWorkflowResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.build.v1.BuildService.StartBuildWorkflow is not implemented"))
+}
+
+func (UnimplementedBuildServiceHandler) GetBuildProgress(context.Context, *connect.Request[v1.GetBuildProgressRequest]) (*connect.Response[v1.GetBuildProgressResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.build.v1.BuildService.GetBuildProgress is not implemented"))
 }

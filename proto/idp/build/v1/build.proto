@@ -15,6 +15,12 @@ service BuildService {
 
   // Stream build logs in real-time
   rpc StreamBuildLogs(StreamBuildLogsRequest) returns (stream StreamBuildLogsResponse);
+
+  // Start a build workflow via Temporal
+  rpc StartBuildWorkflow(StartBuildWorkflowRequest) returns (StartBuildWorkflowResponse);
+
+  // Get the progress of a build workflow
+  rpc GetBuildProgress(GetBuildProgressRequest) returns (GetBuildProgressResponse);
 }
 
 // AnalyzeRepositoryRequest contains parameters for repository analysis
@@ -39,6 +45,18 @@ message DetectedBuildConfig {
   string framework = 3;          // e.g., "nextjs", "fastapi", "gin"
   string build_command = 4;      // e.g., "npm run build"
   string start_command = 5;      // e.g., "npm start"
+  PackageManagerInfo package_manager = 6;  // Detected package manager info
+}
+
+// Package manager detection result
+message PackageManagerInfo {
+  bool detected = 1;             // true if lockfile or packageManager field found
+  string name = 2;               // "npm", "yarn", "pnpm", "bun", or ""
+  string source = 3;             // "lockfile", "packageManager", "engines", ""
+  string lockfile = 4;           // e.g., "yarn.lock" if detected from lockfile
+  string requested_version = 5;  // e.g., "10.2.0" from packageManager field
+  bool version_supported = 6;    // true if we can fulfill this version
+  string supported_range = 7;    // e.g., ">=7.0.0" - what we support
 }
 
 // BuildImageRequest contains parameters for building an image
@@ -58,6 +76,7 @@ message BuildImageRequest {
   // Registry configuration
   RegistryConfig registry = 10;
   string image_tag = 11;              // Tag for the built image
+  string package_manager = 12;        // "npm", "yarn", "pnpm", "bun", or "" for auto
 }
 
 // RegistryConfig contains container registry authentication
@@ -113,4 +132,46 @@ message StreamBuildLogsResponse {
   string level = 2;                   // "info", "warn", "error"
   string message = 3;
   string step = 4;                    // Which build step this belongs to
+}
+
+// StartBuildWorkflowRequest initiates a Temporal build workflow
+message StartBuildWorkflowRequest {
+  string app_id = 1;                  // Orbit App ID
+  string workspace_id = 2;            // Workspace ID for auth
+  string user_id = 3;                 // User initiating the build
+  string repo_url = 4;                // Repository URL
+  string ref = 5;                     // Branch, tag, or commit SHA (default: main)
+  RegistryConfig registry = 6;        // Registry configuration
+
+  // Optional build overrides
+  optional string language_version = 7;
+  optional string build_command = 8;
+  optional string start_command = 9;
+  map<string, string> build_env = 10;
+  string image_tag = 11;              // Tag for the built image
+}
+
+// StartBuildWorkflowResponse contains the workflow ID
+message StartBuildWorkflowResponse {
+  bool success = 1;
+  string workflow_id = 2;             // Temporal workflow ID for tracking
+  string error = 3;                   // Error message if failed
+}
+
+// GetBuildProgressRequest queries a build workflow's progress
+message GetBuildProgressRequest {
+  string workflow_id = 1;             // Temporal workflow ID
+}
+
+// GetBuildProgressResponse contains the current build progress
+message GetBuildProgressResponse {
+  string current_step = 1;            // e.g., "analyzing", "building", "pushing"
+  int32 steps_total = 2;              // Total number of steps
+  int32 steps_current = 3;            // Current step number
+  string message = 4;                 // Human-readable progress message
+  string status = 5;                  // "pending", "running", "success", "failed"
+  string image_url = 6;               // Resulting image URL (if success)
+  string image_digest = 7;            // Resulting image digest (if success)
+  string error = 8;                   // Error message (if failed)
+  DetectedBuildConfig detected_config = 9; // Detected build configuration
 }

@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file idp/build/v1/build.proto.
  */
 export const file_idp_build_v1_build: GenFile = /*@__PURE__*/
-  fileDesc("ChhpZHAvYnVpbGQvdjEvYnVpbGQucHJvdG8SDGlkcC5idWlsZC52MSJVChhBbmFseXplUmVwb3NpdG9yeVJlcXVlc3QSEAoIcmVwb191cmwYASABKAkSCwoDcmVmGAIgASgJEhoKEmluc3RhbGxhdGlvbl90b2tlbhgDIAEoCSKHAQoZQW5hbHl6ZVJlcG9zaXRvcnlSZXNwb25zZRIQCghkZXRlY3RlZBgBIAEoCBIxCgZjb25maWcYAiABKAsyIS5pZHAuYnVpbGQudjEuRGV0ZWN0ZWRCdWlsZENvbmZpZxINCgVlcnJvchgDIAEoCRIWCg5kZXRlY3RlZF9maWxlcxgEIAMoCSKCAQoTRGV0ZWN0ZWRCdWlsZENvbmZpZxIQCghsYW5ndWFnZRgBIAEoCRIYChBsYW5ndWFnZV92ZXJzaW9uGAIgASgJEhEKCWZyYW1ld29yaxgDIAEoCRIVCg1idWlsZF9jb21tYW5kGAQgASgJEhUKDXN0YXJ0X2NvbW1hbmQYBSABKAkiuAMKEUJ1aWxkSW1hZ2VSZXF1ZXN0EhIKCnJlcXVlc3RfaWQYASABKAkSDgoGYXBwX2lkGAIgASgJEhAKCHJlcG9fdXJsGAMgASgJEgsKA3JlZhgEIAEoCRIaChJpbnN0YWxsYXRpb25fdG9rZW4YBSABKAkSHQoQbGFuZ3VhZ2VfdmVyc2lvbhgGIAEoCUgAiAEBEhoKDWJ1aWxkX2NvbW1hbmQYByABKAlIAYgBARIaCg1zdGFydF9jb21tYW5kGAggASgJSAKIAQESQAoJYnVpbGRfZW52GAkgAygLMi0uaWRwLmJ1aWxkLnYxLkJ1aWxkSW1hZ2VSZXF1ZXN0LkJ1aWxkRW52RW50cnkSLgoIcmVnaXN0cnkYCiABKAsyHC5pZHAuYnVpbGQudjEuUmVnaXN0cnlDb25maWcSEQoJaW1hZ2VfdGFnGAsgASgJGi8KDUJ1aWxkRW52RW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUITChFfbGFuZ3VhZ2VfdmVyc2lvbkIQCg5fYnVpbGRfY29tbWFuZEIQCg5fc3RhcnRfY29tbWFuZCKOAQoOUmVnaXN0cnlDb25maWcSKAoEdHlwZRgBIAEoDjIaLmlkcC5idWlsZC52MS5SZWdpc3RyeVR5cGUSCwoDdXJsGAIgASgJEhIKCnJlcG9zaXRvcnkYAyABKAkSDQoFdG9rZW4YBCABKAkSFQoIdXNlcm5hbWUYBSABKAlIAIgBAUILCglfdXNlcm5hbWUihQEKEkJ1aWxkSW1hZ2VSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhEKCWltYWdlX3VybBgCIAEoCRIUCgxpbWFnZV9kaWdlc3QYAyABKAkSDQoFZXJyb3IYBCABKAkSJgoFc3RlcHMYBSADKAsyFy5pZHAuYnVpbGQudjEuQnVpbGRTdGVwIm4KCUJ1aWxkU3RlcBIMCgRuYW1lGAEgASgJEi0KBnN0YXR1cxgCIAEoDjIdLmlkcC5idWlsZC52MS5CdWlsZFN0ZXBTdGF0dXMSDwoHbWVzc2FnZRgDIAEoCRITCgtkdXJhdGlvbl9tcxgEIAEoAyIsChZTdHJlYW1CdWlsZExvZ3NSZXF1ZXN0EhIKCnJlcXVlc3RfaWQYASABKAkiWgoXU3RyZWFtQnVpbGRMb2dzUmVzcG9uc2USEQoJdGltZXN0YW1wGAEgASgDEg0KBWxldmVsGAIgASgJEg8KB21lc3NhZ2UYAyABKAkSDAoEc3RlcBgEIAEoCSpcCgxSZWdpc3RyeVR5cGUSHQoZUkVHSVNUUllfVFlQRV9VTlNQRUNJRklFRBAAEhYKElJFR0lTVFJZX1RZUEVfR0hDUhABEhUKEVJFR0lTVFJZX1RZUEVfQUNSEAIqsQEKD0J1aWxkU3RlcFN0YXR1cxIhCh1CVUlMRF9TVEVQX1NUQVRVU19VTlNQRUNJRklFRBAAEh0KGUJVSUxEX1NURVBfU1RBVFVTX1BFTkRJTkcQARIdChlCVUlMRF9TVEVQX1NUQVRVU19SVU5OSU5HEAISHwobQlVJTERfU1RFUF9TVEFUVVNfQ09NUExFVEVEEAMSHAoYQlVJTERfU1RFUF9TVEFUVVNfRkFJTEVEEAQypwIKDEJ1aWxkU2VydmljZRJkChFBbmFseXplUmVwb3NpdG9yeRImLmlkcC5idWlsZC52MS5BbmFseXplUmVwb3NpdG9yeVJlcXVlc3QaJy5pZHAuYnVpbGQudjEuQW5hbHl6ZVJlcG9zaXRvcnlSZXNwb25zZRJPCgpCdWlsZEltYWdlEh8uaWRwLmJ1aWxkLnYxLkJ1aWxkSW1hZ2VSZXF1ZXN0GiAuaWRwLmJ1aWxkLnYxLkJ1aWxkSW1hZ2VSZXNwb25zZRJgCg9TdHJlYW1CdWlsZExvZ3MSJC5pZHAuYnVpbGQudjEuU3RyZWFtQnVpbGRMb2dzUmVxdWVzdBolLmlkcC5idWlsZC52MS5TdHJlYW1CdWlsZExvZ3NSZXNwb25zZTABQkBaPmdpdGh1Yi5jb20vZHJld3BheW1lbnQvb3JiaXQvcHJvdG8vZ2VuL2dvL2lkcC9idWlsZC92MTtidWlsZHYxYgZwcm90bzM");
+  fileDesc("ChhpZHAvYnVpbGQvdjEvYnVpbGQucHJvdG8SDGlkcC5idWlsZC52MSJVChhBbmFseXplUmVwb3NpdG9yeVJlcXVlc3QSEAoIcmVwb191cmwYASABKAkSCwoDcmVmGAIgASgJEhoKEmluc3RhbGxhdGlvbl90b2tlbhgDIAEoCSKHAQoZQW5hbHl6ZVJlcG9zaXRvcnlSZXNwb25zZRIQCghkZXRlY3RlZBgBIAEoCBIxCgZjb25maWcYAiABKAsyIS5pZHAuYnVpbGQudjEuRGV0ZWN0ZWRCdWlsZENvbmZpZxINCgVlcnJvchgDIAEoCRIWCg5kZXRlY3RlZF9maWxlcxgEIAMoCSK9AQoTRGV0ZWN0ZWRCdWlsZENvbmZpZxIQCghsYW5ndWFnZRgBIAEoCRIYChBsYW5ndWFnZV92ZXJzaW9uGAIgASgJEhEKCWZyYW1ld29yaxgDIAEoCRIVCg1idWlsZF9jb21tYW5kGAQgASgJEhUKDXN0YXJ0X2NvbW1hbmQYBSABKAkSOQoPcGFja2FnZV9tYW5hZ2VyGAYgASgLMiAuaWRwLmJ1aWxkLnYxLlBhY2thZ2VNYW5hZ2VySW5mbyKlAQoSUGFja2FnZU1hbmFnZXJJbmZvEhAKCGRldGVjdGVkGAEgASgIEgwKBG5hbWUYAiABKAkSDgoGc291cmNlGAMgASgJEhAKCGxvY2tmaWxlGAQgASgJEhkKEXJlcXVlc3RlZF92ZXJzaW9uGAUgASgJEhkKEXZlcnNpb25fc3VwcG9ydGVkGAYgASgIEhcKD3N1cHBvcnRlZF9yYW5nZRgHIAEoCSLRAwoRQnVpbGRJbWFnZVJlcXVlc3QSEgoKcmVxdWVzdF9pZBgBIAEoCRIOCgZhcHBfaWQYAiABKAkSEAoIcmVwb191cmwYAyABKAkSCwoDcmVmGAQgASgJEhoKEmluc3RhbGxhdGlvbl90b2tlbhgFIAEoCRIdChBsYW5ndWFnZV92ZXJzaW9uGAYgASgJSACIAQESGgoNYnVpbGRfY29tbWFuZBgHIAEoCUgBiAEBEhoKDXN0YXJ0X2NvbW1hbmQYCCABKAlIAogBARJACglidWlsZF9lbnYYCSADKAsyLS5pZHAuYnVpbGQudjEuQnVpbGRJbWFnZVJlcXVlc3QuQnVpbGRFbnZFbnRyeRIuCghyZWdpc3RyeRgKIAEoCzIcLmlkcC5idWlsZC52MS5SZWdpc3RyeUNvbmZpZxIRCglpbWFnZV90YWcYCyABKAkSFwoPcGFja2FnZV9tYW5hZ2VyGAwgASgJGi8KDUJ1aWxkRW52RW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUITChFfbGFuZ3VhZ2VfdmVyc2lvbkIQCg5fYnVpbGRfY29tbWFuZEIQCg5fc3RhcnRfY29tbWFuZCKOAQoOUmVnaXN0cnlDb25maWcSKAoEdHlwZRgBIAEoDjIaLmlkcC5idWlsZC52MS5SZWdpc3RyeVR5cGUSCwoDdXJsGAIgASgJEhIKCnJlcG9zaXRvcnkYAyABKAkSDQoFdG9rZW4YBCABKAkSFQoIdXNlcm5hbWUYBSABKAlIAIgBAUILCglfdXNlcm5hbWUihQEKEkJ1aWxkSW1hZ2VSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhEKCWltYWdlX3VybBgCIAEoCRIUCgxpbWFnZV9kaWdlc3QYAyABKAkSDQoFZXJyb3IYBCABKAkSJgoFc3RlcHMYBSADKAsyFy5pZHAuYnVpbGQudjEuQnVpbGRTdGVwIm4KCUJ1aWxkU3RlcBIMCgRuYW1lGAEgASgJEi0KBnN0YXR1cxgCIAEoDjIdLmlkcC5idWlsZC52MS5CdWlsZFN0ZXBTdGF0dXMSDwoHbWVzc2FnZRgDIAEoCRITCgtkdXJhdGlvbl9tcxgEIAEoAyIsChZTdHJlYW1CdWlsZExvZ3NSZXF1ZXN0EhIKCnJlcXVlc3RfaWQYASABKAkiWgoXU3RyZWFtQnVpbGRMb2dzUmVzcG9uc2USEQoJdGltZXN0YW1wGAEgASgDEg0KBWxldmVsGAIgASgJEg8KB21lc3NhZ2UYAyABKAkSDAoEc3RlcBgEIAEoCSK/AwoZU3RhcnRCdWlsZFdvcmtmbG93UmVxdWVzdBIOCgZhcHBfaWQYASABKAkSFAoMd29ya3NwYWNlX2lkGAIgASgJEg8KB3VzZXJfaWQYAyABKAkSEAoIcmVwb191cmwYBCABKAkSCwoDcmVmGAUgASgJEi4KCHJlZ2lzdHJ5GAYgASgLMhwuaWRwLmJ1aWxkLnYxLlJlZ2lzdHJ5Q29uZmlnEh0KEGxhbmd1YWdlX3ZlcnNpb24YByABKAlIAIgBARIaCg1idWlsZF9jb21tYW5kGAggASgJSAGIAQESGgoNc3RhcnRfY29tbWFuZBgJIAEoCUgCiAEBEkgKCWJ1aWxkX2VudhgKIAMoCzI1LmlkcC5idWlsZC52MS5TdGFydEJ1aWxkV29ya2Zsb3dSZXF1ZXN0LkJ1aWxkRW52RW50cnkSEQoJaW1hZ2VfdGFnGAsgASgJGi8KDUJ1aWxkRW52RW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUITChFfbGFuZ3VhZ2VfdmVyc2lvbkIQCg5fYnVpbGRfY29tbWFuZEIQCg5fc3RhcnRfY29tbWFuZCJRChpTdGFydEJ1aWxkV29ya2Zsb3dSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhMKC3dvcmtmbG93X2lkGAIgASgJEg0KBWVycm9yGAMgASgJIi4KF0dldEJ1aWxkUHJvZ3Jlc3NSZXF1ZXN0EhMKC3dvcmtmbG93X2lkGAEgASgJIvEBChhHZXRCdWlsZFByb2dyZXNzUmVzcG9uc2USFAoMY3VycmVudF9zdGVwGAEgASgJEhMKC3N0ZXBzX3RvdGFsGAIgASgFEhUKDXN0ZXBzX2N1cnJlbnQYAyABKAUSDwoHbWVzc2FnZRgEIAEoCRIOCgZzdGF0dXMYBSABKAkSEQoJaW1hZ2VfdXJsGAYgASgJEhQKDGltYWdlX2RpZ2VzdBgHIAEoCRINCgVlcnJvchgIIAEoCRI6Cg9kZXRlY3RlZF9jb25maWcYCSABKAsyIS5pZHAuYnVpbGQudjEuRGV0ZWN0ZWRCdWlsZENvbmZpZypcCgxSZWdpc3RyeVR5cGUSHQoZUkVHSVNUUllfVFlQRV9VTlNQRUNJRklFRBAAEhYKElJFR0lTVFJZX1RZUEVfR0hDUhABEhUKEVJFR0lTVFJZX1RZUEVfQUNSEAIqsQEKD0J1aWxkU3RlcFN0YXR1cxIhCh1CVUlMRF9TVEVQX1NUQVRVU19VTlNQRUNJRklFRBAAEh0KGUJVSUxEX1NURVBfU1RBVFVTX1BFTkRJTkcQARIdChlCVUlMRF9TVEVQX1NUQVRVU19SVU5OSU5HEAISHwobQlVJTERfU1RFUF9TVEFUVVNfQ09NUExFVEVEEAMSHAoYQlVJTERfU1RFUF9TVEFUVVNfRkFJTEVEEAQy8wMKDEJ1aWxkU2VydmljZRJkChFBbmFseXplUmVwb3NpdG9yeRImLmlkcC5idWlsZC52MS5BbmFseXplUmVwb3NpdG9yeVJlcXVlc3QaJy5pZHAuYnVpbGQudjEuQW5hbHl6ZVJlcG9zaXRvcnlSZXNwb25zZRJPCgpCdWlsZEltYWdlEh8uaWRwLmJ1aWxkLnYxLkJ1aWxkSW1hZ2VSZXF1ZXN0GiAuaWRwLmJ1aWxkLnYxLkJ1aWxkSW1hZ2VSZXNwb25zZRJgCg9TdHJlYW1CdWlsZExvZ3MSJC5pZHAuYnVpbGQudjEuU3RyZWFtQnVpbGRMb2dzUmVxdWVzdBolLmlkcC5idWlsZC52MS5TdHJlYW1CdWlsZExvZ3NSZXNwb25zZTABEmcKElN0YXJ0QnVpbGRXb3JrZmxvdxInLmlkcC5idWlsZC52MS5TdGFydEJ1aWxkV29ya2Zsb3dSZXF1ZXN0GiguaWRwLmJ1aWxkLnYxLlN0YXJ0QnVpbGRXb3JrZmxvd1Jlc3BvbnNlEmEKEEdldEJ1aWxkUHJvZ3Jlc3MSJS5pZHAuYnVpbGQudjEuR2V0QnVpbGRQcm9ncmVzc1JlcXVlc3QaJi5pZHAuYnVpbGQudjEuR2V0QnVpbGRQcm9ncmVzc1Jlc3BvbnNlQkBaPmdpdGh1Yi5jb20vZHJld3BheW1lbnQvb3JiaXQvcHJvdG8vZ2VuL2dvL2lkcC9idWlsZC92MTtidWlsZHYxYgZwcm90bzM");
 
 /**
  * AnalyzeRepositoryRequest contains parameters for repository analysis
@@ -131,6 +131,13 @@ export type DetectedBuildConfig = Message<"idp.build.v1.DetectedBuildConfig"> & 
    * @generated from field: string start_command = 5;
    */
   startCommand: string;
+
+  /**
+   * Detected package manager info
+   *
+   * @generated from field: idp.build.v1.PackageManagerInfo package_manager = 6;
+   */
+  packageManager?: PackageManagerInfo;
 };
 
 /**
@@ -139,6 +146,69 @@ export type DetectedBuildConfig = Message<"idp.build.v1.DetectedBuildConfig"> & 
  */
 export const DetectedBuildConfigSchema: GenMessage<DetectedBuildConfig> = /*@__PURE__*/
   messageDesc(file_idp_build_v1_build, 2);
+
+/**
+ * Package manager detection result
+ *
+ * @generated from message idp.build.v1.PackageManagerInfo
+ */
+export type PackageManagerInfo = Message<"idp.build.v1.PackageManagerInfo"> & {
+  /**
+   * true if lockfile or packageManager field found
+   *
+   * @generated from field: bool detected = 1;
+   */
+  detected: boolean;
+
+  /**
+   * "npm", "yarn", "pnpm", "bun", or ""
+   *
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * "lockfile", "packageManager", "engines", ""
+   *
+   * @generated from field: string source = 3;
+   */
+  source: string;
+
+  /**
+   * e.g., "yarn.lock" if detected from lockfile
+   *
+   * @generated from field: string lockfile = 4;
+   */
+  lockfile: string;
+
+  /**
+   * e.g., "10.2.0" from packageManager field
+   *
+   * @generated from field: string requested_version = 5;
+   */
+  requestedVersion: string;
+
+  /**
+   * true if we can fulfill this version
+   *
+   * @generated from field: bool version_supported = 6;
+   */
+  versionSupported: boolean;
+
+  /**
+   * e.g., ">=7.0.0" - what we support
+   *
+   * @generated from field: string supported_range = 7;
+   */
+  supportedRange: string;
+};
+
+/**
+ * Describes the message idp.build.v1.PackageManagerInfo.
+ * Use `create(PackageManagerInfoSchema)` to create a new message.
+ */
+export const PackageManagerInfoSchema: GenMessage<PackageManagerInfo> = /*@__PURE__*/
+  messageDesc(file_idp_build_v1_build, 3);
 
 /**
  * BuildImageRequest contains parameters for building an image
@@ -218,6 +288,13 @@ export type BuildImageRequest = Message<"idp.build.v1.BuildImageRequest"> & {
    * @generated from field: string image_tag = 11;
    */
   imageTag: string;
+
+  /**
+   * "npm", "yarn", "pnpm", "bun", or "" for auto
+   *
+   * @generated from field: string package_manager = 12;
+   */
+  packageManager: string;
 };
 
 /**
@@ -225,7 +302,7 @@ export type BuildImageRequest = Message<"idp.build.v1.BuildImageRequest"> & {
  * Use `create(BuildImageRequestSchema)` to create a new message.
  */
 export const BuildImageRequestSchema: GenMessage<BuildImageRequest> = /*@__PURE__*/
-  messageDesc(file_idp_build_v1_build, 3);
+  messageDesc(file_idp_build_v1_build, 4);
 
 /**
  * RegistryConfig contains container registry authentication
@@ -272,7 +349,7 @@ export type RegistryConfig = Message<"idp.build.v1.RegistryConfig"> & {
  * Use `create(RegistryConfigSchema)` to create a new message.
  */
 export const RegistryConfigSchema: GenMessage<RegistryConfig> = /*@__PURE__*/
-  messageDesc(file_idp_build_v1_build, 4);
+  messageDesc(file_idp_build_v1_build, 5);
 
 /**
  * BuildImageResponse contains the build results
@@ -319,7 +396,7 @@ export type BuildImageResponse = Message<"idp.build.v1.BuildImageResponse"> & {
  * Use `create(BuildImageResponseSchema)` to create a new message.
  */
 export const BuildImageResponseSchema: GenMessage<BuildImageResponse> = /*@__PURE__*/
-  messageDesc(file_idp_build_v1_build, 5);
+  messageDesc(file_idp_build_v1_build, 6);
 
 /**
  * BuildStep represents a step in the build process
@@ -353,7 +430,7 @@ export type BuildStep = Message<"idp.build.v1.BuildStep"> & {
  * Use `create(BuildStepSchema)` to create a new message.
  */
 export const BuildStepSchema: GenMessage<BuildStep> = /*@__PURE__*/
-  messageDesc(file_idp_build_v1_build, 6);
+  messageDesc(file_idp_build_v1_build, 7);
 
 /**
  * StreamBuildLogsRequest for streaming build output
@@ -372,7 +449,7 @@ export type StreamBuildLogsRequest = Message<"idp.build.v1.StreamBuildLogsReques
  * Use `create(StreamBuildLogsRequestSchema)` to create a new message.
  */
 export const StreamBuildLogsRequestSchema: GenMessage<StreamBuildLogsRequest> = /*@__PURE__*/
-  messageDesc(file_idp_build_v1_build, 7);
+  messageDesc(file_idp_build_v1_build, 8);
 
 /**
  * StreamBuildLogsResponse represents a single log line
@@ -410,7 +487,223 @@ export type StreamBuildLogsResponse = Message<"idp.build.v1.StreamBuildLogsRespo
  * Use `create(StreamBuildLogsResponseSchema)` to create a new message.
  */
 export const StreamBuildLogsResponseSchema: GenMessage<StreamBuildLogsResponse> = /*@__PURE__*/
-  messageDesc(file_idp_build_v1_build, 8);
+  messageDesc(file_idp_build_v1_build, 9);
+
+/**
+ * StartBuildWorkflowRequest initiates a Temporal build workflow
+ *
+ * @generated from message idp.build.v1.StartBuildWorkflowRequest
+ */
+export type StartBuildWorkflowRequest = Message<"idp.build.v1.StartBuildWorkflowRequest"> & {
+  /**
+   * Orbit App ID
+   *
+   * @generated from field: string app_id = 1;
+   */
+  appId: string;
+
+  /**
+   * Workspace ID for auth
+   *
+   * @generated from field: string workspace_id = 2;
+   */
+  workspaceId: string;
+
+  /**
+   * User initiating the build
+   *
+   * @generated from field: string user_id = 3;
+   */
+  userId: string;
+
+  /**
+   * Repository URL
+   *
+   * @generated from field: string repo_url = 4;
+   */
+  repoUrl: string;
+
+  /**
+   * Branch, tag, or commit SHA (default: main)
+   *
+   * @generated from field: string ref = 5;
+   */
+  ref: string;
+
+  /**
+   * Registry configuration
+   *
+   * @generated from field: idp.build.v1.RegistryConfig registry = 6;
+   */
+  registry?: RegistryConfig;
+
+  /**
+   * Optional build overrides
+   *
+   * @generated from field: optional string language_version = 7;
+   */
+  languageVersion?: string;
+
+  /**
+   * @generated from field: optional string build_command = 8;
+   */
+  buildCommand?: string;
+
+  /**
+   * @generated from field: optional string start_command = 9;
+   */
+  startCommand?: string;
+
+  /**
+   * @generated from field: map<string, string> build_env = 10;
+   */
+  buildEnv: { [key: string]: string };
+
+  /**
+   * Tag for the built image
+   *
+   * @generated from field: string image_tag = 11;
+   */
+  imageTag: string;
+};
+
+/**
+ * Describes the message idp.build.v1.StartBuildWorkflowRequest.
+ * Use `create(StartBuildWorkflowRequestSchema)` to create a new message.
+ */
+export const StartBuildWorkflowRequestSchema: GenMessage<StartBuildWorkflowRequest> = /*@__PURE__*/
+  messageDesc(file_idp_build_v1_build, 10);
+
+/**
+ * StartBuildWorkflowResponse contains the workflow ID
+ *
+ * @generated from message idp.build.v1.StartBuildWorkflowResponse
+ */
+export type StartBuildWorkflowResponse = Message<"idp.build.v1.StartBuildWorkflowResponse"> & {
+  /**
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+
+  /**
+   * Temporal workflow ID for tracking
+   *
+   * @generated from field: string workflow_id = 2;
+   */
+  workflowId: string;
+
+  /**
+   * Error message if failed
+   *
+   * @generated from field: string error = 3;
+   */
+  error: string;
+};
+
+/**
+ * Describes the message idp.build.v1.StartBuildWorkflowResponse.
+ * Use `create(StartBuildWorkflowResponseSchema)` to create a new message.
+ */
+export const StartBuildWorkflowResponseSchema: GenMessage<StartBuildWorkflowResponse> = /*@__PURE__*/
+  messageDesc(file_idp_build_v1_build, 11);
+
+/**
+ * GetBuildProgressRequest queries a build workflow's progress
+ *
+ * @generated from message idp.build.v1.GetBuildProgressRequest
+ */
+export type GetBuildProgressRequest = Message<"idp.build.v1.GetBuildProgressRequest"> & {
+  /**
+   * Temporal workflow ID
+   *
+   * @generated from field: string workflow_id = 1;
+   */
+  workflowId: string;
+};
+
+/**
+ * Describes the message idp.build.v1.GetBuildProgressRequest.
+ * Use `create(GetBuildProgressRequestSchema)` to create a new message.
+ */
+export const GetBuildProgressRequestSchema: GenMessage<GetBuildProgressRequest> = /*@__PURE__*/
+  messageDesc(file_idp_build_v1_build, 12);
+
+/**
+ * GetBuildProgressResponse contains the current build progress
+ *
+ * @generated from message idp.build.v1.GetBuildProgressResponse
+ */
+export type GetBuildProgressResponse = Message<"idp.build.v1.GetBuildProgressResponse"> & {
+  /**
+   * e.g., "analyzing", "building", "pushing"
+   *
+   * @generated from field: string current_step = 1;
+   */
+  currentStep: string;
+
+  /**
+   * Total number of steps
+   *
+   * @generated from field: int32 steps_total = 2;
+   */
+  stepsTotal: number;
+
+  /**
+   * Current step number
+   *
+   * @generated from field: int32 steps_current = 3;
+   */
+  stepsCurrent: number;
+
+  /**
+   * Human-readable progress message
+   *
+   * @generated from field: string message = 4;
+   */
+  message: string;
+
+  /**
+   * "pending", "running", "success", "failed"
+   *
+   * @generated from field: string status = 5;
+   */
+  status: string;
+
+  /**
+   * Resulting image URL (if success)
+   *
+   * @generated from field: string image_url = 6;
+   */
+  imageUrl: string;
+
+  /**
+   * Resulting image digest (if success)
+   *
+   * @generated from field: string image_digest = 7;
+   */
+  imageDigest: string;
+
+  /**
+   * Error message (if failed)
+   *
+   * @generated from field: string error = 8;
+   */
+  error: string;
+
+  /**
+   * Detected build configuration
+   *
+   * @generated from field: idp.build.v1.DetectedBuildConfig detected_config = 9;
+   */
+  detectedConfig?: DetectedBuildConfig;
+};
+
+/**
+ * Describes the message idp.build.v1.GetBuildProgressResponse.
+ * Use `create(GetBuildProgressResponseSchema)` to create a new message.
+ */
+export const GetBuildProgressResponseSchema: GenMessage<GetBuildProgressResponse> = /*@__PURE__*/
+  messageDesc(file_idp_build_v1_build, 13);
 
 /**
  * RegistryType enum
@@ -513,6 +806,26 @@ export const BuildService: GenService<{
     methodKind: "server_streaming";
     input: typeof StreamBuildLogsRequestSchema;
     output: typeof StreamBuildLogsResponseSchema;
+  },
+  /**
+   * Start a build workflow via Temporal
+   *
+   * @generated from rpc idp.build.v1.BuildService.StartBuildWorkflow
+   */
+  startBuildWorkflow: {
+    methodKind: "unary";
+    input: typeof StartBuildWorkflowRequestSchema;
+    output: typeof StartBuildWorkflowResponseSchema;
+  },
+  /**
+   * Get the progress of a build workflow
+   *
+   * @generated from rpc idp.build.v1.BuildService.GetBuildProgress
+   */
+  getBuildProgress: {
+    methodKind: "unary";
+    input: typeof GetBuildProgressRequestSchema;
+    output: typeof GetBuildProgressResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_idp_build_v1_build, 0);

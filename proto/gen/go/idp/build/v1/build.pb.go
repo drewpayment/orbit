@@ -267,6 +267,7 @@ type DetectedBuildConfig struct {
 	Framework       string                 `protobuf:"bytes,3,opt,name=framework,proto3" json:"framework,omitempty"`                                    // e.g., "nextjs", "fastapi", "gin"
 	BuildCommand    string                 `protobuf:"bytes,4,opt,name=build_command,json=buildCommand,proto3" json:"build_command,omitempty"`          // e.g., "npm run build"
 	StartCommand    string                 `protobuf:"bytes,5,opt,name=start_command,json=startCommand,proto3" json:"start_command,omitempty"`          // e.g., "npm start"
+	PackageManager  *PackageManagerInfo    `protobuf:"bytes,6,opt,name=package_manager,json=packageManager,proto3" json:"package_manager,omitempty"`    // Detected package manager info
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -336,6 +337,106 @@ func (x *DetectedBuildConfig) GetStartCommand() string {
 	return ""
 }
 
+func (x *DetectedBuildConfig) GetPackageManager() *PackageManagerInfo {
+	if x != nil {
+		return x.PackageManager
+	}
+	return nil
+}
+
+// Package manager detection result
+type PackageManagerInfo struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Detected         bool                   `protobuf:"varint,1,opt,name=detected,proto3" json:"detected,omitempty"`                                         // true if lockfile or packageManager field found
+	Name             string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`                                                  // "npm", "yarn", "pnpm", "bun", or ""
+	Source           string                 `protobuf:"bytes,3,opt,name=source,proto3" json:"source,omitempty"`                                              // "lockfile", "packageManager", "engines", ""
+	Lockfile         string                 `protobuf:"bytes,4,opt,name=lockfile,proto3" json:"lockfile,omitempty"`                                          // e.g., "yarn.lock" if detected from lockfile
+	RequestedVersion string                 `protobuf:"bytes,5,opt,name=requested_version,json=requestedVersion,proto3" json:"requested_version,omitempty"`  // e.g., "10.2.0" from packageManager field
+	VersionSupported bool                   `protobuf:"varint,6,opt,name=version_supported,json=versionSupported,proto3" json:"version_supported,omitempty"` // true if we can fulfill this version
+	SupportedRange   string                 `protobuf:"bytes,7,opt,name=supported_range,json=supportedRange,proto3" json:"supported_range,omitempty"`        // e.g., ">=7.0.0" - what we support
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *PackageManagerInfo) Reset() {
+	*x = PackageManagerInfo{}
+	mi := &file_idp_build_v1_build_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PackageManagerInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PackageManagerInfo) ProtoMessage() {}
+
+func (x *PackageManagerInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_build_v1_build_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PackageManagerInfo.ProtoReflect.Descriptor instead.
+func (*PackageManagerInfo) Descriptor() ([]byte, []int) {
+	return file_idp_build_v1_build_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *PackageManagerInfo) GetDetected() bool {
+	if x != nil {
+		return x.Detected
+	}
+	return false
+}
+
+func (x *PackageManagerInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *PackageManagerInfo) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *PackageManagerInfo) GetLockfile() string {
+	if x != nil {
+		return x.Lockfile
+	}
+	return ""
+}
+
+func (x *PackageManagerInfo) GetRequestedVersion() string {
+	if x != nil {
+		return x.RequestedVersion
+	}
+	return ""
+}
+
+func (x *PackageManagerInfo) GetVersionSupported() bool {
+	if x != nil {
+		return x.VersionSupported
+	}
+	return false
+}
+
+func (x *PackageManagerInfo) GetSupportedRange() string {
+	if x != nil {
+		return x.SupportedRange
+	}
+	return ""
+}
+
 // BuildImageRequest contains parameters for building an image
 type BuildImageRequest struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
@@ -350,15 +451,16 @@ type BuildImageRequest struct {
 	StartCommand    *string           `protobuf:"bytes,8,opt,name=start_command,json=startCommand,proto3,oneof" json:"start_command,omitempty"`
 	BuildEnv        map[string]string `protobuf:"bytes,9,rep,name=build_env,json=buildEnv,proto3" json:"build_env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Environment variables for build
 	// Registry configuration
-	Registry      *RegistryConfig `protobuf:"bytes,10,opt,name=registry,proto3" json:"registry,omitempty"`
-	ImageTag      string          `protobuf:"bytes,11,opt,name=image_tag,json=imageTag,proto3" json:"image_tag,omitempty"` // Tag for the built image
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Registry       *RegistryConfig `protobuf:"bytes,10,opt,name=registry,proto3" json:"registry,omitempty"`
+	ImageTag       string          `protobuf:"bytes,11,opt,name=image_tag,json=imageTag,proto3" json:"image_tag,omitempty"`                   // Tag for the built image
+	PackageManager string          `protobuf:"bytes,12,opt,name=package_manager,json=packageManager,proto3" json:"package_manager,omitempty"` // "npm", "yarn", "pnpm", "bun", or "" for auto
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *BuildImageRequest) Reset() {
 	*x = BuildImageRequest{}
-	mi := &file_idp_build_v1_build_proto_msgTypes[3]
+	mi := &file_idp_build_v1_build_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -370,7 +472,7 @@ func (x *BuildImageRequest) String() string {
 func (*BuildImageRequest) ProtoMessage() {}
 
 func (x *BuildImageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_build_v1_build_proto_msgTypes[3]
+	mi := &file_idp_build_v1_build_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -383,7 +485,7 @@ func (x *BuildImageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BuildImageRequest.ProtoReflect.Descriptor instead.
 func (*BuildImageRequest) Descriptor() ([]byte, []int) {
-	return file_idp_build_v1_build_proto_rawDescGZIP(), []int{3}
+	return file_idp_build_v1_build_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *BuildImageRequest) GetRequestId() string {
@@ -463,6 +565,13 @@ func (x *BuildImageRequest) GetImageTag() string {
 	return ""
 }
 
+func (x *BuildImageRequest) GetPackageManager() string {
+	if x != nil {
+		return x.PackageManager
+	}
+	return ""
+}
+
 // RegistryConfig contains container registry authentication
 type RegistryConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -477,7 +586,7 @@ type RegistryConfig struct {
 
 func (x *RegistryConfig) Reset() {
 	*x = RegistryConfig{}
-	mi := &file_idp_build_v1_build_proto_msgTypes[4]
+	mi := &file_idp_build_v1_build_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -489,7 +598,7 @@ func (x *RegistryConfig) String() string {
 func (*RegistryConfig) ProtoMessage() {}
 
 func (x *RegistryConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_build_v1_build_proto_msgTypes[4]
+	mi := &file_idp_build_v1_build_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -502,7 +611,7 @@ func (x *RegistryConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegistryConfig.ProtoReflect.Descriptor instead.
 func (*RegistryConfig) Descriptor() ([]byte, []int) {
-	return file_idp_build_v1_build_proto_rawDescGZIP(), []int{4}
+	return file_idp_build_v1_build_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *RegistryConfig) GetType() RegistryType {
@@ -554,7 +663,7 @@ type BuildImageResponse struct {
 
 func (x *BuildImageResponse) Reset() {
 	*x = BuildImageResponse{}
-	mi := &file_idp_build_v1_build_proto_msgTypes[5]
+	mi := &file_idp_build_v1_build_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -566,7 +675,7 @@ func (x *BuildImageResponse) String() string {
 func (*BuildImageResponse) ProtoMessage() {}
 
 func (x *BuildImageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_build_v1_build_proto_msgTypes[5]
+	mi := &file_idp_build_v1_build_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -579,7 +688,7 @@ func (x *BuildImageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BuildImageResponse.ProtoReflect.Descriptor instead.
 func (*BuildImageResponse) Descriptor() ([]byte, []int) {
-	return file_idp_build_v1_build_proto_rawDescGZIP(), []int{5}
+	return file_idp_build_v1_build_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *BuildImageResponse) GetSuccess() bool {
@@ -630,7 +739,7 @@ type BuildStep struct {
 
 func (x *BuildStep) Reset() {
 	*x = BuildStep{}
-	mi := &file_idp_build_v1_build_proto_msgTypes[6]
+	mi := &file_idp_build_v1_build_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -642,7 +751,7 @@ func (x *BuildStep) String() string {
 func (*BuildStep) ProtoMessage() {}
 
 func (x *BuildStep) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_build_v1_build_proto_msgTypes[6]
+	mi := &file_idp_build_v1_build_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -655,7 +764,7 @@ func (x *BuildStep) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BuildStep.ProtoReflect.Descriptor instead.
 func (*BuildStep) Descriptor() ([]byte, []int) {
-	return file_idp_build_v1_build_proto_rawDescGZIP(), []int{6}
+	return file_idp_build_v1_build_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *BuildStep) GetName() string {
@@ -696,7 +805,7 @@ type StreamBuildLogsRequest struct {
 
 func (x *StreamBuildLogsRequest) Reset() {
 	*x = StreamBuildLogsRequest{}
-	mi := &file_idp_build_v1_build_proto_msgTypes[7]
+	mi := &file_idp_build_v1_build_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -708,7 +817,7 @@ func (x *StreamBuildLogsRequest) String() string {
 func (*StreamBuildLogsRequest) ProtoMessage() {}
 
 func (x *StreamBuildLogsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_build_v1_build_proto_msgTypes[7]
+	mi := &file_idp_build_v1_build_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -721,7 +830,7 @@ func (x *StreamBuildLogsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamBuildLogsRequest.ProtoReflect.Descriptor instead.
 func (*StreamBuildLogsRequest) Descriptor() ([]byte, []int) {
-	return file_idp_build_v1_build_proto_rawDescGZIP(), []int{7}
+	return file_idp_build_v1_build_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *StreamBuildLogsRequest) GetRequestId() string {
@@ -744,7 +853,7 @@ type StreamBuildLogsResponse struct {
 
 func (x *StreamBuildLogsResponse) Reset() {
 	*x = StreamBuildLogsResponse{}
-	mi := &file_idp_build_v1_build_proto_msgTypes[8]
+	mi := &file_idp_build_v1_build_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -756,7 +865,7 @@ func (x *StreamBuildLogsResponse) String() string {
 func (*StreamBuildLogsResponse) ProtoMessage() {}
 
 func (x *StreamBuildLogsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_build_v1_build_proto_msgTypes[8]
+	mi := &file_idp_build_v1_build_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -769,7 +878,7 @@ func (x *StreamBuildLogsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamBuildLogsResponse.ProtoReflect.Descriptor instead.
 func (*StreamBuildLogsResponse) Descriptor() ([]byte, []int) {
-	return file_idp_build_v1_build_proto_rawDescGZIP(), []int{8}
+	return file_idp_build_v1_build_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *StreamBuildLogsResponse) GetTimestamp() int64 {
@@ -800,6 +909,347 @@ func (x *StreamBuildLogsResponse) GetStep() string {
 	return ""
 }
 
+// StartBuildWorkflowRequest initiates a Temporal build workflow
+type StartBuildWorkflowRequest struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	AppId       string                 `protobuf:"bytes,1,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`                   // Orbit App ID
+	WorkspaceId string                 `protobuf:"bytes,2,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"` // Workspace ID for auth
+	UserId      string                 `protobuf:"bytes,3,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`                // User initiating the build
+	RepoUrl     string                 `protobuf:"bytes,4,opt,name=repo_url,json=repoUrl,proto3" json:"repo_url,omitempty"`             // Repository URL
+	Ref         string                 `protobuf:"bytes,5,opt,name=ref,proto3" json:"ref,omitempty"`                                    // Branch, tag, or commit SHA (default: main)
+	Registry    *RegistryConfig        `protobuf:"bytes,6,opt,name=registry,proto3" json:"registry,omitempty"`                          // Registry configuration
+	// Optional build overrides
+	LanguageVersion *string           `protobuf:"bytes,7,opt,name=language_version,json=languageVersion,proto3,oneof" json:"language_version,omitempty"`
+	BuildCommand    *string           `protobuf:"bytes,8,opt,name=build_command,json=buildCommand,proto3,oneof" json:"build_command,omitempty"`
+	StartCommand    *string           `protobuf:"bytes,9,opt,name=start_command,json=startCommand,proto3,oneof" json:"start_command,omitempty"`
+	BuildEnv        map[string]string `protobuf:"bytes,10,rep,name=build_env,json=buildEnv,proto3" json:"build_env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	ImageTag        string            `protobuf:"bytes,11,opt,name=image_tag,json=imageTag,proto3" json:"image_tag,omitempty"` // Tag for the built image
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *StartBuildWorkflowRequest) Reset() {
+	*x = StartBuildWorkflowRequest{}
+	mi := &file_idp_build_v1_build_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartBuildWorkflowRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartBuildWorkflowRequest) ProtoMessage() {}
+
+func (x *StartBuildWorkflowRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_build_v1_build_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartBuildWorkflowRequest.ProtoReflect.Descriptor instead.
+func (*StartBuildWorkflowRequest) Descriptor() ([]byte, []int) {
+	return file_idp_build_v1_build_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *StartBuildWorkflowRequest) GetAppId() string {
+	if x != nil {
+		return x.AppId
+	}
+	return ""
+}
+
+func (x *StartBuildWorkflowRequest) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *StartBuildWorkflowRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *StartBuildWorkflowRequest) GetRepoUrl() string {
+	if x != nil {
+		return x.RepoUrl
+	}
+	return ""
+}
+
+func (x *StartBuildWorkflowRequest) GetRef() string {
+	if x != nil {
+		return x.Ref
+	}
+	return ""
+}
+
+func (x *StartBuildWorkflowRequest) GetRegistry() *RegistryConfig {
+	if x != nil {
+		return x.Registry
+	}
+	return nil
+}
+
+func (x *StartBuildWorkflowRequest) GetLanguageVersion() string {
+	if x != nil && x.LanguageVersion != nil {
+		return *x.LanguageVersion
+	}
+	return ""
+}
+
+func (x *StartBuildWorkflowRequest) GetBuildCommand() string {
+	if x != nil && x.BuildCommand != nil {
+		return *x.BuildCommand
+	}
+	return ""
+}
+
+func (x *StartBuildWorkflowRequest) GetStartCommand() string {
+	if x != nil && x.StartCommand != nil {
+		return *x.StartCommand
+	}
+	return ""
+}
+
+func (x *StartBuildWorkflowRequest) GetBuildEnv() map[string]string {
+	if x != nil {
+		return x.BuildEnv
+	}
+	return nil
+}
+
+func (x *StartBuildWorkflowRequest) GetImageTag() string {
+	if x != nil {
+		return x.ImageTag
+	}
+	return ""
+}
+
+// StartBuildWorkflowResponse contains the workflow ID
+type StartBuildWorkflowResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	WorkflowId    string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"` // Temporal workflow ID for tracking
+	Error         string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`                             // Error message if failed
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartBuildWorkflowResponse) Reset() {
+	*x = StartBuildWorkflowResponse{}
+	mi := &file_idp_build_v1_build_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartBuildWorkflowResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartBuildWorkflowResponse) ProtoMessage() {}
+
+func (x *StartBuildWorkflowResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_build_v1_build_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartBuildWorkflowResponse.ProtoReflect.Descriptor instead.
+func (*StartBuildWorkflowResponse) Descriptor() ([]byte, []int) {
+	return file_idp_build_v1_build_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *StartBuildWorkflowResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *StartBuildWorkflowResponse) GetWorkflowId() string {
+	if x != nil {
+		return x.WorkflowId
+	}
+	return ""
+}
+
+func (x *StartBuildWorkflowResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+// GetBuildProgressRequest queries a build workflow's progress
+type GetBuildProgressRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	WorkflowId    string                 `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"` // Temporal workflow ID
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetBuildProgressRequest) Reset() {
+	*x = GetBuildProgressRequest{}
+	mi := &file_idp_build_v1_build_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetBuildProgressRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetBuildProgressRequest) ProtoMessage() {}
+
+func (x *GetBuildProgressRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_build_v1_build_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetBuildProgressRequest.ProtoReflect.Descriptor instead.
+func (*GetBuildProgressRequest) Descriptor() ([]byte, []int) {
+	return file_idp_build_v1_build_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *GetBuildProgressRequest) GetWorkflowId() string {
+	if x != nil {
+		return x.WorkflowId
+	}
+	return ""
+}
+
+// GetBuildProgressResponse contains the current build progress
+type GetBuildProgressResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	CurrentStep    string                 `protobuf:"bytes,1,opt,name=current_step,json=currentStep,proto3" json:"current_step,omitempty"`          // e.g., "analyzing", "building", "pushing"
+	StepsTotal     int32                  `protobuf:"varint,2,opt,name=steps_total,json=stepsTotal,proto3" json:"steps_total,omitempty"`            // Total number of steps
+	StepsCurrent   int32                  `protobuf:"varint,3,opt,name=steps_current,json=stepsCurrent,proto3" json:"steps_current,omitempty"`      // Current step number
+	Message        string                 `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`                                     // Human-readable progress message
+	Status         string                 `protobuf:"bytes,5,opt,name=status,proto3" json:"status,omitempty"`                                       // "pending", "running", "success", "failed"
+	ImageUrl       string                 `protobuf:"bytes,6,opt,name=image_url,json=imageUrl,proto3" json:"image_url,omitempty"`                   // Resulting image URL (if success)
+	ImageDigest    string                 `protobuf:"bytes,7,opt,name=image_digest,json=imageDigest,proto3" json:"image_digest,omitempty"`          // Resulting image digest (if success)
+	Error          string                 `protobuf:"bytes,8,opt,name=error,proto3" json:"error,omitempty"`                                         // Error message (if failed)
+	DetectedConfig *DetectedBuildConfig   `protobuf:"bytes,9,opt,name=detected_config,json=detectedConfig,proto3" json:"detected_config,omitempty"` // Detected build configuration
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *GetBuildProgressResponse) Reset() {
+	*x = GetBuildProgressResponse{}
+	mi := &file_idp_build_v1_build_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetBuildProgressResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetBuildProgressResponse) ProtoMessage() {}
+
+func (x *GetBuildProgressResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_build_v1_build_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetBuildProgressResponse.ProtoReflect.Descriptor instead.
+func (*GetBuildProgressResponse) Descriptor() ([]byte, []int) {
+	return file_idp_build_v1_build_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *GetBuildProgressResponse) GetCurrentStep() string {
+	if x != nil {
+		return x.CurrentStep
+	}
+	return ""
+}
+
+func (x *GetBuildProgressResponse) GetStepsTotal() int32 {
+	if x != nil {
+		return x.StepsTotal
+	}
+	return 0
+}
+
+func (x *GetBuildProgressResponse) GetStepsCurrent() int32 {
+	if x != nil {
+		return x.StepsCurrent
+	}
+	return 0
+}
+
+func (x *GetBuildProgressResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *GetBuildProgressResponse) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *GetBuildProgressResponse) GetImageUrl() string {
+	if x != nil {
+		return x.ImageUrl
+	}
+	return ""
+}
+
+func (x *GetBuildProgressResponse) GetImageDigest() string {
+	if x != nil {
+		return x.ImageDigest
+	}
+	return ""
+}
+
+func (x *GetBuildProgressResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *GetBuildProgressResponse) GetDetectedConfig() *DetectedBuildConfig {
+	if x != nil {
+		return x.DetectedConfig
+	}
+	return nil
+}
+
 var File_idp_build_v1_build_proto protoreflect.FileDescriptor
 
 const file_idp_build_v1_build_proto_rawDesc = "" +
@@ -813,13 +1263,22 @@ const file_idp_build_v1_build_proto_rawDesc = "" +
 	"\bdetected\x18\x01 \x01(\bR\bdetected\x129\n" +
 	"\x06config\x18\x02 \x01(\v2!.idp.build.v1.DetectedBuildConfigR\x06config\x12\x14\n" +
 	"\x05error\x18\x03 \x01(\tR\x05error\x12%\n" +
-	"\x0edetected_files\x18\x04 \x03(\tR\rdetectedFiles\"\xc4\x01\n" +
+	"\x0edetected_files\x18\x04 \x03(\tR\rdetectedFiles\"\x8f\x02\n" +
 	"\x13DetectedBuildConfig\x12\x1a\n" +
 	"\blanguage\x18\x01 \x01(\tR\blanguage\x12)\n" +
 	"\x10language_version\x18\x02 \x01(\tR\x0flanguageVersion\x12\x1c\n" +
 	"\tframework\x18\x03 \x01(\tR\tframework\x12#\n" +
 	"\rbuild_command\x18\x04 \x01(\tR\fbuildCommand\x12#\n" +
-	"\rstart_command\x18\x05 \x01(\tR\fstartCommand\"\xc2\x04\n" +
+	"\rstart_command\x18\x05 \x01(\tR\fstartCommand\x12I\n" +
+	"\x0fpackage_manager\x18\x06 \x01(\v2 .idp.build.v1.PackageManagerInfoR\x0epackageManager\"\xfb\x01\n" +
+	"\x12PackageManagerInfo\x12\x1a\n" +
+	"\bdetected\x18\x01 \x01(\bR\bdetected\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
+	"\x06source\x18\x03 \x01(\tR\x06source\x12\x1a\n" +
+	"\blockfile\x18\x04 \x01(\tR\blockfile\x12+\n" +
+	"\x11requested_version\x18\x05 \x01(\tR\x10requestedVersion\x12+\n" +
+	"\x11version_supported\x18\x06 \x01(\bR\x10versionSupported\x12'\n" +
+	"\x0fsupported_range\x18\a \x01(\tR\x0esupportedRange\"\xeb\x04\n" +
 	"\x11BuildImageRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x15\n" +
@@ -833,7 +1292,8 @@ const file_idp_build_v1_build_proto_rawDesc = "" +
 	"\tbuild_env\x18\t \x03(\v2-.idp.build.v1.BuildImageRequest.BuildEnvEntryR\bbuildEnv\x128\n" +
 	"\bregistry\x18\n" +
 	" \x01(\v2\x1c.idp.build.v1.RegistryConfigR\bregistry\x12\x1b\n" +
-	"\timage_tag\x18\v \x01(\tR\bimageTag\x1a;\n" +
+	"\timage_tag\x18\v \x01(\tR\bimageTag\x12'\n" +
+	"\x0fpackage_manager\x18\f \x01(\tR\x0epackageManager\x1a;\n" +
 	"\rBuildEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x13\n" +
@@ -868,7 +1328,45 @@ const file_idp_build_v1_build_proto_rawDesc = "" +
 	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\x12\x14\n" +
 	"\x05level\x18\x02 \x01(\tR\x05level\x12\x18\n" +
 	"\amessage\x18\x03 \x01(\tR\amessage\x12\x12\n" +
-	"\x04step\x18\x04 \x01(\tR\x04step*\\\n" +
+	"\x04step\x18\x04 \x01(\tR\x04step\"\xc0\x04\n" +
+	"\x19StartBuildWorkflowRequest\x12\x15\n" +
+	"\x06app_id\x18\x01 \x01(\tR\x05appId\x12!\n" +
+	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12\x17\n" +
+	"\auser_id\x18\x03 \x01(\tR\x06userId\x12\x19\n" +
+	"\brepo_url\x18\x04 \x01(\tR\arepoUrl\x12\x10\n" +
+	"\x03ref\x18\x05 \x01(\tR\x03ref\x128\n" +
+	"\bregistry\x18\x06 \x01(\v2\x1c.idp.build.v1.RegistryConfigR\bregistry\x12.\n" +
+	"\x10language_version\x18\a \x01(\tH\x00R\x0flanguageVersion\x88\x01\x01\x12(\n" +
+	"\rbuild_command\x18\b \x01(\tH\x01R\fbuildCommand\x88\x01\x01\x12(\n" +
+	"\rstart_command\x18\t \x01(\tH\x02R\fstartCommand\x88\x01\x01\x12R\n" +
+	"\tbuild_env\x18\n" +
+	" \x03(\v25.idp.build.v1.StartBuildWorkflowRequest.BuildEnvEntryR\bbuildEnv\x12\x1b\n" +
+	"\timage_tag\x18\v \x01(\tR\bimageTag\x1a;\n" +
+	"\rBuildEnvEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x13\n" +
+	"\x11_language_versionB\x10\n" +
+	"\x0e_build_commandB\x10\n" +
+	"\x0e_start_command\"m\n" +
+	"\x1aStartBuildWorkflowResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1f\n" +
+	"\vworkflow_id\x18\x02 \x01(\tR\n" +
+	"workflowId\x12\x14\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\":\n" +
+	"\x17GetBuildProgressRequest\x12\x1f\n" +
+	"\vworkflow_id\x18\x01 \x01(\tR\n" +
+	"workflowId\"\xd7\x02\n" +
+	"\x18GetBuildProgressResponse\x12!\n" +
+	"\fcurrent_step\x18\x01 \x01(\tR\vcurrentStep\x12\x1f\n" +
+	"\vsteps_total\x18\x02 \x01(\x05R\n" +
+	"stepsTotal\x12#\n" +
+	"\rsteps_current\x18\x03 \x01(\x05R\fstepsCurrent\x12\x18\n" +
+	"\amessage\x18\x04 \x01(\tR\amessage\x12\x16\n" +
+	"\x06status\x18\x05 \x01(\tR\x06status\x12\x1b\n" +
+	"\timage_url\x18\x06 \x01(\tR\bimageUrl\x12!\n" +
+	"\fimage_digest\x18\a \x01(\tR\vimageDigest\x12\x14\n" +
+	"\x05error\x18\b \x01(\tR\x05error\x12J\n" +
+	"\x0fdetected_config\x18\t \x01(\v2!.idp.build.v1.DetectedBuildConfigR\x0edetectedConfig*\\\n" +
 	"\fRegistryType\x12\x1d\n" +
 	"\x19REGISTRY_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12REGISTRY_TYPE_GHCR\x10\x01\x12\x15\n" +
@@ -878,12 +1376,14 @@ const file_idp_build_v1_build_proto_rawDesc = "" +
 	"\x19BUILD_STEP_STATUS_PENDING\x10\x01\x12\x1d\n" +
 	"\x19BUILD_STEP_STATUS_RUNNING\x10\x02\x12\x1f\n" +
 	"\x1bBUILD_STEP_STATUS_COMPLETED\x10\x03\x12\x1c\n" +
-	"\x18BUILD_STEP_STATUS_FAILED\x10\x042\xa7\x02\n" +
+	"\x18BUILD_STEP_STATUS_FAILED\x10\x042\xf3\x03\n" +
 	"\fBuildService\x12d\n" +
 	"\x11AnalyzeRepository\x12&.idp.build.v1.AnalyzeRepositoryRequest\x1a'.idp.build.v1.AnalyzeRepositoryResponse\x12O\n" +
 	"\n" +
 	"BuildImage\x12\x1f.idp.build.v1.BuildImageRequest\x1a .idp.build.v1.BuildImageResponse\x12`\n" +
-	"\x0fStreamBuildLogs\x12$.idp.build.v1.StreamBuildLogsRequest\x1a%.idp.build.v1.StreamBuildLogsResponse0\x01B@Z>github.com/drewpayment/orbit/proto/gen/go/idp/build/v1;buildv1b\x06proto3"
+	"\x0fStreamBuildLogs\x12$.idp.build.v1.StreamBuildLogsRequest\x1a%.idp.build.v1.StreamBuildLogsResponse0\x01\x12g\n" +
+	"\x12StartBuildWorkflow\x12'.idp.build.v1.StartBuildWorkflowRequest\x1a(.idp.build.v1.StartBuildWorkflowResponse\x12a\n" +
+	"\x10GetBuildProgress\x12%.idp.build.v1.GetBuildProgressRequest\x1a&.idp.build.v1.GetBuildProgressResponseB@Z>github.com/drewpayment/orbit/proto/gen/go/idp/build/v1;buildv1b\x06proto3"
 
 var (
 	file_idp_build_v1_build_proto_rawDescOnce sync.Once
@@ -898,39 +1398,53 @@ func file_idp_build_v1_build_proto_rawDescGZIP() []byte {
 }
 
 var file_idp_build_v1_build_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_idp_build_v1_build_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_idp_build_v1_build_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_idp_build_v1_build_proto_goTypes = []any{
-	(RegistryType)(0),                 // 0: idp.build.v1.RegistryType
-	(BuildStepStatus)(0),              // 1: idp.build.v1.BuildStepStatus
-	(*AnalyzeRepositoryRequest)(nil),  // 2: idp.build.v1.AnalyzeRepositoryRequest
-	(*AnalyzeRepositoryResponse)(nil), // 3: idp.build.v1.AnalyzeRepositoryResponse
-	(*DetectedBuildConfig)(nil),       // 4: idp.build.v1.DetectedBuildConfig
-	(*BuildImageRequest)(nil),         // 5: idp.build.v1.BuildImageRequest
-	(*RegistryConfig)(nil),            // 6: idp.build.v1.RegistryConfig
-	(*BuildImageResponse)(nil),        // 7: idp.build.v1.BuildImageResponse
-	(*BuildStep)(nil),                 // 8: idp.build.v1.BuildStep
-	(*StreamBuildLogsRequest)(nil),    // 9: idp.build.v1.StreamBuildLogsRequest
-	(*StreamBuildLogsResponse)(nil),   // 10: idp.build.v1.StreamBuildLogsResponse
-	nil,                               // 11: idp.build.v1.BuildImageRequest.BuildEnvEntry
+	(RegistryType)(0),                  // 0: idp.build.v1.RegistryType
+	(BuildStepStatus)(0),               // 1: idp.build.v1.BuildStepStatus
+	(*AnalyzeRepositoryRequest)(nil),   // 2: idp.build.v1.AnalyzeRepositoryRequest
+	(*AnalyzeRepositoryResponse)(nil),  // 3: idp.build.v1.AnalyzeRepositoryResponse
+	(*DetectedBuildConfig)(nil),        // 4: idp.build.v1.DetectedBuildConfig
+	(*PackageManagerInfo)(nil),         // 5: idp.build.v1.PackageManagerInfo
+	(*BuildImageRequest)(nil),          // 6: idp.build.v1.BuildImageRequest
+	(*RegistryConfig)(nil),             // 7: idp.build.v1.RegistryConfig
+	(*BuildImageResponse)(nil),         // 8: idp.build.v1.BuildImageResponse
+	(*BuildStep)(nil),                  // 9: idp.build.v1.BuildStep
+	(*StreamBuildLogsRequest)(nil),     // 10: idp.build.v1.StreamBuildLogsRequest
+	(*StreamBuildLogsResponse)(nil),    // 11: idp.build.v1.StreamBuildLogsResponse
+	(*StartBuildWorkflowRequest)(nil),  // 12: idp.build.v1.StartBuildWorkflowRequest
+	(*StartBuildWorkflowResponse)(nil), // 13: idp.build.v1.StartBuildWorkflowResponse
+	(*GetBuildProgressRequest)(nil),    // 14: idp.build.v1.GetBuildProgressRequest
+	(*GetBuildProgressResponse)(nil),   // 15: idp.build.v1.GetBuildProgressResponse
+	nil,                                // 16: idp.build.v1.BuildImageRequest.BuildEnvEntry
+	nil,                                // 17: idp.build.v1.StartBuildWorkflowRequest.BuildEnvEntry
 }
 var file_idp_build_v1_build_proto_depIdxs = []int32{
 	4,  // 0: idp.build.v1.AnalyzeRepositoryResponse.config:type_name -> idp.build.v1.DetectedBuildConfig
-	11, // 1: idp.build.v1.BuildImageRequest.build_env:type_name -> idp.build.v1.BuildImageRequest.BuildEnvEntry
-	6,  // 2: idp.build.v1.BuildImageRequest.registry:type_name -> idp.build.v1.RegistryConfig
-	0,  // 3: idp.build.v1.RegistryConfig.type:type_name -> idp.build.v1.RegistryType
-	8,  // 4: idp.build.v1.BuildImageResponse.steps:type_name -> idp.build.v1.BuildStep
-	1,  // 5: idp.build.v1.BuildStep.status:type_name -> idp.build.v1.BuildStepStatus
-	2,  // 6: idp.build.v1.BuildService.AnalyzeRepository:input_type -> idp.build.v1.AnalyzeRepositoryRequest
-	5,  // 7: idp.build.v1.BuildService.BuildImage:input_type -> idp.build.v1.BuildImageRequest
-	9,  // 8: idp.build.v1.BuildService.StreamBuildLogs:input_type -> idp.build.v1.StreamBuildLogsRequest
-	3,  // 9: idp.build.v1.BuildService.AnalyzeRepository:output_type -> idp.build.v1.AnalyzeRepositoryResponse
-	7,  // 10: idp.build.v1.BuildService.BuildImage:output_type -> idp.build.v1.BuildImageResponse
-	10, // 11: idp.build.v1.BuildService.StreamBuildLogs:output_type -> idp.build.v1.StreamBuildLogsResponse
-	9,  // [9:12] is the sub-list for method output_type
-	6,  // [6:9] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	5,  // 1: idp.build.v1.DetectedBuildConfig.package_manager:type_name -> idp.build.v1.PackageManagerInfo
+	16, // 2: idp.build.v1.BuildImageRequest.build_env:type_name -> idp.build.v1.BuildImageRequest.BuildEnvEntry
+	7,  // 3: idp.build.v1.BuildImageRequest.registry:type_name -> idp.build.v1.RegistryConfig
+	0,  // 4: idp.build.v1.RegistryConfig.type:type_name -> idp.build.v1.RegistryType
+	9,  // 5: idp.build.v1.BuildImageResponse.steps:type_name -> idp.build.v1.BuildStep
+	1,  // 6: idp.build.v1.BuildStep.status:type_name -> idp.build.v1.BuildStepStatus
+	7,  // 7: idp.build.v1.StartBuildWorkflowRequest.registry:type_name -> idp.build.v1.RegistryConfig
+	17, // 8: idp.build.v1.StartBuildWorkflowRequest.build_env:type_name -> idp.build.v1.StartBuildWorkflowRequest.BuildEnvEntry
+	4,  // 9: idp.build.v1.GetBuildProgressResponse.detected_config:type_name -> idp.build.v1.DetectedBuildConfig
+	2,  // 10: idp.build.v1.BuildService.AnalyzeRepository:input_type -> idp.build.v1.AnalyzeRepositoryRequest
+	6,  // 11: idp.build.v1.BuildService.BuildImage:input_type -> idp.build.v1.BuildImageRequest
+	10, // 12: idp.build.v1.BuildService.StreamBuildLogs:input_type -> idp.build.v1.StreamBuildLogsRequest
+	12, // 13: idp.build.v1.BuildService.StartBuildWorkflow:input_type -> idp.build.v1.StartBuildWorkflowRequest
+	14, // 14: idp.build.v1.BuildService.GetBuildProgress:input_type -> idp.build.v1.GetBuildProgressRequest
+	3,  // 15: idp.build.v1.BuildService.AnalyzeRepository:output_type -> idp.build.v1.AnalyzeRepositoryResponse
+	8,  // 16: idp.build.v1.BuildService.BuildImage:output_type -> idp.build.v1.BuildImageResponse
+	11, // 17: idp.build.v1.BuildService.StreamBuildLogs:output_type -> idp.build.v1.StreamBuildLogsResponse
+	13, // 18: idp.build.v1.BuildService.StartBuildWorkflow:output_type -> idp.build.v1.StartBuildWorkflowResponse
+	15, // 19: idp.build.v1.BuildService.GetBuildProgress:output_type -> idp.build.v1.GetBuildProgressResponse
+	15, // [15:20] is the sub-list for method output_type
+	10, // [10:15] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_idp_build_v1_build_proto_init() }
@@ -938,15 +1452,16 @@ func file_idp_build_v1_build_proto_init() {
 	if File_idp_build_v1_build_proto != nil {
 		return
 	}
-	file_idp_build_v1_build_proto_msgTypes[3].OneofWrappers = []any{}
 	file_idp_build_v1_build_proto_msgTypes[4].OneofWrappers = []any{}
+	file_idp_build_v1_build_proto_msgTypes[5].OneofWrappers = []any{}
+	file_idp_build_v1_build_proto_msgTypes[10].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_idp_build_v1_build_proto_rawDesc), len(file_idp_build_v1_build_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   10,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
