@@ -1,8 +1,10 @@
 package workflows
 
 import (
+	"fmt"
 	"time"
 
+	"github.com/drewpayment/orbit/temporal-workflows/pkg/types"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
@@ -91,6 +93,7 @@ type BuildAndPushInput struct {
 	BuildEnv          map[string]string   `json:"buildEnv"`
 	Registry          BuildRegistryConfig `json:"registry"`
 	ImageTag          string              `json:"imageTag"`
+	PackageManager    string              `json:"packageManager,omitempty"` // "npm", "yarn", "pnpm", "bun", or "" for auto
 }
 
 type BuildAndPushResult struct {
@@ -101,12 +104,13 @@ type BuildAndPushResult struct {
 }
 
 type UpdateBuildStatusInput struct {
-	AppID       string               `json:"appId"`
-	Status      string               `json:"status"`
-	ImageURL    string               `json:"imageUrl,omitempty"`
-	ImageDigest string               `json:"imageDigest,omitempty"`
-	Error       string               `json:"error,omitempty"`
-	BuildConfig *DetectedBuildConfig `json:"buildConfig,omitempty"`
+	AppID            string               `json:"appId"`
+	Status           string               `json:"status"`
+	ImageURL         string               `json:"imageUrl,omitempty"`
+	ImageDigest      string               `json:"imageDigest,omitempty"`
+	Error            string               `json:"error,omitempty"`
+	BuildConfig      *DetectedBuildConfig `json:"buildConfig,omitempty"`
+	AvailableChoices []string             `json:"availableChoices,omitempty"` // For awaiting_input status
 }
 
 // BuildWorkflow orchestrates container image building
@@ -117,6 +121,22 @@ func BuildWorkflow(ctx workflow.Context, input BuildWorkflowInput) (*BuildWorkfl
 		"appID", input.AppID,
 		"repoURL", input.RepoURL)
 
+	// Initialize workflow state
+	state := &types.BuildState{
+		Status: types.BuildStatusAnalyzing,
+	}
+
+	// Register query handler for build state
+	err := workflow.SetQueryHandler(ctx, types.QueryBuildState, func() (*types.BuildState, error) {
+		return state, nil
+	})
+	if err != nil {
+		return &BuildWorkflowResult{
+			Status: types.BuildStatusFailed,
+			Error:  fmt.Sprintf("failed to register query handler: %v", err),
+		}, err
+	}
+
 	// Progress tracking
 	progress := BuildProgress{
 		CurrentStep:  "initializing",
@@ -125,8 +145,8 @@ func BuildWorkflow(ctx workflow.Context, input BuildWorkflowInput) (*BuildWorkfl
 		Message:      "Starting build process",
 	}
 
-	// Set up query handler
-	err := workflow.SetQueryHandler(ctx, "progress", func() (BuildProgress, error) {
+	// Set up query handler for legacy progress tracking
+	err = workflow.SetQueryHandler(ctx, "progress", func() (BuildProgress, error) {
 		return progress, nil
 	})
 	if err != nil {
@@ -144,16 +164,6 @@ func BuildWorkflow(ctx workflow.Context, input BuildWorkflowInput) (*BuildWorkfl
 		},
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
-
-	// Helper to update status on failure
-	updateStatusOnFailure := func(errMsg string) {
-		statusInput := UpdateBuildStatusInput{
-			AppID:  input.AppID,
-			Status: "failed",
-			Error:  errMsg,
-		}
-		_ = workflow.ExecuteActivity(ctx, ActivityUpdateBuildStatus, statusInput).Get(ctx, nil)
-	}
 
 	// Step 1: Update status to analyzing
 	progress.CurrentStep = "analyzing"
@@ -181,9 +191,9 @@ func BuildWorkflow(ctx workflow.Context, input BuildWorkflowInput) (*BuildWorkfl
 	analyzeInput := AnalyzeRepositoryInput{
 		RepoURL:           input.RepoURL,
 		Ref:               input.Ref,
-		InstallationToken: "", // TODO: Get from GitHub App installation
+		InstallationToken: input.Registry.Token, // Use registry token (GitHub token for GHCR)
 	}
-	var analyzeResult AnalyzeRepositoryResult
+	var analyzeResult types.AnalyzeRepositoryResult
 	err = workflow.ExecuteActivity(ctx, ActivityAnalyzeRepository, analyzeInput).Get(ctx, &analyzeResult)
 	if err != nil || !analyzeResult.Detected {
 		errMsg := "repository analysis failed"
@@ -193,22 +203,65 @@ func BuildWorkflow(ctx workflow.Context, input BuildWorkflowInput) (*BuildWorkfl
 			errMsg = analyzeResult.Error
 		}
 		logger.Error("Analysis failed", "error", errMsg)
-		updateStatusOnFailure(errMsg)
-		return &BuildWorkflowResult{
-			Status: "failed",
-			Error:  errMsg,
-		}, nil
+		return failWorkflow(ctx, input.AppID, state, errMsg)
 	}
 
-	// Step 3: Build and push image
+	// Step 3: Check package manager version support
+	if analyzeResult.PackageManager != nil && !analyzeResult.PackageManager.VersionSupported {
+		errMsg := fmt.Sprintf(
+			"Package manager version not supported: %s@%s requested, but only %s %s is supported. Please update your package.json packageManager field.",
+			analyzeResult.PackageManager.Name,
+			analyzeResult.PackageManager.RequestedVersion,
+			analyzeResult.PackageManager.Name,
+			analyzeResult.PackageManager.SupportedRange,
+		)
+		logger.Error("Unsupported package manager version", "error", errMsg)
+		return failWorkflow(ctx, input.AppID, state, errMsg)
+	}
+
+	// Step 4: Check if we need user input for package manager
+	packageManager := ""
+	if analyzeResult.PackageManager != nil {
+		packageManager = analyzeResult.PackageManager.Name
+	}
+
+	if analyzeResult.PackageManager == nil || !analyzeResult.PackageManager.Detected {
+		// No package manager detected - wait for user selection
+		state.Status = types.BuildStatusAwaitingInput
+		state.NeedsPackageManager = true
+		state.AvailableChoices = []string{"npm", "yarn", "pnpm", "bun"}
+
+		logger.Info("Package manager not detected, awaiting user selection")
+
+		// Update frontend status
+		err = workflow.ExecuteActivity(ctx, ActivityUpdateBuildStatus, UpdateBuildStatusInput{
+			AppID:            input.AppID,
+			Status:           types.BuildStatusAwaitingInput,
+			AvailableChoices: state.AvailableChoices,
+		}).Get(ctx, nil)
+		if err != nil {
+			logger.Error("Failed to update awaiting_input status", "error", err)
+		}
+
+		// Wait for signal with user's package manager choice
+		signalChan := workflow.GetSignalChannel(ctx, types.SignalPackageManagerSelected)
+		var selectedPM string
+		signalChan.Receive(ctx, &selectedPM)
+
+		logger.Info("Received package manager selection", "pm", selectedPM)
+		state.SelectedPM = selectedPM
+		packageManager = selectedPM
+	}
+
+	// Step 5: Update status to building
 	progress.CurrentStep = "building"
 	progress.StepsCurrent = 3
 	progress.Message = "Building container image"
 
-	// Update status to building
+	state.Status = types.BuildStatusBuilding
 	statusInput = UpdateBuildStatusInput{
 		AppID:  input.AppID,
-		Status: "building",
+		Status: types.BuildStatusBuilding,
 		BuildConfig: &DetectedBuildConfig{
 			Language:        analyzeResult.Language,
 			LanguageVersion: analyzeResult.LanguageVersion,
@@ -253,13 +306,14 @@ func BuildWorkflow(ctx workflow.Context, input BuildWorkflowInput) (*BuildWorkfl
 		AppID:             input.AppID,
 		RepoURL:           input.RepoURL,
 		Ref:               input.Ref,
-		InstallationToken: "", // TODO: Get from GitHub App installation
+		InstallationToken: input.Registry.Token, // Use registry token (GitHub token for GHCR)
 		LanguageVersion:   languageVersion,
 		BuildCommand:      buildCommand,
 		StartCommand:      startCommand,
 		BuildEnv:          buildEnv,
 		Registry:          input.Registry,
 		ImageTag:          imageTag,
+		PackageManager:    packageManager, // Pass selected/detected package manager
 	}
 
 	var buildResult BuildAndPushResult
@@ -272,21 +326,18 @@ func BuildWorkflow(ctx workflow.Context, input BuildWorkflowInput) (*BuildWorkfl
 			errMsg = buildResult.Error
 		}
 		logger.Error("Build failed", "error", errMsg)
-		updateStatusOnFailure(errMsg)
-		return &BuildWorkflowResult{
-			Status: "failed",
-			Error:  errMsg,
-		}, nil
+		return failWorkflow(ctx, input.AppID, state, errMsg)
 	}
 
-	// Step 4: Update status to success
+	// Step 6: Update status to success
 	progress.CurrentStep = "completed"
 	progress.StepsCurrent = 4
 	progress.Message = "Build completed successfully"
 
+	state.Status = types.BuildStatusSuccess
 	statusInput = UpdateBuildStatusInput{
 		AppID:       input.AppID,
-		Status:      "success",
+		Status:      types.BuildStatusSuccess,
 		ImageURL:    buildResult.ImageURL,
 		ImageDigest: buildResult.ImageDigest,
 		BuildConfig: &DetectedBuildConfig{
@@ -308,7 +359,7 @@ func BuildWorkflow(ctx workflow.Context, input BuildWorkflowInput) (*BuildWorkfl
 		"imageDigest", buildResult.ImageDigest)
 
 	return &BuildWorkflowResult{
-		Status:      "success",
+		Status:      types.BuildStatusSuccess,
 		ImageURL:    buildResult.ImageURL,
 		ImageDigest: buildResult.ImageDigest,
 		DetectedConfig: &DetectedBuildConfig{
@@ -318,5 +369,22 @@ func BuildWorkflow(ctx workflow.Context, input BuildWorkflowInput) (*BuildWorkfl
 			BuildCommand:    buildCommand,
 			StartCommand:    startCommand,
 		},
+	}, nil
+}
+
+// failWorkflow is a helper function that updates status to failed and returns error
+func failWorkflow(ctx workflow.Context, appID string, state *types.BuildState, errMsg string) (*BuildWorkflowResult, error) {
+	state.Status = types.BuildStatusFailed
+	state.Error = errMsg
+
+	_ = workflow.ExecuteActivity(ctx, ActivityUpdateBuildStatus, UpdateBuildStatusInput{
+		AppID:  appID,
+		Status: types.BuildStatusFailed,
+		Error:  errMsg,
+	}).Get(ctx, nil)
+
+	return &BuildWorkflowResult{
+		Status: types.BuildStatusFailed,
+		Error:  errMsg,
 	}, nil
 }
