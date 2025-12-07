@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -21,11 +22,43 @@ type AnalyzeResult struct {
 	StartCommand    string
 	DetectedFiles   []string
 	Error           string
+	PackageManager  *PackageManagerInfo
+}
+
+// PackageManagerInfo holds package manager detection results
+type PackageManagerInfo struct {
+	Detected         bool
+	Name             string // "npm", "yarn", "pnpm", "bun", or ""
+	Source           string // "lockfile", "packageManager", "engines", ""
+	Lockfile         string // actual lockfile found
+	RequestedVersion string // version from packageManager field
+	VersionSupported bool
+	SupportedRange   string
 }
 
 // Analyzer handles Railpack-based project analysis
 type Analyzer struct {
 	logger *slog.Logger
+}
+
+// Supported version ranges
+var supportedVersions = map[string]string{
+	"npm":  ">=7.0.0",
+	"yarn": ">=1.22.0",
+	"pnpm": ">=7.0.0",
+	"bun":  ">=1.0.0",
+}
+
+// lockfileToPackageManager maps lockfiles to package managers (priority order)
+var lockfileToPackageManager = []struct {
+	file string
+	pm   string
+}{
+	{"pnpm-lock.yaml", "pnpm"},
+	{"bun.lockb", "bun"},
+	{"bun.lock", "bun"},
+	{"yarn.lock", "yarn"},
+	{"package-lock.json", "npm"},
 }
 
 // NewAnalyzer creates a new Analyzer instance
@@ -128,52 +161,41 @@ func (a *Analyzer) detectNodeJS(projectDir string) *AnalyzeResult {
 		return nil
 	}
 
+	// Read package.json
 	data, err := os.ReadFile(packageJSONPath)
 	if err != nil {
 		return nil
 	}
 
 	var pkg struct {
-		Scripts      map[string]string `json:"scripts"`
-		Dependencies map[string]string `json:"dependencies"`
+		Dependencies    map[string]string `json:"dependencies"`
+		DevDependencies map[string]string `json:"devDependencies"`
+		Scripts         map[string]string `json:"scripts"`
 	}
 	if err := json.Unmarshal(data, &pkg); err != nil {
 		return nil
 	}
 
 	result := &AnalyzeResult{
-		Detected:      true,
-		Language:      "nodejs",
-		DetectedFiles: []string{"package.json"},
+		Detected:       true,
+		Language:       "nodejs",
+		DetectedFiles:  []string{"package.json"},
+		PackageManager: a.detectPackageManager(projectDir),
 	}
 
-	// Detect framework
+	// Detect Node.js version from .nvmrc
+	if nvmrc, err := os.ReadFile(filepath.Join(projectDir, ".nvmrc")); err == nil {
+		result.LanguageVersion = strings.TrimSpace(string(nvmrc))
+		result.DetectedFiles = append(result.DetectedFiles, ".nvmrc")
+	}
+
+	// Detect framework (no longer setting build/start commands - let Railpack decide)
 	if _, hasNext := pkg.Dependencies["next"]; hasNext {
 		result.Framework = "nextjs"
-		result.BuildCommand = "npm run build"
-		result.StartCommand = "npm start"
 	} else if _, hasReact := pkg.Dependencies["react"]; hasReact {
 		result.Framework = "react"
-		result.BuildCommand = "npm run build"
-		result.StartCommand = "npm start"
 	} else if _, hasExpress := pkg.Dependencies["express"]; hasExpress {
 		result.Framework = "express"
-		result.StartCommand = "npm start"
-	} else {
-		// Generic Node.js
-		if _, hasBuild := pkg.Scripts["build"]; hasBuild {
-			result.BuildCommand = "npm run build"
-		}
-		if _, hasStart := pkg.Scripts["start"]; hasStart {
-			result.StartCommand = "npm start"
-		}
-	}
-
-	// Detect Node version from .nvmrc or engines
-	nvmrcPath := filepath.Join(projectDir, ".nvmrc")
-	if nvmrcData, err := os.ReadFile(nvmrcPath); err == nil {
-		result.LanguageVersion = strings.TrimSpace(string(nvmrcData))
-		result.DetectedFiles = append(result.DetectedFiles, ".nvmrc")
 	}
 
 	return result
@@ -274,4 +296,131 @@ func (a *Analyzer) detectDockerfile(projectDir string) *AnalyzeResult {
 		Language:      "dockerfile",
 		DetectedFiles: []string{"Dockerfile"},
 	}
+}
+
+func (a *Analyzer) detectPackageManager(projectDir string) *PackageManagerInfo {
+	result := &PackageManagerInfo{
+		VersionSupported: true, // Default to true unless we find an unsupported version
+	}
+
+	// Priority 1: Check packageManager field in package.json
+	if pm, version := a.readPackageManagerField(projectDir); pm != "" {
+		result.Detected = true
+		result.Name = pm
+		result.Source = "packageManager"
+		result.RequestedVersion = version
+		result.SupportedRange = supportedVersions[pm]
+		result.VersionSupported = a.isVersionSupported(pm, version)
+		return result
+	}
+
+	// Priority 2: Check lockfiles
+	for _, lf := range lockfileToPackageManager {
+		lockfilePath := filepath.Join(projectDir, lf.file)
+		if _, err := os.Stat(lockfilePath); err == nil {
+			result.Detected = true
+			result.Name = lf.pm
+			result.Source = "lockfile"
+			result.Lockfile = lf.file
+			result.SupportedRange = supportedVersions[lf.pm]
+			return result
+		}
+	}
+
+	// Not detected - workflow will need to ask user
+	return result
+}
+
+func (a *Analyzer) readPackageManagerField(projectDir string) (pm string, version string) {
+	packageJSONPath := filepath.Join(projectDir, "package.json")
+	data, err := os.ReadFile(packageJSONPath)
+	if err != nil {
+		return "", ""
+	}
+
+	var pkg struct {
+		PackageManager string `json:"packageManager"`
+	}
+	if err := json.Unmarshal(data, &pkg); err != nil {
+		return "", ""
+	}
+
+	if pkg.PackageManager == "" {
+		return "", ""
+	}
+
+	// Parse "npm@10.2.0" format
+	parts := strings.SplitN(pkg.PackageManager, "@", 2)
+	pm = parts[0]
+	if len(parts) > 1 {
+		version = parts[1]
+		// Handle corepack hash suffix: "pnpm@8.0.0+sha256.abc..."
+		if idx := strings.Index(version, "+"); idx != -1 {
+			version = version[:idx]
+		}
+	}
+	return pm, version
+}
+
+func (a *Analyzer) isVersionSupported(pm, version string) bool {
+	if version == "" {
+		return true // No version constraint specified
+	}
+
+	supportedRange, ok := supportedVersions[pm]
+	if !ok {
+		return true // Unknown package manager, allow it
+	}
+
+	// Parse minimum version from range like ">=7.0.0"
+	minVersion := strings.TrimPrefix(supportedRange, ">=")
+
+	// Simple semver comparison (major.minor.patch)
+	return semverCompare(version, minVersion) >= 0
+}
+
+// semverCompare returns -1 if a < b, 0 if a == b, 1 if a > b
+func semverCompare(a, b string) int {
+	parseVersion := func(v string) (int, int, int) {
+		parts := strings.Split(v, ".")
+		major, minor, patch := 0, 0, 0
+		if len(parts) >= 1 {
+			major, _ = strconv.Atoi(parts[0])
+		}
+		if len(parts) >= 2 {
+			minor, _ = strconv.Atoi(parts[1])
+		}
+		if len(parts) >= 3 {
+			// Handle versions like "1.22.19" or "1.22.19-rc1"
+			patchStr := parts[2]
+			if idx := strings.IndexAny(patchStr, "-+"); idx != -1 {
+				patchStr = patchStr[:idx]
+			}
+			patch, _ = strconv.Atoi(patchStr)
+		}
+		return major, minor, patch
+	}
+
+	aMajor, aMinor, aPatch := parseVersion(a)
+	bMajor, bMinor, bPatch := parseVersion(b)
+
+	if aMajor != bMajor {
+		if aMajor < bMajor {
+			return -1
+		}
+		return 1
+	}
+	if aMinor != bMinor {
+		if aMinor < bMinor {
+			return -1
+		}
+		return 1
+	}
+	if aPatch != bPatch {
+		if aPatch < bPatch {
+			return -1
+		}
+		return 1
+	}
+	return 0
 }

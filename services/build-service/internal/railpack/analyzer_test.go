@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -177,4 +178,46 @@ func TestAnalyzer_ValidatesInput(t *testing.T) {
 		require.Nil(t, result)
 		require.True(t, os.IsNotExist(err))
 	})
+}
+
+func TestAnalyzer_DetectsPackageManagerFromLockfile(t *testing.T) {
+	tests := []struct {
+		name         string
+		lockfile     string
+		wantPM       string
+		wantSource   string
+		wantDetected bool
+	}{
+		{"npm from package-lock.json", "package-lock.json", "npm", "lockfile", true},
+		{"yarn from yarn.lock", "yarn.lock", "yarn", "lockfile", true},
+		{"pnpm from pnpm-lock.yaml", "pnpm-lock.yaml", "pnpm", "lockfile", true},
+		{"bun from bun.lockb", "bun.lockb", "bun", "lockfile", true},
+		{"bun from bun.lock", "bun.lock", "bun", "lockfile", true},
+		{"no lockfile", "", "", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+
+			// Create package.json (required for Node.js detection)
+			err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(`{"name": "test"}`), 0644)
+			require.NoError(t, err)
+
+			// Create lockfile if specified
+			if tt.lockfile != "" {
+				err := os.WriteFile(filepath.Join(tmpDir, tt.lockfile), []byte(""), 0644)
+				require.NoError(t, err)
+			}
+
+			analyzer := NewAnalyzer(slog.Default())
+			result, err := analyzer.Analyze(context.Background(), tmpDir)
+
+			require.NoError(t, err)
+			require.NotNil(t, result.PackageManager)
+			assert.Equal(t, tt.wantDetected, result.PackageManager.Detected)
+			assert.Equal(t, tt.wantPM, result.PackageManager.Name)
+			assert.Equal(t, tt.wantSource, result.PackageManager.Source)
+		})
+	}
 }
