@@ -81,6 +81,7 @@ interface ImportRepositoryInput {
   repositoryUrl: string
   name: string
   description?: string
+  installationId?: string
 }
 
 export async function importRepository(input: ImportRepositoryInput) {
@@ -130,7 +131,7 @@ export async function importRepository(input: ImportRepositoryInput) {
           owner,
           name: repoName.replace(/\.git$/, ''),
           url: input.repositoryUrl,
-          // installationId will be set when user connects GitHub App
+          ...(input.installationId && { installationId: input.installationId }),
         },
         origin: {
           type: 'imported',
