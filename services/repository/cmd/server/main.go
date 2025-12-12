@@ -14,6 +14,7 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
+	"github.com/drewpayment/orbit/proto/gen/go/idp/build/v1/buildv1connect"
 	"github.com/drewpayment/orbit/proto/gen/go/idp/deployment/v1/deploymentv1connect"
 	"github.com/drewpayment/orbit/proto/gen/go/idp/health/v1/healthv1connect"
 	templatev1 "github.com/drewpayment/orbit/proto/gen/go/idp/template/v1"
@@ -186,6 +187,40 @@ func (tc *TemporalClient) QueryDeploymentWorkflow(ctx context.Context, workflowI
 	return &progress, nil
 }
 
+// StartBuildWorkflow starts a build workflow
+func (tc *TemporalClient) StartBuildWorkflow(ctx context.Context, input *types.BuildWorkflowInput) (string, error) {
+	workflowID := fmt.Sprintf("build-%s-%d", input.AppID, time.Now().Unix())
+
+	// Generate a unique request ID
+	input.RequestID = workflowID
+
+	we, err := tc.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: "orbit-workflows",
+	}, "BuildWorkflow", *input)
+
+	if err != nil {
+		return "", fmt.Errorf("failed to start build workflow: %w", err)
+	}
+
+	return we.GetID(), nil
+}
+
+// QueryBuildWorkflow queries a build workflow for progress
+func (tc *TemporalClient) QueryBuildWorkflow(ctx context.Context, workflowID, queryType string) (*types.BuildProgress, error) {
+	resp, err := tc.client.QueryWorkflow(ctx, workflowID, "", queryType)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query build workflow: %w", err)
+	}
+
+	var progress types.BuildProgress
+	if err := resp.Get(&progress); err != nil {
+		return nil, fmt.Errorf("failed to decode build progress: %w", err)
+	}
+
+	return &progress, nil
+}
+
 // StubPayloadClient is a placeholder for Payload CMS operations
 // TODO: Implement real Payload client
 type StubPayloadClient struct{}
@@ -256,6 +291,17 @@ func main() {
 		log.Println("HealthService registered (Connect)")
 	} else {
 		log.Println("HealthService not registered (Temporal client unavailable)")
+	}
+
+	// Register BuildService (Connect handler)
+	if temporalClient != nil {
+		var buildTemporal grpcserver.BuildClientInterface = temporalClient
+		buildServer := grpcserver.NewBuildServer(buildTemporal)
+		buildPath, buildHandler := buildv1connect.NewBuildServiceHandler(buildServer)
+		mux.Handle(buildPath, buildHandler)
+		log.Println("BuildService registered (Connect)")
+	} else {
+		log.Println("BuildService not registered (Temporal client unavailable)")
 	}
 
 	// Start HTTP health server on separate port

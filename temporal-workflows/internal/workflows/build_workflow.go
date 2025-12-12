@@ -196,6 +196,17 @@ func BuildWorkflow(ctx workflow.Context, input BuildWorkflowInput) (*BuildWorkfl
 	}
 	var analyzeResult types.AnalyzeRepositoryResult
 	err = workflow.ExecuteActivity(ctx, ActivityAnalyzeRepository, analyzeInput).Get(ctx, &analyzeResult)
+
+	// Debug logging for package manager
+	if analyzeResult.PackageManager != nil {
+		logger.Info("Workflow received package manager info",
+			"pm_detected", analyzeResult.PackageManager.Detected,
+			"pm_name", analyzeResult.PackageManager.Name,
+			"pm_source", analyzeResult.PackageManager.Source)
+	} else {
+		logger.Info("Workflow received nil package manager")
+	}
+
 	if err != nil || !analyzeResult.Detected {
 		errMsg := "repository analysis failed"
 		if err != nil {
@@ -222,8 +233,27 @@ func BuildWorkflow(ctx workflow.Context, input BuildWorkflowInput) (*BuildWorkfl
 
 	// Step 4: Check if we need user input for package manager
 	packageManager := ""
+	hasLockfile := false
 	if analyzeResult.PackageManager != nil {
 		packageManager = analyzeResult.PackageManager.Name
+		hasLockfile = analyzeResult.PackageManager.Lockfile != ""
+
+		// Log detailed package manager info
+		logger.Info("Package manager detection result",
+			"detected", analyzeResult.PackageManager.Detected,
+			"name", analyzeResult.PackageManager.Name,
+			"source", analyzeResult.PackageManager.Source,
+			"lockfile", analyzeResult.PackageManager.Lockfile,
+			"hasLockfile", hasLockfile)
+	}
+
+	// If package manager was detected from packageManager field but no lockfile exists,
+	// Railpack will still need a lockfile. Log a warning.
+	if analyzeResult.PackageManager != nil &&
+		analyzeResult.PackageManager.Detected &&
+		analyzeResult.PackageManager.Source == "packageManager" &&
+		!hasLockfile {
+		logger.Warn("Package manager detected from packageManager field but no lockfile found. Build may fail.")
 	}
 
 	if analyzeResult.PackageManager == nil || !analyzeResult.PackageManager.Detected {

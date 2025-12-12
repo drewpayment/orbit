@@ -1,27 +1,37 @@
 # Build stage
 FROM golang:1.21-alpine AS builder
 
-WORKDIR /app
+WORKDIR /build
 
-# Copy go mod files
-COPY go.mod go.sum ./
+# Install git for module downloads
+RUN apk add --no-cache git
+
+# Copy go mod files first for better caching
+COPY proto/go.mod proto/go.sum ./proto/
+COPY temporal-workflows/go.mod temporal-workflows/go.sum ./temporal-workflows/
+
+# Download dependencies
+WORKDIR /build/temporal-workflows
 RUN go mod download
 
 # Copy source code
-COPY . .
+WORKDIR /build
+COPY proto/ ./proto/
+COPY temporal-workflows/ ./temporal-workflows/
 
 # Build the worker
-RUN CGO_ENABLED=0 GOOS=linux go build -o /worker ./cmd/worker
+WORKDIR /build/temporal-workflows
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/worker ./cmd/worker
 
 # Runtime stage
 FROM alpine:latest
 
 RUN apk --no-cache add ca-certificates
 
-WORKDIR /root/
+WORKDIR /app
 
 # Copy the binary from builder
-COPY --from=builder /worker .
+COPY --from=builder /app/worker .
 
 # Run the worker
 CMD ["./worker"]

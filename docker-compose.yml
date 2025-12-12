@@ -67,8 +67,8 @@ services:
   temporal-worker:
     container_name: temporal-worker
     build:
-      context: ./temporal-workflows
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: temporal-workflows/Dockerfile
     depends_on:
       - temporal-server
     environment:

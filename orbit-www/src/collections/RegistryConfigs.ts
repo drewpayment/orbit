@@ -12,9 +12,16 @@ export const RegistryConfigs: CollectionConfig = {
       if (!user) return false
       if (!id) {
         // List view - filter by workspace membership
+        const workspaceIds = await getWorkspaceIdsForUser(payload, user.id)
+        // If user has no workspaces, return empty result (but not 403)
+        if (workspaceIds.length === 0) {
+          return {
+            id: { equals: 'nonexistent-id-to-return-empty-results' },
+          }
+        }
         return {
           workspace: {
-            in: await getWorkspaceIdsForUser(payload, user.id),
+            in: workspaceIds,
           },
         }
       }

@@ -80,6 +80,18 @@ func (s *BuildServer) AnalyzeRepository(ctx context.Context, req *buildv1.Analyz
 		}, nil
 	}
 
+	// Debug logging for package manager detection
+	if result.PackageManager != nil {
+		s.logger.Info("Analyzer returned package manager info",
+			"pm_detected", result.PackageManager.Detected,
+			"pm_name", result.PackageManager.Name,
+			"pm_source", result.PackageManager.Source,
+			"pm_lockfile", result.PackageManager.Lockfile,
+		)
+	} else {
+		s.logger.Info("Analyzer returned nil package manager")
+	}
+
 	// Convert analyzer result to proto response
 	response := &buildv1.AnalyzeRepositoryResponse{
 		Detected:      result.Detected,

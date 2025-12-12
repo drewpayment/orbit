@@ -171,10 +171,22 @@ func (a *BuildActivities) AnalyzeRepository(ctx context.Context, input AnalyzeRe
 		}
 	}
 
-	a.logger.Info("Repository analysis complete",
-		"detected", result.Detected,
-		"language", result.Language,
-		"framework", result.Framework)
+	// Log package manager info for debugging
+	if result.PackageManager != nil {
+		a.logger.Info("Repository analysis complete",
+			"detected", result.Detected,
+			"language", result.Language,
+			"framework", result.Framework,
+			"pm_detected", result.PackageManager.Detected,
+			"pm_name", result.PackageManager.Name,
+			"pm_source", result.PackageManager.Source)
+	} else {
+		a.logger.Info("Repository analysis complete",
+			"detected", result.Detected,
+			"language", result.Language,
+			"framework", result.Framework,
+			"pm_detected", "nil")
+	}
 
 	return result, nil
 }

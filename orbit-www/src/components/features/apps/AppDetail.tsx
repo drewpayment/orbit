@@ -209,7 +209,6 @@ export function AppDetail({ app, deployments }: AppDetailProps) {
         appId={app.id}
         appName={app.name}
         hasRepository={!!app.repository?.url}
-        hasRegistryConfig={!!app.registryConfig}
       />
 
       {/* Deployments */}
