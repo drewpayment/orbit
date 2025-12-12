@@ -28,7 +28,7 @@ vi.mock('@/lib/github/octokit', () => ({
 import { getPayload } from 'payload'
 import { auth } from '@/lib/auth'
 import { getInstallationOctokit } from '@/lib/github/octokit'
-import { getWorkspaceGitHubInstallations, listInstallationRepositories } from '../github'
+import { getWorkspaceGitHubInstallations, listInstallationRepositories, searchInstallationRepositories } from '../github'
 
 describe('getWorkspaceGitHubInstallations', () => {
   beforeEach(() => {
@@ -245,5 +245,71 @@ describe('listInstallationRepositories', () => {
       repos: [],
       hasMore: false,
     })
+  })
+})
+
+describe('searchInstallationRepositories', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('should search repositories by query', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue({
+      user: { id: 'user-1' },
+      session: {},
+    } as any)
+
+    const mockPayload = {
+      findByID: vi.fn().mockResolvedValue({
+        id: 'install-1',
+        installationId: 12345,
+        accountLogin: 'acme-org',
+      }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const mockOctokit = {
+      rest: {
+        search: {
+          repos: vi.fn().mockResolvedValue({
+            data: {
+              items: [
+                {
+                  name: 'backend-api',
+                  full_name: 'acme-org/backend-api',
+                  description: 'API service',
+                  private: false,
+                  default_branch: 'main',
+                },
+              ],
+              total_count: 1,
+            },
+          }),
+        },
+      },
+    }
+    vi.mocked(getInstallationOctokit).mockResolvedValue(mockOctokit as any)
+
+    const result = await searchInstallationRepositories('install-1', 'backend')
+
+    expect(result.success).toBe(true)
+    expect(result.repos).toHaveLength(1)
+    expect(result.repos[0].name).toBe('backend-api')
+    expect(mockOctokit.rest.search.repos).toHaveBeenCalledWith({
+      q: 'backend org:acme-org',
+      per_page: 30,
+    })
+  })
+
+  it('should return empty when query is too short', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue({
+      user: { id: 'user-1' },
+      session: {},
+    } as any)
+
+    const result = await searchInstallationRepositories('install-1', 'ab')
+
+    expect(result.success).toBe(true)
+    expect(result.repos).toEqual([])
   })
 })

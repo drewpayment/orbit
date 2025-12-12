@@ -117,3 +117,65 @@ export async function listInstallationRepositories(
     }
   }
 }
+
+export async function searchInstallationRepositories(
+  installationId: string,
+  query: string
+): Promise<{
+  success: boolean
+  error?: string
+  repos: Repository[]
+  hasMore: boolean
+}> {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+
+  if (!session?.user) {
+    return { success: false, error: 'Unauthorized', repos: [], hasMore: false }
+  }
+
+  // Require at least 3 characters for search
+  if (query.length < 3) {
+    return { success: true, repos: [], hasMore: false }
+  }
+
+  const payload = await getPayload({ config })
+
+  const installation = await payload.findByID({
+    collection: 'github-installations',
+    id: installationId,
+  })
+
+  if (!installation) {
+    return { success: false, error: 'Installation not found', repos: [], hasMore: false }
+  }
+
+  try {
+    const octokit = await getInstallationOctokit(installation.installationId as number)
+    const accountLogin = installation.accountLogin as string
+
+    const response = await octokit.rest.search.repos({
+      q: `${query} org:${accountLogin}`,
+      per_page: 30,
+    })
+
+    const repos: Repository[] = response.data.items.map((repo) => ({
+      name: repo.name,
+      fullName: repo.full_name,
+      description: repo.description ?? null,
+      private: repo.private,
+      defaultBranch: repo.default_branch,
+    }))
+
+    return { success: true, repos, hasMore: response.data.total_count > 30 }
+  } catch (error) {
+    console.error('Failed to search repositories:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to search repositories',
+      repos: [],
+      hasMore: false,
+    }
+  }
+}
