@@ -162,4 +162,64 @@ describe('RepositoryBrowser', () => {
       expect(screen.getByText(/no repositories/i)).toBeInTheDocument()
     })
   })
+
+  it('should show "Search all repositories" button when no local matches', async () => {
+    const user = userEvent.setup()
+
+    vi.mocked(listInstallationRepositories).mockResolvedValue({
+      success: true,
+      repos: [
+        { name: 'backend', fullName: 'org/backend', description: 'API', private: true, defaultBranch: 'main' },
+      ],
+      hasMore: false,
+    })
+
+    render(<RepositoryBrowser installationId="install-1" onSelect={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('backend')).toBeInTheDocument()
+    })
+
+    // Type something that doesn't match
+    await user.type(screen.getByPlaceholderText(/search repositories/i), 'frontend')
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /search all repositories/i })).toBeInTheDocument()
+    })
+  })
+
+  it('should call searchInstallationRepositories when search all clicked', async () => {
+    const user = userEvent.setup()
+
+    vi.mocked(listInstallationRepositories).mockResolvedValue({
+      success: true,
+      repos: [
+        { name: 'backend', fullName: 'org/backend', description: 'API', private: true, defaultBranch: 'main' },
+      ],
+      hasMore: false,
+    })
+
+    vi.mocked(searchInstallationRepositories).mockResolvedValue({
+      success: true,
+      repos: [
+        { name: 'frontend', fullName: 'org/frontend', description: 'UI', private: false, defaultBranch: 'main' },
+      ],
+      hasMore: false,
+    })
+
+    render(<RepositoryBrowser installationId="install-1" onSelect={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('backend')).toBeInTheDocument()
+    })
+
+    await user.type(screen.getByPlaceholderText(/search repositories/i), 'frontend')
+    await user.click(screen.getByRole('button', { name: /search all repositories/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('frontend')).toBeInTheDocument()
+    })
+
+    expect(searchInstallationRepositories).toHaveBeenCalledWith('install-1', 'frontend')
+  })
 })

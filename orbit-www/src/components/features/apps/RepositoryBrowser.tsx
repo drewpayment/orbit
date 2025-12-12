@@ -20,8 +20,10 @@ interface RepositoryBrowserProps {
 
 export function RepositoryBrowser({ installationId, onSelect }: RepositoryBrowserProps) {
   const [repos, setRepos] = useState<Repository[]>([])
+  const [searchResults, setSearchResults] = useState<Repository[] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [isSearching, setIsSearching] = useState(false)
   const [hasMore, setHasMore] = useState(false)
   const [page, setPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState('')
@@ -32,6 +34,8 @@ export function RepositoryBrowser({ installationId, onSelect }: RepositoryBrowse
     async function loadRepos() {
       setIsLoading(true)
       setError(null)
+      setSearchResults(null)
+      setSearchQuery('')
       const result = await listInstallationRepositories(installationId)
       if (result.success) {
         setRepos(result.repos)
@@ -57,8 +61,24 @@ export function RepositoryBrowser({ installationId, onSelect }: RepositoryBrowse
     setIsLoadingMore(false)
   }
 
+  // Search all repositories
+  const handleSearchAll = async () => {
+    if (searchQuery.length < 3) return
+    setIsSearching(true)
+    const result = await searchInstallationRepositories(installationId, searchQuery)
+    if (result.success) {
+      setSearchResults(result.repos)
+    }
+    setIsSearching(false)
+  }
+
   // Client-side filter
   const filteredRepos = useMemo(() => {
+    // If we have search results from API, use those
+    if (searchResults !== null) {
+      return searchResults
+    }
+    // Otherwise filter locally
     if (!searchQuery) return repos
     const query = searchQuery.toLowerCase()
     return repos.filter(
@@ -67,7 +87,19 @@ export function RepositoryBrowser({ installationId, onSelect }: RepositoryBrowse
         repo.fullName.toLowerCase().includes(query) ||
         repo.description?.toLowerCase().includes(query)
     )
-  }, [repos, searchQuery])
+  }, [repos, searchQuery, searchResults])
+
+  // Reset search results when query changes
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value)
+    setSearchResults(null)
+  }
+
+  // Show "Search all" button when local filter has no results and query is long enough
+  const showSearchAllButton =
+    searchResults === null &&
+    searchQuery.length >= 3 &&
+    filteredRepos.length === 0
 
   if (isLoading) {
     return (
@@ -95,15 +127,32 @@ export function RepositoryBrowser({ installationId, onSelect }: RepositoryBrowse
         <Input
           placeholder="Search repositories..."
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(e) => handleSearchChange(e.target.value)}
           className="pl-9"
         />
       </div>
 
       <ScrollArea className="h-[240px] rounded-md border">
         {filteredRepos.length === 0 ? (
-          <div className="flex h-full items-center justify-center p-4 text-sm text-muted-foreground">
-            No repositories found
+          <div className="flex h-full flex-col items-center justify-center gap-3 p-4">
+            <p className="text-sm text-muted-foreground">No repositories found</p>
+            {showSearchAllButton && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSearchAll}
+                disabled={isSearching}
+              >
+                {isSearching ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Searching...
+                  </>
+                ) : (
+                  'Search all repositories'
+                )}
+              </Button>
+            )}
           </div>
         ) : (
           <div className="p-1">
@@ -142,7 +191,7 @@ export function RepositoryBrowser({ installationId, onSelect }: RepositoryBrowse
         )}
       </ScrollArea>
 
-      {hasMore && (
+      {hasMore && !searchQuery && (
         <Button
           variant="outline"
           size="sm"
