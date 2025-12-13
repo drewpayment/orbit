@@ -90,12 +90,12 @@ export async function listInstallationRepositories(
 
   try {
     const octokit = await getInstallationOctokit(installation.installationId as number)
-    const response = await octokit.rest.apps.listReposAccessibleToInstallation({
+    const response = await octokit.request('GET /installation/repositories', {
       per_page: perPage,
       page,
     })
 
-    const repos: Repository[] = response.data.repositories.map((repo) => ({
+    const repos: Repository[] = response.data.repositories.map((repo: any) => ({
       name: repo.name,
       fullName: repo.full_name,
       description: repo.description,
@@ -155,12 +155,12 @@ export async function searchInstallationRepositories(
     const octokit = await getInstallationOctokit(installation.installationId as number)
     const accountLogin = installation.accountLogin as string
 
-    const response = await octokit.rest.search.repos({
+    const response = await octokit.request('GET /search/repositories', {
       q: `${query} org:${accountLogin}`,
       per_page: 30,
     })
 
-    const repos: Repository[] = response.data.items.map((repo) => ({
+    const repos: Repository[] = response.data.items.map((repo: any) => ({
       name: repo.name,
       fullName: repo.full_name,
       description: repo.description ?? null,

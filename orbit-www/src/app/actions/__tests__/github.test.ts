@@ -140,31 +140,27 @@ describe('listInstallationRepositories', () => {
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
 
     const mockOctokit = {
-      rest: {
-        apps: {
-          listReposAccessibleToInstallation: vi.fn().mockResolvedValue({
-            data: {
-              repositories: [
-                {
-                  name: 'backend',
-                  full_name: 'acme-org/backend',
-                  description: 'Backend service',
-                  private: true,
-                  default_branch: 'main',
-                },
-                {
-                  name: 'frontend',
-                  full_name: 'acme-org/frontend',
-                  description: null,
-                  private: false,
-                  default_branch: 'master',
-                },
-              ],
-              total_count: 2,
+      request: vi.fn().mockResolvedValue({
+        data: {
+          repositories: [
+            {
+              name: 'backend',
+              full_name: 'acme-org/backend',
+              description: 'Backend service',
+              private: true,
+              default_branch: 'main',
             },
-          }),
+            {
+              name: 'frontend',
+              full_name: 'acme-org/frontend',
+              description: null,
+              private: false,
+              default_branch: 'master',
+            },
+          ],
+          total_count: 2,
         },
-      },
+      }),
     }
     vi.mocked(getInstallationOctokit).mockResolvedValue(mockOctokit as any)
 
@@ -198,29 +194,25 @@ describe('listInstallationRepositories', () => {
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
 
     const mockOctokit = {
-      rest: {
-        apps: {
-          listReposAccessibleToInstallation: vi.fn().mockResolvedValue({
-            data: {
-              repositories: Array(30).fill({
-                name: 'repo',
-                full_name: 'org/repo',
-                description: null,
-                private: false,
-                default_branch: 'main',
-              }),
-              total_count: 50,
-            },
+      request: vi.fn().mockResolvedValue({
+        data: {
+          repositories: Array(30).fill({
+            name: 'repo',
+            full_name: 'org/repo',
+            description: null,
+            private: false,
+            default_branch: 'main',
           }),
+          total_count: 50,
         },
-      },
+      }),
     }
     vi.mocked(getInstallationOctokit).mockResolvedValue(mockOctokit as any)
 
     const result = await listInstallationRepositories('install-1', 1, 30)
 
     expect(result.hasMore).toBe(true)
-    expect(mockOctokit.rest.apps.listReposAccessibleToInstallation).toHaveBeenCalledWith({
+    expect(mockOctokit.request).toHaveBeenCalledWith('GET /installation/repositories', {
       per_page: 30,
       page: 1,
     })
@@ -269,24 +261,20 @@ describe('searchInstallationRepositories', () => {
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
 
     const mockOctokit = {
-      rest: {
-        search: {
-          repos: vi.fn().mockResolvedValue({
-            data: {
-              items: [
-                {
-                  name: 'backend-api',
-                  full_name: 'acme-org/backend-api',
-                  description: 'API service',
-                  private: false,
-                  default_branch: 'main',
-                },
-              ],
-              total_count: 1,
+      request: vi.fn().mockResolvedValue({
+        data: {
+          items: [
+            {
+              name: 'backend-api',
+              full_name: 'acme-org/backend-api',
+              description: 'API service',
+              private: false,
+              default_branch: 'main',
             },
-          }),
+          ],
+          total_count: 1,
         },
-      },
+      }),
     }
     vi.mocked(getInstallationOctokit).mockResolvedValue(mockOctokit as any)
 
@@ -295,7 +283,7 @@ describe('searchInstallationRepositories', () => {
     expect(result.success).toBe(true)
     expect(result.repos).toHaveLength(1)
     expect(result.repos[0].name).toBe('backend-api')
-    expect(mockOctokit.rest.search.repos).toHaveBeenCalledWith({
+    expect(mockOctokit.request).toHaveBeenCalledWith('GET /search/repositories', {
       q: 'backend org:acme-org',
       per_page: 30,
     })
