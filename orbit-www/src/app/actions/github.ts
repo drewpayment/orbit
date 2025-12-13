@@ -179,3 +179,57 @@ export async function searchInstallationRepositories(
     }
   }
 }
+
+export async function getRepositoryBranches(
+  installationId: string,
+  owner: string,
+  repo: string
+): Promise<{ success: boolean; branches?: string[]; error?: string }> {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+
+  if (!session?.user) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  const payload = await getPayload({ config })
+
+  const installation = await payload.findByID({
+    collection: 'github-installations',
+    id: installationId,
+  })
+
+  if (!installation) {
+    return { success: false, error: 'Installation not found' }
+  }
+
+  try {
+    const octokit = await getInstallationOctokit(installation.installationId as number)
+
+    // Fetch branches - GitHub returns up to 100 per page by default
+    const response = await octokit.request('GET /repos/{owner}/{repo}/branches', {
+      owner,
+      repo,
+      per_page: 100,
+    })
+
+    // Extract branch names and sort alphabetically
+    const branches = response.data
+      .map((branch: { name: string }) => branch.name)
+      .sort((a: string, b: string) => {
+        // Put 'main' and 'master' first
+        if (a === 'main' || a === 'master') return -1
+        if (b === 'main' || b === 'master') return 1
+        return a.localeCompare(b)
+      })
+
+    return { success: true, branches }
+  } catch (error) {
+    console.error('Failed to fetch repository branches:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch branches',
+    }
+  }
+}

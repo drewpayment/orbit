@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
+import { revalidatePath } from 'next/cache'
 import { builtInGenerators } from '@/lib/seeds/deployment-generators'
 
 interface CreateAppFromTemplateInput {
@@ -323,5 +324,171 @@ export async function getHealthHistory(input: GetHealthHistoryInput) {
   } catch (error) {
     console.error('Failed to fetch health history:', error)
     return { success: false, error: 'Failed to fetch health history', data: [] }
+  }
+}
+
+interface UpdateAppSettingsInput {
+  name: string
+  description?: string
+  healthConfig?: {
+    url?: string
+    method?: 'GET' | 'HEAD' | 'POST'
+    interval?: number
+    timeout?: number
+    expectedStatus?: number
+  }
+  branch?: string
+}
+
+export async function updateAppSettings(
+  appId: string,
+  data: UpdateAppSettingsInput
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+
+  if (!session?.user) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  const payload = await getPayload({ config })
+
+  // Fetch app to get workspace ID
+  const app = await payload.findByID({
+    collection: 'apps',
+    id: appId,
+  })
+
+  if (!app) {
+    return { success: false, error: 'App not found' }
+  }
+
+  const workspaceId = typeof app.workspace === 'string' ? app.workspace : app.workspace.id
+
+  // Verify user has workspace member access
+  const membership = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { workspace: { equals: workspaceId } },
+        { user: { equals: session.user.id } },
+        { role: { in: ['owner', 'admin', 'member'] } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    limit: 1,
+  })
+
+  if (membership.docs.length === 0) {
+    return { success: false, error: 'Not authorized to update this app' }
+  }
+
+  try {
+    // Build update data
+    const updateData: Record<string, unknown> = {
+      name: data.name,
+      description: data.description || null,
+    }
+
+    // Update health config if provided
+    if (data.healthConfig) {
+      updateData.healthConfig = {
+        url: data.healthConfig.url || null,
+        method: data.healthConfig.method || 'GET',
+        interval: data.healthConfig.interval || 60,
+        timeout: data.healthConfig.timeout || 10,
+        expectedStatus: data.healthConfig.expectedStatus || 200,
+      }
+    }
+
+    // Update branch if provided and app has repository
+    if (data.branch && app.repository) {
+      updateData.repository = {
+        ...app.repository,
+        branch: data.branch,
+      }
+    }
+
+    await payload.update({
+      collection: 'apps',
+      id: appId,
+      data: updateData,
+    })
+
+    revalidatePath('/apps')
+    revalidatePath(`/apps/${appId}`)
+
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to update app settings:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to update app settings'
+    return { success: false, error: errorMessage }
+  }
+}
+
+export async function deleteApp(
+  appId: string,
+  confirmName: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+
+  if (!session?.user) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  const payload = await getPayload({ config })
+
+  // Fetch app to get name and workspace ID
+  const app = await payload.findByID({
+    collection: 'apps',
+    id: appId,
+  })
+
+  if (!app) {
+    return { success: false, error: 'App not found' }
+  }
+
+  // Validate confirmation name matches exactly
+  if (confirmName !== app.name) {
+    return { success: false, error: 'App name does not match' }
+  }
+
+  const workspaceId = typeof app.workspace === 'string' ? app.workspace : app.workspace.id
+
+  // Verify user has owner/admin role (not just member)
+  const membership = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { workspace: { equals: workspaceId } },
+        { user: { equals: session.user.id } },
+        { role: { in: ['owner', 'admin'] } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    limit: 1,
+  })
+
+  if (membership.docs.length === 0) {
+    return { success: false, error: 'Only workspace owners and admins can delete apps' }
+  }
+
+  try {
+    // Delete app - Payload hooks handle cascade deletion of related entities
+    await payload.delete({
+      collection: 'apps',
+      id: appId,
+    })
+
+    revalidatePath('/apps')
+
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to delete app:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to delete app'
+    return { success: false, error: errorMessage }
   }
 }

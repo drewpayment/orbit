@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import type { App, Deployment, Template, HealthCheck } from '@/payload-types'
 import { AddDeploymentModal } from './AddDeploymentModal'
+import { AppSettingsSheet } from './AppSettingsSheet'
 import { BuildSection } from './BuildSection'
 import { getHealthHistory } from '@/app/actions/apps'
 import { DeploymentRow } from './DeploymentRow'
@@ -56,6 +57,7 @@ const deploymentStatusColors: Record<string, string> = {
 export function AppDetail({ app, deployments }: AppDetailProps) {
   const router = useRouter()
   const [showAddDeployment, setShowAddDeployment] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const [healthHistory, setHealthHistory] = useState<HealthCheck[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
   const status = app.status || 'unknown'
@@ -124,7 +126,7 @@ export function AppDetail({ app, deployments }: AppDetailProps) {
           )}
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={() => setShowSettings(true)}>
             <Settings className="mr-2 h-4 w-4" />
             Settings
           </Button>
@@ -316,6 +318,12 @@ export function AppDetail({ app, deployments }: AppDetailProps) {
         onOpenChange={setShowAddDeployment}
         appId={app.id}
         appName={app.name}
+      />
+
+      <AppSettingsSheet
+        app={app}
+        open={showSettings}
+        onOpenChange={setShowSettings}
       />
     </div>
   )

@@ -20,9 +20,13 @@ vi.mock('next/headers', () => ({
   headers: vi.fn(() => Promise.resolve(new Headers())),
 }))
 
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
+}))
+
 import { getPayload } from 'payload'
 import { auth } from '@/lib/auth'
-import { importRepository } from '../apps'
+import { importRepository, updateAppSettings, deleteApp } from '../apps'
 
 describe('importRepository', () => {
   beforeEach(() => {
@@ -83,6 +87,185 @@ describe('importRepository', () => {
           installationId: expect.anything(),
         }),
       }),
+    })
+  })
+})
+
+describe('updateAppSettings', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('should return unauthorized when no session', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+
+    const result = await updateAppSettings('app-1', { name: 'new-name' })
+
+    expect(result).toEqual({ success: false, error: 'Unauthorized' })
+  })
+
+  it('should return error when app not found', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue({
+      user: { id: 'user-1' },
+      session: {},
+    } as any)
+
+    const mockPayload = {
+      findByID: vi.fn().mockResolvedValue(null),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await updateAppSettings('app-1', { name: 'new-name' })
+
+    expect(result).toEqual({ success: false, error: 'App not found' })
+  })
+
+  it('should return error when user is not a workspace member', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue({
+      user: { id: 'user-1' },
+      session: {},
+    } as any)
+
+    const mockPayload = {
+      findByID: vi.fn().mockResolvedValue({ id: 'app-1', workspace: 'workspace-1' }),
+      find: vi.fn().mockResolvedValue({ docs: [] }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await updateAppSettings('app-1', { name: 'new-name' })
+
+    expect(result).toEqual({ success: false, error: 'Not authorized to update this app' })
+  })
+
+  it('should update app settings successfully', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue({
+      user: { id: 'user-1' },
+      session: {},
+    } as any)
+
+    const mockPayload = {
+      findByID: vi.fn().mockResolvedValue({
+        id: 'app-1',
+        workspace: 'workspace-1',
+        repository: { owner: 'acme', name: 'repo', branch: 'main' },
+      }),
+      find: vi.fn().mockResolvedValue({ docs: [{ id: 'membership-1' }] }),
+      update: vi.fn().mockResolvedValue({ id: 'app-1' }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await updateAppSettings('app-1', {
+      name: 'new-name',
+      description: 'new description',
+      healthConfig: {
+        url: 'https://api.example.com/health',
+        method: 'GET',
+        interval: 60,
+        timeout: 10,
+        expectedStatus: 200,
+      },
+      branch: 'develop',
+    })
+
+    expect(result).toEqual({ success: true })
+    expect(mockPayload.update).toHaveBeenCalledWith({
+      collection: 'apps',
+      id: 'app-1',
+      data: expect.objectContaining({
+        name: 'new-name',
+        description: 'new description',
+        healthConfig: expect.objectContaining({
+          url: 'https://api.example.com/health',
+        }),
+        repository: expect.objectContaining({
+          branch: 'develop',
+        }),
+      }),
+    })
+  })
+})
+
+describe('deleteApp', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('should return unauthorized when no session', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+
+    const result = await deleteApp('app-1', 'my-app')
+
+    expect(result).toEqual({ success: false, error: 'Unauthorized' })
+  })
+
+  it('should return error when app not found', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue({
+      user: { id: 'user-1' },
+      session: {},
+    } as any)
+
+    const mockPayload = {
+      findByID: vi.fn().mockResolvedValue(null),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await deleteApp('app-1', 'my-app')
+
+    expect(result).toEqual({ success: false, error: 'App not found' })
+  })
+
+  it('should return error when confirmation name does not match', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue({
+      user: { id: 'user-1' },
+      session: {},
+    } as any)
+
+    const mockPayload = {
+      findByID: vi.fn().mockResolvedValue({ id: 'app-1', name: 'my-app', workspace: 'workspace-1' }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await deleteApp('app-1', 'wrong-name')
+
+    expect(result).toEqual({ success: false, error: 'App name does not match' })
+  })
+
+  it('should return error when user is not an owner or admin', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue({
+      user: { id: 'user-1' },
+      session: {},
+    } as any)
+
+    const mockPayload = {
+      findByID: vi.fn().mockResolvedValue({ id: 'app-1', name: 'my-app', workspace: 'workspace-1' }),
+      find: vi.fn().mockResolvedValue({ docs: [] }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await deleteApp('app-1', 'my-app')
+
+    expect(result).toEqual({ success: false, error: 'Only workspace owners and admins can delete apps' })
+  })
+
+  it('should delete app successfully when user is owner', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue({
+      user: { id: 'user-1' },
+      session: {},
+    } as any)
+
+    const mockPayload = {
+      findByID: vi.fn().mockResolvedValue({ id: 'app-1', name: 'my-app', workspace: 'workspace-1' }),
+      find: vi.fn().mockResolvedValue({ docs: [{ id: 'membership-1', role: 'owner' }] }),
+      delete: vi.fn().mockResolvedValue({ id: 'app-1' }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await deleteApp('app-1', 'my-app')
+
+    expect(result).toEqual({ success: true })
+    expect(mockPayload.delete).toHaveBeenCalledWith({
+      collection: 'apps',
+      id: 'app-1',
     })
   })
 })

@@ -28,7 +28,7 @@ vi.mock('@/lib/github/octokit', () => ({
 import { getPayload } from 'payload'
 import { auth } from '@/lib/auth'
 import { getInstallationOctokit } from '@/lib/github/octokit'
-import { getWorkspaceGitHubInstallations, listInstallationRepositories, searchInstallationRepositories } from '../github'
+import { getWorkspaceGitHubInstallations, listInstallationRepositories, searchInstallationRepositories, getRepositoryBranches } from '../github'
 
 describe('getWorkspaceGitHubInstallations', () => {
   beforeEach(() => {
@@ -299,5 +299,103 @@ describe('searchInstallationRepositories', () => {
 
     expect(result.success).toBe(true)
     expect(result.repos).toEqual([])
+  })
+})
+
+describe('getRepositoryBranches', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('should return unauthorized error when no session', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+
+    const result = await getRepositoryBranches('install-1', 'acme', 'repo')
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Unauthorized',
+    })
+  })
+
+  it('should return error when installation not found', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue({
+      user: { id: 'user-1' },
+      session: {},
+    } as any)
+
+    const mockPayload = {
+      findByID: vi.fn().mockResolvedValue(null),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await getRepositoryBranches('install-1', 'acme', 'repo')
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Installation not found',
+    })
+  })
+
+  it('should return branches sorted with main/master first', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue({
+      user: { id: 'user-1' },
+      session: {},
+    } as any)
+
+    const mockPayload = {
+      findByID: vi.fn().mockResolvedValue({
+        id: 'install-1',
+        installationId: 12345,
+      }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const mockOctokit = {
+      request: vi.fn().mockResolvedValue({
+        data: [
+          { name: 'develop' },
+          { name: 'feature/new-stuff' },
+          { name: 'main' },
+          { name: 'alpha' },
+        ],
+      }),
+    }
+    vi.mocked(getInstallationOctokit).mockResolvedValue(mockOctokit as any)
+
+    const result = await getRepositoryBranches('install-1', 'acme', 'repo')
+
+    expect(result.success).toBe(true)
+    expect(result.branches).toEqual(['main', 'alpha', 'develop', 'feature/new-stuff'])
+    expect(mockOctokit.request).toHaveBeenCalledWith('GET /repos/{owner}/{repo}/branches', {
+      owner: 'acme',
+      repo: 'repo',
+      per_page: 100,
+    })
+  })
+
+  it('should handle GitHub API errors', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue({
+      user: { id: 'user-1' },
+      session: {},
+    } as any)
+
+    const mockPayload = {
+      findByID: vi.fn().mockResolvedValue({
+        id: 'install-1',
+        installationId: 12345,
+      }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const mockOctokit = {
+      request: vi.fn().mockRejectedValue(new Error('Not Found')),
+    }
+    vi.mocked(getInstallationOctokit).mockResolvedValue(mockOctokit as any)
+
+    const result = await getRepositoryBranches('install-1', 'acme', 'repo')
+
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Not Found')
   })
 })
