@@ -33,7 +33,7 @@ export interface StartBuildParams {
   repoUrl: string
   ref?: string
   registry: {
-    type: 'ghcr' | 'acr'
+    type: 'ghcr' | 'acr' | 'orbit'
     url: string
     repository: string
     token: string
@@ -55,6 +55,8 @@ export async function startBuildWorkflow(
   try {
     const registryType = params.registry.type === 'ghcr'
       ? RegistryType.GHCR
+      : params.registry.type === 'orbit'
+      ? RegistryType.ORBIT
       : RegistryType.ACR
 
     const request = create(StartBuildWorkflowRequestSchema, {

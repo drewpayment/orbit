@@ -9,6 +9,8 @@ import { getTemporalClient } from '@/lib/temporal/client'
 import { resolveEnvironmentVariables } from './environment-variables'
 import { createInstallationToken } from '@/lib/github/octokit'
 
+const ORBIT_REGISTRY_URL = process.env.ORBIT_REGISTRY_URL || 'localhost:5050'
+
 interface StartBuildInput {
   appId: string
   // Optional overrides
@@ -65,6 +67,8 @@ export async function startBuild(input: StartBuildInput) {
 
   // Get registry config (app-specific or workspace default)
   let registryConfig = null
+  let useOrbitRegistry = false
+
   if (app.registryConfig) {
     registryConfig = typeof app.registryConfig === 'string'
       ? await payload.findByID({ collection: 'registry-configs', id: app.registryConfig })
@@ -86,10 +90,22 @@ export async function startBuild(input: StartBuildInput) {
     }
   }
 
+  // If no registry found, check if Orbit registry is allowed as fallback
   if (!registryConfig) {
-    return {
-      success: false,
-      error: 'No container registry configured. Please configure a registry in workspace settings.'
+    const workspace = typeof app.workspace === 'string'
+      ? await payload.findByID({ collection: 'workspaces', id: app.workspace, depth: 0 })
+      : app.workspace
+
+    // Type assertion needed because auto-generated types don't include allowOrbitRegistry yet
+    const allowOrbitRegistry = (workspace?.settings as any)?.allowOrbitRegistry !== false
+
+    if (allowOrbitRegistry) {
+      useOrbitRegistry = true
+    } else {
+      return {
+        success: false,
+        error: 'No container registry configured. Please configure a registry in workspace settings.'
+      }
     }
   }
 
@@ -127,10 +143,10 @@ export async function startBuild(input: StartBuildInput) {
 
     // For GHCR builds, we need a fresh token with packages:write permission
     // The stored token may not have this permission
-    const needsPackagesPermission = registryConfig?.type === 'ghcr'
+    const needsPackagesPermission = registryConfig?.type === 'ghcr' && !useOrbitRegistry
     let githubToken: string
 
-    console.log('[Build] Registry type:', registryConfig?.type, 'needsPackagesPermission:', needsPackagesPermission)
+    console.log('[Build] Registry type:', useOrbitRegistry ? 'orbit' : registryConfig?.type, 'needsPackagesPermission:', needsPackagesPermission)
     console.log('[Build] Installation ID:', installationId, 'type:', typeof installationId)
 
     if (needsPackagesPermission) {
@@ -159,17 +175,33 @@ export async function startBuild(input: StartBuildInput) {
     let registryToken = ''
     let registryUsername: string | undefined
 
-    if (registryConfig.type === 'ghcr') {
+    // Type assertion needed because auto-generated types don't include 'orbit' yet
+    const registryType = registryConfig?.type as 'ghcr' | 'acr' | 'orbit' | undefined
+
+    if (useOrbitRegistry || registryType === 'orbit') {
+      // Using Orbit registry (as fallback or explicit selection)
+      const workspace = typeof app.workspace === 'string'
+        ? await payload.findByID({ collection: 'workspaces', id: app.workspace, depth: 0 })
+        : app.workspace
+      const workspaceSlug = workspace?.slug || 'default'
+
+      registryUrl = ORBIT_REGISTRY_URL
+      repositoryPath = `${workspaceSlug}/${app.name.toLowerCase().replace(/\s+/g, '-')}`
+      registryToken = process.env.ORBIT_REGISTRY_TOKEN || 'orbit-registry-token'
+    } else if (registryType === 'ghcr') {
       registryUrl = 'ghcr.io'
-      repositoryPath = `${registryConfig.ghcrOwner}/${app.name.toLowerCase().replace(/\s+/g, '-')}`
+      repositoryPath = `${registryConfig?.ghcrOwner}/${app.name.toLowerCase().replace(/\s+/g, '-')}`
       // Use GitHub installation token for GHCR authentication
       registryToken = githubToken
-    } else {
+    } else if (registryType === 'acr') {
       // ACR
-      registryUrl = registryConfig.acrLoginServer || ''
+      registryUrl = registryConfig?.acrLoginServer || ''
       repositoryPath = app.name.toLowerCase().replace(/\s+/g, '-')
-      registryUsername = registryConfig.acrUsername || undefined
-      registryToken = registryConfig.acrToken || ''
+      registryUsername = registryConfig?.acrUsername || undefined
+      registryToken = registryConfig?.acrToken || ''
+    } else {
+      // Fallback - should not happen
+      throw new Error('Invalid registry configuration')
     }
 
     // Resolve environment variables from workspace and app settings
@@ -194,6 +226,9 @@ export async function startBuild(input: StartBuildInput) {
 
     console.log('[Build] Starting workflow with registry token length:', registryToken?.length)
 
+    // Determine registry type for workflow (use the local variable defined above)
+    const workflowRegistryType = useOrbitRegistry ? 'orbit' : (registryType || 'orbit')
+
     // Start the Temporal build workflow via gRPC
     const result = await startBuildWorkflow({
       appId: input.appId,
@@ -202,7 +237,7 @@ export async function startBuild(input: StartBuildInput) {
       repoUrl,
       ref,
       registry: {
-        type: registryConfig.type,
+        type: workflowRegistryType,
         url: registryUrl,
         repository: repositoryPath,
         token: registryToken,
@@ -366,7 +401,7 @@ export async function getBuildStatus(appId: string): Promise<BuildStatus | null>
 export async function checkRegistryAvailable(appId: string): Promise<{
   available: boolean
   registryName?: string
-  registryType?: 'ghcr' | 'acr'
+  registryType?: 'ghcr' | 'acr' | 'orbit'
   isWorkspaceDefault?: boolean
 }> {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -423,6 +458,27 @@ export async function checkRegistryAvailable(appId: string): Promise<{
         registryName: registry.name,
         registryType: registry.type,
         isWorkspaceDefault: true,
+      }
+    }
+  }
+
+  // Check if Orbit registry is available as fallback
+  if (workspaceId) {
+    const workspace = await payload.findByID({
+      collection: 'workspaces',
+      id: workspaceId,
+      depth: 0,
+    })
+
+    // Type assertion needed because auto-generated types don't include allowOrbitRegistry yet
+    const allowOrbitRegistry = (workspace?.settings as any)?.allowOrbitRegistry !== false
+
+    if (allowOrbitRegistry) {
+      return {
+        available: true,
+        registryName: 'Orbit Registry',
+        registryType: 'orbit',
+        isWorkspaceDefault: false,
       }
     }
   }
