@@ -197,7 +197,9 @@ func (s *BuildServer) BuildImage(
 			if req.Registry.Username != nil {
 				buildReq.Registry.Username = *req.Registry.Username
 			}
-		default:
+	case buildv1.RegistryType_REGISTRY_TYPE_ORBIT:
+		buildReq.Registry.Type = builder.RegistryTypeOrbit
+	default:
 			return &buildv1.BuildImageResponse{
 				Success: false,
 				Error:   "unsupported registry type",
