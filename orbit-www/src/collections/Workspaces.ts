@@ -109,6 +109,23 @@ export const Workspaces: CollectionConfig = {
             description: 'Custom theme colors, branding, etc.',
           },
         },
+        {
+          name: 'allowOrbitRegistry',
+          type: 'checkbox',
+          defaultValue: true,
+          admin: {
+            description: 'Allow Orbit-hosted registry as fallback when no registry is configured',
+          },
+        },
+        {
+          name: 'registryQuotaBytes',
+          type: 'number',
+          defaultValue: 10737418240, // 10GB
+          admin: {
+            description: 'Maximum storage quota for Orbit-hosted registry (bytes)',
+            hidden: true, // Admin-only, managed by system
+          },
+        },
       ],
     },
     {
