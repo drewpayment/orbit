@@ -159,7 +159,7 @@ interface BuildSectionProps {
 interface RegistryInfo {
   available: boolean
   registryName?: string
-  registryType?: 'ghcr' | 'acr'
+  registryType?: 'ghcr' | 'acr' | 'orbit'
   isWorkspaceDefault?: boolean
 }
 

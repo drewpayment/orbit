@@ -9,13 +9,9 @@ export const RegistryImages: CollectionConfig = {
     hidden: true, // Internal collection, not shown in admin
   },
   access: {
-    // Only system/admin can manage registry images
-    read: ({ req: { user } }) => {
-      if (!user) return false
-      return { workspace: { in: user.workspaces?.map((w: { workspace: string | { id: string } }) =>
-        typeof w.workspace === 'string' ? w.workspace : w.workspace.id
-      ) || [] } }
-    },
+    // System-managed collection - read access for authenticated users
+    // Workspace filtering should be done at query time, not access level
+    read: ({ req: { user } }) => !!user,
     create: () => false, // Only created by system
     update: () => false,
     delete: () => false,
@@ -65,17 +61,6 @@ export const RegistryImages: CollectionConfig = {
       admin: {
         description: 'When the image was pushed to registry',
       },
-    },
-  ],
-  indexes: [
-    {
-      name: 'workspace_pushedAt',
-      fields: ['workspace', 'pushedAt'],
-    },
-    {
-      name: 'workspace_app_tag',
-      fields: ['workspace', 'app', 'tag'],
-      unique: true,
     },
   ],
 }
