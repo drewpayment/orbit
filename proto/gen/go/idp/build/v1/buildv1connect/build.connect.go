@@ -49,6 +49,11 @@ const (
 	// BuildServiceGetBuildProgressProcedure is the fully-qualified name of the BuildService's
 	// GetBuildProgress RPC.
 	BuildServiceGetBuildProgressProcedure = "/idp.build.v1.BuildService/GetBuildProgress"
+	// BuildServiceCheckQuotaAndCleanupProcedure is the fully-qualified name of the BuildService's
+	// CheckQuotaAndCleanup RPC.
+	BuildServiceCheckQuotaAndCleanupProcedure = "/idp.build.v1.BuildService/CheckQuotaAndCleanup"
+	// BuildServiceTrackImageProcedure is the fully-qualified name of the BuildService's TrackImage RPC.
+	BuildServiceTrackImageProcedure = "/idp.build.v1.BuildService/TrackImage"
 )
 
 // BuildServiceClient is a client for the idp.build.v1.BuildService service.
@@ -63,6 +68,9 @@ type BuildServiceClient interface {
 	StartBuildWorkflow(context.Context, *connect.Request[v1.StartBuildWorkflowRequest]) (*connect.Response[v1.StartBuildWorkflowResponse], error)
 	// Get the progress of a build workflow
 	GetBuildProgress(context.Context, *connect.Request[v1.GetBuildProgressRequest]) (*connect.Response[v1.GetBuildProgressResponse], error)
+	// Quota management
+	CheckQuotaAndCleanup(context.Context, *connect.Request[v1.CheckQuotaRequest]) (*connect.Response[v1.CheckQuotaResponse], error)
+	TrackImage(context.Context, *connect.Request[v1.TrackImageRequest]) (*connect.Response[v1.TrackImageResponse], error)
 }
 
 // NewBuildServiceClient constructs a client for the idp.build.v1.BuildService service. By default,
@@ -106,16 +114,30 @@ func NewBuildServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(buildServiceMethods.ByName("GetBuildProgress")),
 			connect.WithClientOptions(opts...),
 		),
+		checkQuotaAndCleanup: connect.NewClient[v1.CheckQuotaRequest, v1.CheckQuotaResponse](
+			httpClient,
+			baseURL+BuildServiceCheckQuotaAndCleanupProcedure,
+			connect.WithSchema(buildServiceMethods.ByName("CheckQuotaAndCleanup")),
+			connect.WithClientOptions(opts...),
+		),
+		trackImage: connect.NewClient[v1.TrackImageRequest, v1.TrackImageResponse](
+			httpClient,
+			baseURL+BuildServiceTrackImageProcedure,
+			connect.WithSchema(buildServiceMethods.ByName("TrackImage")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // buildServiceClient implements BuildServiceClient.
 type buildServiceClient struct {
-	analyzeRepository  *connect.Client[v1.AnalyzeRepositoryRequest, v1.AnalyzeRepositoryResponse]
-	buildImage         *connect.Client[v1.BuildImageRequest, v1.BuildImageResponse]
-	streamBuildLogs    *connect.Client[v1.StreamBuildLogsRequest, v1.StreamBuildLogsResponse]
-	startBuildWorkflow *connect.Client[v1.StartBuildWorkflowRequest, v1.StartBuildWorkflowResponse]
-	getBuildProgress   *connect.Client[v1.GetBuildProgressRequest, v1.GetBuildProgressResponse]
+	analyzeRepository    *connect.Client[v1.AnalyzeRepositoryRequest, v1.AnalyzeRepositoryResponse]
+	buildImage           *connect.Client[v1.BuildImageRequest, v1.BuildImageResponse]
+	streamBuildLogs      *connect.Client[v1.StreamBuildLogsRequest, v1.StreamBuildLogsResponse]
+	startBuildWorkflow   *connect.Client[v1.StartBuildWorkflowRequest, v1.StartBuildWorkflowResponse]
+	getBuildProgress     *connect.Client[v1.GetBuildProgressRequest, v1.GetBuildProgressResponse]
+	checkQuotaAndCleanup *connect.Client[v1.CheckQuotaRequest, v1.CheckQuotaResponse]
+	trackImage           *connect.Client[v1.TrackImageRequest, v1.TrackImageResponse]
 }
 
 // AnalyzeRepository calls idp.build.v1.BuildService.AnalyzeRepository.
@@ -143,6 +165,16 @@ func (c *buildServiceClient) GetBuildProgress(ctx context.Context, req *connect.
 	return c.getBuildProgress.CallUnary(ctx, req)
 }
 
+// CheckQuotaAndCleanup calls idp.build.v1.BuildService.CheckQuotaAndCleanup.
+func (c *buildServiceClient) CheckQuotaAndCleanup(ctx context.Context, req *connect.Request[v1.CheckQuotaRequest]) (*connect.Response[v1.CheckQuotaResponse], error) {
+	return c.checkQuotaAndCleanup.CallUnary(ctx, req)
+}
+
+// TrackImage calls idp.build.v1.BuildService.TrackImage.
+func (c *buildServiceClient) TrackImage(ctx context.Context, req *connect.Request[v1.TrackImageRequest]) (*connect.Response[v1.TrackImageResponse], error) {
+	return c.trackImage.CallUnary(ctx, req)
+}
+
 // BuildServiceHandler is an implementation of the idp.build.v1.BuildService service.
 type BuildServiceHandler interface {
 	// Analyze a repository to detect build configuration
@@ -155,6 +187,9 @@ type BuildServiceHandler interface {
 	StartBuildWorkflow(context.Context, *connect.Request[v1.StartBuildWorkflowRequest]) (*connect.Response[v1.StartBuildWorkflowResponse], error)
 	// Get the progress of a build workflow
 	GetBuildProgress(context.Context, *connect.Request[v1.GetBuildProgressRequest]) (*connect.Response[v1.GetBuildProgressResponse], error)
+	// Quota management
+	CheckQuotaAndCleanup(context.Context, *connect.Request[v1.CheckQuotaRequest]) (*connect.Response[v1.CheckQuotaResponse], error)
+	TrackImage(context.Context, *connect.Request[v1.TrackImageRequest]) (*connect.Response[v1.TrackImageResponse], error)
 }
 
 // NewBuildServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -194,6 +229,18 @@ func NewBuildServiceHandler(svc BuildServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(buildServiceMethods.ByName("GetBuildProgress")),
 		connect.WithHandlerOptions(opts...),
 	)
+	buildServiceCheckQuotaAndCleanupHandler := connect.NewUnaryHandler(
+		BuildServiceCheckQuotaAndCleanupProcedure,
+		svc.CheckQuotaAndCleanup,
+		connect.WithSchema(buildServiceMethods.ByName("CheckQuotaAndCleanup")),
+		connect.WithHandlerOptions(opts...),
+	)
+	buildServiceTrackImageHandler := connect.NewUnaryHandler(
+		BuildServiceTrackImageProcedure,
+		svc.TrackImage,
+		connect.WithSchema(buildServiceMethods.ByName("TrackImage")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/idp.build.v1.BuildService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case BuildServiceAnalyzeRepositoryProcedure:
@@ -206,6 +253,10 @@ func NewBuildServiceHandler(svc BuildServiceHandler, opts ...connect.HandlerOpti
 			buildServiceStartBuildWorkflowHandler.ServeHTTP(w, r)
 		case BuildServiceGetBuildProgressProcedure:
 			buildServiceGetBuildProgressHandler.ServeHTTP(w, r)
+		case BuildServiceCheckQuotaAndCleanupProcedure:
+			buildServiceCheckQuotaAndCleanupHandler.ServeHTTP(w, r)
+		case BuildServiceTrackImageProcedure:
+			buildServiceTrackImageHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -233,4 +284,12 @@ func (UnimplementedBuildServiceHandler) StartBuildWorkflow(context.Context, *con
 
 func (UnimplementedBuildServiceHandler) GetBuildProgress(context.Context, *connect.Request[v1.GetBuildProgressRequest]) (*connect.Response[v1.GetBuildProgressResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.build.v1.BuildService.GetBuildProgress is not implemented"))
+}
+
+func (UnimplementedBuildServiceHandler) CheckQuotaAndCleanup(context.Context, *connect.Request[v1.CheckQuotaRequest]) (*connect.Response[v1.CheckQuotaResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.build.v1.BuildService.CheckQuotaAndCleanup is not implemented"))
+}
+
+func (UnimplementedBuildServiceHandler) TrackImage(context.Context, *connect.Request[v1.TrackImageRequest]) (*connect.Response[v1.TrackImageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.build.v1.BuildService.TrackImage is not implemented"))
 }

@@ -1253,6 +1253,339 @@ func (x *GetBuildProgressResponse) GetDetectedConfig() *DetectedBuildConfig {
 	return nil
 }
 
+// Quota management messages
+type CheckQuotaRequest struct {
+	state                     protoimpl.MessageState `protogen:"open.v1"`
+	WorkspaceId               string                 `protobuf:"bytes,1,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	IncomingImageSizeEstimate int64                  `protobuf:"varint,2,opt,name=incoming_image_size_estimate,json=incomingImageSizeEstimate,proto3" json:"incoming_image_size_estimate,omitempty"` // Optional hint for pre-check
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
+}
+
+func (x *CheckQuotaRequest) Reset() {
+	*x = CheckQuotaRequest{}
+	mi := &file_idp_build_v1_build_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckQuotaRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckQuotaRequest) ProtoMessage() {}
+
+func (x *CheckQuotaRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_build_v1_build_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckQuotaRequest.ProtoReflect.Descriptor instead.
+func (*CheckQuotaRequest) Descriptor() ([]byte, []int) {
+	return file_idp_build_v1_build_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *CheckQuotaRequest) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *CheckQuotaRequest) GetIncomingImageSizeEstimate() int64 {
+	if x != nil {
+		return x.IncomingImageSizeEstimate
+	}
+	return 0
+}
+
+type CheckQuotaResponse struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	CleanupPerformed  bool                   `protobuf:"varint,1,opt,name=cleanup_performed,json=cleanupPerformed,proto3" json:"cleanup_performed,omitempty"`
+	CurrentUsageBytes int64                  `protobuf:"varint,2,opt,name=current_usage_bytes,json=currentUsageBytes,proto3" json:"current_usage_bytes,omitempty"`
+	QuotaBytes        int64                  `protobuf:"varint,3,opt,name=quota_bytes,json=quotaBytes,proto3" json:"quota_bytes,omitempty"`
+	CleanedImages     []*CleanedImage        `protobuf:"bytes,4,rep,name=cleaned_images,json=cleanedImages,proto3" json:"cleaned_images,omitempty"`
+	Error             string                 `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *CheckQuotaResponse) Reset() {
+	*x = CheckQuotaResponse{}
+	mi := &file_idp_build_v1_build_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckQuotaResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckQuotaResponse) ProtoMessage() {}
+
+func (x *CheckQuotaResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_build_v1_build_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckQuotaResponse.ProtoReflect.Descriptor instead.
+func (*CheckQuotaResponse) Descriptor() ([]byte, []int) {
+	return file_idp_build_v1_build_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *CheckQuotaResponse) GetCleanupPerformed() bool {
+	if x != nil {
+		return x.CleanupPerformed
+	}
+	return false
+}
+
+func (x *CheckQuotaResponse) GetCurrentUsageBytes() int64 {
+	if x != nil {
+		return x.CurrentUsageBytes
+	}
+	return 0
+}
+
+func (x *CheckQuotaResponse) GetQuotaBytes() int64 {
+	if x != nil {
+		return x.QuotaBytes
+	}
+	return 0
+}
+
+func (x *CheckQuotaResponse) GetCleanedImages() []*CleanedImage {
+	if x != nil {
+		return x.CleanedImages
+	}
+	return nil
+}
+
+func (x *CheckQuotaResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type CleanedImage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AppName       string                 `protobuf:"bytes,1,opt,name=app_name,json=appName,proto3" json:"app_name,omitempty"`
+	Tag           string                 `protobuf:"bytes,2,opt,name=tag,proto3" json:"tag,omitempty"`
+	SizeBytes     int64                  `protobuf:"varint,3,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CleanedImage) Reset() {
+	*x = CleanedImage{}
+	mi := &file_idp_build_v1_build_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CleanedImage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CleanedImage) ProtoMessage() {}
+
+func (x *CleanedImage) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_build_v1_build_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CleanedImage.ProtoReflect.Descriptor instead.
+func (*CleanedImage) Descriptor() ([]byte, []int) {
+	return file_idp_build_v1_build_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *CleanedImage) GetAppName() string {
+	if x != nil {
+		return x.AppName
+	}
+	return ""
+}
+
+func (x *CleanedImage) GetTag() string {
+	if x != nil {
+		return x.Tag
+	}
+	return ""
+}
+
+func (x *CleanedImage) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+type TrackImageRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	WorkspaceId   string                 `protobuf:"bytes,1,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	AppId         string                 `protobuf:"bytes,2,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
+	Tag           string                 `protobuf:"bytes,3,opt,name=tag,proto3" json:"tag,omitempty"`
+	Digest        string                 `protobuf:"bytes,4,opt,name=digest,proto3" json:"digest,omitempty"`
+	RegistryUrl   string                 `protobuf:"bytes,5,opt,name=registry_url,json=registryUrl,proto3" json:"registry_url,omitempty"`
+	Repository    string                 `protobuf:"bytes,6,opt,name=repository,proto3" json:"repository,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TrackImageRequest) Reset() {
+	*x = TrackImageRequest{}
+	mi := &file_idp_build_v1_build_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TrackImageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TrackImageRequest) ProtoMessage() {}
+
+func (x *TrackImageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_build_v1_build_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TrackImageRequest.ProtoReflect.Descriptor instead.
+func (*TrackImageRequest) Descriptor() ([]byte, []int) {
+	return file_idp_build_v1_build_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *TrackImageRequest) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *TrackImageRequest) GetAppId() string {
+	if x != nil {
+		return x.AppId
+	}
+	return ""
+}
+
+func (x *TrackImageRequest) GetTag() string {
+	if x != nil {
+		return x.Tag
+	}
+	return ""
+}
+
+func (x *TrackImageRequest) GetDigest() string {
+	if x != nil {
+		return x.Digest
+	}
+	return ""
+}
+
+func (x *TrackImageRequest) GetRegistryUrl() string {
+	if x != nil {
+		return x.RegistryUrl
+	}
+	return ""
+}
+
+func (x *TrackImageRequest) GetRepository() string {
+	if x != nil {
+		return x.Repository
+	}
+	return ""
+}
+
+type TrackImageResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SizeBytes     int64                  `protobuf:"varint,1,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	NewTotalUsage int64                  `protobuf:"varint,2,opt,name=new_total_usage,json=newTotalUsage,proto3" json:"new_total_usage,omitempty"`
+	Error         string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TrackImageResponse) Reset() {
+	*x = TrackImageResponse{}
+	mi := &file_idp_build_v1_build_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TrackImageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TrackImageResponse) ProtoMessage() {}
+
+func (x *TrackImageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_build_v1_build_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TrackImageResponse.ProtoReflect.Descriptor instead.
+func (*TrackImageResponse) Descriptor() ([]byte, []int) {
+	return file_idp_build_v1_build_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *TrackImageResponse) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *TrackImageResponse) GetNewTotalUsage() int64 {
+	if x != nil {
+		return x.NewTotalUsage
+	}
+	return 0
+}
+
+func (x *TrackImageResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 var File_idp_build_v1_build_proto protoreflect.FileDescriptor
 
 const file_idp_build_v1_build_proto_rawDesc = "" +
@@ -1369,7 +1702,36 @@ const file_idp_build_v1_build_proto_rawDesc = "" +
 	"\timage_url\x18\x06 \x01(\tR\bimageUrl\x12!\n" +
 	"\fimage_digest\x18\a \x01(\tR\vimageDigest\x12\x14\n" +
 	"\x05error\x18\b \x01(\tR\x05error\x12J\n" +
-	"\x0fdetected_config\x18\t \x01(\v2!.idp.build.v1.DetectedBuildConfigR\x0edetectedConfig*u\n" +
+	"\x0fdetected_config\x18\t \x01(\v2!.idp.build.v1.DetectedBuildConfigR\x0edetectedConfig\"w\n" +
+	"\x11CheckQuotaRequest\x12!\n" +
+	"\fworkspace_id\x18\x01 \x01(\tR\vworkspaceId\x12?\n" +
+	"\x1cincoming_image_size_estimate\x18\x02 \x01(\x03R\x19incomingImageSizeEstimate\"\xeb\x01\n" +
+	"\x12CheckQuotaResponse\x12+\n" +
+	"\x11cleanup_performed\x18\x01 \x01(\bR\x10cleanupPerformed\x12.\n" +
+	"\x13current_usage_bytes\x18\x02 \x01(\x03R\x11currentUsageBytes\x12\x1f\n" +
+	"\vquota_bytes\x18\x03 \x01(\x03R\n" +
+	"quotaBytes\x12A\n" +
+	"\x0ecleaned_images\x18\x04 \x03(\v2\x1a.idp.build.v1.CleanedImageR\rcleanedImages\x12\x14\n" +
+	"\x05error\x18\x05 \x01(\tR\x05error\"Z\n" +
+	"\fCleanedImage\x12\x19\n" +
+	"\bapp_name\x18\x01 \x01(\tR\aappName\x12\x10\n" +
+	"\x03tag\x18\x02 \x01(\tR\x03tag\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\x03 \x01(\x03R\tsizeBytes\"\xba\x01\n" +
+	"\x11TrackImageRequest\x12!\n" +
+	"\fworkspace_id\x18\x01 \x01(\tR\vworkspaceId\x12\x15\n" +
+	"\x06app_id\x18\x02 \x01(\tR\x05appId\x12\x10\n" +
+	"\x03tag\x18\x03 \x01(\tR\x03tag\x12\x16\n" +
+	"\x06digest\x18\x04 \x01(\tR\x06digest\x12!\n" +
+	"\fregistry_url\x18\x05 \x01(\tR\vregistryUrl\x12\x1e\n" +
+	"\n" +
+	"repository\x18\x06 \x01(\tR\n" +
+	"repository\"q\n" +
+	"\x12TrackImageResponse\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\x01 \x01(\x03R\tsizeBytes\x12&\n" +
+	"\x0fnew_total_usage\x18\x02 \x01(\x03R\rnewTotalUsage\x12\x14\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error*u\n" +
 	"\fRegistryType\x12\x1d\n" +
 	"\x19REGISTRY_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12REGISTRY_TYPE_GHCR\x10\x01\x12\x15\n" +
@@ -1380,14 +1742,17 @@ const file_idp_build_v1_build_proto_rawDesc = "" +
 	"\x19BUILD_STEP_STATUS_PENDING\x10\x01\x12\x1d\n" +
 	"\x19BUILD_STEP_STATUS_RUNNING\x10\x02\x12\x1f\n" +
 	"\x1bBUILD_STEP_STATUS_COMPLETED\x10\x03\x12\x1c\n" +
-	"\x18BUILD_STEP_STATUS_FAILED\x10\x042\xf3\x03\n" +
+	"\x18BUILD_STEP_STATUS_FAILED\x10\x042\x9f\x05\n" +
 	"\fBuildService\x12d\n" +
 	"\x11AnalyzeRepository\x12&.idp.build.v1.AnalyzeRepositoryRequest\x1a'.idp.build.v1.AnalyzeRepositoryResponse\x12O\n" +
 	"\n" +
 	"BuildImage\x12\x1f.idp.build.v1.BuildImageRequest\x1a .idp.build.v1.BuildImageResponse\x12`\n" +
 	"\x0fStreamBuildLogs\x12$.idp.build.v1.StreamBuildLogsRequest\x1a%.idp.build.v1.StreamBuildLogsResponse0\x01\x12g\n" +
 	"\x12StartBuildWorkflow\x12'.idp.build.v1.StartBuildWorkflowRequest\x1a(.idp.build.v1.StartBuildWorkflowResponse\x12a\n" +
-	"\x10GetBuildProgress\x12%.idp.build.v1.GetBuildProgressRequest\x1a&.idp.build.v1.GetBuildProgressResponseB@Z>github.com/drewpayment/orbit/proto/gen/go/idp/build/v1;buildv1b\x06proto3"
+	"\x10GetBuildProgress\x12%.idp.build.v1.GetBuildProgressRequest\x1a&.idp.build.v1.GetBuildProgressResponse\x12Y\n" +
+	"\x14CheckQuotaAndCleanup\x12\x1f.idp.build.v1.CheckQuotaRequest\x1a .idp.build.v1.CheckQuotaResponse\x12O\n" +
+	"\n" +
+	"TrackImage\x12\x1f.idp.build.v1.TrackImageRequest\x1a .idp.build.v1.TrackImageResponseB@Z>github.com/drewpayment/orbit/proto/gen/go/idp/build/v1;buildv1b\x06proto3"
 
 var (
 	file_idp_build_v1_build_proto_rawDescOnce sync.Once
@@ -1402,7 +1767,7 @@ func file_idp_build_v1_build_proto_rawDescGZIP() []byte {
 }
 
 var file_idp_build_v1_build_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_idp_build_v1_build_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_idp_build_v1_build_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_idp_build_v1_build_proto_goTypes = []any{
 	(RegistryType)(0),                  // 0: idp.build.v1.RegistryType
 	(BuildStepStatus)(0),               // 1: idp.build.v1.BuildStepStatus
@@ -1420,35 +1785,45 @@ var file_idp_build_v1_build_proto_goTypes = []any{
 	(*StartBuildWorkflowResponse)(nil), // 13: idp.build.v1.StartBuildWorkflowResponse
 	(*GetBuildProgressRequest)(nil),    // 14: idp.build.v1.GetBuildProgressRequest
 	(*GetBuildProgressResponse)(nil),   // 15: idp.build.v1.GetBuildProgressResponse
-	nil,                                // 16: idp.build.v1.BuildImageRequest.BuildEnvEntry
-	nil,                                // 17: idp.build.v1.StartBuildWorkflowRequest.BuildEnvEntry
+	(*CheckQuotaRequest)(nil),          // 16: idp.build.v1.CheckQuotaRequest
+	(*CheckQuotaResponse)(nil),         // 17: idp.build.v1.CheckQuotaResponse
+	(*CleanedImage)(nil),               // 18: idp.build.v1.CleanedImage
+	(*TrackImageRequest)(nil),          // 19: idp.build.v1.TrackImageRequest
+	(*TrackImageResponse)(nil),         // 20: idp.build.v1.TrackImageResponse
+	nil,                                // 21: idp.build.v1.BuildImageRequest.BuildEnvEntry
+	nil,                                // 22: idp.build.v1.StartBuildWorkflowRequest.BuildEnvEntry
 }
 var file_idp_build_v1_build_proto_depIdxs = []int32{
 	4,  // 0: idp.build.v1.AnalyzeRepositoryResponse.config:type_name -> idp.build.v1.DetectedBuildConfig
 	5,  // 1: idp.build.v1.DetectedBuildConfig.package_manager:type_name -> idp.build.v1.PackageManagerInfo
-	16, // 2: idp.build.v1.BuildImageRequest.build_env:type_name -> idp.build.v1.BuildImageRequest.BuildEnvEntry
+	21, // 2: idp.build.v1.BuildImageRequest.build_env:type_name -> idp.build.v1.BuildImageRequest.BuildEnvEntry
 	7,  // 3: idp.build.v1.BuildImageRequest.registry:type_name -> idp.build.v1.RegistryConfig
 	0,  // 4: idp.build.v1.RegistryConfig.type:type_name -> idp.build.v1.RegistryType
 	9,  // 5: idp.build.v1.BuildImageResponse.steps:type_name -> idp.build.v1.BuildStep
 	1,  // 6: idp.build.v1.BuildStep.status:type_name -> idp.build.v1.BuildStepStatus
 	7,  // 7: idp.build.v1.StartBuildWorkflowRequest.registry:type_name -> idp.build.v1.RegistryConfig
-	17, // 8: idp.build.v1.StartBuildWorkflowRequest.build_env:type_name -> idp.build.v1.StartBuildWorkflowRequest.BuildEnvEntry
+	22, // 8: idp.build.v1.StartBuildWorkflowRequest.build_env:type_name -> idp.build.v1.StartBuildWorkflowRequest.BuildEnvEntry
 	4,  // 9: idp.build.v1.GetBuildProgressResponse.detected_config:type_name -> idp.build.v1.DetectedBuildConfig
-	2,  // 10: idp.build.v1.BuildService.AnalyzeRepository:input_type -> idp.build.v1.AnalyzeRepositoryRequest
-	6,  // 11: idp.build.v1.BuildService.BuildImage:input_type -> idp.build.v1.BuildImageRequest
-	10, // 12: idp.build.v1.BuildService.StreamBuildLogs:input_type -> idp.build.v1.StreamBuildLogsRequest
-	12, // 13: idp.build.v1.BuildService.StartBuildWorkflow:input_type -> idp.build.v1.StartBuildWorkflowRequest
-	14, // 14: idp.build.v1.BuildService.GetBuildProgress:input_type -> idp.build.v1.GetBuildProgressRequest
-	3,  // 15: idp.build.v1.BuildService.AnalyzeRepository:output_type -> idp.build.v1.AnalyzeRepositoryResponse
-	8,  // 16: idp.build.v1.BuildService.BuildImage:output_type -> idp.build.v1.BuildImageResponse
-	11, // 17: idp.build.v1.BuildService.StreamBuildLogs:output_type -> idp.build.v1.StreamBuildLogsResponse
-	13, // 18: idp.build.v1.BuildService.StartBuildWorkflow:output_type -> idp.build.v1.StartBuildWorkflowResponse
-	15, // 19: idp.build.v1.BuildService.GetBuildProgress:output_type -> idp.build.v1.GetBuildProgressResponse
-	15, // [15:20] is the sub-list for method output_type
-	10, // [10:15] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	18, // 10: idp.build.v1.CheckQuotaResponse.cleaned_images:type_name -> idp.build.v1.CleanedImage
+	2,  // 11: idp.build.v1.BuildService.AnalyzeRepository:input_type -> idp.build.v1.AnalyzeRepositoryRequest
+	6,  // 12: idp.build.v1.BuildService.BuildImage:input_type -> idp.build.v1.BuildImageRequest
+	10, // 13: idp.build.v1.BuildService.StreamBuildLogs:input_type -> idp.build.v1.StreamBuildLogsRequest
+	12, // 14: idp.build.v1.BuildService.StartBuildWorkflow:input_type -> idp.build.v1.StartBuildWorkflowRequest
+	14, // 15: idp.build.v1.BuildService.GetBuildProgress:input_type -> idp.build.v1.GetBuildProgressRequest
+	16, // 16: idp.build.v1.BuildService.CheckQuotaAndCleanup:input_type -> idp.build.v1.CheckQuotaRequest
+	19, // 17: idp.build.v1.BuildService.TrackImage:input_type -> idp.build.v1.TrackImageRequest
+	3,  // 18: idp.build.v1.BuildService.AnalyzeRepository:output_type -> idp.build.v1.AnalyzeRepositoryResponse
+	8,  // 19: idp.build.v1.BuildService.BuildImage:output_type -> idp.build.v1.BuildImageResponse
+	11, // 20: idp.build.v1.BuildService.StreamBuildLogs:output_type -> idp.build.v1.StreamBuildLogsResponse
+	13, // 21: idp.build.v1.BuildService.StartBuildWorkflow:output_type -> idp.build.v1.StartBuildWorkflowResponse
+	15, // 22: idp.build.v1.BuildService.GetBuildProgress:output_type -> idp.build.v1.GetBuildProgressResponse
+	17, // 23: idp.build.v1.BuildService.CheckQuotaAndCleanup:output_type -> idp.build.v1.CheckQuotaResponse
+	20, // 24: idp.build.v1.BuildService.TrackImage:output_type -> idp.build.v1.TrackImageResponse
+	18, // [18:25] is the sub-list for method output_type
+	11, // [11:18] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_idp_build_v1_build_proto_init() }
@@ -1465,7 +1840,7 @@ func file_idp_build_v1_build_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_idp_build_v1_build_proto_rawDesc), len(file_idp_build_v1_build_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   16,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

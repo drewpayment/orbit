@@ -21,11 +21,13 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	BuildService_AnalyzeRepository_FullMethodName  = "/idp.build.v1.BuildService/AnalyzeRepository"
-	BuildService_BuildImage_FullMethodName         = "/idp.build.v1.BuildService/BuildImage"
-	BuildService_StreamBuildLogs_FullMethodName    = "/idp.build.v1.BuildService/StreamBuildLogs"
-	BuildService_StartBuildWorkflow_FullMethodName = "/idp.build.v1.BuildService/StartBuildWorkflow"
-	BuildService_GetBuildProgress_FullMethodName   = "/idp.build.v1.BuildService/GetBuildProgress"
+	BuildService_AnalyzeRepository_FullMethodName    = "/idp.build.v1.BuildService/AnalyzeRepository"
+	BuildService_BuildImage_FullMethodName           = "/idp.build.v1.BuildService/BuildImage"
+	BuildService_StreamBuildLogs_FullMethodName      = "/idp.build.v1.BuildService/StreamBuildLogs"
+	BuildService_StartBuildWorkflow_FullMethodName   = "/idp.build.v1.BuildService/StartBuildWorkflow"
+	BuildService_GetBuildProgress_FullMethodName     = "/idp.build.v1.BuildService/GetBuildProgress"
+	BuildService_CheckQuotaAndCleanup_FullMethodName = "/idp.build.v1.BuildService/CheckQuotaAndCleanup"
+	BuildService_TrackImage_FullMethodName           = "/idp.build.v1.BuildService/TrackImage"
 )
 
 // BuildServiceClient is the client API for BuildService service.
@@ -44,6 +46,9 @@ type BuildServiceClient interface {
 	StartBuildWorkflow(ctx context.Context, in *StartBuildWorkflowRequest, opts ...grpc.CallOption) (*StartBuildWorkflowResponse, error)
 	// Get the progress of a build workflow
 	GetBuildProgress(ctx context.Context, in *GetBuildProgressRequest, opts ...grpc.CallOption) (*GetBuildProgressResponse, error)
+	// Quota management
+	CheckQuotaAndCleanup(ctx context.Context, in *CheckQuotaRequest, opts ...grpc.CallOption) (*CheckQuotaResponse, error)
+	TrackImage(ctx context.Context, in *TrackImageRequest, opts ...grpc.CallOption) (*TrackImageResponse, error)
 }
 
 type buildServiceClient struct {
@@ -113,6 +118,26 @@ func (c *buildServiceClient) GetBuildProgress(ctx context.Context, in *GetBuildP
 	return out, nil
 }
 
+func (c *buildServiceClient) CheckQuotaAndCleanup(ctx context.Context, in *CheckQuotaRequest, opts ...grpc.CallOption) (*CheckQuotaResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CheckQuotaResponse)
+	err := c.cc.Invoke(ctx, BuildService_CheckQuotaAndCleanup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *buildServiceClient) TrackImage(ctx context.Context, in *TrackImageRequest, opts ...grpc.CallOption) (*TrackImageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TrackImageResponse)
+	err := c.cc.Invoke(ctx, BuildService_TrackImage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BuildServiceServer is the server API for BuildService service.
 // All implementations must embed UnimplementedBuildServiceServer
 // for forward compatibility.
@@ -129,6 +154,9 @@ type BuildServiceServer interface {
 	StartBuildWorkflow(context.Context, *StartBuildWorkflowRequest) (*StartBuildWorkflowResponse, error)
 	// Get the progress of a build workflow
 	GetBuildProgress(context.Context, *GetBuildProgressRequest) (*GetBuildProgressResponse, error)
+	// Quota management
+	CheckQuotaAndCleanup(context.Context, *CheckQuotaRequest) (*CheckQuotaResponse, error)
+	TrackImage(context.Context, *TrackImageRequest) (*TrackImageResponse, error)
 	mustEmbedUnimplementedBuildServiceServer()
 }
 
@@ -153,6 +181,12 @@ func (UnimplementedBuildServiceServer) StartBuildWorkflow(context.Context, *Star
 }
 func (UnimplementedBuildServiceServer) GetBuildProgress(context.Context, *GetBuildProgressRequest) (*GetBuildProgressResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetBuildProgress not implemented")
+}
+func (UnimplementedBuildServiceServer) CheckQuotaAndCleanup(context.Context, *CheckQuotaRequest) (*CheckQuotaResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CheckQuotaAndCleanup not implemented")
+}
+func (UnimplementedBuildServiceServer) TrackImage(context.Context, *TrackImageRequest) (*TrackImageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method TrackImage not implemented")
 }
 func (UnimplementedBuildServiceServer) mustEmbedUnimplementedBuildServiceServer() {}
 func (UnimplementedBuildServiceServer) testEmbeddedByValue()                      {}
@@ -258,6 +292,42 @@ func _BuildService_GetBuildProgress_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BuildService_CheckQuotaAndCleanup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckQuotaRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BuildServiceServer).CheckQuotaAndCleanup(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BuildService_CheckQuotaAndCleanup_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BuildServiceServer).CheckQuotaAndCleanup(ctx, req.(*CheckQuotaRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BuildService_TrackImage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TrackImageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BuildServiceServer).TrackImage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BuildService_TrackImage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BuildServiceServer).TrackImage(ctx, req.(*TrackImageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BuildService_ServiceDesc is the grpc.ServiceDesc for BuildService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -280,6 +350,14 @@ var BuildService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetBuildProgress",
 			Handler:    _BuildService_GetBuildProgress_Handler,
+		},
+		{
+			MethodName: "CheckQuotaAndCleanup",
+			Handler:    _BuildService_CheckQuotaAndCleanup_Handler,
+		},
+		{
+			MethodName: "TrackImage",
+			Handler:    _BuildService_TrackImage_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

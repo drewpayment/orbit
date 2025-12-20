@@ -21,6 +21,10 @@ service BuildService {
 
   // Get the progress of a build workflow
   rpc GetBuildProgress(GetBuildProgressRequest) returns (GetBuildProgressResponse);
+
+  // Quota management
+  rpc CheckQuotaAndCleanup(CheckQuotaRequest) returns (CheckQuotaResponse);
+  rpc TrackImage(TrackImageRequest) returns (TrackImageResponse);
 }
 
 // AnalyzeRepositoryRequest contains parameters for repository analysis
@@ -175,4 +179,39 @@ message GetBuildProgressResponse {
   string image_digest = 7;            // Resulting image digest (if success)
   string error = 8;                   // Error message (if failed)
   DetectedBuildConfig detected_config = 9; // Detected build configuration
+}
+
+// Quota management messages
+message CheckQuotaRequest {
+  string workspace_id = 1;
+  int64 incoming_image_size_estimate = 2; // Optional hint for pre-check
+}
+
+message CheckQuotaResponse {
+  bool cleanup_performed = 1;
+  int64 current_usage_bytes = 2;
+  int64 quota_bytes = 3;
+  repeated CleanedImage cleaned_images = 4;
+  string error = 5;
+}
+
+message CleanedImage {
+  string app_name = 1;
+  string tag = 2;
+  int64 size_bytes = 3;
+}
+
+message TrackImageRequest {
+  string workspace_id = 1;
+  string app_id = 2;
+  string tag = 3;
+  string digest = 4;
+  string registry_url = 5;
+  string repository = 6;
+}
+
+message TrackImageResponse {
+  int64 size_bytes = 1;
+  int64 new_total_usage = 2;
+  string error = 3;
 }
