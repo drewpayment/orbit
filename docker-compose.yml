@@ -180,6 +180,17 @@ services:
       timeout: 5s
       retries: 5
 
+  minio-init:
+    container_name: orbit-minio-init
+    image: minio/mc:latest
+    entrypoint: /init-bucket.sh
+    volumes:
+      - ./infrastructure/registry/init-bucket.sh:/init-bucket.sh:ro
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+
   orbit-registry:
     container_name: orbit-registry
     image: registry:2
@@ -188,8 +199,8 @@ services:
     volumes:
       - ./infrastructure/registry/config.yml:/etc/docker/registry/config.yml:ro
     depends_on:
-      minio:
-        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   # Backstage Backend (Plugin Integration)
