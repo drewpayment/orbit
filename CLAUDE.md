@@ -379,11 +379,14 @@ Historical planning artifacts from pre-superpowers workflow. See `specs/README.m
 - **Environment variables**: Check `.env` files (not in repo) for local configuration
 - **Ports**:
   - 3000: Frontend (Next.js)
+  - 5050: Orbit Container Registry
   - 5432: Temporal PostgreSQL
   - 5433: Application PostgreSQL
   - 6379: Redis
   - 7233: Temporal gRPC
   - 8080: Temporal UI
+  - 9000: MinIO API
+  - 9001: MinIO Console
   - 9200: Elasticsearch (Temporal)
 - **Node version**: Requires Node.js 18.20.2+ or 20.9.0+
 - **Go version**: Requires Go 1.21+
