@@ -180,6 +180,18 @@ services:
       timeout: 5s
       retries: 5
 
+  orbit-registry:
+    container_name: orbit-registry
+    image: registry:2
+    ports:
+      - "5050:5000"
+    volumes:
+      - ./infrastructure/registry/config.yml:/etc/docker/registry/config.yml:ro
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
   # Backstage Backend (Plugin Integration)
   backstage-backend:
     container_name: orbit-backstage

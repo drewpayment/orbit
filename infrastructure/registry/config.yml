@@ -1,0 +1,28 @@
+version: 0.1
+log:
+  level: info
+  formatter: json
+storage:
+  s3:
+    accesskey: orbit-admin
+    secretkey: orbit-secret-key
+    region: us-east-1
+    regionendpoint: http://minio:9000
+    bucket: orbit-registry
+    encrypt: false
+    secure: false
+    v4auth: true
+    rootdirectory: /
+  delete:
+    enabled: true
+  cache:
+    blobdescriptor: inmemory
+http:
+  addr: :5000
+  headers:
+    X-Content-Type-Options: [nosniff]
+health:
+  storagedriver:
+    enabled: true
+    interval: 10s
+    threshold: 3
