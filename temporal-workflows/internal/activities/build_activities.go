@@ -248,6 +248,8 @@ func (a *BuildActivities) BuildAndPushImage(ctx context.Context, input BuildAndP
 		registryType = buildv1.RegistryType_REGISTRY_TYPE_GHCR
 	case "acr":
 		registryType = buildv1.RegistryType_REGISTRY_TYPE_ACR
+	case "orbit":
+		registryType = buildv1.RegistryType_REGISTRY_TYPE_ORBIT
 	default:
 		return nil, fmt.Errorf("unsupported registry type: %s", input.Registry.Type)
 	}
