@@ -28,6 +28,7 @@ import { DeploymentGenerators } from './collections/DeploymentGenerators'
 import { HealthChecks } from './collections/HealthChecks'
 import { RegistryConfigs } from './collections/RegistryConfigs'
 import { EnvironmentVariables } from './collections/EnvironmentVariables'
+import { RegistryImages } from './collections/RegistryImages'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -61,6 +62,7 @@ export default buildConfig({
     HealthChecks,
     RegistryConfigs,
     EnvironmentVariables,
+    RegistryImages,
   ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
