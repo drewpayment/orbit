@@ -131,10 +131,15 @@ export const RegistryConfigs: CollectionConfig = {
       name: 'type',
       type: 'select',
       required: true,
+      defaultValue: 'orbit',
       options: [
+        { label: 'Orbit Registry', value: 'orbit' },
         { label: 'GitHub Container Registry', value: 'ghcr' },
         { label: 'Azure Container Registry', value: 'acr' },
       ],
+      admin: {
+        description: 'Registry type (Orbit Registry requires no configuration)',
+      },
     },
     {
       name: 'isDefault',
