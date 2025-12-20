@@ -28,6 +28,7 @@ import type { App, Deployment, Template, HealthCheck } from '@/payload-types'
 import { AddDeploymentModal } from './AddDeploymentModal'
 import { AppSettingsSheet } from './AppSettingsSheet'
 import { BuildSection } from './BuildSection'
+import { AppEnvironmentVariables } from './AppEnvironmentVariables'
 import { getHealthHistory } from '@/app/actions/apps'
 import { DeploymentRow } from './DeploymentRow'
 import { startDeployment, deleteDeployment } from '@/app/actions/deployments'
@@ -211,6 +212,12 @@ export function AppDetail({ app, deployments }: AppDetailProps) {
         appId={app.id}
         appName={app.name}
         hasRepository={!!app.repository?.url}
+      />
+
+      {/* Environment Variables */}
+      <AppEnvironmentVariables
+        appId={app.id}
+        workspaceId={typeof app.workspace === 'string' ? app.workspace : app.workspace.id}
       />
 
       {/* Deployments */}

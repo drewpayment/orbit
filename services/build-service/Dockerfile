@@ -23,13 +23,31 @@ COPY services/build-service/ ./services/build-service/
 WORKDIR /build/services/build-service
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/server ./cmd/server
 
-# Runtime stage
-FROM alpine:3.19
+# Runtime stage - use Debian for glibc compatibility (required by mise/railpack)
+FROM debian:bookworm-slim
 
 WORKDIR /app
 
 # Install dependencies for building and container operations
-RUN apk add --no-cache ca-certificates git docker-cli
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    git \
+    curl \
+    bash \
+    tar \
+    gnupg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Docker CLI
+RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list && \
+    apt-get update && apt-get install -y --no-install-recommends docker-ce-cli && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Railpack for automatic container image building
+# Railpack will download and manage mise automatically
+RUN curl -sSL https://railpack.com/install.sh | sh && \
+    railpack --version
 
 # Create work directory for builds
 RUN mkdir -p /tmp/orbit-builds

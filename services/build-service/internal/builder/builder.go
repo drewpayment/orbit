@@ -189,13 +189,22 @@ func (b *Builder) buildImage(ctx context.Context, req *BuildRequest, buildDir, i
 	}
 
 	// Build with Railpack
-	cmd := exec.CommandContext(ctx, railpackPath, "build", buildDir, "-t", imageURL)
+	// Note: Railpack uses --name for image name, not -t like Docker
+	// Secrets must be passed via --env flags, not process environment variables
+	args := []string{"build", buildDir, "--name", imageURL}
 
-	// Start with current environment and add build-specific variables
-	cmd.Env = os.Environ()
+	// Pass environment variables as Railpack secrets via --env flag
+	// These get mounted as BuildKit secrets during the Docker build
 	for k, v := range req.BuildEnv {
-		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
+		args = append(args, "--env", fmt.Sprintf("%s=%s", k, v))
 	}
+
+	b.logger.Info("Railpack build args", "envCount", len(req.BuildEnv), "envKeys", getMapKeys(req.BuildEnv))
+
+	cmd := exec.CommandContext(ctx, railpackPath, args...)
+
+	// Keep current environment for Railpack itself (not the Docker build)
+	cmd.Env = os.Environ()
 
 	// Pass package manager to Railpack if specified
 	if req.PackageManager != "" {
@@ -260,6 +269,13 @@ func (b *Builder) pushImage(ctx context.Context, req *BuildRequest, imageURL str
 func (b *Builder) loginToRegistry(ctx context.Context, req *BuildRequest) error {
 	var cmd *exec.Cmd
 
+	b.logger.Info("Logging in to registry",
+		"type", req.Registry.Type,
+		"url", req.Registry.URL,
+		"tokenLength", len(req.Registry.Token),
+		"tokenPrefix", req.Registry.Token[:min(10, len(req.Registry.Token))]+"...",
+	)
+
 	switch req.Registry.Type {
 	case RegistryTypeGHCR:
 		// For GHCR, use the installation token
@@ -305,76 +321,128 @@ func generateImageTag(req *BuildRequest) string {
 	return fmt.Sprintf("%s/%s:%s", req.Registry.URL, req.Registry.Repository, tag)
 }
 
-// extractBuildErrorSummary extracts the meaningful error from docker build output
+// getMapKeys returns the keys of a map as a slice (for logging)
+func getMapKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// extractBuildErrorSummary extracts meaningful error context from build output
+// It tries to capture enough context to be useful for debugging
 func extractBuildErrorSummary(output string) string {
 	lines := strings.Split(output, "\n")
 
-	// Look for common error patterns
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := strings.TrimSpace(lines[i])
-		if line == "" {
-			continue
+	// First pass: look for specific error patterns and collect context
+	var errorLines []string
+	var foundError bool
+	var errorStartIdx int
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Lockfile errors - return immediately with clear message
+		if strings.Contains(trimmed, "Lockfile not found") {
+			return "Lockfile not found. Please commit a lockfile (bun.lock, package-lock.json, yarn.lock, or pnpm-lock.yaml) to your repository."
 		}
 
-		// Lockfile errors
-		if strings.Contains(line, "Lockfile not found") {
-			return "Lockfile not found. Please commit a lockfile or ensure package manager was selected."
-		}
-
-		// npm errors
-		if strings.Contains(line, "npm ERR!") {
-			return "npm install failed: " + line
-		}
-
-		// yarn errors (classic and berry)
-		if strings.Contains(line, "error ") && strings.Contains(strings.ToLower(output), "yarn") {
-			return "yarn install failed: " + line
-		}
-		if strings.HasPrefix(line, "YN") && strings.Contains(line, "Error") {
-			return "yarn install failed: " + line
-		}
-
-		// pnpm errors
-		if strings.Contains(line, "ERR_PNPM") {
-			return "pnpm install failed: " + line
-		}
-
-		// bun errors
-		if strings.Contains(line, "error:") && strings.Contains(strings.ToLower(output), "bun") {
-			return "bun install failed: " + line
-		}
-
-		// Node.js version errors
-		if strings.Contains(line, "Unsupported engine") || strings.Contains(line, `engine "node"`) {
-			return "Node.js version mismatch: " + line
-		}
-
-		// COPY failed (common Docker error)
-		if strings.Contains(line, "COPY failed") {
-			return line
-		}
-
-		if strings.Contains(line, "returned a non-zero code") {
-			// Get the command that failed from the previous line
-			if i > 0 {
-				prevLine := strings.TrimSpace(lines[i-1])
-				if prevLine != "" {
-					return prevLine
-				}
+		// TypeScript/Build errors - these are often the most useful
+		if strings.Contains(trimmed, "error TS") {
+			if !foundError {
+				foundError = true
+				errorStartIdx = i
 			}
-			return line
+			errorLines = append(errorLines, trimmed)
+		}
+
+		// Next.js build errors
+		if strings.Contains(trimmed, "Error:") || strings.Contains(trimmed, "error:") {
+			if !foundError {
+				foundError = true
+				errorStartIdx = i
+			}
+			errorLines = append(errorLines, trimmed)
+		}
+
+		// npm/yarn/pnpm/bun specific errors
+		if strings.Contains(trimmed, "npm ERR!") ||
+			strings.Contains(trimmed, "ERR_PNPM") ||
+			strings.HasPrefix(trimmed, "error:") ||
+			(strings.HasPrefix(trimmed, "YN") && strings.Contains(trimmed, "Error")) {
+			if !foundError {
+				foundError = true
+				errorStartIdx = i
+			}
+			errorLines = append(errorLines, trimmed)
+		}
+
+		// Module not found errors
+		if strings.Contains(trimmed, "Module not found") ||
+			strings.Contains(trimmed, "Cannot find module") {
+			if !foundError {
+				foundError = true
+				errorStartIdx = i
+			}
+			errorLines = append(errorLines, trimmed)
+		}
+
+		// Script exit errors - capture surrounding context
+		if strings.Contains(trimmed, "exited with code") {
+			if !foundError {
+				foundError = true
+				errorStartIdx = i
+			}
+			errorLines = append(errorLines, trimmed)
 		}
 	}
 
-	// If no specific error found, return last non-empty line (truncated)
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := strings.TrimSpace(lines[i])
-		if line != "" && !strings.HasPrefix(line, "DEPRECATED") {
-			if len(line) > 200 {
-				return line[:200] + "..."
-			}
-			return line
+	// If we found errors, return them with context
+	if len(errorLines) > 0 {
+		// Limit to most relevant errors (last 10 error lines)
+		if len(errorLines) > 10 {
+			errorLines = errorLines[len(errorLines)-10:]
 		}
+
+		// Also grab a few lines before the first error for context
+		var contextLines []string
+		contextStart := errorStartIdx - 3
+		if contextStart < 0 {
+			contextStart = 0
+		}
+		for i := contextStart; i < errorStartIdx && i < len(lines); i++ {
+			trimmed := strings.TrimSpace(lines[i])
+			if trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+				contextLines = append(contextLines, trimmed)
+			}
+		}
+
+		// Combine context + errors
+		result := strings.Join(append(contextLines, errorLines...), "\n")
+
+		// Truncate if too long, but keep it useful
+		if len(result) > 1500 {
+			result = result[len(result)-1500:]
+			// Find first newline to avoid cutting mid-line
+			if idx := strings.Index(result, "\n"); idx > 0 {
+				result = "..." + result[idx:]
+			}
+		}
+		return result
+	}
+
+	// Fallback: return last 20 non-empty lines for context
+	var lastLines []string
+	for i := len(lines) - 1; i >= 0 && len(lastLines) < 20; i-- {
+		trimmed := strings.TrimSpace(lines[i])
+		if trimmed != "" && !strings.HasPrefix(trimmed, "DEPRECATED") && !strings.HasPrefix(trimmed, "#") {
+			lastLines = append([]string{trimmed}, lastLines...)
+		}
+	}
+
+	if len(lastLines) > 0 {
+		return strings.Join(lastLines, "\n")
 	}
 
 	return "Build failed. Check logs for details."

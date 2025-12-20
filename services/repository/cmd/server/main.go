@@ -296,7 +296,7 @@ func main() {
 	// Register BuildService (Connect handler)
 	if temporalClient != nil {
 		var buildTemporal grpcserver.BuildClientInterface = temporalClient
-		buildServer := grpcserver.NewBuildServer(buildTemporal)
+		buildServer := grpcserver.NewBuildServer(buildTemporal, nil)
 		buildPath, buildHandler := buildv1connect.NewBuildServiceHandler(buildServer)
 		mux.Handle(buildPath, buildHandler)
 		log.Println("BuildService registered (Connect)")

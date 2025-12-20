@@ -6,6 +6,8 @@ import { headers } from 'next/headers'
 import { auth } from '@/lib/auth'
 import { decrypt } from '@/lib/encryption'
 import { getTemporalClient } from '@/lib/temporal/client'
+import { resolveEnvironmentVariables } from './environment-variables'
+import { createInstallationToken } from '@/lib/github/octokit'
 
 interface StartBuildInput {
   appId: string
@@ -104,7 +106,7 @@ export async function startBuild(input: StartBuildInput) {
       ? app.workspace
       : app.workspace.id
 
-    // Get GitHub installation token for cloning and GHCR auth
+    // Get GitHub installation for this workspace
     const installation = await payload.find({
       collection: 'github-installations',
       where: {
@@ -118,9 +120,37 @@ export async function startBuild(input: StartBuildInput) {
       return { success: false, error: 'No GitHub App installation found for this workspace. Please install the GitHub App.' }
     }
 
-    const githubToken = decrypt(installation.docs[0].installationToken as string)
-    if (!githubToken) {
-      return { success: false, error: 'GitHub installation token not available. Please refresh the GitHub App installation.' }
+    const installationId = installation.docs[0].installationId
+    if (!installationId) {
+      return { success: false, error: 'GitHub installation ID not available.' }
+    }
+
+    // For GHCR builds, we need a fresh token with packages:write permission
+    // The stored token may not have this permission
+    const needsPackagesPermission = registryConfig?.type === 'ghcr'
+    let githubToken: string
+
+    console.log('[Build] Registry type:', registryConfig?.type, 'needsPackagesPermission:', needsPackagesPermission)
+    console.log('[Build] Installation ID:', installationId, 'type:', typeof installationId)
+
+    if (needsPackagesPermission) {
+      // Get a fresh installation token with packages:write permission for GHCR
+      try {
+        console.log('[Build] Requesting fresh token with packages:write permission...')
+        const freshToken = await createInstallationToken(installationId, { includePackages: true })
+        githubToken = freshToken.token
+        console.log('[Build] Created fresh installation token with packages:write permission, token length:', githubToken.length)
+      } catch (error) {
+        console.error('[Build] Failed to create installation token with packages permission:', error)
+        return { success: false, error: 'Failed to create GitHub token with packages permission. Ensure the GitHub App has packages:write permission.' }
+      }
+    } else {
+      // Use the cached token for non-GHCR builds
+      const cachedToken = decrypt(installation.docs[0].installationToken as string)
+      if (!cachedToken) {
+        return { success: false, error: 'GitHub installation token not available. Please refresh the GitHub App installation.' }
+      }
+      githubToken = cachedToken
     }
 
     // Determine registry URL and repository path
@@ -142,8 +172,27 @@ export async function startBuild(input: StartBuildInput) {
       registryToken = registryConfig.acrToken || ''
     }
 
+    // Resolve environment variables from workspace and app settings
+    const envResult = await resolveEnvironmentVariables(input.appId, 'build')
+    console.log('[Build] Environment variables resolved:', {
+      success: envResult.success,
+      error: envResult.error,
+      variableCount: envResult.variables ? Object.keys(envResult.variables).length : 0,
+      variableNames: envResult.variables ? Object.keys(envResult.variables) : [],
+    })
+    const resolvedEnv = envResult.success ? envResult.variables : {}
+
+    // Merge resolved env vars with any explicit overrides (overrides take precedence)
+    const buildEnv = {
+      ...resolvedEnv,
+      ...input.buildEnv,
+    }
+    console.log('[Build] Final buildEnv keys:', Object.keys(buildEnv))
+
     // Import the build client dynamically to avoid build-time issues
     const { startBuildWorkflow } = await import('@/lib/clients/build-client')
+
+    console.log('[Build] Starting workflow with registry token length:', registryToken?.length)
 
     // Start the Temporal build workflow via gRPC
     const result = await startBuildWorkflow({
@@ -162,7 +211,7 @@ export async function startBuild(input: StartBuildInput) {
       languageVersion: input.languageVersion,
       buildCommand: input.buildCommand,
       startCommand: input.startCommand,
-      buildEnv: input.buildEnv,
+      buildEnv,
       imageTag: input.imageTag || 'latest',
     })
 

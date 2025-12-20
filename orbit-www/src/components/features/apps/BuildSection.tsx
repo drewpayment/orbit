@@ -513,9 +513,12 @@ export function BuildSection({ appId, hasRepository }: BuildSectionProps) {
 
 // Separate component for error display
 function BuildErrorDisplay({ error, workflowId }: { error: string | null; workflowId?: string | null }) {
-  const [showFullError, setShowFullError] = useState(false)
   const errorStr = error || 'Unknown error'
   const parsed = parseBuildError(errorStr)
+
+  // Auto-expand if error contains multiple lines (likely has useful detail)
+  const hasMultipleLines = errorStr.includes('\n')
+  const [showFullError, setShowFullError] = useState(hasMultipleLines)
 
   return (
     <div className="mt-4 rounded-lg border border-destructive/50 bg-destructive/10 p-4 space-y-3">
@@ -523,7 +526,7 @@ function BuildErrorDisplay({ error, workflowId }: { error: string | null; workfl
         <AlertCircle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="font-medium text-destructive">{parsed.summary}</div>
-          {parsed.details && parsed.details !== errorStr && (
+          {parsed.details && parsed.details !== errorStr && !hasMultipleLines && (
             <div className="text-sm text-muted-foreground mt-1">{parsed.details}</div>
           )}
         </div>
@@ -544,13 +547,22 @@ function BuildErrorDisplay({ error, workflowId }: { error: string | null; workfl
         </div>
       )}
 
+      {/* Full error output - shown by default for multi-line errors */}
+      {showFullError && (
+        <div className="ml-8 mt-2">
+          <pre className="text-xs font-mono bg-muted/50 p-3 rounded overflow-x-auto max-h-96 overflow-y-auto whitespace-pre-wrap break-words">
+            {error}
+          </pre>
+        </div>
+      )}
+
       {/* View full error / workflow link */}
       <div className="ml-8 flex items-center gap-4 pt-2">
         <button
           onClick={() => setShowFullError(!showFullError)}
           className="text-xs text-muted-foreground hover:text-foreground underline"
         >
-          {showFullError ? 'Hide' : 'Show'} full error
+          {showFullError ? 'Hide' : 'Show'} error details
         </button>
         {workflowId && (
           <a
@@ -564,15 +576,6 @@ function BuildErrorDisplay({ error, workflowId }: { error: string | null; workfl
           </a>
         )}
       </div>
-
-      {/* Full error output */}
-      {showFullError && (
-        <div className="ml-8 mt-2">
-          <pre className="text-xs bg-muted/50 p-3 rounded overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap break-words">
-            {error}
-          </pre>
-        </div>
-      )}
     </div>
   )
 }

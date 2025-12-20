@@ -130,10 +130,23 @@ func (s *BuildServer) BuildImage(
 	ctx context.Context,
 	req *buildv1.BuildImageRequest,
 ) (*buildv1.BuildImageResponse, error) {
+	// Log token info for debugging GHCR auth issues
+	registryTokenPrefix := ""
+	if req.Registry != nil && len(req.Registry.Token) >= 10 {
+		registryTokenPrefix = req.Registry.Token[:10] + "..."
+	}
+
 	s.logger.Info("BuildImage called",
 		"request_id", req.RequestId,
 		"app_id", req.AppId,
 		"repo_url", req.RepoUrl,
+		"registryTokenLength", func() int {
+			if req.Registry != nil {
+				return len(req.Registry.Token)
+			}
+			return 0
+		}(),
+		"registryTokenPrefix", registryTokenPrefix,
 	)
 
 	// Validate registry is provided

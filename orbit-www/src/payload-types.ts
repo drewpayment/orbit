@@ -87,6 +87,7 @@ export interface Config {
     'deployment-generators': DeploymentGenerator;
     'health-checks': HealthCheck;
     'registry-configs': RegistryConfig;
+    'environment-variables': EnvironmentVariable;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -113,6 +114,7 @@ export interface Config {
     'deployment-generators': DeploymentGeneratorsSelect<false> | DeploymentGeneratorsSelect<true>;
     'health-checks': HealthChecksSelect<false> | HealthChecksSelect<true>;
     'registry-configs': RegistryConfigsSelect<false> | RegistryConfigsSelect<true>;
+    'environment-variables': EnvironmentVariablesSelect<false> | EnvironmentVariablesSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -1208,6 +1210,41 @@ export interface HealthCheck {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "environment-variables".
+ */
+export interface EnvironmentVariable {
+  id: string;
+  /**
+   * Variable name (e.g., TURSO_DATABASE_URL, API_KEY)
+   */
+  name: string;
+  /**
+   * Variable value (automatically encrypted on save)
+   */
+  value: string;
+  workspace: string | Workspace;
+  /**
+   * Optional: Set this for app-level variable overrides
+   */
+  app?: (string | null) | App;
+  /**
+   * Include this variable in build processes
+   */
+  useInBuilds?: boolean | null;
+  /**
+   * Include this variable in deployment environments
+   */
+  useInDeployments?: boolean | null;
+  /**
+   * Optional: Describe what this variable is used for
+   */
+  description?: string | null;
+  createdBy: string | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
 export interface PayloadLockedDocument {
@@ -1292,6 +1329,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'registry-configs';
         value: string | RegistryConfig;
+      } | null)
+    | ({
+        relationTo: 'environment-variables';
+        value: string | EnvironmentVariable;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -1857,6 +1898,22 @@ export interface RegistryConfigsSelect<T extends boolean = true> {
   acrLoginServer?: T;
   acrUsername?: T;
   acrToken?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "environment-variables_select".
+ */
+export interface EnvironmentVariablesSelect<T extends boolean = true> {
+  name?: T;
+  value?: T;
+  workspace?: T;
+  app?: T;
+  useInBuilds?: T;
+  useInDeployments?: T;
+  description?: T;
+  createdBy?: T;
   updatedAt?: T;
   createdAt?: T;
 }

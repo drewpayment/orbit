@@ -12,6 +12,7 @@ import {
   SheetHeader,
   SheetFooter,
   SheetTitle,
+  SheetDescription,
 } from '@/components/ui/sheet'
 import {
   Form,
@@ -210,13 +211,17 @@ export function AppSettingsSheet({ app, open, onOpenChange }: AppSettingsSheetPr
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent className="sm:max-w-lg overflow-y-auto">
+      <SheetContent className="sm:max-w-lg flex flex-col">
         <SheetHeader>
           <SheetTitle>Settings</SheetTitle>
+          <SheetDescription>
+            Configure app settings, health checks, and repository options.
+          </SheetDescription>
         </SheetHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 overflow-hidden">
+            <div className="flex-1 overflow-y-auto space-y-6 px-4 py-4">
             {/* General Section */}
             <div className="space-y-4">
               <h3 className="text-sm font-medium">General</h3>
@@ -461,8 +466,9 @@ export function AppSettingsSheet({ app, open, onOpenChange }: AppSettingsSheetPr
                 Delete Application
               </Button>
             </div>
+            </div>
 
-            <SheetFooter className="gap-2 sm:gap-0">
+            <SheetFooter className="border-t px-4 py-4">
               <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
                 Cancel
               </Button>

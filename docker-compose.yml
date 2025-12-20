@@ -78,6 +78,12 @@ services:
       - ORBIT_INTERNAL_API_KEY=${ORBIT_INTERNAL_API_KEY:-orbit-internal-dev-key}
     restart: unless-stopped
 
+  buildkit:
+    container_name: orbit-buildkit
+    image: moby/buildkit:latest
+    privileged: true
+    restart: unless-stopped
+
   build-service:
     container_name: orbit-build-service
     build:
@@ -88,11 +94,13 @@ services:
     environment:
       - BUILD_SERVICE_PORT=50054
       - BUILD_WORK_DIR=/tmp/orbit-builds
+      - BUILDKIT_HOST=docker-container://orbit-buildkit
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - build-workdir:/tmp/orbit-builds
     depends_on:
       - temporal-server
+      - buildkit
     restart: unless-stopped
 
   # Application Services

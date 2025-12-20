@@ -193,12 +193,24 @@ func (a *BuildActivities) AnalyzeRepository(ctx context.Context, input AnalyzeRe
 
 // BuildAndPushImage calls build service gRPC to build and push image
 func (a *BuildActivities) BuildAndPushImage(ctx context.Context, input BuildAndPushInput) (*BuildAndPushResult, error) {
+	// Log token info for debugging GHCR auth issues
+	registryTokenPrefix := ""
+	if len(input.Registry.Token) >= 10 {
+		registryTokenPrefix = input.Registry.Token[:10] + "..."
+	} else if len(input.Registry.Token) > 0 {
+		registryTokenPrefix = input.Registry.Token + "..."
+	}
+
 	a.logger.Info("Building and pushing image",
 		"requestID", input.RequestID,
 		"appID", input.AppID,
 		"repoURL", input.RepoURL,
 		"ref", input.Ref,
-		"imageTag", input.ImageTag)
+		"imageTag", input.ImageTag,
+		"registryType", input.Registry.Type,
+		"registryURL", input.Registry.URL,
+		"registryTokenLength", len(input.Registry.Token),
+		"registryTokenPrefix", registryTokenPrefix)
 
 	// Validate input
 	if input.RequestID == "" {

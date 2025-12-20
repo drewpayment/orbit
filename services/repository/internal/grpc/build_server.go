@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"connectrpc.com/connect"
 
@@ -21,12 +22,17 @@ type BuildClientInterface interface {
 type BuildServer struct {
 	buildv1connect.UnimplementedBuildServiceHandler
 	temporalClient BuildClientInterface
+	logger         *slog.Logger
 }
 
 // NewBuildServer creates a new BuildServer instance
-func NewBuildServer(temporalClient BuildClientInterface) *BuildServer {
+func NewBuildServer(temporalClient BuildClientInterface, logger *slog.Logger) *BuildServer {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &BuildServer{
 		temporalClient: temporalClient,
+		logger:         logger,
 	}
 }
 
@@ -72,6 +78,14 @@ func (s *BuildServer) StartBuildWorkflow(ctx context.Context, req *connect.Reque
 	}
 
 	// Build registry config
+	s.logger.Info("Received registry config",
+		"type", registryType,
+		"url", msg.Registry.Url,
+		"repository", msg.Registry.Repository,
+		"tokenLength", len(msg.Registry.Token),
+		"tokenPrefix", msg.Registry.Token[:min(10, len(msg.Registry.Token))]+"...",
+	)
+
 	registryConfig := types.BuildRegistryConfig{
 		Type:       registryType,
 		URL:        msg.Registry.Url,
