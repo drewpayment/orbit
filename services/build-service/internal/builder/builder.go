@@ -14,8 +14,9 @@ import (
 type RegistryType string
 
 const (
-	RegistryTypeGHCR RegistryType = "ghcr"
-	RegistryTypeACR  RegistryType = "acr"
+	RegistryTypeGHCR  RegistryType = "ghcr"
+	RegistryTypeACR   RegistryType = "acr"
+	RegistryTypeOrbit RegistryType = "orbit"
 )
 
 // RegistryConfig contains registry authentication details
@@ -290,6 +291,18 @@ func (b *Builder) loginToRegistry(ctx context.Context, req *BuildRequest) error 
 			"-u", req.Registry.Username,
 			"--password-stdin")
 		cmd.Stdin = strings.NewReader(req.Registry.Token)
+
+	case RegistryTypeOrbit:
+		// For Orbit registry, use environment variables
+		username := os.Getenv("ORBIT_REGISTRY_USER")
+		password := os.Getenv("ORBIT_REGISTRY_PASS")
+		if username == "" || password == "" {
+			return fmt.Errorf("ORBIT_REGISTRY_USER and ORBIT_REGISTRY_PASS environment variables must be set")
+		}
+		cmd = exec.CommandContext(ctx, "docker", "login", req.Registry.URL,
+			"-u", username,
+			"--password-stdin")
+		cmd.Stdin = strings.NewReader(password)
 
 	default:
 		return fmt.Errorf("unsupported registry type: %s", req.Registry.Type)
