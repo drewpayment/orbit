@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/drewpayment/orbit/temporal-workflows/pkg/types"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
@@ -63,6 +64,13 @@ func TestBuildWorkflow_Success(t *testing.T) {
 		Framework:       "nextjs",
 		BuildCommand:    "npm run build",
 		StartCommand:    "npm start",
+		PackageManager: &types.PackageManagerInfo{
+			Detected:         true,
+			Name:             "npm",
+			Source:           "lockfile",
+			Lockfile:         "package-lock.json",
+			VersionSupported: true,
+		},
 	}, nil)
 
 	// Mock successful build
@@ -219,6 +227,13 @@ func TestBuildWorkflow_BuildFails(t *testing.T) {
 		Framework:       "nextjs",
 		BuildCommand:    "npm run build",
 		StartCommand:    "npm start",
+		PackageManager: &types.PackageManagerInfo{
+			Detected:         true,
+			Name:             "npm",
+			Source:           "lockfile",
+			Lockfile:         "package-lock.json",
+			VersionSupported: true,
+		},
 	}, nil)
 
 	// Mock failed build
@@ -284,8 +299,15 @@ func TestBuildWorkflow_WithOverrides(t *testing.T) {
 		Language:        "node",
 		LanguageVersion: "20", // Will be overridden
 		Framework:       "nextjs",
-		BuildCommand:    "npm run build",  // Will be overridden
-		StartCommand:    "npm start",      // Will be overridden
+		BuildCommand:    "npm run build", // Will be overridden
+		StartCommand:    "npm start",     // Will be overridden
+		PackageManager: &types.PackageManagerInfo{
+			Detected:         true,
+			Name:             "npm",
+			Source:           "lockfile",
+			Lockfile:         "package-lock.json",
+			VersionSupported: true,
+		},
 	}, nil)
 
 	// Mock successful build - verify overrides are applied
