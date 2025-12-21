@@ -8,9 +8,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/drewpayment/orbit/services/build-service/internal/builder"
+	"github.com/drewpayment/orbit/services/build-service/internal/payload"
 	"github.com/drewpayment/orbit/services/build-service/internal/railpack"
+	"github.com/drewpayment/orbit/services/build-service/internal/registry"
 	"github.com/google/uuid"
 
 	buildv1 "github.com/drewpayment/orbit/proto/gen/go/idp/build/v1"
@@ -21,10 +24,13 @@ import (
 // BuildServer implements the BuildService gRPC server
 type BuildServer struct {
 	buildv1.UnimplementedBuildServiceServer
-	logger   *slog.Logger
-	workDir  string
-	analyzer *railpack.Analyzer
-	builder  *builder.Builder
+	logger         *slog.Logger
+	workDir        string
+	analyzer       *railpack.Analyzer
+	builder        *builder.Builder
+	registryClient *registry.Client
+	payloadClient  *payload.RegistryClient
+	cleaner        *registry.Cleaner
 }
 
 // NewBuildServer creates a new BuildServer instance
@@ -41,11 +47,41 @@ func NewBuildServerWithWorkDir(logger *slog.Logger, workDir string) *BuildServer
 	if logger == nil {
 		logger = slog.Default()
 	}
+
+	// Initialize registry client for Docker Registry v2 API
+	registryURL := os.Getenv("ORBIT_REGISTRY_URL")
+	if registryURL == "" {
+		registryURL = "http://orbit-registry:5050"
+	}
+	registryUsername := os.Getenv("ORBIT_REGISTRY_USERNAME")
+	registryPassword := os.Getenv("ORBIT_REGISTRY_PASSWORD")
+
+	var registryClient *registry.Client
+	if registryUsername != "" {
+		registryClient = registry.NewClientWithAuth(registryURL, registryUsername, registryPassword, logger)
+	} else {
+		registryClient = registry.NewClient(registryURL, logger)
+	}
+
+	// Initialize Payload client for registry metadata operations
+	payloadURL := os.Getenv("ORBIT_API_URL")
+	if payloadURL == "" {
+		payloadURL = "http://orbit-www:3000"
+	}
+	payloadAPIKey := os.Getenv("ORBIT_INTERNAL_API_KEY")
+	payloadClient := payload.NewRegistryClient(payloadURL, payloadAPIKey, logger)
+
+	// Initialize cleaner with both clients
+	cleaner := registry.NewCleaner(registryClient, payloadClient, logger)
+
 	return &BuildServer{
-		logger:   logger,
-		workDir:  workDir,
-		analyzer: railpack.NewAnalyzer(logger),
-		builder:  builder.NewBuilder(logger, workDir),
+		logger:         logger,
+		workDir:        workDir,
+		analyzer:       railpack.NewAnalyzer(logger),
+		builder:        builder.NewBuilder(logger, workDir),
+		registryClient: registryClient,
+		payloadClient:  payloadClient,
+		cleaner:        cleaner,
 	}
 }
 
@@ -264,6 +300,147 @@ func (s *BuildServer) StreamBuildLogs(
 
 	// TODO: Implement log streaming
 	return status.Error(codes.Unimplemented, "StreamBuildLogs not yet implemented")
+}
+
+// CheckQuotaAndCleanup checks workspace quota and cleans up old images if needed
+func (s *BuildServer) CheckQuotaAndCleanup(ctx context.Context, req *buildv1.CheckQuotaRequest) (*buildv1.CheckQuotaResponse, error) {
+	s.logger.Info("CheckQuotaAndCleanup called",
+		"workspaceID", req.WorkspaceId,
+		"incomingSizeEstimate", req.IncomingImageSizeEstimate,
+	)
+
+	if req.WorkspaceId == "" {
+		return &buildv1.CheckQuotaResponse{
+			Error: "workspace_id is required",
+		}, nil
+	}
+
+	// Use cleaner to check quota and cleanup if needed
+	result, err := s.cleaner.CleanupIfNeeded(ctx, req.WorkspaceId)
+	if err != nil {
+		s.logger.Error("Cleanup check failed",
+			"error", err,
+			"workspaceID", req.WorkspaceId,
+		)
+		return &buildv1.CheckQuotaResponse{
+			Error: fmt.Sprintf("cleanup check failed: %v", err),
+		}, nil
+	}
+
+	// Convert cleaned images to proto format
+	cleanedImages := make([]*buildv1.CleanedImage, len(result.CleanedImages))
+	for i, img := range result.CleanedImages {
+		cleanedImages[i] = &buildv1.CleanedImage{
+			AppName:   img.AppName,
+			Tag:       img.Tag,
+			SizeBytes: img.SizeBytes,
+		}
+	}
+
+	if result.CleanupPerformed {
+		var totalFreed int64
+		for _, img := range result.CleanedImages {
+			totalFreed += img.SizeBytes
+		}
+		s.logger.Info("Cleanup completed",
+			"workspaceID", req.WorkspaceId,
+			"imagesDeleted", len(result.CleanedImages),
+			"bytesFreed", totalFreed,
+			"newUsage", result.CurrentUsage,
+		)
+	}
+
+	return &buildv1.CheckQuotaResponse{
+		CleanupPerformed:  result.CleanupPerformed,
+		CurrentUsageBytes: result.CurrentUsage,
+		QuotaBytes:        result.QuotaBytes,
+		CleanedImages:     cleanedImages,
+	}, nil
+}
+
+// TrackImage records a pushed image in the registry tracking system
+func (s *BuildServer) TrackImage(ctx context.Context, req *buildv1.TrackImageRequest) (*buildv1.TrackImageResponse, error) {
+	s.logger.Info("TrackImage called",
+		"workspaceID", req.WorkspaceId,
+		"appID", req.AppId,
+		"tag", req.Tag,
+		"repository", req.Repository,
+	)
+
+	if req.WorkspaceId == "" || req.AppId == "" || req.Tag == "" {
+		return &buildv1.TrackImageResponse{
+			Error: "workspace_id, app_id, and tag are required",
+		}, nil
+	}
+
+	// Get image size from registry
+	repository := req.Repository
+	if repository == "" {
+		return &buildv1.TrackImageResponse{
+			Error: "repository is required",
+		}, nil
+	}
+
+	var size int64
+	var err error
+
+	// Try to get actual size from registry
+	size, err = s.registryClient.ImageSize(ctx, repository, req.Tag)
+	if err != nil {
+		s.logger.Warn("Failed to get image size from registry, will record with zero size",
+			"error", err,
+			"repository", repository,
+			"tag", req.Tag,
+		)
+		size = 0 // Will be updated on next query or sync
+	}
+
+	// Create/update image record in Payload
+	image := payload.RegistryImage{
+		Workspace: req.WorkspaceId,
+		App:       req.AppId,
+		Tag:       req.Tag,
+		Digest:    req.Digest,
+		SizeBytes: size,
+		PushedAt:  time.Now(),
+	}
+
+	if err := s.payloadClient.CreateRegistryImage(ctx, image); err != nil {
+		s.logger.Error("Failed to track image in Payload",
+			"error", err,
+			"workspaceID", req.WorkspaceId,
+			"appID", req.AppId,
+			"tag", req.Tag,
+		)
+		return &buildv1.TrackImageResponse{
+			Error: fmt.Sprintf("failed to track image: %v", err),
+		}, nil
+	}
+
+	// Get updated total usage
+	var newTotalUsage int64
+	usage, err := s.payloadClient.GetRegistryUsage(ctx, req.WorkspaceId)
+	if err != nil {
+		s.logger.Warn("Failed to get updated usage after tracking",
+			"error", err,
+			"workspaceID", req.WorkspaceId,
+		)
+	} else {
+		newTotalUsage = usage.CurrentBytes
+	}
+
+	s.logger.Info("Image tracked successfully",
+		"workspaceID", req.WorkspaceId,
+		"appID", req.AppId,
+		"tag", req.Tag,
+		"sizeBytes", size,
+		"newTotalUsage", newTotalUsage,
+	)
+
+	return &buildv1.TrackImageResponse{
+		SizeBytes:     size,
+		NewTotalUsage: newTotalUsage,
+	}, nil
 }
 
 // Helper functions
