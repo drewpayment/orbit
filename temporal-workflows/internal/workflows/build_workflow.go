@@ -59,9 +59,11 @@ type BuildProgress struct {
 
 // Activity names
 const (
-	ActivityAnalyzeRepository = "AnalyzeRepository"
-	ActivityBuildAndPushImage = "BuildAndPushImage"
-	ActivityUpdateBuildStatus = "UpdateBuildStatus"
+	ActivityAnalyzeRepository    = "AnalyzeRepository"
+	ActivityBuildAndPushImage    = "BuildAndPushImage"
+	ActivityUpdateBuildStatus    = "UpdateBuildStatus"
+	ActivityCheckQuotaAndCleanup = "CheckQuotaAndCleanup"
+	ActivityTrackImage           = "TrackImage"
 )
 
 // Activity input types
@@ -112,6 +114,44 @@ type UpdateBuildStatusInput struct {
 	Error            string               `json:"error,omitempty"`
 	BuildConfig      *DetectedBuildConfig `json:"buildConfig,omitempty"`
 	AvailableChoices []string             `json:"availableChoices,omitempty"` // For awaiting_input status
+}
+
+// QuotaCheckInput is input for CheckQuotaAndCleanup activity
+type QuotaCheckInput struct {
+	WorkspaceID string `json:"workspaceId"`
+}
+
+// QuotaCheckResult is result from CheckQuotaAndCleanup activity
+type QuotaCheckResult struct {
+	CleanupPerformed  bool           `json:"cleanupPerformed"`
+	CurrentUsageBytes int64          `json:"currentUsageBytes"`
+	QuotaBytes        int64          `json:"quotaBytes"`
+	CleanedImages     []CleanedImage `json:"cleanedImages"`
+	Error             string         `json:"error,omitempty"`
+}
+
+// CleanedImage represents an image that was cleaned up
+type CleanedImage struct {
+	AppName   string `json:"appName"`
+	Tag       string `json:"tag"`
+	SizeBytes int64  `json:"sizeBytes"`
+}
+
+// TrackImageInput is input for TrackImage activity
+type TrackImageInput struct {
+	WorkspaceID string `json:"workspaceId"`
+	AppID       string `json:"appId"`
+	Tag         string `json:"tag"`
+	Digest      string `json:"digest"`
+	RegistryURL string `json:"registryUrl"`
+	Repository  string `json:"repository"`
+}
+
+// TrackImageResult is result from TrackImage activity
+type TrackImageResult struct {
+	SizeBytes     int64  `json:"sizeBytes"`
+	NewTotalUsage int64  `json:"newTotalUsage"`
+	Error         string `json:"error,omitempty"`
 }
 
 // BuildWorkflow orchestrates container image building
@@ -346,6 +386,40 @@ func BuildWorkflow(ctx workflow.Context, input BuildWorkflowInput) (*BuildWorkfl
 		imageTag = "latest"
 	}
 
+	// Pre-build quota check (only for Orbit registry)
+	if input.Registry.Type == "orbit" {
+		logger.Info("Checking quota before build", "workspaceID", input.WorkspaceID)
+
+		quotaOptions := workflow.ActivityOptions{
+			StartToCloseTimeout: 2 * time.Minute,
+			RetryPolicy: &temporal.RetryPolicy{
+				MaximumAttempts: 3,
+			},
+		}
+		quotaCtx := workflow.WithActivityOptions(ctx, quotaOptions)
+
+		var quotaResult QuotaCheckResult
+		err = workflow.ExecuteActivity(quotaCtx, ActivityCheckQuotaAndCleanup, QuotaCheckInput{
+			WorkspaceID: input.WorkspaceID,
+		}).Get(quotaCtx, &quotaResult)
+
+		if err != nil {
+			logger.Warn("Quota check failed, proceeding with build", "error", err)
+		} else if quotaResult.Error != "" {
+			logger.Warn("Quota check returned error, proceeding with build", "error", quotaResult.Error)
+		} else if quotaResult.CleanupPerformed {
+			var freedBytes int64
+			for _, img := range quotaResult.CleanedImages {
+				freedBytes += img.SizeBytes
+			}
+			logger.Info("Cleaned up old images before build",
+				"imageCount", len(quotaResult.CleanedImages),
+				"freedBytes", freedBytes,
+				"currentUsage", quotaResult.CurrentUsageBytes,
+				"quota", quotaResult.QuotaBytes)
+		}
+	}
+
 	buildInput := BuildAndPushInput{
 		RequestID:         input.RequestID,
 		AppID:             input.AppID,
@@ -372,6 +446,42 @@ func BuildWorkflow(ctx workflow.Context, input BuildWorkflowInput) (*BuildWorkfl
 		}
 		logger.Error("Build failed", "error", errMsg)
 		return failWorkflow(ctx, input.AppID, state, errMsg)
+	}
+
+	// Post-push image tracking (only for Orbit registry)
+	if input.Registry.Type == "orbit" && buildResult.Success {
+		logger.Info("Tracking image after build",
+			"workspaceID", input.WorkspaceID,
+			"appID", input.AppID,
+			"tag", imageTag)
+
+		trackOptions := workflow.ActivityOptions{
+			StartToCloseTimeout: 1 * time.Minute,
+			RetryPolicy: &temporal.RetryPolicy{
+				MaximumAttempts: 3,
+			},
+		}
+		trackCtx := workflow.WithActivityOptions(ctx, trackOptions)
+
+		var trackResult TrackImageResult
+		err = workflow.ExecuteActivity(trackCtx, ActivityTrackImage, TrackImageInput{
+			WorkspaceID: input.WorkspaceID,
+			AppID:       input.AppID,
+			Tag:         imageTag,
+			Digest:      buildResult.ImageDigest,
+			RegistryURL: input.Registry.URL,
+			Repository:  input.Registry.Repository,
+		}).Get(trackCtx, &trackResult)
+
+		if err != nil {
+			logger.Warn("Failed to track image", "error", err)
+		} else if trackResult.Error != "" {
+			logger.Warn("Track image returned error", "error", trackResult.Error)
+		} else {
+			logger.Info("Image tracked successfully",
+				"sizeBytes", trackResult.SizeBytes,
+				"totalUsage", trackResult.NewTotalUsage)
+		}
 	}
 
 	// Step 6: Update status to success
