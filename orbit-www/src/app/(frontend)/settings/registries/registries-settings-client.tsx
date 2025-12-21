@@ -29,6 +29,7 @@ import {
   updateRegistry,
   deleteRegistry,
   testGhcrConnection,
+  testAcrConnection,
   type RegistryConfig,
   type Workspace,
 } from '@/app/actions/registries'
@@ -421,7 +422,9 @@ function RegistryCard({
   async function handleTestConnection() {
     setTesting(true)
     try {
-      const result = await testGhcrConnection(registry.id)
+      const result = registry.type === 'ghcr'
+        ? await testGhcrConnection(registry.id)
+        : await testAcrConnection(registry.id)
       if (!result.success) {
         alert(result.error || 'Connection test failed')
       } else {
@@ -474,6 +477,22 @@ function RegistryCard({
                     {registry.ghcrValidationStatus === 'pending' && 'Not tested'}
                   </Badge>
                 )}
+                {registry.type === 'acr' && registry.acrValidationStatus && (
+                  <Badge
+                    variant={
+                      registry.acrValidationStatus === 'valid'
+                        ? 'default'
+                        : registry.acrValidationStatus === 'invalid'
+                          ? 'destructive'
+                          : 'secondary'
+                    }
+                    className={registry.acrValidationStatus === 'valid' ? 'bg-green-600' : ''}
+                  >
+                    {registry.acrValidationStatus === 'valid' && '✓ Valid'}
+                    {registry.acrValidationStatus === 'invalid' && '✗ Invalid'}
+                    {registry.acrValidationStatus === 'pending' && 'Not tested'}
+                  </Badge>
+                )}
                 <span>{registry.workspace.name}</span>
                 {registry.type === 'ghcr' && registry.ghcrOwner && (
                   <span>ghcr.io/{registry.ghcrOwner}</span>
@@ -486,7 +505,7 @@ function RegistryCard({
           </div>
 
           <div className="flex items-center gap-2">
-            {registry.type === 'ghcr' && (
+            {(registry.type === 'ghcr' || registry.type === 'acr') && (
               <Button
                 variant="outline"
                 size="sm"

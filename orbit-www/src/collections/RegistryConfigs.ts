@@ -120,6 +120,14 @@ export const RegistryConfigs: CollectionConfig = {
             data.ghcrPat = encrypt(data.ghcrPat)
           }
         }
+        // Encrypt ACR token if present and not already encrypted
+        if (data?.acrToken) {
+          const isEncrypted =
+            data.acrToken.includes(':') && data.acrToken.split(':').length === 3
+          if (!isEncrypted) {
+            data.acrToken = encrypt(data.acrToken)
+          }
+        }
         return data
       },
     ],
@@ -236,6 +244,29 @@ export const RegistryConfigs: CollectionConfig = {
       },
       access: {
         read: () => false, // Never return token in API responses
+      },
+    },
+    {
+      name: 'acrValidatedAt',
+      type: 'date',
+      admin: {
+        readOnly: true,
+        condition: (data) => data?.type === 'acr',
+        description: 'Last successful connection test',
+      },
+    },
+    {
+      name: 'acrValidationStatus',
+      type: 'select',
+      options: [
+        { label: 'Not tested', value: 'pending' },
+        { label: 'Valid', value: 'valid' },
+        { label: 'Invalid', value: 'invalid' },
+      ],
+      defaultValue: 'pending',
+      admin: {
+        readOnly: true,
+        condition: (data) => data?.type === 'acr',
       },
     },
   ],

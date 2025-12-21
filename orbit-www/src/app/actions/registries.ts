@@ -17,6 +17,8 @@ export interface RegistryConfig {
   ghcrValidatedAt?: string
   acrLoginServer?: string
   acrUsername?: string
+  acrValidationStatus?: 'pending' | 'valid' | 'invalid'
+  acrValidatedAt?: string
   createdAt: string
   updatedAt: string
 }
@@ -408,5 +410,116 @@ export async function testGhcrConnection(configId: string): Promise<{
   } catch (error) {
     console.error('[GHCR Test] Connection error:', error)
     return { success: false, error: 'Failed to connect to GitHub API' }
+  }
+}
+
+/**
+ * Test ACR connection and update validation status
+ */
+export async function testAcrConnection(configId: string): Promise<{
+  success: boolean
+  error?: string
+}> {
+  const session = await auth.api.getSession({ headers: await headers() })
+
+  if (!session?.user?.id) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  const payload = await getPayload({ config })
+
+  // Get the registry config
+  const registryConfig = await payload.findByID({
+    collection: 'registry-configs',
+    id: configId,
+    overrideAccess: true,
+  })
+
+  if (!registryConfig) {
+    return { success: false, error: 'Registry not found' }
+  }
+
+  if (registryConfig.type !== 'acr') {
+    return { success: false, error: 'Not an ACR registry' }
+  }
+
+  // Access ACR fields
+  const acrToken = (registryConfig as any).acrToken as string | undefined
+  const acrUsername = registryConfig.acrUsername as string | undefined
+  const acrLoginServer = registryConfig.acrLoginServer as string | undefined
+
+  if (!acrToken) {
+    return { success: false, error: 'No token configured' }
+  }
+
+  if (!acrUsername) {
+    return { success: false, error: 'No username configured' }
+  }
+
+  if (!acrLoginServer) {
+    return { success: false, error: 'No login server configured' }
+  }
+
+  // Verify user has access to this registry's workspace
+  const workspaceId =
+    typeof registryConfig.workspace === 'string'
+      ? registryConfig.workspace
+      : registryConfig.workspace.id
+
+  const membership = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { workspace: { equals: workspaceId } },
+        { user: { equals: session.user.id } },
+        { role: { in: ['owner', 'admin'] } },
+        { status: { equals: 'active' } },
+      ],
+    },
+  })
+
+  if (membership.docs.length === 0) {
+    return { success: false, error: 'Not authorized for this workspace' }
+  }
+
+  try {
+    // Decrypt token and test Azure Container Registry API
+    const token = decrypt(acrToken)
+
+    // ACR uses Basic auth with username:token
+    const credentials = Buffer.from(`${acrUsername}:${token}`).toString('base64')
+
+    const response = await fetch(`https://${acrLoginServer}/v2/`, {
+      headers: {
+        Authorization: `Basic ${credentials}`,
+      },
+    })
+
+    const isValid = response.ok
+
+    // Update validation status
+    await payload.update({
+      collection: 'registry-configs',
+      id: configId,
+      data: {
+        acrValidationStatus: isValid ? 'valid' : 'invalid',
+        acrValidatedAt: isValid ? new Date().toISOString() : null,
+      } as any,
+      overrideAccess: true,
+    })
+
+    if (!isValid) {
+      const errorBody = await response.text()
+      console.error('[ACR Test] Validation failed:', response.status, errorBody)
+      return {
+        success: false,
+        error: `ACR API returned ${response.status}. Check your credentials.`,
+      }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('[ACR Test] Connection error:', error)
+    return { success: false, error: 'Failed to connect to ACR' }
   }
 }
