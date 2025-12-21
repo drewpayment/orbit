@@ -126,6 +126,7 @@ services:
       - ORBIT_INTERNAL_API_KEY=${ORBIT_INTERNAL_API_KEY:-orbit-internal-dev-key}
       - ORBIT_REGISTRY_URL=orbit-registry:5000
       - ORBIT_REGISTRY_TOKEN=orbit-registry-token
+      - ORBIT_REGISTRY_JWT_SECRET=${ORBIT_REGISTRY_JWT_SECRET:-orbit-registry-jwt-secret-dev-only-32chars}
     env_file:
       - ./orbit-www/.env
     depends_on:
