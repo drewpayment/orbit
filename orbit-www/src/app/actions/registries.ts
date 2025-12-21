@@ -4,14 +4,17 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
+import { decrypt } from '@/lib/encryption'
 
 export interface RegistryConfig {
   id: string
   name: string
-  type: 'ghcr' | 'acr'
+  type: 'ghcr' | 'acr' | 'orbit'
   isDefault: boolean
   workspace: { id: string; name: string; slug: string }
   ghcrOwner?: string
+  ghcrValidationStatus?: 'pending' | 'valid' | 'invalid'
+  ghcrValidatedAt?: string
   acrLoginServer?: string
   acrUsername?: string
   createdAt: string
@@ -108,10 +111,11 @@ export async function getRegistriesAndWorkspaces(): Promise<{
  */
 export async function createRegistry(data: {
   name: string
-  type: 'ghcr' | 'acr'
+  type: 'ghcr' | 'acr' | 'orbit'
   workspace: string
   isDefault?: boolean
   ghcrOwner?: string
+  ghcrPat?: string
   acrLoginServer?: string
   acrUsername?: string
   acrToken?: string
@@ -151,7 +155,10 @@ export async function createRegistry(data: {
 
     if (data.type === 'ghcr') {
       registryData.ghcrOwner = data.ghcrOwner
-    } else {
+      if (data.ghcrPat) {
+        registryData.ghcrPat = data.ghcrPat // Will be encrypted by beforeChange hook
+      }
+    } else if (data.type === 'acr') {
       registryData.acrLoginServer = data.acrLoginServer
       registryData.acrUsername = data.acrUsername
       if (data.acrToken) {
@@ -180,6 +187,7 @@ export async function updateRegistry(
     name?: string
     isDefault?: boolean
     ghcrOwner?: string
+    ghcrPat?: string
     acrLoginServer?: string
     acrUsername?: string
     acrToken?: string
@@ -230,6 +238,7 @@ export async function updateRegistry(
     if (data.name !== undefined) updateData.name = data.name
     if (data.isDefault !== undefined) updateData.isDefault = data.isDefault
     if (data.ghcrOwner !== undefined) updateData.ghcrOwner = data.ghcrOwner
+    if (data.ghcrPat) updateData.ghcrPat = data.ghcrPat // Will be encrypted by beforeChange hook
     if (data.acrLoginServer !== undefined) updateData.acrLoginServer = data.acrLoginServer
     if (data.acrUsername !== undefined) updateData.acrUsername = data.acrUsername
     if (data.acrToken) updateData.acrToken = data.acrToken
@@ -300,5 +309,104 @@ export async function deleteRegistry(id: string): Promise<{ success: boolean; er
   } catch (error) {
     console.error('Failed to delete registry:', error)
     return { success: false, error: 'Failed to delete registry' }
+  }
+}
+
+/**
+ * Test GHCR connection and update validation status
+ */
+export async function testGhcrConnection(configId: string): Promise<{
+  success: boolean
+  error?: string
+}> {
+  const session = await auth.api.getSession({ headers: await headers() })
+
+  if (!session?.user?.id) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  const payload = await getPayload({ config })
+
+  // Get the registry config
+  const registryConfig = await payload.findByID({
+    collection: 'registry-configs',
+    id: configId,
+    overrideAccess: true,
+  })
+
+  if (!registryConfig) {
+    return { success: false, error: 'Registry not found' }
+  }
+
+  if (registryConfig.type !== 'ghcr') {
+    return { success: false, error: 'Not a GHCR registry' }
+  }
+
+  // Access ghcrPat field (exists in schema but not in generated types yet)
+  const ghcrPat = (registryConfig as any).ghcrPat as string | undefined
+  if (!ghcrPat) {
+    return { success: false, error: 'No PAT configured' }
+  }
+
+  // Verify user has access to this registry's workspace
+  const workspaceId =
+    typeof registryConfig.workspace === 'string'
+      ? registryConfig.workspace
+      : registryConfig.workspace.id
+
+  const membership = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { workspace: { equals: workspaceId } },
+        { user: { equals: session.user.id } },
+        { role: { in: ['owner', 'admin'] } },
+        { status: { equals: 'active' } },
+      ],
+    },
+  })
+
+  if (membership.docs.length === 0) {
+    return { success: false, error: 'Not authorized for this workspace' }
+  }
+
+  try {
+    // Decrypt PAT and test GitHub API
+    const pat = decrypt(ghcrPat)
+
+    const response = await fetch('https://api.github.com/user', {
+      headers: {
+        Authorization: `Bearer ${pat}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    })
+
+    const isValid = response.ok
+
+    // Update validation status
+    await payload.update({
+      collection: 'registry-configs',
+      id: configId,
+      data: {
+        ghcrValidationStatus: isValid ? 'valid' : 'invalid',
+        ghcrValidatedAt: isValid ? new Date().toISOString() : null,
+      } as any,
+      overrideAccess: true,
+    })
+
+    if (!isValid) {
+      const errorBody = await response.text()
+      console.error('[GHCR Test] Validation failed:', response.status, errorBody)
+      return {
+        success: false,
+        error: `GitHub API returned ${response.status}. Check that your PAT has write:packages scope.`,
+      }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('[GHCR Test] Connection error:', error)
+    return { success: false, error: 'Failed to connect to GitHub API' }
   }
 }

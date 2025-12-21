@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { encrypt } from '@/lib/encryption'
 
 export const RegistryConfigs: CollectionConfig = {
   slug: 'registry-configs',
@@ -108,6 +109,21 @@ export const RegistryConfigs: CollectionConfig = {
       return members.docs.length > 0
     },
   },
+  hooks: {
+    beforeChange: [
+      async ({ data }) => {
+        // Encrypt GHCR PAT if present and not already encrypted
+        if (data?.ghcrPat) {
+          const isEncrypted =
+            data.ghcrPat.includes(':') && data.ghcrPat.split(':').length === 3
+          if (!isEncrypted) {
+            data.ghcrPat = encrypt(data.ghcrPat)
+          }
+        }
+        return data
+      },
+    ],
+  },
   fields: [
     {
       name: 'name',
@@ -150,12 +166,47 @@ export const RegistryConfigs: CollectionConfig = {
         position: 'sidebar',
       },
     },
-    // GHCR-specific fields (uses GitHub App automatically)
+    // GHCR-specific fields
     {
       name: 'ghcrOwner',
       type: 'text',
       admin: {
         description: 'GitHub owner/org for GHCR (e.g., "drewpayment")',
+        condition: (data) => data?.type === 'ghcr',
+      },
+    },
+    {
+      name: 'ghcrPat',
+      type: 'text',
+      admin: {
+        description:
+          'GitHub Personal Access Token (classic) with write:packages scope',
+        condition: (data) => data?.type === 'ghcr',
+      },
+      access: {
+        read: () => false, // Never expose in API responses
+      },
+    },
+    {
+      name: 'ghcrValidatedAt',
+      type: 'date',
+      admin: {
+        readOnly: true,
+        condition: (data) => data?.type === 'ghcr',
+        description: 'Last successful connection test',
+      },
+    },
+    {
+      name: 'ghcrValidationStatus',
+      type: 'select',
+      options: [
+        { label: 'Not tested', value: 'pending' },
+        { label: 'Valid', value: 'valid' },
+        { label: 'Invalid', value: 'invalid' },
+      ],
+      defaultValue: 'pending',
+      admin: {
+        readOnly: true,
         condition: (data) => data?.type === 'ghcr',
       },
     },

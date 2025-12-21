@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AlertTriangle, AlertCircle } from 'lucide-react'
-import { getRegistryUsage, formatBytes, type RegistryUsage } from '@/app/actions/registry'
+import { getRegistryUsage, type RegistryUsage } from '@/app/actions/registry'
+import { formatBytes } from '@/lib/utils/format'
 
 interface RegistryQuotaWarningProps {
   workspaceId: string

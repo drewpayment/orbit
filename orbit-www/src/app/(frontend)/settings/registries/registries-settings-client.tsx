@@ -28,6 +28,7 @@ import {
   createRegistry,
   updateRegistry,
   deleteRegistry,
+  testGhcrConnection,
   type RegistryConfig,
   type Workspace,
 } from '@/app/actions/registries'
@@ -44,10 +45,11 @@ export function RegistriesSettingsClient() {
   // Form state
   const [formData, setFormData] = useState({
     name: '',
-    type: 'ghcr' as 'ghcr' | 'acr',
+    type: 'ghcr' as 'ghcr' | 'acr' | 'orbit',
     workspace: '',
     isDefault: false,
     ghcrOwner: '',
+    ghcrPat: '',
     acrLoginServer: '',
     acrUsername: '',
     acrToken: '',
@@ -85,6 +87,7 @@ export function RegistriesSettingsClient() {
       workspace: workspaces[0]?.id || '',
       isDefault: false,
       ghcrOwner: '',
+      ghcrPat: '',
       acrLoginServer: '',
       acrUsername: '',
       acrToken: '',
@@ -100,6 +103,7 @@ export function RegistriesSettingsClient() {
       workspace: registry.workspace.id,
       isDefault: registry.isDefault,
       ghcrOwner: registry.ghcrOwner || '',
+      ghcrPat: '', // Never pre-fill PAT
       acrLoginServer: registry.acrLoginServer || '',
       acrUsername: registry.acrUsername || '',
       acrToken: '', // Never pre-fill token
@@ -115,6 +119,7 @@ export function RegistriesSettingsClient() {
           name: formData.name,
           isDefault: formData.isDefault,
           ghcrOwner: formData.type === 'ghcr' ? formData.ghcrOwner : undefined,
+          ghcrPat: formData.type === 'ghcr' && formData.ghcrPat ? formData.ghcrPat : undefined,
           acrLoginServer: formData.type === 'acr' ? formData.acrLoginServer : undefined,
           acrUsername: formData.type === 'acr' ? formData.acrUsername : undefined,
           acrToken: formData.type === 'acr' && formData.acrToken ? formData.acrToken : undefined,
@@ -130,6 +135,7 @@ export function RegistriesSettingsClient() {
           workspace: formData.workspace,
           isDefault: formData.isDefault,
           ghcrOwner: formData.type === 'ghcr' ? formData.ghcrOwner : undefined,
+          ghcrPat: formData.type === 'ghcr' ? formData.ghcrPat : undefined,
           acrLoginServer: formData.type === 'acr' ? formData.acrLoginServer : undefined,
           acrUsername: formData.type === 'acr' ? formData.acrUsername : undefined,
           acrToken: formData.type === 'acr' ? formData.acrToken : undefined,
@@ -245,6 +251,7 @@ export function RegistriesSettingsClient() {
               onEdit={() => openEditDialog(registry)}
               onDelete={() => handleDelete(registry)}
               onSetDefault={() => handleSetDefault(registry)}
+              onRefresh={fetchData}
             />
           ))}
         </div>
@@ -312,19 +319,38 @@ export function RegistriesSettingsClient() {
             )}
 
             {formData.type === 'ghcr' && (
-              <div className="space-y-2">
-                <Label htmlFor="ghcrOwner">GitHub Owner/Organization</Label>
-                <Input
-                  id="ghcrOwner"
-                  placeholder="e.g., drewpayment"
-                  value={formData.ghcrOwner}
-                  onChange={(e) => setFormData({ ...formData, ghcrOwner: e.target.value })}
-                />
-                <p className="text-xs text-muted-foreground">
-                  The GitHub user or organization that owns the container registry.
-                  Authentication uses your GitHub App installation.
-                </p>
-              </div>
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="ghcrOwner">GitHub Owner/Organization</Label>
+                  <Input
+                    id="ghcrOwner"
+                    placeholder="e.g., drewpayment"
+                    value={formData.ghcrOwner}
+                    onChange={(e) => setFormData({ ...formData, ghcrOwner: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The GitHub user or organization that owns the container registry.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ghcrPat">
+                    Personal Access Token {editingRegistry && '(leave blank to keep existing)'}
+                  </Label>
+                  <Input
+                    id="ghcrPat"
+                    type="password"
+                    placeholder={editingRegistry ? '********' : 'ghp_...'}
+                    value={formData.ghcrPat}
+                    onChange={(e) => setFormData({ ...formData, ghcrPat: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Requires a GitHub Personal Access Token (classic) with{' '}
+                    <code className="bg-muted px-1 py-0.5 rounded">write:packages</code> and{' '}
+                    <code className="bg-muted px-1 py-0.5 rounded">read:packages</code> scopes.
+                    Fine-grained tokens are not supported for GHCR.
+                  </p>
+                </div>
+              </>
             )}
 
             {formData.type === 'acr' && (
@@ -382,12 +408,34 @@ function RegistryCard({
   onEdit,
   onDelete,
   onSetDefault,
+  onRefresh,
 }: {
   registry: RegistryConfig
   onEdit: () => void
   onDelete: () => void
   onSetDefault: () => void
+  onRefresh: () => void
 }) {
+  const [testing, setTesting] = useState(false)
+
+  async function handleTestConnection() {
+    setTesting(true)
+    try {
+      const result = await testGhcrConnection(registry.id)
+      if (!result.success) {
+        alert(result.error || 'Connection test failed')
+      } else {
+        alert('Connection successful!')
+      }
+      // Refresh data to show updated status
+      onRefresh()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to test connection')
+    } finally {
+      setTesting(false)
+    }
+  }
+
   return (
     <Card>
       <CardContent className="p-6">
@@ -408,8 +456,24 @@ function RegistryCard({
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Badge variant="outline">
-                  {registry.type === 'ghcr' ? 'GHCR' : 'ACR'}
+                  {registry.type === 'ghcr' ? 'GHCR' : registry.type === 'acr' ? 'ACR' : 'Orbit'}
                 </Badge>
+                {registry.type === 'ghcr' && registry.ghcrValidationStatus && (
+                  <Badge
+                    variant={
+                      registry.ghcrValidationStatus === 'valid'
+                        ? 'default'
+                        : registry.ghcrValidationStatus === 'invalid'
+                          ? 'destructive'
+                          : 'secondary'
+                    }
+                    className={registry.ghcrValidationStatus === 'valid' ? 'bg-green-600' : ''}
+                  >
+                    {registry.ghcrValidationStatus === 'valid' && '✓ Valid'}
+                    {registry.ghcrValidationStatus === 'invalid' && '✗ Invalid'}
+                    {registry.ghcrValidationStatus === 'pending' && 'Not tested'}
+                  </Badge>
+                )}
                 <span>{registry.workspace.name}</span>
                 {registry.type === 'ghcr' && registry.ghcrOwner && (
                   <span>ghcr.io/{registry.ghcrOwner}</span>
@@ -422,6 +486,16 @@ function RegistryCard({
           </div>
 
           <div className="flex items-center gap-2">
+            {registry.type === 'ghcr' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleTestConnection}
+                disabled={testing}
+              >
+                {testing ? 'Testing...' : 'Test Connection'}
+              </Button>
+            )}
             {!registry.isDefault && (
               <Button variant="ghost" size="sm" onClick={onSetDefault}>
                 <Star className="h-4 w-4 mr-1" />
