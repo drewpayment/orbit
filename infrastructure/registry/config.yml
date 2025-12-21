@@ -21,6 +21,11 @@ http:
   addr: :5000
   headers:
     X-Content-Type-Options: [nosniff]
+auth:
+  token:
+    realm: http://orbit-www:3000/api/registry/token
+    service: orbit-registry
+    issuer: orbit
 health:
   storagedriver:
     enabled: true
