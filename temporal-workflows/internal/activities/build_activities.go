@@ -344,3 +344,174 @@ func (a *BuildActivities) UpdateBuildStatus(ctx context.Context, input UpdateBui
 	a.logger.Info("Build status updated successfully")
 	return nil
 }
+
+// QuotaCheckInput is input for CheckQuotaAndCleanup activity
+type QuotaCheckInput struct {
+	WorkspaceID string `json:"workspaceId"`
+}
+
+// QuotaCheckResult is result from CheckQuotaAndCleanup activity
+type QuotaCheckResult struct {
+	CleanupPerformed  bool           `json:"cleanupPerformed"`
+	CurrentUsageBytes int64          `json:"currentUsageBytes"`
+	QuotaBytes        int64          `json:"quotaBytes"`
+	CleanedImages     []CleanedImage `json:"cleanedImages"`
+	Error             string         `json:"error,omitempty"`
+}
+
+// CleanedImage represents an image that was cleaned up
+type CleanedImage struct {
+	AppName   string `json:"appName"`
+	Tag       string `json:"tag"`
+	SizeBytes int64  `json:"sizeBytes"`
+}
+
+// TrackImageInput is input for TrackImage activity
+type TrackImageInput struct {
+	WorkspaceID string `json:"workspaceId"`
+	AppID       string `json:"appId"`
+	Tag         string `json:"tag"`
+	Digest      string `json:"digest"`
+	RegistryURL string `json:"registryUrl"`
+	Repository  string `json:"repository"`
+}
+
+// TrackImageResult is result from TrackImage activity
+type TrackImageResult struct {
+	SizeBytes     int64  `json:"sizeBytes"`
+	NewTotalUsage int64  `json:"newTotalUsage"`
+	Error         string `json:"error,omitempty"`
+}
+
+// CheckQuotaAndCleanup checks workspace quota and cleans up old images if needed
+func (a *BuildActivities) CheckQuotaAndCleanup(ctx context.Context, input QuotaCheckInput) (*QuotaCheckResult, error) {
+	a.logger.Info("Checking quota and cleanup",
+		"workspaceID", input.WorkspaceID)
+
+	if input.WorkspaceID == "" {
+		return nil, fmt.Errorf("workspace_id is required")
+	}
+
+	// Connect to build service
+	conn, err := grpc.DialContext(ctx, a.buildServiceAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to build service: %w", err)
+	}
+	defer conn.Close()
+
+	client := buildv1.NewBuildServiceClient(conn)
+
+	resp, err := client.CheckQuotaAndCleanup(ctx, &buildv1.CheckQuotaRequest{
+		WorkspaceId: input.WorkspaceID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("quota check failed: %w", err)
+	}
+
+	// Check for error in response
+	if resp.Error != "" {
+		a.logger.Warn("Quota check returned error",
+			"workspaceID", input.WorkspaceID,
+			"error", resp.Error)
+		return &QuotaCheckResult{
+			Error: resp.Error,
+		}, nil
+	}
+
+	// Convert cleaned images
+	cleanedImages := make([]CleanedImage, len(resp.CleanedImages))
+	for i, img := range resp.CleanedImages {
+		cleanedImages[i] = CleanedImage{
+			AppName:   img.AppName,
+			Tag:       img.Tag,
+			SizeBytes: img.SizeBytes,
+		}
+	}
+
+	if resp.CleanupPerformed {
+		var totalFreed int64
+		for _, img := range cleanedImages {
+			totalFreed += img.SizeBytes
+		}
+		a.logger.Info("Quota cleanup completed",
+			"workspaceID", input.WorkspaceID,
+			"imagesDeleted", len(cleanedImages),
+			"bytesFreed", totalFreed,
+			"currentUsage", resp.CurrentUsageBytes,
+			"quota", resp.QuotaBytes)
+	} else {
+		a.logger.Info("Quota check complete, no cleanup needed",
+			"workspaceID", input.WorkspaceID,
+			"currentUsage", resp.CurrentUsageBytes,
+			"quota", resp.QuotaBytes)
+	}
+
+	return &QuotaCheckResult{
+		CleanupPerformed:  resp.CleanupPerformed,
+		CurrentUsageBytes: resp.CurrentUsageBytes,
+		QuotaBytes:        resp.QuotaBytes,
+		CleanedImages:     cleanedImages,
+	}, nil
+}
+
+// TrackImage records a pushed image in the registry tracking system
+func (a *BuildActivities) TrackImage(ctx context.Context, input TrackImageInput) (*TrackImageResult, error) {
+	a.logger.Info("Tracking image",
+		"workspaceID", input.WorkspaceID,
+		"appID", input.AppID,
+		"tag", input.Tag,
+		"repository", input.Repository)
+
+	if input.WorkspaceID == "" || input.AppID == "" || input.Tag == "" {
+		return nil, fmt.Errorf("workspace_id, app_id, and tag are required")
+	}
+
+	if input.Repository == "" {
+		return nil, fmt.Errorf("repository is required")
+	}
+
+	// Connect to build service
+	conn, err := grpc.DialContext(ctx, a.buildServiceAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to build service: %w", err)
+	}
+	defer conn.Close()
+
+	client := buildv1.NewBuildServiceClient(conn)
+
+	resp, err := client.TrackImage(ctx, &buildv1.TrackImageRequest{
+		WorkspaceId: input.WorkspaceID,
+		AppId:       input.AppID,
+		Tag:         input.Tag,
+		Digest:      input.Digest,
+		RegistryUrl: input.RegistryURL,
+		Repository:  input.Repository,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("track image failed: %w", err)
+	}
+
+	// Check for error in response
+	if resp.Error != "" {
+		a.logger.Warn("Track image returned error",
+			"workspaceID", input.WorkspaceID,
+			"appID", input.AppID,
+			"tag", input.Tag,
+			"error", resp.Error)
+		return &TrackImageResult{
+			Error: resp.Error,
+		}, nil
+	}
+
+	a.logger.Info("Image tracked successfully",
+		"workspaceID", input.WorkspaceID,
+		"appID", input.AppID,
+		"tag", input.Tag,
+		"sizeBytes", resp.SizeBytes,
+		"newTotalUsage", resp.NewTotalUsage)
+
+	return &TrackImageResult{
+		SizeBytes:     resp.SizeBytes,
+		NewTotalUsage: resp.NewTotalUsage,
+	}, nil
+}
