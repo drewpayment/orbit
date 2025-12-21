@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file idp/build/v1/build.proto.
  */
 export const file_idp_build_v1_build: GenFile = /*@__PURE__*/
-  fileDesc("ChhpZHAvYnVpbGQvdjEvYnVpbGQucHJvdG8SDGlkcC5idWlsZC52MSJVChhBbmFseXplUmVwb3NpdG9yeVJlcXVlc3QSEAoIcmVwb191cmwYASABKAkSCwoDcmVmGAIgASgJEhoKEmluc3RhbGxhdGlvbl90b2tlbhgDIAEoCSKHAQoZQW5hbHl6ZVJlcG9zaXRvcnlSZXNwb25zZRIQCghkZXRlY3RlZBgBIAEoCBIxCgZjb25maWcYAiABKAsyIS5pZHAuYnVpbGQudjEuRGV0ZWN0ZWRCdWlsZENvbmZpZxINCgVlcnJvchgDIAEoCRIWCg5kZXRlY3RlZF9maWxlcxgEIAMoCSK9AQoTRGV0ZWN0ZWRCdWlsZENvbmZpZxIQCghsYW5ndWFnZRgBIAEoCRIYChBsYW5ndWFnZV92ZXJzaW9uGAIgASgJEhEKCWZyYW1ld29yaxgDIAEoCRIVCg1idWlsZF9jb21tYW5kGAQgASgJEhUKDXN0YXJ0X2NvbW1hbmQYBSABKAkSOQoPcGFja2FnZV9tYW5hZ2VyGAYgASgLMiAuaWRwLmJ1aWxkLnYxLlBhY2thZ2VNYW5hZ2VySW5mbyKlAQoSUGFja2FnZU1hbmFnZXJJbmZvEhAKCGRldGVjdGVkGAEgASgIEgwKBG5hbWUYAiABKAkSDgoGc291cmNlGAMgASgJEhAKCGxvY2tmaWxlGAQgASgJEhkKEXJlcXVlc3RlZF92ZXJzaW9uGAUgASgJEhkKEXZlcnNpb25fc3VwcG9ydGVkGAYgASgIEhcKD3N1cHBvcnRlZF9yYW5nZRgHIAEoCSLRAwoRQnVpbGRJbWFnZVJlcXVlc3QSEgoKcmVxdWVzdF9pZBgBIAEoCRIOCgZhcHBfaWQYAiABKAkSEAoIcmVwb191cmwYAyABKAkSCwoDcmVmGAQgASgJEhoKEmluc3RhbGxhdGlvbl90b2tlbhgFIAEoCRIdChBsYW5ndWFnZV92ZXJzaW9uGAYgASgJSACIAQESGgoNYnVpbGRfY29tbWFuZBgHIAEoCUgBiAEBEhoKDXN0YXJ0X2NvbW1hbmQYCCABKAlIAogBARJACglidWlsZF9lbnYYCSADKAsyLS5pZHAuYnVpbGQudjEuQnVpbGRJbWFnZVJlcXVlc3QuQnVpbGRFbnZFbnRyeRIuCghyZWdpc3RyeRgKIAEoCzIcLmlkcC5idWlsZC52MS5SZWdpc3RyeUNvbmZpZxIRCglpbWFnZV90YWcYCyABKAkSFwoPcGFja2FnZV9tYW5hZ2VyGAwgASgJGi8KDUJ1aWxkRW52RW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUITChFfbGFuZ3VhZ2VfdmVyc2lvbkIQCg5fYnVpbGRfY29tbWFuZEIQCg5fc3RhcnRfY29tbWFuZCKOAQoOUmVnaXN0cnlDb25maWcSKAoEdHlwZRgBIAEoDjIaLmlkcC5idWlsZC52MS5SZWdpc3RyeVR5cGUSCwoDdXJsGAIgASgJEhIKCnJlcG9zaXRvcnkYAyABKAkSDQoFdG9rZW4YBCABKAkSFQoIdXNlcm5hbWUYBSABKAlIAIgBAUILCglfdXNlcm5hbWUihQEKEkJ1aWxkSW1hZ2VSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhEKCWltYWdlX3VybBgCIAEoCRIUCgxpbWFnZV9kaWdlc3QYAyABKAkSDQoFZXJyb3IYBCABKAkSJgoFc3RlcHMYBSADKAsyFy5pZHAuYnVpbGQudjEuQnVpbGRTdGVwIm4KCUJ1aWxkU3RlcBIMCgRuYW1lGAEgASgJEi0KBnN0YXR1cxgCIAEoDjIdLmlkcC5idWlsZC52MS5CdWlsZFN0ZXBTdGF0dXMSDwoHbWVzc2FnZRgDIAEoCRITCgtkdXJhdGlvbl9tcxgEIAEoAyIsChZTdHJlYW1CdWlsZExvZ3NSZXF1ZXN0EhIKCnJlcXVlc3RfaWQYASABKAkiWgoXU3RyZWFtQnVpbGRMb2dzUmVzcG9uc2USEQoJdGltZXN0YW1wGAEgASgDEg0KBWxldmVsGAIgASgJEg8KB21lc3NhZ2UYAyABKAkSDAoEc3RlcBgEIAEoCSK/AwoZU3RhcnRCdWlsZFdvcmtmbG93UmVxdWVzdBIOCgZhcHBfaWQYASABKAkSFAoMd29ya3NwYWNlX2lkGAIgASgJEg8KB3VzZXJfaWQYAyABKAkSEAoIcmVwb191cmwYBCABKAkSCwoDcmVmGAUgASgJEi4KCHJlZ2lzdHJ5GAYgASgLMhwuaWRwLmJ1aWxkLnYxLlJlZ2lzdHJ5Q29uZmlnEh0KEGxhbmd1YWdlX3ZlcnNpb24YByABKAlIAIgBARIaCg1idWlsZF9jb21tYW5kGAggASgJSAGIAQESGgoNc3RhcnRfY29tbWFuZBgJIAEoCUgCiAEBEkgKCWJ1aWxkX2VudhgKIAMoCzI1LmlkcC5idWlsZC52MS5TdGFydEJ1aWxkV29ya2Zsb3dSZXF1ZXN0LkJ1aWxkRW52RW50cnkSEQoJaW1hZ2VfdGFnGAsgASgJGi8KDUJ1aWxkRW52RW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUITChFfbGFuZ3VhZ2VfdmVyc2lvbkIQCg5fYnVpbGRfY29tbWFuZEIQCg5fc3RhcnRfY29tbWFuZCJRChpTdGFydEJ1aWxkV29ya2Zsb3dSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhMKC3dvcmtmbG93X2lkGAIgASgJEg0KBWVycm9yGAMgASgJIi4KF0dldEJ1aWxkUHJvZ3Jlc3NSZXF1ZXN0EhMKC3dvcmtmbG93X2lkGAEgASgJIvEBChhHZXRCdWlsZFByb2dyZXNzUmVzcG9uc2USFAoMY3VycmVudF9zdGVwGAEgASgJEhMKC3N0ZXBzX3RvdGFsGAIgASgFEhUKDXN0ZXBzX2N1cnJlbnQYAyABKAUSDwoHbWVzc2FnZRgEIAEoCRIOCgZzdGF0dXMYBSABKAkSEQoJaW1hZ2VfdXJsGAYgASgJEhQKDGltYWdlX2RpZ2VzdBgHIAEoCRINCgVlcnJvchgIIAEoCRI6Cg9kZXRlY3RlZF9jb25maWcYCSABKAsyIS5pZHAuYnVpbGQudjEuRGV0ZWN0ZWRCdWlsZENvbmZpZyp1CgxSZWdpc3RyeVR5cGUSHQoZUkVHSVNUUllfVFlQRV9VTlNQRUNJRklFRBAAEhYKElJFR0lTVFJZX1RZUEVfR0hDUhABEhUKEVJFR0lTVFJZX1RZUEVfQUNSEAISFwoTUkVHSVNUUllfVFlQRV9PUkJJVBADKrEBCg9CdWlsZFN0ZXBTdGF0dXMSIQodQlVJTERfU1RFUF9TVEFUVVNfVU5TUEVDSUZJRUQQABIdChlCVUlMRF9TVEVQX1NUQVRVU19QRU5ESU5HEAESHQoZQlVJTERfU1RFUF9TVEFUVVNfUlVOTklORxACEh8KG0JVSUxEX1NURVBfU1RBVFVTX0NPTVBMRVRFRBADEhwKGEJVSUxEX1NURVBfU1RBVFVTX0ZBSUxFRBAEMvMDCgxCdWlsZFNlcnZpY2USZAoRQW5hbHl6ZVJlcG9zaXRvcnkSJi5pZHAuYnVpbGQudjEuQW5hbHl6ZVJlcG9zaXRvcnlSZXF1ZXN0GicuaWRwLmJ1aWxkLnYxLkFuYWx5emVSZXBvc2l0b3J5UmVzcG9uc2USTwoKQnVpbGRJbWFnZRIfLmlkcC5idWlsZC52MS5CdWlsZEltYWdlUmVxdWVzdBogLmlkcC5idWlsZC52MS5CdWlsZEltYWdlUmVzcG9uc2USYAoPU3RyZWFtQnVpbGRMb2dzEiQuaWRwLmJ1aWxkLnYxLlN0cmVhbUJ1aWxkTG9nc1JlcXVlc3QaJS5pZHAuYnVpbGQudjEuU3RyZWFtQnVpbGRMb2dzUmVzcG9uc2UwARJnChJTdGFydEJ1aWxkV29ya2Zsb3cSJy5pZHAuYnVpbGQudjEuU3RhcnRCdWlsZFdvcmtmbG93UmVxdWVzdBooLmlkcC5idWlsZC52MS5TdGFydEJ1aWxkV29ya2Zsb3dSZXNwb25zZRJhChBHZXRCdWlsZFByb2dyZXNzEiUuaWRwLmJ1aWxkLnYxLkdldEJ1aWxkUHJvZ3Jlc3NSZXF1ZXN0GiYuaWRwLmJ1aWxkLnYxLkdldEJ1aWxkUHJvZ3Jlc3NSZXNwb25zZUJAWj5naXRodWIuY29tL2RyZXdwYXltZW50L29yYml0L3Byb3RvL2dlbi9nby9pZHAvYnVpbGQvdjE7YnVpbGR2MWIGcHJvdG8z");
+  fileDesc("ChhpZHAvYnVpbGQvdjEvYnVpbGQucHJvdG8SDGlkcC5idWlsZC52MSJVChhBbmFseXplUmVwb3NpdG9yeVJlcXVlc3QSEAoIcmVwb191cmwYASABKAkSCwoDcmVmGAIgASgJEhoKEmluc3RhbGxhdGlvbl90b2tlbhgDIAEoCSKHAQoZQW5hbHl6ZVJlcG9zaXRvcnlSZXNwb25zZRIQCghkZXRlY3RlZBgBIAEoCBIxCgZjb25maWcYAiABKAsyIS5pZHAuYnVpbGQudjEuRGV0ZWN0ZWRCdWlsZENvbmZpZxINCgVlcnJvchgDIAEoCRIWCg5kZXRlY3RlZF9maWxlcxgEIAMoCSK9AQoTRGV0ZWN0ZWRCdWlsZENvbmZpZxIQCghsYW5ndWFnZRgBIAEoCRIYChBsYW5ndWFnZV92ZXJzaW9uGAIgASgJEhEKCWZyYW1ld29yaxgDIAEoCRIVCg1idWlsZF9jb21tYW5kGAQgASgJEhUKDXN0YXJ0X2NvbW1hbmQYBSABKAkSOQoPcGFja2FnZV9tYW5hZ2VyGAYgASgLMiAuaWRwLmJ1aWxkLnYxLlBhY2thZ2VNYW5hZ2VySW5mbyKlAQoSUGFja2FnZU1hbmFnZXJJbmZvEhAKCGRldGVjdGVkGAEgASgIEgwKBG5hbWUYAiABKAkSDgoGc291cmNlGAMgASgJEhAKCGxvY2tmaWxlGAQgASgJEhkKEXJlcXVlc3RlZF92ZXJzaW9uGAUgASgJEhkKEXZlcnNpb25fc3VwcG9ydGVkGAYgASgIEhcKD3N1cHBvcnRlZF9yYW5nZRgHIAEoCSLRAwoRQnVpbGRJbWFnZVJlcXVlc3QSEgoKcmVxdWVzdF9pZBgBIAEoCRIOCgZhcHBfaWQYAiABKAkSEAoIcmVwb191cmwYAyABKAkSCwoDcmVmGAQgASgJEhoKEmluc3RhbGxhdGlvbl90b2tlbhgFIAEoCRIdChBsYW5ndWFnZV92ZXJzaW9uGAYgASgJSACIAQESGgoNYnVpbGRfY29tbWFuZBgHIAEoCUgBiAEBEhoKDXN0YXJ0X2NvbW1hbmQYCCABKAlIAogBARJACglidWlsZF9lbnYYCSADKAsyLS5pZHAuYnVpbGQudjEuQnVpbGRJbWFnZVJlcXVlc3QuQnVpbGRFbnZFbnRyeRIuCghyZWdpc3RyeRgKIAEoCzIcLmlkcC5idWlsZC52MS5SZWdpc3RyeUNvbmZpZxIRCglpbWFnZV90YWcYCyABKAkSFwoPcGFja2FnZV9tYW5hZ2VyGAwgASgJGi8KDUJ1aWxkRW52RW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUITChFfbGFuZ3VhZ2VfdmVyc2lvbkIQCg5fYnVpbGRfY29tbWFuZEIQCg5fc3RhcnRfY29tbWFuZCKOAQoOUmVnaXN0cnlDb25maWcSKAoEdHlwZRgBIAEoDjIaLmlkcC5idWlsZC52MS5SZWdpc3RyeVR5cGUSCwoDdXJsGAIgASgJEhIKCnJlcG9zaXRvcnkYAyABKAkSDQoFdG9rZW4YBCABKAkSFQoIdXNlcm5hbWUYBSABKAlIAIgBAUILCglfdXNlcm5hbWUihQEKEkJ1aWxkSW1hZ2VSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhEKCWltYWdlX3VybBgCIAEoCRIUCgxpbWFnZV9kaWdlc3QYAyABKAkSDQoFZXJyb3IYBCABKAkSJgoFc3RlcHMYBSADKAsyFy5pZHAuYnVpbGQudjEuQnVpbGRTdGVwIm4KCUJ1aWxkU3RlcBIMCgRuYW1lGAEgASgJEi0KBnN0YXR1cxgCIAEoDjIdLmlkcC5idWlsZC52MS5CdWlsZFN0ZXBTdGF0dXMSDwoHbWVzc2FnZRgDIAEoCRITCgtkdXJhdGlvbl9tcxgEIAEoAyIsChZTdHJlYW1CdWlsZExvZ3NSZXF1ZXN0EhIKCnJlcXVlc3RfaWQYASABKAkiWgoXU3RyZWFtQnVpbGRMb2dzUmVzcG9uc2USEQoJdGltZXN0YW1wGAEgASgDEg0KBWxldmVsGAIgASgJEg8KB21lc3NhZ2UYAyABKAkSDAoEc3RlcBgEIAEoCSK/AwoZU3RhcnRCdWlsZFdvcmtmbG93UmVxdWVzdBIOCgZhcHBfaWQYASABKAkSFAoMd29ya3NwYWNlX2lkGAIgASgJEg8KB3VzZXJfaWQYAyABKAkSEAoIcmVwb191cmwYBCABKAkSCwoDcmVmGAUgASgJEi4KCHJlZ2lzdHJ5GAYgASgLMhwuaWRwLmJ1aWxkLnYxLlJlZ2lzdHJ5Q29uZmlnEh0KEGxhbmd1YWdlX3ZlcnNpb24YByABKAlIAIgBARIaCg1idWlsZF9jb21tYW5kGAggASgJSAGIAQESGgoNc3RhcnRfY29tbWFuZBgJIAEoCUgCiAEBEkgKCWJ1aWxkX2VudhgKIAMoCzI1LmlkcC5idWlsZC52MS5TdGFydEJ1aWxkV29ya2Zsb3dSZXF1ZXN0LkJ1aWxkRW52RW50cnkSEQoJaW1hZ2VfdGFnGAsgASgJGi8KDUJ1aWxkRW52RW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUITChFfbGFuZ3VhZ2VfdmVyc2lvbkIQCg5fYnVpbGRfY29tbWFuZEIQCg5fc3RhcnRfY29tbWFuZCJRChpTdGFydEJ1aWxkV29ya2Zsb3dSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhMKC3dvcmtmbG93X2lkGAIgASgJEg0KBWVycm9yGAMgASgJIi4KF0dldEJ1aWxkUHJvZ3Jlc3NSZXF1ZXN0EhMKC3dvcmtmbG93X2lkGAEgASgJIvEBChhHZXRCdWlsZFByb2dyZXNzUmVzcG9uc2USFAoMY3VycmVudF9zdGVwGAEgASgJEhMKC3N0ZXBzX3RvdGFsGAIgASgFEhUKDXN0ZXBzX2N1cnJlbnQYAyABKAUSDwoHbWVzc2FnZRgEIAEoCRIOCgZzdGF0dXMYBSABKAkSEQoJaW1hZ2VfdXJsGAYgASgJEhQKDGltYWdlX2RpZ2VzdBgHIAEoCRINCgVlcnJvchgIIAEoCRI6Cg9kZXRlY3RlZF9jb25maWcYCSABKAsyIS5pZHAuYnVpbGQudjEuRGV0ZWN0ZWRCdWlsZENvbmZpZyJPChFDaGVja1F1b3RhUmVxdWVzdBIUCgx3b3Jrc3BhY2VfaWQYASABKAkSJAocaW5jb21pbmdfaW1hZ2Vfc2l6ZV9lc3RpbWF0ZRgCIAEoAyKkAQoSQ2hlY2tRdW90YVJlc3BvbnNlEhkKEWNsZWFudXBfcGVyZm9ybWVkGAEgASgIEhsKE2N1cnJlbnRfdXNhZ2VfYnl0ZXMYAiABKAMSEwoLcXVvdGFfYnl0ZXMYAyABKAMSMgoOY2xlYW5lZF9pbWFnZXMYBCADKAsyGi5pZHAuYnVpbGQudjEuQ2xlYW5lZEltYWdlEg0KBWVycm9yGAUgASgJIkEKDENsZWFuZWRJbWFnZRIQCghhcHBfbmFtZRgBIAEoCRILCgN0YWcYAiABKAkSEgoKc2l6ZV9ieXRlcxgDIAEoAyKAAQoRVHJhY2tJbWFnZVJlcXVlc3QSFAoMd29ya3NwYWNlX2lkGAEgASgJEg4KBmFwcF9pZBgCIAEoCRILCgN0YWcYAyABKAkSDgoGZGlnZXN0GAQgASgJEhQKDHJlZ2lzdHJ5X3VybBgFIAEoCRISCgpyZXBvc2l0b3J5GAYgASgJIlAKElRyYWNrSW1hZ2VSZXNwb25zZRISCgpzaXplX2J5dGVzGAEgASgDEhcKD25ld190b3RhbF91c2FnZRgCIAEoAxINCgVlcnJvchgDIAEoCSp1CgxSZWdpc3RyeVR5cGUSHQoZUkVHSVNUUllfVFlQRV9VTlNQRUNJRklFRBAAEhYKElJFR0lTVFJZX1RZUEVfR0hDUhABEhUKEVJFR0lTVFJZX1RZUEVfQUNSEAISFwoTUkVHSVNUUllfVFlQRV9PUkJJVBADKrEBCg9CdWlsZFN0ZXBTdGF0dXMSIQodQlVJTERfU1RFUF9TVEFUVVNfVU5TUEVDSUZJRUQQABIdChlCVUlMRF9TVEVQX1NUQVRVU19QRU5ESU5HEAESHQoZQlVJTERfU1RFUF9TVEFUVVNfUlVOTklORxACEh8KG0JVSUxEX1NURVBfU1RBVFVTX0NPTVBMRVRFRBADEhwKGEJVSUxEX1NURVBfU1RBVFVTX0ZBSUxFRBAEMp8FCgxCdWlsZFNlcnZpY2USZAoRQW5hbHl6ZVJlcG9zaXRvcnkSJi5pZHAuYnVpbGQudjEuQW5hbHl6ZVJlcG9zaXRvcnlSZXF1ZXN0GicuaWRwLmJ1aWxkLnYxLkFuYWx5emVSZXBvc2l0b3J5UmVzcG9uc2USTwoKQnVpbGRJbWFnZRIfLmlkcC5idWlsZC52MS5CdWlsZEltYWdlUmVxdWVzdBogLmlkcC5idWlsZC52MS5CdWlsZEltYWdlUmVzcG9uc2USYAoPU3RyZWFtQnVpbGRMb2dzEiQuaWRwLmJ1aWxkLnYxLlN0cmVhbUJ1aWxkTG9nc1JlcXVlc3QaJS5pZHAuYnVpbGQudjEuU3RyZWFtQnVpbGRMb2dzUmVzcG9uc2UwARJnChJTdGFydEJ1aWxkV29ya2Zsb3cSJy5pZHAuYnVpbGQudjEuU3RhcnRCdWlsZFdvcmtmbG93UmVxdWVzdBooLmlkcC5idWlsZC52MS5TdGFydEJ1aWxkV29ya2Zsb3dSZXNwb25zZRJhChBHZXRCdWlsZFByb2dyZXNzEiUuaWRwLmJ1aWxkLnYxLkdldEJ1aWxkUHJvZ3Jlc3NSZXF1ZXN0GiYuaWRwLmJ1aWxkLnYxLkdldEJ1aWxkUHJvZ3Jlc3NSZXNwb25zZRJZChRDaGVja1F1b3RhQW5kQ2xlYW51cBIfLmlkcC5idWlsZC52MS5DaGVja1F1b3RhUmVxdWVzdBogLmlkcC5idWlsZC52MS5DaGVja1F1b3RhUmVzcG9uc2USTwoKVHJhY2tJbWFnZRIfLmlkcC5idWlsZC52MS5UcmFja0ltYWdlUmVxdWVzdBogLmlkcC5idWlsZC52MS5UcmFja0ltYWdlUmVzcG9uc2VCQFo+Z2l0aHViLmNvbS9kcmV3cGF5bWVudC9vcmJpdC9wcm90by9nZW4vZ28vaWRwL2J1aWxkL3YxO2J1aWxkdjFiBnByb3RvMw");
 
 /**
  * AnalyzeRepositoryRequest contains parameters for repository analysis
@@ -706,6 +706,165 @@ export const GetBuildProgressResponseSchema: GenMessage<GetBuildProgressResponse
   messageDesc(file_idp_build_v1_build, 13);
 
 /**
+ * Quota management messages
+ *
+ * @generated from message idp.build.v1.CheckQuotaRequest
+ */
+export type CheckQuotaRequest = Message<"idp.build.v1.CheckQuotaRequest"> & {
+  /**
+   * @generated from field: string workspace_id = 1;
+   */
+  workspaceId: string;
+
+  /**
+   * Optional hint for pre-check
+   *
+   * @generated from field: int64 incoming_image_size_estimate = 2;
+   */
+  incomingImageSizeEstimate: bigint;
+};
+
+/**
+ * Describes the message idp.build.v1.CheckQuotaRequest.
+ * Use `create(CheckQuotaRequestSchema)` to create a new message.
+ */
+export const CheckQuotaRequestSchema: GenMessage<CheckQuotaRequest> = /*@__PURE__*/
+  messageDesc(file_idp_build_v1_build, 14);
+
+/**
+ * @generated from message idp.build.v1.CheckQuotaResponse
+ */
+export type CheckQuotaResponse = Message<"idp.build.v1.CheckQuotaResponse"> & {
+  /**
+   * @generated from field: bool cleanup_performed = 1;
+   */
+  cleanupPerformed: boolean;
+
+  /**
+   * @generated from field: int64 current_usage_bytes = 2;
+   */
+  currentUsageBytes: bigint;
+
+  /**
+   * @generated from field: int64 quota_bytes = 3;
+   */
+  quotaBytes: bigint;
+
+  /**
+   * @generated from field: repeated idp.build.v1.CleanedImage cleaned_images = 4;
+   */
+  cleanedImages: CleanedImage[];
+
+  /**
+   * @generated from field: string error = 5;
+   */
+  error: string;
+};
+
+/**
+ * Describes the message idp.build.v1.CheckQuotaResponse.
+ * Use `create(CheckQuotaResponseSchema)` to create a new message.
+ */
+export const CheckQuotaResponseSchema: GenMessage<CheckQuotaResponse> = /*@__PURE__*/
+  messageDesc(file_idp_build_v1_build, 15);
+
+/**
+ * @generated from message idp.build.v1.CleanedImage
+ */
+export type CleanedImage = Message<"idp.build.v1.CleanedImage"> & {
+  /**
+   * @generated from field: string app_name = 1;
+   */
+  appName: string;
+
+  /**
+   * @generated from field: string tag = 2;
+   */
+  tag: string;
+
+  /**
+   * @generated from field: int64 size_bytes = 3;
+   */
+  sizeBytes: bigint;
+};
+
+/**
+ * Describes the message idp.build.v1.CleanedImage.
+ * Use `create(CleanedImageSchema)` to create a new message.
+ */
+export const CleanedImageSchema: GenMessage<CleanedImage> = /*@__PURE__*/
+  messageDesc(file_idp_build_v1_build, 16);
+
+/**
+ * @generated from message idp.build.v1.TrackImageRequest
+ */
+export type TrackImageRequest = Message<"idp.build.v1.TrackImageRequest"> & {
+  /**
+   * @generated from field: string workspace_id = 1;
+   */
+  workspaceId: string;
+
+  /**
+   * @generated from field: string app_id = 2;
+   */
+  appId: string;
+
+  /**
+   * @generated from field: string tag = 3;
+   */
+  tag: string;
+
+  /**
+   * @generated from field: string digest = 4;
+   */
+  digest: string;
+
+  /**
+   * @generated from field: string registry_url = 5;
+   */
+  registryUrl: string;
+
+  /**
+   * @generated from field: string repository = 6;
+   */
+  repository: string;
+};
+
+/**
+ * Describes the message idp.build.v1.TrackImageRequest.
+ * Use `create(TrackImageRequestSchema)` to create a new message.
+ */
+export const TrackImageRequestSchema: GenMessage<TrackImageRequest> = /*@__PURE__*/
+  messageDesc(file_idp_build_v1_build, 17);
+
+/**
+ * @generated from message idp.build.v1.TrackImageResponse
+ */
+export type TrackImageResponse = Message<"idp.build.v1.TrackImageResponse"> & {
+  /**
+   * @generated from field: int64 size_bytes = 1;
+   */
+  sizeBytes: bigint;
+
+  /**
+   * @generated from field: int64 new_total_usage = 2;
+   */
+  newTotalUsage: bigint;
+
+  /**
+   * @generated from field: string error = 3;
+   */
+  error: string;
+};
+
+/**
+ * Describes the message idp.build.v1.TrackImageResponse.
+ * Use `create(TrackImageResponseSchema)` to create a new message.
+ */
+export const TrackImageResponseSchema: GenMessage<TrackImageResponse> = /*@__PURE__*/
+  messageDesc(file_idp_build_v1_build, 18);
+
+/**
  * RegistryType enum
  *
  * @generated from enum idp.build.v1.RegistryType
@@ -831,6 +990,24 @@ export const BuildService: GenService<{
     methodKind: "unary";
     input: typeof GetBuildProgressRequestSchema;
     output: typeof GetBuildProgressResponseSchema;
+  },
+  /**
+   * Quota management
+   *
+   * @generated from rpc idp.build.v1.BuildService.CheckQuotaAndCleanup
+   */
+  checkQuotaAndCleanup: {
+    methodKind: "unary";
+    input: typeof CheckQuotaRequestSchema;
+    output: typeof CheckQuotaResponseSchema;
+  },
+  /**
+   * @generated from rpc idp.build.v1.BuildService.TrackImage
+   */
+  trackImage: {
+    methodKind: "unary";
+    input: typeof TrackImageRequestSchema;
+    output: typeof TrackImageResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_idp_build_v1_build, 0);

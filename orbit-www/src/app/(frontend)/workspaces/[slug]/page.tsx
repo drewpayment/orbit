@@ -14,6 +14,7 @@ import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
 import { WorkspaceKnowledgeSection } from '@/components/features/workspace/WorkspaceKnowledgeSection'
 import { WorkspaceTemplatesSection } from '@/components/features/workspace/WorkspaceTemplatesSection'
+import { RegistryQuotaWarning } from '@/components/features/workspace/RegistryQuotaWarning'
 
 interface PageProps {
   params: Promise<{
@@ -191,6 +192,11 @@ export default async function WorkspacePage({ params }: PageProps) {
                 </div>
 
                 <Separator className="mb-8" />
+
+                {/* Registry Quota Warning */}
+                <div className="mb-8">
+                  <RegistryQuotaWarning workspaceId={workspace.id} />
+                </div>
 
                 {/* Workspace Content */}
                 <div className="grid gap-8 lg:grid-cols-3">

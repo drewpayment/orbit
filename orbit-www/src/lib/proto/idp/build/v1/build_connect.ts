@@ -5,7 +5,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AnalyzeRepositoryRequest, AnalyzeRepositoryResponse, BuildImageRequest, BuildImageResponse, GetBuildProgressRequest, GetBuildProgressResponse, StartBuildWorkflowRequest, StartBuildWorkflowResponse, StreamBuildLogsRequest, StreamBuildLogsResponse } from "./build_pb.js";
+import { AnalyzeRepositoryRequest, AnalyzeRepositoryResponse, BuildImageRequest, BuildImageResponse, CheckQuotaRequest, CheckQuotaResponse, GetBuildProgressRequest, GetBuildProgressResponse, StartBuildWorkflowRequest, StartBuildWorkflowResponse, StreamBuildLogsRequest, StreamBuildLogsResponse, TrackImageRequest, TrackImageResponse } from "./build_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -69,6 +69,26 @@ export const BuildService = {
       name: "GetBuildProgress",
       I: GetBuildProgressRequest,
       O: GetBuildProgressResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Quota management
+     *
+     * @generated from rpc idp.build.v1.BuildService.CheckQuotaAndCleanup
+     */
+    checkQuotaAndCleanup: {
+      name: "CheckQuotaAndCleanup",
+      I: CheckQuotaRequest,
+      O: CheckQuotaResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc idp.build.v1.BuildService.TrackImage
+     */
+    trackImage: {
+      name: "TrackImage",
+      I: TrackImageRequest,
+      O: TrackImageResponse,
       kind: MethodKind.Unary,
     },
   }

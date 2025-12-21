@@ -95,9 +95,11 @@ services:
       - BUILD_SERVICE_PORT=50054
       - BUILD_WORK_DIR=/tmp/orbit-builds
       - BUILDKIT_HOST=docker-container://orbit-buildkit
-      - ORBIT_REGISTRY_URL=orbit-registry:5000
-      - ORBIT_REGISTRY_USER=orbit-service
-      - ORBIT_REGISTRY_PASS=orbit-registry-token
+      - ORBIT_REGISTRY_URL=http://orbit-registry:5000
+      - ORBIT_REGISTRY_USERNAME=orbit-service
+      - ORBIT_REGISTRY_PASSWORD=orbit-registry-token
+      - ORBIT_API_URL=http://orbit-www:3000
+      - ORBIT_INTERNAL_API_KEY=${ORBIT_INTERNAL_API_KEY:-orbit-internal-dev-key}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - build-workdir:/tmp/orbit-builds
