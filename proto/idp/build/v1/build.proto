@@ -154,6 +154,7 @@ message StartBuildWorkflowRequest {
   optional string start_command = 9;
   map<string, string> build_env = 10;
   string image_tag = 11;              // Tag for the built image
+  string installation_token = 12;     // GitHub App installation token for repo cloning
 }
 
 // StartBuildWorkflowResponse contains the workflow ID

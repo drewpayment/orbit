@@ -47,11 +47,12 @@ type BuildWorkflowInput struct {
 	Ref         string              `json:"ref"`
 	Registry    BuildRegistryConfig `json:"registry"`
 	// Optional overrides
-	LanguageVersion string            `json:"languageVersion,omitempty"`
-	BuildCommand    string            `json:"buildCommand,omitempty"`
-	StartCommand    string            `json:"startCommand,omitempty"`
-	BuildEnv        map[string]string `json:"buildEnv,omitempty"`
-	ImageTag        string            `json:"imageTag,omitempty"`
+	LanguageVersion   string            `json:"languageVersion,omitempty"`
+	BuildCommand      string            `json:"buildCommand,omitempty"`
+	StartCommand      string            `json:"startCommand,omitempty"`
+	BuildEnv          map[string]string `json:"buildEnv,omitempty"`
+	ImageTag          string            `json:"imageTag,omitempty"`
+	InstallationToken string            `json:"installationToken,omitempty"` // GitHub App token for repo cloning
 }
 
 // BuildRegistryConfig contains registry configuration

@@ -73,6 +73,8 @@ func (s *BuildServer) StartBuildWorkflow(ctx context.Context, req *connect.Reque
 		registryType = "ghcr"
 	case buildv1.RegistryType_REGISTRY_TYPE_ACR:
 		registryType = "acr"
+	case buildv1.RegistryType_REGISTRY_TYPE_ORBIT:
+		registryType = "orbit"
 	default:
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unsupported registry type"))
 	}
@@ -98,14 +100,15 @@ func (s *BuildServer) StartBuildWorkflow(ctx context.Context, req *connect.Reque
 
 	// Create workflow input
 	workflowInput := &types.BuildWorkflowInput{
-		AppID:       msg.AppId,
-		WorkspaceID: msg.WorkspaceId,
-		UserID:      msg.UserId,
-		RepoURL:     msg.RepoUrl,
-		Ref:         ref,
-		Registry:    registryConfig,
-		BuildEnv:    msg.BuildEnv,
-		ImageTag:    imageTag,
+		AppID:             msg.AppId,
+		WorkspaceID:       msg.WorkspaceId,
+		UserID:            msg.UserId,
+		RepoURL:           msg.RepoUrl,
+		Ref:               ref,
+		Registry:          registryConfig,
+		BuildEnv:          msg.BuildEnv,
+		ImageTag:          imageTag,
+		InstallationToken: msg.InstallationToken,
 	}
 
 	// Handle optional overrides

@@ -922,13 +922,14 @@ type StartBuildWorkflowRequest struct {
 	Ref         string                 `protobuf:"bytes,5,opt,name=ref,proto3" json:"ref,omitempty"`                                    // Branch, tag, or commit SHA (default: main)
 	Registry    *RegistryConfig        `protobuf:"bytes,6,opt,name=registry,proto3" json:"registry,omitempty"`                          // Registry configuration
 	// Optional build overrides
-	LanguageVersion *string           `protobuf:"bytes,7,opt,name=language_version,json=languageVersion,proto3,oneof" json:"language_version,omitempty"`
-	BuildCommand    *string           `protobuf:"bytes,8,opt,name=build_command,json=buildCommand,proto3,oneof" json:"build_command,omitempty"`
-	StartCommand    *string           `protobuf:"bytes,9,opt,name=start_command,json=startCommand,proto3,oneof" json:"start_command,omitempty"`
-	BuildEnv        map[string]string `protobuf:"bytes,10,rep,name=build_env,json=buildEnv,proto3" json:"build_env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	ImageTag        string            `protobuf:"bytes,11,opt,name=image_tag,json=imageTag,proto3" json:"image_tag,omitempty"` // Tag for the built image
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	LanguageVersion   *string           `protobuf:"bytes,7,opt,name=language_version,json=languageVersion,proto3,oneof" json:"language_version,omitempty"`
+	BuildCommand      *string           `protobuf:"bytes,8,opt,name=build_command,json=buildCommand,proto3,oneof" json:"build_command,omitempty"`
+	StartCommand      *string           `protobuf:"bytes,9,opt,name=start_command,json=startCommand,proto3,oneof" json:"start_command,omitempty"`
+	BuildEnv          map[string]string `protobuf:"bytes,10,rep,name=build_env,json=buildEnv,proto3" json:"build_env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	ImageTag          string            `protobuf:"bytes,11,opt,name=image_tag,json=imageTag,proto3" json:"image_tag,omitempty"`                            // Tag for the built image
+	InstallationToken string            `protobuf:"bytes,12,opt,name=installation_token,json=installationToken,proto3" json:"installation_token,omitempty"` // GitHub App installation token for repo cloning
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *StartBuildWorkflowRequest) Reset() {
@@ -1034,6 +1035,13 @@ func (x *StartBuildWorkflowRequest) GetBuildEnv() map[string]string {
 func (x *StartBuildWorkflowRequest) GetImageTag() string {
 	if x != nil {
 		return x.ImageTag
+	}
+	return ""
+}
+
+func (x *StartBuildWorkflowRequest) GetInstallationToken() string {
+	if x != nil {
+		return x.InstallationToken
 	}
 	return ""
 }
@@ -1664,7 +1672,7 @@ const file_idp_build_v1_build_proto_rawDesc = "" +
 	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\x12\x14\n" +
 	"\x05level\x18\x02 \x01(\tR\x05level\x12\x18\n" +
 	"\amessage\x18\x03 \x01(\tR\amessage\x12\x12\n" +
-	"\x04step\x18\x04 \x01(\tR\x04step\"\xc0\x04\n" +
+	"\x04step\x18\x04 \x01(\tR\x04step\"\xef\x04\n" +
 	"\x19StartBuildWorkflowRequest\x12\x15\n" +
 	"\x06app_id\x18\x01 \x01(\tR\x05appId\x12!\n" +
 	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12\x17\n" +
@@ -1677,7 +1685,8 @@ const file_idp_build_v1_build_proto_rawDesc = "" +
 	"\rstart_command\x18\t \x01(\tH\x02R\fstartCommand\x88\x01\x01\x12R\n" +
 	"\tbuild_env\x18\n" +
 	" \x03(\v25.idp.build.v1.StartBuildWorkflowRequest.BuildEnvEntryR\bbuildEnv\x12\x1b\n" +
-	"\timage_tag\x18\v \x01(\tR\bimageTag\x1a;\n" +
+	"\timage_tag\x18\v \x01(\tR\bimageTag\x12-\n" +
+	"\x12installation_token\x18\f \x01(\tR\x11installationToken\x1a;\n" +
 	"\rBuildEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x13\n" +

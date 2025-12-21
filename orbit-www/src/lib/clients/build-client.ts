@@ -44,6 +44,7 @@ export interface StartBuildParams {
   startCommand?: string
   buildEnv?: Record<string, string>
   imageTag?: string
+  installationToken?: string  // GitHub App installation token for repo cloning
 }
 
 /**
@@ -77,6 +78,7 @@ export async function startBuildWorkflow(
       startCommand: params.startCommand,
       buildEnv: params.buildEnv || {},
       imageTag: params.imageTag || 'latest',
+      installationToken: params.installationToken || '',
     })
 
     return await buildClient.startBuildWorkflow(request)

@@ -19,11 +19,12 @@ type BuildWorkflowInput struct {
 	Ref         string              `json:"ref"`
 	Registry    BuildRegistryConfig `json:"registry"`
 	// Optional overrides
-	LanguageVersion string            `json:"languageVersion,omitempty"`
-	BuildCommand    string            `json:"buildCommand,omitempty"`
-	StartCommand    string            `json:"startCommand,omitempty"`
-	BuildEnv        map[string]string `json:"buildEnv,omitempty"`
-	ImageTag        string            `json:"imageTag,omitempty"`
+	LanguageVersion   string            `json:"languageVersion,omitempty"`
+	BuildCommand      string            `json:"buildCommand,omitempty"`
+	StartCommand      string            `json:"startCommand,omitempty"`
+	BuildEnv          map[string]string `json:"buildEnv,omitempty"`
+	ImageTag          string            `json:"imageTag,omitempty"`
+	InstallationToken string            `json:"installationToken,omitempty"` // GitHub App token for repo cloning
 }
 
 type BuildRegistryConfig struct {
@@ -229,10 +230,16 @@ func BuildWorkflow(ctx workflow.Context, input BuildWorkflowInput) (*BuildWorkfl
 	progress.StepsCurrent = 2
 	progress.Message = "Detecting language and framework"
 
+	// Use InstallationToken if provided (new flow), otherwise fallback to Registry.Token (legacy)
+	installToken := input.InstallationToken
+	if installToken == "" {
+		installToken = input.Registry.Token
+	}
+
 	analyzeInput := AnalyzeRepositoryInput{
 		RepoURL:           input.RepoURL,
 		Ref:               input.Ref,
-		InstallationToken: input.Registry.Token, // Use registry token (GitHub token for GHCR)
+		InstallationToken: installToken,
 	}
 	var analyzeResult types.AnalyzeRepositoryResult
 	err = workflow.ExecuteActivity(ctx, ActivityAnalyzeRepository, analyzeInput).Get(ctx, &analyzeResult)
@@ -425,7 +432,7 @@ func BuildWorkflow(ctx workflow.Context, input BuildWorkflowInput) (*BuildWorkfl
 		AppID:             input.AppID,
 		RepoURL:           input.RepoURL,
 		Ref:               input.Ref,
-		InstallationToken: input.Registry.Token, // Use registry token (GitHub token for GHCR)
+		InstallationToken: installToken, // GitHub App token for repo cloning
 		LanguageVersion:   languageVersion,
 		BuildCommand:      buildCommand,
 		StartCommand:      startCommand,
