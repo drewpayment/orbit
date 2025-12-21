@@ -293,16 +293,18 @@ func (b *Builder) loginToRegistry(ctx context.Context, req *BuildRequest) error 
 		cmd.Stdin = strings.NewReader(req.Registry.Token)
 
 	case RegistryTypeOrbit:
-		// For Orbit registry, use environment variables
-		username := os.Getenv("ORBIT_REGISTRY_USER")
-		password := os.Getenv("ORBIT_REGISTRY_PASS")
-		if username == "" || password == "" {
-			return fmt.Errorf("ORBIT_REGISTRY_USER and ORBIT_REGISTRY_PASS environment variables must be set")
+		// For Orbit registry, use token if provided, otherwise skip login (for local dev without auth)
+		if req.Registry.Token != "" && req.Registry.Token != "orbit-registry-token" {
+			// Use provided token for authentication
+			cmd = exec.CommandContext(ctx, "docker", "login", req.Registry.URL,
+				"-u", "orbit",
+				"--password-stdin")
+			cmd.Stdin = strings.NewReader(req.Registry.Token)
+		} else {
+			// No auth required for local development - skip docker login
+			b.logger.Info("Skipping Orbit registry login (no auth configured)")
+			return nil
 		}
-		cmd = exec.CommandContext(ctx, "docker", "login", req.Registry.URL,
-			"-u", username,
-			"--password-stdin")
-		cmd.Stdin = strings.NewReader(password)
 
 	default:
 		return fmt.Errorf("unsupported registry type: %s", req.Registry.Type)

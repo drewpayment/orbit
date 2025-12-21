@@ -7,8 +7,8 @@ import { auth } from '@/lib/auth'
 import { decrypt } from '@/lib/encryption'
 import { getTemporalClient } from '@/lib/temporal/client'
 import { resolveEnvironmentVariables } from './environment-variables'
-import { createInstallationToken } from '@/lib/github/octokit'
 
+// Use localhost since Docker daemon runs on host and registry is exposed at localhost:5050
 const ORBIT_REGISTRY_URL = process.env.ORBIT_REGISTRY_URL || 'localhost:5050'
 
 interface StartBuildInput {
@@ -70,11 +70,12 @@ export async function startBuild(input: StartBuildInput) {
   let useOrbitRegistry = false
 
   if (app.registryConfig) {
+    // Use overrideAccess to read protected fields like ghcrPat
     registryConfig = typeof app.registryConfig === 'string'
-      ? await payload.findByID({ collection: 'registry-configs', id: app.registryConfig })
-      : app.registryConfig
+      ? await payload.findByID({ collection: 'registry-configs', id: app.registryConfig, overrideAccess: true })
+      : await payload.findByID({ collection: 'registry-configs', id: app.registryConfig.id, overrideAccess: true })
   } else {
-    // Find workspace default
+    // Find workspace default (use overrideAccess to read protected fields like ghcrPat)
     const defaults = await payload.find({
       collection: 'registry-configs',
       where: {
@@ -84,6 +85,7 @@ export async function startBuild(input: StartBuildInput) {
         ],
       },
       limit: 1,
+      overrideAccess: true,
     })
     if (defaults.docs.length > 0) {
       registryConfig = defaults.docs[0]
@@ -141,33 +143,16 @@ export async function startBuild(input: StartBuildInput) {
       return { success: false, error: 'GitHub installation ID not available.' }
     }
 
-    // For GHCR builds, we need a fresh token with packages:write permission
-    // The stored token may not have this permission
-    const needsPackagesPermission = registryConfig?.type === 'ghcr' && !useOrbitRegistry
-    let githubToken: string
-
-    console.log('[Build] Registry type:', useOrbitRegistry ? 'orbit' : registryConfig?.type, 'needsPackagesPermission:', needsPackagesPermission)
+    // Get GitHub installation token for repo cloning
+    // Note: Registry auth uses PAT (for GHCR) or service credentials (for Orbit/ACR), not this token
+    console.log('[Build] Registry type:', useOrbitRegistry ? 'orbit' : registryConfig?.type)
     console.log('[Build] Installation ID:', installationId, 'type:', typeof installationId)
 
-    if (needsPackagesPermission) {
-      // Get a fresh installation token with packages:write permission for GHCR
-      try {
-        console.log('[Build] Requesting fresh token with packages:write permission...')
-        const freshToken = await createInstallationToken(installationId, { includePackages: true })
-        githubToken = freshToken.token
-        console.log('[Build] Created fresh installation token with packages:write permission, token length:', githubToken.length)
-      } catch (error) {
-        console.error('[Build] Failed to create installation token with packages permission:', error)
-        return { success: false, error: 'Failed to create GitHub token with packages permission. Ensure the GitHub App has packages:write permission.' }
-      }
-    } else {
-      // Use the cached token for non-GHCR builds
-      const cachedToken = decrypt(installation.docs[0].installationToken as string)
-      if (!cachedToken) {
-        return { success: false, error: 'GitHub installation token not available. Please refresh the GitHub App installation.' }
-      }
-      githubToken = cachedToken
+    const cachedToken = decrypt(installation.docs[0].installationToken as string)
+    if (!cachedToken) {
+      return { success: false, error: 'GitHub installation token not available. Please refresh the GitHub App installation.' }
     }
+    const githubToken = cachedToken
 
     // Determine registry URL and repository path
     let registryUrl: string
@@ -177,6 +162,14 @@ export async function startBuild(input: StartBuildInput) {
 
     // Type assertion needed because auto-generated types don't include 'orbit' yet
     const registryType = registryConfig?.type as 'ghcr' | 'acr' | 'orbit' | undefined
+
+    // Debug: log registry config state
+    console.log('[Build] Registry config:', {
+      type: registryType,
+      hasGhcrPat: !!registryConfig?.ghcrPat,
+      ghcrPatLength: registryConfig?.ghcrPat?.length || 0,
+      useOrbitRegistry,
+    })
 
     if (useOrbitRegistry || registryType === 'orbit') {
       // Using Orbit registry (as fallback or explicit selection)
@@ -189,10 +182,39 @@ export async function startBuild(input: StartBuildInput) {
       repositoryPath = `${workspaceSlug}/${app.name.toLowerCase().replace(/\s+/g, '-')}`
       registryToken = process.env.ORBIT_REGISTRY_TOKEN || 'orbit-registry-token'
     } else if (registryType === 'ghcr') {
-      registryUrl = 'ghcr.io'
-      repositoryPath = `${registryConfig?.ghcrOwner}/${app.name.toLowerCase().replace(/\s+/g, '-')}`
-      // Use GitHub installation token for GHCR authentication
-      registryToken = githubToken
+      // GHCR requires a PAT with write:packages scope - GitHub App installation tokens CANNOT push to GHCR
+      if (!registryConfig?.ghcrPat) {
+        // No PAT configured - check if Orbit registry fallback is allowed
+        const workspace = typeof app.workspace === 'string'
+          ? await payload.findByID({ collection: 'workspaces', id: app.workspace, depth: 0 })
+          : app.workspace
+        const allowOrbitRegistry = (workspace?.settings as any)?.allowOrbitRegistry !== false
+
+        if (allowOrbitRegistry) {
+          // Fall back to Orbit registry since no GHCR PAT is configured
+          console.log('[Build] No GHCR PAT configured, falling back to Orbit registry')
+          const workspaceSlug = workspace?.slug || 'default'
+          registryUrl = ORBIT_REGISTRY_URL
+          repositoryPath = `${workspaceSlug}/${app.name.toLowerCase().replace(/\s+/g, '-')}`
+          registryToken = process.env.ORBIT_REGISTRY_TOKEN || 'orbit-registry-token'
+          useOrbitRegistry = true
+        } else {
+          return {
+            success: false,
+            error: 'GHCR requires a Personal Access Token (PAT) with write:packages scope. Please add a PAT in registry settings, or enable Orbit Registry as a fallback.'
+          }
+        }
+      } else {
+        // Use the GHCR PAT for authentication
+        registryUrl = 'ghcr.io'
+        repositoryPath = `${registryConfig?.ghcrOwner}/${app.name.toLowerCase().replace(/\s+/g, '-')}`
+        const decryptedPat = decrypt(registryConfig.ghcrPat)
+        if (!decryptedPat) {
+          return { success: false, error: 'Failed to decrypt GHCR PAT. Please re-enter your token in registry settings.' }
+        }
+        registryToken = decryptedPat
+        console.log('[Build] Using GHCR PAT for registry authentication')
+      }
     } else if (registryType === 'acr') {
       // ACR
       registryUrl = registryConfig?.acrLoginServer || ''
@@ -248,6 +270,7 @@ export async function startBuild(input: StartBuildInput) {
       startCommand: input.startCommand,
       buildEnv,
       imageTag: input.imageTag || 'latest',
+      installationToken: githubToken, // GitHub App token for repo cloning
     })
 
     if (!result.success) {
