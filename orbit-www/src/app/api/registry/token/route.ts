@@ -19,7 +19,17 @@ export async function GET(request: NextRequest) {
 
     const base64Credentials = authHeader.slice(6)
     const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8')
-    const [username, password] = credentials.split(':')
+
+    // Handle colons in password by only splitting on first colon
+    const colonIndex = credentials.indexOf(':')
+    if (colonIndex === -1) {
+      return NextResponse.json(
+        { error: 'Invalid credentials format' },
+        { status: 401 }
+      )
+    }
+    const username = credentials.substring(0, colonIndex)
+    const password = credentials.substring(colonIndex + 1)
 
     if (username !== 'orbit-pull' || !password) {
       return NextResponse.json(
