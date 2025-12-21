@@ -1,5 +1,10 @@
 // Vitest setup
 import '@testing-library/jest-dom/vitest';
+import { TextEncoder, TextDecoder } from 'util';
+
+// Polyfill TextEncoder/TextDecoder for jose library
+global.TextEncoder = TextEncoder;
+global.TextDecoder = TextDecoder as any;
 
 // Mock ResizeObserver for components that use ScrollArea
 global.ResizeObserver = class ResizeObserver {
