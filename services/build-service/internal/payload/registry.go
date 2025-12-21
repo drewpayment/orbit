@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -24,6 +25,8 @@ func NewRegistryClient(baseURL, apiKey string, logger *slog.Logger) *RegistryCli
 	if logger == nil {
 		logger = slog.Default()
 	}
+	// Normalize baseURL by removing trailing slash
+	baseURL = strings.TrimSuffix(baseURL, "/")
 	return &RegistryClient{
 		baseURL:    baseURL,
 		apiKey:     apiKey,
@@ -52,6 +55,10 @@ type RegistryImage struct {
 
 // GetRegistryUsage fetches current registry usage for a workspace
 func (c *RegistryClient) GetRegistryUsage(ctx context.Context, workspaceID string) (*RegistryUsage, error) {
+	if workspaceID == "" {
+		return nil, fmt.Errorf("workspaceID is required")
+	}
+
 	url := fmt.Sprintf("%s/api/internal/workspaces/%s/registry-usage", c.baseURL, workspaceID)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -60,7 +67,6 @@ func (c *RegistryClient) GetRegistryUsage(ctx context.Context, workspaceID strin
 	}
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiKey))
-	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -69,7 +75,7 @@ func (c *RegistryClient) GetRegistryUsage(ctx context.Context, workspaceID strin
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024)) // 1MB limit
 		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -83,6 +89,10 @@ func (c *RegistryClient) GetRegistryUsage(ctx context.Context, workspaceID strin
 
 // GetRegistryImages fetches all registry images for a workspace
 func (c *RegistryClient) GetRegistryImages(ctx context.Context, workspaceID string) ([]RegistryImage, error) {
+	if workspaceID == "" {
+		return nil, fmt.Errorf("workspaceID is required")
+	}
+
 	url := fmt.Sprintf("%s/api/internal/workspaces/%s/registry-images", c.baseURL, workspaceID)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -91,7 +101,6 @@ func (c *RegistryClient) GetRegistryImages(ctx context.Context, workspaceID stri
 	}
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiKey))
-	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -100,7 +109,7 @@ func (c *RegistryClient) GetRegistryImages(ctx context.Context, workspaceID stri
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024)) // 1MB limit
 		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -114,6 +123,10 @@ func (c *RegistryClient) GetRegistryImages(ctx context.Context, workspaceID stri
 
 // CreateRegistryImage creates or updates a registry image record
 func (c *RegistryClient) CreateRegistryImage(ctx context.Context, image RegistryImage) error {
+	if image.Workspace == "" || image.App == "" || image.Tag == "" {
+		return fmt.Errorf("workspace, app, and tag are required fields")
+	}
+
 	url := fmt.Sprintf("%s/api/internal/registry-images", c.baseURL)
 
 	body, err := json.Marshal(image)
@@ -136,7 +149,7 @@ func (c *RegistryClient) CreateRegistryImage(ctx context.Context, image Registry
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024)) // 1MB limit
 		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -145,6 +158,10 @@ func (c *RegistryClient) CreateRegistryImage(ctx context.Context, image Registry
 
 // DeleteRegistryImage deletes a registry image record
 func (c *RegistryClient) DeleteRegistryImage(ctx context.Context, imageID string) error {
+	if imageID == "" {
+		return fmt.Errorf("imageID is required")
+	}
+
 	url := fmt.Sprintf("%s/api/internal/registry-images/%s", c.baseURL, imageID)
 
 	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
@@ -161,7 +178,7 @@ func (c *RegistryClient) DeleteRegistryImage(ctx context.Context, imageID string
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024)) // 1MB limit
 		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
 	}
 
