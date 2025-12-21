@@ -66,7 +66,7 @@ func (c *RegistryClient) GetRegistryUsage(ctx context.Context, workspaceID strin
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiKey))
+	req.Header.Set("X-API-Key", c.apiKey)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -100,7 +100,7 @@ func (c *RegistryClient) GetRegistryImages(ctx context.Context, workspaceID stri
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiKey))
+	req.Header.Set("X-API-Key", c.apiKey)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -139,7 +139,7 @@ func (c *RegistryClient) CreateRegistryImage(ctx context.Context, image Registry
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiKey))
+	req.Header.Set("X-API-Key", c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
@@ -169,7 +169,7 @@ func (c *RegistryClient) DeleteRegistryImage(ctx context.Context, imageID string
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiKey))
+	req.Header.Set("X-API-Key", c.apiKey)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
