@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // Client interfaces with Docker Registry v2 API
@@ -15,6 +16,8 @@ type Client struct {
 	baseURL    string
 	httpClient *http.Client
 	logger     *slog.Logger
+	username   string
+	password   string
 }
 
 // NewClient creates a new registry client
@@ -26,8 +29,24 @@ func NewClient(baseURL string, logger *slog.Logger) *Client {
 	baseURL = strings.TrimSuffix(baseURL, "/")
 	return &Client{
 		baseURL:    baseURL,
-		httpClient: &http.Client{},
+		httpClient: &http.Client{Timeout: 30 * time.Second},
 		logger:     logger,
+	}
+}
+
+// NewClientWithAuth creates a new registry client with authentication
+func NewClientWithAuth(baseURL, username, password string, logger *slog.Logger) *Client {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	// Ensure URL doesn't have trailing slash
+	baseURL = strings.TrimSuffix(baseURL, "/")
+	return &Client{
+		baseURL:    baseURL,
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		logger:     logger,
+		username:   username,
+		password:   password,
 	}
 }
 
@@ -42,13 +61,18 @@ type ManifestInfo struct {
 func (c *Client) GetManifest(ctx context.Context, repository, tag string) (*ManifestInfo, error) {
 	url := fmt.Sprintf("%s/v2/%s/manifests/%s", c.baseURL, repository, tag)
 
-	req, err := http.NewRequestWithContext(ctx, "HEAD", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	// Accept manifest types
 	req.Header.Set("Accept", "application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json")
+
+	// Add authentication if configured
+	if c.username != "" {
+		req.SetBasicAuth(c.username, c.password)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -63,7 +87,13 @@ func (c *Client) GetManifest(ctx context.Context, repository, tag string) (*Mani
 		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
 	}
 
+	// Discard body after reading headers
+	_, _ = io.Copy(io.Discard, resp.Body)
+
 	digest := resp.Header.Get("Docker-Content-Digest")
+	if digest == "" {
+		return nil, fmt.Errorf("no Docker-Content-Digest header in response")
+	}
 	contentLength := resp.ContentLength
 	mediaType := resp.Header.Get("Content-Type")
 
@@ -85,6 +115,11 @@ func (c *Client) ImageSize(ctx context.Context, repository, tag string) (int64, 
 
 	req.Header.Set("Accept", "application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json")
 
+	// Add authentication if configured
+	if c.username != "" {
+		req.SetBasicAuth(c.username, c.password)
+	}
+
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return 0, fmt.Errorf("failed to fetch manifest: %w", err)
@@ -95,7 +130,8 @@ func (c *Client) ImageSize(ctx context.Context, repository, tag string) (int64, 
 		return 0, fmt.Errorf("unexpected status: %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	// Limit response body to 10MB to prevent memory exhaustion
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
 	if err != nil {
 		return 0, fmt.Errorf("failed to read response: %w", err)
 	}
@@ -128,6 +164,11 @@ func (c *Client) DeleteManifest(ctx context.Context, repository, digest string) 
 	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Add authentication if configured
+	if c.username != "" {
+		req.SetBasicAuth(c.username, c.password)
 	}
 
 	resp, err := c.httpClient.Do(req)
