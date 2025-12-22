@@ -76,9 +76,19 @@ export default async function WorkspacePage({ params }: PageProps) {
     membershipStatus = await checkMembershipStatus(workspace.id, session.user.id)
   }
 
-  const ownerMembers = members.filter(m => m.role === 'owner')
-  const adminMembers = members.filter(m => m.role === 'admin')
-  const regularMembers = members.filter(m => m.role === 'member')
+  // Extract members for simplified display
+  const memberUsers = members
+    .map((m) => {
+      const user = typeof m.user === 'object' ? m.user : null
+      if (!user) return null
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        avatar: user.avatar && typeof user.avatar === 'object' ? user.avatar : null,
+      }
+    })
+    .filter((u): u is NonNullable<typeof u> => u !== null)
 
   // Extract parent and child workspaces
   const parentWorkspace = workspace.parentWorkspace && typeof workspace.parentWorkspace === 'object' 
@@ -186,282 +196,152 @@ export default async function WorkspacePage({ params }: PageProps) {
         <SiteHeader />
         <div className="flex flex-1 flex-col gap-4 p-8">
           <div className="container mx-auto">
-                {/* Workspace Header */}
-                <div className="mb-8">
-                  <div className="flex items-start gap-6">
-                    {workspace.avatar && typeof workspace.avatar === 'object' && 'url' in workspace.avatar && workspace.avatar.url && (
-                      <Avatar className="h-24 w-24">
-                        <AvatarImage src={workspace.avatar.url} alt={workspace.name} />
-                        <AvatarFallback>{workspace.name.slice(0, 2).toUpperCase()}</AvatarFallback>
-                      </Avatar>
+            {/* Workspace Header */}
+            <div className="mb-8">
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-6">
+                  {workspace.avatar && typeof workspace.avatar === 'object' && 'url' in workspace.avatar && workspace.avatar.url && (
+                    <Avatar className="h-16 w-16">
+                      <AvatarImage src={workspace.avatar.url} alt={workspace.name} />
+                      <AvatarFallback>{workspace.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                  )}
+                  <div>
+                    <h1 className="text-4xl font-bold text-foreground">
+                      {workspace.name}
+                    </h1>
+                    <p className="text-lg text-muted-foreground">
+                      /{workspace.slug}
+                    </p>
+                    {workspace.description && (
+                      <p className="text-muted-foreground mt-2 max-w-2xl">{workspace.description}</p>
                     )}
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h1 className="text-4xl font-bold text-gray-900 dark:text-white">
-                          {workspace.name}
-                        </h1>
-                      </div>
-                      <p className="text-lg text-gray-600 dark:text-gray-400 mb-4">
-                        /{workspace.slug}
-                      </p>
-                      {workspace.description && (
-                        <p className="text-gray-700 dark:text-gray-300">{workspace.description}</p>
-                      )}
-                    </div>
-                    <WorkspaceClient workspaceId={workspace.id} membershipStatus={membershipStatus} />
                   </div>
                 </div>
-
-                <Separator className="mb-8" />
-
-                {/* Registry Quota Warning */}
-                <div className="mb-8">
-                  <RegistryQuotaWarning workspaceId={workspace.id} />
-                </div>
-
-                {/* Workspace Content */}
-                <div className="grid gap-8 lg:grid-cols-3">
-                  <div className="lg:col-span-2 space-y-8">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Welcome</CardTitle>
-                        <CardDescription>
-                          This workspace is part of the Orbit Internal Developer Portal
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="text-gray-700 dark:text-gray-300">
-                          This is the default landing page for the <strong>{workspace.name}</strong> workspace.
-                          Workspace members can customize this page with wikis, documentation, and other
-                          content to help their team collaborate effectively.
-                        </p>
-                      </CardContent>
-                    </Card>
-
-                    {/* Knowledge Section */}
-                    <WorkspaceKnowledgeSection
-                      workspaceSlug={workspace.slug}
-                      spaces={knowledgeSpaces}
-                      canManage={canManageKnowledge}
-                    />
-
-                    {/* Templates Section */}
-                    <WorkspaceTemplatesSection
-                      workspaceSlug={workspace.slug}
-                      workspaceId={workspace.id}
-                      templates={workspaceTemplates}
-                      canManage={canManageTemplates}
-                    />
-                  </div>
-
-                  <div className="space-y-8">
-                    {/* Hierarchy Card */}
-                    {(parentWorkspace || childWorkspaces.length > 0) && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>Workspace Hierarchy</CardTitle>
-                          <CardDescription>
-                            Related workspaces
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="space-y-4">
-                            {parentWorkspace && (
-                              <div>
-                                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2">
-                                  Parent Workspace
-                                </p>
-                                <Link
-                                  href={`/workspaces/${parentWorkspace.slug}`}
-                                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                                >
-                                  {parentWorkspace.avatar && typeof parentWorkspace.avatar === 'object' && 'url' in parentWorkspace.avatar && parentWorkspace.avatar.url && (
-                                    <Avatar className="h-8 w-8">
-                                      <AvatarImage src={parentWorkspace.avatar.url} alt={parentWorkspace.name} />
-                                      <AvatarFallback>
-                                        {parentWorkspace.name.slice(0, 2).toUpperCase()}
-                                      </AvatarFallback>
-                                    </Avatar>
-                                  )}
-                                  {(!parentWorkspace.avatar || typeof parentWorkspace.avatar !== 'object') && (
-                                    <Avatar className="h-8 w-8">
-                                      <AvatarFallback>
-                                        {parentWorkspace.name.slice(0, 2).toUpperCase()}
-                                      </AvatarFallback>
-                                    </Avatar>
-                                  )}
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate">
-                                      {parentWorkspace.name}
-                                    </p>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                                      /{parentWorkspace.slug}
-                                    </p>
-                                  </div>
-                                </Link>
-                              </div>
-                            )}
-
-                            {childWorkspaces.length > 0 && (
-                              <div>
-                                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2">
-                                  Child Workspaces ({childWorkspaces.length})
-                                </p>
-                                <div className="space-y-1">
-                                  {childWorkspaces.map((child) => (
-                                    <Link
-                                      key={child.id}
-                                      href={`/workspaces/${child.slug}`}
-                                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                                    >
-                                      {child.avatar && typeof child.avatar === 'object' && 'url' in child.avatar && child.avatar.url && (
-                                        <Avatar className="h-8 w-8">
-                                          <AvatarImage src={child.avatar.url} alt={child.name} />
-                                          <AvatarFallback>
-                                            {child.name.slice(0, 2).toUpperCase()}
-                                          </AvatarFallback>
-                                        </Avatar>
-                                      )}
-                                      {(!child.avatar || typeof child.avatar !== 'object') && (
-                                        <Avatar className="h-8 w-8">
-                                          <AvatarFallback>
-                                            {child.name.slice(0, 2).toUpperCase()}
-                                          </AvatarFallback>
-                                        </Avatar>
-                                      )}
-                                      <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium truncate">
-                                          {child.name}
-                                        </p>
-                                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                                          /{child.slug}
-                                        </p>
-                                      </div>
-                                    </Link>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Members Card */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Members ({members.length})</CardTitle>
-                        <CardDescription>
-                          People in this workspace
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
-                          {ownerMembers.length > 0 && (
-                            <div>
-                              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2">
-                                Owners
-                              </p>
-                              <div className="space-y-2">
-                                {ownerMembers.map((member) => {
-                                  const user = typeof member.user === 'object' ? member.user : null
-                                  if (!user) return null
-                                  return (
-                                    <div key={member.id} className="flex items-center gap-3">
-                                      <Avatar className="h-8 w-8">
-                                        {user.avatar && typeof user.avatar === 'object' && 'url' in user.avatar && user.avatar.url && (
-                                          <AvatarImage src={user.avatar.url} />
-                                        )}
-                                        <AvatarFallback>
-                                          {(user.name || user.email)?.slice(0, 2).toUpperCase()}
-                                        </AvatarFallback>
-                                      </Avatar>
-                                      <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium truncate">
-                                          {user.name || user.email}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          )}
-
-                          {adminMembers.length > 0 && (
-                            <div>
-                              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2">
-                                Admins
-                              </p>
-                              <div className="space-y-2">
-                                {adminMembers.map((member) => {
-                                  const user = typeof member.user === 'object' ? member.user : null
-                                  if (!user) return null
-                                  return (
-                                    <div key={member.id} className="flex items-center gap-3">
-                                      <Avatar className="h-8 w-8">
-                                        {user.avatar && typeof user.avatar === 'object' && 'url' in user.avatar && user.avatar.url && (
-                                          <AvatarImage src={user.avatar.url} />
-                                        )}
-                                        <AvatarFallback>
-                                          {(user.name || user.email)?.slice(0, 2).toUpperCase()}
-                                        </AvatarFallback>
-                                      </Avatar>
-                                      <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium truncate">
-                                          {user.name || user.email}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          )}
-
-                          {regularMembers.length > 0 && (
-                            <div>
-                              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2">
-                                Members
-                              </p>
-                              <div className="space-y-2">
-                                {regularMembers.slice(0, 5).map((member) => {
-                                  const user = typeof member.user === 'object' ? member.user : null
-                                  if (!user) return null
-                                  return (
-                                    <div key={member.id} className="flex items-center gap-3">
-                                      <Avatar className="h-8 w-8">
-                                        {user.avatar && typeof user.avatar === 'object' && 'url' in user.avatar && user.avatar.url && (
-                                          <AvatarImage src={user.avatar.url} />
-                                        )}
-                                        <AvatarFallback>
-                                          {(user.name || user.email)?.slice(0, 2).toUpperCase()}
-                                        </AvatarFallback>
-                                      </Avatar>
-                                      <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium truncate">
-                                          {user.name || user.email}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  )
-                                })}
-                                {regularMembers.length > 5 && (
-                                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                                    +{regularMembers.length - 5} more
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
+                <div className="flex items-center gap-3">
+                  {membershipStatus?.role && (
+                    <Badge variant="secondary">{membershipStatus.role}</Badge>
+                  )}
+                  <WorkspaceClient workspaceId={workspace.id} membershipStatus={membershipStatus} />
                 </div>
               </div>
             </div>
-          </SidebarInset>
-      </SidebarProvider>
+
+            {/* Registry Quota Warning */}
+            <div className="mb-8">
+              <RegistryQuotaWarning workspaceId={workspace.id} />
+            </div>
+
+            {/* 3-Column Dashboard Layout */}
+            <div className="grid gap-6 lg:grid-cols-[1fr_1fr_280px]">
+              {/* Left Column - Applications */}
+              <div className="space-y-6">
+                <WorkspaceApplicationsCard apps={appsResult.docs} />
+              </div>
+
+              {/* Middle Column - Registries + Recent Docs */}
+              <div className="space-y-6">
+                <WorkspaceRegistriesCard
+                  images={registryImages}
+                  workspaceSlug={workspace.slug}
+                />
+                <WorkspaceRecentDocsCard
+                  docs={recentDocs}
+                  workspaceSlug={workspace.slug}
+                />
+              </div>
+
+              {/* Right Column - Sidebar Cards */}
+              <div className="space-y-6">
+                {/* Hierarchy Card */}
+                {(parentWorkspace || childWorkspaces.length > 0) && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">Workspace Hierarchy</CardTitle>
+                      <CardDescription>Related workspaces</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {parentWorkspace && (
+                          <div>
+                            <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">
+                              Parent Workspace
+                            </p>
+                            <Link
+                              href={`/workspaces/${parentWorkspace.slug}`}
+                              className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors"
+                            >
+                              <Avatar className="h-8 w-8">
+                                {parentWorkspace.avatar && typeof parentWorkspace.avatar === 'object' && 'url' in parentWorkspace.avatar && parentWorkspace.avatar.url && (
+                                  <AvatarImage src={parentWorkspace.avatar.url} alt={parentWorkspace.name} />
+                                )}
+                                <AvatarFallback>
+                                  {parentWorkspace.name.slice(0, 2).toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">
+                                  {parentWorkspace.name}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  /{parentWorkspace.slug}
+                                </p>
+                              </div>
+                            </Link>
+                          </div>
+                        )}
+
+                        {childWorkspaces.length > 0 && (
+                          <div>
+                            <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">
+                              Child Workspaces ({childWorkspaces.length})
+                            </p>
+                            <div className="space-y-1">
+                              {childWorkspaces.map((child) => (
+                                <Link
+                                  key={child.id}
+                                  href={`/workspaces/${child.slug}`}
+                                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors"
+                                >
+                                  <Avatar className="h-8 w-8">
+                                    {child.avatar && typeof child.avatar === 'object' && 'url' in child.avatar && child.avatar.url && (
+                                      <AvatarImage src={child.avatar.url} alt={child.name} />
+                                    )}
+                                    <AvatarFallback>
+                                      {child.name.slice(0, 2).toUpperCase()}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate">
+                                      {child.name}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      /{child.slug}
+                                    </p>
+                                  </div>
+                                </Link>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Members Card */}
+                <WorkspaceMembersCardSimple
+                  members={memberUsers}
+                  totalCount={members.length}
+                />
+
+                {/* Quick Links Card */}
+                <WorkspaceQuickLinksCard workspaceSlug={workspace.slug} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
