@@ -3,7 +3,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Separator } from '@/components/ui/separator'
+import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
@@ -12,9 +12,14 @@ import { WorkspaceClient } from './workspace-client'
 import { checkMembershipStatus } from './actions'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
-import { WorkspaceKnowledgeSection } from '@/components/features/workspace/WorkspaceKnowledgeSection'
-import { WorkspaceTemplatesSection } from '@/components/features/workspace/WorkspaceTemplatesSection'
 import { RegistryQuotaWarning } from '@/components/features/workspace/RegistryQuotaWarning'
+import {
+  WorkspaceApplicationsCard,
+  WorkspaceRegistriesCard,
+  WorkspaceRecentDocsCard,
+  WorkspaceQuickLinksCard,
+  WorkspaceMembersCardSimple,
+} from '@/components/features/workspace'
 
 interface PageProps {
   params: Promise<{
@@ -96,67 +101,83 @@ export default async function WorkspacePage({ params }: PageProps) {
     sort: 'name',
   })
 
-  // Fetch page counts for each space
-  const knowledgeSpaces = await Promise.all(
-    spacesResult.docs.map(async (space) => {
-      const pagesResult = await payload.find({
-        collection: 'knowledge-pages',
-        where: {
-          knowledgeSpace: {
-            equals: space.id,
-          },
-        },
-        limit: 1000,
-      })
-
-      const pages = pagesResult.docs
-      return {
-        id: space.id,
-        name: space.name,
-        slug: space.slug,
-        description: space.description || undefined,
-        icon: space.icon || undefined,
-        visibility: space.visibility,
-        pageCount: pages.length,
-        publishedCount: pages.filter((p) => p.status === 'published').length,
-        draftCount: pages.filter((p) => p.status === 'draft').length,
-      }
-    })
-  )
-
-  // Fetch templates for this workspace
-  const templatesResult = await payload.find({
-    collection: 'templates',
+  // Fetch apps for this workspace
+  const appsResult = await payload.find({
+    collection: 'apps',
     where: {
       workspace: {
         equals: workspace.id,
       },
     },
+    sort: '-latestBuild.builtAt',
     limit: 10,
-    sort: '-usageCount',
+    depth: 1,
   })
 
-  const workspaceTemplates = templatesResult.docs.map((template) => ({
-    id: template.id as string,
-    name: template.name,
-    slug: template.slug,
-    description: template.description || undefined,
-    language: template.language || undefined,
-    framework: template.framework || undefined,
-    visibility: template.visibility as 'workspace' | 'shared' | 'public',
-    usageCount: template.usageCount || 0,
-    categories: template.categories as string[] | undefined,
-  }))
+  // Fetch registry images for this workspace
+  const registryImagesResult = await payload.find({
+    collection: 'registry-images',
+    where: {
+      workspace: {
+        equals: workspace.id,
+      },
+    },
+    sort: '-pushedAt',
+    limit: 10,
+    depth: 2,
+  })
 
-  // Check if user can manage knowledge spaces
-  const canManageKnowledge = membershipStatus?.role
-    ? ['owner', 'admin', 'contributor'].includes(membershipStatus.role)
-    : false
+  // Transform registry images for display
+  const registryImages = registryImagesResult.docs.map((img) => {
+    const app = typeof img.app === 'object' ? img.app : null
+    const registryConfig = app && typeof app.registryConfig === 'object' ? app.registryConfig : null
+    const registryType = (registryConfig?.type || 'orbit') as 'orbit' | 'ghcr' | 'acr'
+    const registryName = registryConfig?.name || 'Orbit Registry'
 
-  // Check if user can manage templates (owner/admin only)
-  const canManageTemplates = membershipStatus?.role
-    ? ['owner', 'admin'].includes(membershipStatus.role)
-    : false
+    let imageUrl = ''
+    if (registryType === 'ghcr' && registryConfig?.ghcrOwner) {
+      imageUrl = `https://ghcr.io/${registryConfig.ghcrOwner}/${app?.name || 'unknown'}:${img.tag}`
+    } else if (registryType === 'acr' && registryConfig?.acrLoginServer) {
+      imageUrl = `https://${registryConfig.acrLoginServer}/${app?.name || 'unknown'}:${img.tag}`
+    } else {
+      imageUrl = `localhost:5050/${app?.name || 'unknown'}:${img.tag}`
+    }
+
+    return {
+      registryType,
+      registryName,
+      imageUrl,
+      appName: app?.name || 'Unknown App',
+      appId: app?.id || '',
+    }
+  })
+
+  // Fetch recent knowledge pages across all spaces in this workspace
+  const spaceIds = spacesResult.docs.map((s) => s.id)
+  const recentPagesResult = spaceIds.length > 0
+    ? await payload.find({
+        collection: 'knowledge-pages',
+        where: {
+          knowledgeSpace: {
+            in: spaceIds,
+          },
+        },
+        sort: '-updatedAt',
+        limit: 10,
+        depth: 1,
+      })
+    : { docs: [] }
+
+  const recentDocs = recentPagesResult.docs.map((page) => {
+    const space = typeof page.knowledgeSpace === 'object' ? page.knowledgeSpace : null
+    return {
+      id: page.id,
+      title: page.title,
+      spaceSlug: space?.slug || '',
+      pageSlug: page.slug,
+    }
+  })
+
 
   return (
     <SidebarProvider>
