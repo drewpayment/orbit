@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus, Upload } from 'lucide-react'
+import { Plus, Upload, Container, ExternalLink } from 'lucide-react'
+import Link from 'next/link'
 import {
   EnvironmentVariablesTable,
   EnvironmentVariableModal,
@@ -58,6 +59,36 @@ export function WorkspaceSettingsClient({
 
   return (
     <div className="space-y-6">
+      {/* Container Registries Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Container className="h-5 w-5" />
+                Container Registries
+              </CardTitle>
+              <CardDescription>
+                Configure where container images are pushed for apps in this workspace.
+              </CardDescription>
+            </div>
+            <Button asChild variant="outline">
+              <Link href={`/settings/registries?workspace=${workspaceSlug}`}>
+                Manage Registries
+                <ExternalLink className="h-4 w-4 ml-2" />
+              </Link>
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Container registries control where built images are stored. By default, Orbit uses its
+            built-in registry. You can also configure external registries like GitHub Container
+            Registry (GHCR) or Azure Container Registry (ACR).
+          </p>
+        </CardContent>
+      </Card>
+
       {/* Environment Variables Section */}
       <Card>
         <CardHeader>

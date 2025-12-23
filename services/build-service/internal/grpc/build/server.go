@@ -365,6 +365,7 @@ func (s *BuildServer) TrackImage(ctx context.Context, req *buildv1.TrackImageReq
 		"appID", req.AppId,
 		"tag", req.Tag,
 		"repository", req.Repository,
+		"registryType", req.RegistryType,
 	)
 
 	if req.WorkspaceId == "" || req.AppId == "" || req.Tag == "" {
@@ -373,7 +374,6 @@ func (s *BuildServer) TrackImage(ctx context.Context, req *buildv1.TrackImageReq
 		}, nil
 	}
 
-	// Get image size from registry
 	repository := req.Repository
 	if repository == "" {
 		return &buildv1.TrackImageResponse{
@@ -384,15 +384,25 @@ func (s *BuildServer) TrackImage(ctx context.Context, req *buildv1.TrackImageReq
 	var size int64
 	var err error
 
-	// Try to get actual size from registry
-	size, err = s.registryClient.ImageSize(ctx, repository, req.Tag)
-	if err != nil {
-		s.logger.Warn("Failed to get image size from registry, will record with zero size",
-			"error", err,
+	// Only try to get image size for Orbit registry (we control it)
+	// For external registries (GHCR, ACR), we can't easily query the size
+	if req.RegistryType == "orbit" {
+		size, err = s.registryClient.ImageSize(ctx, repository, req.Tag)
+		if err != nil {
+			s.logger.Warn("Failed to get image size from Orbit registry, will record with zero size",
+				"error", err,
+				"repository", repository,
+				"tag", req.Tag,
+			)
+			size = 0 // Will be updated on next query or sync
+		}
+	} else {
+		// For GHCR/ACR, we don't track size (external registries have their own billing/quotas)
+		s.logger.Info("Skipping size lookup for external registry",
+			"registryType", req.RegistryType,
 			"repository", repository,
-			"tag", req.Tag,
 		)
-		size = 0 // Will be updated on next query or sync
+		size = 0
 	}
 
 	// Create/update image record in Payload
@@ -417,22 +427,25 @@ func (s *BuildServer) TrackImage(ctx context.Context, req *buildv1.TrackImageReq
 		}, nil
 	}
 
-	// Get updated total usage
+	// Get updated total usage (only meaningful for Orbit registry)
 	var newTotalUsage int64
-	usage, err := s.payloadClient.GetRegistryUsage(ctx, req.WorkspaceId)
-	if err != nil {
-		s.logger.Warn("Failed to get updated usage after tracking",
-			"error", err,
-			"workspaceID", req.WorkspaceId,
-		)
-	} else {
-		newTotalUsage = usage.CurrentBytes
+	if req.RegistryType == "orbit" {
+		usage, err := s.payloadClient.GetRegistryUsage(ctx, req.WorkspaceId)
+		if err != nil {
+			s.logger.Warn("Failed to get updated usage after tracking",
+				"error", err,
+				"workspaceID", req.WorkspaceId,
+			)
+		} else {
+			newTotalUsage = usage.CurrentBytes
+		}
 	}
 
 	s.logger.Info("Image tracked successfully",
 		"workspaceID", req.WorkspaceId,
 		"appID", req.AppId,
 		"tag", req.Tag,
+		"registryType", req.RegistryType,
 		"sizeBytes", size,
 		"newTotalUsage", newTotalUsage,
 	)

@@ -216,6 +216,8 @@ func main() {
 	w.RegisterActivity(buildActivities.AnalyzeRepository)
 	w.RegisterActivity(buildActivities.BuildAndPushImage)
 	w.RegisterActivity(buildActivities.UpdateBuildStatus)
+	w.RegisterActivity(buildActivities.CheckQuotaAndCleanup)
+	w.RegisterActivity(buildActivities.TrackImage)
 
 	log.Printf("Build service address: %s", buildServiceAddr)
 

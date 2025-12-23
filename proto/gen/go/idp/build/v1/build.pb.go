@@ -1458,6 +1458,7 @@ type TrackImageRequest struct {
 	Digest        string                 `protobuf:"bytes,4,opt,name=digest,proto3" json:"digest,omitempty"`
 	RegistryUrl   string                 `protobuf:"bytes,5,opt,name=registry_url,json=registryUrl,proto3" json:"registry_url,omitempty"`
 	Repository    string                 `protobuf:"bytes,6,opt,name=repository,proto3" json:"repository,omitempty"`
+	RegistryType  string                 `protobuf:"bytes,7,opt,name=registry_type,json=registryType,proto3" json:"registry_type,omitempty"` // "orbit", "ghcr", or "acr"
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1530,6 +1531,13 @@ func (x *TrackImageRequest) GetRegistryUrl() string {
 func (x *TrackImageRequest) GetRepository() string {
 	if x != nil {
 		return x.Repository
+	}
+	return ""
+}
+
+func (x *TrackImageRequest) GetRegistryType() string {
+	if x != nil {
+		return x.RegistryType
 	}
 	return ""
 }
@@ -1726,7 +1734,7 @@ const file_idp_build_v1_build_proto_rawDesc = "" +
 	"\bapp_name\x18\x01 \x01(\tR\aappName\x12\x10\n" +
 	"\x03tag\x18\x02 \x01(\tR\x03tag\x12\x1d\n" +
 	"\n" +
-	"size_bytes\x18\x03 \x01(\x03R\tsizeBytes\"\xba\x01\n" +
+	"size_bytes\x18\x03 \x01(\x03R\tsizeBytes\"\xdf\x01\n" +
 	"\x11TrackImageRequest\x12!\n" +
 	"\fworkspace_id\x18\x01 \x01(\tR\vworkspaceId\x12\x15\n" +
 	"\x06app_id\x18\x02 \x01(\tR\x05appId\x12\x10\n" +
@@ -1735,7 +1743,8 @@ const file_idp_build_v1_build_proto_rawDesc = "" +
 	"\fregistry_url\x18\x05 \x01(\tR\vregistryUrl\x12\x1e\n" +
 	"\n" +
 	"repository\x18\x06 \x01(\tR\n" +
-	"repository\"q\n" +
+	"repository\x12#\n" +
+	"\rregistry_type\x18\a \x01(\tR\fregistryType\"q\n" +
 	"\x12TrackImageResponse\x12\x1d\n" +
 	"\n" +
 	"size_bytes\x18\x01 \x01(\x03R\tsizeBytes\x12&\n" +

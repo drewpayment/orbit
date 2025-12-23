@@ -125,6 +125,7 @@ export default async function WorkspacePage({ params }: PageProps) {
   })
 
   // Fetch registry images for this workspace
+  // Note: overrideAccess needed since server component has no user session
   const registryImagesResult = await payload.find({
     collection: 'registry-images',
     where: {
@@ -135,6 +136,7 @@ export default async function WorkspacePage({ params }: PageProps) {
     sort: '-pushedAt',
     limit: 10,
     depth: 2,
+    overrideAccess: true,
   })
 
   // Transform registry images for display

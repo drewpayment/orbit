@@ -368,12 +368,13 @@ type CleanedImage struct {
 
 // TrackImageInput is input for TrackImage activity
 type TrackImageInput struct {
-	WorkspaceID string `json:"workspaceId"`
-	AppID       string `json:"appId"`
-	Tag         string `json:"tag"`
-	Digest      string `json:"digest"`
-	RegistryURL string `json:"registryUrl"`
-	Repository  string `json:"repository"`
+	WorkspaceID  string `json:"workspaceId"`
+	AppID        string `json:"appId"`
+	Tag          string `json:"tag"`
+	Digest       string `json:"digest"`
+	RegistryURL  string `json:"registryUrl"`
+	Repository   string `json:"repository"`
+	RegistryType string `json:"registryType"` // "orbit", "ghcr", or "acr"
 }
 
 // TrackImageResult is result from TrackImage activity
@@ -480,12 +481,13 @@ func (a *BuildActivities) TrackImage(ctx context.Context, input TrackImageInput)
 	client := buildv1.NewBuildServiceClient(conn)
 
 	resp, err := client.TrackImage(ctx, &buildv1.TrackImageRequest{
-		WorkspaceId: input.WorkspaceID,
-		AppId:       input.AppID,
-		Tag:         input.Tag,
-		Digest:      input.Digest,
-		RegistryUrl: input.RegistryURL,
-		Repository:  input.Repository,
+		WorkspaceId:  input.WorkspaceID,
+		AppId:        input.AppID,
+		Tag:          input.Tag,
+		Digest:       input.Digest,
+		RegistryUrl:  input.RegistryURL,
+		Repository:   input.Repository,
+		RegistryType: input.RegistryType,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("track image failed: %w", err)

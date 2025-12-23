@@ -140,12 +140,13 @@ type CleanedImage struct {
 
 // TrackImageInput is input for TrackImage activity
 type TrackImageInput struct {
-	WorkspaceID string `json:"workspaceId"`
-	AppID       string `json:"appId"`
-	Tag         string `json:"tag"`
-	Digest      string `json:"digest"`
-	RegistryURL string `json:"registryUrl"`
-	Repository  string `json:"repository"`
+	WorkspaceID  string `json:"workspaceId"`
+	AppID        string `json:"appId"`
+	Tag          string `json:"tag"`
+	Digest       string `json:"digest"`
+	RegistryURL  string `json:"registryUrl"`
+	Repository   string `json:"repository"`
+	RegistryType string `json:"registryType"` // "orbit", "ghcr", or "acr"
 }
 
 // TrackImageResult is result from TrackImage activity
@@ -455,12 +456,13 @@ func BuildWorkflow(ctx workflow.Context, input BuildWorkflowInput) (*BuildWorkfl
 		return failWorkflow(ctx, input.AppID, state, errMsg)
 	}
 
-	// Post-push image tracking (only for Orbit registry)
-	if input.Registry.Type == "orbit" && buildResult.Success {
+	// Post-push image tracking (for all registry types)
+	if buildResult.Success {
 		logger.Info("Tracking image after build",
 			"workspaceID", input.WorkspaceID,
 			"appID", input.AppID,
-			"tag", imageTag)
+			"tag", imageTag,
+			"registryType", input.Registry.Type)
 
 		trackOptions := workflow.ActivityOptions{
 			StartToCloseTimeout: 1 * time.Minute,
@@ -472,12 +474,13 @@ func BuildWorkflow(ctx workflow.Context, input BuildWorkflowInput) (*BuildWorkfl
 
 		var trackResult TrackImageResult
 		err = workflow.ExecuteActivity(trackCtx, ActivityTrackImage, TrackImageInput{
-			WorkspaceID: input.WorkspaceID,
-			AppID:       input.AppID,
-			Tag:         imageTag,
-			Digest:      buildResult.ImageDigest,
-			RegistryURL: input.Registry.URL,
-			Repository:  input.Registry.Repository,
+			WorkspaceID:  input.WorkspaceID,
+			AppID:        input.AppID,
+			Tag:          imageTag,
+			Digest:       buildResult.ImageDigest,
+			RegistryURL:  input.Registry.URL,
+			Repository:   input.Registry.Repository,
+			RegistryType: input.Registry.Type,
 		}).Get(trackCtx, &trackResult)
 
 		if err != nil {

@@ -148,6 +148,29 @@ export async function createRegistry(data: {
   }
 
   try {
+    // If creating as default, clear default on other registries in the same workspace
+    if (data.isDefault) {
+      const currentDefaults = await payload.find({
+        collection: 'registry-configs',
+        where: {
+          and: [
+            { workspace: { equals: data.workspace } },
+            { isDefault: { equals: true } },
+          ],
+        },
+        overrideAccess: true,
+      })
+
+      for (const existing of currentDefaults.docs) {
+        await payload.update({
+          collection: 'registry-configs',
+          id: existing.id,
+          data: { isDefault: false },
+          overrideAccess: true,
+        })
+      }
+    }
+
     const registryData: Record<string, unknown> = {
       name: data.name,
       type: data.type,
@@ -244,6 +267,30 @@ export async function updateRegistry(
     if (data.acrLoginServer !== undefined) updateData.acrLoginServer = data.acrLoginServer
     if (data.acrUsername !== undefined) updateData.acrUsername = data.acrUsername
     if (data.acrToken) updateData.acrToken = data.acrToken
+
+    // If setting this registry as default, clear default on other registries in the same workspace
+    if (data.isDefault === true) {
+      const otherDefaults = await payload.find({
+        collection: 'registry-configs',
+        where: {
+          and: [
+            { workspace: { equals: workspaceId } },
+            { isDefault: { equals: true } },
+            { id: { not_equals: id } },
+          ],
+        },
+        overrideAccess: true,
+      })
+
+      for (const other of otherDefaults.docs) {
+        await payload.update({
+          collection: 'registry-configs',
+          id: other.id,
+          data: { isDefault: false },
+          overrideAccess: true,
+        })
+      }
+    }
 
     const registry = await payload.update({
       collection: 'registry-configs',
@@ -410,6 +457,99 @@ export async function testGhcrConnection(configId: string): Promise<{
   } catch (error) {
     console.error('[GHCR Test] Connection error:', error)
     return { success: false, error: 'Failed to connect to GitHub API' }
+  }
+}
+
+/**
+ * Set Orbit as the default registry for a workspace
+ * Creates the Orbit registry if it doesn't exist
+ */
+export async function setOrbitAsDefault(workspaceId: string): Promise<{
+  success: boolean
+  error?: string
+}> {
+  const session = await auth.api.getSession({ headers: await headers() })
+
+  if (!session?.user?.id) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  const payload = await getPayload({ config })
+
+  // Verify user is admin/owner of the workspace
+  const membership = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { workspace: { equals: workspaceId } },
+        { user: { equals: session.user.id } },
+        { role: { in: ['owner', 'admin'] } },
+        { status: { equals: 'active' } },
+      ],
+    },
+  })
+
+  if (membership.docs.length === 0) {
+    return { success: false, error: 'Not authorized for this workspace' }
+  }
+
+  try {
+    // Clear default on all other registries in the workspace first
+    const currentDefaults = await payload.find({
+      collection: 'registry-configs',
+      where: {
+        and: [
+          { workspace: { equals: workspaceId } },
+          { isDefault: { equals: true } },
+        ],
+      },
+      overrideAccess: true,
+    })
+
+    for (const existing of currentDefaults.docs) {
+      await payload.update({
+        collection: 'registry-configs',
+        id: existing.id,
+        data: { isDefault: false },
+        overrideAccess: true,
+      })
+    }
+
+    // Check if an Orbit registry already exists for this workspace
+    const existingOrbit = await payload.find({
+      collection: 'registry-configs',
+      where: {
+        and: [
+          { workspace: { equals: workspaceId } },
+          { type: { equals: 'orbit' } },
+        ],
+      },
+    })
+
+    if (existingOrbit.docs.length > 0) {
+      // Update existing Orbit registry to be default
+      await payload.update({
+        collection: 'registry-configs',
+        id: existingOrbit.docs[0].id,
+        data: { isDefault: true },
+      })
+    } else {
+      // Create new Orbit registry as default
+      await payload.create({
+        collection: 'registry-configs',
+        data: {
+          name: 'Orbit Registry',
+          type: 'orbit',
+          workspace: workspaceId,
+          isDefault: true,
+        } as any,
+      })
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to set Orbit as default:', error)
+    return { success: false, error: 'Failed to set Orbit as default' }
   }
 }
 

@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -22,7 +23,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Container, Plus, Trash2, Star, AlertCircle } from 'lucide-react'
+import { Container, Plus, Trash2, Star, AlertCircle, Server, CheckCircle, Filter, X } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   getRegistriesAndWorkspaces,
   createRegistry,
@@ -30,11 +32,16 @@ import {
   deleteRegistry,
   testGhcrConnection,
   testAcrConnection,
+  setOrbitAsDefault,
   type RegistryConfig,
   type Workspace,
 } from '@/app/actions/registries'
 
 export function RegistriesSettingsClient() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const workspaceFilter = searchParams.get('workspace')
+
   const [registries, setRegistries] = useState<RegistryConfig[]>([])
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [loading, setLoading] = useState(true)
@@ -42,6 +49,22 @@ export function RegistriesSettingsClient() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingRegistry, setEditingRegistry] = useState<RegistryConfig | null>(null)
   const [saving, setSaving] = useState(false)
+
+  // Filter workspaces based on URL param
+  const filteredWorkspaces = useMemo(() => {
+    if (!workspaceFilter) return workspaces
+    return workspaces.filter((ws) => ws.id === workspaceFilter || ws.slug === workspaceFilter)
+  }, [workspaces, workspaceFilter])
+
+  function setWorkspaceFilter(workspaceIdOrSlug: string | null) {
+    const params = new URLSearchParams(searchParams.toString())
+    if (workspaceIdOrSlug) {
+      params.set('workspace', workspaceIdOrSlug)
+    } else {
+      params.delete('workspace')
+    }
+    router.push(`/settings/registries?${params.toString()}`)
+  }
 
   // Form state
   const [formData, setFormData] = useState({
@@ -204,10 +227,44 @@ export function RegistriesSettingsClient() {
             Configure container registries for building and pushing images
           </p>
         </div>
-        <Button onClick={openCreateDialog} disabled={workspaces.length === 0}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Registry
-        </Button>
+        <div className="flex items-center gap-3">
+          {/* Workspace Filter */}
+          {workspaces.length > 1 && (
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <Select
+                value={workspaceFilter || 'all'}
+                onValueChange={(value) => setWorkspaceFilter(value === 'all' ? null : value)}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="All Workspaces" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Workspaces</SelectItem>
+                  {workspaces.map((ws) => (
+                    <SelectItem key={ws.id} value={ws.slug}>
+                      {ws.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {workspaceFilter && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setWorkspaceFilter(null)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          )}
+          <Button onClick={openCreateDialog} disabled={workspaces.length === 0}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Registry
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -228,33 +285,71 @@ export function RegistriesSettingsClient() {
         </Alert>
       )}
 
-      {registries.length === 0 && workspaces.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>No Registries Configured</CardTitle>
-            <CardDescription>
-              Add a container registry to enable building and pushing images for your applications.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button onClick={openCreateDialog}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Your First Registry
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {registries.map((registry) => (
-            <RegistryCard
-              key={registry.id}
-              registry={registry}
-              onEdit={() => openEditDialog(registry)}
-              onDelete={() => handleDelete(registry)}
-              onSetDefault={() => handleSetDefault(registry)}
-              onRefresh={fetchData}
-            />
-          ))}
+      {workspaces.length > 0 && (
+        <div className="space-y-6">
+          {filteredWorkspaces.length === 0 && workspaceFilter && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>No workspace found</AlertTitle>
+              <AlertDescription>
+                No workspace matches the filter &quot;{workspaceFilter}&quot;.{' '}
+                <Button variant="link" className="p-0 h-auto" onClick={() => setWorkspaceFilter(null)}>
+                  Clear filter
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+          {filteredWorkspaces.map((workspace) => {
+            const workspaceRegistries = registries.filter(
+              (r) => r.workspace.id === workspace.id
+            )
+            const hasOrbitRegistry = workspaceRegistries.some((r) => r.type === 'orbit')
+            const hasDefaultInWorkspace = workspaceRegistries.some((r) => r.isDefault)
+
+            return (
+              <div key={workspace.id} className="space-y-3">
+                <h2 className="text-lg font-semibold text-muted-foreground">{workspace.name}</h2>
+
+                {/* Built-in Orbit Registry Card (always show if no orbit registry exists) */}
+                {!hasOrbitRegistry && (
+                  <OrbitBuiltInCard
+                    isDefault={!hasDefaultInWorkspace}
+                    onSetDefault={async () => {
+                      try {
+                        const result = await setOrbitAsDefault(workspace.id)
+                        if (!result.success) {
+                          toast.error(result.error || 'Failed to set Orbit as default')
+                        } else {
+                          toast.success('Orbit Registry set as default')
+                          fetchData()
+                        }
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : 'Failed to set Orbit as default')
+                      }
+                    }}
+                  />
+                )}
+
+                {/* User-configured registries */}
+                {workspaceRegistries.map((registry) => (
+                  <RegistryCard
+                    key={registry.id}
+                    registry={registry}
+                    onEdit={() => openEditDialog(registry)}
+                    onDelete={() => handleDelete(registry)}
+                    onSetDefault={() => handleSetDefault(registry)}
+                    onRefresh={fetchData}
+                  />
+                ))}
+
+                {workspaceRegistries.length === 0 && hasOrbitRegistry === false && (
+                  <p className="text-sm text-muted-foreground pl-1">
+                    Using Orbit Registry by default. Add an external registry to push to GHCR or ACR.
+                  </p>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -426,14 +521,14 @@ function RegistryCard({
         ? await testGhcrConnection(registry.id)
         : await testAcrConnection(registry.id)
       if (!result.success) {
-        alert(result.error || 'Connection test failed')
+        toast.error(result.error || 'Connection test failed')
       } else {
-        alert('Connection successful!')
+        toast.success('Connection successful!')
       }
       // Refresh data to show updated status
       onRefresh()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to test connection')
+      toast.error(err instanceof Error ? err.message : 'Failed to test connection')
     } finally {
       setTesting(false)
     }
@@ -529,6 +624,62 @@ function RegistryCard({
             </Button>
           </div>
         </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function OrbitBuiltInCard({
+  isDefault,
+  onSetDefault,
+}: {
+  isDefault: boolean
+  onSetDefault: () => void
+}) {
+  return (
+    <Card className="border-dashed">
+      <CardContent className="p-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+              <Server className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-lg">Orbit Registry</h3>
+                <Badge variant="outline" className="text-blue-600 border-blue-600">
+                  Built-in
+                </Badge>
+                {isDefault && (
+                  <Badge variant="secondary" className="flex items-center gap-1">
+                    <Star className="h-3 w-3" />
+                    Default
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Badge variant="outline">Orbit</Badge>
+                <Badge variant="default" className="bg-green-600 flex items-center gap-1">
+                  <CheckCircle className="h-3 w-3" />
+                  Always Available
+                </Badge>
+                <span>registry.orbit.local</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {!isDefault && (
+              <Button variant="ghost" size="sm" onClick={onSetDefault}>
+                <Star className="h-4 w-4 mr-1" />
+                Set Default
+              </Button>
+            )}
+          </div>
+        </div>
+        <p className="text-sm text-muted-foreground mt-3 pl-16">
+          Push images to Orbit&apos;s built-in registry. No external credentials required.
+        </p>
       </CardContent>
     </Card>
   )

@@ -88,6 +88,7 @@ export interface Config {
     'health-checks': HealthCheck;
     'registry-configs': RegistryConfig;
     'environment-variables': EnvironmentVariable;
+    'registry-images': RegistryImage;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -115,6 +116,7 @@ export interface Config {
     'health-checks': HealthChecksSelect<false> | HealthChecksSelect<true>;
     'registry-configs': RegistryConfigsSelect<false> | RegistryConfigsSelect<true>;
     'environment-variables': EnvironmentVariablesSelect<false> | EnvironmentVariablesSelect<true>;
+    'registry-images': RegistryImagesSelect<false> | RegistryImagesSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -285,6 +287,14 @@ export interface Workspace {
       | number
       | boolean
       | null;
+    /**
+     * Allow Orbit-hosted registry as fallback when no registry is configured
+     */
+    allowOrbitRegistry?: boolean | null;
+    /**
+     * Maximum storage quota for Orbit-hosted registry (bytes)
+     */
+    registryQuotaBytes?: number | null;
   };
   updatedAt: string;
   createdAt: string;
@@ -1044,7 +1054,10 @@ export interface RegistryConfig {
    */
   name: string;
   workspace: string | Workspace;
-  type: 'ghcr' | 'acr';
+  /**
+   * Registry type (Orbit Registry requires no configuration)
+   */
+  type: 'orbit' | 'ghcr' | 'acr';
   /**
    * Use as default registry for this workspace
    */
@@ -1053,6 +1066,15 @@ export interface RegistryConfig {
    * GitHub owner/org for GHCR (e.g., "drewpayment")
    */
   ghcrOwner?: string | null;
+  /**
+   * GitHub Personal Access Token (classic) with write:packages scope
+   */
+  ghcrPat?: string | null;
+  /**
+   * Last successful connection test
+   */
+  ghcrValidatedAt?: string | null;
+  ghcrValidationStatus?: ('pending' | 'valid' | 'invalid') | null;
   /**
    * ACR login server (e.g., "myregistry.azurecr.io")
    */
@@ -1065,6 +1087,11 @@ export interface RegistryConfig {
    * ACR repository-scoped token
    */
   acrToken?: string | null;
+  /**
+   * Last successful connection test
+   */
+  acrValidatedAt?: string | null;
+  acrValidationStatus?: ('pending' | 'valid' | 'invalid') | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -1245,6 +1272,30 @@ export interface EnvironmentVariable {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "registry-images".
+ */
+export interface RegistryImage {
+  id: string;
+  workspace: string | Workspace;
+  app: string | App;
+  tag: string;
+  /**
+   * SHA256 digest of the image manifest
+   */
+  digest: string;
+  /**
+   * Image size in bytes
+   */
+  sizeBytes: number;
+  /**
+   * When the image was pushed to registry
+   */
+  pushedAt: string;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
 export interface PayloadLockedDocument {
@@ -1333,6 +1384,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'environment-variables';
         value: string | EnvironmentVariable;
+      } | null)
+    | ({
+        relationTo: 'registry-images';
+        value: string | RegistryImage;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -1459,6 +1514,8 @@ export interface WorkspacesSelect<T extends boolean = true> {
     | T
     | {
         customization?: T;
+        allowOrbitRegistry?: T;
+        registryQuotaBytes?: T;
       };
   updatedAt?: T;
   createdAt?: T;
@@ -1895,9 +1952,14 @@ export interface RegistryConfigsSelect<T extends boolean = true> {
   type?: T;
   isDefault?: T;
   ghcrOwner?: T;
+  ghcrPat?: T;
+  ghcrValidatedAt?: T;
+  ghcrValidationStatus?: T;
   acrLoginServer?: T;
   acrUsername?: T;
   acrToken?: T;
+  acrValidatedAt?: T;
+  acrValidationStatus?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -1914,6 +1976,20 @@ export interface EnvironmentVariablesSelect<T extends boolean = true> {
   useInDeployments?: T;
   description?: T;
   createdBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "registry-images_select".
+ */
+export interface RegistryImagesSelect<T extends boolean = true> {
+  workspace?: T;
+  app?: T;
+  tag?: T;
+  digest?: T;
+  sizeBytes?: T;
+  pushedAt?: T;
   updatedAt?: T;
   createdAt?: T;
 }

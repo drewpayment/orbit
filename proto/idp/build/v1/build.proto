@@ -209,6 +209,7 @@ message TrackImageRequest {
   string digest = 4;
   string registry_url = 5;
   string repository = 6;
+  string registry_type = 7; // "orbit", "ghcr", or "acr"
 }
 
 message TrackImageResponse {

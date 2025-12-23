@@ -468,7 +468,7 @@ export function BuildSection({ appId, hasRepository }: BuildSectionProps) {
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="text-xs">
-                    {registryInfo.registryType === 'ghcr' ? 'GHCR' : 'ACR'}
+                    {registryInfo.registryType === 'ghcr' ? 'GHCR' : registryInfo.registryType === 'acr' ? 'ACR' : 'Orbit'}
                   </Badge>
                   <span className="text-sm font-medium truncate">{registryInfo.registryName}</span>
                 </div>
