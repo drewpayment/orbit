@@ -112,7 +112,7 @@ func main() {
 }
 
 func loadConfig() *Config {
-	port := 50054 // Default Kafka service port
+	port := 50055 // Default Kafka service port
 	if p := os.Getenv("GRPC_PORT"); p != "" {
 		fmt.Sscanf(p, "%d", &port)
 	}

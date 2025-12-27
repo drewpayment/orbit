@@ -1,16 +1,46 @@
+/**
+ * Kafka gRPC Client
+ *
+ * Provides a configured Connect-ES client for the Orbit Kafka service.
+ * This service manages Kafka topics, schemas, and cross-workspace sharing.
+ *
+ * Usage:
+ * ```ts
+ * import { kafkaClient } from '@/lib/grpc/kafka-client'
+ *
+ * const response = await kafkaClient.listTopics({ workspaceId: 'ws-123' })
+ * ```
+ */
+
 import { createClient } from '@connectrpc/connect'
 import { createConnectTransport } from '@connectrpc/connect-web'
-import { KafkaService } from '@/lib/proto/idp/kafka/v1/kafka_connect'
+import { KafkaService } from '@/lib/proto/idp/kafka/v1/kafka_pb'
 
 /**
- * Create a transport for the Kafka service
- * This uses Connect-ES to communicate with the gRPC-Web backend
+ * Transport configuration for the Kafka gRPC service.
+ * Defaults to localhost:50055 for development.
+ * Override with NEXT_PUBLIC_KAFKA_SERVICE_URL environment variable.
  */
 const transport = createConnectTransport({
   baseUrl: process.env.NEXT_PUBLIC_KAFKA_SERVICE_URL || 'http://localhost:50055',
+  useBinaryFormat: false, // Use JSON for better debugging in development
 })
 
 /**
- * Kafka service client for managing Kafka topics, schemas, and access
+ * Singleton client instance for the Kafka service.
+ *
+ * Available methods:
+ * - Cluster Management: listProviders, registerCluster, validateCluster, listClusters, deleteCluster
+ * - Topic Management: createTopic, listTopics, getTopic, updateTopic, deleteTopic, approveTopic
+ * - Schema Management: registerSchema, listSchemas, getSchema, checkSchemaCompatibility
+ * - Sharing: requestTopicAccess, approveTopicAccess, revokeTopicAccess, listTopicShares, discoverTopics
+ * - Service Accounts: createServiceAccount, listServiceAccounts, revokeServiceAccount
+ * - Metrics: getTopicMetrics, getTopicLineage
  */
 export const kafkaClient = createClient(KafkaService, transport)
+
+/**
+ * Helper type for extracting request types from the client
+ * Useful for component props and function signatures
+ */
+export type KafkaClient = typeof kafkaClient

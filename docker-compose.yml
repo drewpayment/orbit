@@ -127,12 +127,14 @@ services:
       - ORBIT_REGISTRY_URL=orbit-registry:5000
       - ORBIT_REGISTRY_TOKEN=orbit-registry-token
       - ORBIT_REGISTRY_JWT_SECRET=${ORBIT_REGISTRY_JWT_SECRET:-orbit-registry-jwt-secret-dev-only-32chars}
+      - NEXT_PUBLIC_KAFKA_SERVICE_URL=http://kafka-service:50055
     env_file:
       - ./orbit-www/.env
     depends_on:
       - mongo
       - temporal-server
       - repository-service
+      - kafka-service
     volumes:
       - ./orbit-www:/app
       - /app/node_modules
@@ -261,6 +263,20 @@ services:
     restart: unless-stopped
 
   # Go Services
+  kafka-service:
+    container_name: orbit-kafka-service
+    build:
+      context: .
+      dockerfile: services/kafka/Dockerfile
+    ports:
+      - "50055:50055"  # gRPC
+    environment:
+      - GRPC_PORT=50055
+      - ENVIRONMENT=development
+    depends_on:
+      - temporal-server
+    restart: unless-stopped
+
   repository-service:
     container_name: orbit-repository-service
     build:
