@@ -91,3 +91,11 @@ func NewEnvironmentMapping(env string, clusterID uuid.UUID, isDefault bool) *Kaf
 		CreatedAt:   time.Now(),
 	}
 }
+
+// Validate checks mapping invariants
+func (m *KafkaEnvironmentMapping) Validate() error {
+	if m.Environment == "" {
+		return ErrTopicEnvironmentRequired
+	}
+	return nil
+}
