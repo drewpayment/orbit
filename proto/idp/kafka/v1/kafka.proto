@@ -1,0 +1,640 @@
+syntax = "proto3";
+
+package idp.kafka.v1;
+
+option go_package = "github.com/drewpayment/orbit/proto/gen/go/idp/kafka/v1;kafkav1";
+
+import "google/protobuf/timestamp.proto";
+
+// ============================================================================
+// Enums
+// ============================================================================
+
+enum ProviderType {
+  PROVIDER_TYPE_UNSPECIFIED = 0;
+  PROVIDER_TYPE_APACHE_KAFKA = 1;
+  PROVIDER_TYPE_CONFLUENT_CLOUD = 2;
+  PROVIDER_TYPE_AWS_MSK = 3;
+  PROVIDER_TYPE_REDPANDA = 4;
+  PROVIDER_TYPE_AIVEN = 5;
+}
+
+enum ClusterValidationStatus {
+  CLUSTER_VALIDATION_STATUS_UNSPECIFIED = 0;
+  CLUSTER_VALIDATION_STATUS_PENDING = 1;
+  CLUSTER_VALIDATION_STATUS_VALID = 2;
+  CLUSTER_VALIDATION_STATUS_INVALID = 3;
+}
+
+enum TopicStatus {
+  TOPIC_STATUS_UNSPECIFIED = 0;
+  TOPIC_STATUS_PENDING_APPROVAL = 1;
+  TOPIC_STATUS_PROVISIONING = 2;
+  TOPIC_STATUS_ACTIVE = 3;
+  TOPIC_STATUS_FAILED = 4;
+  TOPIC_STATUS_DELETING = 5;
+}
+
+enum SchemaFormat {
+  SCHEMA_FORMAT_UNSPECIFIED = 0;
+  SCHEMA_FORMAT_AVRO = 1;
+  SCHEMA_FORMAT_PROTOBUF = 2;
+  SCHEMA_FORMAT_JSON = 3;
+}
+
+enum SchemaCompatibility {
+  SCHEMA_COMPATIBILITY_UNSPECIFIED = 0;
+  SCHEMA_COMPATIBILITY_BACKWARD = 1;
+  SCHEMA_COMPATIBILITY_FORWARD = 2;
+  SCHEMA_COMPATIBILITY_FULL = 3;
+  SCHEMA_COMPATIBILITY_NONE = 4;
+}
+
+enum ServiceAccountType {
+  SERVICE_ACCOUNT_TYPE_UNSPECIFIED = 0;
+  SERVICE_ACCOUNT_TYPE_PRODUCER = 1;
+  SERVICE_ACCOUNT_TYPE_CONSUMER = 2;
+  SERVICE_ACCOUNT_TYPE_PRODUCER_CONSUMER = 3;
+  SERVICE_ACCOUNT_TYPE_ADMIN = 4;
+}
+
+enum ShareStatus {
+  SHARE_STATUS_UNSPECIFIED = 0;
+  SHARE_STATUS_PENDING_REQUEST = 1;
+  SHARE_STATUS_APPROVED = 2;
+  SHARE_STATUS_REJECTED = 3;
+  SHARE_STATUS_REVOKED = 4;
+}
+
+enum SharePermission {
+  SHARE_PERMISSION_UNSPECIFIED = 0;
+  SHARE_PERMISSION_READ = 1;
+  SHARE_PERMISSION_WRITE = 2;
+  SHARE_PERMISSION_READ_WRITE = 3;
+}
+
+enum TopicVisibility {
+  TOPIC_VISIBILITY_UNSPECIFIED = 0;
+  TOPIC_VISIBILITY_PRIVATE = 1;
+  TOPIC_VISIBILITY_DISCOVERABLE = 2;
+  TOPIC_VISIBILITY_PUBLIC = 3;
+}
+
+enum PolicyScope {
+  POLICY_SCOPE_UNSPECIFIED = 0;
+  POLICY_SCOPE_PLATFORM = 1;
+  POLICY_SCOPE_WORKSPACE = 2;
+}
+
+enum SharePolicyScope {
+  SHARE_POLICY_SCOPE_UNSPECIFIED = 0;
+  SHARE_POLICY_SCOPE_ALL_TOPICS = 1;
+  SHARE_POLICY_SCOPE_TOPIC_PATTERN = 2;
+  SHARE_POLICY_SCOPE_SPECIFIC_TOPIC = 3;
+}
+
+// ============================================================================
+// Core Messages
+// ============================================================================
+
+message KafkaProvider {
+  string id = 1;
+  string name = 2;
+  string display_name = 3;
+  string adapter_type = 4;
+  repeated string required_config_fields = 5;
+  ProviderCapabilities capabilities = 6;
+  string documentation_url = 7;
+  string icon_url = 8;
+}
+
+message ProviderCapabilities {
+  bool schema_registry = 1;
+  bool transactions = 2;
+  bool quotas_api = 3;
+  bool metrics_api = 4;
+}
+
+message KafkaCluster {
+  string id = 1;
+  string name = 2;
+  string provider_id = 3;
+  map<string, string> connection_config = 4;
+  ClusterValidationStatus validation_status = 5;
+  google.protobuf.Timestamp last_validated_at = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+message KafkaEnvironmentMapping {
+  string id = 1;
+  string environment = 2;
+  string cluster_id = 3;
+  map<string, string> routing_rule = 4;
+  int32 priority = 5;
+  bool is_default = 6;
+}
+
+message SchemaRegistry {
+  string id = 1;
+  string url = 2;
+  string subject_naming_template = 3;
+  SchemaCompatibility default_compatibility = 4;
+  repeated EnvironmentCompatibilityOverride environment_overrides = 5;
+}
+
+message EnvironmentCompatibilityOverride {
+  string environment = 1;
+  SchemaCompatibility compatibility = 2;
+}
+
+message KafkaTopic {
+  string id = 1;
+  string workspace_id = 2;
+  string name = 3;
+  string environment = 4;
+  string cluster_id = 5;
+  int32 partitions = 6;
+  int32 replication_factor = 7;
+  int64 retention_ms = 8;
+  string cleanup_policy = 9;
+  string compression = 10;
+  map<string, string> config = 11;
+  TopicStatus status = 12;
+  string workflow_id = 13;
+  bool approval_required = 14;
+  string approved_by = 15;
+  google.protobuf.Timestamp approved_at = 16;
+  google.protobuf.Timestamp created_at = 17;
+  google.protobuf.Timestamp updated_at = 18;
+  string description = 19;
+}
+
+message KafkaSchema {
+  string id = 1;
+  string workspace_id = 2;
+  string topic_id = 3;
+  string type = 4; // "key" or "value"
+  string subject = 5;
+  SchemaFormat format = 6;
+  string content = 7;
+  int32 version = 8;
+  int32 schema_id = 9;
+  SchemaCompatibility compatibility = 10;
+  string status = 11;
+  google.protobuf.Timestamp created_at = 12;
+  google.protobuf.Timestamp updated_at = 13;
+}
+
+message KafkaServiceAccount {
+  string id = 1;
+  string workspace_id = 2;
+  string name = 3;
+  ServiceAccountType type = 4;
+  string status = 5;
+  string created_by = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+message KafkaTopicShare {
+  string id = 1;
+  string topic_id = 2;
+  string shared_with_type = 3; // "workspace" or "user"
+  string shared_with_workspace_id = 4;
+  string shared_with_user_id = 5;
+  SharePermission permission = 6;
+  ShareStatus status = 7;
+  string requested_by = 8;
+  google.protobuf.Timestamp requested_at = 9;
+  string justification = 10;
+  string approved_by = 11;
+  google.protobuf.Timestamp approved_at = 12;
+  google.protobuf.Timestamp expires_at = 13;
+}
+
+message KafkaTopicPolicy {
+  string id = 1;
+  PolicyScope scope = 2;
+  string workspace_id = 3;
+  string environment = 4;
+  string naming_pattern = 5;
+  repeated string auto_approve_patterns = 6;
+  PartitionLimits partition_limits = 7;
+  RetentionLimits retention_limits = 8;
+  bool require_schema = 9;
+  repeated string require_approval_for = 10;
+}
+
+message PartitionLimits {
+  int32 min = 1;
+  int32 max = 2;
+}
+
+message RetentionLimits {
+  int64 min_ms = 1;
+  int64 max_ms = 2;
+}
+
+message KafkaTopicSharePolicy {
+  string id = 1;
+  string workspace_id = 2;
+  SharePolicyScope scope = 3;
+  string topic_pattern = 4;
+  string topic_id = 5;
+  string environment = 6;
+  TopicVisibility visibility = 7;
+  AutoApproveConfig auto_approve = 8;
+  SharePermission default_permission = 9;
+  bool require_justification = 10;
+  int32 access_ttl_days = 11;
+}
+
+message AutoApproveConfig {
+  repeated string environments = 1;
+  repeated SharePermission permissions = 2;
+  repeated string workspace_whitelist = 3;
+  bool same_tenant_only = 4;
+}
+
+message KafkaUsageMetrics {
+  string id = 1;
+  string topic_id = 2;
+  string period = 3;
+  string period_type = 4;
+  int64 bytes_in = 5;
+  int64 bytes_out = 6;
+  int64 message_count_in = 7;
+  int64 message_count_out = 8;
+  int64 storage_bytes = 9;
+  int32 partition_count = 10;
+}
+
+message KafkaConsumerGroup {
+  string id = 1;
+  string group_id = 2;
+  string cluster_id = 3;
+  repeated string topic_ids = 4;
+  string service_account_id = 5;
+  string workspace_id = 6;
+  int64 current_lag = 7;
+  google.protobuf.Timestamp last_seen = 8;
+  google.protobuf.Timestamp last_updated = 9;
+}
+
+message KafkaClientActivity {
+  string id = 1;
+  string client_id = 2;
+  string service_account_id = 3;
+  string workspace_id = 4;
+  string topic_id = 5;
+  string direction = 6; // "produce" or "consume"
+  string consumer_group_id = 7;
+  int64 bytes_transferred = 8;
+  google.protobuf.Timestamp last_seen = 9;
+}
+
+// ============================================================================
+// Service Definition
+// ============================================================================
+
+service KafkaService {
+  // Cluster Management (Platform Admin)
+  rpc ListProviders(ListProvidersRequest) returns (ListProvidersResponse);
+  rpc RegisterCluster(RegisterClusterRequest) returns (RegisterClusterResponse);
+  rpc ValidateCluster(ValidateClusterRequest) returns (ValidateClusterResponse);
+  rpc ListClusters(ListClustersRequest) returns (ListClustersResponse);
+  rpc DeleteCluster(DeleteClusterRequest) returns (DeleteClusterResponse);
+
+  // Environment Mapping (Platform Admin)
+  rpc CreateEnvironmentMapping(CreateEnvironmentMappingRequest) returns (CreateEnvironmentMappingResponse);
+  rpc ListEnvironmentMappings(ListEnvironmentMappingsRequest) returns (ListEnvironmentMappingsResponse);
+  rpc DeleteEnvironmentMapping(DeleteEnvironmentMappingRequest) returns (DeleteEnvironmentMappingResponse);
+
+  // Topic Management (Workspace Scoped)
+  rpc CreateTopic(CreateTopicRequest) returns (CreateTopicResponse);
+  rpc GetTopic(GetTopicRequest) returns (GetTopicResponse);
+  rpc ListTopics(ListTopicsRequest) returns (ListTopicsResponse);
+  rpc UpdateTopic(UpdateTopicRequest) returns (UpdateTopicResponse);
+  rpc DeleteTopic(DeleteTopicRequest) returns (DeleteTopicResponse);
+  rpc ApproveTopic(ApproveTopicRequest) returns (ApproveTopicResponse);
+
+  // Schema Management
+  rpc RegisterSchema(RegisterSchemaRequest) returns (RegisterSchemaResponse);
+  rpc GetSchema(GetSchemaRequest) returns (GetSchemaResponse);
+  rpc ListSchemas(ListSchemasRequest) returns (ListSchemasResponse);
+  rpc CheckSchemaCompatibility(CheckSchemaCompatibilityRequest) returns (CheckSchemaCompatibilityResponse);
+
+  // Service Account Management
+  rpc CreateServiceAccount(CreateServiceAccountRequest) returns (CreateServiceAccountResponse);
+  rpc ListServiceAccounts(ListServiceAccountsRequest) returns (ListServiceAccountsResponse);
+  rpc RevokeServiceAccount(RevokeServiceAccountRequest) returns (RevokeServiceAccountResponse);
+
+  // Topic Sharing
+  rpc RequestTopicAccess(RequestTopicAccessRequest) returns (RequestTopicAccessResponse);
+  rpc ApproveTopicAccess(ApproveTopicAccessRequest) returns (ApproveTopicAccessResponse);
+  rpc RevokeTopicAccess(RevokeTopicAccessRequest) returns (RevokeTopicAccessResponse);
+  rpc ListTopicShares(ListTopicSharesRequest) returns (ListTopicSharesResponse);
+
+  // Discovery (Global Catalog)
+  rpc DiscoverTopics(DiscoverTopicsRequest) returns (DiscoverTopicsResponse);
+
+  // Metrics & Lineage
+  rpc GetTopicMetrics(GetTopicMetricsRequest) returns (GetTopicMetricsResponse);
+  rpc GetTopicLineage(GetTopicLineageRequest) returns (GetTopicLineageResponse);
+}
+
+// ============================================================================
+// Request/Response Messages
+// ============================================================================
+
+// Cluster Management
+message ListProvidersRequest {}
+message ListProvidersResponse {
+  repeated KafkaProvider providers = 1;
+}
+
+message RegisterClusterRequest {
+  string name = 1;
+  string provider_id = 2;
+  map<string, string> connection_config = 3;
+  map<string, string> credentials = 4;
+}
+message RegisterClusterResponse {
+  KafkaCluster cluster = 1;
+  string error = 2;
+}
+
+message ValidateClusterRequest {
+  string cluster_id = 1;
+}
+message ValidateClusterResponse {
+  bool valid = 1;
+  string error = 2;
+}
+
+message ListClustersRequest {}
+message ListClustersResponse {
+  repeated KafkaCluster clusters = 1;
+}
+
+message DeleteClusterRequest {
+  string cluster_id = 1;
+}
+message DeleteClusterResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+// Environment Mapping
+message CreateEnvironmentMappingRequest {
+  string environment = 1;
+  string cluster_id = 2;
+  map<string, string> routing_rule = 3;
+  int32 priority = 4;
+  bool is_default = 5;
+}
+message CreateEnvironmentMappingResponse {
+  KafkaEnvironmentMapping mapping = 1;
+  string error = 2;
+}
+
+message ListEnvironmentMappingsRequest {
+  string environment = 1; // optional filter
+}
+message ListEnvironmentMappingsResponse {
+  repeated KafkaEnvironmentMapping mappings = 1;
+}
+
+message DeleteEnvironmentMappingRequest {
+  string mapping_id = 1;
+}
+message DeleteEnvironmentMappingResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+// Topic Management
+message CreateTopicRequest {
+  string workspace_id = 1;
+  string name = 2;
+  string environment = 3;
+  int32 partitions = 4;
+  int32 replication_factor = 5;
+  int64 retention_ms = 6;
+  string cleanup_policy = 7;
+  string compression = 8;
+  map<string, string> config = 9;
+  string description = 10;
+  KafkaSchema schema = 11; // optional schema to register
+}
+message CreateTopicResponse {
+  KafkaTopic topic = 1;
+  string workflow_id = 2;
+  string error = 3;
+}
+
+message GetTopicRequest {
+  string topic_id = 1;
+}
+message GetTopicResponse {
+  KafkaTopic topic = 1;
+  string error = 2;
+}
+
+message ListTopicsRequest {
+  string workspace_id = 1;
+  string environment = 2;
+  TopicStatus status = 3;
+  int32 limit = 4;
+  int32 offset = 5;
+}
+message ListTopicsResponse {
+  repeated KafkaTopic topics = 1;
+  int32 total = 2;
+}
+
+message UpdateTopicRequest {
+  string topic_id = 1;
+  optional int32 partitions = 2;
+  optional int64 retention_ms = 3;
+  map<string, string> config = 4;
+  optional string description = 5;
+}
+message UpdateTopicResponse {
+  KafkaTopic topic = 1;
+  string error = 2;
+}
+
+message DeleteTopicRequest {
+  string topic_id = 1;
+}
+message DeleteTopicResponse {
+  bool success = 1;
+  string workflow_id = 2;
+  string error = 3;
+}
+
+message ApproveTopicRequest {
+  string topic_id = 1;
+  string approved_by = 2;
+}
+message ApproveTopicResponse {
+  KafkaTopic topic = 1;
+  string workflow_id = 2;
+  string error = 3;
+}
+
+// Schema Management
+message RegisterSchemaRequest {
+  string topic_id = 1;
+  string type = 2; // "key" or "value"
+  SchemaFormat format = 3;
+  string content = 4;
+  SchemaCompatibility compatibility = 5;
+}
+message RegisterSchemaResponse {
+  KafkaSchema schema = 1;
+  string error = 2;
+}
+
+message GetSchemaRequest {
+  string schema_id = 1;
+}
+message GetSchemaResponse {
+  KafkaSchema schema = 1;
+  string error = 2;
+}
+
+message ListSchemasRequest {
+  string topic_id = 1;
+}
+message ListSchemasResponse {
+  repeated KafkaSchema schemas = 1;
+}
+
+message CheckSchemaCompatibilityRequest {
+  string topic_id = 1;
+  string type = 2;
+  SchemaFormat format = 3;
+  string content = 4;
+}
+message CheckSchemaCompatibilityResponse {
+  bool compatible = 1;
+  string error = 2;
+}
+
+// Service Account Management
+message CreateServiceAccountRequest {
+  string workspace_id = 1;
+  string name = 2;
+  ServiceAccountType type = 3;
+}
+message CreateServiceAccountResponse {
+  KafkaServiceAccount service_account = 1;
+  string api_key = 2;
+  string api_secret = 3;
+  string error = 4;
+}
+
+message ListServiceAccountsRequest {
+  string workspace_id = 1;
+}
+message ListServiceAccountsResponse {
+  repeated KafkaServiceAccount service_accounts = 1;
+}
+
+message RevokeServiceAccountRequest {
+  string service_account_id = 1;
+}
+message RevokeServiceAccountResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+// Topic Sharing
+message RequestTopicAccessRequest {
+  string topic_id = 1;
+  string requesting_workspace_id = 2;
+  SharePermission permission = 3;
+  string justification = 4;
+}
+message RequestTopicAccessResponse {
+  KafkaTopicShare share = 1;
+  string error = 2;
+}
+
+message ApproveTopicAccessRequest {
+  string share_id = 1;
+  string approved_by = 2;
+}
+message ApproveTopicAccessResponse {
+  KafkaTopicShare share = 1;
+  string error = 2;
+}
+
+message RevokeTopicAccessRequest {
+  string share_id = 1;
+}
+message RevokeTopicAccessResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message ListTopicSharesRequest {
+  string topic_id = 1;
+  string workspace_id = 2;
+  ShareStatus status = 3;
+}
+message ListTopicSharesResponse {
+  repeated KafkaTopicShare shares = 1;
+}
+
+// Discovery
+message DiscoverTopicsRequest {
+  string requesting_workspace_id = 1;
+  string environment = 2;
+  string search = 3;
+  SchemaFormat schema_format = 4;
+  int32 limit = 5;
+  int32 offset = 6;
+}
+message DiscoverTopicsResponse {
+  repeated DiscoverableTopic topics = 1;
+  int32 total = 2;
+}
+
+message DiscoverableTopic {
+  KafkaTopic topic = 1;
+  string owning_workspace_name = 2;
+  TopicVisibility visibility = 3;
+  string access_status = 4; // "member", "has_access", "can_request", "public"
+  bool has_schema = 5;
+}
+
+// Metrics & Lineage
+message GetTopicMetricsRequest {
+  string topic_id = 1;
+  string period_type = 2; // "hourly" or "daily"
+  int32 periods = 3; // number of periods to return
+}
+message GetTopicMetricsResponse {
+  repeated KafkaUsageMetrics metrics = 1;
+}
+
+message GetTopicLineageRequest {
+  string topic_id = 1;
+}
+message GetTopicLineageResponse {
+  repeated LineageNode producers = 1;
+  repeated LineageNode consumers = 2;
+}
+
+message LineageNode {
+  string workspace_id = 1;
+  string workspace_name = 2;
+  string service_account_id = 3;
+  string service_account_name = 4;
+  string client_id = 5;
+  int64 bytes_transferred = 6;
+  google.protobuf.Timestamp last_seen = 7;
+}
