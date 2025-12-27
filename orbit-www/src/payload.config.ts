@@ -30,6 +30,22 @@ import { RegistryConfigs } from './collections/RegistryConfigs'
 import { EnvironmentVariables } from './collections/EnvironmentVariables'
 import { RegistryImages } from './collections/RegistryImages'
 
+// Kafka collections
+import {
+  KafkaProviders,
+  KafkaClusters,
+  KafkaEnvironmentMappings,
+  KafkaTopics,
+  KafkaSchemas,
+  KafkaServiceAccounts,
+  KafkaTopicShares,
+  KafkaTopicSharePolicies,
+  KafkaTopicPolicies,
+  KafkaUsageMetrics,
+  KafkaConsumerGroups,
+  KafkaClientActivity,
+} from './collections/kafka'
+
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
@@ -63,6 +79,19 @@ export default buildConfig({
     RegistryConfigs,
     EnvironmentVariables,
     RegistryImages,
+    // Kafka collections
+    KafkaProviders,
+    KafkaClusters,
+    KafkaEnvironmentMappings,
+    KafkaTopics,
+    KafkaSchemas,
+    KafkaServiceAccounts,
+    KafkaTopicShares,
+    KafkaTopicSharePolicies,
+    KafkaTopicPolicies,
+    KafkaUsageMetrics,
+    KafkaConsumerGroups,
+    KafkaClientActivity,
   ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
