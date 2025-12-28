@@ -8,10 +8,13 @@ import type {
   KafkaEnvironmentMappingConfig,
 } from '@/app/actions/kafka-admin'
 
-// These will be created in later tasks - for now stub them
-// import { ProvidersTab } from './ProvidersTab'
-// import { ClustersTab } from './ClustersTab'
-// import { MappingsTab } from './MappingsTab'
+// Import tab components
+import { ProvidersTab } from './ProvidersTab'
+import { ClustersTab } from './ClustersTab'
+import { MappingsTab } from './MappingsTab'
+import { ProviderDetail } from './ProviderDetail'
+import { ClusterDetail } from './ClusterDetail'
+import { MappingForm } from './MappingForm'
 
 interface KafkaAdminClientProps {
   initialProviders: KafkaProviderConfig[]
@@ -19,12 +22,8 @@ interface KafkaAdminClientProps {
   initialMappings: KafkaEnvironmentMappingConfig[]
 }
 
-type PanelContent = 'list' | 'detail' | 'form'
-type SelectedItemType =
-  | { type: 'provider'; id: string }
-  | { type: 'cluster'; id: string }
-  | { type: 'mapping'; id: string }
-  | null
+type PanelContent = 'list' | 'provider-detail' | 'cluster-detail' | 'cluster-form' | 'mapping-form'
+type SelectedItemId = string | null
 
 export function KafkaAdminClient({
   initialProviders,
@@ -39,27 +38,37 @@ export function KafkaAdminClient({
   const [clusters, setClusters] = useState(initialClusters)
   const [mappings, setMappings] = useState(initialMappings)
   const [panelContent, setPanelContent] = useState<PanelContent>('list')
-  const [selectedItem, setSelectedItem] = useState<SelectedItemType>(null)
+  const [selectedItemId, setSelectedItemId] = useState<SelectedItemId>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Navigation functions
-  const showDetail = useCallback((item: SelectedItemType) => {
-    setSelectedItem(item)
-    setPanelContent('detail')
+  const showProviderDetail = useCallback((providerId: string) => {
+    setSelectedItemId(providerId)
+    setPanelContent('provider-detail')
   }, [])
 
-  const showForm = useCallback((type: 'cluster' | 'mapping') => {
-    setSelectedItem({ type, id: 'new' } as SelectedItemType)
-    setPanelContent('form')
+  const showClusterDetail = useCallback((clusterId: string) => {
+    setSelectedItemId(clusterId)
+    setPanelContent('cluster-detail')
+  }, [])
+
+  const showClusterForm = useCallback(() => {
+    setSelectedItemId(null)
+    setPanelContent('cluster-form')
+  }, [])
+
+  const showMappingForm = useCallback(() => {
+    setSelectedItemId(null)
+    setPanelContent('mapping-form')
   }, [])
 
   const backToList = useCallback(() => {
-    setSelectedItem(null)
+    setSelectedItemId(null)
     setPanelContent('list')
   }, [])
 
-  // Refresh functions for tabs with error handling
+  // Refresh functions
   const refreshProviders = useCallback(async () => {
     setIsLoading(true)
     setError(null)
@@ -114,6 +123,193 @@ export function KafkaAdminClient({
     }
   }, [])
 
+  // Action handlers
+  const handleSaveProvider = useCallback(async (providerId: string, config: Partial<KafkaProviderConfig>) => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const { saveProviderConfig } = await import('@/app/actions/kafka-admin')
+      const result = await saveProviderConfig(providerId, config)
+      if (result.success) {
+        await refreshProviders()
+        backToList()
+      } else {
+        setError(result.error || 'Failed to save provider')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save provider')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [refreshProviders, backToList])
+
+  const handleSaveCluster = useCallback(async (data: Partial<KafkaClusterConfig>) => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      if (data.id) {
+        // Update existing cluster - not implemented yet
+        setError('Cluster updates not yet implemented')
+      } else {
+        // Create new cluster
+        const { createCluster } = await import('@/app/actions/kafka-admin')
+        const result = await createCluster({
+          name: data.name!,
+          providerId: data.providerId!,
+          bootstrapServers: data.bootstrapServers!,
+          environment: data.environment,
+          schemaRegistryUrl: data.schemaRegistryUrl,
+        })
+        if (result.success) {
+          await refreshClusters()
+          backToList()
+        } else {
+          setError(result.error || 'Failed to create cluster')
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save cluster')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [refreshClusters, backToList])
+
+  const handleDeleteCluster = useCallback(async (clusterId: string) => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const { deleteCluster } = await import('@/app/actions/kafka-admin')
+      const result = await deleteCluster(clusterId)
+      if (result.success) {
+        await refreshClusters()
+        backToList()
+      } else {
+        setError(result.error || 'Failed to delete cluster')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete cluster')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [refreshClusters, backToList])
+
+  const handleValidateCluster = useCallback(async (clusterId: string) => {
+    try {
+      const { validateCluster } = await import('@/app/actions/kafka-admin')
+      const result = await validateCluster(clusterId)
+      if (result.success) {
+        return { valid: result.valid ?? false, error: result.error }
+      }
+      return { valid: false, error: result.error || 'Validation failed' }
+    } catch (err) {
+      return { valid: false, error: err instanceof Error ? err.message : 'Validation failed' }
+    }
+  }, [])
+
+  const handleSaveMapping = useCallback(async (data: {
+    environment: string
+    clusterId: string
+    priority: number
+    isDefault: boolean
+  }) => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const { createMapping } = await import('@/app/actions/kafka-admin')
+      const result = await createMapping(data)
+      if (result.success) {
+        await refreshMappings()
+        backToList()
+      } else {
+        setError(result.error || 'Failed to create mapping')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create mapping')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [refreshMappings, backToList])
+
+  const handleDeleteMapping = useCallback(async (mappingId: string) => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const { deleteMapping } = await import('@/app/actions/kafka-admin')
+      const result = await deleteMapping(mappingId)
+      if (result.success) {
+        await refreshMappings()
+      } else {
+        setError(result.error || 'Failed to delete mapping')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete mapping')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [refreshMappings])
+
+  // Get selected items
+  const selectedProvider = selectedItemId
+    ? providers.find(p => p.id === selectedItemId)
+    : null
+  const selectedCluster = selectedItemId
+    ? clusters.find(c => c.id === selectedItemId)
+    : null
+
+  // Render detail/form views
+  if (panelContent === 'provider-detail' && selectedProvider) {
+    return (
+      <div className="p-6">
+        <ProviderDetail
+          provider={selectedProvider}
+          onBack={backToList}
+          onSave={handleSaveProvider}
+        />
+      </div>
+    )
+  }
+
+  if (panelContent === 'cluster-detail') {
+    return (
+      <div className="p-6">
+        <ClusterDetail
+          cluster={selectedCluster ?? null}
+          providers={providers}
+          onBack={backToList}
+          onSave={handleSaveCluster}
+          onDelete={selectedCluster ? handleDeleteCluster : undefined}
+          onValidate={selectedCluster ? handleValidateCluster : undefined}
+        />
+      </div>
+    )
+  }
+
+  if (panelContent === 'cluster-form') {
+    return (
+      <div className="p-6">
+        <ClusterDetail
+          cluster={null}
+          providers={providers}
+          onBack={backToList}
+          onSave={handleSaveCluster}
+        />
+      </div>
+    )
+  }
+
+  if (panelContent === 'mapping-form') {
+    return (
+      <div className="p-6">
+        <MappingForm
+          clusters={clusters}
+          onBack={backToList}
+          onSave={handleSaveMapping}
+        />
+      </div>
+    )
+  }
+
+  // Main list view with tabs
   return (
     <div className="p-6">
       <div className="mb-6">
@@ -172,32 +368,35 @@ export function KafkaAdminClient({
         </TabsList>
 
         <TabsContent value="clusters" className="mt-6">
-          {/* TODO: ClustersTab component */}
-          <div className="text-muted-foreground">
-            Clusters tab - {clusters.length} clusters
-            <pre className="mt-2 text-xs">{JSON.stringify(clusters, null, 2)}</pre>
-          </div>
+          <ClustersTab
+            clusters={clusters}
+            providers={providers}
+            onSelectCluster={showClusterDetail}
+            onAddCluster={showClusterForm}
+            onRefresh={refreshClusters}
+          />
         </TabsContent>
 
         <TabsContent value="mappings" className="mt-6">
-          {/* TODO: MappingsTab component */}
-          <div className="text-muted-foreground">
-            Mappings tab - {mappings.length} mappings
-            <pre className="mt-2 text-xs">{JSON.stringify(mappings, null, 2)}</pre>
-          </div>
+          <MappingsTab
+            mappings={mappings}
+            onAddMapping={showMappingForm}
+            onDeleteMapping={handleDeleteMapping}
+            onRefresh={refreshMappings}
+          />
         </TabsContent>
 
         <TabsContent value="providers" className="mt-6">
-          {/* TODO: ProvidersTab component */}
-          <div className="text-muted-foreground">
-            Providers tab - {providers.length} providers
-            <pre className="mt-2 text-xs">{JSON.stringify(providers, null, 2)}</pre>
-          </div>
+          <ProvidersTab
+            providers={providers}
+            onSelectProvider={showProviderDetail}
+            onRefresh={refreshProviders}
+          />
         </TabsContent>
       </Tabs>
     </div>
   )
 }
 
-// Export navigation state and functions for use by tab components
-export type { PanelContent, SelectedItemType, KafkaAdminClientProps }
+// Export types for use by other components if needed
+export type { PanelContent, SelectedItemId, KafkaAdminClientProps }
