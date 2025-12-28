@@ -567,6 +567,10 @@ export async function deleteCluster(clusterId: string): Promise<{
   error?: string
 }> {
   try {
+    if (!isNonEmptyString(clusterId)) {
+      return { success: false, error: 'Cluster ID is required' }
+    }
+
     await requireAdmin()
 
     const response = await kafkaClient.deleteCluster({ clusterId })
@@ -716,6 +720,10 @@ export async function deleteMapping(mappingId: string): Promise<{
   error?: string
 }> {
   try {
+    if (!isNonEmptyString(mappingId)) {
+      return { success: false, error: 'Mapping ID is required' }
+    }
+
     await requireAdmin()
 
     const response = await kafkaClient.deleteEnvironmentMapping({ mappingId })

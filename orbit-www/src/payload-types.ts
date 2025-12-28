@@ -89,6 +89,18 @@ export interface Config {
     'registry-configs': RegistryConfig;
     'environment-variables': EnvironmentVariable;
     'registry-images': RegistryImage;
+    'kafka-providers': KafkaProvider;
+    'kafka-clusters': KafkaCluster;
+    'kafka-environment-mappings': KafkaEnvironmentMapping;
+    'kafka-topics': KafkaTopic;
+    'kafka-schemas': KafkaSchema;
+    'kafka-service-accounts': KafkaServiceAccount;
+    'kafka-topic-shares': KafkaTopicShare;
+    'kafka-topic-share-policies': KafkaTopicSharePolicy;
+    'kafka-topic-policies': KafkaTopicPolicy;
+    'kafka-usage-metrics': KafkaUsageMetric;
+    'kafka-consumer-groups': KafkaConsumerGroup;
+    'kafka-client-activity': KafkaClientActivity;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -117,6 +129,18 @@ export interface Config {
     'registry-configs': RegistryConfigsSelect<false> | RegistryConfigsSelect<true>;
     'environment-variables': EnvironmentVariablesSelect<false> | EnvironmentVariablesSelect<true>;
     'registry-images': RegistryImagesSelect<false> | RegistryImagesSelect<true>;
+    'kafka-providers': KafkaProvidersSelect<false> | KafkaProvidersSelect<true>;
+    'kafka-clusters': KafkaClustersSelect<false> | KafkaClustersSelect<true>;
+    'kafka-environment-mappings': KafkaEnvironmentMappingsSelect<false> | KafkaEnvironmentMappingsSelect<true>;
+    'kafka-topics': KafkaTopicsSelect<false> | KafkaTopicsSelect<true>;
+    'kafka-schemas': KafkaSchemasSelect<false> | KafkaSchemasSelect<true>;
+    'kafka-service-accounts': KafkaServiceAccountsSelect<false> | KafkaServiceAccountsSelect<true>;
+    'kafka-topic-shares': KafkaTopicSharesSelect<false> | KafkaTopicSharesSelect<true>;
+    'kafka-topic-share-policies': KafkaTopicSharePoliciesSelect<false> | KafkaTopicSharePoliciesSelect<true>;
+    'kafka-topic-policies': KafkaTopicPoliciesSelect<false> | KafkaTopicPoliciesSelect<true>;
+    'kafka-usage-metrics': KafkaUsageMetricsSelect<false> | KafkaUsageMetricsSelect<true>;
+    'kafka-consumer-groups': KafkaConsumerGroupsSelect<false> | KafkaConsumerGroupsSelect<true>;
+    'kafka-client-activity': KafkaClientActivitySelect<false> | KafkaClientActivitySelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -1295,6 +1319,743 @@ export interface RegistryImage {
   createdAt: string;
 }
 /**
+ * System-managed Kafka provider definitions
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-providers".
+ */
+export interface KafkaProvider {
+  id: string;
+  /**
+   * Unique identifier: apache-kafka, confluent-cloud, aws-msk, etc.
+   */
+  name: string;
+  /**
+   * Human-readable name
+   */
+  displayName: string;
+  /**
+   * Which adapter handles this provider
+   */
+  adapterType: 'apache' | 'confluent' | 'msk';
+  /**
+   * Connection/auth fields required for this provider
+   */
+  requiredConfigFields:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  capabilities?: {
+    /**
+     * Supports Schema Registry integration
+     */
+    schemaRegistry?: boolean | null;
+    /**
+     * Supports transactions
+     */
+    transactions?: boolean | null;
+    /**
+     * Supports quotas API
+     */
+    quotasApi?: boolean | null;
+    /**
+     * Supports native metrics API
+     */
+    metricsApi?: boolean | null;
+  };
+  /**
+   * Link to provider documentation
+   */
+  documentationUrl?: string | null;
+  /**
+   * Provider logo
+   */
+  icon?: (string | null) | Media;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Registered Kafka clusters managed by platform team
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-clusters".
+ */
+export interface KafkaCluster {
+  id: string;
+  /**
+   * Cluster identifier
+   */
+  name: string;
+  /**
+   * Provider type for this cluster
+   */
+  provider: string | KafkaProvider;
+  /**
+   * Provider-specific connection config (bootstrap servers, region, etc.)
+   */
+  connectionConfig:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Encrypted auth credentials (SASL, mTLS certs, API keys)
+   */
+  credentials?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  validationStatus: 'pending' | 'valid' | 'invalid';
+  /**
+   * Last successful connection test
+   */
+  lastValidatedAt?: string | null;
+  /**
+   * Optional cluster description
+   */
+  description?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Maps environments to Kafka clusters
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-environment-mappings".
+ */
+export interface KafkaEnvironmentMapping {
+  id: string;
+  /**
+   * Environment name: dev, staging, prod, etc.
+   */
+  environment: string;
+  /**
+   * Target Kafka cluster for this environment
+   */
+  cluster: string | KafkaCluster;
+  /**
+   * Optional routing rules (region-based, workspace metadata, round-robin)
+   */
+  routingRule?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Priority for multiple clusters in same environment (higher = preferred)
+   */
+  priority?: number | null;
+  /**
+   * Default cluster for this environment
+   */
+  isDefault?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Kafka topics owned by workspaces
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-topics".
+ */
+export interface KafkaTopic {
+  id: string;
+  /**
+   * Owning workspace
+   */
+  workspace: string | Workspace;
+  /**
+   * Topic name (validated against naming conventions)
+   */
+  name: string;
+  /**
+   * Topic description
+   */
+  description?: string | null;
+  /**
+   * Target environment: dev, staging, prod
+   */
+  environment: string;
+  /**
+   * Resolved cluster (stored for reference)
+   */
+  cluster?: (string | null) | KafkaCluster;
+  /**
+   * Number of partitions
+   */
+  partitions: number;
+  /**
+   * Replication factor
+   */
+  replicationFactor: number;
+  /**
+   * Retention period in milliseconds
+   */
+  retentionMs?: number | null;
+  cleanupPolicy?: ('delete' | 'compact' | 'compact,delete') | null;
+  compression?: ('none' | 'gzip' | 'snappy' | 'lz4' | 'zstd') | null;
+  /**
+   * Additional topic configuration
+   */
+  config?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  status: 'pending-approval' | 'provisioning' | 'active' | 'failed' | 'deleting';
+  /**
+   * Temporal workflow ID for async tracking
+   */
+  workflowId?: string | null;
+  /**
+   * Based on policy evaluation
+   */
+  approvalRequired?: boolean | null;
+  /**
+   * Who approved (if required)
+   */
+  approvedBy?: (string | null) | User;
+  /**
+   * Approval timestamp
+   */
+  approvedAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Schemas registered for Kafka topics
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-schemas".
+ */
+export interface KafkaSchema {
+  id: string;
+  workspace: string | Workspace;
+  /**
+   * Associated topic
+   */
+  topic: string | KafkaTopic;
+  /**
+   * Key or value schema
+   */
+  type: 'key' | 'value';
+  /**
+   * Auto-generated: {env}.{workspace}.{topic}-{type}
+   */
+  subject?: string | null;
+  format: 'avro' | 'protobuf' | 'json';
+  /**
+   * Schema definition
+   */
+  content: string;
+  /**
+   * Schema Registry version (mirrored)
+   */
+  version?: number | null;
+  /**
+   * Schema Registry ID
+   */
+  schemaId?: number | null;
+  compatibility?: ('backward' | 'forward' | 'full' | 'none') | null;
+  status: 'pending' | 'registered' | 'failed';
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Service accounts for Kafka access
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-service-accounts".
+ */
+export interface KafkaServiceAccount {
+  id: string;
+  workspace: string | Workspace;
+  /**
+   * Service account identifier
+   */
+  name: string;
+  type: 'producer' | 'consumer' | 'producer-consumer' | 'admin';
+  /**
+   * Provider-specific credentials (encrypted)
+   */
+  credentials?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  status: 'active' | 'revoked';
+  createdBy?: (string | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Cross-workspace topic access grants
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-topic-shares".
+ */
+export interface KafkaTopicShare {
+  id: string;
+  /**
+   * Topic being shared
+   */
+  topic: string | KafkaTopic;
+  /**
+   * Workspace that owns the topic
+   */
+  ownerWorkspace: string | Workspace;
+  /**
+   * Workspace receiving access
+   */
+  targetWorkspace: string | Workspace;
+  /**
+   * Level of access granted
+   */
+  accessLevel: 'read' | 'write' | 'read-write';
+  status: 'pending' | 'approved' | 'rejected' | 'revoked' | 'expired';
+  /**
+   * Optional expiration date for the share
+   */
+  expiresAt?: string | null;
+  /**
+   * User who requested the share
+   */
+  requestedBy?: (string | null) | User;
+  /**
+   * User who approved the share
+   */
+  approvedBy?: (string | null) | User;
+  /**
+   * Approval timestamp
+   */
+  approvedAt?: string | null;
+  /**
+   * Reason for requesting access
+   */
+  reason?: string | null;
+  /**
+   * Reason for rejection (if rejected)
+   */
+  rejectionReason?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Policies controlling topic sharing behavior
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-topic-share-policies".
+ */
+export interface KafkaTopicSharePolicy {
+  id: string;
+  /**
+   * Workspace this policy applies to (null = platform-wide)
+   */
+  workspace?: (string | null) | Workspace;
+  /**
+   * Policy name for identification
+   */
+  name: string;
+  /**
+   * Policy description
+   */
+  description?: string | null;
+  /**
+   * Who can see topics for sharing requests
+   */
+  visibility: 'private' | 'discoverable' | 'public';
+  /**
+   * Automatically approve share requests
+   */
+  autoApprove?: boolean | null;
+  /**
+   * Workspaces whose requests are auto-approved
+   */
+  autoApproveWorkspaces?: (string | Workspace)[] | null;
+  /**
+   * Access levels that can be requested
+   */
+  allowedAccessLevels?: ('read' | 'write' | 'read-write')[] | null;
+  /**
+   * Maximum share duration in days (0 = unlimited)
+   */
+  maxShareDuration?: number | null;
+  /**
+   * Require reason for share requests
+   */
+  requireReason?: boolean | null;
+  /**
+   * Topic name patterns this policy applies to (regex)
+   */
+  topicPatterns?:
+    | {
+        /**
+         * Regex pattern to match topic names
+         */
+        pattern: string;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * Policy is active
+   */
+  enabled?: boolean | null;
+  /**
+   * Higher priority policies are evaluated first
+   */
+  priority?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Guardrails and policies for topic creation
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-topic-policies".
+ */
+export interface KafkaTopicPolicy {
+  id: string;
+  /**
+   * Workspace this policy applies to (null = platform-wide)
+   */
+  workspace?: (string | null) | Workspace;
+  /**
+   * Policy name for identification
+   */
+  name: string;
+  /**
+   * Policy description
+   */
+  description?: string | null;
+  /**
+   * Environments this policy applies to (empty = all)
+   */
+  environment?: ('dev' | 'staging' | 'prod')[] | null;
+  /**
+   * Topic naming rules
+   */
+  namingConventions?: {
+    /**
+     * Regex pattern for valid topic names
+     */
+    pattern?: string | null;
+    /**
+     * Required prefix for topic names
+     */
+    prefix?: string | null;
+    /**
+     * Required suffix for topic names
+     */
+    suffix?: string | null;
+    /**
+     * Maximum topic name length
+     */
+    maxLength?: number | null;
+  };
+  /**
+   * Partition count constraints
+   */
+  partitionLimits?: {
+    /**
+     * Minimum partitions
+     */
+    min?: number | null;
+    /**
+     * Maximum partitions
+     */
+    max?: number | null;
+    /**
+     * Default partition count
+     */
+    default?: number | null;
+  };
+  /**
+   * Replication factor constraints
+   */
+  replicationLimits?: {
+    /**
+     * Minimum replication factor
+     */
+    min?: number | null;
+    /**
+     * Maximum replication factor
+     */
+    max?: number | null;
+    /**
+     * Default replication factor
+     */
+    default?: number | null;
+  };
+  /**
+   * Retention period constraints
+   */
+  retentionLimits?: {
+    /**
+     * Minimum retention in milliseconds
+     */
+    minMs?: number | null;
+    /**
+     * Maximum retention in milliseconds
+     */
+    maxMs?: number | null;
+    /**
+     * Default retention in milliseconds
+     */
+    defaultMs?: number | null;
+  };
+  /**
+   * Require admin approval for topic creation
+   */
+  requireApproval?: boolean | null;
+  /**
+   * Require schema registration before topic creation
+   */
+  requireSchema?: boolean | null;
+  /**
+   * Require topic description
+   */
+  requireDescription?: boolean | null;
+  /**
+   * Allowed compression types
+   */
+  allowedCompressionTypes?: ('none' | 'gzip' | 'snappy' | 'lz4' | 'zstd')[] | null;
+  /**
+   * Allowed cleanup policies
+   */
+  allowedCleanupPolicies?: ('delete' | 'compact' | 'compact,delete')[] | null;
+  /**
+   * Rules for automatic approval
+   */
+  autoApprovalRules?:
+    | {
+        environment?: ('dev' | 'staging' | 'prod') | null;
+        /**
+         * Auto-approve if partitions <= this value
+         */
+        maxPartitions?: number | null;
+        /**
+         * Regex pattern for auto-approvable topics
+         */
+        topicPattern?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * Policy is active
+   */
+  enabled?: boolean | null;
+  /**
+   * Higher priority policies are evaluated first
+   */
+  priority?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Time-series metrics for Kafka topics
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-usage-metrics".
+ */
+export interface KafkaUsageMetric {
+  id: string;
+  workspace: string | Workspace;
+  topic: string | KafkaTopic;
+  cluster?: (string | null) | KafkaCluster;
+  /**
+   * Metric timestamp
+   */
+  timestamp: string;
+  granularity: 'minute' | 'hour' | 'day';
+  /**
+   * Messages produced
+   */
+  messagesIn?: number | null;
+  /**
+   * Messages consumed
+   */
+  messagesOut?: number | null;
+  /**
+   * Bytes produced
+   */
+  bytesIn?: number | null;
+  /**
+   * Bytes consumed
+   */
+  bytesOut?: number | null;
+  /**
+   * Per-partition metrics
+   */
+  partitionMetrics?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Total consumer lag across all groups
+   */
+  totalLag?: number | null;
+  /**
+   * Number of active consumer groups
+   */
+  consumerGroupCount?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Consumer groups consuming from topics
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-consumer-groups".
+ */
+export interface KafkaConsumerGroup {
+  id: string;
+  /**
+   * Workspace owning the topic
+   */
+  workspace: string | Workspace;
+  topic: string | KafkaTopic;
+  cluster?: (string | null) | KafkaCluster;
+  /**
+   * Consumer group ID
+   */
+  groupId: string;
+  /**
+   * Consumer group state
+   */
+  state?: ('unknown' | 'preparing-rebalance' | 'completing-rebalance' | 'stable' | 'dead' | 'empty') | null;
+  /**
+   * Number of group members
+   */
+  members?: number | null;
+  /**
+   * Total lag across all partitions
+   */
+  totalLag?: number | null;
+  /**
+   * Per-partition lag information
+   */
+  partitionLag?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Workspace that owns this consumer (if known)
+   */
+  ownerWorkspace?: (string | null) | Workspace;
+  /**
+   * Associated service account (if identified)
+   */
+  serviceAccount?: (string | null) | KafkaServiceAccount;
+  /**
+   * Associated share grant (if cross-workspace)
+   */
+  share?: (string | null) | KafkaTopicShare;
+  /**
+   * When this group was first discovered
+   */
+  firstSeen?: string | null;
+  /**
+   * When this group was last seen active
+   */
+  lastSeen?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Client activity log for lineage and auditing
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-client-activity".
+ */
+export interface KafkaClientActivity {
+  id: string;
+  /**
+   * Topic owner workspace
+   */
+  workspace: string | Workspace;
+  topic: string | KafkaTopic;
+  cluster?: (string | null) | KafkaCluster;
+  activityType: 'produce' | 'consume' | 'admin';
+  /**
+   * Kafka client ID
+   */
+  clientId?: string | null;
+  /**
+   * Consumer group ID (for consume activity)
+   */
+  consumerGroup?: string | null;
+  /**
+   * Workspace the client belongs to (if identified)
+   */
+  sourceWorkspace?: (string | null) | Workspace;
+  /**
+   * Associated service account (if identified)
+   */
+  serviceAccount?: (string | null) | KafkaServiceAccount;
+  /**
+   * Associated share grant (if cross-workspace access)
+   */
+  share?: (string | null) | KafkaTopicShare;
+  /**
+   * Activity timestamp
+   */
+  timestamp: string;
+  /**
+   * Additional activity metadata
+   */
+  metadata?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Client IP address
+   */
+  ipAddress?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
@@ -1388,6 +2149,54 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'registry-images';
         value: string | RegistryImage;
+      } | null)
+    | ({
+        relationTo: 'kafka-providers';
+        value: string | KafkaProvider;
+      } | null)
+    | ({
+        relationTo: 'kafka-clusters';
+        value: string | KafkaCluster;
+      } | null)
+    | ({
+        relationTo: 'kafka-environment-mappings';
+        value: string | KafkaEnvironmentMapping;
+      } | null)
+    | ({
+        relationTo: 'kafka-topics';
+        value: string | KafkaTopic;
+      } | null)
+    | ({
+        relationTo: 'kafka-schemas';
+        value: string | KafkaSchema;
+      } | null)
+    | ({
+        relationTo: 'kafka-service-accounts';
+        value: string | KafkaServiceAccount;
+      } | null)
+    | ({
+        relationTo: 'kafka-topic-shares';
+        value: string | KafkaTopicShare;
+      } | null)
+    | ({
+        relationTo: 'kafka-topic-share-policies';
+        value: string | KafkaTopicSharePolicy;
+      } | null)
+    | ({
+        relationTo: 'kafka-topic-policies';
+        value: string | KafkaTopicPolicy;
+      } | null)
+    | ({
+        relationTo: 'kafka-usage-metrics';
+        value: string | KafkaUsageMetric;
+      } | null)
+    | ({
+        relationTo: 'kafka-consumer-groups';
+        value: string | KafkaConsumerGroup;
+      } | null)
+    | ({
+        relationTo: 'kafka-client-activity';
+        value: string | KafkaClientActivity;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -1990,6 +2799,273 @@ export interface RegistryImagesSelect<T extends boolean = true> {
   digest?: T;
   sizeBytes?: T;
   pushedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-providers_select".
+ */
+export interface KafkaProvidersSelect<T extends boolean = true> {
+  name?: T;
+  displayName?: T;
+  adapterType?: T;
+  requiredConfigFields?: T;
+  capabilities?:
+    | T
+    | {
+        schemaRegistry?: T;
+        transactions?: T;
+        quotasApi?: T;
+        metricsApi?: T;
+      };
+  documentationUrl?: T;
+  icon?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-clusters_select".
+ */
+export interface KafkaClustersSelect<T extends boolean = true> {
+  name?: T;
+  provider?: T;
+  connectionConfig?: T;
+  credentials?: T;
+  validationStatus?: T;
+  lastValidatedAt?: T;
+  description?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-environment-mappings_select".
+ */
+export interface KafkaEnvironmentMappingsSelect<T extends boolean = true> {
+  environment?: T;
+  cluster?: T;
+  routingRule?: T;
+  priority?: T;
+  isDefault?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-topics_select".
+ */
+export interface KafkaTopicsSelect<T extends boolean = true> {
+  workspace?: T;
+  name?: T;
+  description?: T;
+  environment?: T;
+  cluster?: T;
+  partitions?: T;
+  replicationFactor?: T;
+  retentionMs?: T;
+  cleanupPolicy?: T;
+  compression?: T;
+  config?: T;
+  status?: T;
+  workflowId?: T;
+  approvalRequired?: T;
+  approvedBy?: T;
+  approvedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-schemas_select".
+ */
+export interface KafkaSchemasSelect<T extends boolean = true> {
+  workspace?: T;
+  topic?: T;
+  type?: T;
+  subject?: T;
+  format?: T;
+  content?: T;
+  version?: T;
+  schemaId?: T;
+  compatibility?: T;
+  status?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-service-accounts_select".
+ */
+export interface KafkaServiceAccountsSelect<T extends boolean = true> {
+  workspace?: T;
+  name?: T;
+  type?: T;
+  credentials?: T;
+  status?: T;
+  createdBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-topic-shares_select".
+ */
+export interface KafkaTopicSharesSelect<T extends boolean = true> {
+  topic?: T;
+  ownerWorkspace?: T;
+  targetWorkspace?: T;
+  accessLevel?: T;
+  status?: T;
+  expiresAt?: T;
+  requestedBy?: T;
+  approvedBy?: T;
+  approvedAt?: T;
+  reason?: T;
+  rejectionReason?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-topic-share-policies_select".
+ */
+export interface KafkaTopicSharePoliciesSelect<T extends boolean = true> {
+  workspace?: T;
+  name?: T;
+  description?: T;
+  visibility?: T;
+  autoApprove?: T;
+  autoApproveWorkspaces?: T;
+  allowedAccessLevels?: T;
+  maxShareDuration?: T;
+  requireReason?: T;
+  topicPatterns?:
+    | T
+    | {
+        pattern?: T;
+        id?: T;
+      };
+  enabled?: T;
+  priority?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-topic-policies_select".
+ */
+export interface KafkaTopicPoliciesSelect<T extends boolean = true> {
+  workspace?: T;
+  name?: T;
+  description?: T;
+  environment?: T;
+  namingConventions?:
+    | T
+    | {
+        pattern?: T;
+        prefix?: T;
+        suffix?: T;
+        maxLength?: T;
+      };
+  partitionLimits?:
+    | T
+    | {
+        min?: T;
+        max?: T;
+        default?: T;
+      };
+  replicationLimits?:
+    | T
+    | {
+        min?: T;
+        max?: T;
+        default?: T;
+      };
+  retentionLimits?:
+    | T
+    | {
+        minMs?: T;
+        maxMs?: T;
+        defaultMs?: T;
+      };
+  requireApproval?: T;
+  requireSchema?: T;
+  requireDescription?: T;
+  allowedCompressionTypes?: T;
+  allowedCleanupPolicies?: T;
+  autoApprovalRules?:
+    | T
+    | {
+        environment?: T;
+        maxPartitions?: T;
+        topicPattern?: T;
+        id?: T;
+      };
+  enabled?: T;
+  priority?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-usage-metrics_select".
+ */
+export interface KafkaUsageMetricsSelect<T extends boolean = true> {
+  workspace?: T;
+  topic?: T;
+  cluster?: T;
+  timestamp?: T;
+  granularity?: T;
+  messagesIn?: T;
+  messagesOut?: T;
+  bytesIn?: T;
+  bytesOut?: T;
+  partitionMetrics?: T;
+  totalLag?: T;
+  consumerGroupCount?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-consumer-groups_select".
+ */
+export interface KafkaConsumerGroupsSelect<T extends boolean = true> {
+  workspace?: T;
+  topic?: T;
+  cluster?: T;
+  groupId?: T;
+  state?: T;
+  members?: T;
+  totalLag?: T;
+  partitionLag?: T;
+  ownerWorkspace?: T;
+  serviceAccount?: T;
+  share?: T;
+  firstSeen?: T;
+  lastSeen?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-client-activity_select".
+ */
+export interface KafkaClientActivitySelect<T extends boolean = true> {
+  workspace?: T;
+  topic?: T;
+  cluster?: T;
+  activityType?: T;
+  clientId?: T;
+  consumerGroup?: T;
+  sourceWorkspace?: T;
+  serviceAccount?: T;
+  share?: T;
+  timestamp?: T;
+  metadata?: T;
+  ipAddress?: T;
   updatedAt?: T;
   createdAt?: T;
 }
