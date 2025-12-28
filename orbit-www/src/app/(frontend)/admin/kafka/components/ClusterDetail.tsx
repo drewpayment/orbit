@@ -18,6 +18,17 @@ import {
   CardTitle,
   CardDescription,
 } from '@/components/ui/card'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { ArrowLeft, Save, Trash2, CheckCircle, AlertCircle } from 'lucide-react'
 import type {
@@ -118,7 +129,6 @@ export function ClusterDetail({
 
   const handleDelete = async () => {
     if (!cluster?.id || !onDelete) return
-    if (!confirm('Are you sure you want to delete this cluster?')) return
 
     setIsDeleting(true)
     try {
@@ -164,10 +174,32 @@ export function ClusterDetail({
         </div>
 
         {!isNew && onDelete && (
-          <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
-            <Trash2 className="h-4 w-4 mr-2" />
-            {isDeleting ? 'Deleting...' : 'Delete'}
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" disabled={isDeleting}>
+                <Trash2 className="h-4 w-4 mr-2" />
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Cluster?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently delete the cluster &quot;{cluster?.name}&quot;.
+                  This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDelete}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         )}
       </div>
 
