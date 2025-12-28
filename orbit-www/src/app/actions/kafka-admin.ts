@@ -13,6 +13,208 @@ import type {
 } from '@/lib/proto/idp/kafka/v1/kafka_pb'
 
 // ============================================================================
+// Payload Type Definitions
+// ============================================================================
+
+/**
+ * Represents a workspace role assignment from the Payload CMS.
+ */
+interface WorkspaceRoleAssignment {
+  id: string
+  user: string | { id: string }
+  workspace: string | { id: string }
+  role:
+    | string
+    | {
+        id: string
+        name: string
+        slug: string
+        scope: 'platform' | 'workspace'
+      }
+  createdAt?: string
+  updatedAt?: string
+}
+
+/**
+ * Represents a workspace document from the Payload CMS.
+ */
+interface WorkspaceDoc {
+  id: string
+  name: string
+  slug: string
+  client?: string | { id: string; name: string }
+  createdAt?: string
+  updatedAt?: string
+}
+
+// ============================================================================
+// Validation Helpers
+// ============================================================================
+
+/**
+ * Validates that a string is non-empty after trimming.
+ */
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+/**
+ * Validates bootstrap servers format (comma-separated hostname:port pairs).
+ * Examples of valid formats:
+ * - "localhost:9092"
+ * - "broker1:9092,broker2:9092"
+ * - "kafka.example.com:9092"
+ */
+function isValidBootstrapServers(value: string): boolean {
+  if (!isNonEmptyString(value)) return false
+
+  const servers = value.split(',').map((s) => s.trim())
+  if (servers.length === 0) return false
+
+  // Pattern: hostname or IP followed by colon and port number
+  const hostPortPattern = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*:\d{1,5}$/
+
+  return servers.every((server) => {
+    if (!hostPortPattern.test(server)) return false
+    // Validate port range
+    const port = parseInt(server.split(':').pop() || '', 10)
+    return port >= 1 && port <= 65535
+  })
+}
+
+/**
+ * Validates a URL format (http or https).
+ */
+function isValidUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Validates credentials format - ensures all keys and values are non-empty strings.
+ */
+function isValidCredentials(credentials: unknown): credentials is Record<string, string> {
+  if (credentials === null || credentials === undefined) return true
+  if (typeof credentials !== 'object') return false
+
+  return Object.entries(credentials as Record<string, unknown>).every(
+    ([key, value]) => isNonEmptyString(key) && typeof value === 'string'
+  )
+}
+
+/**
+ * Validates environment name format.
+ * Allowed: lowercase letters, numbers, hyphens.
+ */
+function isValidEnvironmentName(value: string): boolean {
+  if (!isNonEmptyString(value)) return false
+  return /^[a-z0-9-]+$/.test(value)
+}
+
+interface ValidationError {
+  field: string
+  message: string
+}
+
+/**
+ * Validates cluster creation input and returns validation errors.
+ */
+function validateClusterInput(data: {
+  name: string
+  providerId: string
+  bootstrapServers: string
+  environment?: string
+  schemaRegistryUrl?: string
+  credentials?: Record<string, string>
+}): ValidationError[] {
+  const errors: ValidationError[] = []
+
+  if (!isNonEmptyString(data.name)) {
+    errors.push({ field: 'name', message: 'Cluster name is required' })
+  } else if (data.name.length > 255) {
+    errors.push({ field: 'name', message: 'Cluster name must be 255 characters or less' })
+  }
+
+  if (!isNonEmptyString(data.providerId)) {
+    errors.push({ field: 'providerId', message: 'Provider ID is required' })
+  }
+
+  if (!isNonEmptyString(data.bootstrapServers)) {
+    errors.push({ field: 'bootstrapServers', message: 'Bootstrap servers are required' })
+  } else if (!isValidBootstrapServers(data.bootstrapServers)) {
+    errors.push({
+      field: 'bootstrapServers',
+      message: 'Bootstrap servers must be in format "hostname:port" (comma-separated for multiple)',
+    })
+  }
+
+  if (data.environment && !isValidEnvironmentName(data.environment)) {
+    errors.push({
+      field: 'environment',
+      message: 'Environment must contain only lowercase letters, numbers, and hyphens',
+    })
+  }
+
+  if (data.schemaRegistryUrl && !isValidUrl(data.schemaRegistryUrl)) {
+    errors.push({
+      field: 'schemaRegistryUrl',
+      message: 'Schema registry URL must be a valid HTTP or HTTPS URL',
+    })
+  }
+
+  if (data.credentials && !isValidCredentials(data.credentials)) {
+    errors.push({
+      field: 'credentials',
+      message: 'Credentials must be an object with string keys and values',
+    })
+  }
+
+  return errors
+}
+
+/**
+ * Validates environment mapping creation input and returns validation errors.
+ */
+function validateMappingInput(data: {
+  environment: string
+  clusterId: string
+  priority?: number
+  isDefault?: boolean
+}): ValidationError[] {
+  const errors: ValidationError[] = []
+
+  if (!isNonEmptyString(data.environment)) {
+    errors.push({ field: 'environment', message: 'Environment is required' })
+  } else if (!isValidEnvironmentName(data.environment)) {
+    errors.push({
+      field: 'environment',
+      message: 'Environment must contain only lowercase letters, numbers, and hyphens',
+    })
+  }
+
+  if (!isNonEmptyString(data.clusterId)) {
+    errors.push({ field: 'clusterId', message: 'Cluster ID is required' })
+  }
+
+  if (data.priority !== undefined && (data.priority < 0 || !Number.isInteger(data.priority))) {
+    errors.push({ field: 'priority', message: 'Priority must be a non-negative integer' })
+  }
+
+  return errors
+}
+
+/**
+ * Formats validation errors into a single error message.
+ */
+function formatValidationErrors(errors: ValidationError[]): string {
+  return errors.map((e) => `${e.field}: ${e.message}`).join('; ')
+}
+
+// ============================================================================
 // Type Definitions
 // ============================================================================
 
@@ -73,8 +275,9 @@ async function requireAdmin(): Promise<{ userId: string }> {
   const payload = await getPayload({ config })
 
   // Check for platform-level admin role
+  // Note: Using type assertion for collection name since Payload types may not include custom collections
   const roleAssignments = await payload.find({
-    collection: 'user-workspace-roles' as any,
+    collection: 'user-workspace-roles' as 'users', // Type workaround for custom collection
     where: {
       user: { equals: session.user.id },
     },
@@ -82,8 +285,9 @@ async function requireAdmin(): Promise<{ userId: string }> {
     limit: 100,
   })
 
-  const isAdmin = roleAssignments.docs.some((assignment: any) => {
-    const role = typeof assignment.role === 'object' ? assignment.role : null
+  const isAdmin = roleAssignments.docs.some((assignment: unknown) => {
+    const typedAssignment = assignment as WorkspaceRoleAssignment
+    const role = typeof typedAssignment.role === 'object' ? typedAssignment.role : null
     if (!role) return false
     // Check if user has platform admin role or any admin role
     return (
@@ -171,6 +375,16 @@ function mapMappingToConfig(
   }
 }
 
+/**
+ * Fetches all clusters and returns a Map of cluster ID to cluster name.
+ * Use this helper to avoid duplicate listClusters calls in operations
+ * that need cluster name lookups.
+ */
+async function getClustersMap(): Promise<Map<string, string>> {
+  const response = await kafkaClient.listClusters({})
+  return new Map(response.clusters.map((c) => [c.id, c.name]))
+}
+
 // ============================================================================
 // Provider Actions
 // ============================================================================
@@ -256,6 +470,10 @@ export async function listClusters(): Promise<{
 
 /**
  * Gets a single Kafka cluster by ID.
+ *
+ * TODO: This implementation fetches all clusters and filters client-side.
+ * If the gRPC service adds a direct getCluster(clusterId) method in the future,
+ * this should be updated to use that for better performance.
  */
 export async function getCluster(clusterId: string): Promise<{
   success: boolean
@@ -265,6 +483,8 @@ export async function getCluster(clusterId: string): Promise<{
   try {
     await requireAdmin()
 
+    // Note: The gRPC service doesn't have a direct getCluster method,
+    // so we fetch all and filter. See TODO above for potential optimization.
     const response = await kafkaClient.listClusters({})
 
     const cluster = response.clusters.find((c) => c.id === clusterId)
@@ -299,6 +519,12 @@ export async function createCluster(data: {
   error?: string
 }> {
   try {
+    // Validate input before authentication to fail fast
+    const validationErrors = validateClusterInput(data)
+    if (validationErrors.length > 0) {
+      return { success: false, error: formatValidationErrors(validationErrors) }
+    }
+
     await requireAdmin()
 
     // Build connection config
@@ -359,7 +585,16 @@ export async function deleteCluster(clusterId: string): Promise<{
 }
 
 /**
- * Validates a Kafka cluster's connectivity.
+ * Validates a Kafka cluster's connectivity by testing the connection.
+ *
+ * @param clusterId - The ID of the cluster to validate
+ * @returns Response with the following contract:
+ *   - `success: true, valid: true` - Validation succeeded, cluster is reachable
+ *   - `success: true, valid: false, error: string` - Validation succeeded but cluster is unreachable (error describes why)
+ *   - `success: false, error: string` - Validation operation failed (e.g., network error, auth error)
+ *
+ * Note: When `success: true`, the `valid` field indicates cluster connectivity status.
+ * When `success: false`, the validation operation itself failed (not the cluster).
  */
 export async function validateCluster(clusterId: string): Promise<{
   success: boolean
@@ -403,11 +638,8 @@ export async function listMappings(environment?: string): Promise<{
       environment: environment || '',
     })
 
-    // Get cluster names for better display
-    const clustersResponse = await kafkaClient.listClusters({})
-    const clusterMap = new Map(
-      clustersResponse.clusters.map((c) => [c.id, c.name])
-    )
+    // Get cluster names for better display using the helper
+    const clusterMap = await getClustersMap()
 
     const mappings = response.mappings.map((m) =>
       mapMappingToConfig(m, clusterMap.get(m.clusterId))
@@ -437,6 +669,12 @@ export async function createMapping(data: {
   error?: string
 }> {
   try {
+    // Validate input before authentication to fail fast
+    const validationErrors = validateMappingInput(data)
+    if (validationErrors.length > 0) {
+      return { success: false, error: formatValidationErrors(validationErrors) }
+    }
+
     await requireAdmin()
 
     const response = await kafkaClient.createEnvironmentMapping({
@@ -455,13 +693,12 @@ export async function createMapping(data: {
       return { success: false, error: 'No mapping returned from creation' }
     }
 
-    // Get cluster name for display
-    const clustersResponse = await kafkaClient.listClusters({})
-    const cluster = clustersResponse.clusters.find((c) => c.id === data.clusterId)
+    // Get cluster name for display using the helper
+    const clusterMap = await getClustersMap()
 
     return {
       success: true,
-      data: mapMappingToConfig(response.mapping, cluster?.name),
+      data: mapMappingToConfig(response.mapping, clusterMap.get(data.clusterId)),
     }
   } catch (error) {
     console.error('Failed to create environment mapping:', error)
@@ -519,11 +756,14 @@ export async function listWorkspaces(): Promise<{
       sort: 'name',
     })
 
-    const data = workspaces.docs.map((w: any) => ({
-      id: w.id,
-      name: w.name,
-      slug: w.slug,
-    }))
+    const data = workspaces.docs.map((w: unknown) => {
+      const workspace = w as WorkspaceDoc
+      return {
+        id: workspace.id,
+        name: workspace.name,
+        slug: workspace.slug,
+      }
+    })
 
     return { success: true, data }
   } catch (error) {
