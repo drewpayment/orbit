@@ -274,12 +274,26 @@ async function requireAdmin(): Promise<{ userId: string }> {
 
   const payload = await getPayload({ config })
 
-  // Check for platform-level admin role
+  // First, find the Payload user by email (bridges Better-Auth and Payload user systems)
+  const payloadUsers = await payload.find({
+    collection: 'users',
+    where: {
+      email: { equals: session.user.email },
+    },
+    limit: 1,
+  })
+
+  const payloadUser = payloadUsers.docs[0]
+  if (!payloadUser) {
+    throw new Error('Unauthorized: User not found in system')
+  }
+
+  // Check for platform-level admin role using the Payload user ID
   // Note: Using type assertion for collection name since Payload types may not include custom collections
   const roleAssignments = await payload.find({
     collection: 'user-workspace-roles' as 'users', // Type workaround for custom collection
     where: {
-      user: { equals: session.user.id },
+      user: { equals: payloadUser.id },
     },
     depth: 2,
     limit: 100,
