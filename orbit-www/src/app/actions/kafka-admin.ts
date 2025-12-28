@@ -290,17 +290,22 @@ async function requireAdmin(): Promise<{ userId: string }> {
 
   // Check for platform-level admin role using the Payload user ID
   // Note: Using type assertion for collection name since Payload types may not include custom collections
+  // We fetch all assignments with depth to populate relationships, then filter by user
   const roleAssignments = await payload.find({
     collection: 'user-workspace-roles' as 'users', // Type workaround for custom collection
-    where: {
-      user: { equals: payloadUser.id },
-    },
     depth: 2,
-    limit: 100,
+    limit: 1000,
   })
 
   const isAdmin = roleAssignments.docs.some((assignment: unknown) => {
     const typedAssignment = assignment as WorkspaceRoleAssignment
+
+    // Check if this assignment belongs to our user
+    const assignmentUserId = typeof typedAssignment.user === 'object'
+      ? (typedAssignment.user as { id?: string })?.id
+      : typedAssignment.user
+    if (assignmentUserId !== payloadUser.id) return false
+
     const role = typeof typedAssignment.role === 'object' ? typedAssignment.role : null
     if (!role) return false
     // Check if user has platform admin role (super-admin, admin, or platform-admin)
