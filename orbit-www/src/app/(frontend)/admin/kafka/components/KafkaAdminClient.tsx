@@ -40,6 +40,8 @@ export function KafkaAdminClient({
   const [mappings, setMappings] = useState(initialMappings)
   const [panelContent, setPanelContent] = useState<PanelContent>('list')
   const [selectedItem, setSelectedItem] = useState<SelectedItemType>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // Navigation functions
   const showDetail = useCallback((item: SelectedItemType) => {
@@ -57,28 +59,58 @@ export function KafkaAdminClient({
     setPanelContent('list')
   }, [])
 
-  // Refresh functions for tabs
+  // Refresh functions for tabs with error handling
   const refreshProviders = useCallback(async () => {
-    const { getProviders } = await import('@/app/actions/kafka-admin')
-    const result = await getProviders()
-    if (result.success && result.data) {
-      setProviders(result.data)
+    setIsLoading(true)
+    setError(null)
+    try {
+      const { getProviders } = await import('@/app/actions/kafka-admin')
+      const result = await getProviders()
+      if (result.success && result.data) {
+        setProviders(result.data)
+      } else {
+        setError(result.error || 'Failed to refresh providers')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to refresh providers')
+    } finally {
+      setIsLoading(false)
     }
   }, [])
 
   const refreshClusters = useCallback(async () => {
-    const { listClusters } = await import('@/app/actions/kafka-admin')
-    const result = await listClusters()
-    if (result.success && result.data) {
-      setClusters(result.data)
+    setIsLoading(true)
+    setError(null)
+    try {
+      const { listClusters } = await import('@/app/actions/kafka-admin')
+      const result = await listClusters()
+      if (result.success && result.data) {
+        setClusters(result.data)
+      } else {
+        setError(result.error || 'Failed to refresh clusters')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to refresh clusters')
+    } finally {
+      setIsLoading(false)
     }
   }, [])
 
   const refreshMappings = useCallback(async () => {
-    const { listMappings } = await import('@/app/actions/kafka-admin')
-    const result = await listMappings()
-    if (result.success && result.data) {
-      setMappings(result.data)
+    setIsLoading(true)
+    setError(null)
+    try {
+      const { listMappings } = await import('@/app/actions/kafka-admin')
+      const result = await listMappings()
+      if (result.success && result.data) {
+        setMappings(result.data)
+      } else {
+        setError(result.error || 'Failed to refresh mappings')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to refresh mappings')
+    } finally {
+      setIsLoading(false)
     }
   }, [])
 
@@ -90,6 +122,26 @@ export function KafkaAdminClient({
           Manage Kafka clusters, environment mappings, and provider configurations
         </p>
       </div>
+
+      {/* Error display */}
+      {error && (
+        <div className="mb-4 p-4 bg-destructive/10 text-destructive rounded-lg flex items-center justify-between">
+          <span>{error}</span>
+          <button
+            onClick={() => setError(null)}
+            className="text-destructive hover:text-destructive/80"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Loading indicator */}
+      {isLoading && (
+        <div className="mb-4 p-4 bg-muted rounded-lg text-muted-foreground">
+          Loading...
+        </div>
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
