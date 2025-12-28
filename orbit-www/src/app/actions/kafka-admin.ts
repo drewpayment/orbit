@@ -289,10 +289,10 @@ async function requireAdmin(): Promise<{ userId: string }> {
     const typedAssignment = assignment as WorkspaceRoleAssignment
     const role = typeof typedAssignment.role === 'object' ? typedAssignment.role : null
     if (!role) return false
-    // Check if user has platform admin role or any admin role
+    // Check if user has platform admin role (super-admin, admin, or platform-admin)
     return (
       role.scope === 'platform' &&
-      (role.slug === 'admin' || role.slug === 'platform-admin')
+      (role.slug === 'admin' || role.slug === 'platform-admin' || role.slug === 'super-admin')
     )
   })
 
