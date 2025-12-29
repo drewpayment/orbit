@@ -4,12 +4,13 @@ import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { RefreshCw, Server, FileCode, Shield, Gauge } from 'lucide-react'
+import { RefreshCw, Server, FileCode, Shield, Gauge, Plus } from 'lucide-react'
 import type { KafkaProviderConfig } from '@/app/actions/kafka-admin'
 
 interface ProvidersTabProps {
   providers: KafkaProviderConfig[]
   onSelectProvider: (providerId: string) => void
+  onAddProvider: () => void
   onRefresh: () => Promise<void>
 }
 
@@ -27,7 +28,7 @@ const featureLabels = {
   quotaManagement: 'Quota Management',
 } as const
 
-export function ProvidersTab({ providers, onSelectProvider, onRefresh }: ProvidersTabProps) {
+export function ProvidersTab({ providers, onSelectProvider, onAddProvider, onRefresh }: ProvidersTabProps) {
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   const handleRefresh = async () => {
@@ -45,12 +46,18 @@ export function ProvidersTab({ providers, onSelectProvider, onRefresh }: Provide
         <Server className="h-12 w-12 text-muted-foreground/50 mb-4" />
         <h3 className="text-lg font-medium mb-2">No Providers Available</h3>
         <p className="text-muted-foreground mb-4">
-          No Kafka providers are currently configured. Providers are managed by the system.
+          No Kafka providers are currently configured. Add a provider to get started.
         </p>
-        <Button variant="outline" onClick={handleRefresh} disabled={isRefreshing}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleRefresh} disabled={isRefreshing}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Button onClick={onAddProvider}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Provider
+          </Button>
+        </div>
       </div>
     )
   }
@@ -61,10 +68,16 @@ export function ProvidersTab({ providers, onSelectProvider, onRefresh }: Provide
         <p className="text-sm text-muted-foreground">
           {providers.length} provider{providers.length !== 1 ? 's' : ''} available
         </p>
-        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Button size="sm" onClick={onAddProvider}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Provider
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">

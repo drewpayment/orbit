@@ -409,7 +409,48 @@ async function getClustersMap(): Promise<Map<string, string>> {
 // ============================================================================
 
 /**
- * Lists all available Kafka providers.
+ * Payload KafkaProvider document type
+ */
+interface PayloadKafkaProvider {
+  id: string
+  name: string
+  displayName: string
+  adapterType: 'apache' | 'confluent' | 'msk'
+  requiredConfigFields: string[]
+  capabilities?: {
+    schemaRegistry?: boolean
+    transactions?: boolean
+    quotasApi?: boolean
+    metricsApi?: boolean
+  }
+  documentationUrl?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+/**
+ * Maps a Payload KafkaProvider document to KafkaProviderConfig.
+ */
+function mapPayloadProviderToConfig(provider: PayloadKafkaProvider): KafkaProviderConfig {
+  return {
+    id: provider.id,
+    name: provider.name,
+    displayName: provider.displayName,
+    authMethods: provider.requiredConfigFields || [],
+    features: {
+      schemaRegistry: provider.capabilities?.schemaRegistry ?? false,
+      topicCreation: true,
+      aclManagement: false,
+      quotaManagement: provider.capabilities?.quotasApi ?? false,
+    },
+    defaultSettings: {},
+    enabled: true,
+  }
+}
+
+/**
+ * Lists all available Kafka providers from Payload CMS.
+ * If no providers exist in Payload, seeds default providers from the Go service.
  */
 export async function getProviders(): Promise<{
   success: boolean
@@ -419,9 +460,61 @@ export async function getProviders(): Promise<{
   try {
     await requireAdmin()
 
-    const response = await kafkaClient.listProviders({})
+    const payload = await getPayload({ config })
 
-    const providers = response.providers.map(mapProviderToConfig)
+    // Query providers from Payload
+    const providersResult = await payload.find({
+      collection: 'kafka-providers' as 'users', // Type workaround
+      limit: 100,
+      sort: 'displayName',
+    })
+
+    // If no providers in Payload, seed from gRPC service defaults
+    if (providersResult.docs.length === 0) {
+      console.log('[kafka-admin] No providers in Payload, seeding from gRPC service defaults...')
+
+      const grpcResponse = await kafkaClient.listProviders({})
+
+      // Seed each provider to Payload
+      for (const grpcProvider of grpcResponse.providers) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (payload.create as any)({
+          collection: 'kafka-providers',
+          data: {
+            name: grpcProvider.name,
+            displayName: grpcProvider.displayName,
+            adapterType: grpcProvider.name.includes('confluent') ? 'confluent'
+              : grpcProvider.name.includes('msk') ? 'msk'
+              : 'apache',
+            requiredConfigFields: grpcProvider.requiredConfigFields || [],
+            capabilities: {
+              schemaRegistry: grpcProvider.capabilities?.schemaRegistry ?? true,
+              transactions: grpcProvider.capabilities?.transactions ?? true,
+              quotasApi: grpcProvider.capabilities?.quotasApi ?? false,
+              metricsApi: grpcProvider.capabilities?.metricsApi ?? false,
+            },
+            documentationUrl: grpcProvider.documentationUrl || '',
+          },
+        })
+      }
+
+      // Re-fetch after seeding
+      const seededResult = await payload.find({
+        collection: 'kafka-providers' as 'users',
+        limit: 100,
+        sort: 'displayName',
+      })
+
+      const providers = seededResult.docs.map((doc) =>
+        mapPayloadProviderToConfig(doc as unknown as PayloadKafkaProvider)
+      )
+
+      return { success: true, data: providers }
+    }
+
+    const providers = providersResult.docs.map((doc) =>
+      mapPayloadProviderToConfig(doc as unknown as PayloadKafkaProvider)
+    )
 
     return { success: true, data: providers }
   } catch (error) {
@@ -433,8 +526,58 @@ export async function getProviders(): Promise<{
 }
 
 /**
- * Saves provider configuration.
- * Note: This is a placeholder - provider configuration is typically static.
+ * Creates a new Kafka provider in Payload CMS.
+ */
+export async function createProvider(data: {
+  name: string
+  displayName: string
+  adapterType: 'apache' | 'confluent' | 'msk'
+  requiredConfigFields: string[]
+  capabilities?: {
+    schemaRegistry?: boolean
+    transactions?: boolean
+    quotasApi?: boolean
+    metricsApi?: boolean
+  }
+  documentationUrl?: string
+}): Promise<{ success: boolean; data?: KafkaProviderConfig; error?: string }> {
+  try {
+    await requireAdmin()
+
+    const payload = await getPayload({ config })
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const created = await (payload.create as any)({
+      collection: 'kafka-providers',
+      data: {
+        name: data.name,
+        displayName: data.displayName,
+        adapterType: data.adapterType,
+        requiredConfigFields: data.requiredConfigFields,
+        capabilities: data.capabilities || {
+          schemaRegistry: true,
+          transactions: true,
+          quotasApi: false,
+          metricsApi: false,
+        },
+        documentationUrl: data.documentationUrl || '',
+      },
+    })
+
+    return {
+      success: true,
+      data: mapPayloadProviderToConfig(created as unknown as PayloadKafkaProvider)
+    }
+  } catch (error) {
+    console.error('Failed to create Kafka provider:', error)
+    const errorMessage =
+      error instanceof Error ? error.message : 'Failed to create Kafka provider'
+    return { success: false, error: errorMessage }
+  }
+}
+
+/**
+ * Updates a Kafka provider in Payload CMS.
  */
 export async function saveProviderConfig(
   providerId: string,
@@ -443,18 +586,56 @@ export async function saveProviderConfig(
   try {
     await requireAdmin()
 
-    // Log the save attempt - provider config is typically managed externally
-    console.log(`[kafka-admin] saveProviderConfig called for provider: ${providerId}`, {
-      config: providerConfig,
+    const payload = await getPayload({ config })
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (payload.update as any)({
+      collection: 'kafka-providers',
+      id: providerId,
+      data: {
+        ...(providerConfig.displayName && { displayName: providerConfig.displayName }),
+        ...(providerConfig.authMethods && { requiredConfigFields: providerConfig.authMethods }),
+        ...(providerConfig.features && {
+          capabilities: {
+            schemaRegistry: providerConfig.features.schemaRegistry,
+            quotasApi: providerConfig.features.quotaManagement,
+          },
+        }),
+      },
     })
 
-    // In a real implementation, this might update provider settings in the database
-    // For now, we just acknowledge the save request
     return { success: true }
   } catch (error) {
     console.error('Failed to save provider config:', error)
     const errorMessage =
       error instanceof Error ? error.message : 'Failed to save provider config'
+    return { success: false, error: errorMessage }
+  }
+}
+
+/**
+ * Deletes a Kafka provider from Payload CMS.
+ */
+export async function deleteProvider(providerId: string): Promise<{
+  success: boolean
+  error?: string
+}> {
+  try {
+    await requireAdmin()
+
+    const payload = await getPayload({ config })
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (payload.delete as any)({
+      collection: 'kafka-providers',
+      id: providerId,
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to delete Kafka provider:', error)
+    const errorMessage =
+      error instanceof Error ? error.message : 'Failed to delete Kafka provider'
     return { success: false, error: errorMessage }
   }
 }

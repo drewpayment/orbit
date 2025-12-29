@@ -6,13 +6,25 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { ArrowLeft, Save, Server, FileCode, Shield, Gauge } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { ArrowLeft, Save, Server, FileCode, Shield, Gauge, Trash2, Loader2 } from 'lucide-react'
 import type { KafkaProviderConfig } from '@/app/actions/kafka-admin'
 
 interface ProviderDetailProps {
   provider: KafkaProviderConfig
   onBack: () => void
   onSave: (providerId: string, config: Partial<KafkaProviderConfig>) => Promise<void>
+  onDelete?: (providerId: string) => Promise<void>
+  clusterCount?: number
 }
 
 const featureIcons = {
@@ -29,10 +41,12 @@ const featureDescriptions = {
   quotaManagement: 'Enable quota configuration and management',
 } as const
 
-export function ProviderDetail({ provider, onBack, onSave }: ProviderDetailProps) {
+export function ProviderDetail({ provider, onBack, onSave, onDelete, clusterCount = 0 }: ProviderDetailProps) {
   const [isEnabled, setIsEnabled] = useState(provider.enabled)
   const [features, setFeatures] = useState(provider.features)
   const [isSaving, setIsSaving] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -52,6 +66,17 @@ export function ProviderDetail({ provider, onBack, onSave }: ProviderDetailProps
       ([key, value]) =>
         value !== provider.features[key as keyof typeof provider.features]
     )
+
+  const handleDelete = async () => {
+    if (!onDelete) return
+    setIsDeleting(true)
+    try {
+      await onDelete(provider.id)
+    } finally {
+      setIsDeleting(false)
+      setShowDeleteDialog(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -188,16 +213,68 @@ export function ProviderDetail({ provider, onBack, onSave }: ProviderDetailProps
         </Card>
       )}
 
-      {/* Save button */}
-      <div className="flex justify-end gap-3">
-        <Button variant="outline" onClick={onBack}>
-          Cancel
-        </Button>
-        <Button onClick={handleSave} disabled={isSaving || !hasChanges}>
-          <Save className="h-4 w-4 mr-2" />
-          {isSaving ? 'Saving...' : 'Save Changes'}
-        </Button>
+      {/* Action buttons */}
+      <div className="flex justify-between gap-3">
+        <div>
+          {onDelete && (
+            <Button
+              variant="destructive"
+              onClick={() => setShowDeleteDialog(true)}
+              disabled={isSaving || isDeleting}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Provider
+            </Button>
+          )}
+        </div>
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={onBack} disabled={isSaving || isDeleting}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={isSaving || isDeleting || !hasChanges}>
+            {isSaving ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
+            {isSaving ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </div>
       </div>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Provider?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete &quot;{provider.displayName}&quot;?
+              {clusterCount > 0 && (
+                <span className="block mt-2 text-destructive">
+                  Warning: {clusterCount} cluster{clusterCount !== 1 ? 's' : ''} use this provider type.
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

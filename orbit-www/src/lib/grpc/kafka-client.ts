@@ -13,18 +13,18 @@
  */
 
 import { createClient } from '@connectrpc/connect'
-import { createConnectTransport } from '@connectrpc/connect-node'
+import { createGrpcTransport } from '@connectrpc/connect-node'
 import { KafkaService } from '@/lib/proto/idp/kafka/v1/kafka_pb'
 
 /**
  * Transport configuration for the Kafka gRPC service.
- * Uses connect-node for server-side calls from Next.js server actions.
+ * Uses gRPC transport for server-side calls to native gRPC services.
  * Defaults to localhost:50055 for development.
  * Override with KAFKA_SERVICE_URL environment variable.
  */
-const transport = createConnectTransport({
+const transport = createGrpcTransport({
   baseUrl: process.env.KAFKA_SERVICE_URL || 'http://localhost:50055',
-  httpVersion: '1.1', // Use HTTP/1.1 for compatibility
+  httpVersion: '2', // gRPC uses HTTP/2
 })
 
 /**

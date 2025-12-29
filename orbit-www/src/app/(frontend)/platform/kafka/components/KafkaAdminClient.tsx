@@ -13,6 +13,7 @@ import { ProvidersTab } from './ProvidersTab'
 import { ClustersTab } from './ClustersTab'
 import { MappingsTab } from './MappingsTab'
 import { ProviderDetail } from './ProviderDetail'
+import { ProviderForm, type ProviderFormData } from './ProviderForm'
 import { ClusterDetail } from './ClusterDetail'
 import { MappingForm } from './MappingForm'
 
@@ -41,6 +42,10 @@ export function KafkaAdminClient({
   const [selectedItemId, setSelectedItemId] = useState<SelectedItemId>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Provider form dialog state
+  const [providerFormOpen, setProviderFormOpen] = useState(false)
+  const [editingProviderId, setEditingProviderId] = useState<string | null>(null)
 
   // Navigation functions
   const showProviderDetail = useCallback((providerId: string) => {
@@ -122,6 +127,69 @@ export function KafkaAdminClient({
       setIsLoading(false)
     }
   }, [])
+
+  // Provider dialog handlers
+  const handleAddProvider = useCallback(() => {
+    setEditingProviderId(null)
+    setProviderFormOpen(true)
+  }, [])
+
+  const handleCreateOrUpdateProvider = useCallback(async (data: ProviderFormData) => {
+    setError(null)
+    try {
+      if (editingProviderId) {
+        // Update existing provider
+        const { saveProviderConfig } = await import('@/app/actions/kafka-admin')
+        const result = await saveProviderConfig(editingProviderId, {
+          displayName: data.displayName,
+          authMethods: data.requiredConfigFields,
+          features: {
+            schemaRegistry: data.capabilities.schemaRegistry,
+            topicCreation: true,
+            aclManagement: false,
+            quotaManagement: data.capabilities.quotasApi,
+          },
+        })
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to update provider')
+        }
+      } else {
+        // Create new provider
+        const { createProvider } = await import('@/app/actions/kafka-admin')
+        const result = await createProvider({
+          name: data.name,
+          displayName: data.displayName,
+          adapterType: data.adapterType,
+          requiredConfigFields: data.requiredConfigFields,
+          capabilities: data.capabilities,
+          documentationUrl: data.documentationUrl,
+        })
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to create provider')
+        }
+      }
+      await refreshProviders()
+      setProviderFormOpen(false)
+    } catch (err) {
+      throw err // Re-throw to let ProviderForm handle the error
+    }
+  }, [editingProviderId, refreshProviders])
+
+  const handleDeleteProvider = useCallback(async (providerId: string) => {
+    setError(null)
+    try {
+      const { deleteProvider } = await import('@/app/actions/kafka-admin')
+      const result = await deleteProvider(providerId)
+      if (result.success) {
+        await refreshProviders()
+        backToList()
+      } else {
+        setError(result.error || 'Failed to delete provider')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete provider')
+    }
+  }, [refreshProviders, backToList])
 
   // Action handlers
   const handleSaveProvider = useCallback(async (providerId: string, config: Partial<KafkaProviderConfig>) => {
@@ -256,6 +324,16 @@ export function KafkaAdminClient({
     ? clusters.find(c => c.id === selectedItemId)
     : null
 
+  // Calculate cluster count for selected provider (for delete warning)
+  const selectedProviderClusterCount = selectedProvider
+    ? clusters.filter(c => c.providerId === selectedProvider.id).length
+    : 0
+
+  // Get the provider being edited in the form
+  const editingProvider = editingProviderId
+    ? providers.find(p => p.id === editingProviderId)
+    : null
+
   // Render detail/form views
   if (panelContent === 'provider-detail' && selectedProvider) {
     return (
@@ -264,6 +342,8 @@ export function KafkaAdminClient({
           provider={selectedProvider}
           onBack={backToList}
           onSave={handleSaveProvider}
+          onDelete={handleDeleteProvider}
+          clusterCount={selectedProviderClusterCount}
         />
       </div>
     )
@@ -390,10 +470,19 @@ export function KafkaAdminClient({
           <ProvidersTab
             providers={providers}
             onSelectProvider={showProviderDetail}
+            onAddProvider={handleAddProvider}
             onRefresh={refreshProviders}
           />
         </TabsContent>
       </Tabs>
+
+      {/* Provider Form Dialog */}
+      <ProviderForm
+        open={providerFormOpen}
+        onOpenChange={setProviderFormOpen}
+        provider={editingProvider}
+        onSave={handleCreateOrUpdateProvider}
+      />
     </div>
   )
 }

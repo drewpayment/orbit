@@ -84,7 +84,7 @@ async function main() {
     }
 
     console.log('\n✅ Done! User now has platform admin access.')
-    console.log('   Refresh http://localhost:3000/admin/kafka to test.')
+    console.log('   Refresh http://localhost:3000/platform/kafka to test.')
 
   } finally {
     await client.close()
