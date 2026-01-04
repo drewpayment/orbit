@@ -19,34 +19,37 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	KafkaService_ListProviders_FullMethodName            = "/idp.kafka.v1.KafkaService/ListProviders"
-	KafkaService_RegisterCluster_FullMethodName          = "/idp.kafka.v1.KafkaService/RegisterCluster"
-	KafkaService_ValidateCluster_FullMethodName          = "/idp.kafka.v1.KafkaService/ValidateCluster"
-	KafkaService_ListClusters_FullMethodName             = "/idp.kafka.v1.KafkaService/ListClusters"
-	KafkaService_DeleteCluster_FullMethodName            = "/idp.kafka.v1.KafkaService/DeleteCluster"
-	KafkaService_CreateEnvironmentMapping_FullMethodName = "/idp.kafka.v1.KafkaService/CreateEnvironmentMapping"
-	KafkaService_ListEnvironmentMappings_FullMethodName  = "/idp.kafka.v1.KafkaService/ListEnvironmentMappings"
-	KafkaService_DeleteEnvironmentMapping_FullMethodName = "/idp.kafka.v1.KafkaService/DeleteEnvironmentMapping"
-	KafkaService_CreateTopic_FullMethodName              = "/idp.kafka.v1.KafkaService/CreateTopic"
-	KafkaService_GetTopic_FullMethodName                 = "/idp.kafka.v1.KafkaService/GetTopic"
-	KafkaService_ListTopics_FullMethodName               = "/idp.kafka.v1.KafkaService/ListTopics"
-	KafkaService_UpdateTopic_FullMethodName              = "/idp.kafka.v1.KafkaService/UpdateTopic"
-	KafkaService_DeleteTopic_FullMethodName              = "/idp.kafka.v1.KafkaService/DeleteTopic"
-	KafkaService_ApproveTopic_FullMethodName             = "/idp.kafka.v1.KafkaService/ApproveTopic"
-	KafkaService_RegisterSchema_FullMethodName           = "/idp.kafka.v1.KafkaService/RegisterSchema"
-	KafkaService_GetSchema_FullMethodName                = "/idp.kafka.v1.KafkaService/GetSchema"
-	KafkaService_ListSchemas_FullMethodName              = "/idp.kafka.v1.KafkaService/ListSchemas"
-	KafkaService_CheckSchemaCompatibility_FullMethodName = "/idp.kafka.v1.KafkaService/CheckSchemaCompatibility"
-	KafkaService_CreateServiceAccount_FullMethodName     = "/idp.kafka.v1.KafkaService/CreateServiceAccount"
-	KafkaService_ListServiceAccounts_FullMethodName      = "/idp.kafka.v1.KafkaService/ListServiceAccounts"
-	KafkaService_RevokeServiceAccount_FullMethodName     = "/idp.kafka.v1.KafkaService/RevokeServiceAccount"
-	KafkaService_RequestTopicAccess_FullMethodName       = "/idp.kafka.v1.KafkaService/RequestTopicAccess"
-	KafkaService_ApproveTopicAccess_FullMethodName       = "/idp.kafka.v1.KafkaService/ApproveTopicAccess"
-	KafkaService_RevokeTopicAccess_FullMethodName        = "/idp.kafka.v1.KafkaService/RevokeTopicAccess"
-	KafkaService_ListTopicShares_FullMethodName          = "/idp.kafka.v1.KafkaService/ListTopicShares"
-	KafkaService_DiscoverTopics_FullMethodName           = "/idp.kafka.v1.KafkaService/DiscoverTopics"
-	KafkaService_GetTopicMetrics_FullMethodName          = "/idp.kafka.v1.KafkaService/GetTopicMetrics"
-	KafkaService_GetTopicLineage_FullMethodName          = "/idp.kafka.v1.KafkaService/GetTopicLineage"
+	KafkaService_ListProviders_FullMethodName             = "/idp.kafka.v1.KafkaService/ListProviders"
+	KafkaService_RegisterCluster_FullMethodName           = "/idp.kafka.v1.KafkaService/RegisterCluster"
+	KafkaService_ValidateCluster_FullMethodName           = "/idp.kafka.v1.KafkaService/ValidateCluster"
+	KafkaService_ValidateClusterConnection_FullMethodName = "/idp.kafka.v1.KafkaService/ValidateClusterConnection"
+	KafkaService_ListClusters_FullMethodName              = "/idp.kafka.v1.KafkaService/ListClusters"
+	KafkaService_DeleteCluster_FullMethodName             = "/idp.kafka.v1.KafkaService/DeleteCluster"
+	KafkaService_CreateEnvironmentMapping_FullMethodName  = "/idp.kafka.v1.KafkaService/CreateEnvironmentMapping"
+	KafkaService_ListEnvironmentMappings_FullMethodName   = "/idp.kafka.v1.KafkaService/ListEnvironmentMappings"
+	KafkaService_DeleteEnvironmentMapping_FullMethodName  = "/idp.kafka.v1.KafkaService/DeleteEnvironmentMapping"
+	KafkaService_CreateTopic_FullMethodName               = "/idp.kafka.v1.KafkaService/CreateTopic"
+	KafkaService_CreateTopicDirect_FullMethodName         = "/idp.kafka.v1.KafkaService/CreateTopicDirect"
+	KafkaService_GetTopic_FullMethodName                  = "/idp.kafka.v1.KafkaService/GetTopic"
+	KafkaService_ListTopics_FullMethodName                = "/idp.kafka.v1.KafkaService/ListTopics"
+	KafkaService_UpdateTopic_FullMethodName               = "/idp.kafka.v1.KafkaService/UpdateTopic"
+	KafkaService_DeleteTopic_FullMethodName               = "/idp.kafka.v1.KafkaService/DeleteTopic"
+	KafkaService_DeleteTopicByName_FullMethodName         = "/idp.kafka.v1.KafkaService/DeleteTopicByName"
+	KafkaService_ApproveTopic_FullMethodName              = "/idp.kafka.v1.KafkaService/ApproveTopic"
+	KafkaService_RegisterSchema_FullMethodName            = "/idp.kafka.v1.KafkaService/RegisterSchema"
+	KafkaService_GetSchema_FullMethodName                 = "/idp.kafka.v1.KafkaService/GetSchema"
+	KafkaService_ListSchemas_FullMethodName               = "/idp.kafka.v1.KafkaService/ListSchemas"
+	KafkaService_CheckSchemaCompatibility_FullMethodName  = "/idp.kafka.v1.KafkaService/CheckSchemaCompatibility"
+	KafkaService_CreateServiceAccount_FullMethodName      = "/idp.kafka.v1.KafkaService/CreateServiceAccount"
+	KafkaService_ListServiceAccounts_FullMethodName       = "/idp.kafka.v1.KafkaService/ListServiceAccounts"
+	KafkaService_RevokeServiceAccount_FullMethodName      = "/idp.kafka.v1.KafkaService/RevokeServiceAccount"
+	KafkaService_RequestTopicAccess_FullMethodName        = "/idp.kafka.v1.KafkaService/RequestTopicAccess"
+	KafkaService_ApproveTopicAccess_FullMethodName        = "/idp.kafka.v1.KafkaService/ApproveTopicAccess"
+	KafkaService_RevokeTopicAccess_FullMethodName         = "/idp.kafka.v1.KafkaService/RevokeTopicAccess"
+	KafkaService_ListTopicShares_FullMethodName           = "/idp.kafka.v1.KafkaService/ListTopicShares"
+	KafkaService_DiscoverTopics_FullMethodName            = "/idp.kafka.v1.KafkaService/DiscoverTopics"
+	KafkaService_GetTopicMetrics_FullMethodName           = "/idp.kafka.v1.KafkaService/GetTopicMetrics"
+	KafkaService_GetTopicLineage_FullMethodName           = "/idp.kafka.v1.KafkaService/GetTopicLineage"
 )
 
 // KafkaServiceClient is the client API for KafkaService service.
@@ -57,6 +60,7 @@ type KafkaServiceClient interface {
 	ListProviders(ctx context.Context, in *ListProvidersRequest, opts ...grpc.CallOption) (*ListProvidersResponse, error)
 	RegisterCluster(ctx context.Context, in *RegisterClusterRequest, opts ...grpc.CallOption) (*RegisterClusterResponse, error)
 	ValidateCluster(ctx context.Context, in *ValidateClusterRequest, opts ...grpc.CallOption) (*ValidateClusterResponse, error)
+	ValidateClusterConnection(ctx context.Context, in *ValidateClusterConnectionRequest, opts ...grpc.CallOption) (*ValidateClusterConnectionResponse, error)
 	ListClusters(ctx context.Context, in *ListClustersRequest, opts ...grpc.CallOption) (*ListClustersResponse, error)
 	DeleteCluster(ctx context.Context, in *DeleteClusterRequest, opts ...grpc.CallOption) (*DeleteClusterResponse, error)
 	// Environment Mapping (Platform Admin)
@@ -65,10 +69,12 @@ type KafkaServiceClient interface {
 	DeleteEnvironmentMapping(ctx context.Context, in *DeleteEnvironmentMappingRequest, opts ...grpc.CallOption) (*DeleteEnvironmentMappingResponse, error)
 	// Topic Management (Workspace Scoped)
 	CreateTopic(ctx context.Context, in *CreateTopicRequest, opts ...grpc.CallOption) (*CreateTopicResponse, error)
+	CreateTopicDirect(ctx context.Context, in *CreateTopicDirectRequest, opts ...grpc.CallOption) (*CreateTopicDirectResponse, error)
 	GetTopic(ctx context.Context, in *GetTopicRequest, opts ...grpc.CallOption) (*GetTopicResponse, error)
 	ListTopics(ctx context.Context, in *ListTopicsRequest, opts ...grpc.CallOption) (*ListTopicsResponse, error)
 	UpdateTopic(ctx context.Context, in *UpdateTopicRequest, opts ...grpc.CallOption) (*UpdateTopicResponse, error)
 	DeleteTopic(ctx context.Context, in *DeleteTopicRequest, opts ...grpc.CallOption) (*DeleteTopicResponse, error)
+	DeleteTopicByName(ctx context.Context, in *DeleteTopicByNameRequest, opts ...grpc.CallOption) (*DeleteTopicByNameResponse, error)
 	ApproveTopic(ctx context.Context, in *ApproveTopicRequest, opts ...grpc.CallOption) (*ApproveTopicResponse, error)
 	// Schema Management
 	RegisterSchema(ctx context.Context, in *RegisterSchemaRequest, opts ...grpc.CallOption) (*RegisterSchemaResponse, error)
@@ -123,6 +129,16 @@ func (c *kafkaServiceClient) ValidateCluster(ctx context.Context, in *ValidateCl
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ValidateClusterResponse)
 	err := c.cc.Invoke(ctx, KafkaService_ValidateCluster_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *kafkaServiceClient) ValidateClusterConnection(ctx context.Context, in *ValidateClusterConnectionRequest, opts ...grpc.CallOption) (*ValidateClusterConnectionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ValidateClusterConnectionResponse)
+	err := c.cc.Invoke(ctx, KafkaService_ValidateClusterConnection_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -189,6 +205,16 @@ func (c *kafkaServiceClient) CreateTopic(ctx context.Context, in *CreateTopicReq
 	return out, nil
 }
 
+func (c *kafkaServiceClient) CreateTopicDirect(ctx context.Context, in *CreateTopicDirectRequest, opts ...grpc.CallOption) (*CreateTopicDirectResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateTopicDirectResponse)
+	err := c.cc.Invoke(ctx, KafkaService_CreateTopicDirect_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *kafkaServiceClient) GetTopic(ctx context.Context, in *GetTopicRequest, opts ...grpc.CallOption) (*GetTopicResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetTopicResponse)
@@ -223,6 +249,16 @@ func (c *kafkaServiceClient) DeleteTopic(ctx context.Context, in *DeleteTopicReq
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DeleteTopicResponse)
 	err := c.cc.Invoke(ctx, KafkaService_DeleteTopic_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *kafkaServiceClient) DeleteTopicByName(ctx context.Context, in *DeleteTopicByNameRequest, opts ...grpc.CallOption) (*DeleteTopicByNameResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteTopicByNameResponse)
+	err := c.cc.Invoke(ctx, KafkaService_DeleteTopicByName_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -387,6 +423,7 @@ type KafkaServiceServer interface {
 	ListProviders(context.Context, *ListProvidersRequest) (*ListProvidersResponse, error)
 	RegisterCluster(context.Context, *RegisterClusterRequest) (*RegisterClusterResponse, error)
 	ValidateCluster(context.Context, *ValidateClusterRequest) (*ValidateClusterResponse, error)
+	ValidateClusterConnection(context.Context, *ValidateClusterConnectionRequest) (*ValidateClusterConnectionResponse, error)
 	ListClusters(context.Context, *ListClustersRequest) (*ListClustersResponse, error)
 	DeleteCluster(context.Context, *DeleteClusterRequest) (*DeleteClusterResponse, error)
 	// Environment Mapping (Platform Admin)
@@ -395,10 +432,12 @@ type KafkaServiceServer interface {
 	DeleteEnvironmentMapping(context.Context, *DeleteEnvironmentMappingRequest) (*DeleteEnvironmentMappingResponse, error)
 	// Topic Management (Workspace Scoped)
 	CreateTopic(context.Context, *CreateTopicRequest) (*CreateTopicResponse, error)
+	CreateTopicDirect(context.Context, *CreateTopicDirectRequest) (*CreateTopicDirectResponse, error)
 	GetTopic(context.Context, *GetTopicRequest) (*GetTopicResponse, error)
 	ListTopics(context.Context, *ListTopicsRequest) (*ListTopicsResponse, error)
 	UpdateTopic(context.Context, *UpdateTopicRequest) (*UpdateTopicResponse, error)
 	DeleteTopic(context.Context, *DeleteTopicRequest) (*DeleteTopicResponse, error)
+	DeleteTopicByName(context.Context, *DeleteTopicByNameRequest) (*DeleteTopicByNameResponse, error)
 	ApproveTopic(context.Context, *ApproveTopicRequest) (*ApproveTopicResponse, error)
 	// Schema Management
 	RegisterSchema(context.Context, *RegisterSchemaRequest) (*RegisterSchemaResponse, error)
@@ -438,6 +477,9 @@ func (UnimplementedKafkaServiceServer) RegisterCluster(context.Context, *Registe
 func (UnimplementedKafkaServiceServer) ValidateCluster(context.Context, *ValidateClusterRequest) (*ValidateClusterResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ValidateCluster not implemented")
 }
+func (UnimplementedKafkaServiceServer) ValidateClusterConnection(context.Context, *ValidateClusterConnectionRequest) (*ValidateClusterConnectionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ValidateClusterConnection not implemented")
+}
 func (UnimplementedKafkaServiceServer) ListClusters(context.Context, *ListClustersRequest) (*ListClustersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListClusters not implemented")
 }
@@ -456,6 +498,9 @@ func (UnimplementedKafkaServiceServer) DeleteEnvironmentMapping(context.Context,
 func (UnimplementedKafkaServiceServer) CreateTopic(context.Context, *CreateTopicRequest) (*CreateTopicResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateTopic not implemented")
 }
+func (UnimplementedKafkaServiceServer) CreateTopicDirect(context.Context, *CreateTopicDirectRequest) (*CreateTopicDirectResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateTopicDirect not implemented")
+}
 func (UnimplementedKafkaServiceServer) GetTopic(context.Context, *GetTopicRequest) (*GetTopicResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetTopic not implemented")
 }
@@ -467,6 +512,9 @@ func (UnimplementedKafkaServiceServer) UpdateTopic(context.Context, *UpdateTopic
 }
 func (UnimplementedKafkaServiceServer) DeleteTopic(context.Context, *DeleteTopicRequest) (*DeleteTopicResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteTopic not implemented")
+}
+func (UnimplementedKafkaServiceServer) DeleteTopicByName(context.Context, *DeleteTopicByNameRequest) (*DeleteTopicByNameResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteTopicByName not implemented")
 }
 func (UnimplementedKafkaServiceServer) ApproveTopic(context.Context, *ApproveTopicRequest) (*ApproveTopicResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ApproveTopic not implemented")
@@ -588,6 +636,24 @@ func _KafkaService_ValidateCluster_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _KafkaService_ValidateClusterConnection_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ValidateClusterConnectionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KafkaServiceServer).ValidateClusterConnection(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KafkaService_ValidateClusterConnection_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KafkaServiceServer).ValidateClusterConnection(ctx, req.(*ValidateClusterConnectionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _KafkaService_ListClusters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListClustersRequest)
 	if err := dec(in); err != nil {
@@ -696,6 +762,24 @@ func _KafkaService_CreateTopic_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _KafkaService_CreateTopicDirect_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateTopicDirectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KafkaServiceServer).CreateTopicDirect(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KafkaService_CreateTopicDirect_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KafkaServiceServer).CreateTopicDirect(ctx, req.(*CreateTopicDirectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _KafkaService_GetTopic_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetTopicRequest)
 	if err := dec(in); err != nil {
@@ -764,6 +848,24 @@ func _KafkaService_DeleteTopic_Handler(srv interface{}, ctx context.Context, dec
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(KafkaServiceServer).DeleteTopic(ctx, req.(*DeleteTopicRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _KafkaService_DeleteTopicByName_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteTopicByNameRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KafkaServiceServer).DeleteTopicByName(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KafkaService_DeleteTopicByName_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KafkaServiceServer).DeleteTopicByName(ctx, req.(*DeleteTopicByNameRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1058,6 +1160,10 @@ var KafkaService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _KafkaService_ValidateCluster_Handler,
 		},
 		{
+			MethodName: "ValidateClusterConnection",
+			Handler:    _KafkaService_ValidateClusterConnection_Handler,
+		},
+		{
 			MethodName: "ListClusters",
 			Handler:    _KafkaService_ListClusters_Handler,
 		},
@@ -1082,6 +1188,10 @@ var KafkaService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _KafkaService_CreateTopic_Handler,
 		},
 		{
+			MethodName: "CreateTopicDirect",
+			Handler:    _KafkaService_CreateTopicDirect_Handler,
+		},
+		{
 			MethodName: "GetTopic",
 			Handler:    _KafkaService_GetTopic_Handler,
 		},
@@ -1096,6 +1206,10 @@ var KafkaService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteTopic",
 			Handler:    _KafkaService_DeleteTopic_Handler,
+		},
+		{
+			MethodName: "DeleteTopicByName",
+			Handler:    _KafkaService_DeleteTopicByName_Handler,
 		},
 		{
 			MethodName: "ApproveTopic",

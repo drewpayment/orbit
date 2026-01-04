@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ApproveTopicAccessRequest, ApproveTopicAccessResponse, ApproveTopicRequest, ApproveTopicResponse, CheckSchemaCompatibilityRequest, CheckSchemaCompatibilityResponse, CreateEnvironmentMappingRequest, CreateEnvironmentMappingResponse, CreateServiceAccountRequest, CreateServiceAccountResponse, CreateTopicRequest, CreateTopicResponse, DeleteClusterRequest, DeleteClusterResponse, DeleteEnvironmentMappingRequest, DeleteEnvironmentMappingResponse, DeleteTopicRequest, DeleteTopicResponse, DiscoverTopicsRequest, DiscoverTopicsResponse, GetSchemaRequest, GetSchemaResponse, GetTopicLineageRequest, GetTopicLineageResponse, GetTopicMetricsRequest, GetTopicMetricsResponse, GetTopicRequest, GetTopicResponse, ListClustersRequest, ListClustersResponse, ListEnvironmentMappingsRequest, ListEnvironmentMappingsResponse, ListProvidersRequest, ListProvidersResponse, ListSchemasRequest, ListSchemasResponse, ListServiceAccountsRequest, ListServiceAccountsResponse, ListTopicSharesRequest, ListTopicSharesResponse, ListTopicsRequest, ListTopicsResponse, RegisterClusterRequest, RegisterClusterResponse, RegisterSchemaRequest, RegisterSchemaResponse, RequestTopicAccessRequest, RequestTopicAccessResponse, RevokeServiceAccountRequest, RevokeServiceAccountResponse, RevokeTopicAccessRequest, RevokeTopicAccessResponse, UpdateTopicRequest, UpdateTopicResponse, ValidateClusterRequest, ValidateClusterResponse } from "./kafka_pb.js";
+import { ApproveTopicAccessRequest, ApproveTopicAccessResponse, ApproveTopicRequest, ApproveTopicResponse, CheckSchemaCompatibilityRequest, CheckSchemaCompatibilityResponse, CreateEnvironmentMappingRequest, CreateEnvironmentMappingResponse, CreateServiceAccountRequest, CreateServiceAccountResponse, CreateTopicDirectRequest, CreateTopicDirectResponse, CreateTopicRequest, CreateTopicResponse, DeleteClusterRequest, DeleteClusterResponse, DeleteEnvironmentMappingRequest, DeleteEnvironmentMappingResponse, DeleteTopicByNameRequest, DeleteTopicByNameResponse, DeleteTopicRequest, DeleteTopicResponse, DiscoverTopicsRequest, DiscoverTopicsResponse, GetSchemaRequest, GetSchemaResponse, GetTopicLineageRequest, GetTopicLineageResponse, GetTopicMetricsRequest, GetTopicMetricsResponse, GetTopicRequest, GetTopicResponse, ListClustersRequest, ListClustersResponse, ListEnvironmentMappingsRequest, ListEnvironmentMappingsResponse, ListProvidersRequest, ListProvidersResponse, ListSchemasRequest, ListSchemasResponse, ListServiceAccountsRequest, ListServiceAccountsResponse, ListTopicSharesRequest, ListTopicSharesResponse, ListTopicsRequest, ListTopicsResponse, RegisterClusterRequest, RegisterClusterResponse, RegisterSchemaRequest, RegisterSchemaResponse, RequestTopicAccessRequest, RequestTopicAccessResponse, RevokeServiceAccountRequest, RevokeServiceAccountResponse, RevokeTopicAccessRequest, RevokeTopicAccessResponse, UpdateTopicRequest, UpdateTopicResponse, ValidateClusterConnectionRequest, ValidateClusterConnectionResponse, ValidateClusterRequest, ValidateClusterResponse } from "./kafka_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -39,6 +39,15 @@ export const KafkaService = {
       name: "ValidateCluster",
       I: ValidateClusterRequest,
       O: ValidateClusterResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc idp.kafka.v1.KafkaService.ValidateClusterConnection
+     */
+    validateClusterConnection: {
+      name: "ValidateClusterConnection",
+      I: ValidateClusterConnectionRequest,
+      O: ValidateClusterConnectionResponse,
       kind: MethodKind.Unary,
     },
     /**
@@ -100,6 +109,15 @@ export const KafkaService = {
       kind: MethodKind.Unary,
     },
     /**
+     * @generated from rpc idp.kafka.v1.KafkaService.CreateTopicDirect
+     */
+    createTopicDirect: {
+      name: "CreateTopicDirect",
+      I: CreateTopicDirectRequest,
+      O: CreateTopicDirectResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
      * @generated from rpc idp.kafka.v1.KafkaService.GetTopic
      */
     getTopic: {
@@ -133,6 +151,15 @@ export const KafkaService = {
       name: "DeleteTopic",
       I: DeleteTopicRequest,
       O: DeleteTopicResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc idp.kafka.v1.KafkaService.DeleteTopicByName
+     */
+    deleteTopicByName: {
+      name: "DeleteTopicByName",
+      I: DeleteTopicByNameRequest,
+      O: DeleteTopicByNameResponse,
       kind: MethodKind.Unary,
     },
     /**

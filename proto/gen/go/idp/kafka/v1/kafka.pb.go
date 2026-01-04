@@ -2693,6 +2693,112 @@ func (x *ValidateClusterResponse) GetError() string {
 	return ""
 }
 
+// ValidateClusterConnection validates a Kafka connection using provided config
+// This is used when cluster config is stored externally (e.g., Payload CMS)
+type ValidateClusterConnectionRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	ConnectionConfig map[string]string      `protobuf:"bytes,1,rep,name=connection_config,json=connectionConfig,proto3" json:"connection_config,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Credentials      map[string]string      `protobuf:"bytes,2,rep,name=credentials,proto3" json:"credentials,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ValidateClusterConnectionRequest) Reset() {
+	*x = ValidateClusterConnectionRequest{}
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidateClusterConnectionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidateClusterConnectionRequest) ProtoMessage() {}
+
+func (x *ValidateClusterConnectionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidateClusterConnectionRequest.ProtoReflect.Descriptor instead.
+func (*ValidateClusterConnectionRequest) Descriptor() ([]byte, []int) {
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ValidateClusterConnectionRequest) GetConnectionConfig() map[string]string {
+	if x != nil {
+		return x.ConnectionConfig
+	}
+	return nil
+}
+
+func (x *ValidateClusterConnectionRequest) GetCredentials() map[string]string {
+	if x != nil {
+		return x.Credentials
+	}
+	return nil
+}
+
+type ValidateClusterConnectionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Valid         bool                   `protobuf:"varint,1,opt,name=valid,proto3" json:"valid,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ValidateClusterConnectionResponse) Reset() {
+	*x = ValidateClusterConnectionResponse{}
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidateClusterConnectionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidateClusterConnectionResponse) ProtoMessage() {}
+
+func (x *ValidateClusterConnectionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidateClusterConnectionResponse.ProtoReflect.Descriptor instead.
+func (*ValidateClusterConnectionResponse) Descriptor() ([]byte, []int) {
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ValidateClusterConnectionResponse) GetValid() bool {
+	if x != nil {
+		return x.Valid
+	}
+	return false
+}
+
+func (x *ValidateClusterConnectionResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 type ListClustersRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -2701,7 +2807,7 @@ type ListClustersRequest struct {
 
 func (x *ListClustersRequest) Reset() {
 	*x = ListClustersRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[24]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2713,7 +2819,7 @@ func (x *ListClustersRequest) String() string {
 func (*ListClustersRequest) ProtoMessage() {}
 
 func (x *ListClustersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[24]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2726,7 +2832,7 @@ func (x *ListClustersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListClustersRequest.ProtoReflect.Descriptor instead.
 func (*ListClustersRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{24}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{26}
 }
 
 type ListClustersResponse struct {
@@ -2738,7 +2844,7 @@ type ListClustersResponse struct {
 
 func (x *ListClustersResponse) Reset() {
 	*x = ListClustersResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[25]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2750,7 +2856,7 @@ func (x *ListClustersResponse) String() string {
 func (*ListClustersResponse) ProtoMessage() {}
 
 func (x *ListClustersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[25]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2763,7 +2869,7 @@ func (x *ListClustersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListClustersResponse.ProtoReflect.Descriptor instead.
 func (*ListClustersResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{25}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ListClustersResponse) GetClusters() []*KafkaCluster {
@@ -2782,7 +2888,7 @@ type DeleteClusterRequest struct {
 
 func (x *DeleteClusterRequest) Reset() {
 	*x = DeleteClusterRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[26]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2794,7 +2900,7 @@ func (x *DeleteClusterRequest) String() string {
 func (*DeleteClusterRequest) ProtoMessage() {}
 
 func (x *DeleteClusterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[26]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2807,7 +2913,7 @@ func (x *DeleteClusterRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteClusterRequest.ProtoReflect.Descriptor instead.
 func (*DeleteClusterRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{26}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *DeleteClusterRequest) GetClusterId() string {
@@ -2827,7 +2933,7 @@ type DeleteClusterResponse struct {
 
 func (x *DeleteClusterResponse) Reset() {
 	*x = DeleteClusterResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[27]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2839,7 +2945,7 @@ func (x *DeleteClusterResponse) String() string {
 func (*DeleteClusterResponse) ProtoMessage() {}
 
 func (x *DeleteClusterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[27]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2852,7 +2958,7 @@ func (x *DeleteClusterResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteClusterResponse.ProtoReflect.Descriptor instead.
 func (*DeleteClusterResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{27}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *DeleteClusterResponse) GetSuccess() bool {
@@ -2883,7 +2989,7 @@ type CreateEnvironmentMappingRequest struct {
 
 func (x *CreateEnvironmentMappingRequest) Reset() {
 	*x = CreateEnvironmentMappingRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[28]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2895,7 +3001,7 @@ func (x *CreateEnvironmentMappingRequest) String() string {
 func (*CreateEnvironmentMappingRequest) ProtoMessage() {}
 
 func (x *CreateEnvironmentMappingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[28]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2908,7 +3014,7 @@ func (x *CreateEnvironmentMappingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateEnvironmentMappingRequest.ProtoReflect.Descriptor instead.
 func (*CreateEnvironmentMappingRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{28}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *CreateEnvironmentMappingRequest) GetEnvironment() string {
@@ -2956,7 +3062,7 @@ type CreateEnvironmentMappingResponse struct {
 
 func (x *CreateEnvironmentMappingResponse) Reset() {
 	*x = CreateEnvironmentMappingResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[29]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2968,7 +3074,7 @@ func (x *CreateEnvironmentMappingResponse) String() string {
 func (*CreateEnvironmentMappingResponse) ProtoMessage() {}
 
 func (x *CreateEnvironmentMappingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[29]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2981,7 +3087,7 @@ func (x *CreateEnvironmentMappingResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateEnvironmentMappingResponse.ProtoReflect.Descriptor instead.
 func (*CreateEnvironmentMappingResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{29}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *CreateEnvironmentMappingResponse) GetMapping() *KafkaEnvironmentMapping {
@@ -3007,7 +3113,7 @@ type ListEnvironmentMappingsRequest struct {
 
 func (x *ListEnvironmentMappingsRequest) Reset() {
 	*x = ListEnvironmentMappingsRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[30]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3019,7 +3125,7 @@ func (x *ListEnvironmentMappingsRequest) String() string {
 func (*ListEnvironmentMappingsRequest) ProtoMessage() {}
 
 func (x *ListEnvironmentMappingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[30]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3032,7 +3138,7 @@ func (x *ListEnvironmentMappingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEnvironmentMappingsRequest.ProtoReflect.Descriptor instead.
 func (*ListEnvironmentMappingsRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{30}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ListEnvironmentMappingsRequest) GetEnvironment() string {
@@ -3051,7 +3157,7 @@ type ListEnvironmentMappingsResponse struct {
 
 func (x *ListEnvironmentMappingsResponse) Reset() {
 	*x = ListEnvironmentMappingsResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[31]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3063,7 +3169,7 @@ func (x *ListEnvironmentMappingsResponse) String() string {
 func (*ListEnvironmentMappingsResponse) ProtoMessage() {}
 
 func (x *ListEnvironmentMappingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[31]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3076,7 +3182,7 @@ func (x *ListEnvironmentMappingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEnvironmentMappingsResponse.ProtoReflect.Descriptor instead.
 func (*ListEnvironmentMappingsResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{31}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ListEnvironmentMappingsResponse) GetMappings() []*KafkaEnvironmentMapping {
@@ -3095,7 +3201,7 @@ type DeleteEnvironmentMappingRequest struct {
 
 func (x *DeleteEnvironmentMappingRequest) Reset() {
 	*x = DeleteEnvironmentMappingRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[32]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3107,7 +3213,7 @@ func (x *DeleteEnvironmentMappingRequest) String() string {
 func (*DeleteEnvironmentMappingRequest) ProtoMessage() {}
 
 func (x *DeleteEnvironmentMappingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[32]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3120,7 +3226,7 @@ func (x *DeleteEnvironmentMappingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteEnvironmentMappingRequest.ProtoReflect.Descriptor instead.
 func (*DeleteEnvironmentMappingRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{32}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *DeleteEnvironmentMappingRequest) GetMappingId() string {
@@ -3140,7 +3246,7 @@ type DeleteEnvironmentMappingResponse struct {
 
 func (x *DeleteEnvironmentMappingResponse) Reset() {
 	*x = DeleteEnvironmentMappingResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[33]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3152,7 +3258,7 @@ func (x *DeleteEnvironmentMappingResponse) String() string {
 func (*DeleteEnvironmentMappingResponse) ProtoMessage() {}
 
 func (x *DeleteEnvironmentMappingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[33]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3165,7 +3271,7 @@ func (x *DeleteEnvironmentMappingResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteEnvironmentMappingResponse.ProtoReflect.Descriptor instead.
 func (*DeleteEnvironmentMappingResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{33}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *DeleteEnvironmentMappingResponse) GetSuccess() bool {
@@ -3202,7 +3308,7 @@ type CreateTopicRequest struct {
 
 func (x *CreateTopicRequest) Reset() {
 	*x = CreateTopicRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[34]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3214,7 +3320,7 @@ func (x *CreateTopicRequest) String() string {
 func (*CreateTopicRequest) ProtoMessage() {}
 
 func (x *CreateTopicRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[34]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3227,7 +3333,7 @@ func (x *CreateTopicRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTopicRequest.ProtoReflect.Descriptor instead.
 func (*CreateTopicRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{34}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *CreateTopicRequest) GetWorkspaceId() string {
@@ -3318,7 +3424,7 @@ type CreateTopicResponse struct {
 
 func (x *CreateTopicResponse) Reset() {
 	*x = CreateTopicResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[35]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3330,7 +3436,7 @@ func (x *CreateTopicResponse) String() string {
 func (*CreateTopicResponse) ProtoMessage() {}
 
 func (x *CreateTopicResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[35]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3343,7 +3449,7 @@ func (x *CreateTopicResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTopicResponse.ProtoReflect.Descriptor instead.
 func (*CreateTopicResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{35}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *CreateTopicResponse) GetTopic() *KafkaTopic {
@@ -3367,6 +3473,145 @@ func (x *CreateTopicResponse) GetError() string {
 	return ""
 }
 
+// CreateTopicDirect creates a topic directly on the Kafka cluster.
+// This is used when topic metadata is stored externally (e.g., Payload CMS)
+// and we only need to create the topic on Kafka without storing in Go service.
+type CreateTopicDirectRequest struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	TopicName         string                 `protobuf:"bytes,1,opt,name=topic_name,json=topicName,proto3" json:"topic_name,omitempty"` // Full topic name on Kafka cluster (e.g., "prod.my-workspace.orders")
+	Partitions        int32                  `protobuf:"varint,2,opt,name=partitions,proto3" json:"partitions,omitempty"`
+	ReplicationFactor int32                  `protobuf:"varint,3,opt,name=replication_factor,json=replicationFactor,proto3" json:"replication_factor,omitempty"`
+	Config            map[string]string      `protobuf:"bytes,4,rep,name=config,proto3" json:"config,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`                                             // Topic configuration (retention.ms, cleanup.policy, etc.)
+	ConnectionConfig  map[string]string      `protobuf:"bytes,5,rep,name=connection_config,json=connectionConfig,proto3" json:"connection_config,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Cluster connection config
+	Credentials       map[string]string      `protobuf:"bytes,6,rep,name=credentials,proto3" json:"credentials,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`                                   // Cluster credentials
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *CreateTopicDirectRequest) Reset() {
+	*x = CreateTopicDirectRequest{}
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateTopicDirectRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateTopicDirectRequest) ProtoMessage() {}
+
+func (x *CreateTopicDirectRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateTopicDirectRequest.ProtoReflect.Descriptor instead.
+func (*CreateTopicDirectRequest) Descriptor() ([]byte, []int) {
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *CreateTopicDirectRequest) GetTopicName() string {
+	if x != nil {
+		return x.TopicName
+	}
+	return ""
+}
+
+func (x *CreateTopicDirectRequest) GetPartitions() int32 {
+	if x != nil {
+		return x.Partitions
+	}
+	return 0
+}
+
+func (x *CreateTopicDirectRequest) GetReplicationFactor() int32 {
+	if x != nil {
+		return x.ReplicationFactor
+	}
+	return 0
+}
+
+func (x *CreateTopicDirectRequest) GetConfig() map[string]string {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
+func (x *CreateTopicDirectRequest) GetConnectionConfig() map[string]string {
+	if x != nil {
+		return x.ConnectionConfig
+	}
+	return nil
+}
+
+func (x *CreateTopicDirectRequest) GetCredentials() map[string]string {
+	if x != nil {
+		return x.Credentials
+	}
+	return nil
+}
+
+type CreateTopicDirectResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateTopicDirectResponse) Reset() {
+	*x = CreateTopicDirectResponse{}
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateTopicDirectResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateTopicDirectResponse) ProtoMessage() {}
+
+func (x *CreateTopicDirectResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateTopicDirectResponse.ProtoReflect.Descriptor instead.
+func (*CreateTopicDirectResponse) Descriptor() ([]byte, []int) {
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *CreateTopicDirectResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *CreateTopicDirectResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 type GetTopicRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TopicId       string                 `protobuf:"bytes,1,opt,name=topic_id,json=topicId,proto3" json:"topic_id,omitempty"`
@@ -3376,7 +3621,7 @@ type GetTopicRequest struct {
 
 func (x *GetTopicRequest) Reset() {
 	*x = GetTopicRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[36]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3388,7 +3633,7 @@ func (x *GetTopicRequest) String() string {
 func (*GetTopicRequest) ProtoMessage() {}
 
 func (x *GetTopicRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[36]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3401,7 +3646,7 @@ func (x *GetTopicRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTopicRequest.ProtoReflect.Descriptor instead.
 func (*GetTopicRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{36}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *GetTopicRequest) GetTopicId() string {
@@ -3421,7 +3666,7 @@ type GetTopicResponse struct {
 
 func (x *GetTopicResponse) Reset() {
 	*x = GetTopicResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[37]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3433,7 +3678,7 @@ func (x *GetTopicResponse) String() string {
 func (*GetTopicResponse) ProtoMessage() {}
 
 func (x *GetTopicResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[37]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3446,7 +3691,7 @@ func (x *GetTopicResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTopicResponse.ProtoReflect.Descriptor instead.
 func (*GetTopicResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{37}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *GetTopicResponse) GetTopic() *KafkaTopic {
@@ -3476,7 +3721,7 @@ type ListTopicsRequest struct {
 
 func (x *ListTopicsRequest) Reset() {
 	*x = ListTopicsRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[38]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3488,7 +3733,7 @@ func (x *ListTopicsRequest) String() string {
 func (*ListTopicsRequest) ProtoMessage() {}
 
 func (x *ListTopicsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[38]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3501,7 +3746,7 @@ func (x *ListTopicsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTopicsRequest.ProtoReflect.Descriptor instead.
 func (*ListTopicsRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{38}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *ListTopicsRequest) GetWorkspaceId() string {
@@ -3549,7 +3794,7 @@ type ListTopicsResponse struct {
 
 func (x *ListTopicsResponse) Reset() {
 	*x = ListTopicsResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[39]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3561,7 +3806,7 @@ func (x *ListTopicsResponse) String() string {
 func (*ListTopicsResponse) ProtoMessage() {}
 
 func (x *ListTopicsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[39]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3574,7 +3819,7 @@ func (x *ListTopicsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTopicsResponse.ProtoReflect.Descriptor instead.
 func (*ListTopicsResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{39}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ListTopicsResponse) GetTopics() []*KafkaTopic {
@@ -3604,7 +3849,7 @@ type UpdateTopicRequest struct {
 
 func (x *UpdateTopicRequest) Reset() {
 	*x = UpdateTopicRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[40]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3616,7 +3861,7 @@ func (x *UpdateTopicRequest) String() string {
 func (*UpdateTopicRequest) ProtoMessage() {}
 
 func (x *UpdateTopicRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[40]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3629,7 +3874,7 @@ func (x *UpdateTopicRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateTopicRequest.ProtoReflect.Descriptor instead.
 func (*UpdateTopicRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{40}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *UpdateTopicRequest) GetTopicId() string {
@@ -3677,7 +3922,7 @@ type UpdateTopicResponse struct {
 
 func (x *UpdateTopicResponse) Reset() {
 	*x = UpdateTopicResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[41]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3689,7 +3934,7 @@ func (x *UpdateTopicResponse) String() string {
 func (*UpdateTopicResponse) ProtoMessage() {}
 
 func (x *UpdateTopicResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[41]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3702,7 +3947,7 @@ func (x *UpdateTopicResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateTopicResponse.ProtoReflect.Descriptor instead.
 func (*UpdateTopicResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{41}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *UpdateTopicResponse) GetTopic() *KafkaTopic {
@@ -3728,7 +3973,7 @@ type DeleteTopicRequest struct {
 
 func (x *DeleteTopicRequest) Reset() {
 	*x = DeleteTopicRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[42]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3740,7 +3985,7 @@ func (x *DeleteTopicRequest) String() string {
 func (*DeleteTopicRequest) ProtoMessage() {}
 
 func (x *DeleteTopicRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[42]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3753,7 +3998,7 @@ func (x *DeleteTopicRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteTopicRequest.ProtoReflect.Descriptor instead.
 func (*DeleteTopicRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{42}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *DeleteTopicRequest) GetTopicId() string {
@@ -3774,7 +4019,7 @@ type DeleteTopicResponse struct {
 
 func (x *DeleteTopicResponse) Reset() {
 	*x = DeleteTopicResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[43]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3786,7 +4031,7 @@ func (x *DeleteTopicResponse) String() string {
 func (*DeleteTopicResponse) ProtoMessage() {}
 
 func (x *DeleteTopicResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[43]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3799,7 +4044,7 @@ func (x *DeleteTopicResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteTopicResponse.ProtoReflect.Descriptor instead.
 func (*DeleteTopicResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{43}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *DeleteTopicResponse) GetSuccess() bool {
@@ -3823,6 +4068,121 @@ func (x *DeleteTopicResponse) GetError() string {
 	return ""
 }
 
+// DeleteTopicByName deletes a topic directly by its full name on the Kafka cluster.
+// This is useful when the topic metadata is stored externally (e.g., Payload CMS)
+// and we only need to remove the topic from Kafka without looking up internal IDs.
+type DeleteTopicByNameRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	TopicName        string                 `protobuf:"bytes,1,opt,name=topic_name,json=topicName,proto3" json:"topic_name,omitempty"`                                                                                                // Full topic name on Kafka cluster (e.g., "prod.my-workspace.orders")
+	ConnectionConfig map[string]string      `protobuf:"bytes,2,rep,name=connection_config,json=connectionConfig,proto3" json:"connection_config,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Cluster connection config
+	Credentials      map[string]string      `protobuf:"bytes,3,rep,name=credentials,proto3" json:"credentials,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`                                   // Cluster credentials
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *DeleteTopicByNameRequest) Reset() {
+	*x = DeleteTopicByNameRequest{}
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteTopicByNameRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteTopicByNameRequest) ProtoMessage() {}
+
+func (x *DeleteTopicByNameRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteTopicByNameRequest.ProtoReflect.Descriptor instead.
+func (*DeleteTopicByNameRequest) Descriptor() ([]byte, []int) {
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *DeleteTopicByNameRequest) GetTopicName() string {
+	if x != nil {
+		return x.TopicName
+	}
+	return ""
+}
+
+func (x *DeleteTopicByNameRequest) GetConnectionConfig() map[string]string {
+	if x != nil {
+		return x.ConnectionConfig
+	}
+	return nil
+}
+
+func (x *DeleteTopicByNameRequest) GetCredentials() map[string]string {
+	if x != nil {
+		return x.Credentials
+	}
+	return nil
+}
+
+type DeleteTopicByNameResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteTopicByNameResponse) Reset() {
+	*x = DeleteTopicByNameResponse{}
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteTopicByNameResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteTopicByNameResponse) ProtoMessage() {}
+
+func (x *DeleteTopicByNameResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteTopicByNameResponse.ProtoReflect.Descriptor instead.
+func (*DeleteTopicByNameResponse) Descriptor() ([]byte, []int) {
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *DeleteTopicByNameResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *DeleteTopicByNameResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 type ApproveTopicRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TopicId       string                 `protobuf:"bytes,1,opt,name=topic_id,json=topicId,proto3" json:"topic_id,omitempty"`
@@ -3833,7 +4193,7 @@ type ApproveTopicRequest struct {
 
 func (x *ApproveTopicRequest) Reset() {
 	*x = ApproveTopicRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[44]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3845,7 +4205,7 @@ func (x *ApproveTopicRequest) String() string {
 func (*ApproveTopicRequest) ProtoMessage() {}
 
 func (x *ApproveTopicRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[44]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3858,7 +4218,7 @@ func (x *ApproveTopicRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApproveTopicRequest.ProtoReflect.Descriptor instead.
 func (*ApproveTopicRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{44}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *ApproveTopicRequest) GetTopicId() string {
@@ -3886,7 +4246,7 @@ type ApproveTopicResponse struct {
 
 func (x *ApproveTopicResponse) Reset() {
 	*x = ApproveTopicResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[45]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3898,7 +4258,7 @@ func (x *ApproveTopicResponse) String() string {
 func (*ApproveTopicResponse) ProtoMessage() {}
 
 func (x *ApproveTopicResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[45]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3911,7 +4271,7 @@ func (x *ApproveTopicResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApproveTopicResponse.ProtoReflect.Descriptor instead.
 func (*ApproveTopicResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{45}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *ApproveTopicResponse) GetTopic() *KafkaTopic {
@@ -3949,7 +4309,7 @@ type RegisterSchemaRequest struct {
 
 func (x *RegisterSchemaRequest) Reset() {
 	*x = RegisterSchemaRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[46]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3961,7 +4321,7 @@ func (x *RegisterSchemaRequest) String() string {
 func (*RegisterSchemaRequest) ProtoMessage() {}
 
 func (x *RegisterSchemaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[46]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3974,7 +4334,7 @@ func (x *RegisterSchemaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterSchemaRequest.ProtoReflect.Descriptor instead.
 func (*RegisterSchemaRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{46}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *RegisterSchemaRequest) GetTopicId() string {
@@ -4022,7 +4382,7 @@ type RegisterSchemaResponse struct {
 
 func (x *RegisterSchemaResponse) Reset() {
 	*x = RegisterSchemaResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[47]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4034,7 +4394,7 @@ func (x *RegisterSchemaResponse) String() string {
 func (*RegisterSchemaResponse) ProtoMessage() {}
 
 func (x *RegisterSchemaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[47]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4047,7 +4407,7 @@ func (x *RegisterSchemaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterSchemaResponse.ProtoReflect.Descriptor instead.
 func (*RegisterSchemaResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{47}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *RegisterSchemaResponse) GetSchema() *KafkaSchema {
@@ -4073,7 +4433,7 @@ type GetSchemaRequest struct {
 
 func (x *GetSchemaRequest) Reset() {
 	*x = GetSchemaRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[48]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4085,7 +4445,7 @@ func (x *GetSchemaRequest) String() string {
 func (*GetSchemaRequest) ProtoMessage() {}
 
 func (x *GetSchemaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[48]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4098,7 +4458,7 @@ func (x *GetSchemaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSchemaRequest.ProtoReflect.Descriptor instead.
 func (*GetSchemaRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{48}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *GetSchemaRequest) GetSchemaId() string {
@@ -4118,7 +4478,7 @@ type GetSchemaResponse struct {
 
 func (x *GetSchemaResponse) Reset() {
 	*x = GetSchemaResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[49]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4130,7 +4490,7 @@ func (x *GetSchemaResponse) String() string {
 func (*GetSchemaResponse) ProtoMessage() {}
 
 func (x *GetSchemaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[49]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4143,7 +4503,7 @@ func (x *GetSchemaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSchemaResponse.ProtoReflect.Descriptor instead.
 func (*GetSchemaResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{49}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *GetSchemaResponse) GetSchema() *KafkaSchema {
@@ -4169,7 +4529,7 @@ type ListSchemasRequest struct {
 
 func (x *ListSchemasRequest) Reset() {
 	*x = ListSchemasRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[50]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4181,7 +4541,7 @@ func (x *ListSchemasRequest) String() string {
 func (*ListSchemasRequest) ProtoMessage() {}
 
 func (x *ListSchemasRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[50]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4194,7 +4554,7 @@ func (x *ListSchemasRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSchemasRequest.ProtoReflect.Descriptor instead.
 func (*ListSchemasRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{50}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *ListSchemasRequest) GetTopicId() string {
@@ -4213,7 +4573,7 @@ type ListSchemasResponse struct {
 
 func (x *ListSchemasResponse) Reset() {
 	*x = ListSchemasResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[51]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4225,7 +4585,7 @@ func (x *ListSchemasResponse) String() string {
 func (*ListSchemasResponse) ProtoMessage() {}
 
 func (x *ListSchemasResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[51]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4238,7 +4598,7 @@ func (x *ListSchemasResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSchemasResponse.ProtoReflect.Descriptor instead.
 func (*ListSchemasResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{51}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *ListSchemasResponse) GetSchemas() []*KafkaSchema {
@@ -4260,7 +4620,7 @@ type CheckSchemaCompatibilityRequest struct {
 
 func (x *CheckSchemaCompatibilityRequest) Reset() {
 	*x = CheckSchemaCompatibilityRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[52]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4272,7 +4632,7 @@ func (x *CheckSchemaCompatibilityRequest) String() string {
 func (*CheckSchemaCompatibilityRequest) ProtoMessage() {}
 
 func (x *CheckSchemaCompatibilityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[52]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4285,7 +4645,7 @@ func (x *CheckSchemaCompatibilityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckSchemaCompatibilityRequest.ProtoReflect.Descriptor instead.
 func (*CheckSchemaCompatibilityRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{52}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *CheckSchemaCompatibilityRequest) GetTopicId() string {
@@ -4326,7 +4686,7 @@ type CheckSchemaCompatibilityResponse struct {
 
 func (x *CheckSchemaCompatibilityResponse) Reset() {
 	*x = CheckSchemaCompatibilityResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[53]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4338,7 +4698,7 @@ func (x *CheckSchemaCompatibilityResponse) String() string {
 func (*CheckSchemaCompatibilityResponse) ProtoMessage() {}
 
 func (x *CheckSchemaCompatibilityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[53]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4351,7 +4711,7 @@ func (x *CheckSchemaCompatibilityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckSchemaCompatibilityResponse.ProtoReflect.Descriptor instead.
 func (*CheckSchemaCompatibilityResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{53}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *CheckSchemaCompatibilityResponse) GetCompatible() bool {
@@ -4380,7 +4740,7 @@ type CreateServiceAccountRequest struct {
 
 func (x *CreateServiceAccountRequest) Reset() {
 	*x = CreateServiceAccountRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[54]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4392,7 +4752,7 @@ func (x *CreateServiceAccountRequest) String() string {
 func (*CreateServiceAccountRequest) ProtoMessage() {}
 
 func (x *CreateServiceAccountRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[54]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4405,7 +4765,7 @@ func (x *CreateServiceAccountRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateServiceAccountRequest.ProtoReflect.Descriptor instead.
 func (*CreateServiceAccountRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{54}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *CreateServiceAccountRequest) GetWorkspaceId() string {
@@ -4441,7 +4801,7 @@ type CreateServiceAccountResponse struct {
 
 func (x *CreateServiceAccountResponse) Reset() {
 	*x = CreateServiceAccountResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[55]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4453,7 +4813,7 @@ func (x *CreateServiceAccountResponse) String() string {
 func (*CreateServiceAccountResponse) ProtoMessage() {}
 
 func (x *CreateServiceAccountResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[55]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4466,7 +4826,7 @@ func (x *CreateServiceAccountResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateServiceAccountResponse.ProtoReflect.Descriptor instead.
 func (*CreateServiceAccountResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{55}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *CreateServiceAccountResponse) GetServiceAccount() *KafkaServiceAccount {
@@ -4506,7 +4866,7 @@ type ListServiceAccountsRequest struct {
 
 func (x *ListServiceAccountsRequest) Reset() {
 	*x = ListServiceAccountsRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[56]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4518,7 +4878,7 @@ func (x *ListServiceAccountsRequest) String() string {
 func (*ListServiceAccountsRequest) ProtoMessage() {}
 
 func (x *ListServiceAccountsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[56]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4531,7 +4891,7 @@ func (x *ListServiceAccountsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListServiceAccountsRequest.ProtoReflect.Descriptor instead.
 func (*ListServiceAccountsRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{56}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *ListServiceAccountsRequest) GetWorkspaceId() string {
@@ -4550,7 +4910,7 @@ type ListServiceAccountsResponse struct {
 
 func (x *ListServiceAccountsResponse) Reset() {
 	*x = ListServiceAccountsResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[57]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4562,7 +4922,7 @@ func (x *ListServiceAccountsResponse) String() string {
 func (*ListServiceAccountsResponse) ProtoMessage() {}
 
 func (x *ListServiceAccountsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[57]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4575,7 +4935,7 @@ func (x *ListServiceAccountsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListServiceAccountsResponse.ProtoReflect.Descriptor instead.
 func (*ListServiceAccountsResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{57}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *ListServiceAccountsResponse) GetServiceAccounts() []*KafkaServiceAccount {
@@ -4594,7 +4954,7 @@ type RevokeServiceAccountRequest struct {
 
 func (x *RevokeServiceAccountRequest) Reset() {
 	*x = RevokeServiceAccountRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[58]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4606,7 +4966,7 @@ func (x *RevokeServiceAccountRequest) String() string {
 func (*RevokeServiceAccountRequest) ProtoMessage() {}
 
 func (x *RevokeServiceAccountRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[58]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4619,7 +4979,7 @@ func (x *RevokeServiceAccountRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeServiceAccountRequest.ProtoReflect.Descriptor instead.
 func (*RevokeServiceAccountRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{58}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *RevokeServiceAccountRequest) GetServiceAccountId() string {
@@ -4639,7 +4999,7 @@ type RevokeServiceAccountResponse struct {
 
 func (x *RevokeServiceAccountResponse) Reset() {
 	*x = RevokeServiceAccountResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[59]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4651,7 +5011,7 @@ func (x *RevokeServiceAccountResponse) String() string {
 func (*RevokeServiceAccountResponse) ProtoMessage() {}
 
 func (x *RevokeServiceAccountResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[59]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4664,7 +5024,7 @@ func (x *RevokeServiceAccountResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeServiceAccountResponse.ProtoReflect.Descriptor instead.
 func (*RevokeServiceAccountResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{59}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *RevokeServiceAccountResponse) GetSuccess() bool {
@@ -4694,7 +5054,7 @@ type RequestTopicAccessRequest struct {
 
 func (x *RequestTopicAccessRequest) Reset() {
 	*x = RequestTopicAccessRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[60]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4706,7 +5066,7 @@ func (x *RequestTopicAccessRequest) String() string {
 func (*RequestTopicAccessRequest) ProtoMessage() {}
 
 func (x *RequestTopicAccessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[60]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4719,7 +5079,7 @@ func (x *RequestTopicAccessRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestTopicAccessRequest.ProtoReflect.Descriptor instead.
 func (*RequestTopicAccessRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{60}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *RequestTopicAccessRequest) GetTopicId() string {
@@ -4760,7 +5120,7 @@ type RequestTopicAccessResponse struct {
 
 func (x *RequestTopicAccessResponse) Reset() {
 	*x = RequestTopicAccessResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[61]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4772,7 +5132,7 @@ func (x *RequestTopicAccessResponse) String() string {
 func (*RequestTopicAccessResponse) ProtoMessage() {}
 
 func (x *RequestTopicAccessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[61]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4785,7 +5145,7 @@ func (x *RequestTopicAccessResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestTopicAccessResponse.ProtoReflect.Descriptor instead.
 func (*RequestTopicAccessResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{61}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *RequestTopicAccessResponse) GetShare() *KafkaTopicShare {
@@ -4812,7 +5172,7 @@ type ApproveTopicAccessRequest struct {
 
 func (x *ApproveTopicAccessRequest) Reset() {
 	*x = ApproveTopicAccessRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[62]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4824,7 +5184,7 @@ func (x *ApproveTopicAccessRequest) String() string {
 func (*ApproveTopicAccessRequest) ProtoMessage() {}
 
 func (x *ApproveTopicAccessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[62]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4837,7 +5197,7 @@ func (x *ApproveTopicAccessRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApproveTopicAccessRequest.ProtoReflect.Descriptor instead.
 func (*ApproveTopicAccessRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{62}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *ApproveTopicAccessRequest) GetShareId() string {
@@ -4864,7 +5224,7 @@ type ApproveTopicAccessResponse struct {
 
 func (x *ApproveTopicAccessResponse) Reset() {
 	*x = ApproveTopicAccessResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[63]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4876,7 +5236,7 @@ func (x *ApproveTopicAccessResponse) String() string {
 func (*ApproveTopicAccessResponse) ProtoMessage() {}
 
 func (x *ApproveTopicAccessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[63]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4889,7 +5249,7 @@ func (x *ApproveTopicAccessResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApproveTopicAccessResponse.ProtoReflect.Descriptor instead.
 func (*ApproveTopicAccessResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{63}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *ApproveTopicAccessResponse) GetShare() *KafkaTopicShare {
@@ -4915,7 +5275,7 @@ type RevokeTopicAccessRequest struct {
 
 func (x *RevokeTopicAccessRequest) Reset() {
 	*x = RevokeTopicAccessRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[64]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4927,7 +5287,7 @@ func (x *RevokeTopicAccessRequest) String() string {
 func (*RevokeTopicAccessRequest) ProtoMessage() {}
 
 func (x *RevokeTopicAccessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[64]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4940,7 +5300,7 @@ func (x *RevokeTopicAccessRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeTopicAccessRequest.ProtoReflect.Descriptor instead.
 func (*RevokeTopicAccessRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{64}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *RevokeTopicAccessRequest) GetShareId() string {
@@ -4960,7 +5320,7 @@ type RevokeTopicAccessResponse struct {
 
 func (x *RevokeTopicAccessResponse) Reset() {
 	*x = RevokeTopicAccessResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[65]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4972,7 +5332,7 @@ func (x *RevokeTopicAccessResponse) String() string {
 func (*RevokeTopicAccessResponse) ProtoMessage() {}
 
 func (x *RevokeTopicAccessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[65]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4985,7 +5345,7 @@ func (x *RevokeTopicAccessResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeTopicAccessResponse.ProtoReflect.Descriptor instead.
 func (*RevokeTopicAccessResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{65}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *RevokeTopicAccessResponse) GetSuccess() bool {
@@ -5013,7 +5373,7 @@ type ListTopicSharesRequest struct {
 
 func (x *ListTopicSharesRequest) Reset() {
 	*x = ListTopicSharesRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[66]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5025,7 +5385,7 @@ func (x *ListTopicSharesRequest) String() string {
 func (*ListTopicSharesRequest) ProtoMessage() {}
 
 func (x *ListTopicSharesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[66]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5038,7 +5398,7 @@ func (x *ListTopicSharesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTopicSharesRequest.ProtoReflect.Descriptor instead.
 func (*ListTopicSharesRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{66}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *ListTopicSharesRequest) GetTopicId() string {
@@ -5071,7 +5431,7 @@ type ListTopicSharesResponse struct {
 
 func (x *ListTopicSharesResponse) Reset() {
 	*x = ListTopicSharesResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[67]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5083,7 +5443,7 @@ func (x *ListTopicSharesResponse) String() string {
 func (*ListTopicSharesResponse) ProtoMessage() {}
 
 func (x *ListTopicSharesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[67]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5096,7 +5456,7 @@ func (x *ListTopicSharesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTopicSharesResponse.ProtoReflect.Descriptor instead.
 func (*ListTopicSharesResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{67}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *ListTopicSharesResponse) GetShares() []*KafkaTopicShare {
@@ -5121,7 +5481,7 @@ type DiscoverTopicsRequest struct {
 
 func (x *DiscoverTopicsRequest) Reset() {
 	*x = DiscoverTopicsRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[68]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5133,7 +5493,7 @@ func (x *DiscoverTopicsRequest) String() string {
 func (*DiscoverTopicsRequest) ProtoMessage() {}
 
 func (x *DiscoverTopicsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[68]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5146,7 +5506,7 @@ func (x *DiscoverTopicsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscoverTopicsRequest.ProtoReflect.Descriptor instead.
 func (*DiscoverTopicsRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{68}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *DiscoverTopicsRequest) GetRequestingWorkspaceId() string {
@@ -5201,7 +5561,7 @@ type DiscoverTopicsResponse struct {
 
 func (x *DiscoverTopicsResponse) Reset() {
 	*x = DiscoverTopicsResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[69]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5213,7 +5573,7 @@ func (x *DiscoverTopicsResponse) String() string {
 func (*DiscoverTopicsResponse) ProtoMessage() {}
 
 func (x *DiscoverTopicsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[69]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5226,7 +5586,7 @@ func (x *DiscoverTopicsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscoverTopicsResponse.ProtoReflect.Descriptor instead.
 func (*DiscoverTopicsResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{69}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *DiscoverTopicsResponse) GetTopics() []*DiscoverableTopic {
@@ -5256,7 +5616,7 @@ type DiscoverableTopic struct {
 
 func (x *DiscoverableTopic) Reset() {
 	*x = DiscoverableTopic{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[70]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5268,7 +5628,7 @@ func (x *DiscoverableTopic) String() string {
 func (*DiscoverableTopic) ProtoMessage() {}
 
 func (x *DiscoverableTopic) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[70]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5281,7 +5641,7 @@ func (x *DiscoverableTopic) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscoverableTopic.ProtoReflect.Descriptor instead.
 func (*DiscoverableTopic) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{70}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *DiscoverableTopic) GetTopic() *KafkaTopic {
@@ -5331,7 +5691,7 @@ type GetTopicMetricsRequest struct {
 
 func (x *GetTopicMetricsRequest) Reset() {
 	*x = GetTopicMetricsRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[71]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5343,7 +5703,7 @@ func (x *GetTopicMetricsRequest) String() string {
 func (*GetTopicMetricsRequest) ProtoMessage() {}
 
 func (x *GetTopicMetricsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[71]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5356,7 +5716,7 @@ func (x *GetTopicMetricsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTopicMetricsRequest.ProtoReflect.Descriptor instead.
 func (*GetTopicMetricsRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{71}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *GetTopicMetricsRequest) GetTopicId() string {
@@ -5389,7 +5749,7 @@ type GetTopicMetricsResponse struct {
 
 func (x *GetTopicMetricsResponse) Reset() {
 	*x = GetTopicMetricsResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[72]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5401,7 +5761,7 @@ func (x *GetTopicMetricsResponse) String() string {
 func (*GetTopicMetricsResponse) ProtoMessage() {}
 
 func (x *GetTopicMetricsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[72]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5414,7 +5774,7 @@ func (x *GetTopicMetricsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTopicMetricsResponse.ProtoReflect.Descriptor instead.
 func (*GetTopicMetricsResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{72}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *GetTopicMetricsResponse) GetMetrics() []*KafkaUsageMetrics {
@@ -5433,7 +5793,7 @@ type GetTopicLineageRequest struct {
 
 func (x *GetTopicLineageRequest) Reset() {
 	*x = GetTopicLineageRequest{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[73]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5445,7 +5805,7 @@ func (x *GetTopicLineageRequest) String() string {
 func (*GetTopicLineageRequest) ProtoMessage() {}
 
 func (x *GetTopicLineageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[73]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5458,7 +5818,7 @@ func (x *GetTopicLineageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTopicLineageRequest.ProtoReflect.Descriptor instead.
 func (*GetTopicLineageRequest) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{73}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *GetTopicLineageRequest) GetTopicId() string {
@@ -5478,7 +5838,7 @@ type GetTopicLineageResponse struct {
 
 func (x *GetTopicLineageResponse) Reset() {
 	*x = GetTopicLineageResponse{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[74]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5490,7 +5850,7 @@ func (x *GetTopicLineageResponse) String() string {
 func (*GetTopicLineageResponse) ProtoMessage() {}
 
 func (x *GetTopicLineageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[74]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5503,7 +5863,7 @@ func (x *GetTopicLineageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTopicLineageResponse.ProtoReflect.Descriptor instead.
 func (*GetTopicLineageResponse) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{74}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *GetTopicLineageResponse) GetProducers() []*LineageNode {
@@ -5535,7 +5895,7 @@ type LineageNode struct {
 
 func (x *LineageNode) Reset() {
 	*x = LineageNode{}
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[75]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5547,7 +5907,7 @@ func (x *LineageNode) String() string {
 func (*LineageNode) ProtoMessage() {}
 
 func (x *LineageNode) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[75]
+	mi := &file_idp_kafka_v1_kafka_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5560,7 +5920,7 @@ func (x *LineageNode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LineageNode.ProtoReflect.Descriptor instead.
 func (*LineageNode) Descriptor() ([]byte, []int) {
-	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{75}
+	return file_idp_kafka_v1_kafka_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *LineageNode) GetWorkspaceId() string {
@@ -5845,6 +6205,18 @@ const file_idp_kafka_v1_kafka_proto_rawDesc = "" +
 	"cluster_id\x18\x01 \x01(\tR\tclusterId\"E\n" +
 	"\x17ValidateClusterResponse\x12\x14\n" +
 	"\x05valid\x18\x01 \x01(\bR\x05valid\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\xfd\x02\n" +
+	" ValidateClusterConnectionRequest\x12q\n" +
+	"\x11connection_config\x18\x01 \x03(\v2D.idp.kafka.v1.ValidateClusterConnectionRequest.ConnectionConfigEntryR\x10connectionConfig\x12a\n" +
+	"\vcredentials\x18\x02 \x03(\v2?.idp.kafka.v1.ValidateClusterConnectionRequest.CredentialsEntryR\vcredentials\x1aC\n" +
+	"\x15ConnectionConfigEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a>\n" +
+	"\x10CredentialsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"O\n" +
+	"!ValidateClusterConnectionResponse\x12\x14\n" +
+	"\x05valid\x18\x01 \x01(\bR\x05valid\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\"\x15\n" +
 	"\x13ListClustersRequest\"N\n" +
 	"\x14ListClustersResponse\x126\n" +
@@ -5901,7 +6273,29 @@ const file_idp_kafka_v1_kafka_proto_rawDesc = "" +
 	"\x05topic\x18\x01 \x01(\v2\x18.idp.kafka.v1.KafkaTopicR\x05topic\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
 	"workflowId\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\",\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"\xda\x04\n" +
+	"\x18CreateTopicDirectRequest\x12\x1d\n" +
+	"\n" +
+	"topic_name\x18\x01 \x01(\tR\ttopicName\x12\x1e\n" +
+	"\n" +
+	"partitions\x18\x02 \x01(\x05R\n" +
+	"partitions\x12-\n" +
+	"\x12replication_factor\x18\x03 \x01(\x05R\x11replicationFactor\x12J\n" +
+	"\x06config\x18\x04 \x03(\v22.idp.kafka.v1.CreateTopicDirectRequest.ConfigEntryR\x06config\x12i\n" +
+	"\x11connection_config\x18\x05 \x03(\v2<.idp.kafka.v1.CreateTopicDirectRequest.ConnectionConfigEntryR\x10connectionConfig\x12Y\n" +
+	"\vcredentials\x18\x06 \x03(\v27.idp.kafka.v1.CreateTopicDirectRequest.CredentialsEntryR\vcredentials\x1a9\n" +
+	"\vConfigEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aC\n" +
+	"\x15ConnectionConfigEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a>\n" +
+	"\x10CredentialsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"K\n" +
+	"\x19CreateTopicDirectResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\",\n" +
 	"\x0fGetTopicRequest\x12\x19\n" +
 	"\btopic_id\x18\x01 \x01(\tR\atopicId\"X\n" +
 	"\x10GetTopicResponse\x12.\n" +
@@ -5939,7 +6333,21 @@ const file_idp_kafka_v1_kafka_proto_rawDesc = "" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
 	"workflowId\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\"Q\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"\x84\x03\n" +
+	"\x18DeleteTopicByNameRequest\x12\x1d\n" +
+	"\n" +
+	"topic_name\x18\x01 \x01(\tR\ttopicName\x12i\n" +
+	"\x11connection_config\x18\x02 \x03(\v2<.idp.kafka.v1.DeleteTopicByNameRequest.ConnectionConfigEntryR\x10connectionConfig\x12Y\n" +
+	"\vcredentials\x18\x03 \x03(\v27.idp.kafka.v1.DeleteTopicByNameRequest.CredentialsEntryR\vcredentials\x1aC\n" +
+	"\x15ConnectionConfigEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a>\n" +
+	"\x10CredentialsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"K\n" +
+	"\x19DeleteTopicByNameResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"Q\n" +
 	"\x13ApproveTopicRequest\x12\x19\n" +
 	"\btopic_id\x18\x01 \x01(\tR\atopicId\x12\x1f\n" +
 	"\vapproved_by\x18\x02 \x01(\tR\n" +
@@ -6123,22 +6531,25 @@ const file_idp_kafka_v1_kafka_proto_rawDesc = "" +
 	"\x1eSHARE_POLICY_SCOPE_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dSHARE_POLICY_SCOPE_ALL_TOPICS\x10\x01\x12$\n" +
 	" SHARE_POLICY_SCOPE_TOPIC_PATTERN\x10\x02\x12%\n" +
-	"!SHARE_POLICY_SCOPE_SPECIFIC_TOPIC\x10\x032\xaf\x15\n" +
+	"!SHARE_POLICY_SCOPE_SPECIFIC_TOPIC\x10\x032\xf9\x17\n" +
 	"\fKafkaService\x12X\n" +
 	"\rListProviders\x12\".idp.kafka.v1.ListProvidersRequest\x1a#.idp.kafka.v1.ListProvidersResponse\x12^\n" +
 	"\x0fRegisterCluster\x12$.idp.kafka.v1.RegisterClusterRequest\x1a%.idp.kafka.v1.RegisterClusterResponse\x12^\n" +
-	"\x0fValidateCluster\x12$.idp.kafka.v1.ValidateClusterRequest\x1a%.idp.kafka.v1.ValidateClusterResponse\x12U\n" +
+	"\x0fValidateCluster\x12$.idp.kafka.v1.ValidateClusterRequest\x1a%.idp.kafka.v1.ValidateClusterResponse\x12|\n" +
+	"\x19ValidateClusterConnection\x12..idp.kafka.v1.ValidateClusterConnectionRequest\x1a/.idp.kafka.v1.ValidateClusterConnectionResponse\x12U\n" +
 	"\fListClusters\x12!.idp.kafka.v1.ListClustersRequest\x1a\".idp.kafka.v1.ListClustersResponse\x12X\n" +
 	"\rDeleteCluster\x12\".idp.kafka.v1.DeleteClusterRequest\x1a#.idp.kafka.v1.DeleteClusterResponse\x12y\n" +
 	"\x18CreateEnvironmentMapping\x12-.idp.kafka.v1.CreateEnvironmentMappingRequest\x1a..idp.kafka.v1.CreateEnvironmentMappingResponse\x12v\n" +
 	"\x17ListEnvironmentMappings\x12,.idp.kafka.v1.ListEnvironmentMappingsRequest\x1a-.idp.kafka.v1.ListEnvironmentMappingsResponse\x12y\n" +
 	"\x18DeleteEnvironmentMapping\x12-.idp.kafka.v1.DeleteEnvironmentMappingRequest\x1a..idp.kafka.v1.DeleteEnvironmentMappingResponse\x12R\n" +
-	"\vCreateTopic\x12 .idp.kafka.v1.CreateTopicRequest\x1a!.idp.kafka.v1.CreateTopicResponse\x12I\n" +
+	"\vCreateTopic\x12 .idp.kafka.v1.CreateTopicRequest\x1a!.idp.kafka.v1.CreateTopicResponse\x12d\n" +
+	"\x11CreateTopicDirect\x12&.idp.kafka.v1.CreateTopicDirectRequest\x1a'.idp.kafka.v1.CreateTopicDirectResponse\x12I\n" +
 	"\bGetTopic\x12\x1d.idp.kafka.v1.GetTopicRequest\x1a\x1e.idp.kafka.v1.GetTopicResponse\x12O\n" +
 	"\n" +
 	"ListTopics\x12\x1f.idp.kafka.v1.ListTopicsRequest\x1a .idp.kafka.v1.ListTopicsResponse\x12R\n" +
 	"\vUpdateTopic\x12 .idp.kafka.v1.UpdateTopicRequest\x1a!.idp.kafka.v1.UpdateTopicResponse\x12R\n" +
-	"\vDeleteTopic\x12 .idp.kafka.v1.DeleteTopicRequest\x1a!.idp.kafka.v1.DeleteTopicResponse\x12U\n" +
+	"\vDeleteTopic\x12 .idp.kafka.v1.DeleteTopicRequest\x1a!.idp.kafka.v1.DeleteTopicResponse\x12d\n" +
+	"\x11DeleteTopicByName\x12&.idp.kafka.v1.DeleteTopicByNameRequest\x1a'.idp.kafka.v1.DeleteTopicByNameResponse\x12U\n" +
 	"\fApproveTopic\x12!.idp.kafka.v1.ApproveTopicRequest\x1a\".idp.kafka.v1.ApproveTopicResponse\x12[\n" +
 	"\x0eRegisterSchema\x12#.idp.kafka.v1.RegisterSchemaRequest\x1a$.idp.kafka.v1.RegisterSchemaResponse\x12L\n" +
 	"\tGetSchema\x12\x1e.idp.kafka.v1.GetSchemaRequest\x1a\x1f.idp.kafka.v1.GetSchemaResponse\x12R\n" +
@@ -6168,132 +6579,145 @@ func file_idp_kafka_v1_kafka_proto_rawDescGZIP() []byte {
 }
 
 var file_idp_kafka_v1_kafka_proto_enumTypes = make([]protoimpl.EnumInfo, 11)
-var file_idp_kafka_v1_kafka_proto_msgTypes = make([]protoimpl.MessageInfo, 84)
+var file_idp_kafka_v1_kafka_proto_msgTypes = make([]protoimpl.MessageInfo, 97)
 var file_idp_kafka_v1_kafka_proto_goTypes = []any{
-	(ProviderType)(0),                        // 0: idp.kafka.v1.ProviderType
-	(ClusterValidationStatus)(0),             // 1: idp.kafka.v1.ClusterValidationStatus
-	(TopicStatus)(0),                         // 2: idp.kafka.v1.TopicStatus
-	(SchemaFormat)(0),                        // 3: idp.kafka.v1.SchemaFormat
-	(SchemaCompatibility)(0),                 // 4: idp.kafka.v1.SchemaCompatibility
-	(ServiceAccountType)(0),                  // 5: idp.kafka.v1.ServiceAccountType
-	(ShareStatus)(0),                         // 6: idp.kafka.v1.ShareStatus
-	(SharePermission)(0),                     // 7: idp.kafka.v1.SharePermission
-	(TopicVisibility)(0),                     // 8: idp.kafka.v1.TopicVisibility
-	(PolicyScope)(0),                         // 9: idp.kafka.v1.PolicyScope
-	(SharePolicyScope)(0),                    // 10: idp.kafka.v1.SharePolicyScope
-	(*KafkaProvider)(nil),                    // 11: idp.kafka.v1.KafkaProvider
-	(*ProviderCapabilities)(nil),             // 12: idp.kafka.v1.ProviderCapabilities
-	(*KafkaCluster)(nil),                     // 13: idp.kafka.v1.KafkaCluster
-	(*KafkaEnvironmentMapping)(nil),          // 14: idp.kafka.v1.KafkaEnvironmentMapping
-	(*SchemaRegistry)(nil),                   // 15: idp.kafka.v1.SchemaRegistry
-	(*EnvironmentCompatibilityOverride)(nil), // 16: idp.kafka.v1.EnvironmentCompatibilityOverride
-	(*KafkaTopic)(nil),                       // 17: idp.kafka.v1.KafkaTopic
-	(*KafkaSchema)(nil),                      // 18: idp.kafka.v1.KafkaSchema
-	(*KafkaServiceAccount)(nil),              // 19: idp.kafka.v1.KafkaServiceAccount
-	(*KafkaTopicShare)(nil),                  // 20: idp.kafka.v1.KafkaTopicShare
-	(*KafkaTopicPolicy)(nil),                 // 21: idp.kafka.v1.KafkaTopicPolicy
-	(*PartitionLimits)(nil),                  // 22: idp.kafka.v1.PartitionLimits
-	(*RetentionLimits)(nil),                  // 23: idp.kafka.v1.RetentionLimits
-	(*KafkaTopicSharePolicy)(nil),            // 24: idp.kafka.v1.KafkaTopicSharePolicy
-	(*AutoApproveConfig)(nil),                // 25: idp.kafka.v1.AutoApproveConfig
-	(*KafkaUsageMetrics)(nil),                // 26: idp.kafka.v1.KafkaUsageMetrics
-	(*KafkaConsumerGroup)(nil),               // 27: idp.kafka.v1.KafkaConsumerGroup
-	(*KafkaClientActivity)(nil),              // 28: idp.kafka.v1.KafkaClientActivity
-	(*ListProvidersRequest)(nil),             // 29: idp.kafka.v1.ListProvidersRequest
-	(*ListProvidersResponse)(nil),            // 30: idp.kafka.v1.ListProvidersResponse
-	(*RegisterClusterRequest)(nil),           // 31: idp.kafka.v1.RegisterClusterRequest
-	(*RegisterClusterResponse)(nil),          // 32: idp.kafka.v1.RegisterClusterResponse
-	(*ValidateClusterRequest)(nil),           // 33: idp.kafka.v1.ValidateClusterRequest
-	(*ValidateClusterResponse)(nil),          // 34: idp.kafka.v1.ValidateClusterResponse
-	(*ListClustersRequest)(nil),              // 35: idp.kafka.v1.ListClustersRequest
-	(*ListClustersResponse)(nil),             // 36: idp.kafka.v1.ListClustersResponse
-	(*DeleteClusterRequest)(nil),             // 37: idp.kafka.v1.DeleteClusterRequest
-	(*DeleteClusterResponse)(nil),            // 38: idp.kafka.v1.DeleteClusterResponse
-	(*CreateEnvironmentMappingRequest)(nil),  // 39: idp.kafka.v1.CreateEnvironmentMappingRequest
-	(*CreateEnvironmentMappingResponse)(nil), // 40: idp.kafka.v1.CreateEnvironmentMappingResponse
-	(*ListEnvironmentMappingsRequest)(nil),   // 41: idp.kafka.v1.ListEnvironmentMappingsRequest
-	(*ListEnvironmentMappingsResponse)(nil),  // 42: idp.kafka.v1.ListEnvironmentMappingsResponse
-	(*DeleteEnvironmentMappingRequest)(nil),  // 43: idp.kafka.v1.DeleteEnvironmentMappingRequest
-	(*DeleteEnvironmentMappingResponse)(nil), // 44: idp.kafka.v1.DeleteEnvironmentMappingResponse
-	(*CreateTopicRequest)(nil),               // 45: idp.kafka.v1.CreateTopicRequest
-	(*CreateTopicResponse)(nil),              // 46: idp.kafka.v1.CreateTopicResponse
-	(*GetTopicRequest)(nil),                  // 47: idp.kafka.v1.GetTopicRequest
-	(*GetTopicResponse)(nil),                 // 48: idp.kafka.v1.GetTopicResponse
-	(*ListTopicsRequest)(nil),                // 49: idp.kafka.v1.ListTopicsRequest
-	(*ListTopicsResponse)(nil),               // 50: idp.kafka.v1.ListTopicsResponse
-	(*UpdateTopicRequest)(nil),               // 51: idp.kafka.v1.UpdateTopicRequest
-	(*UpdateTopicResponse)(nil),              // 52: idp.kafka.v1.UpdateTopicResponse
-	(*DeleteTopicRequest)(nil),               // 53: idp.kafka.v1.DeleteTopicRequest
-	(*DeleteTopicResponse)(nil),              // 54: idp.kafka.v1.DeleteTopicResponse
-	(*ApproveTopicRequest)(nil),              // 55: idp.kafka.v1.ApproveTopicRequest
-	(*ApproveTopicResponse)(nil),             // 56: idp.kafka.v1.ApproveTopicResponse
-	(*RegisterSchemaRequest)(nil),            // 57: idp.kafka.v1.RegisterSchemaRequest
-	(*RegisterSchemaResponse)(nil),           // 58: idp.kafka.v1.RegisterSchemaResponse
-	(*GetSchemaRequest)(nil),                 // 59: idp.kafka.v1.GetSchemaRequest
-	(*GetSchemaResponse)(nil),                // 60: idp.kafka.v1.GetSchemaResponse
-	(*ListSchemasRequest)(nil),               // 61: idp.kafka.v1.ListSchemasRequest
-	(*ListSchemasResponse)(nil),              // 62: idp.kafka.v1.ListSchemasResponse
-	(*CheckSchemaCompatibilityRequest)(nil),  // 63: idp.kafka.v1.CheckSchemaCompatibilityRequest
-	(*CheckSchemaCompatibilityResponse)(nil), // 64: idp.kafka.v1.CheckSchemaCompatibilityResponse
-	(*CreateServiceAccountRequest)(nil),      // 65: idp.kafka.v1.CreateServiceAccountRequest
-	(*CreateServiceAccountResponse)(nil),     // 66: idp.kafka.v1.CreateServiceAccountResponse
-	(*ListServiceAccountsRequest)(nil),       // 67: idp.kafka.v1.ListServiceAccountsRequest
-	(*ListServiceAccountsResponse)(nil),      // 68: idp.kafka.v1.ListServiceAccountsResponse
-	(*RevokeServiceAccountRequest)(nil),      // 69: idp.kafka.v1.RevokeServiceAccountRequest
-	(*RevokeServiceAccountResponse)(nil),     // 70: idp.kafka.v1.RevokeServiceAccountResponse
-	(*RequestTopicAccessRequest)(nil),        // 71: idp.kafka.v1.RequestTopicAccessRequest
-	(*RequestTopicAccessResponse)(nil),       // 72: idp.kafka.v1.RequestTopicAccessResponse
-	(*ApproveTopicAccessRequest)(nil),        // 73: idp.kafka.v1.ApproveTopicAccessRequest
-	(*ApproveTopicAccessResponse)(nil),       // 74: idp.kafka.v1.ApproveTopicAccessResponse
-	(*RevokeTopicAccessRequest)(nil),         // 75: idp.kafka.v1.RevokeTopicAccessRequest
-	(*RevokeTopicAccessResponse)(nil),        // 76: idp.kafka.v1.RevokeTopicAccessResponse
-	(*ListTopicSharesRequest)(nil),           // 77: idp.kafka.v1.ListTopicSharesRequest
-	(*ListTopicSharesResponse)(nil),          // 78: idp.kafka.v1.ListTopicSharesResponse
-	(*DiscoverTopicsRequest)(nil),            // 79: idp.kafka.v1.DiscoverTopicsRequest
-	(*DiscoverTopicsResponse)(nil),           // 80: idp.kafka.v1.DiscoverTopicsResponse
-	(*DiscoverableTopic)(nil),                // 81: idp.kafka.v1.DiscoverableTopic
-	(*GetTopicMetricsRequest)(nil),           // 82: idp.kafka.v1.GetTopicMetricsRequest
-	(*GetTopicMetricsResponse)(nil),          // 83: idp.kafka.v1.GetTopicMetricsResponse
-	(*GetTopicLineageRequest)(nil),           // 84: idp.kafka.v1.GetTopicLineageRequest
-	(*GetTopicLineageResponse)(nil),          // 85: idp.kafka.v1.GetTopicLineageResponse
-	(*LineageNode)(nil),                      // 86: idp.kafka.v1.LineageNode
-	nil,                                      // 87: idp.kafka.v1.KafkaCluster.ConnectionConfigEntry
-	nil,                                      // 88: idp.kafka.v1.KafkaEnvironmentMapping.RoutingRuleEntry
-	nil,                                      // 89: idp.kafka.v1.KafkaTopic.ConfigEntry
-	nil,                                      // 90: idp.kafka.v1.RegisterClusterRequest.ConnectionConfigEntry
-	nil,                                      // 91: idp.kafka.v1.RegisterClusterRequest.CredentialsEntry
-	nil,                                      // 92: idp.kafka.v1.CreateEnvironmentMappingRequest.RoutingRuleEntry
-	nil,                                      // 93: idp.kafka.v1.CreateTopicRequest.ConfigEntry
-	nil,                                      // 94: idp.kafka.v1.UpdateTopicRequest.ConfigEntry
-	(*timestamppb.Timestamp)(nil),            // 95: google.protobuf.Timestamp
+	(ProviderType)(0),                         // 0: idp.kafka.v1.ProviderType
+	(ClusterValidationStatus)(0),              // 1: idp.kafka.v1.ClusterValidationStatus
+	(TopicStatus)(0),                          // 2: idp.kafka.v1.TopicStatus
+	(SchemaFormat)(0),                         // 3: idp.kafka.v1.SchemaFormat
+	(SchemaCompatibility)(0),                  // 4: idp.kafka.v1.SchemaCompatibility
+	(ServiceAccountType)(0),                   // 5: idp.kafka.v1.ServiceAccountType
+	(ShareStatus)(0),                          // 6: idp.kafka.v1.ShareStatus
+	(SharePermission)(0),                      // 7: idp.kafka.v1.SharePermission
+	(TopicVisibility)(0),                      // 8: idp.kafka.v1.TopicVisibility
+	(PolicyScope)(0),                          // 9: idp.kafka.v1.PolicyScope
+	(SharePolicyScope)(0),                     // 10: idp.kafka.v1.SharePolicyScope
+	(*KafkaProvider)(nil),                     // 11: idp.kafka.v1.KafkaProvider
+	(*ProviderCapabilities)(nil),              // 12: idp.kafka.v1.ProviderCapabilities
+	(*KafkaCluster)(nil),                      // 13: idp.kafka.v1.KafkaCluster
+	(*KafkaEnvironmentMapping)(nil),           // 14: idp.kafka.v1.KafkaEnvironmentMapping
+	(*SchemaRegistry)(nil),                    // 15: idp.kafka.v1.SchemaRegistry
+	(*EnvironmentCompatibilityOverride)(nil),  // 16: idp.kafka.v1.EnvironmentCompatibilityOverride
+	(*KafkaTopic)(nil),                        // 17: idp.kafka.v1.KafkaTopic
+	(*KafkaSchema)(nil),                       // 18: idp.kafka.v1.KafkaSchema
+	(*KafkaServiceAccount)(nil),               // 19: idp.kafka.v1.KafkaServiceAccount
+	(*KafkaTopicShare)(nil),                   // 20: idp.kafka.v1.KafkaTopicShare
+	(*KafkaTopicPolicy)(nil),                  // 21: idp.kafka.v1.KafkaTopicPolicy
+	(*PartitionLimits)(nil),                   // 22: idp.kafka.v1.PartitionLimits
+	(*RetentionLimits)(nil),                   // 23: idp.kafka.v1.RetentionLimits
+	(*KafkaTopicSharePolicy)(nil),             // 24: idp.kafka.v1.KafkaTopicSharePolicy
+	(*AutoApproveConfig)(nil),                 // 25: idp.kafka.v1.AutoApproveConfig
+	(*KafkaUsageMetrics)(nil),                 // 26: idp.kafka.v1.KafkaUsageMetrics
+	(*KafkaConsumerGroup)(nil),                // 27: idp.kafka.v1.KafkaConsumerGroup
+	(*KafkaClientActivity)(nil),               // 28: idp.kafka.v1.KafkaClientActivity
+	(*ListProvidersRequest)(nil),              // 29: idp.kafka.v1.ListProvidersRequest
+	(*ListProvidersResponse)(nil),             // 30: idp.kafka.v1.ListProvidersResponse
+	(*RegisterClusterRequest)(nil),            // 31: idp.kafka.v1.RegisterClusterRequest
+	(*RegisterClusterResponse)(nil),           // 32: idp.kafka.v1.RegisterClusterResponse
+	(*ValidateClusterRequest)(nil),            // 33: idp.kafka.v1.ValidateClusterRequest
+	(*ValidateClusterResponse)(nil),           // 34: idp.kafka.v1.ValidateClusterResponse
+	(*ValidateClusterConnectionRequest)(nil),  // 35: idp.kafka.v1.ValidateClusterConnectionRequest
+	(*ValidateClusterConnectionResponse)(nil), // 36: idp.kafka.v1.ValidateClusterConnectionResponse
+	(*ListClustersRequest)(nil),               // 37: idp.kafka.v1.ListClustersRequest
+	(*ListClustersResponse)(nil),              // 38: idp.kafka.v1.ListClustersResponse
+	(*DeleteClusterRequest)(nil),              // 39: idp.kafka.v1.DeleteClusterRequest
+	(*DeleteClusterResponse)(nil),             // 40: idp.kafka.v1.DeleteClusterResponse
+	(*CreateEnvironmentMappingRequest)(nil),   // 41: idp.kafka.v1.CreateEnvironmentMappingRequest
+	(*CreateEnvironmentMappingResponse)(nil),  // 42: idp.kafka.v1.CreateEnvironmentMappingResponse
+	(*ListEnvironmentMappingsRequest)(nil),    // 43: idp.kafka.v1.ListEnvironmentMappingsRequest
+	(*ListEnvironmentMappingsResponse)(nil),   // 44: idp.kafka.v1.ListEnvironmentMappingsResponse
+	(*DeleteEnvironmentMappingRequest)(nil),   // 45: idp.kafka.v1.DeleteEnvironmentMappingRequest
+	(*DeleteEnvironmentMappingResponse)(nil),  // 46: idp.kafka.v1.DeleteEnvironmentMappingResponse
+	(*CreateTopicRequest)(nil),                // 47: idp.kafka.v1.CreateTopicRequest
+	(*CreateTopicResponse)(nil),               // 48: idp.kafka.v1.CreateTopicResponse
+	(*CreateTopicDirectRequest)(nil),          // 49: idp.kafka.v1.CreateTopicDirectRequest
+	(*CreateTopicDirectResponse)(nil),         // 50: idp.kafka.v1.CreateTopicDirectResponse
+	(*GetTopicRequest)(nil),                   // 51: idp.kafka.v1.GetTopicRequest
+	(*GetTopicResponse)(nil),                  // 52: idp.kafka.v1.GetTopicResponse
+	(*ListTopicsRequest)(nil),                 // 53: idp.kafka.v1.ListTopicsRequest
+	(*ListTopicsResponse)(nil),                // 54: idp.kafka.v1.ListTopicsResponse
+	(*UpdateTopicRequest)(nil),                // 55: idp.kafka.v1.UpdateTopicRequest
+	(*UpdateTopicResponse)(nil),               // 56: idp.kafka.v1.UpdateTopicResponse
+	(*DeleteTopicRequest)(nil),                // 57: idp.kafka.v1.DeleteTopicRequest
+	(*DeleteTopicResponse)(nil),               // 58: idp.kafka.v1.DeleteTopicResponse
+	(*DeleteTopicByNameRequest)(nil),          // 59: idp.kafka.v1.DeleteTopicByNameRequest
+	(*DeleteTopicByNameResponse)(nil),         // 60: idp.kafka.v1.DeleteTopicByNameResponse
+	(*ApproveTopicRequest)(nil),               // 61: idp.kafka.v1.ApproveTopicRequest
+	(*ApproveTopicResponse)(nil),              // 62: idp.kafka.v1.ApproveTopicResponse
+	(*RegisterSchemaRequest)(nil),             // 63: idp.kafka.v1.RegisterSchemaRequest
+	(*RegisterSchemaResponse)(nil),            // 64: idp.kafka.v1.RegisterSchemaResponse
+	(*GetSchemaRequest)(nil),                  // 65: idp.kafka.v1.GetSchemaRequest
+	(*GetSchemaResponse)(nil),                 // 66: idp.kafka.v1.GetSchemaResponse
+	(*ListSchemasRequest)(nil),                // 67: idp.kafka.v1.ListSchemasRequest
+	(*ListSchemasResponse)(nil),               // 68: idp.kafka.v1.ListSchemasResponse
+	(*CheckSchemaCompatibilityRequest)(nil),   // 69: idp.kafka.v1.CheckSchemaCompatibilityRequest
+	(*CheckSchemaCompatibilityResponse)(nil),  // 70: idp.kafka.v1.CheckSchemaCompatibilityResponse
+	(*CreateServiceAccountRequest)(nil),       // 71: idp.kafka.v1.CreateServiceAccountRequest
+	(*CreateServiceAccountResponse)(nil),      // 72: idp.kafka.v1.CreateServiceAccountResponse
+	(*ListServiceAccountsRequest)(nil),        // 73: idp.kafka.v1.ListServiceAccountsRequest
+	(*ListServiceAccountsResponse)(nil),       // 74: idp.kafka.v1.ListServiceAccountsResponse
+	(*RevokeServiceAccountRequest)(nil),       // 75: idp.kafka.v1.RevokeServiceAccountRequest
+	(*RevokeServiceAccountResponse)(nil),      // 76: idp.kafka.v1.RevokeServiceAccountResponse
+	(*RequestTopicAccessRequest)(nil),         // 77: idp.kafka.v1.RequestTopicAccessRequest
+	(*RequestTopicAccessResponse)(nil),        // 78: idp.kafka.v1.RequestTopicAccessResponse
+	(*ApproveTopicAccessRequest)(nil),         // 79: idp.kafka.v1.ApproveTopicAccessRequest
+	(*ApproveTopicAccessResponse)(nil),        // 80: idp.kafka.v1.ApproveTopicAccessResponse
+	(*RevokeTopicAccessRequest)(nil),          // 81: idp.kafka.v1.RevokeTopicAccessRequest
+	(*RevokeTopicAccessResponse)(nil),         // 82: idp.kafka.v1.RevokeTopicAccessResponse
+	(*ListTopicSharesRequest)(nil),            // 83: idp.kafka.v1.ListTopicSharesRequest
+	(*ListTopicSharesResponse)(nil),           // 84: idp.kafka.v1.ListTopicSharesResponse
+	(*DiscoverTopicsRequest)(nil),             // 85: idp.kafka.v1.DiscoverTopicsRequest
+	(*DiscoverTopicsResponse)(nil),            // 86: idp.kafka.v1.DiscoverTopicsResponse
+	(*DiscoverableTopic)(nil),                 // 87: idp.kafka.v1.DiscoverableTopic
+	(*GetTopicMetricsRequest)(nil),            // 88: idp.kafka.v1.GetTopicMetricsRequest
+	(*GetTopicMetricsResponse)(nil),           // 89: idp.kafka.v1.GetTopicMetricsResponse
+	(*GetTopicLineageRequest)(nil),            // 90: idp.kafka.v1.GetTopicLineageRequest
+	(*GetTopicLineageResponse)(nil),           // 91: idp.kafka.v1.GetTopicLineageResponse
+	(*LineageNode)(nil),                       // 92: idp.kafka.v1.LineageNode
+	nil,                                       // 93: idp.kafka.v1.KafkaCluster.ConnectionConfigEntry
+	nil,                                       // 94: idp.kafka.v1.KafkaEnvironmentMapping.RoutingRuleEntry
+	nil,                                       // 95: idp.kafka.v1.KafkaTopic.ConfigEntry
+	nil,                                       // 96: idp.kafka.v1.RegisterClusterRequest.ConnectionConfigEntry
+	nil,                                       // 97: idp.kafka.v1.RegisterClusterRequest.CredentialsEntry
+	nil,                                       // 98: idp.kafka.v1.ValidateClusterConnectionRequest.ConnectionConfigEntry
+	nil,                                       // 99: idp.kafka.v1.ValidateClusterConnectionRequest.CredentialsEntry
+	nil,                                       // 100: idp.kafka.v1.CreateEnvironmentMappingRequest.RoutingRuleEntry
+	nil,                                       // 101: idp.kafka.v1.CreateTopicRequest.ConfigEntry
+	nil,                                       // 102: idp.kafka.v1.CreateTopicDirectRequest.ConfigEntry
+	nil,                                       // 103: idp.kafka.v1.CreateTopicDirectRequest.ConnectionConfigEntry
+	nil,                                       // 104: idp.kafka.v1.CreateTopicDirectRequest.CredentialsEntry
+	nil,                                       // 105: idp.kafka.v1.UpdateTopicRequest.ConfigEntry
+	nil,                                       // 106: idp.kafka.v1.DeleteTopicByNameRequest.ConnectionConfigEntry
+	nil,                                       // 107: idp.kafka.v1.DeleteTopicByNameRequest.CredentialsEntry
+	(*timestamppb.Timestamp)(nil),             // 108: google.protobuf.Timestamp
 }
 var file_idp_kafka_v1_kafka_proto_depIdxs = []int32{
 	12,  // 0: idp.kafka.v1.KafkaProvider.capabilities:type_name -> idp.kafka.v1.ProviderCapabilities
-	87,  // 1: idp.kafka.v1.KafkaCluster.connection_config:type_name -> idp.kafka.v1.KafkaCluster.ConnectionConfigEntry
+	93,  // 1: idp.kafka.v1.KafkaCluster.connection_config:type_name -> idp.kafka.v1.KafkaCluster.ConnectionConfigEntry
 	1,   // 2: idp.kafka.v1.KafkaCluster.validation_status:type_name -> idp.kafka.v1.ClusterValidationStatus
-	95,  // 3: idp.kafka.v1.KafkaCluster.last_validated_at:type_name -> google.protobuf.Timestamp
-	95,  // 4: idp.kafka.v1.KafkaCluster.created_at:type_name -> google.protobuf.Timestamp
-	95,  // 5: idp.kafka.v1.KafkaCluster.updated_at:type_name -> google.protobuf.Timestamp
-	88,  // 6: idp.kafka.v1.KafkaEnvironmentMapping.routing_rule:type_name -> idp.kafka.v1.KafkaEnvironmentMapping.RoutingRuleEntry
+	108, // 3: idp.kafka.v1.KafkaCluster.last_validated_at:type_name -> google.protobuf.Timestamp
+	108, // 4: idp.kafka.v1.KafkaCluster.created_at:type_name -> google.protobuf.Timestamp
+	108, // 5: idp.kafka.v1.KafkaCluster.updated_at:type_name -> google.protobuf.Timestamp
+	94,  // 6: idp.kafka.v1.KafkaEnvironmentMapping.routing_rule:type_name -> idp.kafka.v1.KafkaEnvironmentMapping.RoutingRuleEntry
 	4,   // 7: idp.kafka.v1.SchemaRegistry.default_compatibility:type_name -> idp.kafka.v1.SchemaCompatibility
 	16,  // 8: idp.kafka.v1.SchemaRegistry.environment_overrides:type_name -> idp.kafka.v1.EnvironmentCompatibilityOverride
 	4,   // 9: idp.kafka.v1.EnvironmentCompatibilityOverride.compatibility:type_name -> idp.kafka.v1.SchemaCompatibility
-	89,  // 10: idp.kafka.v1.KafkaTopic.config:type_name -> idp.kafka.v1.KafkaTopic.ConfigEntry
+	95,  // 10: idp.kafka.v1.KafkaTopic.config:type_name -> idp.kafka.v1.KafkaTopic.ConfigEntry
 	2,   // 11: idp.kafka.v1.KafkaTopic.status:type_name -> idp.kafka.v1.TopicStatus
-	95,  // 12: idp.kafka.v1.KafkaTopic.approved_at:type_name -> google.protobuf.Timestamp
-	95,  // 13: idp.kafka.v1.KafkaTopic.created_at:type_name -> google.protobuf.Timestamp
-	95,  // 14: idp.kafka.v1.KafkaTopic.updated_at:type_name -> google.protobuf.Timestamp
+	108, // 12: idp.kafka.v1.KafkaTopic.approved_at:type_name -> google.protobuf.Timestamp
+	108, // 13: idp.kafka.v1.KafkaTopic.created_at:type_name -> google.protobuf.Timestamp
+	108, // 14: idp.kafka.v1.KafkaTopic.updated_at:type_name -> google.protobuf.Timestamp
 	3,   // 15: idp.kafka.v1.KafkaSchema.format:type_name -> idp.kafka.v1.SchemaFormat
 	4,   // 16: idp.kafka.v1.KafkaSchema.compatibility:type_name -> idp.kafka.v1.SchemaCompatibility
-	95,  // 17: idp.kafka.v1.KafkaSchema.created_at:type_name -> google.protobuf.Timestamp
-	95,  // 18: idp.kafka.v1.KafkaSchema.updated_at:type_name -> google.protobuf.Timestamp
+	108, // 17: idp.kafka.v1.KafkaSchema.created_at:type_name -> google.protobuf.Timestamp
+	108, // 18: idp.kafka.v1.KafkaSchema.updated_at:type_name -> google.protobuf.Timestamp
 	5,   // 19: idp.kafka.v1.KafkaServiceAccount.type:type_name -> idp.kafka.v1.ServiceAccountType
-	95,  // 20: idp.kafka.v1.KafkaServiceAccount.created_at:type_name -> google.protobuf.Timestamp
+	108, // 20: idp.kafka.v1.KafkaServiceAccount.created_at:type_name -> google.protobuf.Timestamp
 	7,   // 21: idp.kafka.v1.KafkaTopicShare.permission:type_name -> idp.kafka.v1.SharePermission
 	6,   // 22: idp.kafka.v1.KafkaTopicShare.status:type_name -> idp.kafka.v1.ShareStatus
-	95,  // 23: idp.kafka.v1.KafkaTopicShare.requested_at:type_name -> google.protobuf.Timestamp
-	95,  // 24: idp.kafka.v1.KafkaTopicShare.approved_at:type_name -> google.protobuf.Timestamp
-	95,  // 25: idp.kafka.v1.KafkaTopicShare.expires_at:type_name -> google.protobuf.Timestamp
+	108, // 23: idp.kafka.v1.KafkaTopicShare.requested_at:type_name -> google.protobuf.Timestamp
+	108, // 24: idp.kafka.v1.KafkaTopicShare.approved_at:type_name -> google.protobuf.Timestamp
+	108, // 25: idp.kafka.v1.KafkaTopicShare.expires_at:type_name -> google.protobuf.Timestamp
 	9,   // 26: idp.kafka.v1.KafkaTopicPolicy.scope:type_name -> idp.kafka.v1.PolicyScope
 	22,  // 27: idp.kafka.v1.KafkaTopicPolicy.partition_limits:type_name -> idp.kafka.v1.PartitionLimits
 	23,  // 28: idp.kafka.v1.KafkaTopicPolicy.retention_limits:type_name -> idp.kafka.v1.RetentionLimits
@@ -6302,109 +6726,122 @@ var file_idp_kafka_v1_kafka_proto_depIdxs = []int32{
 	25,  // 31: idp.kafka.v1.KafkaTopicSharePolicy.auto_approve:type_name -> idp.kafka.v1.AutoApproveConfig
 	7,   // 32: idp.kafka.v1.KafkaTopicSharePolicy.default_permission:type_name -> idp.kafka.v1.SharePermission
 	7,   // 33: idp.kafka.v1.AutoApproveConfig.permissions:type_name -> idp.kafka.v1.SharePermission
-	95,  // 34: idp.kafka.v1.KafkaConsumerGroup.last_seen:type_name -> google.protobuf.Timestamp
-	95,  // 35: idp.kafka.v1.KafkaConsumerGroup.last_updated:type_name -> google.protobuf.Timestamp
-	95,  // 36: idp.kafka.v1.KafkaClientActivity.last_seen:type_name -> google.protobuf.Timestamp
+	108, // 34: idp.kafka.v1.KafkaConsumerGroup.last_seen:type_name -> google.protobuf.Timestamp
+	108, // 35: idp.kafka.v1.KafkaConsumerGroup.last_updated:type_name -> google.protobuf.Timestamp
+	108, // 36: idp.kafka.v1.KafkaClientActivity.last_seen:type_name -> google.protobuf.Timestamp
 	11,  // 37: idp.kafka.v1.ListProvidersResponse.providers:type_name -> idp.kafka.v1.KafkaProvider
-	90,  // 38: idp.kafka.v1.RegisterClusterRequest.connection_config:type_name -> idp.kafka.v1.RegisterClusterRequest.ConnectionConfigEntry
-	91,  // 39: idp.kafka.v1.RegisterClusterRequest.credentials:type_name -> idp.kafka.v1.RegisterClusterRequest.CredentialsEntry
+	96,  // 38: idp.kafka.v1.RegisterClusterRequest.connection_config:type_name -> idp.kafka.v1.RegisterClusterRequest.ConnectionConfigEntry
+	97,  // 39: idp.kafka.v1.RegisterClusterRequest.credentials:type_name -> idp.kafka.v1.RegisterClusterRequest.CredentialsEntry
 	13,  // 40: idp.kafka.v1.RegisterClusterResponse.cluster:type_name -> idp.kafka.v1.KafkaCluster
-	13,  // 41: idp.kafka.v1.ListClustersResponse.clusters:type_name -> idp.kafka.v1.KafkaCluster
-	92,  // 42: idp.kafka.v1.CreateEnvironmentMappingRequest.routing_rule:type_name -> idp.kafka.v1.CreateEnvironmentMappingRequest.RoutingRuleEntry
-	14,  // 43: idp.kafka.v1.CreateEnvironmentMappingResponse.mapping:type_name -> idp.kafka.v1.KafkaEnvironmentMapping
-	14,  // 44: idp.kafka.v1.ListEnvironmentMappingsResponse.mappings:type_name -> idp.kafka.v1.KafkaEnvironmentMapping
-	93,  // 45: idp.kafka.v1.CreateTopicRequest.config:type_name -> idp.kafka.v1.CreateTopicRequest.ConfigEntry
-	18,  // 46: idp.kafka.v1.CreateTopicRequest.schema:type_name -> idp.kafka.v1.KafkaSchema
-	17,  // 47: idp.kafka.v1.CreateTopicResponse.topic:type_name -> idp.kafka.v1.KafkaTopic
-	17,  // 48: idp.kafka.v1.GetTopicResponse.topic:type_name -> idp.kafka.v1.KafkaTopic
-	2,   // 49: idp.kafka.v1.ListTopicsRequest.status:type_name -> idp.kafka.v1.TopicStatus
-	17,  // 50: idp.kafka.v1.ListTopicsResponse.topics:type_name -> idp.kafka.v1.KafkaTopic
-	94,  // 51: idp.kafka.v1.UpdateTopicRequest.config:type_name -> idp.kafka.v1.UpdateTopicRequest.ConfigEntry
-	17,  // 52: idp.kafka.v1.UpdateTopicResponse.topic:type_name -> idp.kafka.v1.KafkaTopic
-	17,  // 53: idp.kafka.v1.ApproveTopicResponse.topic:type_name -> idp.kafka.v1.KafkaTopic
-	3,   // 54: idp.kafka.v1.RegisterSchemaRequest.format:type_name -> idp.kafka.v1.SchemaFormat
-	4,   // 55: idp.kafka.v1.RegisterSchemaRequest.compatibility:type_name -> idp.kafka.v1.SchemaCompatibility
-	18,  // 56: idp.kafka.v1.RegisterSchemaResponse.schema:type_name -> idp.kafka.v1.KafkaSchema
-	18,  // 57: idp.kafka.v1.GetSchemaResponse.schema:type_name -> idp.kafka.v1.KafkaSchema
-	18,  // 58: idp.kafka.v1.ListSchemasResponse.schemas:type_name -> idp.kafka.v1.KafkaSchema
-	3,   // 59: idp.kafka.v1.CheckSchemaCompatibilityRequest.format:type_name -> idp.kafka.v1.SchemaFormat
-	5,   // 60: idp.kafka.v1.CreateServiceAccountRequest.type:type_name -> idp.kafka.v1.ServiceAccountType
-	19,  // 61: idp.kafka.v1.CreateServiceAccountResponse.service_account:type_name -> idp.kafka.v1.KafkaServiceAccount
-	19,  // 62: idp.kafka.v1.ListServiceAccountsResponse.service_accounts:type_name -> idp.kafka.v1.KafkaServiceAccount
-	7,   // 63: idp.kafka.v1.RequestTopicAccessRequest.permission:type_name -> idp.kafka.v1.SharePermission
-	20,  // 64: idp.kafka.v1.RequestTopicAccessResponse.share:type_name -> idp.kafka.v1.KafkaTopicShare
-	20,  // 65: idp.kafka.v1.ApproveTopicAccessResponse.share:type_name -> idp.kafka.v1.KafkaTopicShare
-	6,   // 66: idp.kafka.v1.ListTopicSharesRequest.status:type_name -> idp.kafka.v1.ShareStatus
-	20,  // 67: idp.kafka.v1.ListTopicSharesResponse.shares:type_name -> idp.kafka.v1.KafkaTopicShare
-	3,   // 68: idp.kafka.v1.DiscoverTopicsRequest.schema_format:type_name -> idp.kafka.v1.SchemaFormat
-	81,  // 69: idp.kafka.v1.DiscoverTopicsResponse.topics:type_name -> idp.kafka.v1.DiscoverableTopic
-	17,  // 70: idp.kafka.v1.DiscoverableTopic.topic:type_name -> idp.kafka.v1.KafkaTopic
-	8,   // 71: idp.kafka.v1.DiscoverableTopic.visibility:type_name -> idp.kafka.v1.TopicVisibility
-	26,  // 72: idp.kafka.v1.GetTopicMetricsResponse.metrics:type_name -> idp.kafka.v1.KafkaUsageMetrics
-	86,  // 73: idp.kafka.v1.GetTopicLineageResponse.producers:type_name -> idp.kafka.v1.LineageNode
-	86,  // 74: idp.kafka.v1.GetTopicLineageResponse.consumers:type_name -> idp.kafka.v1.LineageNode
-	95,  // 75: idp.kafka.v1.LineageNode.last_seen:type_name -> google.protobuf.Timestamp
-	29,  // 76: idp.kafka.v1.KafkaService.ListProviders:input_type -> idp.kafka.v1.ListProvidersRequest
-	31,  // 77: idp.kafka.v1.KafkaService.RegisterCluster:input_type -> idp.kafka.v1.RegisterClusterRequest
-	33,  // 78: idp.kafka.v1.KafkaService.ValidateCluster:input_type -> idp.kafka.v1.ValidateClusterRequest
-	35,  // 79: idp.kafka.v1.KafkaService.ListClusters:input_type -> idp.kafka.v1.ListClustersRequest
-	37,  // 80: idp.kafka.v1.KafkaService.DeleteCluster:input_type -> idp.kafka.v1.DeleteClusterRequest
-	39,  // 81: idp.kafka.v1.KafkaService.CreateEnvironmentMapping:input_type -> idp.kafka.v1.CreateEnvironmentMappingRequest
-	41,  // 82: idp.kafka.v1.KafkaService.ListEnvironmentMappings:input_type -> idp.kafka.v1.ListEnvironmentMappingsRequest
-	43,  // 83: idp.kafka.v1.KafkaService.DeleteEnvironmentMapping:input_type -> idp.kafka.v1.DeleteEnvironmentMappingRequest
-	45,  // 84: idp.kafka.v1.KafkaService.CreateTopic:input_type -> idp.kafka.v1.CreateTopicRequest
-	47,  // 85: idp.kafka.v1.KafkaService.GetTopic:input_type -> idp.kafka.v1.GetTopicRequest
-	49,  // 86: idp.kafka.v1.KafkaService.ListTopics:input_type -> idp.kafka.v1.ListTopicsRequest
-	51,  // 87: idp.kafka.v1.KafkaService.UpdateTopic:input_type -> idp.kafka.v1.UpdateTopicRequest
-	53,  // 88: idp.kafka.v1.KafkaService.DeleteTopic:input_type -> idp.kafka.v1.DeleteTopicRequest
-	55,  // 89: idp.kafka.v1.KafkaService.ApproveTopic:input_type -> idp.kafka.v1.ApproveTopicRequest
-	57,  // 90: idp.kafka.v1.KafkaService.RegisterSchema:input_type -> idp.kafka.v1.RegisterSchemaRequest
-	59,  // 91: idp.kafka.v1.KafkaService.GetSchema:input_type -> idp.kafka.v1.GetSchemaRequest
-	61,  // 92: idp.kafka.v1.KafkaService.ListSchemas:input_type -> idp.kafka.v1.ListSchemasRequest
-	63,  // 93: idp.kafka.v1.KafkaService.CheckSchemaCompatibility:input_type -> idp.kafka.v1.CheckSchemaCompatibilityRequest
-	65,  // 94: idp.kafka.v1.KafkaService.CreateServiceAccount:input_type -> idp.kafka.v1.CreateServiceAccountRequest
-	67,  // 95: idp.kafka.v1.KafkaService.ListServiceAccounts:input_type -> idp.kafka.v1.ListServiceAccountsRequest
-	69,  // 96: idp.kafka.v1.KafkaService.RevokeServiceAccount:input_type -> idp.kafka.v1.RevokeServiceAccountRequest
-	71,  // 97: idp.kafka.v1.KafkaService.RequestTopicAccess:input_type -> idp.kafka.v1.RequestTopicAccessRequest
-	73,  // 98: idp.kafka.v1.KafkaService.ApproveTopicAccess:input_type -> idp.kafka.v1.ApproveTopicAccessRequest
-	75,  // 99: idp.kafka.v1.KafkaService.RevokeTopicAccess:input_type -> idp.kafka.v1.RevokeTopicAccessRequest
-	77,  // 100: idp.kafka.v1.KafkaService.ListTopicShares:input_type -> idp.kafka.v1.ListTopicSharesRequest
-	79,  // 101: idp.kafka.v1.KafkaService.DiscoverTopics:input_type -> idp.kafka.v1.DiscoverTopicsRequest
-	82,  // 102: idp.kafka.v1.KafkaService.GetTopicMetrics:input_type -> idp.kafka.v1.GetTopicMetricsRequest
-	84,  // 103: idp.kafka.v1.KafkaService.GetTopicLineage:input_type -> idp.kafka.v1.GetTopicLineageRequest
-	30,  // 104: idp.kafka.v1.KafkaService.ListProviders:output_type -> idp.kafka.v1.ListProvidersResponse
-	32,  // 105: idp.kafka.v1.KafkaService.RegisterCluster:output_type -> idp.kafka.v1.RegisterClusterResponse
-	34,  // 106: idp.kafka.v1.KafkaService.ValidateCluster:output_type -> idp.kafka.v1.ValidateClusterResponse
-	36,  // 107: idp.kafka.v1.KafkaService.ListClusters:output_type -> idp.kafka.v1.ListClustersResponse
-	38,  // 108: idp.kafka.v1.KafkaService.DeleteCluster:output_type -> idp.kafka.v1.DeleteClusterResponse
-	40,  // 109: idp.kafka.v1.KafkaService.CreateEnvironmentMapping:output_type -> idp.kafka.v1.CreateEnvironmentMappingResponse
-	42,  // 110: idp.kafka.v1.KafkaService.ListEnvironmentMappings:output_type -> idp.kafka.v1.ListEnvironmentMappingsResponse
-	44,  // 111: idp.kafka.v1.KafkaService.DeleteEnvironmentMapping:output_type -> idp.kafka.v1.DeleteEnvironmentMappingResponse
-	46,  // 112: idp.kafka.v1.KafkaService.CreateTopic:output_type -> idp.kafka.v1.CreateTopicResponse
-	48,  // 113: idp.kafka.v1.KafkaService.GetTopic:output_type -> idp.kafka.v1.GetTopicResponse
-	50,  // 114: idp.kafka.v1.KafkaService.ListTopics:output_type -> idp.kafka.v1.ListTopicsResponse
-	52,  // 115: idp.kafka.v1.KafkaService.UpdateTopic:output_type -> idp.kafka.v1.UpdateTopicResponse
-	54,  // 116: idp.kafka.v1.KafkaService.DeleteTopic:output_type -> idp.kafka.v1.DeleteTopicResponse
-	56,  // 117: idp.kafka.v1.KafkaService.ApproveTopic:output_type -> idp.kafka.v1.ApproveTopicResponse
-	58,  // 118: idp.kafka.v1.KafkaService.RegisterSchema:output_type -> idp.kafka.v1.RegisterSchemaResponse
-	60,  // 119: idp.kafka.v1.KafkaService.GetSchema:output_type -> idp.kafka.v1.GetSchemaResponse
-	62,  // 120: idp.kafka.v1.KafkaService.ListSchemas:output_type -> idp.kafka.v1.ListSchemasResponse
-	64,  // 121: idp.kafka.v1.KafkaService.CheckSchemaCompatibility:output_type -> idp.kafka.v1.CheckSchemaCompatibilityResponse
-	66,  // 122: idp.kafka.v1.KafkaService.CreateServiceAccount:output_type -> idp.kafka.v1.CreateServiceAccountResponse
-	68,  // 123: idp.kafka.v1.KafkaService.ListServiceAccounts:output_type -> idp.kafka.v1.ListServiceAccountsResponse
-	70,  // 124: idp.kafka.v1.KafkaService.RevokeServiceAccount:output_type -> idp.kafka.v1.RevokeServiceAccountResponse
-	72,  // 125: idp.kafka.v1.KafkaService.RequestTopicAccess:output_type -> idp.kafka.v1.RequestTopicAccessResponse
-	74,  // 126: idp.kafka.v1.KafkaService.ApproveTopicAccess:output_type -> idp.kafka.v1.ApproveTopicAccessResponse
-	76,  // 127: idp.kafka.v1.KafkaService.RevokeTopicAccess:output_type -> idp.kafka.v1.RevokeTopicAccessResponse
-	78,  // 128: idp.kafka.v1.KafkaService.ListTopicShares:output_type -> idp.kafka.v1.ListTopicSharesResponse
-	80,  // 129: idp.kafka.v1.KafkaService.DiscoverTopics:output_type -> idp.kafka.v1.DiscoverTopicsResponse
-	83,  // 130: idp.kafka.v1.KafkaService.GetTopicMetrics:output_type -> idp.kafka.v1.GetTopicMetricsResponse
-	85,  // 131: idp.kafka.v1.KafkaService.GetTopicLineage:output_type -> idp.kafka.v1.GetTopicLineageResponse
-	104, // [104:132] is the sub-list for method output_type
-	76,  // [76:104] is the sub-list for method input_type
-	76,  // [76:76] is the sub-list for extension type_name
-	76,  // [76:76] is the sub-list for extension extendee
-	0,   // [0:76] is the sub-list for field type_name
+	98,  // 41: idp.kafka.v1.ValidateClusterConnectionRequest.connection_config:type_name -> idp.kafka.v1.ValidateClusterConnectionRequest.ConnectionConfigEntry
+	99,  // 42: idp.kafka.v1.ValidateClusterConnectionRequest.credentials:type_name -> idp.kafka.v1.ValidateClusterConnectionRequest.CredentialsEntry
+	13,  // 43: idp.kafka.v1.ListClustersResponse.clusters:type_name -> idp.kafka.v1.KafkaCluster
+	100, // 44: idp.kafka.v1.CreateEnvironmentMappingRequest.routing_rule:type_name -> idp.kafka.v1.CreateEnvironmentMappingRequest.RoutingRuleEntry
+	14,  // 45: idp.kafka.v1.CreateEnvironmentMappingResponse.mapping:type_name -> idp.kafka.v1.KafkaEnvironmentMapping
+	14,  // 46: idp.kafka.v1.ListEnvironmentMappingsResponse.mappings:type_name -> idp.kafka.v1.KafkaEnvironmentMapping
+	101, // 47: idp.kafka.v1.CreateTopicRequest.config:type_name -> idp.kafka.v1.CreateTopicRequest.ConfigEntry
+	18,  // 48: idp.kafka.v1.CreateTopicRequest.schema:type_name -> idp.kafka.v1.KafkaSchema
+	17,  // 49: idp.kafka.v1.CreateTopicResponse.topic:type_name -> idp.kafka.v1.KafkaTopic
+	102, // 50: idp.kafka.v1.CreateTopicDirectRequest.config:type_name -> idp.kafka.v1.CreateTopicDirectRequest.ConfigEntry
+	103, // 51: idp.kafka.v1.CreateTopicDirectRequest.connection_config:type_name -> idp.kafka.v1.CreateTopicDirectRequest.ConnectionConfigEntry
+	104, // 52: idp.kafka.v1.CreateTopicDirectRequest.credentials:type_name -> idp.kafka.v1.CreateTopicDirectRequest.CredentialsEntry
+	17,  // 53: idp.kafka.v1.GetTopicResponse.topic:type_name -> idp.kafka.v1.KafkaTopic
+	2,   // 54: idp.kafka.v1.ListTopicsRequest.status:type_name -> idp.kafka.v1.TopicStatus
+	17,  // 55: idp.kafka.v1.ListTopicsResponse.topics:type_name -> idp.kafka.v1.KafkaTopic
+	105, // 56: idp.kafka.v1.UpdateTopicRequest.config:type_name -> idp.kafka.v1.UpdateTopicRequest.ConfigEntry
+	17,  // 57: idp.kafka.v1.UpdateTopicResponse.topic:type_name -> idp.kafka.v1.KafkaTopic
+	106, // 58: idp.kafka.v1.DeleteTopicByNameRequest.connection_config:type_name -> idp.kafka.v1.DeleteTopicByNameRequest.ConnectionConfigEntry
+	107, // 59: idp.kafka.v1.DeleteTopicByNameRequest.credentials:type_name -> idp.kafka.v1.DeleteTopicByNameRequest.CredentialsEntry
+	17,  // 60: idp.kafka.v1.ApproveTopicResponse.topic:type_name -> idp.kafka.v1.KafkaTopic
+	3,   // 61: idp.kafka.v1.RegisterSchemaRequest.format:type_name -> idp.kafka.v1.SchemaFormat
+	4,   // 62: idp.kafka.v1.RegisterSchemaRequest.compatibility:type_name -> idp.kafka.v1.SchemaCompatibility
+	18,  // 63: idp.kafka.v1.RegisterSchemaResponse.schema:type_name -> idp.kafka.v1.KafkaSchema
+	18,  // 64: idp.kafka.v1.GetSchemaResponse.schema:type_name -> idp.kafka.v1.KafkaSchema
+	18,  // 65: idp.kafka.v1.ListSchemasResponse.schemas:type_name -> idp.kafka.v1.KafkaSchema
+	3,   // 66: idp.kafka.v1.CheckSchemaCompatibilityRequest.format:type_name -> idp.kafka.v1.SchemaFormat
+	5,   // 67: idp.kafka.v1.CreateServiceAccountRequest.type:type_name -> idp.kafka.v1.ServiceAccountType
+	19,  // 68: idp.kafka.v1.CreateServiceAccountResponse.service_account:type_name -> idp.kafka.v1.KafkaServiceAccount
+	19,  // 69: idp.kafka.v1.ListServiceAccountsResponse.service_accounts:type_name -> idp.kafka.v1.KafkaServiceAccount
+	7,   // 70: idp.kafka.v1.RequestTopicAccessRequest.permission:type_name -> idp.kafka.v1.SharePermission
+	20,  // 71: idp.kafka.v1.RequestTopicAccessResponse.share:type_name -> idp.kafka.v1.KafkaTopicShare
+	20,  // 72: idp.kafka.v1.ApproveTopicAccessResponse.share:type_name -> idp.kafka.v1.KafkaTopicShare
+	6,   // 73: idp.kafka.v1.ListTopicSharesRequest.status:type_name -> idp.kafka.v1.ShareStatus
+	20,  // 74: idp.kafka.v1.ListTopicSharesResponse.shares:type_name -> idp.kafka.v1.KafkaTopicShare
+	3,   // 75: idp.kafka.v1.DiscoverTopicsRequest.schema_format:type_name -> idp.kafka.v1.SchemaFormat
+	87,  // 76: idp.kafka.v1.DiscoverTopicsResponse.topics:type_name -> idp.kafka.v1.DiscoverableTopic
+	17,  // 77: idp.kafka.v1.DiscoverableTopic.topic:type_name -> idp.kafka.v1.KafkaTopic
+	8,   // 78: idp.kafka.v1.DiscoverableTopic.visibility:type_name -> idp.kafka.v1.TopicVisibility
+	26,  // 79: idp.kafka.v1.GetTopicMetricsResponse.metrics:type_name -> idp.kafka.v1.KafkaUsageMetrics
+	92,  // 80: idp.kafka.v1.GetTopicLineageResponse.producers:type_name -> idp.kafka.v1.LineageNode
+	92,  // 81: idp.kafka.v1.GetTopicLineageResponse.consumers:type_name -> idp.kafka.v1.LineageNode
+	108, // 82: idp.kafka.v1.LineageNode.last_seen:type_name -> google.protobuf.Timestamp
+	29,  // 83: idp.kafka.v1.KafkaService.ListProviders:input_type -> idp.kafka.v1.ListProvidersRequest
+	31,  // 84: idp.kafka.v1.KafkaService.RegisterCluster:input_type -> idp.kafka.v1.RegisterClusterRequest
+	33,  // 85: idp.kafka.v1.KafkaService.ValidateCluster:input_type -> idp.kafka.v1.ValidateClusterRequest
+	35,  // 86: idp.kafka.v1.KafkaService.ValidateClusterConnection:input_type -> idp.kafka.v1.ValidateClusterConnectionRequest
+	37,  // 87: idp.kafka.v1.KafkaService.ListClusters:input_type -> idp.kafka.v1.ListClustersRequest
+	39,  // 88: idp.kafka.v1.KafkaService.DeleteCluster:input_type -> idp.kafka.v1.DeleteClusterRequest
+	41,  // 89: idp.kafka.v1.KafkaService.CreateEnvironmentMapping:input_type -> idp.kafka.v1.CreateEnvironmentMappingRequest
+	43,  // 90: idp.kafka.v1.KafkaService.ListEnvironmentMappings:input_type -> idp.kafka.v1.ListEnvironmentMappingsRequest
+	45,  // 91: idp.kafka.v1.KafkaService.DeleteEnvironmentMapping:input_type -> idp.kafka.v1.DeleteEnvironmentMappingRequest
+	47,  // 92: idp.kafka.v1.KafkaService.CreateTopic:input_type -> idp.kafka.v1.CreateTopicRequest
+	49,  // 93: idp.kafka.v1.KafkaService.CreateTopicDirect:input_type -> idp.kafka.v1.CreateTopicDirectRequest
+	51,  // 94: idp.kafka.v1.KafkaService.GetTopic:input_type -> idp.kafka.v1.GetTopicRequest
+	53,  // 95: idp.kafka.v1.KafkaService.ListTopics:input_type -> idp.kafka.v1.ListTopicsRequest
+	55,  // 96: idp.kafka.v1.KafkaService.UpdateTopic:input_type -> idp.kafka.v1.UpdateTopicRequest
+	57,  // 97: idp.kafka.v1.KafkaService.DeleteTopic:input_type -> idp.kafka.v1.DeleteTopicRequest
+	59,  // 98: idp.kafka.v1.KafkaService.DeleteTopicByName:input_type -> idp.kafka.v1.DeleteTopicByNameRequest
+	61,  // 99: idp.kafka.v1.KafkaService.ApproveTopic:input_type -> idp.kafka.v1.ApproveTopicRequest
+	63,  // 100: idp.kafka.v1.KafkaService.RegisterSchema:input_type -> idp.kafka.v1.RegisterSchemaRequest
+	65,  // 101: idp.kafka.v1.KafkaService.GetSchema:input_type -> idp.kafka.v1.GetSchemaRequest
+	67,  // 102: idp.kafka.v1.KafkaService.ListSchemas:input_type -> idp.kafka.v1.ListSchemasRequest
+	69,  // 103: idp.kafka.v1.KafkaService.CheckSchemaCompatibility:input_type -> idp.kafka.v1.CheckSchemaCompatibilityRequest
+	71,  // 104: idp.kafka.v1.KafkaService.CreateServiceAccount:input_type -> idp.kafka.v1.CreateServiceAccountRequest
+	73,  // 105: idp.kafka.v1.KafkaService.ListServiceAccounts:input_type -> idp.kafka.v1.ListServiceAccountsRequest
+	75,  // 106: idp.kafka.v1.KafkaService.RevokeServiceAccount:input_type -> idp.kafka.v1.RevokeServiceAccountRequest
+	77,  // 107: idp.kafka.v1.KafkaService.RequestTopicAccess:input_type -> idp.kafka.v1.RequestTopicAccessRequest
+	79,  // 108: idp.kafka.v1.KafkaService.ApproveTopicAccess:input_type -> idp.kafka.v1.ApproveTopicAccessRequest
+	81,  // 109: idp.kafka.v1.KafkaService.RevokeTopicAccess:input_type -> idp.kafka.v1.RevokeTopicAccessRequest
+	83,  // 110: idp.kafka.v1.KafkaService.ListTopicShares:input_type -> idp.kafka.v1.ListTopicSharesRequest
+	85,  // 111: idp.kafka.v1.KafkaService.DiscoverTopics:input_type -> idp.kafka.v1.DiscoverTopicsRequest
+	88,  // 112: idp.kafka.v1.KafkaService.GetTopicMetrics:input_type -> idp.kafka.v1.GetTopicMetricsRequest
+	90,  // 113: idp.kafka.v1.KafkaService.GetTopicLineage:input_type -> idp.kafka.v1.GetTopicLineageRequest
+	30,  // 114: idp.kafka.v1.KafkaService.ListProviders:output_type -> idp.kafka.v1.ListProvidersResponse
+	32,  // 115: idp.kafka.v1.KafkaService.RegisterCluster:output_type -> idp.kafka.v1.RegisterClusterResponse
+	34,  // 116: idp.kafka.v1.KafkaService.ValidateCluster:output_type -> idp.kafka.v1.ValidateClusterResponse
+	36,  // 117: idp.kafka.v1.KafkaService.ValidateClusterConnection:output_type -> idp.kafka.v1.ValidateClusterConnectionResponse
+	38,  // 118: idp.kafka.v1.KafkaService.ListClusters:output_type -> idp.kafka.v1.ListClustersResponse
+	40,  // 119: idp.kafka.v1.KafkaService.DeleteCluster:output_type -> idp.kafka.v1.DeleteClusterResponse
+	42,  // 120: idp.kafka.v1.KafkaService.CreateEnvironmentMapping:output_type -> idp.kafka.v1.CreateEnvironmentMappingResponse
+	44,  // 121: idp.kafka.v1.KafkaService.ListEnvironmentMappings:output_type -> idp.kafka.v1.ListEnvironmentMappingsResponse
+	46,  // 122: idp.kafka.v1.KafkaService.DeleteEnvironmentMapping:output_type -> idp.kafka.v1.DeleteEnvironmentMappingResponse
+	48,  // 123: idp.kafka.v1.KafkaService.CreateTopic:output_type -> idp.kafka.v1.CreateTopicResponse
+	50,  // 124: idp.kafka.v1.KafkaService.CreateTopicDirect:output_type -> idp.kafka.v1.CreateTopicDirectResponse
+	52,  // 125: idp.kafka.v1.KafkaService.GetTopic:output_type -> idp.kafka.v1.GetTopicResponse
+	54,  // 126: idp.kafka.v1.KafkaService.ListTopics:output_type -> idp.kafka.v1.ListTopicsResponse
+	56,  // 127: idp.kafka.v1.KafkaService.UpdateTopic:output_type -> idp.kafka.v1.UpdateTopicResponse
+	58,  // 128: idp.kafka.v1.KafkaService.DeleteTopic:output_type -> idp.kafka.v1.DeleteTopicResponse
+	60,  // 129: idp.kafka.v1.KafkaService.DeleteTopicByName:output_type -> idp.kafka.v1.DeleteTopicByNameResponse
+	62,  // 130: idp.kafka.v1.KafkaService.ApproveTopic:output_type -> idp.kafka.v1.ApproveTopicResponse
+	64,  // 131: idp.kafka.v1.KafkaService.RegisterSchema:output_type -> idp.kafka.v1.RegisterSchemaResponse
+	66,  // 132: idp.kafka.v1.KafkaService.GetSchema:output_type -> idp.kafka.v1.GetSchemaResponse
+	68,  // 133: idp.kafka.v1.KafkaService.ListSchemas:output_type -> idp.kafka.v1.ListSchemasResponse
+	70,  // 134: idp.kafka.v1.KafkaService.CheckSchemaCompatibility:output_type -> idp.kafka.v1.CheckSchemaCompatibilityResponse
+	72,  // 135: idp.kafka.v1.KafkaService.CreateServiceAccount:output_type -> idp.kafka.v1.CreateServiceAccountResponse
+	74,  // 136: idp.kafka.v1.KafkaService.ListServiceAccounts:output_type -> idp.kafka.v1.ListServiceAccountsResponse
+	76,  // 137: idp.kafka.v1.KafkaService.RevokeServiceAccount:output_type -> idp.kafka.v1.RevokeServiceAccountResponse
+	78,  // 138: idp.kafka.v1.KafkaService.RequestTopicAccess:output_type -> idp.kafka.v1.RequestTopicAccessResponse
+	80,  // 139: idp.kafka.v1.KafkaService.ApproveTopicAccess:output_type -> idp.kafka.v1.ApproveTopicAccessResponse
+	82,  // 140: idp.kafka.v1.KafkaService.RevokeTopicAccess:output_type -> idp.kafka.v1.RevokeTopicAccessResponse
+	84,  // 141: idp.kafka.v1.KafkaService.ListTopicShares:output_type -> idp.kafka.v1.ListTopicSharesResponse
+	86,  // 142: idp.kafka.v1.KafkaService.DiscoverTopics:output_type -> idp.kafka.v1.DiscoverTopicsResponse
+	89,  // 143: idp.kafka.v1.KafkaService.GetTopicMetrics:output_type -> idp.kafka.v1.GetTopicMetricsResponse
+	91,  // 144: idp.kafka.v1.KafkaService.GetTopicLineage:output_type -> idp.kafka.v1.GetTopicLineageResponse
+	114, // [114:145] is the sub-list for method output_type
+	83,  // [83:114] is the sub-list for method input_type
+	83,  // [83:83] is the sub-list for extension type_name
+	83,  // [83:83] is the sub-list for extension extendee
+	0,   // [0:83] is the sub-list for field type_name
 }
 
 func init() { file_idp_kafka_v1_kafka_proto_init() }
@@ -6412,14 +6849,14 @@ func file_idp_kafka_v1_kafka_proto_init() {
 	if File_idp_kafka_v1_kafka_proto != nil {
 		return
 	}
-	file_idp_kafka_v1_kafka_proto_msgTypes[40].OneofWrappers = []any{}
+	file_idp_kafka_v1_kafka_proto_msgTypes[44].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_idp_kafka_v1_kafka_proto_rawDesc), len(file_idp_kafka_v1_kafka_proto_rawDesc)),
 			NumEnums:      11,
-			NumMessages:   84,
+			NumMessages:   97,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

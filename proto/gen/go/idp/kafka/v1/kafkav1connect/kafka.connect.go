@@ -42,6 +42,9 @@ const (
 	// KafkaServiceValidateClusterProcedure is the fully-qualified name of the KafkaService's
 	// ValidateCluster RPC.
 	KafkaServiceValidateClusterProcedure = "/idp.kafka.v1.KafkaService/ValidateCluster"
+	// KafkaServiceValidateClusterConnectionProcedure is the fully-qualified name of the KafkaService's
+	// ValidateClusterConnection RPC.
+	KafkaServiceValidateClusterConnectionProcedure = "/idp.kafka.v1.KafkaService/ValidateClusterConnection"
 	// KafkaServiceListClustersProcedure is the fully-qualified name of the KafkaService's ListClusters
 	// RPC.
 	KafkaServiceListClustersProcedure = "/idp.kafka.v1.KafkaService/ListClusters"
@@ -60,6 +63,9 @@ const (
 	// KafkaServiceCreateTopicProcedure is the fully-qualified name of the KafkaService's CreateTopic
 	// RPC.
 	KafkaServiceCreateTopicProcedure = "/idp.kafka.v1.KafkaService/CreateTopic"
+	// KafkaServiceCreateTopicDirectProcedure is the fully-qualified name of the KafkaService's
+	// CreateTopicDirect RPC.
+	KafkaServiceCreateTopicDirectProcedure = "/idp.kafka.v1.KafkaService/CreateTopicDirect"
 	// KafkaServiceGetTopicProcedure is the fully-qualified name of the KafkaService's GetTopic RPC.
 	KafkaServiceGetTopicProcedure = "/idp.kafka.v1.KafkaService/GetTopic"
 	// KafkaServiceListTopicsProcedure is the fully-qualified name of the KafkaService's ListTopics RPC.
@@ -70,6 +76,9 @@ const (
 	// KafkaServiceDeleteTopicProcedure is the fully-qualified name of the KafkaService's DeleteTopic
 	// RPC.
 	KafkaServiceDeleteTopicProcedure = "/idp.kafka.v1.KafkaService/DeleteTopic"
+	// KafkaServiceDeleteTopicByNameProcedure is the fully-qualified name of the KafkaService's
+	// DeleteTopicByName RPC.
+	KafkaServiceDeleteTopicByNameProcedure = "/idp.kafka.v1.KafkaService/DeleteTopicByName"
 	// KafkaServiceApproveTopicProcedure is the fully-qualified name of the KafkaService's ApproveTopic
 	// RPC.
 	KafkaServiceApproveTopicProcedure = "/idp.kafka.v1.KafkaService/ApproveTopic"
@@ -122,6 +131,7 @@ type KafkaServiceClient interface {
 	ListProviders(context.Context, *connect.Request[v1.ListProvidersRequest]) (*connect.Response[v1.ListProvidersResponse], error)
 	RegisterCluster(context.Context, *connect.Request[v1.RegisterClusterRequest]) (*connect.Response[v1.RegisterClusterResponse], error)
 	ValidateCluster(context.Context, *connect.Request[v1.ValidateClusterRequest]) (*connect.Response[v1.ValidateClusterResponse], error)
+	ValidateClusterConnection(context.Context, *connect.Request[v1.ValidateClusterConnectionRequest]) (*connect.Response[v1.ValidateClusterConnectionResponse], error)
 	ListClusters(context.Context, *connect.Request[v1.ListClustersRequest]) (*connect.Response[v1.ListClustersResponse], error)
 	DeleteCluster(context.Context, *connect.Request[v1.DeleteClusterRequest]) (*connect.Response[v1.DeleteClusterResponse], error)
 	// Environment Mapping (Platform Admin)
@@ -130,10 +140,12 @@ type KafkaServiceClient interface {
 	DeleteEnvironmentMapping(context.Context, *connect.Request[v1.DeleteEnvironmentMappingRequest]) (*connect.Response[v1.DeleteEnvironmentMappingResponse], error)
 	// Topic Management (Workspace Scoped)
 	CreateTopic(context.Context, *connect.Request[v1.CreateTopicRequest]) (*connect.Response[v1.CreateTopicResponse], error)
+	CreateTopicDirect(context.Context, *connect.Request[v1.CreateTopicDirectRequest]) (*connect.Response[v1.CreateTopicDirectResponse], error)
 	GetTopic(context.Context, *connect.Request[v1.GetTopicRequest]) (*connect.Response[v1.GetTopicResponse], error)
 	ListTopics(context.Context, *connect.Request[v1.ListTopicsRequest]) (*connect.Response[v1.ListTopicsResponse], error)
 	UpdateTopic(context.Context, *connect.Request[v1.UpdateTopicRequest]) (*connect.Response[v1.UpdateTopicResponse], error)
 	DeleteTopic(context.Context, *connect.Request[v1.DeleteTopicRequest]) (*connect.Response[v1.DeleteTopicResponse], error)
+	DeleteTopicByName(context.Context, *connect.Request[v1.DeleteTopicByNameRequest]) (*connect.Response[v1.DeleteTopicByNameResponse], error)
 	ApproveTopic(context.Context, *connect.Request[v1.ApproveTopicRequest]) (*connect.Response[v1.ApproveTopicResponse], error)
 	// Schema Management
 	RegisterSchema(context.Context, *connect.Request[v1.RegisterSchemaRequest]) (*connect.Response[v1.RegisterSchemaResponse], error)
@@ -185,6 +197,12 @@ func NewKafkaServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(kafkaServiceMethods.ByName("ValidateCluster")),
 			connect.WithClientOptions(opts...),
 		),
+		validateClusterConnection: connect.NewClient[v1.ValidateClusterConnectionRequest, v1.ValidateClusterConnectionResponse](
+			httpClient,
+			baseURL+KafkaServiceValidateClusterConnectionProcedure,
+			connect.WithSchema(kafkaServiceMethods.ByName("ValidateClusterConnection")),
+			connect.WithClientOptions(opts...),
+		),
 		listClusters: connect.NewClient[v1.ListClustersRequest, v1.ListClustersResponse](
 			httpClient,
 			baseURL+KafkaServiceListClustersProcedure,
@@ -221,6 +239,12 @@ func NewKafkaServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(kafkaServiceMethods.ByName("CreateTopic")),
 			connect.WithClientOptions(opts...),
 		),
+		createTopicDirect: connect.NewClient[v1.CreateTopicDirectRequest, v1.CreateTopicDirectResponse](
+			httpClient,
+			baseURL+KafkaServiceCreateTopicDirectProcedure,
+			connect.WithSchema(kafkaServiceMethods.ByName("CreateTopicDirect")),
+			connect.WithClientOptions(opts...),
+		),
 		getTopic: connect.NewClient[v1.GetTopicRequest, v1.GetTopicResponse](
 			httpClient,
 			baseURL+KafkaServiceGetTopicProcedure,
@@ -243,6 +267,12 @@ func NewKafkaServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+KafkaServiceDeleteTopicProcedure,
 			connect.WithSchema(kafkaServiceMethods.ByName("DeleteTopic")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteTopicByName: connect.NewClient[v1.DeleteTopicByNameRequest, v1.DeleteTopicByNameResponse](
+			httpClient,
+			baseURL+KafkaServiceDeleteTopicByNameProcedure,
+			connect.WithSchema(kafkaServiceMethods.ByName("DeleteTopicByName")),
 			connect.WithClientOptions(opts...),
 		),
 		approveTopic: connect.NewClient[v1.ApproveTopicRequest, v1.ApproveTopicResponse](
@@ -340,34 +370,37 @@ func NewKafkaServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 
 // kafkaServiceClient implements KafkaServiceClient.
 type kafkaServiceClient struct {
-	listProviders            *connect.Client[v1.ListProvidersRequest, v1.ListProvidersResponse]
-	registerCluster          *connect.Client[v1.RegisterClusterRequest, v1.RegisterClusterResponse]
-	validateCluster          *connect.Client[v1.ValidateClusterRequest, v1.ValidateClusterResponse]
-	listClusters             *connect.Client[v1.ListClustersRequest, v1.ListClustersResponse]
-	deleteCluster            *connect.Client[v1.DeleteClusterRequest, v1.DeleteClusterResponse]
-	createEnvironmentMapping *connect.Client[v1.CreateEnvironmentMappingRequest, v1.CreateEnvironmentMappingResponse]
-	listEnvironmentMappings  *connect.Client[v1.ListEnvironmentMappingsRequest, v1.ListEnvironmentMappingsResponse]
-	deleteEnvironmentMapping *connect.Client[v1.DeleteEnvironmentMappingRequest, v1.DeleteEnvironmentMappingResponse]
-	createTopic              *connect.Client[v1.CreateTopicRequest, v1.CreateTopicResponse]
-	getTopic                 *connect.Client[v1.GetTopicRequest, v1.GetTopicResponse]
-	listTopics               *connect.Client[v1.ListTopicsRequest, v1.ListTopicsResponse]
-	updateTopic              *connect.Client[v1.UpdateTopicRequest, v1.UpdateTopicResponse]
-	deleteTopic              *connect.Client[v1.DeleteTopicRequest, v1.DeleteTopicResponse]
-	approveTopic             *connect.Client[v1.ApproveTopicRequest, v1.ApproveTopicResponse]
-	registerSchema           *connect.Client[v1.RegisterSchemaRequest, v1.RegisterSchemaResponse]
-	getSchema                *connect.Client[v1.GetSchemaRequest, v1.GetSchemaResponse]
-	listSchemas              *connect.Client[v1.ListSchemasRequest, v1.ListSchemasResponse]
-	checkSchemaCompatibility *connect.Client[v1.CheckSchemaCompatibilityRequest, v1.CheckSchemaCompatibilityResponse]
-	createServiceAccount     *connect.Client[v1.CreateServiceAccountRequest, v1.CreateServiceAccountResponse]
-	listServiceAccounts      *connect.Client[v1.ListServiceAccountsRequest, v1.ListServiceAccountsResponse]
-	revokeServiceAccount     *connect.Client[v1.RevokeServiceAccountRequest, v1.RevokeServiceAccountResponse]
-	requestTopicAccess       *connect.Client[v1.RequestTopicAccessRequest, v1.RequestTopicAccessResponse]
-	approveTopicAccess       *connect.Client[v1.ApproveTopicAccessRequest, v1.ApproveTopicAccessResponse]
-	revokeTopicAccess        *connect.Client[v1.RevokeTopicAccessRequest, v1.RevokeTopicAccessResponse]
-	listTopicShares          *connect.Client[v1.ListTopicSharesRequest, v1.ListTopicSharesResponse]
-	discoverTopics           *connect.Client[v1.DiscoverTopicsRequest, v1.DiscoverTopicsResponse]
-	getTopicMetrics          *connect.Client[v1.GetTopicMetricsRequest, v1.GetTopicMetricsResponse]
-	getTopicLineage          *connect.Client[v1.GetTopicLineageRequest, v1.GetTopicLineageResponse]
+	listProviders             *connect.Client[v1.ListProvidersRequest, v1.ListProvidersResponse]
+	registerCluster           *connect.Client[v1.RegisterClusterRequest, v1.RegisterClusterResponse]
+	validateCluster           *connect.Client[v1.ValidateClusterRequest, v1.ValidateClusterResponse]
+	validateClusterConnection *connect.Client[v1.ValidateClusterConnectionRequest, v1.ValidateClusterConnectionResponse]
+	listClusters              *connect.Client[v1.ListClustersRequest, v1.ListClustersResponse]
+	deleteCluster             *connect.Client[v1.DeleteClusterRequest, v1.DeleteClusterResponse]
+	createEnvironmentMapping  *connect.Client[v1.CreateEnvironmentMappingRequest, v1.CreateEnvironmentMappingResponse]
+	listEnvironmentMappings   *connect.Client[v1.ListEnvironmentMappingsRequest, v1.ListEnvironmentMappingsResponse]
+	deleteEnvironmentMapping  *connect.Client[v1.DeleteEnvironmentMappingRequest, v1.DeleteEnvironmentMappingResponse]
+	createTopic               *connect.Client[v1.CreateTopicRequest, v1.CreateTopicResponse]
+	createTopicDirect         *connect.Client[v1.CreateTopicDirectRequest, v1.CreateTopicDirectResponse]
+	getTopic                  *connect.Client[v1.GetTopicRequest, v1.GetTopicResponse]
+	listTopics                *connect.Client[v1.ListTopicsRequest, v1.ListTopicsResponse]
+	updateTopic               *connect.Client[v1.UpdateTopicRequest, v1.UpdateTopicResponse]
+	deleteTopic               *connect.Client[v1.DeleteTopicRequest, v1.DeleteTopicResponse]
+	deleteTopicByName         *connect.Client[v1.DeleteTopicByNameRequest, v1.DeleteTopicByNameResponse]
+	approveTopic              *connect.Client[v1.ApproveTopicRequest, v1.ApproveTopicResponse]
+	registerSchema            *connect.Client[v1.RegisterSchemaRequest, v1.RegisterSchemaResponse]
+	getSchema                 *connect.Client[v1.GetSchemaRequest, v1.GetSchemaResponse]
+	listSchemas               *connect.Client[v1.ListSchemasRequest, v1.ListSchemasResponse]
+	checkSchemaCompatibility  *connect.Client[v1.CheckSchemaCompatibilityRequest, v1.CheckSchemaCompatibilityResponse]
+	createServiceAccount      *connect.Client[v1.CreateServiceAccountRequest, v1.CreateServiceAccountResponse]
+	listServiceAccounts       *connect.Client[v1.ListServiceAccountsRequest, v1.ListServiceAccountsResponse]
+	revokeServiceAccount      *connect.Client[v1.RevokeServiceAccountRequest, v1.RevokeServiceAccountResponse]
+	requestTopicAccess        *connect.Client[v1.RequestTopicAccessRequest, v1.RequestTopicAccessResponse]
+	approveTopicAccess        *connect.Client[v1.ApproveTopicAccessRequest, v1.ApproveTopicAccessResponse]
+	revokeTopicAccess         *connect.Client[v1.RevokeTopicAccessRequest, v1.RevokeTopicAccessResponse]
+	listTopicShares           *connect.Client[v1.ListTopicSharesRequest, v1.ListTopicSharesResponse]
+	discoverTopics            *connect.Client[v1.DiscoverTopicsRequest, v1.DiscoverTopicsResponse]
+	getTopicMetrics           *connect.Client[v1.GetTopicMetricsRequest, v1.GetTopicMetricsResponse]
+	getTopicLineage           *connect.Client[v1.GetTopicLineageRequest, v1.GetTopicLineageResponse]
 }
 
 // ListProviders calls idp.kafka.v1.KafkaService.ListProviders.
@@ -383,6 +416,11 @@ func (c *kafkaServiceClient) RegisterCluster(ctx context.Context, req *connect.R
 // ValidateCluster calls idp.kafka.v1.KafkaService.ValidateCluster.
 func (c *kafkaServiceClient) ValidateCluster(ctx context.Context, req *connect.Request[v1.ValidateClusterRequest]) (*connect.Response[v1.ValidateClusterResponse], error) {
 	return c.validateCluster.CallUnary(ctx, req)
+}
+
+// ValidateClusterConnection calls idp.kafka.v1.KafkaService.ValidateClusterConnection.
+func (c *kafkaServiceClient) ValidateClusterConnection(ctx context.Context, req *connect.Request[v1.ValidateClusterConnectionRequest]) (*connect.Response[v1.ValidateClusterConnectionResponse], error) {
+	return c.validateClusterConnection.CallUnary(ctx, req)
 }
 
 // ListClusters calls idp.kafka.v1.KafkaService.ListClusters.
@@ -415,6 +453,11 @@ func (c *kafkaServiceClient) CreateTopic(ctx context.Context, req *connect.Reque
 	return c.createTopic.CallUnary(ctx, req)
 }
 
+// CreateTopicDirect calls idp.kafka.v1.KafkaService.CreateTopicDirect.
+func (c *kafkaServiceClient) CreateTopicDirect(ctx context.Context, req *connect.Request[v1.CreateTopicDirectRequest]) (*connect.Response[v1.CreateTopicDirectResponse], error) {
+	return c.createTopicDirect.CallUnary(ctx, req)
+}
+
 // GetTopic calls idp.kafka.v1.KafkaService.GetTopic.
 func (c *kafkaServiceClient) GetTopic(ctx context.Context, req *connect.Request[v1.GetTopicRequest]) (*connect.Response[v1.GetTopicResponse], error) {
 	return c.getTopic.CallUnary(ctx, req)
@@ -433,6 +476,11 @@ func (c *kafkaServiceClient) UpdateTopic(ctx context.Context, req *connect.Reque
 // DeleteTopic calls idp.kafka.v1.KafkaService.DeleteTopic.
 func (c *kafkaServiceClient) DeleteTopic(ctx context.Context, req *connect.Request[v1.DeleteTopicRequest]) (*connect.Response[v1.DeleteTopicResponse], error) {
 	return c.deleteTopic.CallUnary(ctx, req)
+}
+
+// DeleteTopicByName calls idp.kafka.v1.KafkaService.DeleteTopicByName.
+func (c *kafkaServiceClient) DeleteTopicByName(ctx context.Context, req *connect.Request[v1.DeleteTopicByNameRequest]) (*connect.Response[v1.DeleteTopicByNameResponse], error) {
+	return c.deleteTopicByName.CallUnary(ctx, req)
 }
 
 // ApproveTopic calls idp.kafka.v1.KafkaService.ApproveTopic.
@@ -516,6 +564,7 @@ type KafkaServiceHandler interface {
 	ListProviders(context.Context, *connect.Request[v1.ListProvidersRequest]) (*connect.Response[v1.ListProvidersResponse], error)
 	RegisterCluster(context.Context, *connect.Request[v1.RegisterClusterRequest]) (*connect.Response[v1.RegisterClusterResponse], error)
 	ValidateCluster(context.Context, *connect.Request[v1.ValidateClusterRequest]) (*connect.Response[v1.ValidateClusterResponse], error)
+	ValidateClusterConnection(context.Context, *connect.Request[v1.ValidateClusterConnectionRequest]) (*connect.Response[v1.ValidateClusterConnectionResponse], error)
 	ListClusters(context.Context, *connect.Request[v1.ListClustersRequest]) (*connect.Response[v1.ListClustersResponse], error)
 	DeleteCluster(context.Context, *connect.Request[v1.DeleteClusterRequest]) (*connect.Response[v1.DeleteClusterResponse], error)
 	// Environment Mapping (Platform Admin)
@@ -524,10 +573,12 @@ type KafkaServiceHandler interface {
 	DeleteEnvironmentMapping(context.Context, *connect.Request[v1.DeleteEnvironmentMappingRequest]) (*connect.Response[v1.DeleteEnvironmentMappingResponse], error)
 	// Topic Management (Workspace Scoped)
 	CreateTopic(context.Context, *connect.Request[v1.CreateTopicRequest]) (*connect.Response[v1.CreateTopicResponse], error)
+	CreateTopicDirect(context.Context, *connect.Request[v1.CreateTopicDirectRequest]) (*connect.Response[v1.CreateTopicDirectResponse], error)
 	GetTopic(context.Context, *connect.Request[v1.GetTopicRequest]) (*connect.Response[v1.GetTopicResponse], error)
 	ListTopics(context.Context, *connect.Request[v1.ListTopicsRequest]) (*connect.Response[v1.ListTopicsResponse], error)
 	UpdateTopic(context.Context, *connect.Request[v1.UpdateTopicRequest]) (*connect.Response[v1.UpdateTopicResponse], error)
 	DeleteTopic(context.Context, *connect.Request[v1.DeleteTopicRequest]) (*connect.Response[v1.DeleteTopicResponse], error)
+	DeleteTopicByName(context.Context, *connect.Request[v1.DeleteTopicByNameRequest]) (*connect.Response[v1.DeleteTopicByNameResponse], error)
 	ApproveTopic(context.Context, *connect.Request[v1.ApproveTopicRequest]) (*connect.Response[v1.ApproveTopicResponse], error)
 	// Schema Management
 	RegisterSchema(context.Context, *connect.Request[v1.RegisterSchemaRequest]) (*connect.Response[v1.RegisterSchemaResponse], error)
@@ -575,6 +626,12 @@ func NewKafkaServiceHandler(svc KafkaServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(kafkaServiceMethods.ByName("ValidateCluster")),
 		connect.WithHandlerOptions(opts...),
 	)
+	kafkaServiceValidateClusterConnectionHandler := connect.NewUnaryHandler(
+		KafkaServiceValidateClusterConnectionProcedure,
+		svc.ValidateClusterConnection,
+		connect.WithSchema(kafkaServiceMethods.ByName("ValidateClusterConnection")),
+		connect.WithHandlerOptions(opts...),
+	)
 	kafkaServiceListClustersHandler := connect.NewUnaryHandler(
 		KafkaServiceListClustersProcedure,
 		svc.ListClusters,
@@ -611,6 +668,12 @@ func NewKafkaServiceHandler(svc KafkaServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(kafkaServiceMethods.ByName("CreateTopic")),
 		connect.WithHandlerOptions(opts...),
 	)
+	kafkaServiceCreateTopicDirectHandler := connect.NewUnaryHandler(
+		KafkaServiceCreateTopicDirectProcedure,
+		svc.CreateTopicDirect,
+		connect.WithSchema(kafkaServiceMethods.ByName("CreateTopicDirect")),
+		connect.WithHandlerOptions(opts...),
+	)
 	kafkaServiceGetTopicHandler := connect.NewUnaryHandler(
 		KafkaServiceGetTopicProcedure,
 		svc.GetTopic,
@@ -633,6 +696,12 @@ func NewKafkaServiceHandler(svc KafkaServiceHandler, opts ...connect.HandlerOpti
 		KafkaServiceDeleteTopicProcedure,
 		svc.DeleteTopic,
 		connect.WithSchema(kafkaServiceMethods.ByName("DeleteTopic")),
+		connect.WithHandlerOptions(opts...),
+	)
+	kafkaServiceDeleteTopicByNameHandler := connect.NewUnaryHandler(
+		KafkaServiceDeleteTopicByNameProcedure,
+		svc.DeleteTopicByName,
+		connect.WithSchema(kafkaServiceMethods.ByName("DeleteTopicByName")),
 		connect.WithHandlerOptions(opts...),
 	)
 	kafkaServiceApproveTopicHandler := connect.NewUnaryHandler(
@@ -733,6 +802,8 @@ func NewKafkaServiceHandler(svc KafkaServiceHandler, opts ...connect.HandlerOpti
 			kafkaServiceRegisterClusterHandler.ServeHTTP(w, r)
 		case KafkaServiceValidateClusterProcedure:
 			kafkaServiceValidateClusterHandler.ServeHTTP(w, r)
+		case KafkaServiceValidateClusterConnectionProcedure:
+			kafkaServiceValidateClusterConnectionHandler.ServeHTTP(w, r)
 		case KafkaServiceListClustersProcedure:
 			kafkaServiceListClustersHandler.ServeHTTP(w, r)
 		case KafkaServiceDeleteClusterProcedure:
@@ -745,6 +816,8 @@ func NewKafkaServiceHandler(svc KafkaServiceHandler, opts ...connect.HandlerOpti
 			kafkaServiceDeleteEnvironmentMappingHandler.ServeHTTP(w, r)
 		case KafkaServiceCreateTopicProcedure:
 			kafkaServiceCreateTopicHandler.ServeHTTP(w, r)
+		case KafkaServiceCreateTopicDirectProcedure:
+			kafkaServiceCreateTopicDirectHandler.ServeHTTP(w, r)
 		case KafkaServiceGetTopicProcedure:
 			kafkaServiceGetTopicHandler.ServeHTTP(w, r)
 		case KafkaServiceListTopicsProcedure:
@@ -753,6 +826,8 @@ func NewKafkaServiceHandler(svc KafkaServiceHandler, opts ...connect.HandlerOpti
 			kafkaServiceUpdateTopicHandler.ServeHTTP(w, r)
 		case KafkaServiceDeleteTopicProcedure:
 			kafkaServiceDeleteTopicHandler.ServeHTTP(w, r)
+		case KafkaServiceDeleteTopicByNameProcedure:
+			kafkaServiceDeleteTopicByNameHandler.ServeHTTP(w, r)
 		case KafkaServiceApproveTopicProcedure:
 			kafkaServiceApproveTopicHandler.ServeHTTP(w, r)
 		case KafkaServiceRegisterSchemaProcedure:
@@ -804,6 +879,10 @@ func (UnimplementedKafkaServiceHandler) ValidateCluster(context.Context, *connec
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.kafka.v1.KafkaService.ValidateCluster is not implemented"))
 }
 
+func (UnimplementedKafkaServiceHandler) ValidateClusterConnection(context.Context, *connect.Request[v1.ValidateClusterConnectionRequest]) (*connect.Response[v1.ValidateClusterConnectionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.kafka.v1.KafkaService.ValidateClusterConnection is not implemented"))
+}
+
 func (UnimplementedKafkaServiceHandler) ListClusters(context.Context, *connect.Request[v1.ListClustersRequest]) (*connect.Response[v1.ListClustersResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.kafka.v1.KafkaService.ListClusters is not implemented"))
 }
@@ -828,6 +907,10 @@ func (UnimplementedKafkaServiceHandler) CreateTopic(context.Context, *connect.Re
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.kafka.v1.KafkaService.CreateTopic is not implemented"))
 }
 
+func (UnimplementedKafkaServiceHandler) CreateTopicDirect(context.Context, *connect.Request[v1.CreateTopicDirectRequest]) (*connect.Response[v1.CreateTopicDirectResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.kafka.v1.KafkaService.CreateTopicDirect is not implemented"))
+}
+
 func (UnimplementedKafkaServiceHandler) GetTopic(context.Context, *connect.Request[v1.GetTopicRequest]) (*connect.Response[v1.GetTopicResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.kafka.v1.KafkaService.GetTopic is not implemented"))
 }
@@ -842,6 +925,10 @@ func (UnimplementedKafkaServiceHandler) UpdateTopic(context.Context, *connect.Re
 
 func (UnimplementedKafkaServiceHandler) DeleteTopic(context.Context, *connect.Request[v1.DeleteTopicRequest]) (*connect.Response[v1.DeleteTopicResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.kafka.v1.KafkaService.DeleteTopic is not implemented"))
+}
+
+func (UnimplementedKafkaServiceHandler) DeleteTopicByName(context.Context, *connect.Request[v1.DeleteTopicByNameRequest]) (*connect.Response[v1.DeleteTopicByNameResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.kafka.v1.KafkaService.DeleteTopicByName is not implemented"))
 }
 
 func (UnimplementedKafkaServiceHandler) ApproveTopic(context.Context, *connect.Request[v1.ApproveTopicRequest]) (*connect.Response[v1.ApproveTopicResponse], error) {

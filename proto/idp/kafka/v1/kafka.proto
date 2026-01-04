@@ -302,6 +302,7 @@ service KafkaService {
   rpc ListProviders(ListProvidersRequest) returns (ListProvidersResponse);
   rpc RegisterCluster(RegisterClusterRequest) returns (RegisterClusterResponse);
   rpc ValidateCluster(ValidateClusterRequest) returns (ValidateClusterResponse);
+  rpc ValidateClusterConnection(ValidateClusterConnectionRequest) returns (ValidateClusterConnectionResponse);
   rpc ListClusters(ListClustersRequest) returns (ListClustersResponse);
   rpc DeleteCluster(DeleteClusterRequest) returns (DeleteClusterResponse);
 
@@ -312,10 +313,12 @@ service KafkaService {
 
   // Topic Management (Workspace Scoped)
   rpc CreateTopic(CreateTopicRequest) returns (CreateTopicResponse);
+  rpc CreateTopicDirect(CreateTopicDirectRequest) returns (CreateTopicDirectResponse);
   rpc GetTopic(GetTopicRequest) returns (GetTopicResponse);
   rpc ListTopics(ListTopicsRequest) returns (ListTopicsResponse);
   rpc UpdateTopic(UpdateTopicRequest) returns (UpdateTopicResponse);
   rpc DeleteTopic(DeleteTopicRequest) returns (DeleteTopicResponse);
+  rpc DeleteTopicByName(DeleteTopicByNameRequest) returns (DeleteTopicByNameResponse);
   rpc ApproveTopic(ApproveTopicRequest) returns (ApproveTopicResponse);
 
   // Schema Management
@@ -368,6 +371,17 @@ message ValidateClusterRequest {
   string cluster_id = 1;
 }
 message ValidateClusterResponse {
+  bool valid = 1;
+  string error = 2;
+}
+
+// ValidateClusterConnection validates a Kafka connection using provided config
+// This is used when cluster config is stored externally (e.g., Payload CMS)
+message ValidateClusterConnectionRequest {
+  map<string, string> connection_config = 1;
+  map<string, string> credentials = 2;
+}
+message ValidateClusterConnectionResponse {
   bool valid = 1;
   string error = 2;
 }
@@ -433,6 +447,22 @@ message CreateTopicResponse {
   string error = 3;
 }
 
+// CreateTopicDirect creates a topic directly on the Kafka cluster.
+// This is used when topic metadata is stored externally (e.g., Payload CMS)
+// and we only need to create the topic on Kafka without storing in Go service.
+message CreateTopicDirectRequest {
+  string topic_name = 1; // Full topic name on Kafka cluster (e.g., "prod.my-workspace.orders")
+  int32 partitions = 2;
+  int32 replication_factor = 3;
+  map<string, string> config = 4; // Topic configuration (retention.ms, cleanup.policy, etc.)
+  map<string, string> connection_config = 5; // Cluster connection config
+  map<string, string> credentials = 6; // Cluster credentials
+}
+message CreateTopicDirectResponse {
+  bool success = 1;
+  string error = 2;
+}
+
 message GetTopicRequest {
   string topic_id = 1;
 }
@@ -472,6 +502,19 @@ message DeleteTopicResponse {
   bool success = 1;
   string workflow_id = 2;
   string error = 3;
+}
+
+// DeleteTopicByName deletes a topic directly by its full name on the Kafka cluster.
+// This is useful when the topic metadata is stored externally (e.g., Payload CMS)
+// and we only need to remove the topic from Kafka without looking up internal IDs.
+message DeleteTopicByNameRequest {
+  string topic_name = 1; // Full topic name on Kafka cluster (e.g., "prod.my-workspace.orders")
+  map<string, string> connection_config = 2; // Cluster connection config
+  map<string, string> credentials = 3; // Cluster credentials
+}
+message DeleteTopicByNameResponse {
+  bool success = 1;
+  string error = 2;
 }
 
 message ApproveTopicRequest {
