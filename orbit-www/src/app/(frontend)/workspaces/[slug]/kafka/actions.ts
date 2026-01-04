@@ -5,10 +5,7 @@ import config from '@payload-config'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
-
-// NOTE: gRPC client removed for now - @connectrpc/connect-node breaks Next.js webpack bundling
-// Kafka operations will use mock implementations until we implement HTTP REST endpoints
-// or resolve the bundling issues
+import { kafkaClient } from '@/lib/grpc/kafka-client'
 
 // ============================================================================
 // Types
@@ -20,6 +17,7 @@ export interface KafkaTopic {
   name: string
   environment: string
   clusterId?: string
+  fullTopicName?: string
   partitions: number
   replicationFactor: number
   retentionMs: number
@@ -27,6 +25,7 @@ export interface KafkaTopic {
   compression: string
   config: Record<string, string>
   status: 'pending_approval' | 'provisioning' | 'active' | 'failed' | 'deleting'
+  provisioningError?: string
   workflowId?: string
   approvalRequired: boolean
   approvedBy?: string
@@ -34,6 +33,77 @@ export interface KafkaTopic {
   createdAt: string
   updatedAt: string
   description?: string
+}
+
+// ============================================================================
+// Payload Types
+// ============================================================================
+
+interface PayloadKafkaTopic {
+  id: string
+  workspace: string | { id: string; slug?: string }
+  name: string
+  environment: string
+  cluster?: string | { id: string }
+  fullTopicName?: string
+  partitions: number
+  replicationFactor: number
+  retentionMs: number
+  cleanupPolicy: string
+  compression: string
+  config?: Record<string, string>
+  status: 'pending-approval' | 'provisioning' | 'active' | 'failed' | 'deleting'
+  provisioningError?: string
+  workflowId?: string
+  approvalRequired: boolean
+  approvedBy?: string | { id: string }
+  approvedAt?: string
+  description?: string
+  createdBy?: string | { id: string }
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * Maps a Payload KafkaTopic document to the KafkaTopic interface.
+ */
+function mapPayloadTopicToKafkaTopic(doc: PayloadKafkaTopic): KafkaTopic {
+  const workspaceId = typeof doc.workspace === 'object' ? doc.workspace.id : doc.workspace
+  const clusterId = doc.cluster ? (typeof doc.cluster === 'object' ? doc.cluster.id : doc.cluster) : undefined
+  const approvedBy = doc.approvedBy ? (typeof doc.approvedBy === 'object' ? doc.approvedBy.id : doc.approvedBy) : undefined
+
+  // Map status from Payload format (pending-approval) to interface format (pending_approval)
+  const statusMap: Record<string, KafkaTopic['status']> = {
+    'pending-approval': 'pending_approval',
+    'provisioning': 'provisioning',
+    'active': 'active',
+    'failed': 'failed',
+    'deleting': 'deleting',
+  }
+
+  return {
+    id: doc.id,
+    workspaceId,
+    name: doc.name,
+    environment: doc.environment,
+    clusterId,
+    fullTopicName: doc.fullTopicName,
+    partitions: doc.partitions,
+    replicationFactor: doc.replicationFactor,
+    retentionMs: doc.retentionMs,
+    cleanupPolicy: doc.cleanupPolicy,
+    compression: doc.compression,
+    config: doc.config || {},
+    status: statusMap[doc.status] || 'pending_approval',
+    provisioningError: doc.provisioningError,
+    workflowId: doc.workflowId,
+    approvalRequired: doc.approvalRequired,
+    approvedBy,
+    approvedAt: doc.approvedAt,
+    description: doc.description,
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
+  }
 }
 
 export interface KafkaSchema {
@@ -101,7 +171,15 @@ export interface CreateTopicResult {
 }
 
 /**
- * Create a new Kafka topic
+ * Create a new Kafka topic.
+ *
+ * Flow:
+ * 1. Validate user is workspace member
+ * 2. Get workspace slug for topic naming
+ * 3. Find environment mapping to get cluster
+ * 4. Create topic in Payload with status 'provisioning'
+ * 5. Call Go service to create topic on Kafka cluster
+ * 6. Update Payload topic status to 'active' or 'failed'
  */
 export async function createTopic(input: CreateTopicInput): Promise<CreateTopicResult> {
   const session = await auth.api.getSession({
@@ -131,34 +209,152 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
     return { success: false, error: 'Not a member of this workspace' }
   }
 
-  // TODO: Call actual gRPC service when available
-  // For now, return a mock response
-  const mockTopic: KafkaTopic = {
-    id: `topic-${Date.now()}`,
-    workspaceId: input.workspaceId,
-    name: input.name,
-    environment: input.environment,
-    partitions: input.partitions || 3,
-    replicationFactor: input.replicationFactor || 3,
-    retentionMs: input.retentionMs || 604800000, // 7 days
-    cleanupPolicy: input.cleanupPolicy || 'delete',
-    compression: input.compression || 'none',
-    config: input.config || {},
-    status: 'pending_approval',
-    approvalRequired: true,
-    description: input.description,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+  // Get workspace for slug (used in topic naming)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const workspace = await (payload.findByID as any)({
+    collection: 'workspaces',
+    id: input.workspaceId,
+  })
+
+  if (!workspace) {
+    return { success: false, error: 'Workspace not found' }
   }
 
-  const workflowId = `wf-topic-${Date.now()}`
+  // Find environment mapping to get cluster
+  const mappingsResult = await payload.find({
+    collection: 'kafka-environment-mappings',
+    where: {
+      environment: { equals: input.environment },
+    },
+    depth: 1,
+    limit: 1,
+    sort: '-priority', // Higher priority first
+  })
 
-  revalidatePath(`/workspaces/[slug]/kafka/topics`)
+  if (mappingsResult.docs.length === 0) {
+    return {
+      success: false,
+      error: `No Kafka cluster configured for environment '${input.environment}'. Please contact an administrator.`,
+    }
+  }
 
-  return {
-    success: true,
-    topic: mockTopic,
-    workflowId,
+  const mapping = mappingsResult.docs[0]
+  const cluster = typeof mapping.cluster === 'object' ? mapping.cluster : null
+
+  if (!cluster) {
+    return { success: false, error: 'Cluster not found in environment mapping' }
+  }
+
+  // Build full topic name: environment.workspace-slug.topic-name
+  const fullTopicName = `${input.environment}.${workspace.slug}.${input.name}`
+
+  // Build topic config
+  const topicConfig: Record<string, string> = {
+    'retention.ms': String(input.retentionMs || 604800000),
+    'cleanup.policy': input.cleanupPolicy || 'delete',
+    ...(input.compression && input.compression !== 'none' ? { 'compression.type': input.compression } : {}),
+    ...(input.config || {}),
+  }
+
+  // Create topic in Payload with status 'provisioning'
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const created = await (payload.create as any)({
+    collection: 'kafka-topics',
+    data: {
+      workspace: input.workspaceId,
+      name: input.name,
+      description: input.description,
+      environment: input.environment,
+      cluster: cluster.id,
+      fullTopicName,
+      partitions: input.partitions || 3,
+      replicationFactor: input.replicationFactor || 3,
+      retentionMs: input.retentionMs || 604800000,
+      cleanupPolicy: input.cleanupPolicy || 'delete',
+      compression: input.compression || 'none',
+      config: topicConfig,
+      status: 'provisioning',
+      approvalRequired: false, // Auto-approve for MVP
+      createdBy: session.user.id,
+    },
+  })
+
+  // Call Go service to create topic on Kafka cluster using direct method
+  // (bypasses UUID requirement by passing connection config directly)
+  try {
+    const connectionConfig = (cluster.connectionConfig as Record<string, string>) || {}
+    const credentials = (cluster.credentials as Record<string, string>) || {}
+
+    console.log('[createTopic] Cluster ID:', cluster.id)
+    console.log('[createTopic] Connection config:', JSON.stringify(connectionConfig))
+    console.log('[createTopic] Has credentials:', Object.keys(credentials).length > 0)
+
+    const response = await kafkaClient.createTopicDirect({
+      topicName: fullTopicName,
+      partitions: input.partitions || 3,
+      replicationFactor: input.replicationFactor || 3,
+      config: topicConfig,
+      connectionConfig,
+      credentials,
+    })
+
+    if (!response.success && response.error) {
+      // Update topic status to failed
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (payload.update as any)({
+        collection: 'kafka-topics',
+        id: created.id,
+        data: {
+          status: 'failed',
+          provisioningError: response.error,
+        },
+      })
+
+      return { success: false, error: response.error }
+    }
+
+    // Update topic status to active
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (payload.update as any)({
+      collection: 'kafka-topics',
+      id: created.id,
+      data: {
+        status: 'active',
+      },
+    })
+
+    // Re-fetch to get full topic data
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updatedTopic = await (payload.findByID as any)({
+      collection: 'kafka-topics',
+      id: created.id,
+      depth: 1,
+    })
+
+    revalidatePath(`/workspaces/[slug]/kafka`)
+
+    return {
+      success: true,
+      topic: mapPayloadTopicToKafkaTopic(updatedTopic as PayloadKafkaTopic),
+    }
+  } catch (error) {
+    console.error('Failed to provision Kafka topic:', error)
+
+    // Update topic status to failed
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (payload.update as any)({
+      collection: 'kafka-topics',
+      id: created.id,
+      data: {
+        status: 'failed',
+        provisioningError: error instanceof Error ? error.message : 'Failed to provision topic',
+      },
+    })
+
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to provision topic',
+    }
   }
 }
 
@@ -178,7 +374,7 @@ export interface ListTopicsResult {
 }
 
 /**
- * List Kafka topics for a workspace
+ * List Kafka topics for a workspace from Payload CMS.
  */
 export async function listTopics(input: ListTopicsInput): Promise<ListTopicsResult> {
   const session = await auth.api.getSession({
@@ -208,12 +404,51 @@ export async function listTopics(input: ListTopicsInput): Promise<ListTopicsResu
     return { success: false, error: 'Not a member of this workspace' }
   }
 
-  // TODO: Call actual gRPC service when available
-  // For now, return empty list
-  return {
-    success: true,
-    topics: [],
-    total: 0,
+  // Build query filters
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const whereConditions: any[] = [{ workspace: { equals: input.workspaceId } }]
+
+  if (input.environment) {
+    whereConditions.push({ environment: { equals: input.environment } })
+  }
+
+  if (input.status) {
+    // Map from API format (pending_approval) to Payload format (pending-approval)
+    const statusMap: Record<string, string> = {
+      pending_approval: 'pending-approval',
+      provisioning: 'provisioning',
+      active: 'active',
+      failed: 'failed',
+      deleting: 'deleting',
+    }
+    whereConditions.push({ status: { equals: statusMap[input.status] || input.status } })
+  }
+
+  try {
+    const topicsResult = await payload.find({
+      collection: 'kafka-topics',
+      where: { and: whereConditions },
+      limit: input.limit || 100,
+      page: input.offset ? Math.floor(input.offset / (input.limit || 100)) + 1 : 1,
+      sort: '-createdAt',
+      depth: 1,
+    })
+
+    const topics = topicsResult.docs.map((doc) =>
+      mapPayloadTopicToKafkaTopic(doc as unknown as PayloadKafkaTopic)
+    )
+
+    return {
+      success: true,
+      topics,
+      total: topicsResult.totalDocs,
+    }
+  } catch (error) {
+    console.error('Failed to list Kafka topics:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to list topics',
+    }
   }
 }
 
@@ -224,7 +459,7 @@ export interface GetTopicResult {
 }
 
 /**
- * Get a single Kafka topic by ID
+ * Get a single Kafka topic by ID from Payload CMS.
  */
 export async function getTopic(topicId: string): Promise<GetTopicResult> {
   const session = await auth.api.getSession({
@@ -235,8 +470,49 @@ export async function getTopic(topicId: string): Promise<GetTopicResult> {
     return { success: false, error: 'Not authenticated' }
   }
 
-  // TODO: Call actual gRPC service when available
-  return { success: false, error: 'Topic not found' }
+  try {
+    const payload = await getPayload({ config })
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const topic = await (payload.findByID as any)({
+      collection: 'kafka-topics',
+      id: topicId,
+      depth: 1,
+    })
+
+    if (!topic) {
+      return { success: false, error: 'Topic not found' }
+    }
+
+    // Check workspace membership
+    const workspaceId = typeof topic.workspace === 'object' ? topic.workspace.id : topic.workspace
+    const membership = await payload.find({
+      collection: 'workspace-members',
+      where: {
+        and: [
+          { workspace: { equals: workspaceId } },
+          { user: { equals: session.user.id } },
+          { status: { equals: 'active' } },
+        ],
+      },
+      limit: 1,
+    })
+
+    if (membership.docs.length === 0) {
+      return { success: false, error: 'Not a member of this workspace' }
+    }
+
+    return {
+      success: true,
+      topic: mapPayloadTopicToKafkaTopic(topic as PayloadKafkaTopic),
+    }
+  } catch (error) {
+    console.error('Failed to get Kafka topic:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get topic',
+    }
+  }
 }
 
 export interface UpdateTopicInput {
@@ -276,7 +552,14 @@ export interface DeleteTopicResult {
 }
 
 /**
- * Delete a Kafka topic
+ * Delete a Kafka topic.
+ *
+ * Flow:
+ * 1. Get topic from Payload
+ * 2. Verify workspace membership (owner/admin role required)
+ * 3. Update status to 'deleting'
+ * 4. Call Go service to delete from Kafka cluster
+ * 5. Delete from Payload
  */
 export async function deleteTopic(topicId: string): Promise<DeleteTopicResult> {
   const session = await auth.api.getSession({
@@ -287,9 +570,123 @@ export async function deleteTopic(topicId: string): Promise<DeleteTopicResult> {
     return { success: false, error: 'Not authenticated' }
   }
 
-  // TODO: Call actual gRPC service when available
-  const workflowId = `wf-delete-${Date.now()}`
-  return { success: true, workflowId }
+  const payload = await getPayload({ config })
+
+  try {
+    // Get topic from Payload
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const topic = await (payload.findByID as any)({
+      collection: 'kafka-topics',
+      id: topicId,
+      depth: 1,
+    })
+
+    if (!topic) {
+      return { success: false, error: 'Topic not found' }
+    }
+
+    const workspaceId = typeof topic.workspace === 'object' ? topic.workspace.id : topic.workspace
+
+    // Check workspace membership (owner/admin required for delete)
+    const membership = await payload.find({
+      collection: 'workspace-members',
+      where: {
+        and: [
+          { workspace: { equals: workspaceId } },
+          { user: { equals: session.user.id } },
+          { role: { in: ['owner', 'admin'] } },
+          { status: { equals: 'active' } },
+        ],
+      },
+      limit: 1,
+    })
+
+    if (membership.docs.length === 0) {
+      return { success: false, error: 'Permission denied. You must be an admin or owner of this workspace.' }
+    }
+
+    // Update status to 'deleting'
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (payload.update as any)({
+      collection: 'kafka-topics',
+      id: topicId,
+      data: { status: 'deleting' },
+    })
+
+    // Call Go service to delete topic from Kafka cluster if it was provisioned
+    if (topic.fullTopicName && topic.status === 'active') {
+      // Get cluster connection config and credentials
+      const clusterId = typeof topic.cluster === 'object' ? topic.cluster?.id : topic.cluster
+      if (clusterId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const cluster = await (payload.findByID as any)({
+          collection: 'kafka-clusters',
+          id: clusterId,
+          depth: 0,
+        })
+
+        if (cluster) {
+          try {
+            const response = await kafkaClient.deleteTopicByName({
+              topicName: topic.fullTopicName,
+              connectionConfig: cluster.connectionConfig || {},
+              credentials: cluster.credentials || {},
+            })
+
+            if (!response.success && response.error) {
+              // Revert status back
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              await (payload.update as any)({
+                collection: 'kafka-topics',
+                id: topicId,
+                data: {
+                  status: 'failed',
+                  provisioningError: `Delete failed: ${response.error}`,
+                },
+              })
+
+              return { success: false, error: response.error }
+            }
+          } catch (error) {
+            console.error('Failed to delete Kafka topic from cluster:', error)
+
+            // Revert status back
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (payload.update as any)({
+              collection: 'kafka-topics',
+              id: topicId,
+              data: {
+                status: 'failed',
+                provisioningError: `Delete failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              },
+            })
+
+            return {
+              success: false,
+              error: error instanceof Error ? error.message : 'Failed to delete topic from Kafka cluster',
+            }
+          }
+        }
+      }
+    }
+
+    // Delete from Payload
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (payload.delete as any)({
+      collection: 'kafka-topics',
+      id: topicId,
+    })
+
+    revalidatePath(`/workspaces/[slug]/kafka`)
+
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to delete Kafka topic:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to delete topic',
+    }
+  }
 }
 
 export interface ApproveTopicResult {
