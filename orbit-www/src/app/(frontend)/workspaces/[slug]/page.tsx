@@ -19,6 +19,7 @@ import {
   WorkspaceRecentDocsCard,
   WorkspaceQuickLinksCard,
   WorkspaceMembersCardSimple,
+  WorkspaceKafkaTopicsCard,
 } from '@/components/features/workspace'
 
 interface PageProps {
@@ -164,6 +165,27 @@ export default async function WorkspacePage({ params }: PageProps) {
     }
   })
 
+  // Fetch Kafka topics for this workspace
+  const kafkaTopicsResult = await payload.find({
+    collection: 'kafka-topics',
+    where: {
+      workspace: {
+        equals: workspace.id,
+      },
+    },
+    sort: '-createdAt',
+    limit: 5,
+    overrideAccess: true,
+  })
+
+  // Transform Kafka topics for display
+  const kafkaTopics = kafkaTopicsResult.docs.map((topic) => ({
+    id: topic.id,
+    name: topic.name,
+    environment: topic.environment,
+    status: topic.status,
+  }))
+
   // Fetch recent knowledge pages across all spaces in this workspace
   const spaceIds = spacesResult.docs.map((s) => s.id)
   const recentPagesResult = spaceIds.length > 0
@@ -241,8 +263,13 @@ export default async function WorkspacePage({ params }: PageProps) {
                 <WorkspaceApplicationsCard apps={appsResult.docs} />
               </div>
 
-              {/* Middle Column - Registries + Recent Docs */}
+              {/* Middle Column - Kafka Topics + Registries + Recent Docs */}
               <div className="space-y-6">
+                <WorkspaceKafkaTopicsCard
+                  topics={kafkaTopics}
+                  workspaceSlug={workspace.slug}
+                  totalCount={kafkaTopicsResult.totalDocs}
+                />
                 <WorkspaceRegistriesCard
                   images={registryImages}
                   workspaceSlug={workspace.slug}
