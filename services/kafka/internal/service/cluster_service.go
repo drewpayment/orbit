@@ -99,7 +99,7 @@ func (s *ClusterService) RegisterCluster(ctx context.Context, req RegisterCluste
 	return cluster, nil
 }
 
-// ValidateCluster validates a cluster connection
+// ValidateCluster validates a cluster connection (cluster stored in Go service)
 func (s *ClusterService) ValidateCluster(ctx context.Context, clusterID uuid.UUID, credentials map[string]string) (bool, error) {
 	cluster, err := s.clusterRepo.GetByID(ctx, clusterID)
 	if err != nil {
@@ -120,6 +120,78 @@ func (s *ClusterService) ValidateCluster(ctx context.Context, clusterID uuid.UUI
 	}
 
 	return true, nil
+}
+
+// ValidateClusterConnection validates a Kafka connection using provided config
+// This is used when cluster config is stored externally (e.g., Payload CMS)
+func (s *ClusterService) ValidateClusterConnection(ctx context.Context, connectionConfig, credentials map[string]string) (bool, error) {
+	// Create a temporary cluster object with the provided config
+	cluster := &domain.KafkaCluster{
+		ConnectionConfig: connectionConfig,
+	}
+
+	adapter, err := s.adapterFactory.CreateKafkaAdapter(cluster, credentials)
+	if err != nil {
+		return false, err
+	}
+	defer adapter.Close()
+
+	if err := adapter.ValidateConnection(ctx); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+// DeleteTopicByName deletes a topic directly by name from the Kafka cluster.
+// This is used when topic metadata is stored externally (e.g., Payload CMS)
+// and we only need to remove the topic from Kafka without looking up internal IDs.
+func (s *ClusterService) DeleteTopicByName(ctx context.Context, topicName string, connectionConfig, credentials map[string]string) error {
+	// Create a temporary cluster object with the provided config
+	cluster := &domain.KafkaCluster{
+		ConnectionConfig: connectionConfig,
+	}
+
+	adapter, err := s.adapterFactory.CreateKafkaAdapter(cluster, credentials)
+	if err != nil {
+		return err
+	}
+	defer adapter.Close()
+
+	return adapter.DeleteTopic(ctx, topicName)
+}
+
+// CreateTopicDirect creates a topic directly on the Kafka cluster.
+// This is used when topic metadata is stored externally (e.g., Payload CMS)
+// and we only need to create the topic on Kafka without storing in Go service.
+func (s *ClusterService) CreateTopicDirect(ctx context.Context, req CreateTopicDirectRequest) error {
+	// Create a temporary cluster object with the provided config
+	cluster := &domain.KafkaCluster{
+		ConnectionConfig: req.ConnectionConfig,
+	}
+
+	adapter, err := s.adapterFactory.CreateKafkaAdapter(cluster, req.Credentials)
+	if err != nil {
+		return err
+	}
+	defer adapter.Close()
+
+	return adapter.CreateTopic(ctx, adapters.TopicSpec{
+		Name:              req.TopicName,
+		Partitions:        req.Partitions,
+		ReplicationFactor: req.ReplicationFactor,
+		Config:            req.Config,
+	})
+}
+
+// CreateTopicDirectRequest contains parameters for direct topic creation
+type CreateTopicDirectRequest struct {
+	TopicName         string
+	Partitions        int
+	ReplicationFactor int
+	Config            map[string]string
+	ConnectionConfig  map[string]string
+	Credentials       map[string]string
 }
 
 // ListClusters returns all registered clusters

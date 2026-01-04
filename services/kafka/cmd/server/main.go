@@ -7,11 +7,13 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
 	kafkav1 "github.com/drewpayment/orbit/proto/gen/go/idp/kafka/v1"
 	"github.com/drewpayment/orbit/services/kafka/internal/adapters"
+	"github.com/drewpayment/orbit/services/kafka/internal/adapters/apache"
 	"github.com/drewpayment/orbit/services/kafka/internal/domain"
 	kafkagrpc "github.com/drewpayment/orbit/services/kafka/internal/grpc"
 	"github.com/drewpayment/orbit/services/kafka/internal/service"
@@ -42,7 +44,7 @@ func main() {
 	// Initialize dependencies
 	// TODO: Initialize actual repositories connected to Payload CMS
 	// For now, we'll create placeholder implementations
-	clusterRepo := &inMemoryClusterRepository{}
+	clusterRepo := newInMemoryClusterRepository()
 	providerRepo := &inMemoryProviderRepository{}
 	mappingRepo := &inMemoryMappingRepository{}
 	topicRepo := &inMemoryTopicRepository{}
@@ -53,8 +55,8 @@ func main() {
 	sharePolicyRepo := &inMemorySharePolicyRepository{}
 	serviceAccountRepo := &inMemoryServiceAccountRepository{}
 
-	// TODO: Initialize actual adapter factory
-	adapterFactory := &stubAdapterFactory{}
+	// Initialize adapter factory with real Kafka adapter
+	adapterFactory := &kafkaAdapterFactory{}
 
 	// Create services
 	clusterService := service.NewClusterService(clusterRepo, providerRepo, mappingRepo, adapterFactory)
@@ -143,22 +145,57 @@ func loggingInterceptor(
 // Placeholder repository implementations
 // TODO: Replace with actual implementations connected to Payload CMS
 
-type inMemoryClusterRepository struct{}
+type inMemoryClusterRepository struct {
+	clusters map[uuid.UUID]*domain.KafkaCluster
+	mu       sync.RWMutex
+}
+
+func newInMemoryClusterRepository() *inMemoryClusterRepository {
+	return &inMemoryClusterRepository{
+		clusters: make(map[uuid.UUID]*domain.KafkaCluster),
+	}
+}
 
 func (r *inMemoryClusterRepository) Create(ctx context.Context, cluster *domain.KafkaCluster) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.clusters[cluster.ID] = cluster
 	return nil
 }
 func (r *inMemoryClusterRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.KafkaCluster, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if cluster, ok := r.clusters[id]; ok {
+		return cluster, nil
+	}
 	return nil, nil
 }
 func (r *inMemoryClusterRepository) List(ctx context.Context) ([]*domain.KafkaCluster, error) {
-	return nil, nil
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	result := make([]*domain.KafkaCluster, 0, len(r.clusters))
+	for _, cluster := range r.clusters {
+		result = append(result, cluster)
+	}
+	return result, nil
 }
 func (r *inMemoryClusterRepository) Update(ctx context.Context, cluster *domain.KafkaCluster) error {
-	return nil
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.clusters[cluster.ID]; ok {
+		r.clusters[cluster.ID] = cluster
+		return nil
+	}
+	return domain.ErrClusterNotFound
 }
 func (r *inMemoryClusterRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	return nil
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.clusters[id]; ok {
+		delete(r.clusters, id)
+		return nil
+	}
+	return domain.ErrClusterNotFound
 }
 
 type inMemoryProviderRepository struct{}
@@ -295,13 +332,20 @@ func (r *inMemoryServiceAccountRepository) Update(ctx context.Context, account *
 	return nil
 }
 
-// Stub adapter factory
-type stubAdapterFactory struct{}
+// Real adapter factory using Apache Kafka adapter
+type kafkaAdapterFactory struct{}
 
-func (f *stubAdapterFactory) CreateKafkaAdapter(cluster *domain.KafkaCluster, credentials map[string]string) (adapters.KafkaAdapter, error) {
-	return nil, fmt.Errorf("adapter not configured")
+func (f *kafkaAdapterFactory) CreateKafkaAdapter(cluster *domain.KafkaCluster, credentials map[string]string) (adapters.KafkaAdapter, error) {
+	// Get bootstrap servers from connection config
+	bootstrapServers := cluster.ConnectionConfig["bootstrap.servers"]
+	if bootstrapServers == "" {
+		return nil, fmt.Errorf("bootstrap.servers not configured")
+	}
+
+	return apache.NewClientFromCluster(cluster.ConnectionConfig, credentials)
 }
 
-func (f *stubAdapterFactory) CreateSchemaRegistryAdapter(registry *domain.SchemaRegistry, credentials map[string]string) (adapters.SchemaRegistryAdapter, error) {
-	return nil, fmt.Errorf("adapter not configured")
+func (f *kafkaAdapterFactory) CreateSchemaRegistryAdapter(registry *domain.SchemaRegistry, credentials map[string]string) (adapters.SchemaRegistryAdapter, error) {
+	// Schema registry adapter not yet implemented
+	return nil, fmt.Errorf("schema registry adapter not configured")
 }

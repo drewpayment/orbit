@@ -44,6 +44,10 @@ func (s *KafkaServer) ValidateCluster(ctx context.Context, req *kafkav1.Validate
 	return s.clusterHandler.ValidateCluster(ctx, req)
 }
 
+func (s *KafkaServer) ValidateClusterConnection(ctx context.Context, req *kafkav1.ValidateClusterConnectionRequest) (*kafkav1.ValidateClusterConnectionResponse, error) {
+	return s.clusterHandler.ValidateClusterConnection(ctx, req)
+}
+
 func (s *KafkaServer) ListClusters(ctx context.Context, req *kafkav1.ListClustersRequest) (*kafkav1.ListClustersResponse, error) {
 	return s.clusterHandler.ListClusters(ctx, req)
 }
@@ -70,6 +74,10 @@ func (s *KafkaServer) CreateTopic(ctx context.Context, req *kafkav1.CreateTopicR
 	return s.topicHandler.CreateTopic(ctx, req)
 }
 
+func (s *KafkaServer) CreateTopicDirect(ctx context.Context, req *kafkav1.CreateTopicDirectRequest) (*kafkav1.CreateTopicDirectResponse, error) {
+	return s.clusterHandler.CreateTopicDirect(ctx, req)
+}
+
 func (s *KafkaServer) GetTopic(ctx context.Context, req *kafkav1.GetTopicRequest) (*kafkav1.GetTopicResponse, error) {
 	return s.topicHandler.GetTopic(ctx, req)
 }
@@ -84,6 +92,10 @@ func (s *KafkaServer) UpdateTopic(ctx context.Context, req *kafkav1.UpdateTopicR
 
 func (s *KafkaServer) DeleteTopic(ctx context.Context, req *kafkav1.DeleteTopicRequest) (*kafkav1.DeleteTopicResponse, error) {
 	return s.topicHandler.DeleteTopic(ctx, req)
+}
+
+func (s *KafkaServer) DeleteTopicByName(ctx context.Context, req *kafkav1.DeleteTopicByNameRequest) (*kafkav1.DeleteTopicByNameResponse, error) {
+	return s.clusterHandler.DeleteTopicByName(ctx, req)
 }
 
 func (s *KafkaServer) ApproveTopic(ctx context.Context, req *kafkav1.ApproveTopicRequest) (*kafkav1.ApproveTopicResponse, error) {

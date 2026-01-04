@@ -61,7 +61,7 @@ func (h *ClusterHandler) RegisterCluster(ctx context.Context, req *kafkav1.Regis
 	}, nil
 }
 
-// ValidateCluster validates a cluster connection
+// ValidateCluster validates a cluster connection (cluster stored in Go service)
 func (h *ClusterHandler) ValidateCluster(ctx context.Context, req *kafkav1.ValidateClusterRequest) (*kafkav1.ValidateClusterResponse, error) {
 	clusterID, err := uuid.Parse(req.ClusterId)
 	if err != nil {
@@ -78,6 +78,77 @@ func (h *ClusterHandler) ValidateCluster(ctx context.Context, req *kafkav1.Valid
 
 	return &kafkav1.ValidateClusterResponse{
 		Valid: valid,
+	}, nil
+}
+
+// ValidateClusterConnection validates a Kafka connection using provided config
+// This is used when cluster config is stored externally (e.g., Payload CMS)
+func (h *ClusterHandler) ValidateClusterConnection(ctx context.Context, req *kafkav1.ValidateClusterConnectionRequest) (*kafkav1.ValidateClusterConnectionResponse, error) {
+	valid, err := h.clusterService.ValidateClusterConnection(ctx, req.ConnectionConfig, req.Credentials)
+	if err != nil {
+		return &kafkav1.ValidateClusterConnectionResponse{
+			Valid: false,
+			Error: err.Error(),
+		}, nil
+	}
+
+	return &kafkav1.ValidateClusterConnectionResponse{
+		Valid: valid,
+	}, nil
+}
+
+// DeleteTopicByName deletes a topic directly by name from the Kafka cluster.
+// This is used when topic metadata is stored externally (e.g., Payload CMS)
+// and we only need to remove the topic from Kafka without looking up internal IDs.
+func (h *ClusterHandler) DeleteTopicByName(ctx context.Context, req *kafkav1.DeleteTopicByNameRequest) (*kafkav1.DeleteTopicByNameResponse, error) {
+	if req.TopicName == "" {
+		return &kafkav1.DeleteTopicByNameResponse{
+			Success: false,
+			Error:   "topic_name is required",
+		}, nil
+	}
+
+	err := h.clusterService.DeleteTopicByName(ctx, req.TopicName, req.ConnectionConfig, req.Credentials)
+	if err != nil {
+		return &kafkav1.DeleteTopicByNameResponse{
+			Success: false,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	return &kafkav1.DeleteTopicByNameResponse{
+		Success: true,
+	}, nil
+}
+
+// CreateTopicDirect creates a topic directly on the Kafka cluster.
+// This is used when topic metadata is stored externally (e.g., Payload CMS)
+// and we only need to create the topic on Kafka without storing in Go service.
+func (h *ClusterHandler) CreateTopicDirect(ctx context.Context, req *kafkav1.CreateTopicDirectRequest) (*kafkav1.CreateTopicDirectResponse, error) {
+	if req.TopicName == "" {
+		return &kafkav1.CreateTopicDirectResponse{
+			Success: false,
+			Error:   "topic_name is required",
+		}, nil
+	}
+
+	err := h.clusterService.CreateTopicDirect(ctx, service.CreateTopicDirectRequest{
+		TopicName:         req.TopicName,
+		Partitions:        int(req.Partitions),
+		ReplicationFactor: int(req.ReplicationFactor),
+		Config:            req.Config,
+		ConnectionConfig:  req.ConnectionConfig,
+		Credentials:       req.Credentials,
+	})
+	if err != nil {
+		return &kafkav1.CreateTopicDirectResponse{
+			Success: false,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	return &kafkav1.CreateTopicDirectResponse{
+		Success: true,
 	}, nil
 }
 
