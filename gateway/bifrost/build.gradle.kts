@@ -79,7 +79,10 @@ sourceSets {
     main {
         proto {
             // Include protos from the monorepo proto directory
-            srcDir("../../proto")
+            // In Docker: proto is copied to /app/proto (relative: "proto")
+            // Locally: proto is at ../../proto
+            val protoDir = if (file("proto").exists()) "proto" else "../../proto"
+            srcDir(protoDir)
         }
     }
 }
