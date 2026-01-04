@@ -11,12 +11,15 @@ import {
   LifeBuoy,
   MessageSquare,
   Settings2,
+  Server,
 } from "lucide-react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { useSession } from "@/lib/auth-client"
+import { usePlatformAdmin } from "@/hooks/usePlatformAdmin"
 
 import { NavMain } from "@/components/nav-main"
+import { NavPlatform, type NavPlatformItem } from "@/components/nav-platform"
 import { NavProjects } from "@/components/nav-projects"
 import { NavSecondary } from "@/components/nav-secondary"
 import { NavUser } from "@/components/nav-user"
@@ -108,9 +111,20 @@ const navSecondaryData = [
   },
 ]
 
+// Platform admin navigation - only visible to platform admins
+const navPlatformData: NavPlatformItem[] = [
+  {
+    title: "Kafka",
+    url: "/platform/kafka",
+    icon: Server,
+    items: [], // Main page has tabs for Providers, Clusters, Environments
+  },
+]
+
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
   const { data: session } = useSession()
+  const { isPlatformAdmin } = usePlatformAdmin()
 
   // Extract workspace slug from pathname if we're in a workspace route
   const workspaceSlug = React.useMemo(() => {
@@ -177,6 +191,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={navMainWithWorkspace} />
+        <NavPlatform items={navPlatformData} isVisible={isPlatformAdmin} />
         <NavProjects projects={[]} />
         <NavSecondary items={navSecondaryData} className="mt-auto" />
       </SidebarContent>

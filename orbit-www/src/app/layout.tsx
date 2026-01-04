@@ -1,20 +1,8 @@
 import React from 'react'
-import { Crimson_Pro, Source_Serif_4 } from 'next/font/google'
-import './globals.css'
 
-const crimsonPro = Crimson_Pro({
-  subsets: ['latin'],
-  weight: ['400', '600', '700'],
-  variable: '--font-crimson-pro',
-  display: 'swap',
-})
-
-const sourceSerif = Source_Serif_4({
-  subsets: ['latin'],
-  weight: ['400', '600'],
-  variable: '--font-source-serif',
-  display: 'swap',
-})
+// Root layout is a pass-through since child route groups have their own html/body.
+// Fonts and styles are imported in (frontend)/layout.tsx for non-Payload routes.
+// Payload's (payload)/layout.tsx handles its own html/body with @payloadcms/next/layouts.
 
 export const metadata = {
   description: 'Orbit - Internal Developer Portal',
@@ -22,9 +10,5 @@ export const metadata = {
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={`${crimsonPro.variable} ${sourceSerif.variable}`}>{children}</body>
-    </html>
-  )
+  return children
 }
