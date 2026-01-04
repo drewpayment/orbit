@@ -43,9 +43,11 @@ This will:
 Access the services:
 - **Frontend**: http://localhost:3000
 - **Temporal UI**: http://localhost:8080
+- **Redpanda Console**: http://localhost:8083
 - **MongoDB**: mongodb://localhost:27017
 - **PostgreSQL**: postgresql://localhost:5433
 - **Redis**: redis://localhost:6379
+- **Kafka (Redpanda)**: localhost:19092
 
 ## Services Overview
 
@@ -61,6 +63,8 @@ Access the services:
 - **temporal-ui**: Web UI for monitoring workflows
 - **postgres**: PostgreSQL for future Go services
 - **redis**: Redis for caching and pub/sub
+- **redpanda**: Kafka-compatible message broker for topic management
+- **redpanda-console**: Web UI for managing Kafka topics and schemas
 
 ## Development Workflow
 
@@ -195,6 +199,85 @@ docker-compose down -v
 
 # Rebuild and start fresh
 make dev
+```
+
+## Setting Up Kafka for Development
+
+Orbit includes Redpanda, a Kafka-compatible message broker, for local development. After starting the dev environment, you need to register the local Redpanda cluster as a Kafka provider in Orbit.
+
+### 1. Access Payload Admin
+
+Navigate to http://localhost:3000/admin and log in.
+
+### 2. Create a Kafka Provider
+
+1. Go to **Kafka > Kafka Providers**
+2. Click **Create New**
+3. Fill in:
+   - **Name**: `redpanda`
+   - **Display Name**: `Redpanda (Local)`
+   - **Adapter Type**: `apache` (Redpanda uses the standard Kafka protocol)
+   - **Required Config Fields**: `["bootstrap.servers"]`
+   - **Capabilities**: Enable as needed (Schema Registry is available)
+
+### 3. Create a Kafka Cluster
+
+1. Go to **Kafka > Kafka Clusters**
+2. Click **Create New**
+3. Fill in:
+   - **Name**: `local-dev`
+   - **Provider**: Select the Redpanda provider you created
+   - **Connection Config**:
+     ```json
+     {
+       "bootstrap.servers": "localhost:19092"
+     }
+     ```
+   - **Credentials**: Leave empty (no auth for local dev)
+
+### 4. Create an Environment Mapping
+
+1. Go to **Kafka > Kafka Environment Mappings**
+2. Click **Create New**
+3. Fill in:
+   - **Environment**: `development`
+   - **Cluster**: Select the `local-dev` cluster
+   - **Priority**: `100`
+   - **Is Default**: `true`
+
+### 5. Verify the Setup
+
+1. Open Redpanda Console at http://localhost:8083 to view topics
+2. In Orbit, navigate to a workspace's Kafka section
+3. Create a test topic - it should appear in Redpanda Console
+
+### Redpanda Ports
+
+| Port | Service |
+|------|---------|
+| 19092 | Kafka API (external) |
+| 18081 | Schema Registry |
+| 18082 | HTTP Proxy (REST) |
+| 9644 | Admin API |
+| 8083 | Redpanda Console UI |
+
+### Troubleshooting Kafka
+
+```bash
+# Check if Redpanda is healthy
+docker-compose logs redpanda
+
+# Check Redpanda cluster status
+docker exec orbit-redpanda rpk cluster info
+
+# List topics
+docker exec orbit-redpanda rpk topic list
+
+# Create a test topic manually
+docker exec orbit-redpanda rpk topic create test-topic
+
+# Consume messages from a topic
+docker exec orbit-redpanda rpk topic consume test-topic
 ```
 
 ## Testing GitHub App Integration

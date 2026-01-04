@@ -110,35 +110,35 @@ services:
     restart: unless-stopped
 
   # Application Services
-  orbit-www:
-    container_name: orbit-www
-    build:
-      context: ./orbit-www
-      dockerfile: Dockerfile.dev
-    ports:
-      - 3000:3000
-    environment:
-      - DATABASE_URI=mongodb://mongo:27017/orbit-www
-      - TEMPORAL_NAMESPACE=default
-      - TEMPORAL_ADDRESS=temporal-server:7233
-      - NEXT_PUBLIC_REPOSITORY_URL=http://repository-service:50051
-      - REPOSITORY_SERVICE_URL=http://repository-service:50051
-      - ORBIT_INTERNAL_API_KEY=${ORBIT_INTERNAL_API_KEY:-orbit-internal-dev-key}
-      - ORBIT_REGISTRY_URL=orbit-registry:5000
-      - ORBIT_REGISTRY_TOKEN=orbit-registry-token
-      - ORBIT_REGISTRY_JWT_SECRET=${ORBIT_REGISTRY_JWT_SECRET:-orbit-registry-jwt-secret-dev-only-32chars}
-      - NEXT_PUBLIC_KAFKA_SERVICE_URL=http://kafka-service:50055
-    env_file:
-      - ./orbit-www/.env
-    depends_on:
-      - mongo
-      - temporal-server
-      - repository-service
-      - kafka-service
-    volumes:
-      - ./orbit-www:/app
-      - /app/node_modules
-    restart: unless-stopped
+  # orbit-www:
+  #   container_name: orbit-www
+  #   build:
+  #     context: ./orbit-www
+  #     dockerfile: Dockerfile.dev
+  #   ports:
+  #     - 3000:3000
+  #   environment:
+  #     - DATABASE_URI=mongodb://mongo:27017/orbit-www
+  #     - TEMPORAL_NAMESPACE=default
+  #     - TEMPORAL_ADDRESS=temporal-server:7233
+  #     - NEXT_PUBLIC_REPOSITORY_URL=http://repository-service:50051
+  #     - REPOSITORY_SERVICE_URL=http://repository-service:50051
+  #     - ORBIT_INTERNAL_API_KEY=${ORBIT_INTERNAL_API_KEY:-orbit-internal-dev-key}
+  #     - ORBIT_REGISTRY_URL=orbit-registry:5000
+  #     - ORBIT_REGISTRY_TOKEN=orbit-registry-token
+  #     - ORBIT_REGISTRY_JWT_SECRET=${ORBIT_REGISTRY_JWT_SECRET:-orbit-registry-jwt-secret-dev-only-32chars}
+  #     - NEXT_PUBLIC_KAFKA_SERVICE_URL=http://kafka-service:50055
+  #   env_file:
+  #     - ./orbit-www/.env
+  #   depends_on:
+  #     - mongo
+  #     - temporal-server
+  #     - repository-service
+  #     - kafka-service
+  #   volumes:
+  #     - ./orbit-www:/app
+  #     - /app/node_modules
+  #   restart: unless-stopped
 
   mongo:
     container_name: orbit-mongo
@@ -215,29 +215,29 @@ services:
     restart: unless-stopped
 
   # Backstage Backend (Plugin Integration)
-  backstage-backend:
-    container_name: orbit-backstage
-    build:
-      context: ./services/backstage-backend
-      dockerfile: Dockerfile
-    ports:
-      - 7007:7007
-    environment:
-      - NODE_ENV=development
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=orbit
-      - POSTGRES_PASSWORD=orbit
-      - POSTGRES_DATABASE=backstage
-      - ORBIT_API_URL=http://orbit-www:3000
-      - CONFIG_POLL_INTERVAL=60000
-    depends_on:
-      - postgres
-      - redis
-    volumes:
-      - ./services/backstage-backend:/app
-      - /app/node_modules
-    restart: unless-stopped
+  # backstage-backend:
+  #   container_name: orbit-backstage
+  #   build:
+  #     context: ./services/backstage-backend
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - 7007:7007
+  #   environment:
+  #     - NODE_ENV=development
+  #     - POSTGRES_HOST=postgres
+  #     - POSTGRES_PORT=5432
+  #     - POSTGRES_USER=orbit
+  #     - POSTGRES_PASSWORD=orbit
+  #     - POSTGRES_DATABASE=backstage
+  #     - ORBIT_API_URL=http://orbit-www:3000
+  #     - CONFIG_POLL_INTERVAL=60000
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #   volumes:
+  #     - ./services/backstage-backend:/app
+  #     - /app/node_modules
+  #   restart: unless-stopped
 
   # Go Plugins Service (Backstage proxy)
   plugins-service:
@@ -258,8 +258,55 @@ services:
       - CIRCUIT_BREAKER_TIMEOUT=30s
       - REDIS_URL=redis://redis:6379
     depends_on:
-      - backstage-backend
+      # - backstage-backend
       - redis
+    restart: unless-stopped
+
+  # Kafka Runtime (Redpanda - Kafka-compatible, simpler for dev)
+  redpanda:
+    container_name: orbit-redpanda
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.10
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr redpanda:33145
+      - --advertise-rpc-addr redpanda:33145
+      - --mode dev-container
+      - --smp 1
+      - --default-log-level=warn
+    ports:
+      - "19092:19092"  # Kafka API (external)
+      - "18081:18081"  # Schema Registry (external)
+      - "18082:18082"  # HTTP Proxy (external)
+      - "9644:9644"    # Admin API
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health", "--exit-when-healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redpanda-console:
+    container_name: orbit-redpanda-console
+    image: docker.redpanda.com/redpandadata/console:v2.7.2
+    ports:
+      - "8083:8080"  # Console UI (remapped to avoid conflict with temporal-ui)
+    environment:
+      - KAFKA_BROKERS=redpanda:9092
+      - KAFKA_SCHEMAREGISTRY_ENABLED=true
+      - KAFKA_SCHEMAREGISTRY_URLS=http://redpanda:8081
+      - REDPANDA_ADMINAPI_ENABLED=true
+      - REDPANDA_ADMINAPI_URLS=http://redpanda:9644
+    depends_on:
+      redpanda:
+        condition: service_healthy
     restart: unless-stopped
 
   # Go Services
@@ -275,6 +322,7 @@ services:
       - ENVIRONMENT=development
     depends_on:
       - temporal-server
+      - redpanda
     restart: unless-stopped
 
   repository-service:
@@ -303,3 +351,4 @@ volumes:
   redis-data:
   build-workdir:
   minio-data:
+  redpanda-data:

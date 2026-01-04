@@ -385,9 +385,11 @@ Historical planning artifacts from pre-superpowers workflow. See `specs/README.m
   - 6379: Redis
   - 7233: Temporal gRPC
   - 8080: Temporal UI
+  - 8083: Redpanda Console
   - 9000: MinIO API
   - 9001: MinIO Console
   - 9200: Elasticsearch (Temporal)
+  - 19092: Kafka/Redpanda API
 - **Node version**: Requires Node.js 18.20.2+ or 20.9.0+
 - **Go version**: Requires Go 1.21+
 
