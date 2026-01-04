@@ -216,6 +216,24 @@ export const KafkaTopics: CollectionConfig = {
       },
     },
     {
+      name: 'fullTopicName',
+      type: 'text',
+      admin: {
+        readOnly: true,
+        description: 'Full topic name on Kafka cluster (environment.workspace.name)',
+        position: 'sidebar',
+      },
+    },
+    {
+      name: 'provisioningError',
+      type: 'textarea',
+      admin: {
+        readOnly: true,
+        description: 'Error message if provisioning failed',
+        condition: (data) => data?.status === 'failed',
+      },
+    },
+    {
       name: 'approvalRequired',
       type: 'checkbox',
       defaultValue: true,

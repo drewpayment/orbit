@@ -1530,6 +1530,14 @@ export interface KafkaTopic {
    */
   workflowId?: string | null;
   /**
+   * Full topic name on Kafka cluster (environment.workspace.name)
+   */
+  fullTopicName?: string | null;
+  /**
+   * Error message if provisioning failed
+   */
+  provisioningError?: string | null;
+  /**
    * Based on policy evaluation
    */
   approvalRequired?: boolean | null;
@@ -2870,6 +2878,8 @@ export interface KafkaTopicsSelect<T extends boolean = true> {
   config?: T;
   status?: T;
   workflowId?: T;
+  fullTopicName?: T;
+  provisioningError?: T;
   approvalRequired?: T;
   approvedBy?: T;
   approvedAt?: T;
