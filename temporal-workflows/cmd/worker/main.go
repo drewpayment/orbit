@@ -221,6 +221,21 @@ func main() {
 
 	log.Printf("Build service address: %s", buildServiceAddr)
 
+	// Register virtual cluster provisioning workflow
+	w.RegisterWorkflow(workflows.VirtualClusterProvisionWorkflow)
+
+	// Create and register virtual cluster activities
+	bifrostAdminURL := os.Getenv("BIFROST_ADMIN_URL")
+	if bifrostAdminURL == "" {
+		bifrostAdminURL = "localhost:50060"
+	}
+	vcActivities := activities.NewVirtualClusterActivities(orbitAPIURL, bifrostAdminURL, logger)
+	w.RegisterActivity(vcActivities.GetEnvironmentMapping)
+	w.RegisterActivity(vcActivities.CreateVirtualCluster)
+	w.RegisterActivity(vcActivities.PushToBifrost)
+	w.RegisterActivity(vcActivities.UpdateVirtualClusterStatus)
+	log.Printf("Bifrost admin URL: %s", bifrostAdminURL)
+
 	log.Println("Starting Temporal worker...")
 	log.Printf("Temporal address: %s", temporalAddress)
 	log.Printf("Temporal namespace: %s", temporalNamespace)
