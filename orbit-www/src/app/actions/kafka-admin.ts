@@ -5,12 +5,6 @@ import config from '@payload-config'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
 import { kafkaClient } from '@/lib/grpc/kafka-client'
-import type {
-  KafkaProvider,
-  KafkaCluster,
-  KafkaEnvironmentMapping,
-  ClusterValidationStatus,
-} from '@/lib/proto/idp/kafka/v1/kafka_pb'
 
 // ============================================================================
 // Payload Type Definitions
@@ -322,88 +316,6 @@ async function requireAdmin(): Promise<{ userId: string }> {
   return { userId: session.user.id }
 }
 
-/**
- * Converts ClusterValidationStatus enum to a string status.
- */
-function mapValidationStatus(status: ClusterValidationStatus): KafkaClusterConfig['status'] {
-  // Use number comparison since enum values are numbers
-  switch (status) {
-    case 1: // PENDING
-      return 'pending'
-    case 2: // VALID
-      return 'valid'
-    case 3: // INVALID
-      return 'invalid'
-    default:
-      return 'unknown'
-  }
-}
-
-/**
- * Converts a proto KafkaCluster to KafkaClusterConfig.
- */
-function mapClusterToConfig(cluster: KafkaCluster): KafkaClusterConfig {
-  return {
-    id: cluster.id,
-    name: cluster.name,
-    providerId: cluster.providerId,
-    bootstrapServers: cluster.connectionConfig?.['bootstrap.servers'] || '',
-    environment: cluster.connectionConfig?.['environment'] || 'development',
-    status: mapValidationStatus(cluster.validationStatus),
-    schemaRegistryUrl: cluster.connectionConfig?.['schema.registry.url'],
-    credentials: {}, // Credentials are not exposed in the response for security
-    config: cluster.connectionConfig || {},
-  }
-}
-
-/**
- * Converts a proto KafkaProvider to KafkaProviderConfig.
- */
-function mapProviderToConfig(provider: KafkaProvider): KafkaProviderConfig {
-  return {
-    id: provider.id,
-    name: provider.name,
-    displayName: provider.displayName,
-    authMethods: provider.requiredConfigFields || [],
-    features: {
-      schemaRegistry: provider.capabilities?.schemaRegistry ?? false,
-      topicCreation: true, // Default to true
-      aclManagement: false, // Not in current proto
-      quotaManagement: provider.capabilities?.quotasApi ?? false,
-    },
-    defaultSettings: {},
-    enabled: true,
-  }
-}
-
-/**
- * Converts a proto KafkaEnvironmentMapping to KafkaEnvironmentMappingConfig.
- */
-function mapMappingToConfig(
-  mapping: KafkaEnvironmentMapping,
-  clusterName?: string
-): KafkaEnvironmentMappingConfig {
-  return {
-    id: mapping.id,
-    environment: mapping.environment,
-    clusterId: mapping.clusterId,
-    clusterName: clusterName || mapping.clusterId,
-    priority: mapping.priority,
-    isDefault: mapping.isDefault,
-    createdAt: undefined, // Not in current proto
-  }
-}
-
-/**
- * Fetches all clusters and returns a Map of cluster ID to cluster name.
- * Use this helper to avoid duplicate listClusters calls in operations
- * that need cluster name lookups.
- */
-async function getClustersMap(): Promise<Map<string, string>> {
-  const response = await kafkaClient.listClusters({})
-  return new Map(response.clusters.map((c) => [c.id, c.name]))
-}
-
 // ============================================================================
 // Provider Actions
 // ============================================================================
@@ -450,7 +362,7 @@ function mapPayloadProviderToConfig(provider: PayloadKafkaProvider): KafkaProvid
 
 /**
  * Lists all available Kafka providers from Payload CMS.
- * If no providers exist in Payload, seeds default providers from the Go service.
+ * Providers are managed entirely through the UI - no auto-seeding.
  */
 export async function getProviders(): Promise<{
   success: boolean
@@ -462,55 +374,12 @@ export async function getProviders(): Promise<{
 
     const payload = await getPayload({ config })
 
-    // Query providers from Payload
+    // Query providers from Payload - no auto-seeding, providers are managed via UI
     const providersResult = await payload.find({
       collection: 'kafka-providers' as 'users', // Type workaround
       limit: 100,
       sort: 'displayName',
     })
-
-    // If no providers in Payload, seed from gRPC service defaults
-    if (providersResult.docs.length === 0) {
-      console.log('[kafka-admin] No providers in Payload, seeding from gRPC service defaults...')
-
-      const grpcResponse = await kafkaClient.listProviders({})
-
-      // Seed each provider to Payload
-      for (const grpcProvider of grpcResponse.providers) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (payload.create as any)({
-          collection: 'kafka-providers',
-          data: {
-            name: grpcProvider.name,
-            displayName: grpcProvider.displayName,
-            adapterType: grpcProvider.name.includes('confluent') ? 'confluent'
-              : grpcProvider.name.includes('msk') ? 'msk'
-              : 'apache',
-            requiredConfigFields: grpcProvider.requiredConfigFields || [],
-            capabilities: {
-              schemaRegistry: grpcProvider.capabilities?.schemaRegistry ?? true,
-              transactions: grpcProvider.capabilities?.transactions ?? true,
-              quotasApi: grpcProvider.capabilities?.quotasApi ?? false,
-              metricsApi: grpcProvider.capabilities?.metricsApi ?? false,
-            },
-            documentationUrl: grpcProvider.documentationUrl || '',
-          },
-        })
-      }
-
-      // Re-fetch after seeding
-      const seededResult = await payload.find({
-        collection: 'kafka-providers' as 'users',
-        limit: 100,
-        sort: 'displayName',
-      })
-
-      const providers = seededResult.docs.map((doc) =>
-        mapPayloadProviderToConfig(doc as unknown as PayloadKafkaProvider)
-      )
-
-      return { success: true, data: providers }
-    }
 
     const providers = providersResult.docs.map((doc) =>
       mapPayloadProviderToConfig(doc as unknown as PayloadKafkaProvider)
@@ -641,11 +510,48 @@ export async function deleteProvider(providerId: string): Promise<{
 }
 
 // ============================================================================
-// Cluster Actions
+// Cluster Actions (stored in Payload CMS)
 // ============================================================================
 
 /**
- * Lists all registered Kafka clusters.
+ * Payload KafkaCluster document type
+ */
+interface PayloadKafkaCluster {
+  id: string
+  name: string
+  provider: string | { id: string; name: string }
+  connectionConfig: Record<string, string>
+  credentials?: Record<string, string>
+  validationStatus: 'pending' | 'valid' | 'invalid'
+  lastValidatedAt?: string
+  description?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+/**
+ * Maps a Payload KafkaCluster document to KafkaClusterConfig.
+ */
+function mapPayloadClusterToConfig(cluster: PayloadKafkaCluster): KafkaClusterConfig {
+  const providerId = typeof cluster.provider === 'object'
+    ? cluster.provider.name
+    : cluster.provider
+
+  return {
+    id: cluster.id,
+    name: cluster.name,
+    providerId,
+    bootstrapServers: cluster.connectionConfig?.['bootstrap.servers'] || '',
+    environment: cluster.connectionConfig?.['environment'] || 'development',
+    status: cluster.validationStatus || 'unknown',
+    schemaRegistryUrl: cluster.connectionConfig?.['schema.registry.url'],
+    credentials: {}, // Don't expose credentials
+    config: cluster.connectionConfig || {},
+  }
+}
+
+/**
+ * Lists all registered Kafka clusters from Payload CMS.
  */
 export async function listClusters(): Promise<{
   success: boolean
@@ -655,9 +561,18 @@ export async function listClusters(): Promise<{
   try {
     await requireAdmin()
 
-    const response = await kafkaClient.listClusters({})
+    const payload = await getPayload({ config })
 
-    const clusters = response.clusters.map(mapClusterToConfig)
+    const clustersResult = await payload.find({
+      collection: 'kafka-clusters' as 'users', // Type workaround
+      limit: 100,
+      sort: 'name',
+      depth: 1, // Populate provider relationship
+    })
+
+    const clusters = clustersResult.docs.map((doc) =>
+      mapPayloadClusterToConfig(doc as unknown as PayloadKafkaCluster)
+    )
 
     return { success: true, data: clusters }
   } catch (error) {
@@ -669,11 +584,7 @@ export async function listClusters(): Promise<{
 }
 
 /**
- * Gets a single Kafka cluster by ID.
- *
- * TODO: This implementation fetches all clusters and filters client-side.
- * If the gRPC service adds a direct getCluster(clusterId) method in the future,
- * this should be updated to use that for better performance.
+ * Gets a single Kafka cluster by ID from Payload CMS.
  */
 export async function getCluster(clusterId: string): Promise<{
   success: boolean
@@ -683,17 +594,20 @@ export async function getCluster(clusterId: string): Promise<{
   try {
     await requireAdmin()
 
-    // Note: The gRPC service doesn't have a direct getCluster method,
-    // so we fetch all and filter. See TODO above for potential optimization.
-    const response = await kafkaClient.listClusters({})
+    const payload = await getPayload({ config })
 
-    const cluster = response.clusters.find((c) => c.id === clusterId)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cluster = await (payload.findByID as any)({
+      collection: 'kafka-clusters',
+      id: clusterId,
+      depth: 1,
+    })
 
     if (!cluster) {
       return { success: false, error: 'Cluster not found' }
     }
 
-    return { success: true, data: mapClusterToConfig(cluster) }
+    return { success: true, data: mapPayloadClusterToConfig(cluster as PayloadKafkaCluster) }
   } catch (error) {
     console.error('Failed to get Kafka cluster:', error)
     const errorMessage =
@@ -703,7 +617,7 @@ export async function getCluster(clusterId: string): Promise<{
 }
 
 /**
- * Creates a new Kafka cluster.
+ * Creates a new Kafka cluster in Payload CMS.
  */
 export async function createCluster(data: {
   name: string
@@ -727,6 +641,21 @@ export async function createCluster(data: {
 
     await requireAdmin()
 
+    const payload = await getPayload({ config })
+
+    // Look up the provider by name to get its Payload ID for the relationship
+    const providersResult = await payload.find({
+      collection: 'kafka-providers' as 'users',
+      where: { name: { equals: data.providerId } },
+      limit: 1,
+    })
+
+    if (providersResult.docs.length === 0) {
+      return { success: false, error: `Provider '${data.providerId}' not found` }
+    }
+
+    const providerPayloadId = providersResult.docs[0].id
+
     // Build connection config
     const connectionConfig: Record<string, string> = {
       'bootstrap.servers': data.bootstrapServers,
@@ -735,22 +664,22 @@ export async function createCluster(data: {
       ...(data.config || {}),
     }
 
-    const response = await kafkaClient.registerCluster({
-      name: data.name,
-      providerId: data.providerId,
-      connectionConfig,
-      credentials: data.credentials || {},
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const created = await (payload.create as any)({
+      collection: 'kafka-clusters',
+      data: {
+        name: data.name,
+        provider: providerPayloadId,
+        connectionConfig,
+        credentials: data.credentials || {},
+        validationStatus: 'pending',
+      },
     })
 
-    if (response.error) {
-      return { success: false, error: response.error }
+    return {
+      success: true,
+      data: mapPayloadClusterToConfig(created as PayloadKafkaCluster),
     }
-
-    if (!response.cluster) {
-      return { success: false, error: 'No cluster returned from registration' }
-    }
-
-    return { success: true, data: mapClusterToConfig(response.cluster) }
   } catch (error) {
     console.error('Failed to create Kafka cluster:', error)
     const errorMessage =
@@ -760,7 +689,7 @@ export async function createCluster(data: {
 }
 
 /**
- * Deletes a Kafka cluster.
+ * Deletes a Kafka cluster from Payload CMS.
  */
 export async function deleteCluster(clusterId: string): Promise<{
   success: boolean
@@ -773,11 +702,13 @@ export async function deleteCluster(clusterId: string): Promise<{
 
     await requireAdmin()
 
-    const response = await kafkaClient.deleteCluster({ clusterId })
+    const payload = await getPayload({ config })
 
-    if (!response.success) {
-      return { success: false, error: response.error || 'Failed to delete cluster' }
-    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (payload.delete as any)({
+      collection: 'kafka-clusters',
+      id: clusterId,
+    })
 
     return { success: true }
   } catch (error) {
@@ -789,16 +720,129 @@ export async function deleteCluster(clusterId: string): Promise<{
 }
 
 /**
+ * Updates an existing Kafka cluster in Payload CMS.
+ */
+export async function updateCluster(
+  clusterId: string,
+  data: {
+    name?: string
+    providerId?: string
+    bootstrapServers?: string
+    environment?: string
+    schemaRegistryUrl?: string
+  }
+): Promise<{
+  success: boolean
+  data?: KafkaClusterConfig
+  error?: string
+}> {
+  try {
+    if (!isNonEmptyString(clusterId)) {
+      return { success: false, error: 'Cluster ID is required' }
+    }
+
+    await requireAdmin()
+
+    const payload = await getPayload({ config })
+
+    // Build the update data
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updateData: Record<string, any> = {}
+
+    if (data.name !== undefined) {
+      updateData.name = data.name
+    }
+
+    if (data.providerId !== undefined) {
+      // Look up the provider by name to get its Payload ID for the relationship
+      const providersResult = await payload.find({
+        collection: 'kafka-providers' as 'users',
+        where: { name: { equals: data.providerId } },
+        limit: 1,
+      })
+
+      if (providersResult.docs.length === 0) {
+        return { success: false, error: `Provider '${data.providerId}' not found` }
+      }
+
+      updateData.provider = providersResult.docs[0].id
+    }
+
+    // Build connectionConfig from the provided fields
+    if (data.bootstrapServers !== undefined || data.environment !== undefined || data.schemaRegistryUrl !== undefined) {
+      // First, get the existing cluster to merge connectionConfig
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const existingCluster = await (payload.findByID as any)({
+        collection: 'kafka-clusters',
+        id: clusterId,
+        depth: 0,
+      }) as PayloadKafkaCluster | null
+
+      if (!existingCluster) {
+        return { success: false, error: 'Cluster not found' }
+      }
+
+      const existingConfig = existingCluster.connectionConfig || {}
+      const newConfig: Record<string, string> = { ...existingConfig }
+
+      if (data.bootstrapServers !== undefined) {
+        newConfig['bootstrap.servers'] = data.bootstrapServers
+      }
+
+      if (data.environment !== undefined) {
+        newConfig['environment'] = data.environment
+      }
+
+      if (data.schemaRegistryUrl !== undefined) {
+        if (data.schemaRegistryUrl) {
+          newConfig['schema.registry.url'] = data.schemaRegistryUrl
+        } else {
+          delete newConfig['schema.registry.url']
+        }
+      }
+
+      updateData.connectionConfig = newConfig
+
+      // Reset validation status when connection config changes
+      if (data.bootstrapServers !== undefined) {
+        updateData.validationStatus = 'pending'
+      }
+    }
+
+    // Perform the update
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updated = await (payload.update as any)({
+      collection: 'kafka-clusters',
+      id: clusterId,
+      data: updateData,
+      depth: 1,
+    })
+
+    return {
+      success: true,
+      data: mapPayloadClusterToConfig(updated as PayloadKafkaCluster),
+    }
+  } catch (error) {
+    console.error('Failed to update Kafka cluster:', error)
+    const errorMessage =
+      error instanceof Error ? error.message : 'Failed to update Kafka cluster'
+    return { success: false, error: errorMessage }
+  }
+}
+
+/**
  * Validates a Kafka cluster's connectivity by testing the connection.
  *
- * @param clusterId - The ID of the cluster to validate
+ * This function:
+ * 1. Reads cluster config from Payload CMS
+ * 2. Calls the Go Kafka service to test the connection
+ * 3. Updates the validation status in Payload CMS
+ *
+ * @param clusterId - The Payload ID of the cluster to validate
  * @returns Response with the following contract:
  *   - `success: true, valid: true` - Validation succeeded, cluster is reachable
  *   - `success: true, valid: false, error: string` - Validation succeeded but cluster is unreachable (error describes why)
  *   - `success: false, error: string` - Validation operation failed (e.g., network error, auth error)
- *
- * Note: When `success: true`, the `valid` field indicates cluster connectivity status.
- * When `success: false`, the validation operation itself failed (not the cluster).
  */
 export async function validateCluster(clusterId: string): Promise<{
   success: boolean
@@ -808,7 +852,38 @@ export async function validateCluster(clusterId: string): Promise<{
   try {
     await requireAdmin()
 
-    const response = await kafkaClient.validateCluster({ clusterId })
+    const payload = await getPayload({ config })
+
+    // Get cluster from Payload
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cluster = await (payload.findByID as any)({
+      collection: 'kafka-clusters',
+      id: clusterId,
+      depth: 1,
+    }) as PayloadKafkaCluster | null
+
+    if (!cluster) {
+      return { success: false, error: 'Cluster not found' }
+    }
+
+    // Call Go service to validate the connection
+    // The Go service needs bootstrap servers and credentials to test
+    const response = await kafkaClient.validateClusterConnection({
+      connectionConfig: cluster.connectionConfig || {},
+      credentials: cluster.credentials || {},
+    })
+
+    // Update validation status in Payload
+    const newStatus = response.valid ? 'valid' : 'invalid'
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (payload.update as any)({
+      collection: 'kafka-clusters',
+      id: clusterId,
+      data: {
+        validationStatus: newStatus,
+        lastValidatedAt: new Date().toISOString(),
+      },
+    })
 
     if (response.error) {
       return { success: true, valid: false, error: response.error }
@@ -824,11 +899,47 @@ export async function validateCluster(clusterId: string): Promise<{
 }
 
 // ============================================================================
-// Environment Mapping Actions
+// Environment Mapping Actions (stored in Payload CMS)
 // ============================================================================
 
 /**
- * Lists environment mappings, optionally filtered by environment.
+ * Payload KafkaEnvironmentMapping document type
+ */
+interface PayloadKafkaEnvironmentMapping {
+  id: string
+  environment: string
+  cluster: string | { id: string; name: string }
+  routingRule?: Record<string, string>
+  priority: number
+  isDefault: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+/**
+ * Maps a Payload KafkaEnvironmentMapping document to KafkaEnvironmentMappingConfig.
+ */
+function mapPayloadMappingToConfig(mapping: PayloadKafkaEnvironmentMapping): KafkaEnvironmentMappingConfig {
+  const clusterId = typeof mapping.cluster === 'object'
+    ? mapping.cluster.id
+    : mapping.cluster
+  const clusterName = typeof mapping.cluster === 'object'
+    ? mapping.cluster.name
+    : mapping.cluster
+
+  return {
+    id: mapping.id,
+    environment: mapping.environment,
+    clusterId,
+    clusterName,
+    priority: mapping.priority,
+    isDefault: mapping.isDefault,
+    createdAt: mapping.createdAt,
+  }
+}
+
+/**
+ * Lists environment mappings from Payload CMS, optionally filtered by environment.
  */
 export async function listMappings(environment?: string): Promise<{
   success: boolean
@@ -838,15 +949,25 @@ export async function listMappings(environment?: string): Promise<{
   try {
     await requireAdmin()
 
-    const response = await kafkaClient.listEnvironmentMappings({
-      environment: environment || '',
-    })
+    const payload = await getPayload({ config })
 
-    // Get cluster names for better display using the helper
-    const clusterMap = await getClustersMap()
+    // Build query with optional environment filter
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const query: any = {
+      collection: 'kafka-environment-mappings',
+      limit: 100,
+      sort: 'environment',
+      depth: 1, // Populate cluster relationship
+    }
 
-    const mappings = response.mappings.map((m) =>
-      mapMappingToConfig(m, clusterMap.get(m.clusterId))
+    if (environment) {
+      query.where = { environment: { equals: environment } }
+    }
+
+    const mappingsResult = await payload.find(query)
+
+    const mappings = mappingsResult.docs.map((doc) =>
+      mapPayloadMappingToConfig(doc as unknown as PayloadKafkaEnvironmentMapping)
     )
 
     return { success: true, data: mappings }
@@ -859,7 +980,7 @@ export async function listMappings(environment?: string): Promise<{
 }
 
 /**
- * Creates a new environment mapping.
+ * Creates a new environment mapping in Payload CMS.
  */
 export async function createMapping(data: {
   environment: string
@@ -881,28 +1002,42 @@ export async function createMapping(data: {
 
     await requireAdmin()
 
-    const response = await kafkaClient.createEnvironmentMapping({
-      environment: data.environment,
-      clusterId: data.clusterId,
-      priority: data.priority ?? 0,
-      isDefault: data.isDefault ?? false,
-      routingRule: data.routingRule || {},
+    const payload = await getPayload({ config })
+
+    // Verify the cluster exists
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cluster = await (payload.findByID as any)({
+      collection: 'kafka-clusters',
+      id: data.clusterId,
     })
 
-    if (response.error) {
-      return { success: false, error: response.error }
+    if (!cluster) {
+      return { success: false, error: 'Cluster not found' }
     }
 
-    if (!response.mapping) {
-      return { success: false, error: 'No mapping returned from creation' }
-    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const created = await (payload.create as any)({
+      collection: 'kafka-environment-mappings',
+      data: {
+        environment: data.environment,
+        cluster: data.clusterId,
+        priority: data.priority ?? 0,
+        isDefault: data.isDefault ?? false,
+        routingRule: data.routingRule || {},
+      },
+    })
 
-    // Get cluster name for display using the helper
-    const clusterMap = await getClustersMap()
+    // Re-fetch with depth to get cluster name
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const createdWithCluster = await (payload.findByID as any)({
+      collection: 'kafka-environment-mappings',
+      id: created.id,
+      depth: 1,
+    })
 
     return {
       success: true,
-      data: mapMappingToConfig(response.mapping, clusterMap.get(data.clusterId)),
+      data: mapPayloadMappingToConfig(createdWithCluster as PayloadKafkaEnvironmentMapping),
     }
   } catch (error) {
     console.error('Failed to create environment mapping:', error)
@@ -913,7 +1048,7 @@ export async function createMapping(data: {
 }
 
 /**
- * Deletes an environment mapping.
+ * Deletes an environment mapping from Payload CMS.
  */
 export async function deleteMapping(mappingId: string): Promise<{
   success: boolean
@@ -926,11 +1061,13 @@ export async function deleteMapping(mappingId: string): Promise<{
 
     await requireAdmin()
 
-    const response = await kafkaClient.deleteEnvironmentMapping({ mappingId })
+    const payload = await getPayload({ config })
 
-    if (!response.success) {
-      return { success: false, error: response.error || 'Failed to delete mapping' }
-    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (payload.delete as any)({
+      collection: 'kafka-environment-mappings',
+      id: mappingId,
+    })
 
     return { success: true }
   } catch (error) {
