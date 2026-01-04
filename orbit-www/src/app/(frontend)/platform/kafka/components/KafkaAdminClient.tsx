@@ -216,8 +216,21 @@ export function KafkaAdminClient({
     setError(null)
     try {
       if (data.id) {
-        // Update existing cluster - not implemented yet
-        setError('Cluster updates not yet implemented')
+        // Update existing cluster
+        const { updateCluster } = await import('@/app/actions/kafka-admin')
+        const result = await updateCluster(data.id, {
+          name: data.name,
+          providerId: data.providerId,
+          bootstrapServers: data.bootstrapServers,
+          environment: data.environment,
+          schemaRegistryUrl: data.schemaRegistryUrl,
+        })
+        if (result.success) {
+          await refreshClusters()
+          backToList()
+        } else {
+          setError(result.error || 'Failed to update cluster')
+        }
       } else {
         // Create new cluster
         const { createCluster } = await import('@/app/actions/kafka-admin')
@@ -338,6 +351,18 @@ export function KafkaAdminClient({
   if (panelContent === 'provider-detail' && selectedProvider) {
     return (
       <div className="p-6">
+        {/* Error display for detail view */}
+        {error && (
+          <div className="mb-4 p-4 bg-destructive/10 text-destructive rounded-lg flex items-center justify-between">
+            <span>{error}</span>
+            <button
+              onClick={() => setError(null)}
+              className="text-destructive hover:text-destructive/80"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         <ProviderDetail
           provider={selectedProvider}
           onBack={backToList}
@@ -352,6 +377,18 @@ export function KafkaAdminClient({
   if (panelContent === 'cluster-detail') {
     return (
       <div className="p-6">
+        {/* Error display for detail view */}
+        {error && (
+          <div className="mb-4 p-4 bg-destructive/10 text-destructive rounded-lg flex items-center justify-between">
+            <span>{error}</span>
+            <button
+              onClick={() => setError(null)}
+              className="text-destructive hover:text-destructive/80"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         <ClusterDetail
           cluster={selectedCluster ?? null}
           providers={providers}
@@ -367,6 +404,18 @@ export function KafkaAdminClient({
   if (panelContent === 'cluster-form') {
     return (
       <div className="p-6">
+        {/* Error display for form view */}
+        {error && (
+          <div className="mb-4 p-4 bg-destructive/10 text-destructive rounded-lg flex items-center justify-between">
+            <span>{error}</span>
+            <button
+              onClick={() => setError(null)}
+              className="text-destructive hover:text-destructive/80"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         <ClusterDetail
           cluster={null}
           providers={providers}
@@ -380,6 +429,18 @@ export function KafkaAdminClient({
   if (panelContent === 'mapping-form') {
     return (
       <div className="p-6">
+        {/* Error display for form view */}
+        {error && (
+          <div className="mb-4 p-4 bg-destructive/10 text-destructive rounded-lg flex items-center justify-between">
+            <span>{error}</span>
+            <button
+              onClick={() => setError(null)}
+              className="text-destructive hover:text-destructive/80"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         <MappingForm
           clusters={clusters}
           onBack={backToList}

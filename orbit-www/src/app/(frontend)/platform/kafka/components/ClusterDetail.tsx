@@ -234,7 +234,7 @@ export function ClusterDetail({
               </SelectTrigger>
               <SelectContent>
                 {enabledProviders.map((provider) => (
-                  <SelectItem key={provider.id} value={provider.id}>
+                  <SelectItem key={provider.id} value={provider.name}>
                     {provider.displayName}
                   </SelectItem>
                 ))}
