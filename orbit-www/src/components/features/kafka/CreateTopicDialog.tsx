@@ -20,9 +20,41 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2 } from 'lucide-react'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { Loader2, HelpCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { createTopic } from '@/app/(frontend)/workspaces/[slug]/kafka/actions'
+
+/**
+ * Label with an info icon tooltip
+ */
+function LabelWithTooltip({
+  htmlFor,
+  label,
+  tooltip,
+}: {
+  htmlFor: string
+  label: string
+  tooltip: string
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <Label htmlFor={htmlFor}>{label}</Label>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-[250px]">
+          {tooltip}
+        </TooltipContent>
+      </Tooltip>
+    </div>
+  )
+}
 
 interface CreateTopicDialogProps {
   open: boolean
@@ -157,7 +189,11 @@ export function CreateTopicDialog({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="partitions">Partitions</Label>
+              <LabelWithTooltip
+                htmlFor="partitions"
+                label="Partitions"
+                tooltip="Number of partitions for parallel processing. More partitions allow higher throughput but use more resources. Cannot be decreased after creation."
+              />
               <Input
                 id="partitions"
                 type="number"
@@ -172,7 +208,11 @@ export function CreateTopicDialog({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="replicationFactor">Replication Factor</Label>
+              <LabelWithTooltip
+                htmlFor="replicationFactor"
+                label="Replication Factor"
+                tooltip="Number of copies of each partition stored across different brokers. Higher values improve fault tolerance but require more storage. Cannot be changed after creation."
+              />
               <Input
                 id="replicationFactor"
                 type="number"
@@ -188,7 +228,11 @@ export function CreateTopicDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="retention">Retention Period</Label>
+            <LabelWithTooltip
+              htmlFor="retention"
+              label="Retention Period"
+              tooltip="How long messages are kept before being deleted. Longer retention uses more storage. Choose based on how long consumers need to access historical data."
+            />
             <Select
               value={formData.retentionMs.toString()}
               onValueChange={(value) =>
@@ -211,7 +255,11 @@ export function CreateTopicDialog({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="cleanupPolicy">Cleanup Policy</Label>
+              <LabelWithTooltip
+                htmlFor="cleanupPolicy"
+                label="Cleanup Policy"
+                tooltip="Delete: Remove old messages after retention period. Compact: Keep only the latest value per key. Compact & Delete: Compact first, then delete after retention."
+              />
               <Select
                 value={formData.cleanupPolicy}
                 onValueChange={(value) => setFormData({ ...formData, cleanupPolicy: value })}
@@ -229,7 +277,11 @@ export function CreateTopicDialog({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="compression">Compression</Label>
+              <LabelWithTooltip
+                htmlFor="compression"
+                label="Compression"
+                tooltip="Compress messages to reduce storage and network usage. LZ4 and Snappy are fast with moderate compression. Zstd offers best compression. Gzip is widely compatible."
+              />
               <Select
                 value={formData.compression}
                 onValueChange={(value) => setFormData({ ...formData, compression: value })}
