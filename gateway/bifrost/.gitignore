@@ -1,0 +1,7 @@
+# gateway/bifrost/.gitignore
+.gradle/
+build/
+.idea/
+*.iml
+out/
+.kotlin/
