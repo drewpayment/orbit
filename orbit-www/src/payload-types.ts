@@ -92,6 +92,8 @@ export interface Config {
     'kafka-providers': KafkaProvider;
     'kafka-clusters': KafkaCluster;
     'kafka-environment-mappings': KafkaEnvironmentMapping;
+    'kafka-applications': KafkaApplication;
+    'kafka-virtual-clusters': KafkaVirtualCluster;
     'kafka-topics': KafkaTopic;
     'kafka-schemas': KafkaSchema;
     'kafka-service-accounts': KafkaServiceAccount;
@@ -132,6 +134,8 @@ export interface Config {
     'kafka-providers': KafkaProvidersSelect<false> | KafkaProvidersSelect<true>;
     'kafka-clusters': KafkaClustersSelect<false> | KafkaClustersSelect<true>;
     'kafka-environment-mappings': KafkaEnvironmentMappingsSelect<false> | KafkaEnvironmentMappingsSelect<true>;
+    'kafka-applications': KafkaApplicationsSelect<false> | KafkaApplicationsSelect<true>;
+    'kafka-virtual-clusters': KafkaVirtualClustersSelect<false> | KafkaVirtualClustersSelect<true>;
     'kafka-topics': KafkaTopicsSelect<false> | KafkaTopicsSelect<true>;
     'kafka-schemas': KafkaSchemasSelect<false> | KafkaSchemasSelect<true>;
     'kafka-service-accounts': KafkaServiceAccountsSelect<false> | KafkaServiceAccountsSelect<true>;
@@ -1471,6 +1475,83 @@ export interface KafkaEnvironmentMapping {
   createdAt: string;
 }
 /**
+ * Kafka applications for self-service virtual clusters
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-applications".
+ */
+export interface KafkaApplication {
+  id: string;
+  /**
+   * Display name for the application (e.g., "Payments Service")
+   */
+  name: string;
+  /**
+   * URL-safe identifier (e.g., "payments-service")
+   */
+  slug: string;
+  /**
+   * Workspace that owns this application
+   */
+  workspace: string | Workspace;
+  /**
+   * Optional description of what this application does
+   */
+  description?: string | null;
+  status: 'active' | 'decommissioning' | 'deleted';
+  decommissioningStartedAt?: string | null;
+  deletedAt?: string | null;
+  deletedBy?: (string | null) | User;
+  forceDeleted?: boolean | null;
+  createdBy?: (string | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Virtual clusters for Kafka applications (one per environment)
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-virtual-clusters".
+ */
+export interface KafkaVirtualCluster {
+  id: string;
+  /**
+   * Parent Kafka application
+   */
+  application: string | KafkaApplication;
+  /**
+   * Target environment
+   */
+  environment: 'dev' | 'stage' | 'prod';
+  /**
+   * Backing physical Kafka cluster
+   */
+  physicalCluster: string | KafkaCluster;
+  /**
+   * Prefix for physical topic names (e.g., "acme-payments-dev-")
+   */
+  topicPrefix: string;
+  /**
+   * Prefix for consumer group IDs
+   */
+  groupPrefix: string;
+  /**
+   * Gateway hostname for clients (e.g., "payments-service.dev.kafka.orbit.io")
+   */
+  advertisedHost: string;
+  /**
+   * Gateway port for clients
+   */
+  advertisedPort: number;
+  status: 'provisioning' | 'active' | 'read_only' | 'deleting' | 'deleted';
+  /**
+   * Error message if provisioning failed
+   */
+  provisioningError?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * Kafka topics owned by workspaces
  *
  * This interface was referenced by `Config`'s JSON-Schema
@@ -2171,6 +2252,14 @@ export interface PayloadLockedDocument {
         value: string | KafkaEnvironmentMapping;
       } | null)
     | ({
+        relationTo: 'kafka-applications';
+        value: string | KafkaApplication;
+      } | null)
+    | ({
+        relationTo: 'kafka-virtual-clusters';
+        value: string | KafkaVirtualCluster;
+      } | null)
+    | ({
         relationTo: 'kafka-topics';
         value: string | KafkaTopic;
       } | null)
@@ -2857,6 +2946,41 @@ export interface KafkaEnvironmentMappingsSelect<T extends boolean = true> {
   routingRule?: T;
   priority?: T;
   isDefault?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-applications_select".
+ */
+export interface KafkaApplicationsSelect<T extends boolean = true> {
+  name?: T;
+  slug?: T;
+  workspace?: T;
+  description?: T;
+  status?: T;
+  decommissioningStartedAt?: T;
+  deletedAt?: T;
+  deletedBy?: T;
+  forceDeleted?: T;
+  createdBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-virtual-clusters_select".
+ */
+export interface KafkaVirtualClustersSelect<T extends boolean = true> {
+  application?: T;
+  environment?: T;
+  physicalCluster?: T;
+  topicPrefix?: T;
+  groupPrefix?: T;
+  advertisedHost?: T;
+  advertisedPort?: T;
+  status?: T;
+  provisioningError?: T;
   updatedAt?: T;
   createdAt?: T;
 }

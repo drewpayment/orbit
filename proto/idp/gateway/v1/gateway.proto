@@ -1,0 +1,157 @@
+// proto/idp/gateway/v1/gateway.proto
+syntax = "proto3";
+
+package idp.gateway.v1;
+
+option go_package = "github.com/drewpayment/orbit/proto/gen/go/idp/gateway/v1;gatewayv1";
+option java_package = "io.orbit.bifrost.proto";
+option java_multiple_files = true;
+
+import "google/protobuf/timestamp.proto";
+
+// ============================================================================
+// Bifrost Admin Service (Control Plane → Gateway)
+// ============================================================================
+
+service BifrostAdminService {
+  // Virtual Cluster lifecycle
+  rpc UpsertVirtualCluster(UpsertVirtualClusterRequest) returns (UpsertVirtualClusterResponse);
+  rpc DeleteVirtualCluster(DeleteVirtualClusterRequest) returns (DeleteVirtualClusterResponse);
+  rpc SetVirtualClusterReadOnly(SetVirtualClusterReadOnlyRequest) returns (SetVirtualClusterReadOnlyResponse);
+
+  // Credential management
+  rpc UpsertCredential(UpsertCredentialRequest) returns (UpsertCredentialResponse);
+  rpc RevokeCredential(RevokeCredentialRequest) returns (RevokeCredentialResponse);
+  rpc ListCredentials(ListCredentialsRequest) returns (ListCredentialsResponse);
+
+  // Full sync (startup reconciliation)
+  rpc GetFullConfig(GetFullConfigRequest) returns (GetFullConfigResponse);
+
+  // Health & observability
+  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
+  rpc ListVirtualClusters(ListVirtualClustersRequest) returns (ListVirtualClustersResponse);
+}
+
+// ============================================================================
+// Messages: Virtual Clusters
+// ============================================================================
+
+message VirtualClusterConfig {
+  string id = 1;
+  string application_id = 2;
+  string application_slug = 3;
+  string workspace_slug = 4;
+  string environment = 5;
+  string topic_prefix = 6;
+  string group_prefix = 7;
+  string transaction_id_prefix = 8;
+  string advertised_host = 9;
+  int32 advertised_port = 10;
+  string physical_bootstrap_servers = 11;
+  bool read_only = 12;
+}
+
+message UpsertVirtualClusterRequest {
+  VirtualClusterConfig config = 1;
+}
+
+message UpsertVirtualClusterResponse {
+  bool success = 1;
+}
+
+message DeleteVirtualClusterRequest {
+  string virtual_cluster_id = 1;
+}
+
+message DeleteVirtualClusterResponse {
+  bool success = 1;
+}
+
+message SetVirtualClusterReadOnlyRequest {
+  string virtual_cluster_id = 1;
+  bool read_only = 2;
+}
+
+message SetVirtualClusterReadOnlyResponse {
+  bool success = 1;
+}
+
+// ============================================================================
+// Messages: Full Config Sync
+// ============================================================================
+
+message GetFullConfigRequest {}
+
+message GetFullConfigResponse {
+  repeated VirtualClusterConfig virtual_clusters = 1;
+}
+
+// ============================================================================
+// Messages: Status
+// ============================================================================
+
+message GetStatusRequest {}
+
+message GetStatusResponse {
+  string status = 1;
+  int32 active_connections = 2;
+  int32 virtual_cluster_count = 3;
+  map<string, string> version_info = 4;
+}
+
+message ListVirtualClustersRequest {}
+
+message ListVirtualClustersResponse {
+  repeated VirtualClusterConfig virtual_clusters = 1;
+}
+
+// ============================================================================
+// Messages: Credentials
+// ============================================================================
+
+enum PermissionTemplate {
+  PERMISSION_TEMPLATE_UNSPECIFIED = 0;
+  PERMISSION_TEMPLATE_PRODUCER = 1;
+  PERMISSION_TEMPLATE_CONSUMER = 2;
+  PERMISSION_TEMPLATE_ADMIN = 3;
+  PERMISSION_TEMPLATE_CUSTOM = 4;
+}
+
+message CustomPermission {
+  string resource_type = 1;    // topic, group, transactional_id
+  string resource_pattern = 2; // regex or literal
+  repeated string operations = 3; // read, write, create, delete, alter
+}
+
+message CredentialConfig {
+  string id = 1;
+  string virtual_cluster_id = 2;
+  string username = 3;
+  string password_hash = 4;
+  PermissionTemplate template = 5;
+  repeated CustomPermission custom_permissions = 6;
+}
+
+message UpsertCredentialRequest {
+  CredentialConfig config = 1;
+}
+
+message UpsertCredentialResponse {
+  bool success = 1;
+}
+
+message RevokeCredentialRequest {
+  string credential_id = 1;
+}
+
+message RevokeCredentialResponse {
+  bool success = 1;
+}
+
+message ListCredentialsRequest {
+  string virtual_cluster_id = 1; // Optional filter
+}
+
+message ListCredentialsResponse {
+  repeated CredentialConfig credentials = 1;
+}

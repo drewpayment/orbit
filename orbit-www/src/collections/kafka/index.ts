@@ -4,6 +4,10 @@ export { KafkaProviders } from './KafkaProviders'
 export { KafkaClusters } from './KafkaClusters'
 export { KafkaEnvironmentMappings } from './KafkaEnvironmentMappings'
 
+// Application-level resources (workspace managed)
+export { KafkaApplications } from './KafkaApplications'
+export { KafkaVirtualClusters } from './KafkaVirtualClusters'
+
 // Workspace-level resources
 export { KafkaTopics } from './KafkaTopics'
 export { KafkaSchemas } from './KafkaSchemas'

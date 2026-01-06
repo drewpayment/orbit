@@ -309,6 +309,23 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Bifrost Gateway (Kafka Virtual Clusters)
+  bifrost:
+    container_name: orbit-bifrost
+    build:
+      context: .
+      dockerfile: gateway/bifrost/Dockerfile
+    ports:
+      - "9093:9092"    # Kafka proxy port
+      - "50060:50060"  # Admin gRPC
+    environment:
+      - BIFROST_ADMIN_PORT=50060
+      - KAFKA_BOOTSTRAP_SERVERS=redpanda:9092
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    restart: unless-stopped
+
   # Go Services
   kafka-service:
     container_name: orbit-kafka-service
