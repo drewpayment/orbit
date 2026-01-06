@@ -19,6 +19,11 @@ service BifrostAdminService {
   rpc DeleteVirtualCluster(DeleteVirtualClusterRequest) returns (DeleteVirtualClusterResponse);
   rpc SetVirtualClusterReadOnly(SetVirtualClusterReadOnlyRequest) returns (SetVirtualClusterReadOnlyResponse);
 
+  // Credential management
+  rpc UpsertCredential(UpsertCredentialRequest) returns (UpsertCredentialResponse);
+  rpc RevokeCredential(RevokeCredentialRequest) returns (RevokeCredentialResponse);
+  rpc ListCredentials(ListCredentialsRequest) returns (ListCredentialsResponse);
+
   // Full sync (startup reconciliation)
   rpc GetFullConfig(GetFullConfigRequest) returns (GetFullConfigResponse);
 
@@ -98,4 +103,55 @@ message ListVirtualClustersRequest {}
 
 message ListVirtualClustersResponse {
   repeated VirtualClusterConfig virtual_clusters = 1;
+}
+
+// ============================================================================
+// Messages: Credentials
+// ============================================================================
+
+enum PermissionTemplate {
+  PERMISSION_TEMPLATE_UNSPECIFIED = 0;
+  PERMISSION_TEMPLATE_PRODUCER = 1;
+  PERMISSION_TEMPLATE_CONSUMER = 2;
+  PERMISSION_TEMPLATE_ADMIN = 3;
+  PERMISSION_TEMPLATE_CUSTOM = 4;
+}
+
+message CustomPermission {
+  string resource_type = 1;    // topic, group, transactional_id
+  string resource_pattern = 2; // regex or literal
+  repeated string operations = 3; // read, write, create, delete, alter
+}
+
+message CredentialConfig {
+  string id = 1;
+  string virtual_cluster_id = 2;
+  string username = 3;
+  string password_hash = 4;
+  PermissionTemplate template = 5;
+  repeated CustomPermission custom_permissions = 6;
+}
+
+message UpsertCredentialRequest {
+  CredentialConfig config = 1;
+}
+
+message UpsertCredentialResponse {
+  bool success = 1;
+}
+
+message RevokeCredentialRequest {
+  string credential_id = 1;
+}
+
+message RevokeCredentialResponse {
+  bool success = 1;
+}
+
+message ListCredentialsRequest {
+  string virtual_cluster_id = 1; // Optional filter
+}
+
+message ListCredentialsResponse {
+  repeated CredentialConfig credentials = 1;
 }
