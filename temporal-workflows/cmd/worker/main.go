@@ -236,6 +236,15 @@ func main() {
 	w.RegisterActivity(vcActivities.UpdateVirtualClusterStatus)
 	log.Printf("Bifrost admin URL: %s", bifrostAdminURL)
 
+	// Register credential sync workflows
+	w.RegisterWorkflow(workflows.CredentialUpsertWorkflow)
+	w.RegisterWorkflow(workflows.CredentialRevokeWorkflow)
+
+	// Create and register credential activities
+	credActivities := activities.NewCredentialActivities(bifrostAdminURL, logger)
+	w.RegisterActivity(credActivities.SyncCredentialToBifrost)
+	w.RegisterActivity(credActivities.RevokeCredentialFromBifrost)
+
 	log.Println("Starting Temporal worker...")
 	log.Printf("Temporal address: %s", temporalAddress)
 	log.Printf("Temporal namespace: %s", temporalNamespace)
