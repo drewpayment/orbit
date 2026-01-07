@@ -245,6 +245,17 @@ func main() {
 	w.RegisterActivity(credActivities.SyncCredentialToBifrost)
 	w.RegisterActivity(credActivities.RevokeCredentialFromBifrost)
 
+	// Register topic sync workflows (gateway → orbit sync)
+	w.RegisterWorkflow(workflows.TopicCreatedSyncWorkflow)
+	w.RegisterWorkflow(workflows.TopicDeletedSyncWorkflow)
+	w.RegisterWorkflow(workflows.TopicConfigSyncWorkflow)
+
+	// Create and register topic sync activities
+	topicSyncActivities := activities.NewTopicSyncActivities(orbitAPIURL, logger)
+	w.RegisterActivity(topicSyncActivities.CreateTopicRecord)
+	w.RegisterActivity(topicSyncActivities.MarkTopicDeleted)
+	w.RegisterActivity(topicSyncActivities.UpdateTopicConfig)
+
 	log.Println("Starting Temporal worker...")
 	log.Printf("Temporal address: %s", temporalAddress)
 	log.Printf("Temporal namespace: %s", temporalNamespace)
