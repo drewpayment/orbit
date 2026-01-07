@@ -6,6 +6,8 @@ import io.orbit.bifrost.auth.CredentialStore
 import io.orbit.bifrost.auth.CustomPermission
 import io.orbit.bifrost.auth.PermissionTemplate
 import io.orbit.bifrost.config.VirtualClusterStore
+import io.orbit.bifrost.policy.PolicyStore
+import io.orbit.bifrost.policy.PolicyConfig as PolicyConfigDomain
 import idp.gateway.v1.*
 import idp.gateway.v1.BifrostAdminServiceGrpcKt
 import mu.KotlinLogging
@@ -14,7 +16,8 @@ private val logger = KotlinLogging.logger {}
 
 class BifrostAdminServiceImpl(
     private val store: VirtualClusterStore,
-    private val credentialStore: CredentialStore = CredentialStore()
+    private val credentialStore: CredentialStore = CredentialStore(),
+    private val policyStore: PolicyStore = PolicyStore()
 ) : BifrostAdminServiceGrpcKt.BifrostAdminServiceCoroutineImplBase() {
 
     override suspend fun upsertVirtualCluster(
@@ -59,6 +62,8 @@ class BifrostAdminServiceImpl(
         logger.info { "GetFullConfig requested" }
         return Gateway.GetFullConfigResponse.newBuilder()
             .addAllVirtualClusters(store.getAll())
+            .addAllCredentials(credentialStore.getAll().map { it.toProto() })
+            .addAllPolicies(policyStore.getAll().map { it.toProto() })
             .build()
     }
 
@@ -132,6 +137,47 @@ class BifrostAdminServiceImpl(
     }
 
     // ========================================================================
+    // Policy Management
+    // ========================================================================
+
+    override suspend fun upsertPolicy(
+        request: Gateway.UpsertPolicyRequest
+    ): Gateway.UpsertPolicyResponse {
+        logger.info { "UpsertPolicy: ${request.config.id}" }
+
+        val policy = request.config.toDomain()
+        policyStore.upsert(policy)
+
+        return Gateway.UpsertPolicyResponse.newBuilder()
+            .setSuccess(true)
+            .build()
+    }
+
+    override suspend fun deletePolicy(
+        request: Gateway.DeletePolicyRequest
+    ): Gateway.DeletePolicyResponse {
+        logger.info { "DeletePolicy: ${request.policyId}" }
+        policyStore.delete(request.policyId)
+        return Gateway.DeletePolicyResponse.newBuilder()
+            .setSuccess(true)
+            .build()
+    }
+
+    override suspend fun listPolicies(
+        request: Gateway.ListPoliciesRequest
+    ): Gateway.ListPoliciesResponse {
+        val policies = if (request.environment.isNotEmpty()) {
+            policyStore.getByEnvironment(request.environment)
+        } else {
+            policyStore.getAll()
+        }
+
+        return Gateway.ListPoliciesResponse.newBuilder()
+            .addAllPolicies(policies.map { it.toProto() })
+            .build()
+    }
+
+    // ========================================================================
     // Extension functions for proto conversion
     // ========================================================================
 
@@ -178,6 +224,38 @@ class BifrostAdminServiceImpl(
             .setResourceType(resourceType)
             .setResourcePattern(resourcePattern)
             .addAllOperations(operations)
+            .build()
+    }
+
+    // ========================================================================
+    // PolicyConfig conversion functions
+    // ========================================================================
+
+    private fun Gateway.PolicyConfig.toDomain(): PolicyConfigDomain {
+        return PolicyConfigDomain(
+            id = id,
+            environment = environment,
+            maxPartitions = maxPartitions,
+            minPartitions = minPartitions,
+            maxRetentionMs = maxRetentionMs,
+            minReplicationFactor = minReplicationFactor,
+            allowedCleanupPolicies = allowedCleanupPoliciesList.toList(),
+            namingPattern = namingPattern,
+            maxNameLength = maxNameLength
+        )
+    }
+
+    private fun PolicyConfigDomain.toProto(): Gateway.PolicyConfig {
+        return Gateway.PolicyConfig.newBuilder()
+            .setId(id)
+            .setEnvironment(environment)
+            .setMaxPartitions(maxPartitions)
+            .setMinPartitions(minPartitions)
+            .setMaxRetentionMs(maxRetentionMs)
+            .setMinReplicationFactor(minReplicationFactor)
+            .addAllAllowedCleanupPolicies(allowedCleanupPolicies)
+            .setNamingPattern(namingPattern)
+            .setMaxNameLength(maxNameLength)
             .build()
     }
 }
