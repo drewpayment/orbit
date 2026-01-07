@@ -100,6 +100,24 @@ export const KafkaTopics: CollectionConfig = {
       },
     },
     {
+      name: 'application',
+      type: 'relationship',
+      relationTo: 'kafka-applications',
+      index: true,
+      admin: {
+        description: 'Owning Kafka application (optional for legacy topics)',
+      },
+    },
+    {
+      name: 'virtualCluster',
+      type: 'relationship',
+      relationTo: 'kafka-virtual-clusters',
+      index: true,
+      admin: {
+        description: 'Virtual cluster this topic belongs to',
+      },
+    },
+    {
       name: 'name',
       type: 'text',
       required: true,
@@ -201,6 +219,7 @@ export const KafkaTopics: CollectionConfig = {
         { label: 'Active', value: 'active' },
         { label: 'Failed', value: 'failed' },
         { label: 'Deleting', value: 'deleting' },
+        { label: 'Deleted', value: 'deleted' },
       ],
       admin: {
         position: 'sidebar',
@@ -258,6 +277,58 @@ export const KafkaTopics: CollectionConfig = {
         readOnly: true,
         description: 'Approval timestamp',
       },
+    },
+    {
+      name: 'createdVia',
+      type: 'select',
+      defaultValue: 'orbit-ui',
+      options: [
+        { label: 'Orbit UI', value: 'orbit-ui' },
+        { label: 'Gateway Passthrough', value: 'gateway-passthrough' },
+        { label: 'API', value: 'api' },
+        { label: 'Migration', value: 'migration' },
+      ],
+      admin: {
+        position: 'sidebar',
+        description: 'How this topic was created',
+      },
+    },
+    {
+      name: 'createdByCredential',
+      type: 'relationship',
+      relationTo: 'kafka-service-accounts',
+      admin: {
+        position: 'sidebar',
+        description: 'Service account that created this topic (if via gateway)',
+        condition: (data) => data?.createdVia === 'gateway-passthrough',
+      },
+    },
+    {
+      name: 'visibility',
+      type: 'select',
+      defaultValue: 'private',
+      options: [
+        { label: 'Private (Owning Application)', value: 'private' },
+        { label: 'Workspace (Same Workspace)', value: 'workspace' },
+        { label: 'Discoverable (Catalog Listed)', value: 'discoverable' },
+        { label: 'Public (All Applications)', value: 'public' },
+      ],
+      admin: {
+        description: 'Topic visibility for sharing',
+      },
+    },
+    {
+      name: 'tags',
+      type: 'array',
+      admin: {
+        description: 'Tags for topic discovery',
+      },
+      fields: [
+        {
+          name: 'tag',
+          type: 'text',
+        },
+      ],
     },
   ],
   timestamps: true,
