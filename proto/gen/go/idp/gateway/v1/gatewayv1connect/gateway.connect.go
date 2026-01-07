@@ -25,6 +25,8 @@ const _ = connect.IsAtLeastVersion1_13_0
 const (
 	// BifrostAdminServiceName is the fully-qualified name of the BifrostAdminService service.
 	BifrostAdminServiceName = "idp.gateway.v1.BifrostAdminService"
+	// BifrostCallbackServiceName is the fully-qualified name of the BifrostCallbackService service.
+	BifrostCallbackServiceName = "idp.gateway.v1.BifrostCallbackService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -44,6 +46,15 @@ const (
 	// BifrostAdminServiceSetVirtualClusterReadOnlyProcedure is the fully-qualified name of the
 	// BifrostAdminService's SetVirtualClusterReadOnly RPC.
 	BifrostAdminServiceSetVirtualClusterReadOnlyProcedure = "/idp.gateway.v1.BifrostAdminService/SetVirtualClusterReadOnly"
+	// BifrostAdminServiceUpsertCredentialProcedure is the fully-qualified name of the
+	// BifrostAdminService's UpsertCredential RPC.
+	BifrostAdminServiceUpsertCredentialProcedure = "/idp.gateway.v1.BifrostAdminService/UpsertCredential"
+	// BifrostAdminServiceRevokeCredentialProcedure is the fully-qualified name of the
+	// BifrostAdminService's RevokeCredential RPC.
+	BifrostAdminServiceRevokeCredentialProcedure = "/idp.gateway.v1.BifrostAdminService/RevokeCredential"
+	// BifrostAdminServiceListCredentialsProcedure is the fully-qualified name of the
+	// BifrostAdminService's ListCredentials RPC.
+	BifrostAdminServiceListCredentialsProcedure = "/idp.gateway.v1.BifrostAdminService/ListCredentials"
 	// BifrostAdminServiceGetFullConfigProcedure is the fully-qualified name of the
 	// BifrostAdminService's GetFullConfig RPC.
 	BifrostAdminServiceGetFullConfigProcedure = "/idp.gateway.v1.BifrostAdminService/GetFullConfig"
@@ -53,6 +64,24 @@ const (
 	// BifrostAdminServiceListVirtualClustersProcedure is the fully-qualified name of the
 	// BifrostAdminService's ListVirtualClusters RPC.
 	BifrostAdminServiceListVirtualClustersProcedure = "/idp.gateway.v1.BifrostAdminService/ListVirtualClusters"
+	// BifrostAdminServiceUpsertPolicyProcedure is the fully-qualified name of the BifrostAdminService's
+	// UpsertPolicy RPC.
+	BifrostAdminServiceUpsertPolicyProcedure = "/idp.gateway.v1.BifrostAdminService/UpsertPolicy"
+	// BifrostAdminServiceDeletePolicyProcedure is the fully-qualified name of the BifrostAdminService's
+	// DeletePolicy RPC.
+	BifrostAdminServiceDeletePolicyProcedure = "/idp.gateway.v1.BifrostAdminService/DeletePolicy"
+	// BifrostAdminServiceListPoliciesProcedure is the fully-qualified name of the BifrostAdminService's
+	// ListPolicies RPC.
+	BifrostAdminServiceListPoliciesProcedure = "/idp.gateway.v1.BifrostAdminService/ListPolicies"
+	// BifrostCallbackServiceTopicCreatedProcedure is the fully-qualified name of the
+	// BifrostCallbackService's TopicCreated RPC.
+	BifrostCallbackServiceTopicCreatedProcedure = "/idp.gateway.v1.BifrostCallbackService/TopicCreated"
+	// BifrostCallbackServiceTopicDeletedProcedure is the fully-qualified name of the
+	// BifrostCallbackService's TopicDeleted RPC.
+	BifrostCallbackServiceTopicDeletedProcedure = "/idp.gateway.v1.BifrostCallbackService/TopicDeleted"
+	// BifrostCallbackServiceTopicConfigUpdatedProcedure is the fully-qualified name of the
+	// BifrostCallbackService's TopicConfigUpdated RPC.
+	BifrostCallbackServiceTopicConfigUpdatedProcedure = "/idp.gateway.v1.BifrostCallbackService/TopicConfigUpdated"
 )
 
 // BifrostAdminServiceClient is a client for the idp.gateway.v1.BifrostAdminService service.
@@ -61,11 +90,19 @@ type BifrostAdminServiceClient interface {
 	UpsertVirtualCluster(context.Context, *connect.Request[v1.UpsertVirtualClusterRequest]) (*connect.Response[v1.UpsertVirtualClusterResponse], error)
 	DeleteVirtualCluster(context.Context, *connect.Request[v1.DeleteVirtualClusterRequest]) (*connect.Response[v1.DeleteVirtualClusterResponse], error)
 	SetVirtualClusterReadOnly(context.Context, *connect.Request[v1.SetVirtualClusterReadOnlyRequest]) (*connect.Response[v1.SetVirtualClusterReadOnlyResponse], error)
+	// Credential management
+	UpsertCredential(context.Context, *connect.Request[v1.UpsertCredentialRequest]) (*connect.Response[v1.UpsertCredentialResponse], error)
+	RevokeCredential(context.Context, *connect.Request[v1.RevokeCredentialRequest]) (*connect.Response[v1.RevokeCredentialResponse], error)
+	ListCredentials(context.Context, *connect.Request[v1.ListCredentialsRequest]) (*connect.Response[v1.ListCredentialsResponse], error)
 	// Full sync (startup reconciliation)
 	GetFullConfig(context.Context, *connect.Request[v1.GetFullConfigRequest]) (*connect.Response[v1.GetFullConfigResponse], error)
 	// Health & observability
 	GetStatus(context.Context, *connect.Request[v1.GetStatusRequest]) (*connect.Response[v1.GetStatusResponse], error)
 	ListVirtualClusters(context.Context, *connect.Request[v1.ListVirtualClustersRequest]) (*connect.Response[v1.ListVirtualClustersResponse], error)
+	// Policy management
+	UpsertPolicy(context.Context, *connect.Request[v1.UpsertPolicyRequest]) (*connect.Response[v1.UpsertPolicyResponse], error)
+	DeletePolicy(context.Context, *connect.Request[v1.DeletePolicyRequest]) (*connect.Response[v1.DeletePolicyResponse], error)
+	ListPolicies(context.Context, *connect.Request[v1.ListPoliciesRequest]) (*connect.Response[v1.ListPoliciesResponse], error)
 }
 
 // NewBifrostAdminServiceClient constructs a client for the idp.gateway.v1.BifrostAdminService
@@ -97,6 +134,24 @@ func NewBifrostAdminServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(bifrostAdminServiceMethods.ByName("SetVirtualClusterReadOnly")),
 			connect.WithClientOptions(opts...),
 		),
+		upsertCredential: connect.NewClient[v1.UpsertCredentialRequest, v1.UpsertCredentialResponse](
+			httpClient,
+			baseURL+BifrostAdminServiceUpsertCredentialProcedure,
+			connect.WithSchema(bifrostAdminServiceMethods.ByName("UpsertCredential")),
+			connect.WithClientOptions(opts...),
+		),
+		revokeCredential: connect.NewClient[v1.RevokeCredentialRequest, v1.RevokeCredentialResponse](
+			httpClient,
+			baseURL+BifrostAdminServiceRevokeCredentialProcedure,
+			connect.WithSchema(bifrostAdminServiceMethods.ByName("RevokeCredential")),
+			connect.WithClientOptions(opts...),
+		),
+		listCredentials: connect.NewClient[v1.ListCredentialsRequest, v1.ListCredentialsResponse](
+			httpClient,
+			baseURL+BifrostAdminServiceListCredentialsProcedure,
+			connect.WithSchema(bifrostAdminServiceMethods.ByName("ListCredentials")),
+			connect.WithClientOptions(opts...),
+		),
 		getFullConfig: connect.NewClient[v1.GetFullConfigRequest, v1.GetFullConfigResponse](
 			httpClient,
 			baseURL+BifrostAdminServiceGetFullConfigProcedure,
@@ -115,6 +170,24 @@ func NewBifrostAdminServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(bifrostAdminServiceMethods.ByName("ListVirtualClusters")),
 			connect.WithClientOptions(opts...),
 		),
+		upsertPolicy: connect.NewClient[v1.UpsertPolicyRequest, v1.UpsertPolicyResponse](
+			httpClient,
+			baseURL+BifrostAdminServiceUpsertPolicyProcedure,
+			connect.WithSchema(bifrostAdminServiceMethods.ByName("UpsertPolicy")),
+			connect.WithClientOptions(opts...),
+		),
+		deletePolicy: connect.NewClient[v1.DeletePolicyRequest, v1.DeletePolicyResponse](
+			httpClient,
+			baseURL+BifrostAdminServiceDeletePolicyProcedure,
+			connect.WithSchema(bifrostAdminServiceMethods.ByName("DeletePolicy")),
+			connect.WithClientOptions(opts...),
+		),
+		listPolicies: connect.NewClient[v1.ListPoliciesRequest, v1.ListPoliciesResponse](
+			httpClient,
+			baseURL+BifrostAdminServiceListPoliciesProcedure,
+			connect.WithSchema(bifrostAdminServiceMethods.ByName("ListPolicies")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -123,9 +196,15 @@ type bifrostAdminServiceClient struct {
 	upsertVirtualCluster      *connect.Client[v1.UpsertVirtualClusterRequest, v1.UpsertVirtualClusterResponse]
 	deleteVirtualCluster      *connect.Client[v1.DeleteVirtualClusterRequest, v1.DeleteVirtualClusterResponse]
 	setVirtualClusterReadOnly *connect.Client[v1.SetVirtualClusterReadOnlyRequest, v1.SetVirtualClusterReadOnlyResponse]
+	upsertCredential          *connect.Client[v1.UpsertCredentialRequest, v1.UpsertCredentialResponse]
+	revokeCredential          *connect.Client[v1.RevokeCredentialRequest, v1.RevokeCredentialResponse]
+	listCredentials           *connect.Client[v1.ListCredentialsRequest, v1.ListCredentialsResponse]
 	getFullConfig             *connect.Client[v1.GetFullConfigRequest, v1.GetFullConfigResponse]
 	getStatus                 *connect.Client[v1.GetStatusRequest, v1.GetStatusResponse]
 	listVirtualClusters       *connect.Client[v1.ListVirtualClustersRequest, v1.ListVirtualClustersResponse]
+	upsertPolicy              *connect.Client[v1.UpsertPolicyRequest, v1.UpsertPolicyResponse]
+	deletePolicy              *connect.Client[v1.DeletePolicyRequest, v1.DeletePolicyResponse]
+	listPolicies              *connect.Client[v1.ListPoliciesRequest, v1.ListPoliciesResponse]
 }
 
 // UpsertVirtualCluster calls idp.gateway.v1.BifrostAdminService.UpsertVirtualCluster.
@@ -143,6 +222,21 @@ func (c *bifrostAdminServiceClient) SetVirtualClusterReadOnly(ctx context.Contex
 	return c.setVirtualClusterReadOnly.CallUnary(ctx, req)
 }
 
+// UpsertCredential calls idp.gateway.v1.BifrostAdminService.UpsertCredential.
+func (c *bifrostAdminServiceClient) UpsertCredential(ctx context.Context, req *connect.Request[v1.UpsertCredentialRequest]) (*connect.Response[v1.UpsertCredentialResponse], error) {
+	return c.upsertCredential.CallUnary(ctx, req)
+}
+
+// RevokeCredential calls idp.gateway.v1.BifrostAdminService.RevokeCredential.
+func (c *bifrostAdminServiceClient) RevokeCredential(ctx context.Context, req *connect.Request[v1.RevokeCredentialRequest]) (*connect.Response[v1.RevokeCredentialResponse], error) {
+	return c.revokeCredential.CallUnary(ctx, req)
+}
+
+// ListCredentials calls idp.gateway.v1.BifrostAdminService.ListCredentials.
+func (c *bifrostAdminServiceClient) ListCredentials(ctx context.Context, req *connect.Request[v1.ListCredentialsRequest]) (*connect.Response[v1.ListCredentialsResponse], error) {
+	return c.listCredentials.CallUnary(ctx, req)
+}
+
 // GetFullConfig calls idp.gateway.v1.BifrostAdminService.GetFullConfig.
 func (c *bifrostAdminServiceClient) GetFullConfig(ctx context.Context, req *connect.Request[v1.GetFullConfigRequest]) (*connect.Response[v1.GetFullConfigResponse], error) {
 	return c.getFullConfig.CallUnary(ctx, req)
@@ -158,6 +252,21 @@ func (c *bifrostAdminServiceClient) ListVirtualClusters(ctx context.Context, req
 	return c.listVirtualClusters.CallUnary(ctx, req)
 }
 
+// UpsertPolicy calls idp.gateway.v1.BifrostAdminService.UpsertPolicy.
+func (c *bifrostAdminServiceClient) UpsertPolicy(ctx context.Context, req *connect.Request[v1.UpsertPolicyRequest]) (*connect.Response[v1.UpsertPolicyResponse], error) {
+	return c.upsertPolicy.CallUnary(ctx, req)
+}
+
+// DeletePolicy calls idp.gateway.v1.BifrostAdminService.DeletePolicy.
+func (c *bifrostAdminServiceClient) DeletePolicy(ctx context.Context, req *connect.Request[v1.DeletePolicyRequest]) (*connect.Response[v1.DeletePolicyResponse], error) {
+	return c.deletePolicy.CallUnary(ctx, req)
+}
+
+// ListPolicies calls idp.gateway.v1.BifrostAdminService.ListPolicies.
+func (c *bifrostAdminServiceClient) ListPolicies(ctx context.Context, req *connect.Request[v1.ListPoliciesRequest]) (*connect.Response[v1.ListPoliciesResponse], error) {
+	return c.listPolicies.CallUnary(ctx, req)
+}
+
 // BifrostAdminServiceHandler is an implementation of the idp.gateway.v1.BifrostAdminService
 // service.
 type BifrostAdminServiceHandler interface {
@@ -165,11 +274,19 @@ type BifrostAdminServiceHandler interface {
 	UpsertVirtualCluster(context.Context, *connect.Request[v1.UpsertVirtualClusterRequest]) (*connect.Response[v1.UpsertVirtualClusterResponse], error)
 	DeleteVirtualCluster(context.Context, *connect.Request[v1.DeleteVirtualClusterRequest]) (*connect.Response[v1.DeleteVirtualClusterResponse], error)
 	SetVirtualClusterReadOnly(context.Context, *connect.Request[v1.SetVirtualClusterReadOnlyRequest]) (*connect.Response[v1.SetVirtualClusterReadOnlyResponse], error)
+	// Credential management
+	UpsertCredential(context.Context, *connect.Request[v1.UpsertCredentialRequest]) (*connect.Response[v1.UpsertCredentialResponse], error)
+	RevokeCredential(context.Context, *connect.Request[v1.RevokeCredentialRequest]) (*connect.Response[v1.RevokeCredentialResponse], error)
+	ListCredentials(context.Context, *connect.Request[v1.ListCredentialsRequest]) (*connect.Response[v1.ListCredentialsResponse], error)
 	// Full sync (startup reconciliation)
 	GetFullConfig(context.Context, *connect.Request[v1.GetFullConfigRequest]) (*connect.Response[v1.GetFullConfigResponse], error)
 	// Health & observability
 	GetStatus(context.Context, *connect.Request[v1.GetStatusRequest]) (*connect.Response[v1.GetStatusResponse], error)
 	ListVirtualClusters(context.Context, *connect.Request[v1.ListVirtualClustersRequest]) (*connect.Response[v1.ListVirtualClustersResponse], error)
+	// Policy management
+	UpsertPolicy(context.Context, *connect.Request[v1.UpsertPolicyRequest]) (*connect.Response[v1.UpsertPolicyResponse], error)
+	DeletePolicy(context.Context, *connect.Request[v1.DeletePolicyRequest]) (*connect.Response[v1.DeletePolicyResponse], error)
+	ListPolicies(context.Context, *connect.Request[v1.ListPoliciesRequest]) (*connect.Response[v1.ListPoliciesResponse], error)
 }
 
 // NewBifrostAdminServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -197,6 +314,24 @@ func NewBifrostAdminServiceHandler(svc BifrostAdminServiceHandler, opts ...conne
 		connect.WithSchema(bifrostAdminServiceMethods.ByName("SetVirtualClusterReadOnly")),
 		connect.WithHandlerOptions(opts...),
 	)
+	bifrostAdminServiceUpsertCredentialHandler := connect.NewUnaryHandler(
+		BifrostAdminServiceUpsertCredentialProcedure,
+		svc.UpsertCredential,
+		connect.WithSchema(bifrostAdminServiceMethods.ByName("UpsertCredential")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bifrostAdminServiceRevokeCredentialHandler := connect.NewUnaryHandler(
+		BifrostAdminServiceRevokeCredentialProcedure,
+		svc.RevokeCredential,
+		connect.WithSchema(bifrostAdminServiceMethods.ByName("RevokeCredential")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bifrostAdminServiceListCredentialsHandler := connect.NewUnaryHandler(
+		BifrostAdminServiceListCredentialsProcedure,
+		svc.ListCredentials,
+		connect.WithSchema(bifrostAdminServiceMethods.ByName("ListCredentials")),
+		connect.WithHandlerOptions(opts...),
+	)
 	bifrostAdminServiceGetFullConfigHandler := connect.NewUnaryHandler(
 		BifrostAdminServiceGetFullConfigProcedure,
 		svc.GetFullConfig,
@@ -215,6 +350,24 @@ func NewBifrostAdminServiceHandler(svc BifrostAdminServiceHandler, opts ...conne
 		connect.WithSchema(bifrostAdminServiceMethods.ByName("ListVirtualClusters")),
 		connect.WithHandlerOptions(opts...),
 	)
+	bifrostAdminServiceUpsertPolicyHandler := connect.NewUnaryHandler(
+		BifrostAdminServiceUpsertPolicyProcedure,
+		svc.UpsertPolicy,
+		connect.WithSchema(bifrostAdminServiceMethods.ByName("UpsertPolicy")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bifrostAdminServiceDeletePolicyHandler := connect.NewUnaryHandler(
+		BifrostAdminServiceDeletePolicyProcedure,
+		svc.DeletePolicy,
+		connect.WithSchema(bifrostAdminServiceMethods.ByName("DeletePolicy")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bifrostAdminServiceListPoliciesHandler := connect.NewUnaryHandler(
+		BifrostAdminServiceListPoliciesProcedure,
+		svc.ListPolicies,
+		connect.WithSchema(bifrostAdminServiceMethods.ByName("ListPolicies")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/idp.gateway.v1.BifrostAdminService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case BifrostAdminServiceUpsertVirtualClusterProcedure:
@@ -223,12 +376,24 @@ func NewBifrostAdminServiceHandler(svc BifrostAdminServiceHandler, opts ...conne
 			bifrostAdminServiceDeleteVirtualClusterHandler.ServeHTTP(w, r)
 		case BifrostAdminServiceSetVirtualClusterReadOnlyProcedure:
 			bifrostAdminServiceSetVirtualClusterReadOnlyHandler.ServeHTTP(w, r)
+		case BifrostAdminServiceUpsertCredentialProcedure:
+			bifrostAdminServiceUpsertCredentialHandler.ServeHTTP(w, r)
+		case BifrostAdminServiceRevokeCredentialProcedure:
+			bifrostAdminServiceRevokeCredentialHandler.ServeHTTP(w, r)
+		case BifrostAdminServiceListCredentialsProcedure:
+			bifrostAdminServiceListCredentialsHandler.ServeHTTP(w, r)
 		case BifrostAdminServiceGetFullConfigProcedure:
 			bifrostAdminServiceGetFullConfigHandler.ServeHTTP(w, r)
 		case BifrostAdminServiceGetStatusProcedure:
 			bifrostAdminServiceGetStatusHandler.ServeHTTP(w, r)
 		case BifrostAdminServiceListVirtualClustersProcedure:
 			bifrostAdminServiceListVirtualClustersHandler.ServeHTTP(w, r)
+		case BifrostAdminServiceUpsertPolicyProcedure:
+			bifrostAdminServiceUpsertPolicyHandler.ServeHTTP(w, r)
+		case BifrostAdminServiceDeletePolicyProcedure:
+			bifrostAdminServiceDeletePolicyHandler.ServeHTTP(w, r)
+		case BifrostAdminServiceListPoliciesProcedure:
+			bifrostAdminServiceListPoliciesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -250,6 +415,18 @@ func (UnimplementedBifrostAdminServiceHandler) SetVirtualClusterReadOnly(context
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.SetVirtualClusterReadOnly is not implemented"))
 }
 
+func (UnimplementedBifrostAdminServiceHandler) UpsertCredential(context.Context, *connect.Request[v1.UpsertCredentialRequest]) (*connect.Response[v1.UpsertCredentialResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.UpsertCredential is not implemented"))
+}
+
+func (UnimplementedBifrostAdminServiceHandler) RevokeCredential(context.Context, *connect.Request[v1.RevokeCredentialRequest]) (*connect.Response[v1.RevokeCredentialResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.RevokeCredential is not implemented"))
+}
+
+func (UnimplementedBifrostAdminServiceHandler) ListCredentials(context.Context, *connect.Request[v1.ListCredentialsRequest]) (*connect.Response[v1.ListCredentialsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.ListCredentials is not implemented"))
+}
+
 func (UnimplementedBifrostAdminServiceHandler) GetFullConfig(context.Context, *connect.Request[v1.GetFullConfigRequest]) (*connect.Response[v1.GetFullConfigResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.GetFullConfig is not implemented"))
 }
@@ -260,4 +437,141 @@ func (UnimplementedBifrostAdminServiceHandler) GetStatus(context.Context, *conne
 
 func (UnimplementedBifrostAdminServiceHandler) ListVirtualClusters(context.Context, *connect.Request[v1.ListVirtualClustersRequest]) (*connect.Response[v1.ListVirtualClustersResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.ListVirtualClusters is not implemented"))
+}
+
+func (UnimplementedBifrostAdminServiceHandler) UpsertPolicy(context.Context, *connect.Request[v1.UpsertPolicyRequest]) (*connect.Response[v1.UpsertPolicyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.UpsertPolicy is not implemented"))
+}
+
+func (UnimplementedBifrostAdminServiceHandler) DeletePolicy(context.Context, *connect.Request[v1.DeletePolicyRequest]) (*connect.Response[v1.DeletePolicyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.DeletePolicy is not implemented"))
+}
+
+func (UnimplementedBifrostAdminServiceHandler) ListPolicies(context.Context, *connect.Request[v1.ListPoliciesRequest]) (*connect.Response[v1.ListPoliciesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.ListPolicies is not implemented"))
+}
+
+// BifrostCallbackServiceClient is a client for the idp.gateway.v1.BifrostCallbackService service.
+type BifrostCallbackServiceClient interface {
+	// Topic sync (passthrough creates)
+	TopicCreated(context.Context, *connect.Request[v1.TopicCreatedRequest]) (*connect.Response[v1.TopicCreatedResponse], error)
+	TopicDeleted(context.Context, *connect.Request[v1.TopicDeletedRequest]) (*connect.Response[v1.TopicDeletedResponse], error)
+	TopicConfigUpdated(context.Context, *connect.Request[v1.TopicConfigUpdatedRequest]) (*connect.Response[v1.TopicConfigUpdatedResponse], error)
+}
+
+// NewBifrostCallbackServiceClient constructs a client for the idp.gateway.v1.BifrostCallbackService
+// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
+// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
+// the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewBifrostCallbackServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) BifrostCallbackServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	bifrostCallbackServiceMethods := v1.File_idp_gateway_v1_gateway_proto.Services().ByName("BifrostCallbackService").Methods()
+	return &bifrostCallbackServiceClient{
+		topicCreated: connect.NewClient[v1.TopicCreatedRequest, v1.TopicCreatedResponse](
+			httpClient,
+			baseURL+BifrostCallbackServiceTopicCreatedProcedure,
+			connect.WithSchema(bifrostCallbackServiceMethods.ByName("TopicCreated")),
+			connect.WithClientOptions(opts...),
+		),
+		topicDeleted: connect.NewClient[v1.TopicDeletedRequest, v1.TopicDeletedResponse](
+			httpClient,
+			baseURL+BifrostCallbackServiceTopicDeletedProcedure,
+			connect.WithSchema(bifrostCallbackServiceMethods.ByName("TopicDeleted")),
+			connect.WithClientOptions(opts...),
+		),
+		topicConfigUpdated: connect.NewClient[v1.TopicConfigUpdatedRequest, v1.TopicConfigUpdatedResponse](
+			httpClient,
+			baseURL+BifrostCallbackServiceTopicConfigUpdatedProcedure,
+			connect.WithSchema(bifrostCallbackServiceMethods.ByName("TopicConfigUpdated")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// bifrostCallbackServiceClient implements BifrostCallbackServiceClient.
+type bifrostCallbackServiceClient struct {
+	topicCreated       *connect.Client[v1.TopicCreatedRequest, v1.TopicCreatedResponse]
+	topicDeleted       *connect.Client[v1.TopicDeletedRequest, v1.TopicDeletedResponse]
+	topicConfigUpdated *connect.Client[v1.TopicConfigUpdatedRequest, v1.TopicConfigUpdatedResponse]
+}
+
+// TopicCreated calls idp.gateway.v1.BifrostCallbackService.TopicCreated.
+func (c *bifrostCallbackServiceClient) TopicCreated(ctx context.Context, req *connect.Request[v1.TopicCreatedRequest]) (*connect.Response[v1.TopicCreatedResponse], error) {
+	return c.topicCreated.CallUnary(ctx, req)
+}
+
+// TopicDeleted calls idp.gateway.v1.BifrostCallbackService.TopicDeleted.
+func (c *bifrostCallbackServiceClient) TopicDeleted(ctx context.Context, req *connect.Request[v1.TopicDeletedRequest]) (*connect.Response[v1.TopicDeletedResponse], error) {
+	return c.topicDeleted.CallUnary(ctx, req)
+}
+
+// TopicConfigUpdated calls idp.gateway.v1.BifrostCallbackService.TopicConfigUpdated.
+func (c *bifrostCallbackServiceClient) TopicConfigUpdated(ctx context.Context, req *connect.Request[v1.TopicConfigUpdatedRequest]) (*connect.Response[v1.TopicConfigUpdatedResponse], error) {
+	return c.topicConfigUpdated.CallUnary(ctx, req)
+}
+
+// BifrostCallbackServiceHandler is an implementation of the idp.gateway.v1.BifrostCallbackService
+// service.
+type BifrostCallbackServiceHandler interface {
+	// Topic sync (passthrough creates)
+	TopicCreated(context.Context, *connect.Request[v1.TopicCreatedRequest]) (*connect.Response[v1.TopicCreatedResponse], error)
+	TopicDeleted(context.Context, *connect.Request[v1.TopicDeletedRequest]) (*connect.Response[v1.TopicDeletedResponse], error)
+	TopicConfigUpdated(context.Context, *connect.Request[v1.TopicConfigUpdatedRequest]) (*connect.Response[v1.TopicConfigUpdatedResponse], error)
+}
+
+// NewBifrostCallbackServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewBifrostCallbackServiceHandler(svc BifrostCallbackServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	bifrostCallbackServiceMethods := v1.File_idp_gateway_v1_gateway_proto.Services().ByName("BifrostCallbackService").Methods()
+	bifrostCallbackServiceTopicCreatedHandler := connect.NewUnaryHandler(
+		BifrostCallbackServiceTopicCreatedProcedure,
+		svc.TopicCreated,
+		connect.WithSchema(bifrostCallbackServiceMethods.ByName("TopicCreated")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bifrostCallbackServiceTopicDeletedHandler := connect.NewUnaryHandler(
+		BifrostCallbackServiceTopicDeletedProcedure,
+		svc.TopicDeleted,
+		connect.WithSchema(bifrostCallbackServiceMethods.ByName("TopicDeleted")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bifrostCallbackServiceTopicConfigUpdatedHandler := connect.NewUnaryHandler(
+		BifrostCallbackServiceTopicConfigUpdatedProcedure,
+		svc.TopicConfigUpdated,
+		connect.WithSchema(bifrostCallbackServiceMethods.ByName("TopicConfigUpdated")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/idp.gateway.v1.BifrostCallbackService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case BifrostCallbackServiceTopicCreatedProcedure:
+			bifrostCallbackServiceTopicCreatedHandler.ServeHTTP(w, r)
+		case BifrostCallbackServiceTopicDeletedProcedure:
+			bifrostCallbackServiceTopicDeletedHandler.ServeHTTP(w, r)
+		case BifrostCallbackServiceTopicConfigUpdatedProcedure:
+			bifrostCallbackServiceTopicConfigUpdatedHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedBifrostCallbackServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedBifrostCallbackServiceHandler struct{}
+
+func (UnimplementedBifrostCallbackServiceHandler) TopicCreated(context.Context, *connect.Request[v1.TopicCreatedRequest]) (*connect.Response[v1.TopicCreatedResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostCallbackService.TopicCreated is not implemented"))
+}
+
+func (UnimplementedBifrostCallbackServiceHandler) TopicDeleted(context.Context, *connect.Request[v1.TopicDeletedRequest]) (*connect.Response[v1.TopicDeletedResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostCallbackService.TopicDeleted is not implemented"))
+}
+
+func (UnimplementedBifrostCallbackServiceHandler) TopicConfigUpdated(context.Context, *connect.Request[v1.TopicConfigUpdatedRequest]) (*connect.Response[v1.TopicConfigUpdatedResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostCallbackService.TopicConfigUpdated is not implemented"))
 }

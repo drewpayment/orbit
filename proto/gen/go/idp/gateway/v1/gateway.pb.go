@@ -24,6 +24,61 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type PermissionTemplate int32
+
+const (
+	PermissionTemplate_PERMISSION_TEMPLATE_UNSPECIFIED PermissionTemplate = 0
+	PermissionTemplate_PERMISSION_TEMPLATE_PRODUCER    PermissionTemplate = 1
+	PermissionTemplate_PERMISSION_TEMPLATE_CONSUMER    PermissionTemplate = 2
+	PermissionTemplate_PERMISSION_TEMPLATE_ADMIN       PermissionTemplate = 3
+	PermissionTemplate_PERMISSION_TEMPLATE_CUSTOM      PermissionTemplate = 4
+)
+
+// Enum value maps for PermissionTemplate.
+var (
+	PermissionTemplate_name = map[int32]string{
+		0: "PERMISSION_TEMPLATE_UNSPECIFIED",
+		1: "PERMISSION_TEMPLATE_PRODUCER",
+		2: "PERMISSION_TEMPLATE_CONSUMER",
+		3: "PERMISSION_TEMPLATE_ADMIN",
+		4: "PERMISSION_TEMPLATE_CUSTOM",
+	}
+	PermissionTemplate_value = map[string]int32{
+		"PERMISSION_TEMPLATE_UNSPECIFIED": 0,
+		"PERMISSION_TEMPLATE_PRODUCER":    1,
+		"PERMISSION_TEMPLATE_CONSUMER":    2,
+		"PERMISSION_TEMPLATE_ADMIN":       3,
+		"PERMISSION_TEMPLATE_CUSTOM":      4,
+	}
+)
+
+func (x PermissionTemplate) Enum() *PermissionTemplate {
+	p := new(PermissionTemplate)
+	*p = x
+	return p
+}
+
+func (x PermissionTemplate) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (PermissionTemplate) Descriptor() protoreflect.EnumDescriptor {
+	return file_idp_gateway_v1_gateway_proto_enumTypes[0].Descriptor()
+}
+
+func (PermissionTemplate) Type() protoreflect.EnumType {
+	return &file_idp_gateway_v1_gateway_proto_enumTypes[0]
+}
+
+func (x PermissionTemplate) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use PermissionTemplate.Descriptor instead.
+func (PermissionTemplate) EnumDescriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{0}
+}
+
 type VirtualClusterConfig struct {
 	state                    protoimpl.MessageState `protogen:"open.v1"`
 	Id                       string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -467,6 +522,8 @@ func (*GetFullConfigRequest) Descriptor() ([]byte, []int) {
 type GetFullConfigResponse struct {
 	state           protoimpl.MessageState  `protogen:"open.v1"`
 	VirtualClusters []*VirtualClusterConfig `protobuf:"bytes,1,rep,name=virtual_clusters,json=virtualClusters,proto3" json:"virtual_clusters,omitempty"`
+	Credentials     []*CredentialConfig     `protobuf:"bytes,2,rep,name=credentials,proto3" json:"credentials,omitempty"`
+	Policies        []*PolicyConfig         `protobuf:"bytes,3,rep,name=policies,proto3" json:"policies,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -504,6 +561,20 @@ func (*GetFullConfigResponse) Descriptor() ([]byte, []int) {
 func (x *GetFullConfigResponse) GetVirtualClusters() []*VirtualClusterConfig {
 	if x != nil {
 		return x.VirtualClusters
+	}
+	return nil
+}
+
+func (x *GetFullConfigResponse) GetCredentials() []*CredentialConfig {
+	if x != nil {
+		return x.Credentials
+	}
+	return nil
+}
+
+func (x *GetFullConfigResponse) GetPolicies() []*PolicyConfig {
+	if x != nil {
+		return x.Policies
 	}
 	return nil
 }
@@ -692,6 +763,1230 @@ func (x *ListVirtualClustersResponse) GetVirtualClusters() []*VirtualClusterConf
 	return nil
 }
 
+type CustomPermission struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ResourceType    string                 `protobuf:"bytes,1,opt,name=resource_type,json=resourceType,proto3" json:"resource_type,omitempty"`          // topic, group, transactional_id
+	ResourcePattern string                 `protobuf:"bytes,2,opt,name=resource_pattern,json=resourcePattern,proto3" json:"resource_pattern,omitempty"` // regex or literal
+	Operations      []string               `protobuf:"bytes,3,rep,name=operations,proto3" json:"operations,omitempty"`                                  // read, write, create, delete, alter
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *CustomPermission) Reset() {
+	*x = CustomPermission{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CustomPermission) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CustomPermission) ProtoMessage() {}
+
+func (x *CustomPermission) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CustomPermission.ProtoReflect.Descriptor instead.
+func (*CustomPermission) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *CustomPermission) GetResourceType() string {
+	if x != nil {
+		return x.ResourceType
+	}
+	return ""
+}
+
+func (x *CustomPermission) GetResourcePattern() string {
+	if x != nil {
+		return x.ResourcePattern
+	}
+	return ""
+}
+
+func (x *CustomPermission) GetOperations() []string {
+	if x != nil {
+		return x.Operations
+	}
+	return nil
+}
+
+type CredentialConfig struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	VirtualClusterId  string                 `protobuf:"bytes,2,opt,name=virtual_cluster_id,json=virtualClusterId,proto3" json:"virtual_cluster_id,omitempty"`
+	Username          string                 `protobuf:"bytes,3,opt,name=username,proto3" json:"username,omitempty"`
+	PasswordHash      string                 `protobuf:"bytes,4,opt,name=password_hash,json=passwordHash,proto3" json:"password_hash,omitempty"`
+	Template          PermissionTemplate     `protobuf:"varint,5,opt,name=template,proto3,enum=idp.gateway.v1.PermissionTemplate" json:"template,omitempty"`
+	CustomPermissions []*CustomPermission    `protobuf:"bytes,6,rep,name=custom_permissions,json=customPermissions,proto3" json:"custom_permissions,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *CredentialConfig) Reset() {
+	*x = CredentialConfig{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CredentialConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CredentialConfig) ProtoMessage() {}
+
+func (x *CredentialConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CredentialConfig.ProtoReflect.Descriptor instead.
+func (*CredentialConfig) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *CredentialConfig) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *CredentialConfig) GetVirtualClusterId() string {
+	if x != nil {
+		return x.VirtualClusterId
+	}
+	return ""
+}
+
+func (x *CredentialConfig) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *CredentialConfig) GetPasswordHash() string {
+	if x != nil {
+		return x.PasswordHash
+	}
+	return ""
+}
+
+func (x *CredentialConfig) GetTemplate() PermissionTemplate {
+	if x != nil {
+		return x.Template
+	}
+	return PermissionTemplate_PERMISSION_TEMPLATE_UNSPECIFIED
+}
+
+func (x *CredentialConfig) GetCustomPermissions() []*CustomPermission {
+	if x != nil {
+		return x.CustomPermissions
+	}
+	return nil
+}
+
+type UpsertCredentialRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Config        *CredentialConfig      `protobuf:"bytes,1,opt,name=config,proto3" json:"config,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpsertCredentialRequest) Reset() {
+	*x = UpsertCredentialRequest{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpsertCredentialRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpsertCredentialRequest) ProtoMessage() {}
+
+func (x *UpsertCredentialRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpsertCredentialRequest.ProtoReflect.Descriptor instead.
+func (*UpsertCredentialRequest) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *UpsertCredentialRequest) GetConfig() *CredentialConfig {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
+type UpsertCredentialResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpsertCredentialResponse) Reset() {
+	*x = UpsertCredentialResponse{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpsertCredentialResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpsertCredentialResponse) ProtoMessage() {}
+
+func (x *UpsertCredentialResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpsertCredentialResponse.ProtoReflect.Descriptor instead.
+func (*UpsertCredentialResponse) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *UpsertCredentialResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+type RevokeCredentialRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CredentialId  string                 `protobuf:"bytes,1,opt,name=credential_id,json=credentialId,proto3" json:"credential_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeCredentialRequest) Reset() {
+	*x = RevokeCredentialRequest{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeCredentialRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeCredentialRequest) ProtoMessage() {}
+
+func (x *RevokeCredentialRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeCredentialRequest.ProtoReflect.Descriptor instead.
+func (*RevokeCredentialRequest) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *RevokeCredentialRequest) GetCredentialId() string {
+	if x != nil {
+		return x.CredentialId
+	}
+	return ""
+}
+
+type RevokeCredentialResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeCredentialResponse) Reset() {
+	*x = RevokeCredentialResponse{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeCredentialResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeCredentialResponse) ProtoMessage() {}
+
+func (x *RevokeCredentialResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeCredentialResponse.ProtoReflect.Descriptor instead.
+func (*RevokeCredentialResponse) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *RevokeCredentialResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+type ListCredentialsRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	VirtualClusterId string                 `protobuf:"bytes,1,opt,name=virtual_cluster_id,json=virtualClusterId,proto3" json:"virtual_cluster_id,omitempty"` // Optional filter
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ListCredentialsRequest) Reset() {
+	*x = ListCredentialsRequest{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCredentialsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCredentialsRequest) ProtoMessage() {}
+
+func (x *ListCredentialsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCredentialsRequest.ProtoReflect.Descriptor instead.
+func (*ListCredentialsRequest) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ListCredentialsRequest) GetVirtualClusterId() string {
+	if x != nil {
+		return x.VirtualClusterId
+	}
+	return ""
+}
+
+type ListCredentialsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Credentials   []*CredentialConfig    `protobuf:"bytes,1,rep,name=credentials,proto3" json:"credentials,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListCredentialsResponse) Reset() {
+	*x = ListCredentialsResponse{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCredentialsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCredentialsResponse) ProtoMessage() {}
+
+func (x *ListCredentialsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCredentialsResponse.ProtoReflect.Descriptor instead.
+func (*ListCredentialsResponse) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *ListCredentialsResponse) GetCredentials() []*CredentialConfig {
+	if x != nil {
+		return x.Credentials
+	}
+	return nil
+}
+
+type PolicyConfig struct {
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	Id                     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Environment            string                 `protobuf:"bytes,2,opt,name=environment,proto3" json:"environment,omitempty"` // dev, staging, prod
+	MaxPartitions          int32                  `protobuf:"varint,3,opt,name=max_partitions,json=maxPartitions,proto3" json:"max_partitions,omitempty"`
+	MinPartitions          int32                  `protobuf:"varint,4,opt,name=min_partitions,json=minPartitions,proto3" json:"min_partitions,omitempty"`
+	MaxRetentionMs         int64                  `protobuf:"varint,5,opt,name=max_retention_ms,json=maxRetentionMs,proto3" json:"max_retention_ms,omitempty"`
+	MinReplicationFactor   int32                  `protobuf:"varint,6,opt,name=min_replication_factor,json=minReplicationFactor,proto3" json:"min_replication_factor,omitempty"`
+	AllowedCleanupPolicies []string               `protobuf:"bytes,7,rep,name=allowed_cleanup_policies,json=allowedCleanupPolicies,proto3" json:"allowed_cleanup_policies,omitempty"`
+	NamingPattern          string                 `protobuf:"bytes,8,opt,name=naming_pattern,json=namingPattern,proto3" json:"naming_pattern,omitempty"` // regex for valid topic names
+	MaxNameLength          int32                  `protobuf:"varint,9,opt,name=max_name_length,json=maxNameLength,proto3" json:"max_name_length,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *PolicyConfig) Reset() {
+	*x = PolicyConfig{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PolicyConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PolicyConfig) ProtoMessage() {}
+
+func (x *PolicyConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PolicyConfig.ProtoReflect.Descriptor instead.
+func (*PolicyConfig) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *PolicyConfig) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *PolicyConfig) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
+	}
+	return ""
+}
+
+func (x *PolicyConfig) GetMaxPartitions() int32 {
+	if x != nil {
+		return x.MaxPartitions
+	}
+	return 0
+}
+
+func (x *PolicyConfig) GetMinPartitions() int32 {
+	if x != nil {
+		return x.MinPartitions
+	}
+	return 0
+}
+
+func (x *PolicyConfig) GetMaxRetentionMs() int64 {
+	if x != nil {
+		return x.MaxRetentionMs
+	}
+	return 0
+}
+
+func (x *PolicyConfig) GetMinReplicationFactor() int32 {
+	if x != nil {
+		return x.MinReplicationFactor
+	}
+	return 0
+}
+
+func (x *PolicyConfig) GetAllowedCleanupPolicies() []string {
+	if x != nil {
+		return x.AllowedCleanupPolicies
+	}
+	return nil
+}
+
+func (x *PolicyConfig) GetNamingPattern() string {
+	if x != nil {
+		return x.NamingPattern
+	}
+	return ""
+}
+
+func (x *PolicyConfig) GetMaxNameLength() int32 {
+	if x != nil {
+		return x.MaxNameLength
+	}
+	return 0
+}
+
+type UpsertPolicyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Config        *PolicyConfig          `protobuf:"bytes,1,opt,name=config,proto3" json:"config,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpsertPolicyRequest) Reset() {
+	*x = UpsertPolicyRequest{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpsertPolicyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpsertPolicyRequest) ProtoMessage() {}
+
+func (x *UpsertPolicyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpsertPolicyRequest.ProtoReflect.Descriptor instead.
+func (*UpsertPolicyRequest) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *UpsertPolicyRequest) GetConfig() *PolicyConfig {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
+type UpsertPolicyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpsertPolicyResponse) Reset() {
+	*x = UpsertPolicyResponse{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpsertPolicyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpsertPolicyResponse) ProtoMessage() {}
+
+func (x *UpsertPolicyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpsertPolicyResponse.ProtoReflect.Descriptor instead.
+func (*UpsertPolicyResponse) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *UpsertPolicyResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+type DeletePolicyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PolicyId      string                 `protobuf:"bytes,1,opt,name=policy_id,json=policyId,proto3" json:"policy_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeletePolicyRequest) Reset() {
+	*x = DeletePolicyRequest{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeletePolicyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeletePolicyRequest) ProtoMessage() {}
+
+func (x *DeletePolicyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeletePolicyRequest.ProtoReflect.Descriptor instead.
+func (*DeletePolicyRequest) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *DeletePolicyRequest) GetPolicyId() string {
+	if x != nil {
+		return x.PolicyId
+	}
+	return ""
+}
+
+type DeletePolicyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeletePolicyResponse) Reset() {
+	*x = DeletePolicyResponse{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeletePolicyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeletePolicyResponse) ProtoMessage() {}
+
+func (x *DeletePolicyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeletePolicyResponse.ProtoReflect.Descriptor instead.
+func (*DeletePolicyResponse) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *DeletePolicyResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+type ListPoliciesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Environment   string                 `protobuf:"bytes,1,opt,name=environment,proto3" json:"environment,omitempty"` // Optional filter
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPoliciesRequest) Reset() {
+	*x = ListPoliciesRequest{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPoliciesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPoliciesRequest) ProtoMessage() {}
+
+func (x *ListPoliciesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPoliciesRequest.ProtoReflect.Descriptor instead.
+func (*ListPoliciesRequest) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *ListPoliciesRequest) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
+	}
+	return ""
+}
+
+type ListPoliciesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Policies      []*PolicyConfig        `protobuf:"bytes,1,rep,name=policies,proto3" json:"policies,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPoliciesResponse) Reset() {
+	*x = ListPoliciesResponse{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPoliciesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPoliciesResponse) ProtoMessage() {}
+
+func (x *ListPoliciesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPoliciesResponse.ProtoReflect.Descriptor instead.
+func (*ListPoliciesResponse) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *ListPoliciesResponse) GetPolicies() []*PolicyConfig {
+	if x != nil {
+		return x.Policies
+	}
+	return nil
+}
+
+type TopicCreatedRequest struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	VirtualClusterId      string                 `protobuf:"bytes,1,opt,name=virtual_cluster_id,json=virtualClusterId,proto3" json:"virtual_cluster_id,omitempty"`
+	VirtualName           string                 `protobuf:"bytes,2,opt,name=virtual_name,json=virtualName,proto3" json:"virtual_name,omitempty"`    // Topic name as client sees it
+	PhysicalName          string                 `protobuf:"bytes,3,opt,name=physical_name,json=physicalName,proto3" json:"physical_name,omitempty"` // Full prefixed name on broker
+	Partitions            int32                  `protobuf:"varint,4,opt,name=partitions,proto3" json:"partitions,omitempty"`
+	ReplicationFactor     int32                  `protobuf:"varint,5,opt,name=replication_factor,json=replicationFactor,proto3" json:"replication_factor,omitempty"`
+	Config                map[string]string      `protobuf:"bytes,6,rep,name=config,proto3" json:"config,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	CreatedByCredentialId string                 `protobuf:"bytes,7,opt,name=created_by_credential_id,json=createdByCredentialId,proto3" json:"created_by_credential_id,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *TopicCreatedRequest) Reset() {
+	*x = TopicCreatedRequest{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TopicCreatedRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TopicCreatedRequest) ProtoMessage() {}
+
+func (x *TopicCreatedRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TopicCreatedRequest.ProtoReflect.Descriptor instead.
+func (*TopicCreatedRequest) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *TopicCreatedRequest) GetVirtualClusterId() string {
+	if x != nil {
+		return x.VirtualClusterId
+	}
+	return ""
+}
+
+func (x *TopicCreatedRequest) GetVirtualName() string {
+	if x != nil {
+		return x.VirtualName
+	}
+	return ""
+}
+
+func (x *TopicCreatedRequest) GetPhysicalName() string {
+	if x != nil {
+		return x.PhysicalName
+	}
+	return ""
+}
+
+func (x *TopicCreatedRequest) GetPartitions() int32 {
+	if x != nil {
+		return x.Partitions
+	}
+	return 0
+}
+
+func (x *TopicCreatedRequest) GetReplicationFactor() int32 {
+	if x != nil {
+		return x.ReplicationFactor
+	}
+	return 0
+}
+
+func (x *TopicCreatedRequest) GetConfig() map[string]string {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
+func (x *TopicCreatedRequest) GetCreatedByCredentialId() string {
+	if x != nil {
+		return x.CreatedByCredentialId
+	}
+	return ""
+}
+
+type TopicCreatedResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	TopicId       string                 `protobuf:"bytes,2,opt,name=topic_id,json=topicId,proto3" json:"topic_id,omitempty"` // Orbit's topic record ID
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TopicCreatedResponse) Reset() {
+	*x = TopicCreatedResponse{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TopicCreatedResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TopicCreatedResponse) ProtoMessage() {}
+
+func (x *TopicCreatedResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TopicCreatedResponse.ProtoReflect.Descriptor instead.
+func (*TopicCreatedResponse) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *TopicCreatedResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *TopicCreatedResponse) GetTopicId() string {
+	if x != nil {
+		return x.TopicId
+	}
+	return ""
+}
+
+type TopicDeletedRequest struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	VirtualClusterId      string                 `protobuf:"bytes,1,opt,name=virtual_cluster_id,json=virtualClusterId,proto3" json:"virtual_cluster_id,omitempty"`
+	VirtualName           string                 `protobuf:"bytes,2,opt,name=virtual_name,json=virtualName,proto3" json:"virtual_name,omitempty"`
+	PhysicalName          string                 `protobuf:"bytes,3,opt,name=physical_name,json=physicalName,proto3" json:"physical_name,omitempty"`
+	DeletedByCredentialId string                 `protobuf:"bytes,4,opt,name=deleted_by_credential_id,json=deletedByCredentialId,proto3" json:"deleted_by_credential_id,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *TopicDeletedRequest) Reset() {
+	*x = TopicDeletedRequest{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TopicDeletedRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TopicDeletedRequest) ProtoMessage() {}
+
+func (x *TopicDeletedRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TopicDeletedRequest.ProtoReflect.Descriptor instead.
+func (*TopicDeletedRequest) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *TopicDeletedRequest) GetVirtualClusterId() string {
+	if x != nil {
+		return x.VirtualClusterId
+	}
+	return ""
+}
+
+func (x *TopicDeletedRequest) GetVirtualName() string {
+	if x != nil {
+		return x.VirtualName
+	}
+	return ""
+}
+
+func (x *TopicDeletedRequest) GetPhysicalName() string {
+	if x != nil {
+		return x.PhysicalName
+	}
+	return ""
+}
+
+func (x *TopicDeletedRequest) GetDeletedByCredentialId() string {
+	if x != nil {
+		return x.DeletedByCredentialId
+	}
+	return ""
+}
+
+type TopicDeletedResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TopicDeletedResponse) Reset() {
+	*x = TopicDeletedResponse{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TopicDeletedResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TopicDeletedResponse) ProtoMessage() {}
+
+func (x *TopicDeletedResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TopicDeletedResponse.ProtoReflect.Descriptor instead.
+func (*TopicDeletedResponse) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *TopicDeletedResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+type TopicConfigUpdatedRequest struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	VirtualClusterId      string                 `protobuf:"bytes,1,opt,name=virtual_cluster_id,json=virtualClusterId,proto3" json:"virtual_cluster_id,omitempty"`
+	VirtualName           string                 `protobuf:"bytes,2,opt,name=virtual_name,json=virtualName,proto3" json:"virtual_name,omitempty"`
+	Config                map[string]string      `protobuf:"bytes,3,rep,name=config,proto3" json:"config,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	UpdatedByCredentialId string                 `protobuf:"bytes,4,opt,name=updated_by_credential_id,json=updatedByCredentialId,proto3" json:"updated_by_credential_id,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *TopicConfigUpdatedRequest) Reset() {
+	*x = TopicConfigUpdatedRequest{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TopicConfigUpdatedRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TopicConfigUpdatedRequest) ProtoMessage() {}
+
+func (x *TopicConfigUpdatedRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TopicConfigUpdatedRequest.ProtoReflect.Descriptor instead.
+func (*TopicConfigUpdatedRequest) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *TopicConfigUpdatedRequest) GetVirtualClusterId() string {
+	if x != nil {
+		return x.VirtualClusterId
+	}
+	return ""
+}
+
+func (x *TopicConfigUpdatedRequest) GetVirtualName() string {
+	if x != nil {
+		return x.VirtualName
+	}
+	return ""
+}
+
+func (x *TopicConfigUpdatedRequest) GetConfig() map[string]string {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
+func (x *TopicConfigUpdatedRequest) GetUpdatedByCredentialId() string {
+	if x != nil {
+		return x.UpdatedByCredentialId
+	}
+	return ""
+}
+
+type TopicConfigUpdatedResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TopicConfigUpdatedResponse) Reset() {
+	*x = TopicConfigUpdatedResponse{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TopicConfigUpdatedResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TopicConfigUpdatedResponse) ProtoMessage() {}
+
+func (x *TopicConfigUpdatedResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TopicConfigUpdatedResponse.ProtoReflect.Descriptor instead.
+func (*TopicConfigUpdatedResponse) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *TopicConfigUpdatedResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+type PolicyViolation struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Field         string                 `protobuf:"bytes,1,opt,name=field,proto3" json:"field,omitempty"`           // e.g., "partitions", "retention.ms"
+	Constraint    string                 `protobuf:"bytes,2,opt,name=constraint,proto3" json:"constraint,omitempty"` // e.g., "max_partitions"
+	Message       string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`       // Human-readable error
+	ActualValue   string                 `protobuf:"bytes,4,opt,name=actual_value,json=actualValue,proto3" json:"actual_value,omitempty"`
+	AllowedValue  string                 `protobuf:"bytes,5,opt,name=allowed_value,json=allowedValue,proto3" json:"allowed_value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PolicyViolation) Reset() {
+	*x = PolicyViolation{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PolicyViolation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PolicyViolation) ProtoMessage() {}
+
+func (x *PolicyViolation) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PolicyViolation.ProtoReflect.Descriptor instead.
+func (*PolicyViolation) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *PolicyViolation) GetField() string {
+	if x != nil {
+		return x.Field
+	}
+	return ""
+}
+
+func (x *PolicyViolation) GetConstraint() string {
+	if x != nil {
+		return x.Constraint
+	}
+	return ""
+}
+
+func (x *PolicyViolation) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *PolicyViolation) GetActualValue() string {
+	if x != nil {
+		return x.ActualValue
+	}
+	return ""
+}
+
+func (x *PolicyViolation) GetAllowedValue() string {
+	if x != nil {
+		return x.AllowedValue
+	}
+	return ""
+}
+
 var File_idp_gateway_v1_gateway_proto protoreflect.FileDescriptor
 
 const file_idp_gateway_v1_gateway_proto_rawDesc = "" +
@@ -724,9 +2019,11 @@ const file_idp_gateway_v1_gateway_proto_rawDesc = "" +
 	"\tread_only\x18\x02 \x01(\bR\breadOnly\"=\n" +
 	"!SetVirtualClusterReadOnlyResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\"\x16\n" +
-	"\x14GetFullConfigRequest\"h\n" +
+	"\x14GetFullConfigRequest\"\xe6\x01\n" +
 	"\x15GetFullConfigResponse\x12O\n" +
-	"\x10virtual_clusters\x18\x01 \x03(\v2$.idp.gateway.v1.VirtualClusterConfigR\x0fvirtualClusters\"\x12\n" +
+	"\x10virtual_clusters\x18\x01 \x03(\v2$.idp.gateway.v1.VirtualClusterConfigR\x0fvirtualClusters\x12B\n" +
+	"\vcredentials\x18\x02 \x03(\v2 .idp.gateway.v1.CredentialConfigR\vcredentials\x128\n" +
+	"\bpolicies\x18\x03 \x03(\v2\x1c.idp.gateway.v1.PolicyConfigR\bpolicies\"\x12\n" +
 	"\x10GetStatusRequest\"\xa5\x02\n" +
 	"\x11GetStatusResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12-\n" +
@@ -738,14 +2035,118 @@ const file_idp_gateway_v1_gateway_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x1c\n" +
 	"\x1aListVirtualClustersRequest\"n\n" +
 	"\x1bListVirtualClustersResponse\x12O\n" +
-	"\x10virtual_clusters\x18\x01 \x03(\v2$.idp.gateway.v1.VirtualClusterConfigR\x0fvirtualClusters2\x9e\x05\n" +
+	"\x10virtual_clusters\x18\x01 \x03(\v2$.idp.gateway.v1.VirtualClusterConfigR\x0fvirtualClusters\"\x82\x01\n" +
+	"\x10CustomPermission\x12#\n" +
+	"\rresource_type\x18\x01 \x01(\tR\fresourceType\x12)\n" +
+	"\x10resource_pattern\x18\x02 \x01(\tR\x0fresourcePattern\x12\x1e\n" +
+	"\n" +
+	"operations\x18\x03 \x03(\tR\n" +
+	"operations\"\xa2\x02\n" +
+	"\x10CredentialConfig\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12,\n" +
+	"\x12virtual_cluster_id\x18\x02 \x01(\tR\x10virtualClusterId\x12\x1a\n" +
+	"\busername\x18\x03 \x01(\tR\busername\x12#\n" +
+	"\rpassword_hash\x18\x04 \x01(\tR\fpasswordHash\x12>\n" +
+	"\btemplate\x18\x05 \x01(\x0e2\".idp.gateway.v1.PermissionTemplateR\btemplate\x12O\n" +
+	"\x12custom_permissions\x18\x06 \x03(\v2 .idp.gateway.v1.CustomPermissionR\x11customPermissions\"S\n" +
+	"\x17UpsertCredentialRequest\x128\n" +
+	"\x06config\x18\x01 \x01(\v2 .idp.gateway.v1.CredentialConfigR\x06config\"4\n" +
+	"\x18UpsertCredentialResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\">\n" +
+	"\x17RevokeCredentialRequest\x12#\n" +
+	"\rcredential_id\x18\x01 \x01(\tR\fcredentialId\"4\n" +
+	"\x18RevokeCredentialResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"F\n" +
+	"\x16ListCredentialsRequest\x12,\n" +
+	"\x12virtual_cluster_id\x18\x01 \x01(\tR\x10virtualClusterId\"]\n" +
+	"\x17ListCredentialsResponse\x12B\n" +
+	"\vcredentials\x18\x01 \x03(\v2 .idp.gateway.v1.CredentialConfigR\vcredentials\"\xf7\x02\n" +
+	"\fPolicyConfig\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12 \n" +
+	"\venvironment\x18\x02 \x01(\tR\venvironment\x12%\n" +
+	"\x0emax_partitions\x18\x03 \x01(\x05R\rmaxPartitions\x12%\n" +
+	"\x0emin_partitions\x18\x04 \x01(\x05R\rminPartitions\x12(\n" +
+	"\x10max_retention_ms\x18\x05 \x01(\x03R\x0emaxRetentionMs\x124\n" +
+	"\x16min_replication_factor\x18\x06 \x01(\x05R\x14minReplicationFactor\x128\n" +
+	"\x18allowed_cleanup_policies\x18\a \x03(\tR\x16allowedCleanupPolicies\x12%\n" +
+	"\x0enaming_pattern\x18\b \x01(\tR\rnamingPattern\x12&\n" +
+	"\x0fmax_name_length\x18\t \x01(\x05R\rmaxNameLength\"K\n" +
+	"\x13UpsertPolicyRequest\x124\n" +
+	"\x06config\x18\x01 \x01(\v2\x1c.idp.gateway.v1.PolicyConfigR\x06config\"0\n" +
+	"\x14UpsertPolicyResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"2\n" +
+	"\x13DeletePolicyRequest\x12\x1b\n" +
+	"\tpolicy_id\x18\x01 \x01(\tR\bpolicyId\"0\n" +
+	"\x14DeletePolicyResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"7\n" +
+	"\x13ListPoliciesRequest\x12 \n" +
+	"\venvironment\x18\x01 \x01(\tR\venvironment\"P\n" +
+	"\x14ListPoliciesResponse\x128\n" +
+	"\bpolicies\x18\x01 \x03(\v2\x1c.idp.gateway.v1.PolicyConfigR\bpolicies\"\x97\x03\n" +
+	"\x13TopicCreatedRequest\x12,\n" +
+	"\x12virtual_cluster_id\x18\x01 \x01(\tR\x10virtualClusterId\x12!\n" +
+	"\fvirtual_name\x18\x02 \x01(\tR\vvirtualName\x12#\n" +
+	"\rphysical_name\x18\x03 \x01(\tR\fphysicalName\x12\x1e\n" +
+	"\n" +
+	"partitions\x18\x04 \x01(\x05R\n" +
+	"partitions\x12-\n" +
+	"\x12replication_factor\x18\x05 \x01(\x05R\x11replicationFactor\x12G\n" +
+	"\x06config\x18\x06 \x03(\v2/.idp.gateway.v1.TopicCreatedRequest.ConfigEntryR\x06config\x127\n" +
+	"\x18created_by_credential_id\x18\a \x01(\tR\x15createdByCredentialId\x1a9\n" +
+	"\vConfigEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"K\n" +
+	"\x14TopicCreatedResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x19\n" +
+	"\btopic_id\x18\x02 \x01(\tR\atopicId\"\xc4\x01\n" +
+	"\x13TopicDeletedRequest\x12,\n" +
+	"\x12virtual_cluster_id\x18\x01 \x01(\tR\x10virtualClusterId\x12!\n" +
+	"\fvirtual_name\x18\x02 \x01(\tR\vvirtualName\x12#\n" +
+	"\rphysical_name\x18\x03 \x01(\tR\fphysicalName\x127\n" +
+	"\x18deleted_by_credential_id\x18\x04 \x01(\tR\x15deletedByCredentialId\"0\n" +
+	"\x14TopicDeletedResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"\xaf\x02\n" +
+	"\x19TopicConfigUpdatedRequest\x12,\n" +
+	"\x12virtual_cluster_id\x18\x01 \x01(\tR\x10virtualClusterId\x12!\n" +
+	"\fvirtual_name\x18\x02 \x01(\tR\vvirtualName\x12M\n" +
+	"\x06config\x18\x03 \x03(\v25.idp.gateway.v1.TopicConfigUpdatedRequest.ConfigEntryR\x06config\x127\n" +
+	"\x18updated_by_credential_id\x18\x04 \x01(\tR\x15updatedByCredentialId\x1a9\n" +
+	"\vConfigEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"6\n" +
+	"\x1aTopicConfigUpdatedResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"\xa9\x01\n" +
+	"\x0fPolicyViolation\x12\x14\n" +
+	"\x05field\x18\x01 \x01(\tR\x05field\x12\x1e\n" +
+	"\n" +
+	"constraint\x18\x02 \x01(\tR\n" +
+	"constraint\x12\x18\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage\x12!\n" +
+	"\factual_value\x18\x04 \x01(\tR\vactualValue\x12#\n" +
+	"\rallowed_value\x18\x05 \x01(\tR\fallowedValue*\xbc\x01\n" +
+	"\x12PermissionTemplate\x12#\n" +
+	"\x1fPERMISSION_TEMPLATE_UNSPECIFIED\x10\x00\x12 \n" +
+	"\x1cPERMISSION_TEMPLATE_PRODUCER\x10\x01\x12 \n" +
+	"\x1cPERMISSION_TEMPLATE_CONSUMER\x10\x02\x12\x1d\n" +
+	"\x19PERMISSION_TEMPLATE_ADMIN\x10\x03\x12\x1e\n" +
+	"\x1aPERMISSION_TEMPLATE_CUSTOM\x10\x042\xe1\t\n" +
 	"\x13BifrostAdminService\x12q\n" +
 	"\x14UpsertVirtualCluster\x12+.idp.gateway.v1.UpsertVirtualClusterRequest\x1a,.idp.gateway.v1.UpsertVirtualClusterResponse\x12q\n" +
 	"\x14DeleteVirtualCluster\x12+.idp.gateway.v1.DeleteVirtualClusterRequest\x1a,.idp.gateway.v1.DeleteVirtualClusterResponse\x12\x80\x01\n" +
-	"\x19SetVirtualClusterReadOnly\x120.idp.gateway.v1.SetVirtualClusterReadOnlyRequest\x1a1.idp.gateway.v1.SetVirtualClusterReadOnlyResponse\x12\\\n" +
+	"\x19SetVirtualClusterReadOnly\x120.idp.gateway.v1.SetVirtualClusterReadOnlyRequest\x1a1.idp.gateway.v1.SetVirtualClusterReadOnlyResponse\x12e\n" +
+	"\x10UpsertCredential\x12'.idp.gateway.v1.UpsertCredentialRequest\x1a(.idp.gateway.v1.UpsertCredentialResponse\x12e\n" +
+	"\x10RevokeCredential\x12'.idp.gateway.v1.RevokeCredentialRequest\x1a(.idp.gateway.v1.RevokeCredentialResponse\x12b\n" +
+	"\x0fListCredentials\x12&.idp.gateway.v1.ListCredentialsRequest\x1a'.idp.gateway.v1.ListCredentialsResponse\x12\\\n" +
 	"\rGetFullConfig\x12$.idp.gateway.v1.GetFullConfigRequest\x1a%.idp.gateway.v1.GetFullConfigResponse\x12P\n" +
 	"\tGetStatus\x12 .idp.gateway.v1.GetStatusRequest\x1a!.idp.gateway.v1.GetStatusResponse\x12n\n" +
-	"\x13ListVirtualClusters\x12*.idp.gateway.v1.ListVirtualClustersRequest\x1a+.idp.gateway.v1.ListVirtualClustersResponseB^\n" +
+	"\x13ListVirtualClusters\x12*.idp.gateway.v1.ListVirtualClustersRequest\x1a+.idp.gateway.v1.ListVirtualClustersResponse\x12Y\n" +
+	"\fUpsertPolicy\x12#.idp.gateway.v1.UpsertPolicyRequest\x1a$.idp.gateway.v1.UpsertPolicyResponse\x12Y\n" +
+	"\fDeletePolicy\x12#.idp.gateway.v1.DeletePolicyRequest\x1a$.idp.gateway.v1.DeletePolicyResponse\x12Y\n" +
+	"\fListPolicies\x12#.idp.gateway.v1.ListPoliciesRequest\x1a$.idp.gateway.v1.ListPoliciesResponse2\xbb\x02\n" +
+	"\x16BifrostCallbackService\x12Y\n" +
+	"\fTopicCreated\x12#.idp.gateway.v1.TopicCreatedRequest\x1a$.idp.gateway.v1.TopicCreatedResponse\x12Y\n" +
+	"\fTopicDeleted\x12#.idp.gateway.v1.TopicDeletedRequest\x1a$.idp.gateway.v1.TopicDeletedResponse\x12k\n" +
+	"\x12TopicConfigUpdated\x12).idp.gateway.v1.TopicConfigUpdatedRequest\x1a*.idp.gateway.v1.TopicConfigUpdatedResponseB^\n" +
 	"\x16io.orbit.bifrost.protoP\x01ZBgithub.com/drewpayment/orbit/proto/gen/go/idp/gateway/v1;gatewayv1b\x06proto3"
 
 var (
@@ -760,45 +2161,99 @@ func file_idp_gateway_v1_gateway_proto_rawDescGZIP() []byte {
 	return file_idp_gateway_v1_gateway_proto_rawDescData
 }
 
-var file_idp_gateway_v1_gateway_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_idp_gateway_v1_gateway_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_idp_gateway_v1_gateway_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
 var file_idp_gateway_v1_gateway_proto_goTypes = []any{
-	(*VirtualClusterConfig)(nil),              // 0: idp.gateway.v1.VirtualClusterConfig
-	(*UpsertVirtualClusterRequest)(nil),       // 1: idp.gateway.v1.UpsertVirtualClusterRequest
-	(*UpsertVirtualClusterResponse)(nil),      // 2: idp.gateway.v1.UpsertVirtualClusterResponse
-	(*DeleteVirtualClusterRequest)(nil),       // 3: idp.gateway.v1.DeleteVirtualClusterRequest
-	(*DeleteVirtualClusterResponse)(nil),      // 4: idp.gateway.v1.DeleteVirtualClusterResponse
-	(*SetVirtualClusterReadOnlyRequest)(nil),  // 5: idp.gateway.v1.SetVirtualClusterReadOnlyRequest
-	(*SetVirtualClusterReadOnlyResponse)(nil), // 6: idp.gateway.v1.SetVirtualClusterReadOnlyResponse
-	(*GetFullConfigRequest)(nil),              // 7: idp.gateway.v1.GetFullConfigRequest
-	(*GetFullConfigResponse)(nil),             // 8: idp.gateway.v1.GetFullConfigResponse
-	(*GetStatusRequest)(nil),                  // 9: idp.gateway.v1.GetStatusRequest
-	(*GetStatusResponse)(nil),                 // 10: idp.gateway.v1.GetStatusResponse
-	(*ListVirtualClustersRequest)(nil),        // 11: idp.gateway.v1.ListVirtualClustersRequest
-	(*ListVirtualClustersResponse)(nil),       // 12: idp.gateway.v1.ListVirtualClustersResponse
-	nil,                                       // 13: idp.gateway.v1.GetStatusResponse.VersionInfoEntry
+	(PermissionTemplate)(0),                   // 0: idp.gateway.v1.PermissionTemplate
+	(*VirtualClusterConfig)(nil),              // 1: idp.gateway.v1.VirtualClusterConfig
+	(*UpsertVirtualClusterRequest)(nil),       // 2: idp.gateway.v1.UpsertVirtualClusterRequest
+	(*UpsertVirtualClusterResponse)(nil),      // 3: idp.gateway.v1.UpsertVirtualClusterResponse
+	(*DeleteVirtualClusterRequest)(nil),       // 4: idp.gateway.v1.DeleteVirtualClusterRequest
+	(*DeleteVirtualClusterResponse)(nil),      // 5: idp.gateway.v1.DeleteVirtualClusterResponse
+	(*SetVirtualClusterReadOnlyRequest)(nil),  // 6: idp.gateway.v1.SetVirtualClusterReadOnlyRequest
+	(*SetVirtualClusterReadOnlyResponse)(nil), // 7: idp.gateway.v1.SetVirtualClusterReadOnlyResponse
+	(*GetFullConfigRequest)(nil),              // 8: idp.gateway.v1.GetFullConfigRequest
+	(*GetFullConfigResponse)(nil),             // 9: idp.gateway.v1.GetFullConfigResponse
+	(*GetStatusRequest)(nil),                  // 10: idp.gateway.v1.GetStatusRequest
+	(*GetStatusResponse)(nil),                 // 11: idp.gateway.v1.GetStatusResponse
+	(*ListVirtualClustersRequest)(nil),        // 12: idp.gateway.v1.ListVirtualClustersRequest
+	(*ListVirtualClustersResponse)(nil),       // 13: idp.gateway.v1.ListVirtualClustersResponse
+	(*CustomPermission)(nil),                  // 14: idp.gateway.v1.CustomPermission
+	(*CredentialConfig)(nil),                  // 15: idp.gateway.v1.CredentialConfig
+	(*UpsertCredentialRequest)(nil),           // 16: idp.gateway.v1.UpsertCredentialRequest
+	(*UpsertCredentialResponse)(nil),          // 17: idp.gateway.v1.UpsertCredentialResponse
+	(*RevokeCredentialRequest)(nil),           // 18: idp.gateway.v1.RevokeCredentialRequest
+	(*RevokeCredentialResponse)(nil),          // 19: idp.gateway.v1.RevokeCredentialResponse
+	(*ListCredentialsRequest)(nil),            // 20: idp.gateway.v1.ListCredentialsRequest
+	(*ListCredentialsResponse)(nil),           // 21: idp.gateway.v1.ListCredentialsResponse
+	(*PolicyConfig)(nil),                      // 22: idp.gateway.v1.PolicyConfig
+	(*UpsertPolicyRequest)(nil),               // 23: idp.gateway.v1.UpsertPolicyRequest
+	(*UpsertPolicyResponse)(nil),              // 24: idp.gateway.v1.UpsertPolicyResponse
+	(*DeletePolicyRequest)(nil),               // 25: idp.gateway.v1.DeletePolicyRequest
+	(*DeletePolicyResponse)(nil),              // 26: idp.gateway.v1.DeletePolicyResponse
+	(*ListPoliciesRequest)(nil),               // 27: idp.gateway.v1.ListPoliciesRequest
+	(*ListPoliciesResponse)(nil),              // 28: idp.gateway.v1.ListPoliciesResponse
+	(*TopicCreatedRequest)(nil),               // 29: idp.gateway.v1.TopicCreatedRequest
+	(*TopicCreatedResponse)(nil),              // 30: idp.gateway.v1.TopicCreatedResponse
+	(*TopicDeletedRequest)(nil),               // 31: idp.gateway.v1.TopicDeletedRequest
+	(*TopicDeletedResponse)(nil),              // 32: idp.gateway.v1.TopicDeletedResponse
+	(*TopicConfigUpdatedRequest)(nil),         // 33: idp.gateway.v1.TopicConfigUpdatedRequest
+	(*TopicConfigUpdatedResponse)(nil),        // 34: idp.gateway.v1.TopicConfigUpdatedResponse
+	(*PolicyViolation)(nil),                   // 35: idp.gateway.v1.PolicyViolation
+	nil,                                       // 36: idp.gateway.v1.GetStatusResponse.VersionInfoEntry
+	nil,                                       // 37: idp.gateway.v1.TopicCreatedRequest.ConfigEntry
+	nil,                                       // 38: idp.gateway.v1.TopicConfigUpdatedRequest.ConfigEntry
 }
 var file_idp_gateway_v1_gateway_proto_depIdxs = []int32{
-	0,  // 0: idp.gateway.v1.UpsertVirtualClusterRequest.config:type_name -> idp.gateway.v1.VirtualClusterConfig
-	0,  // 1: idp.gateway.v1.GetFullConfigResponse.virtual_clusters:type_name -> idp.gateway.v1.VirtualClusterConfig
-	13, // 2: idp.gateway.v1.GetStatusResponse.version_info:type_name -> idp.gateway.v1.GetStatusResponse.VersionInfoEntry
-	0,  // 3: idp.gateway.v1.ListVirtualClustersResponse.virtual_clusters:type_name -> idp.gateway.v1.VirtualClusterConfig
-	1,  // 4: idp.gateway.v1.BifrostAdminService.UpsertVirtualCluster:input_type -> idp.gateway.v1.UpsertVirtualClusterRequest
-	3,  // 5: idp.gateway.v1.BifrostAdminService.DeleteVirtualCluster:input_type -> idp.gateway.v1.DeleteVirtualClusterRequest
-	5,  // 6: idp.gateway.v1.BifrostAdminService.SetVirtualClusterReadOnly:input_type -> idp.gateway.v1.SetVirtualClusterReadOnlyRequest
-	7,  // 7: idp.gateway.v1.BifrostAdminService.GetFullConfig:input_type -> idp.gateway.v1.GetFullConfigRequest
-	9,  // 8: idp.gateway.v1.BifrostAdminService.GetStatus:input_type -> idp.gateway.v1.GetStatusRequest
-	11, // 9: idp.gateway.v1.BifrostAdminService.ListVirtualClusters:input_type -> idp.gateway.v1.ListVirtualClustersRequest
-	2,  // 10: idp.gateway.v1.BifrostAdminService.UpsertVirtualCluster:output_type -> idp.gateway.v1.UpsertVirtualClusterResponse
-	4,  // 11: idp.gateway.v1.BifrostAdminService.DeleteVirtualCluster:output_type -> idp.gateway.v1.DeleteVirtualClusterResponse
-	6,  // 12: idp.gateway.v1.BifrostAdminService.SetVirtualClusterReadOnly:output_type -> idp.gateway.v1.SetVirtualClusterReadOnlyResponse
-	8,  // 13: idp.gateway.v1.BifrostAdminService.GetFullConfig:output_type -> idp.gateway.v1.GetFullConfigResponse
-	10, // 14: idp.gateway.v1.BifrostAdminService.GetStatus:output_type -> idp.gateway.v1.GetStatusResponse
-	12, // 15: idp.gateway.v1.BifrostAdminService.ListVirtualClusters:output_type -> idp.gateway.v1.ListVirtualClustersResponse
-	10, // [10:16] is the sub-list for method output_type
-	4,  // [4:10] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	1,  // 0: idp.gateway.v1.UpsertVirtualClusterRequest.config:type_name -> idp.gateway.v1.VirtualClusterConfig
+	1,  // 1: idp.gateway.v1.GetFullConfigResponse.virtual_clusters:type_name -> idp.gateway.v1.VirtualClusterConfig
+	15, // 2: idp.gateway.v1.GetFullConfigResponse.credentials:type_name -> idp.gateway.v1.CredentialConfig
+	22, // 3: idp.gateway.v1.GetFullConfigResponse.policies:type_name -> idp.gateway.v1.PolicyConfig
+	36, // 4: idp.gateway.v1.GetStatusResponse.version_info:type_name -> idp.gateway.v1.GetStatusResponse.VersionInfoEntry
+	1,  // 5: idp.gateway.v1.ListVirtualClustersResponse.virtual_clusters:type_name -> idp.gateway.v1.VirtualClusterConfig
+	0,  // 6: idp.gateway.v1.CredentialConfig.template:type_name -> idp.gateway.v1.PermissionTemplate
+	14, // 7: idp.gateway.v1.CredentialConfig.custom_permissions:type_name -> idp.gateway.v1.CustomPermission
+	15, // 8: idp.gateway.v1.UpsertCredentialRequest.config:type_name -> idp.gateway.v1.CredentialConfig
+	15, // 9: idp.gateway.v1.ListCredentialsResponse.credentials:type_name -> idp.gateway.v1.CredentialConfig
+	22, // 10: idp.gateway.v1.UpsertPolicyRequest.config:type_name -> idp.gateway.v1.PolicyConfig
+	22, // 11: idp.gateway.v1.ListPoliciesResponse.policies:type_name -> idp.gateway.v1.PolicyConfig
+	37, // 12: idp.gateway.v1.TopicCreatedRequest.config:type_name -> idp.gateway.v1.TopicCreatedRequest.ConfigEntry
+	38, // 13: idp.gateway.v1.TopicConfigUpdatedRequest.config:type_name -> idp.gateway.v1.TopicConfigUpdatedRequest.ConfigEntry
+	2,  // 14: idp.gateway.v1.BifrostAdminService.UpsertVirtualCluster:input_type -> idp.gateway.v1.UpsertVirtualClusterRequest
+	4,  // 15: idp.gateway.v1.BifrostAdminService.DeleteVirtualCluster:input_type -> idp.gateway.v1.DeleteVirtualClusterRequest
+	6,  // 16: idp.gateway.v1.BifrostAdminService.SetVirtualClusterReadOnly:input_type -> idp.gateway.v1.SetVirtualClusterReadOnlyRequest
+	16, // 17: idp.gateway.v1.BifrostAdminService.UpsertCredential:input_type -> idp.gateway.v1.UpsertCredentialRequest
+	18, // 18: idp.gateway.v1.BifrostAdminService.RevokeCredential:input_type -> idp.gateway.v1.RevokeCredentialRequest
+	20, // 19: idp.gateway.v1.BifrostAdminService.ListCredentials:input_type -> idp.gateway.v1.ListCredentialsRequest
+	8,  // 20: idp.gateway.v1.BifrostAdminService.GetFullConfig:input_type -> idp.gateway.v1.GetFullConfigRequest
+	10, // 21: idp.gateway.v1.BifrostAdminService.GetStatus:input_type -> idp.gateway.v1.GetStatusRequest
+	12, // 22: idp.gateway.v1.BifrostAdminService.ListVirtualClusters:input_type -> idp.gateway.v1.ListVirtualClustersRequest
+	23, // 23: idp.gateway.v1.BifrostAdminService.UpsertPolicy:input_type -> idp.gateway.v1.UpsertPolicyRequest
+	25, // 24: idp.gateway.v1.BifrostAdminService.DeletePolicy:input_type -> idp.gateway.v1.DeletePolicyRequest
+	27, // 25: idp.gateway.v1.BifrostAdminService.ListPolicies:input_type -> idp.gateway.v1.ListPoliciesRequest
+	29, // 26: idp.gateway.v1.BifrostCallbackService.TopicCreated:input_type -> idp.gateway.v1.TopicCreatedRequest
+	31, // 27: idp.gateway.v1.BifrostCallbackService.TopicDeleted:input_type -> idp.gateway.v1.TopicDeletedRequest
+	33, // 28: idp.gateway.v1.BifrostCallbackService.TopicConfigUpdated:input_type -> idp.gateway.v1.TopicConfigUpdatedRequest
+	3,  // 29: idp.gateway.v1.BifrostAdminService.UpsertVirtualCluster:output_type -> idp.gateway.v1.UpsertVirtualClusterResponse
+	5,  // 30: idp.gateway.v1.BifrostAdminService.DeleteVirtualCluster:output_type -> idp.gateway.v1.DeleteVirtualClusterResponse
+	7,  // 31: idp.gateway.v1.BifrostAdminService.SetVirtualClusterReadOnly:output_type -> idp.gateway.v1.SetVirtualClusterReadOnlyResponse
+	17, // 32: idp.gateway.v1.BifrostAdminService.UpsertCredential:output_type -> idp.gateway.v1.UpsertCredentialResponse
+	19, // 33: idp.gateway.v1.BifrostAdminService.RevokeCredential:output_type -> idp.gateway.v1.RevokeCredentialResponse
+	21, // 34: idp.gateway.v1.BifrostAdminService.ListCredentials:output_type -> idp.gateway.v1.ListCredentialsResponse
+	9,  // 35: idp.gateway.v1.BifrostAdminService.GetFullConfig:output_type -> idp.gateway.v1.GetFullConfigResponse
+	11, // 36: idp.gateway.v1.BifrostAdminService.GetStatus:output_type -> idp.gateway.v1.GetStatusResponse
+	13, // 37: idp.gateway.v1.BifrostAdminService.ListVirtualClusters:output_type -> idp.gateway.v1.ListVirtualClustersResponse
+	24, // 38: idp.gateway.v1.BifrostAdminService.UpsertPolicy:output_type -> idp.gateway.v1.UpsertPolicyResponse
+	26, // 39: idp.gateway.v1.BifrostAdminService.DeletePolicy:output_type -> idp.gateway.v1.DeletePolicyResponse
+	28, // 40: idp.gateway.v1.BifrostAdminService.ListPolicies:output_type -> idp.gateway.v1.ListPoliciesResponse
+	30, // 41: idp.gateway.v1.BifrostCallbackService.TopicCreated:output_type -> idp.gateway.v1.TopicCreatedResponse
+	32, // 42: idp.gateway.v1.BifrostCallbackService.TopicDeleted:output_type -> idp.gateway.v1.TopicDeletedResponse
+	34, // 43: idp.gateway.v1.BifrostCallbackService.TopicConfigUpdated:output_type -> idp.gateway.v1.TopicConfigUpdatedResponse
+	29, // [29:44] is the sub-list for method output_type
+	14, // [14:29] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_idp_gateway_v1_gateway_proto_init() }
@@ -811,13 +2266,14 @@ func file_idp_gateway_v1_gateway_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_idp_gateway_v1_gateway_proto_rawDesc), len(file_idp_gateway_v1_gateway_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   14,
+			NumEnums:      1,
+			NumMessages:   38,
 			NumExtensions: 0,
-			NumServices:   1,
+			NumServices:   2,
 		},
 		GoTypes:           file_idp_gateway_v1_gateway_proto_goTypes,
 		DependencyIndexes: file_idp_gateway_v1_gateway_proto_depIdxs,
+		EnumInfos:         file_idp_gateway_v1_gateway_proto_enumTypes,
 		MessageInfos:      file_idp_gateway_v1_gateway_proto_msgTypes,
 	}.Build()
 	File_idp_gateway_v1_gateway_proto = out.File

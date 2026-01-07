@@ -4,8 +4,8 @@
 // @generated from file idp/gateway/v1/gateway.proto (package idp.gateway.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file idp/gateway/v1/gateway.proto.
  */
 export const file_idp_gateway_v1_gateway: GenFile = /*@__PURE__*/
-  fileDesc("ChxpZHAvZ2F0ZXdheS92MS9nYXRld2F5LnByb3RvEg5pZHAuZ2F0ZXdheS52MSK1AgoUVmlydHVhbENsdXN0ZXJDb25maWcSCgoCaWQYASABKAkSFgoOYXBwbGljYXRpb25faWQYAiABKAkSGAoQYXBwbGljYXRpb25fc2x1ZxgDIAEoCRIWCg53b3Jrc3BhY2Vfc2x1ZxgEIAEoCRITCgtlbnZpcm9ubWVudBgFIAEoCRIUCgx0b3BpY19wcmVmaXgYBiABKAkSFAoMZ3JvdXBfcHJlZml4GAcgASgJEh0KFXRyYW5zYWN0aW9uX2lkX3ByZWZpeBgIIAEoCRIXCg9hZHZlcnRpc2VkX2hvc3QYCSABKAkSFwoPYWR2ZXJ0aXNlZF9wb3J0GAogASgFEiIKGnBoeXNpY2FsX2Jvb3RzdHJhcF9zZXJ2ZXJzGAsgASgJEhEKCXJlYWRfb25seRgMIAEoCCJTChtVcHNlcnRWaXJ0dWFsQ2x1c3RlclJlcXVlc3QSNAoGY29uZmlnGAEgASgLMiQuaWRwLmdhdGV3YXkudjEuVmlydHVhbENsdXN0ZXJDb25maWciLwocVXBzZXJ0VmlydHVhbENsdXN0ZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIjkKG0RlbGV0ZVZpcnR1YWxDbHVzdGVyUmVxdWVzdBIaChJ2aXJ0dWFsX2NsdXN0ZXJfaWQYASABKAkiLwocRGVsZXRlVmlydHVhbENsdXN0ZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIlEKIFNldFZpcnR1YWxDbHVzdGVyUmVhZE9ubHlSZXF1ZXN0EhoKEnZpcnR1YWxfY2x1c3Rlcl9pZBgBIAEoCRIRCglyZWFkX29ubHkYAiABKAgiNAohU2V0VmlydHVhbENsdXN0ZXJSZWFkT25seVJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgiFgoUR2V0RnVsbENvbmZpZ1JlcXVlc3QiVwoVR2V0RnVsbENvbmZpZ1Jlc3BvbnNlEj4KEHZpcnR1YWxfY2x1c3RlcnMYASADKAsyJC5pZHAuZ2F0ZXdheS52MS5WaXJ0dWFsQ2x1c3RlckNvbmZpZyISChBHZXRTdGF0dXNSZXF1ZXN0ItwBChFHZXRTdGF0dXNSZXNwb25zZRIOCgZzdGF0dXMYASABKAkSGgoSYWN0aXZlX2Nvbm5lY3Rpb25zGAIgASgFEh0KFXZpcnR1YWxfY2x1c3Rlcl9jb3VudBgDIAEoBRJICgx2ZXJzaW9uX2luZm8YBCADKAsyMi5pZHAuZ2F0ZXdheS52MS5HZXRTdGF0dXNSZXNwb25zZS5WZXJzaW9uSW5mb0VudHJ5GjIKEFZlcnNpb25JbmZvRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASIcChpMaXN0VmlydHVhbENsdXN0ZXJzUmVxdWVzdCJdChtMaXN0VmlydHVhbENsdXN0ZXJzUmVzcG9uc2USPgoQdmlydHVhbF9jbHVzdGVycxgBIAMoCzIkLmlkcC5nYXRld2F5LnYxLlZpcnR1YWxDbHVzdGVyQ29uZmlnMp4FChNCaWZyb3N0QWRtaW5TZXJ2aWNlEnEKFFVwc2VydFZpcnR1YWxDbHVzdGVyEisuaWRwLmdhdGV3YXkudjEuVXBzZXJ0VmlydHVhbENsdXN0ZXJSZXF1ZXN0GiwuaWRwLmdhdGV3YXkudjEuVXBzZXJ0VmlydHVhbENsdXN0ZXJSZXNwb25zZRJxChREZWxldGVWaXJ0dWFsQ2x1c3RlchIrLmlkcC5nYXRld2F5LnYxLkRlbGV0ZVZpcnR1YWxDbHVzdGVyUmVxdWVzdBosLmlkcC5nYXRld2F5LnYxLkRlbGV0ZVZpcnR1YWxDbHVzdGVyUmVzcG9uc2USgAEKGVNldFZpcnR1YWxDbHVzdGVyUmVhZE9ubHkSMC5pZHAuZ2F0ZXdheS52MS5TZXRWaXJ0dWFsQ2x1c3RlclJlYWRPbmx5UmVxdWVzdBoxLmlkcC5nYXRld2F5LnYxLlNldFZpcnR1YWxDbHVzdGVyUmVhZE9ubHlSZXNwb25zZRJcCg1HZXRGdWxsQ29uZmlnEiQuaWRwLmdhdGV3YXkudjEuR2V0RnVsbENvbmZpZ1JlcXVlc3QaJS5pZHAuZ2F0ZXdheS52MS5HZXRGdWxsQ29uZmlnUmVzcG9uc2USUAoJR2V0U3RhdHVzEiAuaWRwLmdhdGV3YXkudjEuR2V0U3RhdHVzUmVxdWVzdBohLmlkcC5nYXRld2F5LnYxLkdldFN0YXR1c1Jlc3BvbnNlEm4KE0xpc3RWaXJ0dWFsQ2x1c3RlcnMSKi5pZHAuZ2F0ZXdheS52MS5MaXN0VmlydHVhbENsdXN0ZXJzUmVxdWVzdBorLmlkcC5nYXRld2F5LnYxLkxpc3RWaXJ0dWFsQ2x1c3RlcnNSZXNwb25zZUJeChZpby5vcmJpdC5iaWZyb3N0LnByb3RvUAFaQmdpdGh1Yi5jb20vZHJld3BheW1lbnQvb3JiaXQvcHJvdG8vZ2VuL2dvL2lkcC9nYXRld2F5L3YxO2dhdGV3YXl2MWIGcHJvdG8z", [file_google_protobuf_timestamp]);
+  fileDesc("ChxpZHAvZ2F0ZXdheS92MS9nYXRld2F5LnByb3RvEg5pZHAuZ2F0ZXdheS52MSK1AgoUVmlydHVhbENsdXN0ZXJDb25maWcSCgoCaWQYASABKAkSFgoOYXBwbGljYXRpb25faWQYAiABKAkSGAoQYXBwbGljYXRpb25fc2x1ZxgDIAEoCRIWCg53b3Jrc3BhY2Vfc2x1ZxgEIAEoCRITCgtlbnZpcm9ubWVudBgFIAEoCRIUCgx0b3BpY19wcmVmaXgYBiABKAkSFAoMZ3JvdXBfcHJlZml4GAcgASgJEh0KFXRyYW5zYWN0aW9uX2lkX3ByZWZpeBgIIAEoCRIXCg9hZHZlcnRpc2VkX2hvc3QYCSABKAkSFwoPYWR2ZXJ0aXNlZF9wb3J0GAogASgFEiIKGnBoeXNpY2FsX2Jvb3RzdHJhcF9zZXJ2ZXJzGAsgASgJEhEKCXJlYWRfb25seRgMIAEoCCJTChtVcHNlcnRWaXJ0dWFsQ2x1c3RlclJlcXVlc3QSNAoGY29uZmlnGAEgASgLMiQuaWRwLmdhdGV3YXkudjEuVmlydHVhbENsdXN0ZXJDb25maWciLwocVXBzZXJ0VmlydHVhbENsdXN0ZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIjkKG0RlbGV0ZVZpcnR1YWxDbHVzdGVyUmVxdWVzdBIaChJ2aXJ0dWFsX2NsdXN0ZXJfaWQYASABKAkiLwocRGVsZXRlVmlydHVhbENsdXN0ZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIlEKIFNldFZpcnR1YWxDbHVzdGVyUmVhZE9ubHlSZXF1ZXN0EhoKEnZpcnR1YWxfY2x1c3Rlcl9pZBgBIAEoCRIRCglyZWFkX29ubHkYAiABKAgiNAohU2V0VmlydHVhbENsdXN0ZXJSZWFkT25seVJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgiFgoUR2V0RnVsbENvbmZpZ1JlcXVlc3QivgEKFUdldEZ1bGxDb25maWdSZXNwb25zZRI+ChB2aXJ0dWFsX2NsdXN0ZXJzGAEgAygLMiQuaWRwLmdhdGV3YXkudjEuVmlydHVhbENsdXN0ZXJDb25maWcSNQoLY3JlZGVudGlhbHMYAiADKAsyIC5pZHAuZ2F0ZXdheS52MS5DcmVkZW50aWFsQ29uZmlnEi4KCHBvbGljaWVzGAMgAygLMhwuaWRwLmdhdGV3YXkudjEuUG9saWN5Q29uZmlnIhIKEEdldFN0YXR1c1JlcXVlc3Qi3AEKEUdldFN0YXR1c1Jlc3BvbnNlEg4KBnN0YXR1cxgBIAEoCRIaChJhY3RpdmVfY29ubmVjdGlvbnMYAiABKAUSHQoVdmlydHVhbF9jbHVzdGVyX2NvdW50GAMgASgFEkgKDHZlcnNpb25faW5mbxgEIAMoCzIyLmlkcC5nYXRld2F5LnYxLkdldFN0YXR1c1Jlc3BvbnNlLlZlcnNpb25JbmZvRW50cnkaMgoQVmVyc2lvbkluZm9FbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIhwKGkxpc3RWaXJ0dWFsQ2x1c3RlcnNSZXF1ZXN0Il0KG0xpc3RWaXJ0dWFsQ2x1c3RlcnNSZXNwb25zZRI+ChB2aXJ0dWFsX2NsdXN0ZXJzGAEgAygLMiQuaWRwLmdhdGV3YXkudjEuVmlydHVhbENsdXN0ZXJDb25maWciVwoQQ3VzdG9tUGVybWlzc2lvbhIVCg1yZXNvdXJjZV90eXBlGAEgASgJEhgKEHJlc291cmNlX3BhdHRlcm4YAiABKAkSEgoKb3BlcmF0aW9ucxgDIAMoCSLXAQoQQ3JlZGVudGlhbENvbmZpZxIKCgJpZBgBIAEoCRIaChJ2aXJ0dWFsX2NsdXN0ZXJfaWQYAiABKAkSEAoIdXNlcm5hbWUYAyABKAkSFQoNcGFzc3dvcmRfaGFzaBgEIAEoCRI0Cgh0ZW1wbGF0ZRgFIAEoDjIiLmlkcC5nYXRld2F5LnYxLlBlcm1pc3Npb25UZW1wbGF0ZRI8ChJjdXN0b21fcGVybWlzc2lvbnMYBiADKAsyIC5pZHAuZ2F0ZXdheS52MS5DdXN0b21QZXJtaXNzaW9uIksKF1Vwc2VydENyZWRlbnRpYWxSZXF1ZXN0EjAKBmNvbmZpZxgBIAEoCzIgLmlkcC5nYXRld2F5LnYxLkNyZWRlbnRpYWxDb25maWciKwoYVXBzZXJ0Q3JlZGVudGlhbFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgiMAoXUmV2b2tlQ3JlZGVudGlhbFJlcXVlc3QSFQoNY3JlZGVudGlhbF9pZBgBIAEoCSIrChhSZXZva2VDcmVkZW50aWFsUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCI0ChZMaXN0Q3JlZGVudGlhbHNSZXF1ZXN0EhoKEnZpcnR1YWxfY2x1c3Rlcl9pZBgBIAEoCSJQChdMaXN0Q3JlZGVudGlhbHNSZXNwb25zZRI1CgtjcmVkZW50aWFscxgBIAMoCzIgLmlkcC5nYXRld2F5LnYxLkNyZWRlbnRpYWxDb25maWci7AEKDFBvbGljeUNvbmZpZxIKCgJpZBgBIAEoCRITCgtlbnZpcm9ubWVudBgCIAEoCRIWCg5tYXhfcGFydGl0aW9ucxgDIAEoBRIWCg5taW5fcGFydGl0aW9ucxgEIAEoBRIYChBtYXhfcmV0ZW50aW9uX21zGAUgASgDEh4KFm1pbl9yZXBsaWNhdGlvbl9mYWN0b3IYBiABKAUSIAoYYWxsb3dlZF9jbGVhbnVwX3BvbGljaWVzGAcgAygJEhYKDm5hbWluZ19wYXR0ZXJuGAggASgJEhcKD21heF9uYW1lX2xlbmd0aBgJIAEoBSJDChNVcHNlcnRQb2xpY3lSZXF1ZXN0EiwKBmNvbmZpZxgBIAEoCzIcLmlkcC5nYXRld2F5LnYxLlBvbGljeUNvbmZpZyInChRVcHNlcnRQb2xpY3lSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIigKE0RlbGV0ZVBvbGljeVJlcXVlc3QSEQoJcG9saWN5X2lkGAEgASgJIicKFERlbGV0ZVBvbGljeVJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgiKgoTTGlzdFBvbGljaWVzUmVxdWVzdBITCgtlbnZpcm9ubWVudBgBIAEoCSJGChRMaXN0UG9saWNpZXNSZXNwb25zZRIuCghwb2xpY2llcxgBIAMoCzIcLmlkcC5nYXRld2F5LnYxLlBvbGljeUNvbmZpZyKgAgoTVG9waWNDcmVhdGVkUmVxdWVzdBIaChJ2aXJ0dWFsX2NsdXN0ZXJfaWQYASABKAkSFAoMdmlydHVhbF9uYW1lGAIgASgJEhUKDXBoeXNpY2FsX25hbWUYAyABKAkSEgoKcGFydGl0aW9ucxgEIAEoBRIaChJyZXBsaWNhdGlvbl9mYWN0b3IYBSABKAUSPwoGY29uZmlnGAYgAygLMi8uaWRwLmdhdGV3YXkudjEuVG9waWNDcmVhdGVkUmVxdWVzdC5Db25maWdFbnRyeRIgChhjcmVhdGVkX2J5X2NyZWRlbnRpYWxfaWQYByABKAkaLQoLQ29uZmlnRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASI5ChRUb3BpY0NyZWF0ZWRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhAKCHRvcGljX2lkGAIgASgJIoABChNUb3BpY0RlbGV0ZWRSZXF1ZXN0EhoKEnZpcnR1YWxfY2x1c3Rlcl9pZBgBIAEoCRIUCgx2aXJ0dWFsX25hbWUYAiABKAkSFQoNcGh5c2ljYWxfbmFtZRgDIAEoCRIgChhkZWxldGVkX2J5X2NyZWRlbnRpYWxfaWQYBCABKAkiJwoUVG9waWNEZWxldGVkUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCLlAQoZVG9waWNDb25maWdVcGRhdGVkUmVxdWVzdBIaChJ2aXJ0dWFsX2NsdXN0ZXJfaWQYASABKAkSFAoMdmlydHVhbF9uYW1lGAIgASgJEkUKBmNvbmZpZxgDIAMoCzI1LmlkcC5nYXRld2F5LnYxLlRvcGljQ29uZmlnVXBkYXRlZFJlcXVlc3QuQ29uZmlnRW50cnkSIAoYdXBkYXRlZF9ieV9jcmVkZW50aWFsX2lkGAQgASgJGi0KC0NvbmZpZ0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiLQoaVG9waWNDb25maWdVcGRhdGVkUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCJyCg9Qb2xpY3lWaW9sYXRpb24SDQoFZmllbGQYASABKAkSEgoKY29uc3RyYWludBgCIAEoCRIPCgdtZXNzYWdlGAMgASgJEhQKDGFjdHVhbF92YWx1ZRgEIAEoCRIVCg1hbGxvd2VkX3ZhbHVlGAUgASgJKrwBChJQZXJtaXNzaW9uVGVtcGxhdGUSIwofUEVSTUlTU0lPTl9URU1QTEFURV9VTlNQRUNJRklFRBAAEiAKHFBFUk1JU1NJT05fVEVNUExBVEVfUFJPRFVDRVIQARIgChxQRVJNSVNTSU9OX1RFTVBMQVRFX0NPTlNVTUVSEAISHQoZUEVSTUlTU0lPTl9URU1QTEFURV9BRE1JThADEh4KGlBFUk1JU1NJT05fVEVNUExBVEVfQ1VTVE9NEAQy4QkKE0JpZnJvc3RBZG1pblNlcnZpY2UScQoUVXBzZXJ0VmlydHVhbENsdXN0ZXISKy5pZHAuZ2F0ZXdheS52MS5VcHNlcnRWaXJ0dWFsQ2x1c3RlclJlcXVlc3QaLC5pZHAuZ2F0ZXdheS52MS5VcHNlcnRWaXJ0dWFsQ2x1c3RlclJlc3BvbnNlEnEKFERlbGV0ZVZpcnR1YWxDbHVzdGVyEisuaWRwLmdhdGV3YXkudjEuRGVsZXRlVmlydHVhbENsdXN0ZXJSZXF1ZXN0GiwuaWRwLmdhdGV3YXkudjEuRGVsZXRlVmlydHVhbENsdXN0ZXJSZXNwb25zZRKAAQoZU2V0VmlydHVhbENsdXN0ZXJSZWFkT25seRIwLmlkcC5nYXRld2F5LnYxLlNldFZpcnR1YWxDbHVzdGVyUmVhZE9ubHlSZXF1ZXN0GjEuaWRwLmdhdGV3YXkudjEuU2V0VmlydHVhbENsdXN0ZXJSZWFkT25seVJlc3BvbnNlEmUKEFVwc2VydENyZWRlbnRpYWwSJy5pZHAuZ2F0ZXdheS52MS5VcHNlcnRDcmVkZW50aWFsUmVxdWVzdBooLmlkcC5nYXRld2F5LnYxLlVwc2VydENyZWRlbnRpYWxSZXNwb25zZRJlChBSZXZva2VDcmVkZW50aWFsEicuaWRwLmdhdGV3YXkudjEuUmV2b2tlQ3JlZGVudGlhbFJlcXVlc3QaKC5pZHAuZ2F0ZXdheS52MS5SZXZva2VDcmVkZW50aWFsUmVzcG9uc2USYgoPTGlzdENyZWRlbnRpYWxzEiYuaWRwLmdhdGV3YXkudjEuTGlzdENyZWRlbnRpYWxzUmVxdWVzdBonLmlkcC5nYXRld2F5LnYxLkxpc3RDcmVkZW50aWFsc1Jlc3BvbnNlElwKDUdldEZ1bGxDb25maWcSJC5pZHAuZ2F0ZXdheS52MS5HZXRGdWxsQ29uZmlnUmVxdWVzdBolLmlkcC5nYXRld2F5LnYxLkdldEZ1bGxDb25maWdSZXNwb25zZRJQCglHZXRTdGF0dXMSIC5pZHAuZ2F0ZXdheS52MS5HZXRTdGF0dXNSZXF1ZXN0GiEuaWRwLmdhdGV3YXkudjEuR2V0U3RhdHVzUmVzcG9uc2USbgoTTGlzdFZpcnR1YWxDbHVzdGVycxIqLmlkcC5nYXRld2F5LnYxLkxpc3RWaXJ0dWFsQ2x1c3RlcnNSZXF1ZXN0GisuaWRwLmdhdGV3YXkudjEuTGlzdFZpcnR1YWxDbHVzdGVyc1Jlc3BvbnNlElkKDFVwc2VydFBvbGljeRIjLmlkcC5nYXRld2F5LnYxLlVwc2VydFBvbGljeVJlcXVlc3QaJC5pZHAuZ2F0ZXdheS52MS5VcHNlcnRQb2xpY3lSZXNwb25zZRJZCgxEZWxldGVQb2xpY3kSIy5pZHAuZ2F0ZXdheS52MS5EZWxldGVQb2xpY3lSZXF1ZXN0GiQuaWRwLmdhdGV3YXkudjEuRGVsZXRlUG9saWN5UmVzcG9uc2USWQoMTGlzdFBvbGljaWVzEiMuaWRwLmdhdGV3YXkudjEuTGlzdFBvbGljaWVzUmVxdWVzdBokLmlkcC5nYXRld2F5LnYxLkxpc3RQb2xpY2llc1Jlc3BvbnNlMrsCChZCaWZyb3N0Q2FsbGJhY2tTZXJ2aWNlElkKDFRvcGljQ3JlYXRlZBIjLmlkcC5nYXRld2F5LnYxLlRvcGljQ3JlYXRlZFJlcXVlc3QaJC5pZHAuZ2F0ZXdheS52MS5Ub3BpY0NyZWF0ZWRSZXNwb25zZRJZCgxUb3BpY0RlbGV0ZWQSIy5pZHAuZ2F0ZXdheS52MS5Ub3BpY0RlbGV0ZWRSZXF1ZXN0GiQuaWRwLmdhdGV3YXkudjEuVG9waWNEZWxldGVkUmVzcG9uc2USawoSVG9waWNDb25maWdVcGRhdGVkEikuaWRwLmdhdGV3YXkudjEuVG9waWNDb25maWdVcGRhdGVkUmVxdWVzdBoqLmlkcC5nYXRld2F5LnYxLlRvcGljQ29uZmlnVXBkYXRlZFJlc3BvbnNlQl4KFmlvLm9yYml0LmJpZnJvc3QucHJvdG9QAVpCZ2l0aHViLmNvbS9kcmV3cGF5bWVudC9vcmJpdC9wcm90by9nZW4vZ28vaWRwL2dhdGV3YXkvdjE7Z2F0ZXdheXYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message idp.gateway.v1.VirtualClusterConfig
@@ -215,6 +215,16 @@ export type GetFullConfigResponse = Message<"idp.gateway.v1.GetFullConfigRespons
    * @generated from field: repeated idp.gateway.v1.VirtualClusterConfig virtual_clusters = 1;
    */
   virtualClusters: VirtualClusterConfig[];
+
+  /**
+   * @generated from field: repeated idp.gateway.v1.CredentialConfig credentials = 2;
+   */
+  credentials: CredentialConfig[];
+
+  /**
+   * @generated from field: repeated idp.gateway.v1.PolicyConfig policies = 3;
+   */
+  policies: PolicyConfig[];
 };
 
 /**
@@ -300,6 +310,602 @@ export const ListVirtualClustersResponseSchema: GenMessage<ListVirtualClustersRe
   messageDesc(file_idp_gateway_v1_gateway, 12);
 
 /**
+ * @generated from message idp.gateway.v1.CustomPermission
+ */
+export type CustomPermission = Message<"idp.gateway.v1.CustomPermission"> & {
+  /**
+   * topic, group, transactional_id
+   *
+   * @generated from field: string resource_type = 1;
+   */
+  resourceType: string;
+
+  /**
+   * regex or literal
+   *
+   * @generated from field: string resource_pattern = 2;
+   */
+  resourcePattern: string;
+
+  /**
+   * read, write, create, delete, alter
+   *
+   * @generated from field: repeated string operations = 3;
+   */
+  operations: string[];
+};
+
+/**
+ * Describes the message idp.gateway.v1.CustomPermission.
+ * Use `create(CustomPermissionSchema)` to create a new message.
+ */
+export const CustomPermissionSchema: GenMessage<CustomPermission> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 13);
+
+/**
+ * @generated from message idp.gateway.v1.CredentialConfig
+ */
+export type CredentialConfig = Message<"idp.gateway.v1.CredentialConfig"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string virtual_cluster_id = 2;
+   */
+  virtualClusterId: string;
+
+  /**
+   * @generated from field: string username = 3;
+   */
+  username: string;
+
+  /**
+   * @generated from field: string password_hash = 4;
+   */
+  passwordHash: string;
+
+  /**
+   * @generated from field: idp.gateway.v1.PermissionTemplate template = 5;
+   */
+  template: PermissionTemplate;
+
+  /**
+   * @generated from field: repeated idp.gateway.v1.CustomPermission custom_permissions = 6;
+   */
+  customPermissions: CustomPermission[];
+};
+
+/**
+ * Describes the message idp.gateway.v1.CredentialConfig.
+ * Use `create(CredentialConfigSchema)` to create a new message.
+ */
+export const CredentialConfigSchema: GenMessage<CredentialConfig> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 14);
+
+/**
+ * @generated from message idp.gateway.v1.UpsertCredentialRequest
+ */
+export type UpsertCredentialRequest = Message<"idp.gateway.v1.UpsertCredentialRequest"> & {
+  /**
+   * @generated from field: idp.gateway.v1.CredentialConfig config = 1;
+   */
+  config?: CredentialConfig;
+};
+
+/**
+ * Describes the message idp.gateway.v1.UpsertCredentialRequest.
+ * Use `create(UpsertCredentialRequestSchema)` to create a new message.
+ */
+export const UpsertCredentialRequestSchema: GenMessage<UpsertCredentialRequest> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 15);
+
+/**
+ * @generated from message idp.gateway.v1.UpsertCredentialResponse
+ */
+export type UpsertCredentialResponse = Message<"idp.gateway.v1.UpsertCredentialResponse"> & {
+  /**
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+};
+
+/**
+ * Describes the message idp.gateway.v1.UpsertCredentialResponse.
+ * Use `create(UpsertCredentialResponseSchema)` to create a new message.
+ */
+export const UpsertCredentialResponseSchema: GenMessage<UpsertCredentialResponse> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 16);
+
+/**
+ * @generated from message idp.gateway.v1.RevokeCredentialRequest
+ */
+export type RevokeCredentialRequest = Message<"idp.gateway.v1.RevokeCredentialRequest"> & {
+  /**
+   * @generated from field: string credential_id = 1;
+   */
+  credentialId: string;
+};
+
+/**
+ * Describes the message idp.gateway.v1.RevokeCredentialRequest.
+ * Use `create(RevokeCredentialRequestSchema)` to create a new message.
+ */
+export const RevokeCredentialRequestSchema: GenMessage<RevokeCredentialRequest> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 17);
+
+/**
+ * @generated from message idp.gateway.v1.RevokeCredentialResponse
+ */
+export type RevokeCredentialResponse = Message<"idp.gateway.v1.RevokeCredentialResponse"> & {
+  /**
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+};
+
+/**
+ * Describes the message idp.gateway.v1.RevokeCredentialResponse.
+ * Use `create(RevokeCredentialResponseSchema)` to create a new message.
+ */
+export const RevokeCredentialResponseSchema: GenMessage<RevokeCredentialResponse> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 18);
+
+/**
+ * @generated from message idp.gateway.v1.ListCredentialsRequest
+ */
+export type ListCredentialsRequest = Message<"idp.gateway.v1.ListCredentialsRequest"> & {
+  /**
+   * Optional filter
+   *
+   * @generated from field: string virtual_cluster_id = 1;
+   */
+  virtualClusterId: string;
+};
+
+/**
+ * Describes the message idp.gateway.v1.ListCredentialsRequest.
+ * Use `create(ListCredentialsRequestSchema)` to create a new message.
+ */
+export const ListCredentialsRequestSchema: GenMessage<ListCredentialsRequest> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 19);
+
+/**
+ * @generated from message idp.gateway.v1.ListCredentialsResponse
+ */
+export type ListCredentialsResponse = Message<"idp.gateway.v1.ListCredentialsResponse"> & {
+  /**
+   * @generated from field: repeated idp.gateway.v1.CredentialConfig credentials = 1;
+   */
+  credentials: CredentialConfig[];
+};
+
+/**
+ * Describes the message idp.gateway.v1.ListCredentialsResponse.
+ * Use `create(ListCredentialsResponseSchema)` to create a new message.
+ */
+export const ListCredentialsResponseSchema: GenMessage<ListCredentialsResponse> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 20);
+
+/**
+ * @generated from message idp.gateway.v1.PolicyConfig
+ */
+export type PolicyConfig = Message<"idp.gateway.v1.PolicyConfig"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * dev, staging, prod
+   *
+   * @generated from field: string environment = 2;
+   */
+  environment: string;
+
+  /**
+   * @generated from field: int32 max_partitions = 3;
+   */
+  maxPartitions: number;
+
+  /**
+   * @generated from field: int32 min_partitions = 4;
+   */
+  minPartitions: number;
+
+  /**
+   * @generated from field: int64 max_retention_ms = 5;
+   */
+  maxRetentionMs: bigint;
+
+  /**
+   * @generated from field: int32 min_replication_factor = 6;
+   */
+  minReplicationFactor: number;
+
+  /**
+   * @generated from field: repeated string allowed_cleanup_policies = 7;
+   */
+  allowedCleanupPolicies: string[];
+
+  /**
+   * regex for valid topic names
+   *
+   * @generated from field: string naming_pattern = 8;
+   */
+  namingPattern: string;
+
+  /**
+   * @generated from field: int32 max_name_length = 9;
+   */
+  maxNameLength: number;
+};
+
+/**
+ * Describes the message idp.gateway.v1.PolicyConfig.
+ * Use `create(PolicyConfigSchema)` to create a new message.
+ */
+export const PolicyConfigSchema: GenMessage<PolicyConfig> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 21);
+
+/**
+ * @generated from message idp.gateway.v1.UpsertPolicyRequest
+ */
+export type UpsertPolicyRequest = Message<"idp.gateway.v1.UpsertPolicyRequest"> & {
+  /**
+   * @generated from field: idp.gateway.v1.PolicyConfig config = 1;
+   */
+  config?: PolicyConfig;
+};
+
+/**
+ * Describes the message idp.gateway.v1.UpsertPolicyRequest.
+ * Use `create(UpsertPolicyRequestSchema)` to create a new message.
+ */
+export const UpsertPolicyRequestSchema: GenMessage<UpsertPolicyRequest> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 22);
+
+/**
+ * @generated from message idp.gateway.v1.UpsertPolicyResponse
+ */
+export type UpsertPolicyResponse = Message<"idp.gateway.v1.UpsertPolicyResponse"> & {
+  /**
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+};
+
+/**
+ * Describes the message idp.gateway.v1.UpsertPolicyResponse.
+ * Use `create(UpsertPolicyResponseSchema)` to create a new message.
+ */
+export const UpsertPolicyResponseSchema: GenMessage<UpsertPolicyResponse> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 23);
+
+/**
+ * @generated from message idp.gateway.v1.DeletePolicyRequest
+ */
+export type DeletePolicyRequest = Message<"idp.gateway.v1.DeletePolicyRequest"> & {
+  /**
+   * @generated from field: string policy_id = 1;
+   */
+  policyId: string;
+};
+
+/**
+ * Describes the message idp.gateway.v1.DeletePolicyRequest.
+ * Use `create(DeletePolicyRequestSchema)` to create a new message.
+ */
+export const DeletePolicyRequestSchema: GenMessage<DeletePolicyRequest> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 24);
+
+/**
+ * @generated from message idp.gateway.v1.DeletePolicyResponse
+ */
+export type DeletePolicyResponse = Message<"idp.gateway.v1.DeletePolicyResponse"> & {
+  /**
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+};
+
+/**
+ * Describes the message idp.gateway.v1.DeletePolicyResponse.
+ * Use `create(DeletePolicyResponseSchema)` to create a new message.
+ */
+export const DeletePolicyResponseSchema: GenMessage<DeletePolicyResponse> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 25);
+
+/**
+ * @generated from message idp.gateway.v1.ListPoliciesRequest
+ */
+export type ListPoliciesRequest = Message<"idp.gateway.v1.ListPoliciesRequest"> & {
+  /**
+   * Optional filter
+   *
+   * @generated from field: string environment = 1;
+   */
+  environment: string;
+};
+
+/**
+ * Describes the message idp.gateway.v1.ListPoliciesRequest.
+ * Use `create(ListPoliciesRequestSchema)` to create a new message.
+ */
+export const ListPoliciesRequestSchema: GenMessage<ListPoliciesRequest> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 26);
+
+/**
+ * @generated from message idp.gateway.v1.ListPoliciesResponse
+ */
+export type ListPoliciesResponse = Message<"idp.gateway.v1.ListPoliciesResponse"> & {
+  /**
+   * @generated from field: repeated idp.gateway.v1.PolicyConfig policies = 1;
+   */
+  policies: PolicyConfig[];
+};
+
+/**
+ * Describes the message idp.gateway.v1.ListPoliciesResponse.
+ * Use `create(ListPoliciesResponseSchema)` to create a new message.
+ */
+export const ListPoliciesResponseSchema: GenMessage<ListPoliciesResponse> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 27);
+
+/**
+ * @generated from message idp.gateway.v1.TopicCreatedRequest
+ */
+export type TopicCreatedRequest = Message<"idp.gateway.v1.TopicCreatedRequest"> & {
+  /**
+   * @generated from field: string virtual_cluster_id = 1;
+   */
+  virtualClusterId: string;
+
+  /**
+   * Topic name as client sees it
+   *
+   * @generated from field: string virtual_name = 2;
+   */
+  virtualName: string;
+
+  /**
+   * Full prefixed name on broker
+   *
+   * @generated from field: string physical_name = 3;
+   */
+  physicalName: string;
+
+  /**
+   * @generated from field: int32 partitions = 4;
+   */
+  partitions: number;
+
+  /**
+   * @generated from field: int32 replication_factor = 5;
+   */
+  replicationFactor: number;
+
+  /**
+   * @generated from field: map<string, string> config = 6;
+   */
+  config: { [key: string]: string };
+
+  /**
+   * @generated from field: string created_by_credential_id = 7;
+   */
+  createdByCredentialId: string;
+};
+
+/**
+ * Describes the message idp.gateway.v1.TopicCreatedRequest.
+ * Use `create(TopicCreatedRequestSchema)` to create a new message.
+ */
+export const TopicCreatedRequestSchema: GenMessage<TopicCreatedRequest> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 28);
+
+/**
+ * @generated from message idp.gateway.v1.TopicCreatedResponse
+ */
+export type TopicCreatedResponse = Message<"idp.gateway.v1.TopicCreatedResponse"> & {
+  /**
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+
+  /**
+   * Orbit's topic record ID
+   *
+   * @generated from field: string topic_id = 2;
+   */
+  topicId: string;
+};
+
+/**
+ * Describes the message idp.gateway.v1.TopicCreatedResponse.
+ * Use `create(TopicCreatedResponseSchema)` to create a new message.
+ */
+export const TopicCreatedResponseSchema: GenMessage<TopicCreatedResponse> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 29);
+
+/**
+ * @generated from message idp.gateway.v1.TopicDeletedRequest
+ */
+export type TopicDeletedRequest = Message<"idp.gateway.v1.TopicDeletedRequest"> & {
+  /**
+   * @generated from field: string virtual_cluster_id = 1;
+   */
+  virtualClusterId: string;
+
+  /**
+   * @generated from field: string virtual_name = 2;
+   */
+  virtualName: string;
+
+  /**
+   * @generated from field: string physical_name = 3;
+   */
+  physicalName: string;
+
+  /**
+   * @generated from field: string deleted_by_credential_id = 4;
+   */
+  deletedByCredentialId: string;
+};
+
+/**
+ * Describes the message idp.gateway.v1.TopicDeletedRequest.
+ * Use `create(TopicDeletedRequestSchema)` to create a new message.
+ */
+export const TopicDeletedRequestSchema: GenMessage<TopicDeletedRequest> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 30);
+
+/**
+ * @generated from message idp.gateway.v1.TopicDeletedResponse
+ */
+export type TopicDeletedResponse = Message<"idp.gateway.v1.TopicDeletedResponse"> & {
+  /**
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+};
+
+/**
+ * Describes the message idp.gateway.v1.TopicDeletedResponse.
+ * Use `create(TopicDeletedResponseSchema)` to create a new message.
+ */
+export const TopicDeletedResponseSchema: GenMessage<TopicDeletedResponse> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 31);
+
+/**
+ * @generated from message idp.gateway.v1.TopicConfigUpdatedRequest
+ */
+export type TopicConfigUpdatedRequest = Message<"idp.gateway.v1.TopicConfigUpdatedRequest"> & {
+  /**
+   * @generated from field: string virtual_cluster_id = 1;
+   */
+  virtualClusterId: string;
+
+  /**
+   * @generated from field: string virtual_name = 2;
+   */
+  virtualName: string;
+
+  /**
+   * @generated from field: map<string, string> config = 3;
+   */
+  config: { [key: string]: string };
+
+  /**
+   * @generated from field: string updated_by_credential_id = 4;
+   */
+  updatedByCredentialId: string;
+};
+
+/**
+ * Describes the message idp.gateway.v1.TopicConfigUpdatedRequest.
+ * Use `create(TopicConfigUpdatedRequestSchema)` to create a new message.
+ */
+export const TopicConfigUpdatedRequestSchema: GenMessage<TopicConfigUpdatedRequest> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 32);
+
+/**
+ * @generated from message idp.gateway.v1.TopicConfigUpdatedResponse
+ */
+export type TopicConfigUpdatedResponse = Message<"idp.gateway.v1.TopicConfigUpdatedResponse"> & {
+  /**
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+};
+
+/**
+ * Describes the message idp.gateway.v1.TopicConfigUpdatedResponse.
+ * Use `create(TopicConfigUpdatedResponseSchema)` to create a new message.
+ */
+export const TopicConfigUpdatedResponseSchema: GenMessage<TopicConfigUpdatedResponse> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 33);
+
+/**
+ * @generated from message idp.gateway.v1.PolicyViolation
+ */
+export type PolicyViolation = Message<"idp.gateway.v1.PolicyViolation"> & {
+  /**
+   * e.g., "partitions", "retention.ms"
+   *
+   * @generated from field: string field = 1;
+   */
+  field: string;
+
+  /**
+   * e.g., "max_partitions"
+   *
+   * @generated from field: string constraint = 2;
+   */
+  constraint: string;
+
+  /**
+   * Human-readable error
+   *
+   * @generated from field: string message = 3;
+   */
+  message: string;
+
+  /**
+   * @generated from field: string actual_value = 4;
+   */
+  actualValue: string;
+
+  /**
+   * @generated from field: string allowed_value = 5;
+   */
+  allowedValue: string;
+};
+
+/**
+ * Describes the message idp.gateway.v1.PolicyViolation.
+ * Use `create(PolicyViolationSchema)` to create a new message.
+ */
+export const PolicyViolationSchema: GenMessage<PolicyViolation> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 34);
+
+/**
+ * @generated from enum idp.gateway.v1.PermissionTemplate
+ */
+export enum PermissionTemplate {
+  /**
+   * @generated from enum value: PERMISSION_TEMPLATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: PERMISSION_TEMPLATE_PRODUCER = 1;
+   */
+  PRODUCER = 1,
+
+  /**
+   * @generated from enum value: PERMISSION_TEMPLATE_CONSUMER = 2;
+   */
+  CONSUMER = 2,
+
+  /**
+   * @generated from enum value: PERMISSION_TEMPLATE_ADMIN = 3;
+   */
+  ADMIN = 3,
+
+  /**
+   * @generated from enum value: PERMISSION_TEMPLATE_CUSTOM = 4;
+   */
+  CUSTOM = 4,
+}
+
+/**
+ * Describes the enum idp.gateway.v1.PermissionTemplate.
+ */
+export const PermissionTemplateSchema: GenEnum<PermissionTemplate> = /*@__PURE__*/
+  enumDesc(file_idp_gateway_v1_gateway, 0);
+
+/**
  * @generated from service idp.gateway.v1.BifrostAdminService
  */
 export const BifrostAdminService: GenService<{
@@ -330,6 +936,32 @@ export const BifrostAdminService: GenService<{
     output: typeof SetVirtualClusterReadOnlyResponseSchema;
   },
   /**
+   * Credential management
+   *
+   * @generated from rpc idp.gateway.v1.BifrostAdminService.UpsertCredential
+   */
+  upsertCredential: {
+    methodKind: "unary";
+    input: typeof UpsertCredentialRequestSchema;
+    output: typeof UpsertCredentialResponseSchema;
+  },
+  /**
+   * @generated from rpc idp.gateway.v1.BifrostAdminService.RevokeCredential
+   */
+  revokeCredential: {
+    methodKind: "unary";
+    input: typeof RevokeCredentialRequestSchema;
+    output: typeof RevokeCredentialResponseSchema;
+  },
+  /**
+   * @generated from rpc idp.gateway.v1.BifrostAdminService.ListCredentials
+   */
+  listCredentials: {
+    methodKind: "unary";
+    input: typeof ListCredentialsRequestSchema;
+    output: typeof ListCredentialsResponseSchema;
+  },
+  /**
    * Full sync (startup reconciliation)
    *
    * @generated from rpc idp.gateway.v1.BifrostAdminService.GetFullConfig
@@ -357,6 +989,65 @@ export const BifrostAdminService: GenService<{
     input: typeof ListVirtualClustersRequestSchema;
     output: typeof ListVirtualClustersResponseSchema;
   },
+  /**
+   * Policy management
+   *
+   * @generated from rpc idp.gateway.v1.BifrostAdminService.UpsertPolicy
+   */
+  upsertPolicy: {
+    methodKind: "unary";
+    input: typeof UpsertPolicyRequestSchema;
+    output: typeof UpsertPolicyResponseSchema;
+  },
+  /**
+   * @generated from rpc idp.gateway.v1.BifrostAdminService.DeletePolicy
+   */
+  deletePolicy: {
+    methodKind: "unary";
+    input: typeof DeletePolicyRequestSchema;
+    output: typeof DeletePolicyResponseSchema;
+  },
+  /**
+   * @generated from rpc idp.gateway.v1.BifrostAdminService.ListPolicies
+   */
+  listPolicies: {
+    methodKind: "unary";
+    input: typeof ListPoliciesRequestSchema;
+    output: typeof ListPoliciesResponseSchema;
+  },
 }> = /*@__PURE__*/
   serviceDesc(file_idp_gateway_v1_gateway, 0);
+
+/**
+ * @generated from service idp.gateway.v1.BifrostCallbackService
+ */
+export const BifrostCallbackService: GenService<{
+  /**
+   * Topic sync (passthrough creates)
+   *
+   * @generated from rpc idp.gateway.v1.BifrostCallbackService.TopicCreated
+   */
+  topicCreated: {
+    methodKind: "unary";
+    input: typeof TopicCreatedRequestSchema;
+    output: typeof TopicCreatedResponseSchema;
+  },
+  /**
+   * @generated from rpc idp.gateway.v1.BifrostCallbackService.TopicDeleted
+   */
+  topicDeleted: {
+    methodKind: "unary";
+    input: typeof TopicDeletedRequestSchema;
+    output: typeof TopicDeletedResponseSchema;
+  },
+  /**
+   * @generated from rpc idp.gateway.v1.BifrostCallbackService.TopicConfigUpdated
+   */
+  topicConfigUpdated: {
+    methodKind: "unary";
+    input: typeof TopicConfigUpdatedRequestSchema;
+    output: typeof TopicConfigUpdatedResponseSchema;
+  },
+}> = /*@__PURE__*/
+  serviceDesc(file_idp_gateway_v1_gateway, 1);
 

@@ -30,6 +30,11 @@ service BifrostAdminService {
   // Health & observability
   rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
   rpc ListVirtualClusters(ListVirtualClustersRequest) returns (ListVirtualClustersResponse);
+
+  // Policy management
+  rpc UpsertPolicy(UpsertPolicyRequest) returns (UpsertPolicyResponse);
+  rpc DeletePolicy(DeletePolicyRequest) returns (DeletePolicyResponse);
+  rpc ListPolicies(ListPoliciesRequest) returns (ListPoliciesResponse);
 }
 
 // ============================================================================
@@ -84,6 +89,8 @@ message GetFullConfigRequest {}
 
 message GetFullConfigResponse {
   repeated VirtualClusterConfig virtual_clusters = 1;
+  repeated CredentialConfig credentials = 2;
+  repeated PolicyConfig policies = 3;
 }
 
 // ============================================================================
@@ -154,4 +161,104 @@ message ListCredentialsRequest {
 
 message ListCredentialsResponse {
   repeated CredentialConfig credentials = 1;
+}
+
+// ============================================================================
+// Messages: Policies
+// ============================================================================
+
+message PolicyConfig {
+  string id = 1;
+  string environment = 2;  // dev, staging, prod
+  int32 max_partitions = 3;
+  int32 min_partitions = 4;
+  int64 max_retention_ms = 5;
+  int32 min_replication_factor = 6;
+  repeated string allowed_cleanup_policies = 7;
+  string naming_pattern = 8;  // regex for valid topic names
+  int32 max_name_length = 9;
+}
+
+message UpsertPolicyRequest {
+  PolicyConfig config = 1;
+}
+
+message UpsertPolicyResponse {
+  bool success = 1;
+}
+
+message DeletePolicyRequest {
+  string policy_id = 1;
+}
+
+message DeletePolicyResponse {
+  bool success = 1;
+}
+
+message ListPoliciesRequest {
+  string environment = 1;  // Optional filter
+}
+
+message ListPoliciesResponse {
+  repeated PolicyConfig policies = 1;
+}
+
+// ============================================================================
+// Bifrost Callback Service (Gateway → Control Plane)
+// ============================================================================
+
+service BifrostCallbackService {
+  // Topic sync (passthrough creates)
+  rpc TopicCreated(TopicCreatedRequest) returns (TopicCreatedResponse);
+  rpc TopicDeleted(TopicDeletedRequest) returns (TopicDeletedResponse);
+  rpc TopicConfigUpdated(TopicConfigUpdatedRequest) returns (TopicConfigUpdatedResponse);
+}
+
+message TopicCreatedRequest {
+  string virtual_cluster_id = 1;
+  string virtual_name = 2;      // Topic name as client sees it
+  string physical_name = 3;     // Full prefixed name on broker
+  int32 partitions = 4;
+  int32 replication_factor = 5;
+  map<string, string> config = 6;
+  string created_by_credential_id = 7;
+}
+
+message TopicCreatedResponse {
+  bool success = 1;
+  string topic_id = 2;  // Orbit's topic record ID
+}
+
+message TopicDeletedRequest {
+  string virtual_cluster_id = 1;
+  string virtual_name = 2;
+  string physical_name = 3;
+  string deleted_by_credential_id = 4;
+}
+
+message TopicDeletedResponse {
+  bool success = 1;
+}
+
+message TopicConfigUpdatedRequest {
+  string virtual_cluster_id = 1;
+  string virtual_name = 2;
+  map<string, string> config = 3;
+  string updated_by_credential_id = 4;
+}
+
+message TopicConfigUpdatedResponse {
+  bool success = 1;
+}
+
+// ============================================================================
+// Policy Violation Details
+// ============================================================================
+
+message PolicyViolation {
+  string field = 1;           // e.g., "partitions", "retention.ms"
+  string constraint = 2;      // e.g., "max_partitions"
+  string message = 3;         // Human-readable error
+  string actual_value = 4;
+  string allowed_value = 5;
 }

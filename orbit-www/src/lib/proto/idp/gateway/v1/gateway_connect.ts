@@ -5,7 +5,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { DeleteVirtualClusterRequest, DeleteVirtualClusterResponse, GetFullConfigRequest, GetFullConfigResponse, GetStatusRequest, GetStatusResponse, ListVirtualClustersRequest, ListVirtualClustersResponse, SetVirtualClusterReadOnlyRequest, SetVirtualClusterReadOnlyResponse, UpsertVirtualClusterRequest, UpsertVirtualClusterResponse } from "./gateway_pb.js";
+import { DeletePolicyRequest, DeletePolicyResponse, DeleteVirtualClusterRequest, DeleteVirtualClusterResponse, GetFullConfigRequest, GetFullConfigResponse, GetStatusRequest, GetStatusResponse, ListCredentialsRequest, ListCredentialsResponse, ListPoliciesRequest, ListPoliciesResponse, ListVirtualClustersRequest, ListVirtualClustersResponse, RevokeCredentialRequest, RevokeCredentialResponse, SetVirtualClusterReadOnlyRequest, SetVirtualClusterReadOnlyResponse, TopicConfigUpdatedRequest, TopicConfigUpdatedResponse, TopicCreatedRequest, TopicCreatedResponse, TopicDeletedRequest, TopicDeletedResponse, UpsertCredentialRequest, UpsertCredentialResponse, UpsertPolicyRequest, UpsertPolicyResponse, UpsertVirtualClusterRequest, UpsertVirtualClusterResponse } from "./gateway_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -44,6 +44,35 @@ export const BifrostAdminService = {
       kind: MethodKind.Unary,
     },
     /**
+     * Credential management
+     *
+     * @generated from rpc idp.gateway.v1.BifrostAdminService.UpsertCredential
+     */
+    upsertCredential: {
+      name: "UpsertCredential",
+      I: UpsertCredentialRequest,
+      O: UpsertCredentialResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc idp.gateway.v1.BifrostAdminService.RevokeCredential
+     */
+    revokeCredential: {
+      name: "RevokeCredential",
+      I: RevokeCredentialRequest,
+      O: RevokeCredentialResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc idp.gateway.v1.BifrostAdminService.ListCredentials
+     */
+    listCredentials: {
+      name: "ListCredentials",
+      I: ListCredentialsRequest,
+      O: ListCredentialsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
      * Full sync (startup reconciliation)
      *
      * @generated from rpc idp.gateway.v1.BifrostAdminService.GetFullConfig
@@ -72,6 +101,73 @@ export const BifrostAdminService = {
       name: "ListVirtualClusters",
       I: ListVirtualClustersRequest,
       O: ListVirtualClustersResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Policy management
+     *
+     * @generated from rpc idp.gateway.v1.BifrostAdminService.UpsertPolicy
+     */
+    upsertPolicy: {
+      name: "UpsertPolicy",
+      I: UpsertPolicyRequest,
+      O: UpsertPolicyResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc idp.gateway.v1.BifrostAdminService.DeletePolicy
+     */
+    deletePolicy: {
+      name: "DeletePolicy",
+      I: DeletePolicyRequest,
+      O: DeletePolicyResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc idp.gateway.v1.BifrostAdminService.ListPolicies
+     */
+    listPolicies: {
+      name: "ListPolicies",
+      I: ListPoliciesRequest,
+      O: ListPoliciesResponse,
+      kind: MethodKind.Unary,
+    },
+  }
+} as const;
+
+/**
+ * @generated from service idp.gateway.v1.BifrostCallbackService
+ */
+export const BifrostCallbackService = {
+  typeName: "idp.gateway.v1.BifrostCallbackService",
+  methods: {
+    /**
+     * Topic sync (passthrough creates)
+     *
+     * @generated from rpc idp.gateway.v1.BifrostCallbackService.TopicCreated
+     */
+    topicCreated: {
+      name: "TopicCreated",
+      I: TopicCreatedRequest,
+      O: TopicCreatedResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc idp.gateway.v1.BifrostCallbackService.TopicDeleted
+     */
+    topicDeleted: {
+      name: "TopicDeleted",
+      I: TopicDeletedRequest,
+      O: TopicDeletedResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc idp.gateway.v1.BifrostCallbackService.TopicConfigUpdated
+     */
+    topicConfigUpdated: {
+      name: "TopicConfigUpdated",
+      I: TopicConfigUpdatedRequest,
+      O: TopicConfigUpdatedResponse,
       kind: MethodKind.Unary,
     },
   }

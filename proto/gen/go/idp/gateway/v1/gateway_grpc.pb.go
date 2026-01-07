@@ -24,9 +24,15 @@ const (
 	BifrostAdminService_UpsertVirtualCluster_FullMethodName      = "/idp.gateway.v1.BifrostAdminService/UpsertVirtualCluster"
 	BifrostAdminService_DeleteVirtualCluster_FullMethodName      = "/idp.gateway.v1.BifrostAdminService/DeleteVirtualCluster"
 	BifrostAdminService_SetVirtualClusterReadOnly_FullMethodName = "/idp.gateway.v1.BifrostAdminService/SetVirtualClusterReadOnly"
+	BifrostAdminService_UpsertCredential_FullMethodName          = "/idp.gateway.v1.BifrostAdminService/UpsertCredential"
+	BifrostAdminService_RevokeCredential_FullMethodName          = "/idp.gateway.v1.BifrostAdminService/RevokeCredential"
+	BifrostAdminService_ListCredentials_FullMethodName           = "/idp.gateway.v1.BifrostAdminService/ListCredentials"
 	BifrostAdminService_GetFullConfig_FullMethodName             = "/idp.gateway.v1.BifrostAdminService/GetFullConfig"
 	BifrostAdminService_GetStatus_FullMethodName                 = "/idp.gateway.v1.BifrostAdminService/GetStatus"
 	BifrostAdminService_ListVirtualClusters_FullMethodName       = "/idp.gateway.v1.BifrostAdminService/ListVirtualClusters"
+	BifrostAdminService_UpsertPolicy_FullMethodName              = "/idp.gateway.v1.BifrostAdminService/UpsertPolicy"
+	BifrostAdminService_DeletePolicy_FullMethodName              = "/idp.gateway.v1.BifrostAdminService/DeletePolicy"
+	BifrostAdminService_ListPolicies_FullMethodName              = "/idp.gateway.v1.BifrostAdminService/ListPolicies"
 )
 
 // BifrostAdminServiceClient is the client API for BifrostAdminService service.
@@ -37,11 +43,19 @@ type BifrostAdminServiceClient interface {
 	UpsertVirtualCluster(ctx context.Context, in *UpsertVirtualClusterRequest, opts ...grpc.CallOption) (*UpsertVirtualClusterResponse, error)
 	DeleteVirtualCluster(ctx context.Context, in *DeleteVirtualClusterRequest, opts ...grpc.CallOption) (*DeleteVirtualClusterResponse, error)
 	SetVirtualClusterReadOnly(ctx context.Context, in *SetVirtualClusterReadOnlyRequest, opts ...grpc.CallOption) (*SetVirtualClusterReadOnlyResponse, error)
+	// Credential management
+	UpsertCredential(ctx context.Context, in *UpsertCredentialRequest, opts ...grpc.CallOption) (*UpsertCredentialResponse, error)
+	RevokeCredential(ctx context.Context, in *RevokeCredentialRequest, opts ...grpc.CallOption) (*RevokeCredentialResponse, error)
+	ListCredentials(ctx context.Context, in *ListCredentialsRequest, opts ...grpc.CallOption) (*ListCredentialsResponse, error)
 	// Full sync (startup reconciliation)
 	GetFullConfig(ctx context.Context, in *GetFullConfigRequest, opts ...grpc.CallOption) (*GetFullConfigResponse, error)
 	// Health & observability
 	GetStatus(ctx context.Context, in *GetStatusRequest, opts ...grpc.CallOption) (*GetStatusResponse, error)
 	ListVirtualClusters(ctx context.Context, in *ListVirtualClustersRequest, opts ...grpc.CallOption) (*ListVirtualClustersResponse, error)
+	// Policy management
+	UpsertPolicy(ctx context.Context, in *UpsertPolicyRequest, opts ...grpc.CallOption) (*UpsertPolicyResponse, error)
+	DeletePolicy(ctx context.Context, in *DeletePolicyRequest, opts ...grpc.CallOption) (*DeletePolicyResponse, error)
+	ListPolicies(ctx context.Context, in *ListPoliciesRequest, opts ...grpc.CallOption) (*ListPoliciesResponse, error)
 }
 
 type bifrostAdminServiceClient struct {
@@ -82,6 +96,36 @@ func (c *bifrostAdminServiceClient) SetVirtualClusterReadOnly(ctx context.Contex
 	return out, nil
 }
 
+func (c *bifrostAdminServiceClient) UpsertCredential(ctx context.Context, in *UpsertCredentialRequest, opts ...grpc.CallOption) (*UpsertCredentialResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpsertCredentialResponse)
+	err := c.cc.Invoke(ctx, BifrostAdminService_UpsertCredential_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bifrostAdminServiceClient) RevokeCredential(ctx context.Context, in *RevokeCredentialRequest, opts ...grpc.CallOption) (*RevokeCredentialResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevokeCredentialResponse)
+	err := c.cc.Invoke(ctx, BifrostAdminService_RevokeCredential_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bifrostAdminServiceClient) ListCredentials(ctx context.Context, in *ListCredentialsRequest, opts ...grpc.CallOption) (*ListCredentialsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListCredentialsResponse)
+	err := c.cc.Invoke(ctx, BifrostAdminService_ListCredentials_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *bifrostAdminServiceClient) GetFullConfig(ctx context.Context, in *GetFullConfigRequest, opts ...grpc.CallOption) (*GetFullConfigResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetFullConfigResponse)
@@ -112,6 +156,36 @@ func (c *bifrostAdminServiceClient) ListVirtualClusters(ctx context.Context, in 
 	return out, nil
 }
 
+func (c *bifrostAdminServiceClient) UpsertPolicy(ctx context.Context, in *UpsertPolicyRequest, opts ...grpc.CallOption) (*UpsertPolicyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpsertPolicyResponse)
+	err := c.cc.Invoke(ctx, BifrostAdminService_UpsertPolicy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bifrostAdminServiceClient) DeletePolicy(ctx context.Context, in *DeletePolicyRequest, opts ...grpc.CallOption) (*DeletePolicyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeletePolicyResponse)
+	err := c.cc.Invoke(ctx, BifrostAdminService_DeletePolicy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bifrostAdminServiceClient) ListPolicies(ctx context.Context, in *ListPoliciesRequest, opts ...grpc.CallOption) (*ListPoliciesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListPoliciesResponse)
+	err := c.cc.Invoke(ctx, BifrostAdminService_ListPolicies_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BifrostAdminServiceServer is the server API for BifrostAdminService service.
 // All implementations must embed UnimplementedBifrostAdminServiceServer
 // for forward compatibility.
@@ -120,11 +194,19 @@ type BifrostAdminServiceServer interface {
 	UpsertVirtualCluster(context.Context, *UpsertVirtualClusterRequest) (*UpsertVirtualClusterResponse, error)
 	DeleteVirtualCluster(context.Context, *DeleteVirtualClusterRequest) (*DeleteVirtualClusterResponse, error)
 	SetVirtualClusterReadOnly(context.Context, *SetVirtualClusterReadOnlyRequest) (*SetVirtualClusterReadOnlyResponse, error)
+	// Credential management
+	UpsertCredential(context.Context, *UpsertCredentialRequest) (*UpsertCredentialResponse, error)
+	RevokeCredential(context.Context, *RevokeCredentialRequest) (*RevokeCredentialResponse, error)
+	ListCredentials(context.Context, *ListCredentialsRequest) (*ListCredentialsResponse, error)
 	// Full sync (startup reconciliation)
 	GetFullConfig(context.Context, *GetFullConfigRequest) (*GetFullConfigResponse, error)
 	// Health & observability
 	GetStatus(context.Context, *GetStatusRequest) (*GetStatusResponse, error)
 	ListVirtualClusters(context.Context, *ListVirtualClustersRequest) (*ListVirtualClustersResponse, error)
+	// Policy management
+	UpsertPolicy(context.Context, *UpsertPolicyRequest) (*UpsertPolicyResponse, error)
+	DeletePolicy(context.Context, *DeletePolicyRequest) (*DeletePolicyResponse, error)
+	ListPolicies(context.Context, *ListPoliciesRequest) (*ListPoliciesResponse, error)
 	mustEmbedUnimplementedBifrostAdminServiceServer()
 }
 
@@ -144,6 +226,15 @@ func (UnimplementedBifrostAdminServiceServer) DeleteVirtualCluster(context.Conte
 func (UnimplementedBifrostAdminServiceServer) SetVirtualClusterReadOnly(context.Context, *SetVirtualClusterReadOnlyRequest) (*SetVirtualClusterReadOnlyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetVirtualClusterReadOnly not implemented")
 }
+func (UnimplementedBifrostAdminServiceServer) UpsertCredential(context.Context, *UpsertCredentialRequest) (*UpsertCredentialResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpsertCredential not implemented")
+}
+func (UnimplementedBifrostAdminServiceServer) RevokeCredential(context.Context, *RevokeCredentialRequest) (*RevokeCredentialResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RevokeCredential not implemented")
+}
+func (UnimplementedBifrostAdminServiceServer) ListCredentials(context.Context, *ListCredentialsRequest) (*ListCredentialsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListCredentials not implemented")
+}
 func (UnimplementedBifrostAdminServiceServer) GetFullConfig(context.Context, *GetFullConfigRequest) (*GetFullConfigResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetFullConfig not implemented")
 }
@@ -152,6 +243,15 @@ func (UnimplementedBifrostAdminServiceServer) GetStatus(context.Context, *GetSta
 }
 func (UnimplementedBifrostAdminServiceServer) ListVirtualClusters(context.Context, *ListVirtualClustersRequest) (*ListVirtualClustersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListVirtualClusters not implemented")
+}
+func (UnimplementedBifrostAdminServiceServer) UpsertPolicy(context.Context, *UpsertPolicyRequest) (*UpsertPolicyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpsertPolicy not implemented")
+}
+func (UnimplementedBifrostAdminServiceServer) DeletePolicy(context.Context, *DeletePolicyRequest) (*DeletePolicyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeletePolicy not implemented")
+}
+func (UnimplementedBifrostAdminServiceServer) ListPolicies(context.Context, *ListPoliciesRequest) (*ListPoliciesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListPolicies not implemented")
 }
 func (UnimplementedBifrostAdminServiceServer) mustEmbedUnimplementedBifrostAdminServiceServer() {}
 func (UnimplementedBifrostAdminServiceServer) testEmbeddedByValue()                             {}
@@ -228,6 +328,60 @@ func _BifrostAdminService_SetVirtualClusterReadOnly_Handler(srv interface{}, ctx
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BifrostAdminService_UpsertCredential_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpsertCredentialRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostAdminServiceServer).UpsertCredential(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostAdminService_UpsertCredential_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostAdminServiceServer).UpsertCredential(ctx, req.(*UpsertCredentialRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BifrostAdminService_RevokeCredential_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeCredentialRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostAdminServiceServer).RevokeCredential(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostAdminService_RevokeCredential_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostAdminServiceServer).RevokeCredential(ctx, req.(*RevokeCredentialRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BifrostAdminService_ListCredentials_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListCredentialsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostAdminServiceServer).ListCredentials(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostAdminService_ListCredentials_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostAdminServiceServer).ListCredentials(ctx, req.(*ListCredentialsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _BifrostAdminService_GetFullConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetFullConfigRequest)
 	if err := dec(in); err != nil {
@@ -282,6 +436,60 @@ func _BifrostAdminService_ListVirtualClusters_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BifrostAdminService_UpsertPolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpsertPolicyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostAdminServiceServer).UpsertPolicy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostAdminService_UpsertPolicy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostAdminServiceServer).UpsertPolicy(ctx, req.(*UpsertPolicyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BifrostAdminService_DeletePolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeletePolicyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostAdminServiceServer).DeletePolicy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostAdminService_DeletePolicy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostAdminServiceServer).DeletePolicy(ctx, req.(*DeletePolicyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BifrostAdminService_ListPolicies_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListPoliciesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostAdminServiceServer).ListPolicies(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostAdminService_ListPolicies_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostAdminServiceServer).ListPolicies(ctx, req.(*ListPoliciesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BifrostAdminService_ServiceDesc is the grpc.ServiceDesc for BifrostAdminService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -302,6 +510,18 @@ var BifrostAdminService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _BifrostAdminService_SetVirtualClusterReadOnly_Handler,
 		},
 		{
+			MethodName: "UpsertCredential",
+			Handler:    _BifrostAdminService_UpsertCredential_Handler,
+		},
+		{
+			MethodName: "RevokeCredential",
+			Handler:    _BifrostAdminService_RevokeCredential_Handler,
+		},
+		{
+			MethodName: "ListCredentials",
+			Handler:    _BifrostAdminService_ListCredentials_Handler,
+		},
+		{
 			MethodName: "GetFullConfig",
 			Handler:    _BifrostAdminService_GetFullConfig_Handler,
 		},
@@ -312,6 +532,199 @@ var BifrostAdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListVirtualClusters",
 			Handler:    _BifrostAdminService_ListVirtualClusters_Handler,
+		},
+		{
+			MethodName: "UpsertPolicy",
+			Handler:    _BifrostAdminService_UpsertPolicy_Handler,
+		},
+		{
+			MethodName: "DeletePolicy",
+			Handler:    _BifrostAdminService_DeletePolicy_Handler,
+		},
+		{
+			MethodName: "ListPolicies",
+			Handler:    _BifrostAdminService_ListPolicies_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "idp/gateway/v1/gateway.proto",
+}
+
+const (
+	BifrostCallbackService_TopicCreated_FullMethodName       = "/idp.gateway.v1.BifrostCallbackService/TopicCreated"
+	BifrostCallbackService_TopicDeleted_FullMethodName       = "/idp.gateway.v1.BifrostCallbackService/TopicDeleted"
+	BifrostCallbackService_TopicConfigUpdated_FullMethodName = "/idp.gateway.v1.BifrostCallbackService/TopicConfigUpdated"
+)
+
+// BifrostCallbackServiceClient is the client API for BifrostCallbackService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type BifrostCallbackServiceClient interface {
+	// Topic sync (passthrough creates)
+	TopicCreated(ctx context.Context, in *TopicCreatedRequest, opts ...grpc.CallOption) (*TopicCreatedResponse, error)
+	TopicDeleted(ctx context.Context, in *TopicDeletedRequest, opts ...grpc.CallOption) (*TopicDeletedResponse, error)
+	TopicConfigUpdated(ctx context.Context, in *TopicConfigUpdatedRequest, opts ...grpc.CallOption) (*TopicConfigUpdatedResponse, error)
+}
+
+type bifrostCallbackServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewBifrostCallbackServiceClient(cc grpc.ClientConnInterface) BifrostCallbackServiceClient {
+	return &bifrostCallbackServiceClient{cc}
+}
+
+func (c *bifrostCallbackServiceClient) TopicCreated(ctx context.Context, in *TopicCreatedRequest, opts ...grpc.CallOption) (*TopicCreatedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TopicCreatedResponse)
+	err := c.cc.Invoke(ctx, BifrostCallbackService_TopicCreated_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bifrostCallbackServiceClient) TopicDeleted(ctx context.Context, in *TopicDeletedRequest, opts ...grpc.CallOption) (*TopicDeletedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TopicDeletedResponse)
+	err := c.cc.Invoke(ctx, BifrostCallbackService_TopicDeleted_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bifrostCallbackServiceClient) TopicConfigUpdated(ctx context.Context, in *TopicConfigUpdatedRequest, opts ...grpc.CallOption) (*TopicConfigUpdatedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TopicConfigUpdatedResponse)
+	err := c.cc.Invoke(ctx, BifrostCallbackService_TopicConfigUpdated_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// BifrostCallbackServiceServer is the server API for BifrostCallbackService service.
+// All implementations must embed UnimplementedBifrostCallbackServiceServer
+// for forward compatibility.
+type BifrostCallbackServiceServer interface {
+	// Topic sync (passthrough creates)
+	TopicCreated(context.Context, *TopicCreatedRequest) (*TopicCreatedResponse, error)
+	TopicDeleted(context.Context, *TopicDeletedRequest) (*TopicDeletedResponse, error)
+	TopicConfigUpdated(context.Context, *TopicConfigUpdatedRequest) (*TopicConfigUpdatedResponse, error)
+	mustEmbedUnimplementedBifrostCallbackServiceServer()
+}
+
+// UnimplementedBifrostCallbackServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedBifrostCallbackServiceServer struct{}
+
+func (UnimplementedBifrostCallbackServiceServer) TopicCreated(context.Context, *TopicCreatedRequest) (*TopicCreatedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method TopicCreated not implemented")
+}
+func (UnimplementedBifrostCallbackServiceServer) TopicDeleted(context.Context, *TopicDeletedRequest) (*TopicDeletedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method TopicDeleted not implemented")
+}
+func (UnimplementedBifrostCallbackServiceServer) TopicConfigUpdated(context.Context, *TopicConfigUpdatedRequest) (*TopicConfigUpdatedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method TopicConfigUpdated not implemented")
+}
+func (UnimplementedBifrostCallbackServiceServer) mustEmbedUnimplementedBifrostCallbackServiceServer() {
+}
+func (UnimplementedBifrostCallbackServiceServer) testEmbeddedByValue() {}
+
+// UnsafeBifrostCallbackServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to BifrostCallbackServiceServer will
+// result in compilation errors.
+type UnsafeBifrostCallbackServiceServer interface {
+	mustEmbedUnimplementedBifrostCallbackServiceServer()
+}
+
+func RegisterBifrostCallbackServiceServer(s grpc.ServiceRegistrar, srv BifrostCallbackServiceServer) {
+	// If the following call panics, it indicates UnimplementedBifrostCallbackServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&BifrostCallbackService_ServiceDesc, srv)
+}
+
+func _BifrostCallbackService_TopicCreated_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TopicCreatedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostCallbackServiceServer).TopicCreated(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostCallbackService_TopicCreated_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostCallbackServiceServer).TopicCreated(ctx, req.(*TopicCreatedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BifrostCallbackService_TopicDeleted_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TopicDeletedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostCallbackServiceServer).TopicDeleted(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostCallbackService_TopicDeleted_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostCallbackServiceServer).TopicDeleted(ctx, req.(*TopicDeletedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BifrostCallbackService_TopicConfigUpdated_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TopicConfigUpdatedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostCallbackServiceServer).TopicConfigUpdated(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostCallbackService_TopicConfigUpdated_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostCallbackServiceServer).TopicConfigUpdated(ctx, req.(*TopicConfigUpdatedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// BifrostCallbackService_ServiceDesc is the grpc.ServiceDesc for BifrostCallbackService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var BifrostCallbackService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "idp.gateway.v1.BifrostCallbackService",
+	HandlerType: (*BifrostCallbackServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "TopicCreated",
+			Handler:    _BifrostCallbackService_TopicCreated_Handler,
+		},
+		{
+			MethodName: "TopicDeleted",
+			Handler:    _BifrostCallbackService_TopicDeleted_Handler,
+		},
+		{
+			MethodName: "TopicConfigUpdated",
+			Handler:    _BifrostCallbackService_TopicConfigUpdated_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
