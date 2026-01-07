@@ -3,7 +3,9 @@ package io.orbit.bifrost.admin
 
 import io.grpc.Server
 import io.grpc.ServerBuilder
+import io.orbit.bifrost.auth.CredentialStore
 import io.orbit.bifrost.config.VirtualClusterStore
+import io.orbit.bifrost.policy.PolicyStore
 import mu.KotlinLogging
 import java.util.concurrent.TimeUnit
 
@@ -11,13 +13,15 @@ private val logger = KotlinLogging.logger {}
 
 class AdminServer(
     private val port: Int,
-    private val store: VirtualClusterStore
+    private val virtualClusterStore: VirtualClusterStore,
+    private val credentialStore: CredentialStore,
+    private val policyStore: PolicyStore
 ) {
     private var server: Server? = null
 
     fun start() {
         server = ServerBuilder.forPort(port)
-            .addService(BifrostAdminServiceImpl(store))
+            .addService(BifrostAdminServiceImpl(virtualClusterStore, credentialStore, policyStore))
             .build()
             .start()
 
