@@ -147,6 +147,31 @@ describe('kafka-topic-shares actions', () => {
       expect(result.error).toBe('Not authorized to approve this share')
     })
 
+    it('should return error when share is not pending', async () => {
+      const { auth } = await import('@/lib/auth')
+      const { getPayload } = await import('payload')
+
+      ;(auth.api.getSession as any).mockResolvedValue({
+        user: { id: 'user-1' },
+      })
+
+      const mockPayload = {
+        findByID: vi.fn().mockResolvedValue({
+          id: 'share-1',
+          ownerWorkspace: { id: 'ws-owner' },
+          targetWorkspace: { id: 'ws-target' },
+          status: 'approved', // Already approved
+        }),
+      }
+      ;(getPayload as any).mockResolvedValue(mockPayload)
+
+      const { approveShare } = await import('./kafka-topic-shares')
+      const result = await approveShare({ shareId: 'share-1' })
+
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('Share is not pending approval')
+    })
+
     it('should successfully approve a pending share', async () => {
       const { auth } = await import('@/lib/auth')
       const { getPayload } = await import('payload')
@@ -234,6 +259,31 @@ describe('kafka-topic-shares actions', () => {
 
       expect(result.success).toBe(false)
       expect(result.error).toBe('Not authorized to reject this share')
+    })
+
+    it('should return error when share is not pending', async () => {
+      const { auth } = await import('@/lib/auth')
+      const { getPayload } = await import('payload')
+
+      ;(auth.api.getSession as any).mockResolvedValue({
+        user: { id: 'user-1' },
+      })
+
+      const mockPayload = {
+        findByID: vi.fn().mockResolvedValue({
+          id: 'share-1',
+          ownerWorkspace: { id: 'ws-owner' },
+          targetWorkspace: { id: 'ws-target' },
+          status: 'approved', // Already approved
+        }),
+      }
+      ;(getPayload as any).mockResolvedValue(mockPayload)
+
+      const { rejectShare } = await import('./kafka-topic-shares')
+      const result = await rejectShare({ shareId: 'share-1', reason: 'Not approved' })
+
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('Can only reject pending shares')
     })
 
     it('should successfully reject a pending share with reason', async () => {
@@ -324,6 +374,31 @@ describe('kafka-topic-shares actions', () => {
 
       expect(result.success).toBe(false)
       expect(result.error).toBe('Not authorized to revoke this share')
+    })
+
+    it('should return error when share is not approved', async () => {
+      const { auth } = await import('@/lib/auth')
+      const { getPayload } = await import('payload')
+
+      ;(auth.api.getSession as any).mockResolvedValue({
+        user: { id: 'user-1' },
+      })
+
+      const mockPayload = {
+        findByID: vi.fn().mockResolvedValue({
+          id: 'share-1',
+          ownerWorkspace: { id: 'ws-owner' },
+          targetWorkspace: { id: 'ws-target' },
+          status: 'pending', // Not approved
+        }),
+      }
+      ;(getPayload as any).mockResolvedValue(mockPayload)
+
+      const { revokeShare } = await import('./kafka-topic-shares')
+      const result = await revokeShare({ shareId: 'share-1' })
+
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('Can only revoke approved shares')
     })
 
     it('should successfully revoke an approved share', async () => {
