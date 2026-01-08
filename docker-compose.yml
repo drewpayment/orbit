@@ -321,9 +321,28 @@ services:
     environment:
       - BIFROST_ADMIN_PORT=50060
       - KAFKA_BOOTSTRAP_SERVERS=redpanda:9092
+      - BIFROST_CALLBACK_URL=bifrost-callback:50061
     depends_on:
       redpanda:
         condition: service_healthy
+      bifrost-callback:
+        condition: service_started
+    restart: unless-stopped
+
+  # Bifrost Callback Service (Gateway → Orbit sync)
+  bifrost-callback:
+    container_name: orbit-bifrost-callback
+    build:
+      context: .
+      dockerfile: services/bifrost-callback/Dockerfile
+    ports:
+      - "50061:50061"  # gRPC
+    environment:
+      - GRPC_PORT=50061
+      - TEMPORAL_ADDRESS=temporal-server:7233
+      - TEMPORAL_NAMESPACE=default
+    depends_on:
+      - temporal-server
     restart: unless-stopped
 
   # Go Services

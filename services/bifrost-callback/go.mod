@@ -1,6 +1,6 @@
 module github.com/drewpayment/orbit/services/bifrost-callback
 
-go 1.24.7
+go 1.24
 
 replace github.com/drewpayment/orbit/proto => ../../proto
 
