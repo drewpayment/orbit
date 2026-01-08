@@ -98,11 +98,17 @@ class TopicACLFilter(private val aclStore: ACLStore) : BifrostFilter {
     private fun extractTopics(apiKey: Short, request: AbstractRequest): List<String> {
         return when (apiKey.toInt()) {
             ApiKeys.FETCH.id.toInt() -> {
-                val fetchRequest = request as FetchRequest
+                val fetchRequest = request as? FetchRequest ?: run {
+                    logger.error { "Expected FetchRequest but got ${request::class.simpleName}" }
+                    return emptyList()
+                }
                 fetchRequest.data().topics().map { it.topic() }
             }
             ApiKeys.PRODUCE.id.toInt() -> {
-                val produceRequest = request as ProduceRequest
+                val produceRequest = request as? ProduceRequest ?: run {
+                    logger.error { "Expected ProduceRequest but got ${request::class.simpleName}" }
+                    return emptyList()
+                }
                 produceRequest.data().topicData().map { it.name() }
             }
             else -> emptyList()

@@ -301,4 +301,44 @@ class TopicACLFilterTest {
         // We can't easily create a FetchResponse, but we verify the order is correct
         assertEquals(15, filter.order)
     }
+
+    @Test
+    fun `treats all topics as foreign when topicPrefix is empty`() = runBlocking {
+        // Empty prefix means no topic is "owned" - all require ACL check
+        // This is a security-critical edge case
+        val context = createContext(
+            topicPrefix = "",
+            credentialId = "cred-123"
+        )
+        val request = createFetchRequest("any-topic")
+
+        // Without ACL, access should be denied (not auto-allowed)
+        val result = filter.onRequest(context, ApiKeys.FETCH.id.toShort(), request)
+
+        assertIs<FilterResult.Reject<*>>(result)
+        assertEquals(29.toShort(), (result as FilterResult.Reject).errorCode)
+    }
+
+    @Test
+    fun `allows access to topic with empty prefix when ACL exists`() = runBlocking {
+        // With empty prefix, ACL must be granted for any topic access
+        val entry = ACLEntry(
+            id = "share-1",
+            credentialId = "cred-123",
+            topicPhysicalName = "any-topic",
+            permissions = setOf("read"),
+            expiresAt = null
+        )
+        aclStore.upsert(entry)
+
+        val context = createContext(
+            topicPrefix = "",
+            credentialId = "cred-123"
+        )
+        val request = createFetchRequest("any-topic")
+
+        val result = filter.onRequest(context, ApiKeys.FETCH.id.toShort(), request)
+
+        assertIs<FilterResult.Pass<*>>(result)
+    }
 }
