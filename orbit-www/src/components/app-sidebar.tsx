@@ -117,7 +117,12 @@ const navPlatformData: NavPlatformItem[] = [
     title: "Kafka",
     url: "/platform/kafka",
     icon: Server,
-    items: [], // Main page has tabs for Providers, Clusters, Environments
+    items: [
+      {
+        title: "Pending Approvals",
+        url: "/platform/kafka/pending-approvals",
+      },
+    ],
   },
 ]
 

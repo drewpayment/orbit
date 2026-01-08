@@ -26,11 +26,13 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
+  ClipboardList,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { listApplications, ApplicationData } from '@/app/actions/kafka-applications'
-import { CreateApplicationDialog } from '@/components/features/kafka/CreateApplicationDialog'
+import { getWorkspaceAdminStatus } from '@/app/actions/kafka-application-requests'
+import { CreateApplicationDialog, MyRequestsList } from '@/components/features/kafka'
 
 interface ApplicationsClientProps {
   workspaceId: string
@@ -65,6 +67,15 @@ export function ApplicationsClient({ workspaceId, workspaceSlug }: ApplicationsC
   const [applications, setApplications] = useState<ApplicationData[]>([])
   const [loading, setLoading] = useState(true)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [adminStatus, setAdminStatus] = useState<{ isAdmin: boolean; pendingCount: number }>({
+    isAdmin: false,
+    pendingCount: 0,
+  })
+
+  const loadAdminStatus = useCallback(async () => {
+    const status = await getWorkspaceAdminStatus(workspaceId)
+    setAdminStatus(status)
+  }, [workspaceId])
 
   const loadApplications = useCallback(async () => {
     setLoading(true)
@@ -84,7 +95,8 @@ export function ApplicationsClient({ workspaceId, workspaceSlug }: ApplicationsC
 
   useEffect(() => {
     loadApplications()
-  }, [loadApplications])
+    loadAdminStatus()
+  }, [loadApplications, loadAdminStatus])
 
   const handleCreateSuccess = () => {
     setCreateDialogOpen(false)
@@ -113,6 +125,19 @@ export function ApplicationsClient({ workspaceId, workspaceSlug }: ApplicationsC
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {adminStatus.isAdmin && (
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/workspaces/${workspaceSlug}/kafka/pending-approvals`}>
+                <ClipboardList className="h-4 w-4 mr-1" />
+                Pending Approvals
+                {adminStatus.pendingCount > 0 && (
+                  <Badge variant="secondary" className="ml-1 bg-orange-100 text-orange-800">
+                    {adminStatus.pendingCount}
+                  </Badge>
+                )}
+              </Link>
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={loadApplications} disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
             Refresh
@@ -123,6 +148,8 @@ export function ApplicationsClient({ workspaceId, workspaceSlug }: ApplicationsC
           </Button>
         </div>
       </div>
+
+      <MyRequestsList workspaceId={workspaceId} />
 
       {applications.length === 0 && !loading ? (
         <Card>
