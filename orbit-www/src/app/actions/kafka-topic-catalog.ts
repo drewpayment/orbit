@@ -16,6 +16,7 @@ export type TopicCatalogEntry = {
   workspace: {
     id: string
     name: string
+    slug: string
   }
   application?: {
     id: string
@@ -322,8 +323,8 @@ export async function searchTopicCatalog(
     // Transform to catalog entries
     const topics: TopicCatalogEntry[] = topicsResult.docs.map(topic => {
       const workspace = typeof topic.workspace === 'string'
-        ? { id: topic.workspace, name: 'Unknown' }
-        : { id: topic.workspace.id, name: topic.workspace.name ?? 'Unknown' }
+        ? { id: topic.workspace, name: 'Unknown', slug: 'unknown' }
+        : { id: topic.workspace.id, name: topic.workspace.name ?? 'Unknown', slug: topic.workspace.slug ?? 'unknown' }
 
       const application = topic.application
         ? typeof topic.application === 'string'

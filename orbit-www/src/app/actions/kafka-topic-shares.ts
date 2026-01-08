@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
+import { revalidatePath } from 'next/cache'
 
 // ============================================================================
 // Type Definitions
@@ -206,6 +207,11 @@ export async function approveShare(
       return { success: false, error: 'Share not found' }
     }
 
+    // Verify share is in pending status
+    if (share.status !== 'pending') {
+      return { success: false, error: 'Share is not pending approval' }
+    }
+
     // Get owner workspace ID
     const ownerWorkspaceId = typeof share.ownerWorkspace === 'string'
       ? share.ownerWorkspace
@@ -239,6 +245,10 @@ export async function approveShare(
       id: share.id,
       topic,
     })
+
+    // Revalidate share-related pages
+    revalidatePath('/topics/catalog')
+    revalidatePath('/topics/shared')
 
     return { success: true }
   } catch (error) {
@@ -280,6 +290,11 @@ export async function rejectShare(
 
     if (!share) {
       return { success: false, error: 'Share not found' }
+    }
+
+    // Verify share is in pending status
+    if (share.status !== 'pending') {
+      return { success: false, error: 'Can only reject pending shares' }
     }
 
     // Get owner workspace ID
@@ -326,6 +341,10 @@ export async function rejectShare(
       input.reason
     )
 
+    // Revalidate share-related pages
+    revalidatePath('/topics/catalog')
+    revalidatePath('/topics/shared')
+
     return { success: true }
   } catch (error) {
     console.error('Failed to reject share:', error)
@@ -368,6 +387,11 @@ export async function revokeShare(
       return { success: false, error: 'Share not found' }
     }
 
+    // Verify share is in approved status
+    if (share.status !== 'approved') {
+      return { success: false, error: 'Can only revoke approved shares' }
+    }
+
     // Get owner workspace ID
     const ownerWorkspaceId = typeof share.ownerWorkspace === 'string'
       ? share.ownerWorkspace
@@ -399,6 +423,10 @@ export async function revokeShare(
       id: share.id,
       topic,
     })
+
+    // Revalidate share-related pages
+    revalidatePath('/topics/catalog')
+    revalidatePath('/topics/shared')
 
     return { success: true }
   } catch (error) {
@@ -438,7 +466,7 @@ export async function listPendingShares(
     }
 
     // Build query based on type
-    const workspaceFilter = input.type === 'incoming'
+    const workspaceCondition = input.type === 'incoming'
       ? { ownerWorkspace: { equals: input.workspaceId } }
       : { targetWorkspace: { equals: input.workspaceId } }
 
@@ -447,7 +475,7 @@ export async function listPendingShares(
       collection: 'kafka-topic-shares',
       where: {
         and: [
-          workspaceFilter,
+          workspaceCondition,
           { status: { equals: 'pending' } },
         ],
       },
