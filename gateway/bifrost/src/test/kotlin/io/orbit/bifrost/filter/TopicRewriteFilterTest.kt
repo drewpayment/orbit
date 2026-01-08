@@ -1,7 +1,7 @@
 // gateway/bifrost/src/test/kotlin/io/orbit/bifrost/filter/TopicRewriteFilterTest.kt
 package io.orbit.bifrost.filter
 
-import io.orbit.bifrost.proto.VirtualClusterConfig
+import idp.gateway.v1.Gateway.VirtualClusterConfig
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*

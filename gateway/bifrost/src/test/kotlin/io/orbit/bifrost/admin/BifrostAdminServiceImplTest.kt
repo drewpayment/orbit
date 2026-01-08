@@ -124,7 +124,7 @@ class BifrostAdminServiceImplTest {
         virtualClusterStore.upsert(
             Gateway.VirtualClusterConfig.newBuilder()
                 .setId("vc-1")
-                .setName("test-cluster")
+                .setApplicationSlug("test-cluster")
                 .build()
         )
         policyStore.upsert(PolicyConfig(id = "policy-1", environment = "dev"))
