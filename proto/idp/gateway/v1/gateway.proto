@@ -36,6 +36,11 @@ service BifrostAdminService {
   rpc UpsertPolicy(UpsertPolicyRequest) returns (UpsertPolicyResponse);
   rpc DeletePolicy(DeletePolicyRequest) returns (DeletePolicyResponse);
   rpc ListPolicies(ListPoliciesRequest) returns (ListPoliciesResponse);
+
+  // Topic ACL management (for cross-application sharing)
+  rpc UpsertTopicACL(UpsertTopicACLRequest) returns (UpsertTopicACLResponse);
+  rpc RevokeTopicACL(RevokeTopicACLRequest) returns (RevokeTopicACLResponse);
+  rpc ListTopicACLs(ListTopicACLsRequest) returns (ListTopicACLsResponse);
 }
 
 // ============================================================================
@@ -92,6 +97,8 @@ message GetFullConfigResponse {
   repeated VirtualClusterConfig virtual_clusters = 1;
   repeated CredentialConfig credentials = 2;
   repeated PolicyConfig policies = 3;
+  reserved 4;
+  repeated TopicACLEntry topic_acls = 5;
 }
 
 // ============================================================================
@@ -202,6 +209,42 @@ message ListPoliciesRequest {
 
 message ListPoliciesResponse {
   repeated PolicyConfig policies = 1;
+}
+
+// ============================================================================
+// Topic ACL Messages (Cross-Application Sharing)
+// ============================================================================
+
+message TopicACLEntry {
+  string id = 1;                          // Share ID from Orbit
+  string credential_id = 2;               // Service account granted access
+  string topic_physical_name = 3;         // Full physical topic name
+  repeated string permissions = 4;        // "read", "write"
+  google.protobuf.Timestamp expires_at = 5;
+}
+
+message UpsertTopicACLRequest {
+  TopicACLEntry entry = 1;
+}
+
+message UpsertTopicACLResponse {
+  bool success = 1;
+}
+
+message RevokeTopicACLRequest {
+  string acl_id = 1;
+}
+
+message RevokeTopicACLResponse {
+  bool success = 1;
+}
+
+message ListTopicACLsRequest {
+  string credential_id = 1;  // Optional: filter by credential
+}
+
+message ListTopicACLsResponse {
+  repeated TopicACLEntry entries = 1;
 }
 
 // ============================================================================

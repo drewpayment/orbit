@@ -33,6 +33,9 @@ const (
 	BifrostAdminService_UpsertPolicy_FullMethodName              = "/idp.gateway.v1.BifrostAdminService/UpsertPolicy"
 	BifrostAdminService_DeletePolicy_FullMethodName              = "/idp.gateway.v1.BifrostAdminService/DeletePolicy"
 	BifrostAdminService_ListPolicies_FullMethodName              = "/idp.gateway.v1.BifrostAdminService/ListPolicies"
+	BifrostAdminService_UpsertTopicACL_FullMethodName            = "/idp.gateway.v1.BifrostAdminService/UpsertTopicACL"
+	BifrostAdminService_RevokeTopicACL_FullMethodName            = "/idp.gateway.v1.BifrostAdminService/RevokeTopicACL"
+	BifrostAdminService_ListTopicACLs_FullMethodName             = "/idp.gateway.v1.BifrostAdminService/ListTopicACLs"
 )
 
 // BifrostAdminServiceClient is the client API for BifrostAdminService service.
@@ -56,6 +59,10 @@ type BifrostAdminServiceClient interface {
 	UpsertPolicy(ctx context.Context, in *UpsertPolicyRequest, opts ...grpc.CallOption) (*UpsertPolicyResponse, error)
 	DeletePolicy(ctx context.Context, in *DeletePolicyRequest, opts ...grpc.CallOption) (*DeletePolicyResponse, error)
 	ListPolicies(ctx context.Context, in *ListPoliciesRequest, opts ...grpc.CallOption) (*ListPoliciesResponse, error)
+	// Topic ACL management (for cross-application sharing)
+	UpsertTopicACL(ctx context.Context, in *UpsertTopicACLRequest, opts ...grpc.CallOption) (*UpsertTopicACLResponse, error)
+	RevokeTopicACL(ctx context.Context, in *RevokeTopicACLRequest, opts ...grpc.CallOption) (*RevokeTopicACLResponse, error)
+	ListTopicACLs(ctx context.Context, in *ListTopicACLsRequest, opts ...grpc.CallOption) (*ListTopicACLsResponse, error)
 }
 
 type bifrostAdminServiceClient struct {
@@ -186,6 +193,36 @@ func (c *bifrostAdminServiceClient) ListPolicies(ctx context.Context, in *ListPo
 	return out, nil
 }
 
+func (c *bifrostAdminServiceClient) UpsertTopicACL(ctx context.Context, in *UpsertTopicACLRequest, opts ...grpc.CallOption) (*UpsertTopicACLResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpsertTopicACLResponse)
+	err := c.cc.Invoke(ctx, BifrostAdminService_UpsertTopicACL_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bifrostAdminServiceClient) RevokeTopicACL(ctx context.Context, in *RevokeTopicACLRequest, opts ...grpc.CallOption) (*RevokeTopicACLResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevokeTopicACLResponse)
+	err := c.cc.Invoke(ctx, BifrostAdminService_RevokeTopicACL_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bifrostAdminServiceClient) ListTopicACLs(ctx context.Context, in *ListTopicACLsRequest, opts ...grpc.CallOption) (*ListTopicACLsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListTopicACLsResponse)
+	err := c.cc.Invoke(ctx, BifrostAdminService_ListTopicACLs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BifrostAdminServiceServer is the server API for BifrostAdminService service.
 // All implementations must embed UnimplementedBifrostAdminServiceServer
 // for forward compatibility.
@@ -207,6 +244,10 @@ type BifrostAdminServiceServer interface {
 	UpsertPolicy(context.Context, *UpsertPolicyRequest) (*UpsertPolicyResponse, error)
 	DeletePolicy(context.Context, *DeletePolicyRequest) (*DeletePolicyResponse, error)
 	ListPolicies(context.Context, *ListPoliciesRequest) (*ListPoliciesResponse, error)
+	// Topic ACL management (for cross-application sharing)
+	UpsertTopicACL(context.Context, *UpsertTopicACLRequest) (*UpsertTopicACLResponse, error)
+	RevokeTopicACL(context.Context, *RevokeTopicACLRequest) (*RevokeTopicACLResponse, error)
+	ListTopicACLs(context.Context, *ListTopicACLsRequest) (*ListTopicACLsResponse, error)
 	mustEmbedUnimplementedBifrostAdminServiceServer()
 }
 
@@ -252,6 +293,15 @@ func (UnimplementedBifrostAdminServiceServer) DeletePolicy(context.Context, *Del
 }
 func (UnimplementedBifrostAdminServiceServer) ListPolicies(context.Context, *ListPoliciesRequest) (*ListPoliciesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListPolicies not implemented")
+}
+func (UnimplementedBifrostAdminServiceServer) UpsertTopicACL(context.Context, *UpsertTopicACLRequest) (*UpsertTopicACLResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpsertTopicACL not implemented")
+}
+func (UnimplementedBifrostAdminServiceServer) RevokeTopicACL(context.Context, *RevokeTopicACLRequest) (*RevokeTopicACLResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RevokeTopicACL not implemented")
+}
+func (UnimplementedBifrostAdminServiceServer) ListTopicACLs(context.Context, *ListTopicACLsRequest) (*ListTopicACLsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListTopicACLs not implemented")
 }
 func (UnimplementedBifrostAdminServiceServer) mustEmbedUnimplementedBifrostAdminServiceServer() {}
 func (UnimplementedBifrostAdminServiceServer) testEmbeddedByValue()                             {}
@@ -490,6 +540,60 @@ func _BifrostAdminService_ListPolicies_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BifrostAdminService_UpsertTopicACL_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpsertTopicACLRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostAdminServiceServer).UpsertTopicACL(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostAdminService_UpsertTopicACL_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostAdminServiceServer).UpsertTopicACL(ctx, req.(*UpsertTopicACLRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BifrostAdminService_RevokeTopicACL_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeTopicACLRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostAdminServiceServer).RevokeTopicACL(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostAdminService_RevokeTopicACL_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostAdminServiceServer).RevokeTopicACL(ctx, req.(*RevokeTopicACLRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BifrostAdminService_ListTopicACLs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListTopicACLsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostAdminServiceServer).ListTopicACLs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostAdminService_ListTopicACLs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostAdminServiceServer).ListTopicACLs(ctx, req.(*ListTopicACLsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BifrostAdminService_ServiceDesc is the grpc.ServiceDesc for BifrostAdminService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -544,6 +648,18 @@ var BifrostAdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListPolicies",
 			Handler:    _BifrostAdminService_ListPolicies_Handler,
+		},
+		{
+			MethodName: "UpsertTopicACL",
+			Handler:    _BifrostAdminService_UpsertTopicACL_Handler,
+		},
+		{
+			MethodName: "RevokeTopicACL",
+			Handler:    _BifrostAdminService_RevokeTopicACL_Handler,
+		},
+		{
+			MethodName: "ListTopicACLs",
+			Handler:    _BifrostAdminService_ListTopicACLs_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

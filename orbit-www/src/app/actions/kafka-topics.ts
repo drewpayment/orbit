@@ -16,6 +16,7 @@ export type CreateTopicInput = {
   cleanupPolicy?: 'delete' | 'compact' | 'compact,delete'
   compression?: 'none' | 'gzip' | 'snappy' | 'lz4' | 'zstd'
   config?: Record<string, string>
+  visibility?: 'private' | 'workspace' | 'discoverable' | 'public'
 }
 
 export type CreateTopicResult = {
@@ -113,6 +114,7 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
         cleanupPolicy: input.cleanupPolicy ?? 'delete',
         compression: input.compression ?? 'none',
         config: input.config ?? {},
+        visibility: input.visibility ?? 'private',
         status: violations.length > 0 ? 'pending-approval' : 'provisioning',
         approvalRequired: violations.length > 0,
         createdVia: 'orbit-ui',
