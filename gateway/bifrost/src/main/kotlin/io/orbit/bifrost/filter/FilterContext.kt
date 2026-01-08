@@ -1,7 +1,7 @@
 // gateway/bifrost/src/main/kotlin/io/orbit/bifrost/filter/FilterContext.kt
 package io.orbit.bifrost.filter
 
-import io.orbit.bifrost.proto.VirtualClusterConfig
+import idp.gateway.v1.Gateway.VirtualClusterConfig
 
 /**
  * Context passed through the filter chain for each connection.

@@ -5,6 +5,8 @@ import io.orbit.bifrost.policy.PolicyConfig
 import io.orbit.bifrost.policy.PolicyStore
 import io.orbit.bifrost.policy.PolicyViolation
 import mu.KotlinLogging
+import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableTopicConfig
+import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableTopicConfigCollection
 import org.apache.kafka.common.protocol.ApiKeys
 import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.requests.AbstractRequest
@@ -46,7 +48,7 @@ class PolicyEnforcementFilter(private val policyStore: PolicyStore) : BifrostFil
         request: AbstractRequest
     ): FilterResult<AbstractRequest> {
         // Only process CREATE_TOPICS requests
-        if (apiKey.toInt() != ApiKeys.CREATE_TOPICS.id) {
+        if (apiKey.toInt() != ApiKeys.CREATE_TOPICS.id.toInt()) {
             return FilterResult.Pass(request)
         }
 
@@ -109,7 +111,7 @@ class PolicyEnforcementFilter(private val policyStore: PolicyStore) : BifrostFil
             val message = buildViolationMessage(allViolations)
             logger.warn { "Rejecting CreateTopics request: $message" }
             FilterResult.Reject(
-                errorCode = Errors.POLICY_VIOLATION.code().toInt(),
+                errorCode = Errors.POLICY_VIOLATION.code(),
                 message = message
             )
         } else {
@@ -120,9 +122,8 @@ class PolicyEnforcementFilter(private val policyStore: PolicyStore) : BifrostFil
     /**
      * Extracts retention.ms config value from topic configs.
      */
-    private fun extractRetentionMs(configs: List<*>): Long? {
+    private fun extractRetentionMs(configs: CreatableTopicConfigCollection): Long? {
         return configs
-            .filterIsInstance<org.apache.kafka.common.message.CreateTopicsRequestData.CreateableTopicConfig>()
             .find { it.name() == "retention.ms" }
             ?.value()
             ?.toLongOrNull()
@@ -131,9 +132,8 @@ class PolicyEnforcementFilter(private val policyStore: PolicyStore) : BifrostFil
     /**
      * Extracts cleanup.policy config value from topic configs.
      */
-    private fun extractCleanupPolicy(configs: List<*>): String? {
+    private fun extractCleanupPolicy(configs: CreatableTopicConfigCollection): String? {
         return configs
-            .filterIsInstance<org.apache.kafka.common.message.CreateTopicsRequestData.CreateableTopicConfig>()
             .find { it.name() == "cleanup.policy" }
             ?.value()
     }

@@ -24,12 +24,13 @@ class TransactionRewriteFilter : BifrostFilter {
             return FilterResult.Pass(request)
         }
 
-        return when (apiKey.toInt()) {
-            ApiKeys.INIT_PRODUCER_ID.id -> rewriteInitProducerIdRequest(context, request as InitProducerIdRequest)
-            ApiKeys.ADD_PARTITIONS_TO_TXN.id -> rewriteAddPartitionsToTxnRequest(context, request as AddPartitionsToTxnRequest)
-            ApiKeys.ADD_OFFSETS_TO_TXN.id -> rewriteAddOffsetsToTxnRequest(context, request as AddOffsetsToTxnRequest)
-            ApiKeys.END_TXN.id -> rewriteEndTxnRequest(context, request as EndTxnRequest)
-            ApiKeys.TXN_OFFSET_COMMIT.id -> rewriteTxnOffsetCommitRequest(context, request as TxnOffsetCommitRequest)
+        val key = apiKey.toInt()
+        return when {
+            key == ApiKeys.INIT_PRODUCER_ID.id.toInt() -> rewriteInitProducerIdRequest(context, request as InitProducerIdRequest)
+            key == ApiKeys.ADD_PARTITIONS_TO_TXN.id.toInt() -> rewriteAddPartitionsToTxnRequest(context, request as AddPartitionsToTxnRequest)
+            key == ApiKeys.ADD_OFFSETS_TO_TXN.id.toInt() -> rewriteAddOffsetsToTxnRequest(context, request as AddOffsetsToTxnRequest)
+            key == ApiKeys.END_TXN.id.toInt() -> rewriteEndTxnRequest(context, request as EndTxnRequest)
+            key == ApiKeys.TXN_OFFSET_COMMIT.id.toInt() -> rewriteTxnOffsetCommitRequest(context, request as TxnOffsetCommitRequest)
             else -> FilterResult.Pass(request)
         }
     }

@@ -24,17 +24,18 @@ class GroupRewriteFilter : BifrostFilter {
             return FilterResult.Pass(request)
         }
 
-        return when (apiKey.toInt()) {
-            ApiKeys.FIND_COORDINATOR.id -> rewriteFindCoordinatorRequest(context, request as FindCoordinatorRequest)
-            ApiKeys.JOIN_GROUP.id -> rewriteJoinGroupRequest(context, request as JoinGroupRequest)
-            ApiKeys.SYNC_GROUP.id -> rewriteSyncGroupRequest(context, request as SyncGroupRequest)
-            ApiKeys.LEAVE_GROUP.id -> rewriteLeaveGroupRequest(context, request as LeaveGroupRequest)
-            ApiKeys.HEARTBEAT.id -> rewriteHeartbeatRequest(context, request as HeartbeatRequest)
-            ApiKeys.OFFSET_COMMIT.id -> rewriteOffsetCommitRequest(context, request as OffsetCommitRequest)
-            ApiKeys.OFFSET_FETCH.id -> rewriteOffsetFetchRequest(context, request as OffsetFetchRequest)
-            ApiKeys.LIST_GROUPS.id -> FilterResult.Pass(request) // Will filter response
-            ApiKeys.DESCRIBE_GROUPS.id -> rewriteDescribeGroupsRequest(context, request as DescribeGroupsRequest)
-            ApiKeys.DELETE_GROUPS.id -> rewriteDeleteGroupsRequest(context, request as DeleteGroupsRequest)
+        val key = apiKey.toInt()
+        return when {
+            key == ApiKeys.FIND_COORDINATOR.id.toInt() -> rewriteFindCoordinatorRequest(context, request as FindCoordinatorRequest)
+            key == ApiKeys.JOIN_GROUP.id.toInt() -> rewriteJoinGroupRequest(context, request as JoinGroupRequest)
+            key == ApiKeys.SYNC_GROUP.id.toInt() -> rewriteSyncGroupRequest(context, request as SyncGroupRequest)
+            key == ApiKeys.LEAVE_GROUP.id.toInt() -> rewriteLeaveGroupRequest(context, request as LeaveGroupRequest)
+            key == ApiKeys.HEARTBEAT.id.toInt() -> rewriteHeartbeatRequest(context, request as HeartbeatRequest)
+            key == ApiKeys.OFFSET_COMMIT.id.toInt() -> rewriteOffsetCommitRequest(context, request as OffsetCommitRequest)
+            key == ApiKeys.OFFSET_FETCH.id.toInt() -> rewriteOffsetFetchRequest(context, request as OffsetFetchRequest)
+            key == ApiKeys.LIST_GROUPS.id.toInt() -> FilterResult.Pass(request) // Will filter response
+            key == ApiKeys.DESCRIBE_GROUPS.id.toInt() -> rewriteDescribeGroupsRequest(context, request as DescribeGroupsRequest)
+            key == ApiKeys.DELETE_GROUPS.id.toInt() -> rewriteDeleteGroupsRequest(context, request as DeleteGroupsRequest)
             else -> FilterResult.Pass(request)
         }
     }
@@ -48,9 +49,10 @@ class GroupRewriteFilter : BifrostFilter {
             return FilterResult.Pass(response)
         }
 
-        return when (apiKey.toInt()) {
-            ApiKeys.LIST_GROUPS.id -> rewriteListGroupsResponse(context, response as ListGroupsResponse)
-            ApiKeys.DESCRIBE_GROUPS.id -> rewriteDescribeGroupsResponse(context, response as DescribeGroupsResponse)
+        val key = apiKey.toInt()
+        return when {
+            key == ApiKeys.LIST_GROUPS.id.toInt() -> rewriteListGroupsResponse(context, response as ListGroupsResponse)
+            key == ApiKeys.DESCRIBE_GROUPS.id.toInt() -> rewriteDescribeGroupsResponse(context, response as DescribeGroupsResponse)
             else -> FilterResult.Pass(response)
         }
     }

@@ -26,14 +26,15 @@ class TopicRewriteFilter : BifrostFilter {
             return FilterResult.Pass(request)
         }
 
-        return when (apiKey.toInt()) {
-            ApiKeys.METADATA.id -> rewriteMetadataRequest(context, request as MetadataRequest)
-            ApiKeys.PRODUCE.id -> rewriteProduceRequest(context, request as ProduceRequest)
-            ApiKeys.FETCH.id -> rewriteFetchRequest(context, request as FetchRequest)
-            ApiKeys.LIST_OFFSETS.id -> rewriteListOffsetsRequest(context, request as ListOffsetsRequest)
-            ApiKeys.CREATE_TOPICS.id -> rewriteCreateTopicsRequest(context, request as CreateTopicsRequest)
-            ApiKeys.DELETE_TOPICS.id -> rewriteDeleteTopicsRequest(context, request as DeleteTopicsRequest)
-            ApiKeys.DESCRIBE_CONFIGS.id -> rewriteDescribeConfigsRequest(context, request as DescribeConfigsRequest)
+        val key = apiKey.toInt()
+        return when {
+            key == ApiKeys.METADATA.id.toInt() -> rewriteMetadataRequest(context, request as MetadataRequest)
+            key == ApiKeys.PRODUCE.id.toInt() -> rewriteProduceRequest(context, request as ProduceRequest)
+            key == ApiKeys.FETCH.id.toInt() -> rewriteFetchRequest(context, request as FetchRequest)
+            key == ApiKeys.LIST_OFFSETS.id.toInt() -> rewriteListOffsetsRequest(context, request as ListOffsetsRequest)
+            key == ApiKeys.CREATE_TOPICS.id.toInt() -> rewriteCreateTopicsRequest(context, request as CreateTopicsRequest)
+            key == ApiKeys.DELETE_TOPICS.id.toInt() -> rewriteDeleteTopicsRequest(context, request as DeleteTopicsRequest)
+            key == ApiKeys.DESCRIBE_CONFIGS.id.toInt() -> rewriteDescribeConfigsRequest(context, request as DescribeConfigsRequest)
             else -> FilterResult.Pass(request)
         }
     }
@@ -47,13 +48,14 @@ class TopicRewriteFilter : BifrostFilter {
             return FilterResult.Pass(response)
         }
 
-        return when (apiKey.toInt()) {
-            ApiKeys.METADATA.id -> rewriteMetadataResponse(context, response as MetadataResponse)
-            ApiKeys.PRODUCE.id -> rewriteProduceResponse(context, response as ProduceResponse)
-            ApiKeys.FETCH.id -> rewriteFetchResponse(context, response as FetchResponse)
-            ApiKeys.LIST_OFFSETS.id -> rewriteListOffsetsResponse(context, response as ListOffsetsResponse)
-            ApiKeys.CREATE_TOPICS.id -> rewriteCreateTopicsResponse(context, response as CreateTopicsResponse)
-            ApiKeys.DELETE_TOPICS.id -> rewriteDeleteTopicsResponse(context, response as DeleteTopicsResponse)
+        val key = apiKey.toInt()
+        return when {
+            key == ApiKeys.METADATA.id.toInt() -> rewriteMetadataResponse(context, response as MetadataResponse)
+            key == ApiKeys.PRODUCE.id.toInt() -> rewriteProduceResponse(context, response as ProduceResponse)
+            key == ApiKeys.FETCH.id.toInt() -> rewriteFetchResponse(context, response as FetchResponse)
+            key == ApiKeys.LIST_OFFSETS.id.toInt() -> rewriteListOffsetsResponse(context, response as ListOffsetsResponse)
+            key == ApiKeys.CREATE_TOPICS.id.toInt() -> rewriteCreateTopicsResponse(context, response as CreateTopicsResponse)
+            key == ApiKeys.DELETE_TOPICS.id.toInt() -> rewriteDeleteTopicsResponse(context, response as DeleteTopicsResponse)
             else -> FilterResult.Pass(response)
         }
     }

@@ -1564,6 +1564,14 @@ export interface KafkaTopic {
    */
   workspace: string | Workspace;
   /**
+   * Owning Kafka application (optional for legacy topics)
+   */
+  application?: (string | null) | KafkaApplication;
+  /**
+   * Virtual cluster this topic belongs to
+   */
+  virtualCluster?: (string | null) | KafkaVirtualCluster;
+  /**
    * Topic name (validated against naming conventions)
    */
   name: string;
@@ -1605,7 +1613,7 @@ export interface KafkaTopic {
     | number
     | boolean
     | null;
-  status: 'pending-approval' | 'provisioning' | 'active' | 'failed' | 'deleting';
+  status: 'pending-approval' | 'provisioning' | 'active' | 'failed' | 'deleting' | 'deleted';
   /**
    * Temporal workflow ID for async tracking
    */
@@ -1630,6 +1638,81 @@ export interface KafkaTopic {
    * Approval timestamp
    */
   approvedAt?: string | null;
+  /**
+   * How this topic was created
+   */
+  createdVia?: ('orbit-ui' | 'gateway-passthrough' | 'api' | 'migration') | null;
+  /**
+   * Service account that created this topic (if via gateway)
+   */
+  createdByCredential?: (string | null) | KafkaServiceAccount;
+  /**
+   * Topic visibility for sharing
+   */
+  visibility?: ('private' | 'workspace' | 'discoverable' | 'public') | null;
+  /**
+   * Tags for topic discovery
+   */
+  tags?:
+    | {
+        tag?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Service accounts for Kafka authentication
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-service-accounts".
+ */
+export interface KafkaServiceAccount {
+  id: string;
+  /**
+   * Display name for the service account
+   */
+  name: string;
+  /**
+   * Parent Kafka application
+   */
+  application: string | KafkaApplication;
+  /**
+   * Virtual cluster this account authenticates to
+   */
+  virtualCluster: string | KafkaVirtualCluster;
+  /**
+   * Generated username (workspace-app-env-name)
+   */
+  username: string;
+  /**
+   * SHA-256 hash of the password
+   */
+  passwordHash: string;
+  /**
+   * Permission template defining access rights
+   */
+  permissionTemplate: 'producer' | 'consumer' | 'admin' | 'custom';
+  /**
+   * Custom permissions (only for custom template)
+   */
+  customPermissions?:
+    | {
+        resourceType: 'topic' | 'group' | 'transactional_id';
+        /**
+         * Resource name pattern (regex or literal)
+         */
+        resourcePattern: string;
+        operations: ('read' | 'write' | 'create' | 'delete' | 'alter' | 'describe')[];
+        id?: string | null;
+      }[]
+    | null;
+  status: 'active' | 'revoked';
+  lastRotatedAt?: string | null;
+  revokedAt?: string | null;
+  revokedBy?: (string | null) | User;
+  createdBy?: (string | null) | User;
   updatedAt: string;
   createdAt: string;
 }
@@ -1669,37 +1752,6 @@ export interface KafkaSchema {
   schemaId?: number | null;
   compatibility?: ('backward' | 'forward' | 'full' | 'none') | null;
   status: 'pending' | 'registered' | 'failed';
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * Service accounts for Kafka access
- *
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "kafka-service-accounts".
- */
-export interface KafkaServiceAccount {
-  id: string;
-  workspace: string | Workspace;
-  /**
-   * Service account identifier
-   */
-  name: string;
-  type: 'producer' | 'consumer' | 'producer-consumer' | 'admin';
-  /**
-   * Provider-specific credentials (encrypted)
-   */
-  credentials?:
-    | {
-        [k: string]: unknown;
-      }
-    | unknown[]
-    | string
-    | number
-    | boolean
-    | null;
-  status: 'active' | 'revoked';
-  createdBy?: (string | null) | User;
   updatedAt: string;
   createdAt: string;
 }
@@ -2990,6 +3042,8 @@ export interface KafkaVirtualClustersSelect<T extends boolean = true> {
  */
 export interface KafkaTopicsSelect<T extends boolean = true> {
   workspace?: T;
+  application?: T;
+  virtualCluster?: T;
   name?: T;
   description?: T;
   environment?: T;
@@ -3007,6 +3061,15 @@ export interface KafkaTopicsSelect<T extends boolean = true> {
   approvalRequired?: T;
   approvedBy?: T;
   approvedAt?: T;
+  createdVia?: T;
+  createdByCredential?: T;
+  visibility?: T;
+  tags?:
+    | T
+    | {
+        tag?: T;
+        id?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
 }
@@ -3033,11 +3096,24 @@ export interface KafkaSchemasSelect<T extends boolean = true> {
  * via the `definition` "kafka-service-accounts_select".
  */
 export interface KafkaServiceAccountsSelect<T extends boolean = true> {
-  workspace?: T;
   name?: T;
-  type?: T;
-  credentials?: T;
+  application?: T;
+  virtualCluster?: T;
+  username?: T;
+  passwordHash?: T;
+  permissionTemplate?: T;
+  customPermissions?:
+    | T
+    | {
+        resourceType?: T;
+        resourcePattern?: T;
+        operations?: T;
+        id?: T;
+      };
   status?: T;
+  lastRotatedAt?: T;
+  revokedAt?: T;
+  revokedBy?: T;
   createdBy?: T;
   updatedAt?: T;
   createdAt?: T;

@@ -27,16 +27,16 @@ class AuthenticationFilter(
         request: AbstractRequest
     ): FilterResult<AbstractRequest> {
         // API version requests are allowed without auth (for client negotiation)
-        if (apiKey.toInt() == ApiKeys.API_VERSIONS.id) {
+        if (apiKey.toInt() == ApiKeys.API_VERSIONS.id.toInt()) {
             return FilterResult.Pass(request)
         }
 
         // SASL handshake and authenticate are handled specially
-        if (apiKey.toInt() == ApiKeys.SASL_HANDSHAKE.id) {
+        if (apiKey.toInt() == ApiKeys.SASL_HANDSHAKE.id.toInt()) {
             return FilterResult.Pass(request)
         }
 
-        if (apiKey.toInt() == ApiKeys.SASL_AUTHENTICATE.id) {
+        if (apiKey.toInt() == ApiKeys.SASL_AUTHENTICATE.id.toInt()) {
             return handleSaslAuthenticate(request as SaslAuthenticateRequest)
         }
 
@@ -111,18 +111,16 @@ class AuthenticationFilter(
     }
 
     private fun isWriteOperation(apiKey: Short): Boolean {
-        return when (apiKey.toInt()) {
-            ApiKeys.PRODUCE.id,
-            ApiKeys.CREATE_TOPICS.id,
-            ApiKeys.DELETE_TOPICS.id,
-            ApiKeys.DELETE_RECORDS.id,
-            ApiKeys.ALTER_CONFIGS.id,
-            ApiKeys.DELETE_GROUPS.id,
-            ApiKeys.INIT_PRODUCER_ID.id,
-            ApiKeys.ADD_PARTITIONS_TO_TXN.id,
-            ApiKeys.END_TXN.id -> true
-            else -> false
-        }
+        val key = apiKey.toInt()
+        return key == ApiKeys.PRODUCE.id.toInt() ||
+               key == ApiKeys.CREATE_TOPICS.id.toInt() ||
+               key == ApiKeys.DELETE_TOPICS.id.toInt() ||
+               key == ApiKeys.DELETE_RECORDS.id.toInt() ||
+               key == ApiKeys.ALTER_CONFIGS.id.toInt() ||
+               key == ApiKeys.DELETE_GROUPS.id.toInt() ||
+               key == ApiKeys.INIT_PRODUCER_ID.id.toInt() ||
+               key == ApiKeys.ADD_PARTITIONS_TO_TXN.id.toInt() ||
+               key == ApiKeys.END_TXN.id.toInt()
     }
 
     private fun hasWritePermission(context: FilterContext): Boolean {

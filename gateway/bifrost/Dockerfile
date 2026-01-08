@@ -10,12 +10,12 @@ COPY proto ./proto
 COPY gateway/bifrost/build.gradle.kts gateway/bifrost/settings.gradle.kts gateway/bifrost/gradle.properties ./
 COPY gateway/bifrost/src ./src
 
-RUN gradle build --no-daemon -x test
+RUN gradle shadowJar --no-daemon -x test
 
 FROM eclipse-temurin:21-jre
 
 WORKDIR /app
-COPY --from=builder /app/build/libs/*.jar app.jar
+COPY --from=builder /app/build/libs/*-all.jar app.jar
 
 ENV BIFROST_ADMIN_PORT=50060
 

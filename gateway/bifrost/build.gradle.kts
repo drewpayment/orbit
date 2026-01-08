@@ -4,6 +4,7 @@ plugins {
     kotlin("plugin.serialization") version "1.9.22"
     application
     id("com.google.protobuf") version "0.9.4"
+    id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
 group = "io.orbit"
