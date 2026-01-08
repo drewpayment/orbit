@@ -6,6 +6,7 @@
 
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -13,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file idp/gateway/v1/gateway.proto.
  */
 export const file_idp_gateway_v1_gateway: GenFile = /*@__PURE__*/
-  fileDesc("ChxpZHAvZ2F0ZXdheS92MS9nYXRld2F5LnByb3RvEg5pZHAuZ2F0ZXdheS52MSK1AgoUVmlydHVhbENsdXN0ZXJDb25maWcSCgoCaWQYASABKAkSFgoOYXBwbGljYXRpb25faWQYAiABKAkSGAoQYXBwbGljYXRpb25fc2x1ZxgDIAEoCRIWCg53b3Jrc3BhY2Vfc2x1ZxgEIAEoCRITCgtlbnZpcm9ubWVudBgFIAEoCRIUCgx0b3BpY19wcmVmaXgYBiABKAkSFAoMZ3JvdXBfcHJlZml4GAcgASgJEh0KFXRyYW5zYWN0aW9uX2lkX3ByZWZpeBgIIAEoCRIXCg9hZHZlcnRpc2VkX2hvc3QYCSABKAkSFwoPYWR2ZXJ0aXNlZF9wb3J0GAogASgFEiIKGnBoeXNpY2FsX2Jvb3RzdHJhcF9zZXJ2ZXJzGAsgASgJEhEKCXJlYWRfb25seRgMIAEoCCJTChtVcHNlcnRWaXJ0dWFsQ2x1c3RlclJlcXVlc3QSNAoGY29uZmlnGAEgASgLMiQuaWRwLmdhdGV3YXkudjEuVmlydHVhbENsdXN0ZXJDb25maWciLwocVXBzZXJ0VmlydHVhbENsdXN0ZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIjkKG0RlbGV0ZVZpcnR1YWxDbHVzdGVyUmVxdWVzdBIaChJ2aXJ0dWFsX2NsdXN0ZXJfaWQYASABKAkiLwocRGVsZXRlVmlydHVhbENsdXN0ZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIlEKIFNldFZpcnR1YWxDbHVzdGVyUmVhZE9ubHlSZXF1ZXN0EhoKEnZpcnR1YWxfY2x1c3Rlcl9pZBgBIAEoCRIRCglyZWFkX29ubHkYAiABKAgiNAohU2V0VmlydHVhbENsdXN0ZXJSZWFkT25seVJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgiFgoUR2V0RnVsbENvbmZpZ1JlcXVlc3QivgEKFUdldEZ1bGxDb25maWdSZXNwb25zZRI+ChB2aXJ0dWFsX2NsdXN0ZXJzGAEgAygLMiQuaWRwLmdhdGV3YXkudjEuVmlydHVhbENsdXN0ZXJDb25maWcSNQoLY3JlZGVudGlhbHMYAiADKAsyIC5pZHAuZ2F0ZXdheS52MS5DcmVkZW50aWFsQ29uZmlnEi4KCHBvbGljaWVzGAMgAygLMhwuaWRwLmdhdGV3YXkudjEuUG9saWN5Q29uZmlnIhIKEEdldFN0YXR1c1JlcXVlc3Qi3AEKEUdldFN0YXR1c1Jlc3BvbnNlEg4KBnN0YXR1cxgBIAEoCRIaChJhY3RpdmVfY29ubmVjdGlvbnMYAiABKAUSHQoVdmlydHVhbF9jbHVzdGVyX2NvdW50GAMgASgFEkgKDHZlcnNpb25faW5mbxgEIAMoCzIyLmlkcC5nYXRld2F5LnYxLkdldFN0YXR1c1Jlc3BvbnNlLlZlcnNpb25JbmZvRW50cnkaMgoQVmVyc2lvbkluZm9FbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIhwKGkxpc3RWaXJ0dWFsQ2x1c3RlcnNSZXF1ZXN0Il0KG0xpc3RWaXJ0dWFsQ2x1c3RlcnNSZXNwb25zZRI+ChB2aXJ0dWFsX2NsdXN0ZXJzGAEgAygLMiQuaWRwLmdhdGV3YXkudjEuVmlydHVhbENsdXN0ZXJDb25maWciVwoQQ3VzdG9tUGVybWlzc2lvbhIVCg1yZXNvdXJjZV90eXBlGAEgASgJEhgKEHJlc291cmNlX3BhdHRlcm4YAiABKAkSEgoKb3BlcmF0aW9ucxgDIAMoCSLXAQoQQ3JlZGVudGlhbENvbmZpZxIKCgJpZBgBIAEoCRIaChJ2aXJ0dWFsX2NsdXN0ZXJfaWQYAiABKAkSEAoIdXNlcm5hbWUYAyABKAkSFQoNcGFzc3dvcmRfaGFzaBgEIAEoCRI0Cgh0ZW1wbGF0ZRgFIAEoDjIiLmlkcC5nYXRld2F5LnYxLlBlcm1pc3Npb25UZW1wbGF0ZRI8ChJjdXN0b21fcGVybWlzc2lvbnMYBiADKAsyIC5pZHAuZ2F0ZXdheS52MS5DdXN0b21QZXJtaXNzaW9uIksKF1Vwc2VydENyZWRlbnRpYWxSZXF1ZXN0EjAKBmNvbmZpZxgBIAEoCzIgLmlkcC5nYXRld2F5LnYxLkNyZWRlbnRpYWxDb25maWciKwoYVXBzZXJ0Q3JlZGVudGlhbFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgiMAoXUmV2b2tlQ3JlZGVudGlhbFJlcXVlc3QSFQoNY3JlZGVudGlhbF9pZBgBIAEoCSIrChhSZXZva2VDcmVkZW50aWFsUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCI0ChZMaXN0Q3JlZGVudGlhbHNSZXF1ZXN0EhoKEnZpcnR1YWxfY2x1c3Rlcl9pZBgBIAEoCSJQChdMaXN0Q3JlZGVudGlhbHNSZXNwb25zZRI1CgtjcmVkZW50aWFscxgBIAMoCzIgLmlkcC5nYXRld2F5LnYxLkNyZWRlbnRpYWxDb25maWci7AEKDFBvbGljeUNvbmZpZxIKCgJpZBgBIAEoCRITCgtlbnZpcm9ubWVudBgCIAEoCRIWCg5tYXhfcGFydGl0aW9ucxgDIAEoBRIWCg5taW5fcGFydGl0aW9ucxgEIAEoBRIYChBtYXhfcmV0ZW50aW9uX21zGAUgASgDEh4KFm1pbl9yZXBsaWNhdGlvbl9mYWN0b3IYBiABKAUSIAoYYWxsb3dlZF9jbGVhbnVwX3BvbGljaWVzGAcgAygJEhYKDm5hbWluZ19wYXR0ZXJuGAggASgJEhcKD21heF9uYW1lX2xlbmd0aBgJIAEoBSJDChNVcHNlcnRQb2xpY3lSZXF1ZXN0EiwKBmNvbmZpZxgBIAEoCzIcLmlkcC5nYXRld2F5LnYxLlBvbGljeUNvbmZpZyInChRVcHNlcnRQb2xpY3lSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIigKE0RlbGV0ZVBvbGljeVJlcXVlc3QSEQoJcG9saWN5X2lkGAEgASgJIicKFERlbGV0ZVBvbGljeVJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgiKgoTTGlzdFBvbGljaWVzUmVxdWVzdBITCgtlbnZpcm9ubWVudBgBIAEoCSJGChRMaXN0UG9saWNpZXNSZXNwb25zZRIuCghwb2xpY2llcxgBIAMoCzIcLmlkcC5nYXRld2F5LnYxLlBvbGljeUNvbmZpZyKgAgoTVG9waWNDcmVhdGVkUmVxdWVzdBIaChJ2aXJ0dWFsX2NsdXN0ZXJfaWQYASABKAkSFAoMdmlydHVhbF9uYW1lGAIgASgJEhUKDXBoeXNpY2FsX25hbWUYAyABKAkSEgoKcGFydGl0aW9ucxgEIAEoBRIaChJyZXBsaWNhdGlvbl9mYWN0b3IYBSABKAUSPwoGY29uZmlnGAYgAygLMi8uaWRwLmdhdGV3YXkudjEuVG9waWNDcmVhdGVkUmVxdWVzdC5Db25maWdFbnRyeRIgChhjcmVhdGVkX2J5X2NyZWRlbnRpYWxfaWQYByABKAkaLQoLQ29uZmlnRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASI5ChRUb3BpY0NyZWF0ZWRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhAKCHRvcGljX2lkGAIgASgJIoABChNUb3BpY0RlbGV0ZWRSZXF1ZXN0EhoKEnZpcnR1YWxfY2x1c3Rlcl9pZBgBIAEoCRIUCgx2aXJ0dWFsX25hbWUYAiABKAkSFQoNcGh5c2ljYWxfbmFtZRgDIAEoCRIgChhkZWxldGVkX2J5X2NyZWRlbnRpYWxfaWQYBCABKAkiJwoUVG9waWNEZWxldGVkUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCLlAQoZVG9waWNDb25maWdVcGRhdGVkUmVxdWVzdBIaChJ2aXJ0dWFsX2NsdXN0ZXJfaWQYASABKAkSFAoMdmlydHVhbF9uYW1lGAIgASgJEkUKBmNvbmZpZxgDIAMoCzI1LmlkcC5nYXRld2F5LnYxLlRvcGljQ29uZmlnVXBkYXRlZFJlcXVlc3QuQ29uZmlnRW50cnkSIAoYdXBkYXRlZF9ieV9jcmVkZW50aWFsX2lkGAQgASgJGi0KC0NvbmZpZ0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiLQoaVG9waWNDb25maWdVcGRhdGVkUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCJyCg9Qb2xpY3lWaW9sYXRpb24SDQoFZmllbGQYASABKAkSEgoKY29uc3RyYWludBgCIAEoCRIPCgdtZXNzYWdlGAMgASgJEhQKDGFjdHVhbF92YWx1ZRgEIAEoCRIVCg1hbGxvd2VkX3ZhbHVlGAUgASgJKrwBChJQZXJtaXNzaW9uVGVtcGxhdGUSIwofUEVSTUlTU0lPTl9URU1QTEFURV9VTlNQRUNJRklFRBAAEiAKHFBFUk1JU1NJT05fVEVNUExBVEVfUFJPRFVDRVIQARIgChxQRVJNSVNTSU9OX1RFTVBMQVRFX0NPTlNVTUVSEAISHQoZUEVSTUlTU0lPTl9URU1QTEFURV9BRE1JThADEh4KGlBFUk1JU1NJT05fVEVNUExBVEVfQ1VTVE9NEAQy4QkKE0JpZnJvc3RBZG1pblNlcnZpY2UScQoUVXBzZXJ0VmlydHVhbENsdXN0ZXISKy5pZHAuZ2F0ZXdheS52MS5VcHNlcnRWaXJ0dWFsQ2x1c3RlclJlcXVlc3QaLC5pZHAuZ2F0ZXdheS52MS5VcHNlcnRWaXJ0dWFsQ2x1c3RlclJlc3BvbnNlEnEKFERlbGV0ZVZpcnR1YWxDbHVzdGVyEisuaWRwLmdhdGV3YXkudjEuRGVsZXRlVmlydHVhbENsdXN0ZXJSZXF1ZXN0GiwuaWRwLmdhdGV3YXkudjEuRGVsZXRlVmlydHVhbENsdXN0ZXJSZXNwb25zZRKAAQoZU2V0VmlydHVhbENsdXN0ZXJSZWFkT25seRIwLmlkcC5nYXRld2F5LnYxLlNldFZpcnR1YWxDbHVzdGVyUmVhZE9ubHlSZXF1ZXN0GjEuaWRwLmdhdGV3YXkudjEuU2V0VmlydHVhbENsdXN0ZXJSZWFkT25seVJlc3BvbnNlEmUKEFVwc2VydENyZWRlbnRpYWwSJy5pZHAuZ2F0ZXdheS52MS5VcHNlcnRDcmVkZW50aWFsUmVxdWVzdBooLmlkcC5nYXRld2F5LnYxLlVwc2VydENyZWRlbnRpYWxSZXNwb25zZRJlChBSZXZva2VDcmVkZW50aWFsEicuaWRwLmdhdGV3YXkudjEuUmV2b2tlQ3JlZGVudGlhbFJlcXVlc3QaKC5pZHAuZ2F0ZXdheS52MS5SZXZva2VDcmVkZW50aWFsUmVzcG9uc2USYgoPTGlzdENyZWRlbnRpYWxzEiYuaWRwLmdhdGV3YXkudjEuTGlzdENyZWRlbnRpYWxzUmVxdWVzdBonLmlkcC5nYXRld2F5LnYxLkxpc3RDcmVkZW50aWFsc1Jlc3BvbnNlElwKDUdldEZ1bGxDb25maWcSJC5pZHAuZ2F0ZXdheS52MS5HZXRGdWxsQ29uZmlnUmVxdWVzdBolLmlkcC5nYXRld2F5LnYxLkdldEZ1bGxDb25maWdSZXNwb25zZRJQCglHZXRTdGF0dXMSIC5pZHAuZ2F0ZXdheS52MS5HZXRTdGF0dXNSZXF1ZXN0GiEuaWRwLmdhdGV3YXkudjEuR2V0U3RhdHVzUmVzcG9uc2USbgoTTGlzdFZpcnR1YWxDbHVzdGVycxIqLmlkcC5nYXRld2F5LnYxLkxpc3RWaXJ0dWFsQ2x1c3RlcnNSZXF1ZXN0GisuaWRwLmdhdGV3YXkudjEuTGlzdFZpcnR1YWxDbHVzdGVyc1Jlc3BvbnNlElkKDFVwc2VydFBvbGljeRIjLmlkcC5nYXRld2F5LnYxLlVwc2VydFBvbGljeVJlcXVlc3QaJC5pZHAuZ2F0ZXdheS52MS5VcHNlcnRQb2xpY3lSZXNwb25zZRJZCgxEZWxldGVQb2xpY3kSIy5pZHAuZ2F0ZXdheS52MS5EZWxldGVQb2xpY3lSZXF1ZXN0GiQuaWRwLmdhdGV3YXkudjEuRGVsZXRlUG9saWN5UmVzcG9uc2USWQoMTGlzdFBvbGljaWVzEiMuaWRwLmdhdGV3YXkudjEuTGlzdFBvbGljaWVzUmVxdWVzdBokLmlkcC5nYXRld2F5LnYxLkxpc3RQb2xpY2llc1Jlc3BvbnNlMrsCChZCaWZyb3N0Q2FsbGJhY2tTZXJ2aWNlElkKDFRvcGljQ3JlYXRlZBIjLmlkcC5nYXRld2F5LnYxLlRvcGljQ3JlYXRlZFJlcXVlc3QaJC5pZHAuZ2F0ZXdheS52MS5Ub3BpY0NyZWF0ZWRSZXNwb25zZRJZCgxUb3BpY0RlbGV0ZWQSIy5pZHAuZ2F0ZXdheS52MS5Ub3BpY0RlbGV0ZWRSZXF1ZXN0GiQuaWRwLmdhdGV3YXkudjEuVG9waWNEZWxldGVkUmVzcG9uc2USawoSVG9waWNDb25maWdVcGRhdGVkEikuaWRwLmdhdGV3YXkudjEuVG9waWNDb25maWdVcGRhdGVkUmVxdWVzdBoqLmlkcC5nYXRld2F5LnYxLlRvcGljQ29uZmlnVXBkYXRlZFJlc3BvbnNlQl4KFmlvLm9yYml0LmJpZnJvc3QucHJvdG9QAVpCZ2l0aHViLmNvbS9kcmV3cGF5bWVudC9vcmJpdC9wcm90by9nZW4vZ28vaWRwL2dhdGV3YXkvdjE7Z2F0ZXdheXYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
+  fileDesc("ChxpZHAvZ2F0ZXdheS92MS9nYXRld2F5LnByb3RvEg5pZHAuZ2F0ZXdheS52MSK1AgoUVmlydHVhbENsdXN0ZXJDb25maWcSCgoCaWQYASABKAkSFgoOYXBwbGljYXRpb25faWQYAiABKAkSGAoQYXBwbGljYXRpb25fc2x1ZxgDIAEoCRIWCg53b3Jrc3BhY2Vfc2x1ZxgEIAEoCRITCgtlbnZpcm9ubWVudBgFIAEoCRIUCgx0b3BpY19wcmVmaXgYBiABKAkSFAoMZ3JvdXBfcHJlZml4GAcgASgJEh0KFXRyYW5zYWN0aW9uX2lkX3ByZWZpeBgIIAEoCRIXCg9hZHZlcnRpc2VkX2hvc3QYCSABKAkSFwoPYWR2ZXJ0aXNlZF9wb3J0GAogASgFEiIKGnBoeXNpY2FsX2Jvb3RzdHJhcF9zZXJ2ZXJzGAsgASgJEhEKCXJlYWRfb25seRgMIAEoCCJTChtVcHNlcnRWaXJ0dWFsQ2x1c3RlclJlcXVlc3QSNAoGY29uZmlnGAEgASgLMiQuaWRwLmdhdGV3YXkudjEuVmlydHVhbENsdXN0ZXJDb25maWciLwocVXBzZXJ0VmlydHVhbENsdXN0ZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIjkKG0RlbGV0ZVZpcnR1YWxDbHVzdGVyUmVxdWVzdBIaChJ2aXJ0dWFsX2NsdXN0ZXJfaWQYASABKAkiLwocRGVsZXRlVmlydHVhbENsdXN0ZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIlEKIFNldFZpcnR1YWxDbHVzdGVyUmVhZE9ubHlSZXF1ZXN0EhoKEnZpcnR1YWxfY2x1c3Rlcl9pZBgBIAEoCRIRCglyZWFkX29ubHkYAiABKAgiNAohU2V0VmlydHVhbENsdXN0ZXJSZWFkT25seVJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgiFgoUR2V0RnVsbENvbmZpZ1JlcXVlc3Qi9wEKFUdldEZ1bGxDb25maWdSZXNwb25zZRI+ChB2aXJ0dWFsX2NsdXN0ZXJzGAEgAygLMiQuaWRwLmdhdGV3YXkudjEuVmlydHVhbENsdXN0ZXJDb25maWcSNQoLY3JlZGVudGlhbHMYAiADKAsyIC5pZHAuZ2F0ZXdheS52MS5DcmVkZW50aWFsQ29uZmlnEi4KCHBvbGljaWVzGAMgAygLMhwuaWRwLmdhdGV3YXkudjEuUG9saWN5Q29uZmlnEjEKCnRvcGljX2FjbHMYBSADKAsyHS5pZHAuZ2F0ZXdheS52MS5Ub3BpY0FDTEVudHJ5SgQIBBAFIhIKEEdldFN0YXR1c1JlcXVlc3Qi3AEKEUdldFN0YXR1c1Jlc3BvbnNlEg4KBnN0YXR1cxgBIAEoCRIaChJhY3RpdmVfY29ubmVjdGlvbnMYAiABKAUSHQoVdmlydHVhbF9jbHVzdGVyX2NvdW50GAMgASgFEkgKDHZlcnNpb25faW5mbxgEIAMoCzIyLmlkcC5nYXRld2F5LnYxLkdldFN0YXR1c1Jlc3BvbnNlLlZlcnNpb25JbmZvRW50cnkaMgoQVmVyc2lvbkluZm9FbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIhwKGkxpc3RWaXJ0dWFsQ2x1c3RlcnNSZXF1ZXN0Il0KG0xpc3RWaXJ0dWFsQ2x1c3RlcnNSZXNwb25zZRI+ChB2aXJ0dWFsX2NsdXN0ZXJzGAEgAygLMiQuaWRwLmdhdGV3YXkudjEuVmlydHVhbENsdXN0ZXJDb25maWciVwoQQ3VzdG9tUGVybWlzc2lvbhIVCg1yZXNvdXJjZV90eXBlGAEgASgJEhgKEHJlc291cmNlX3BhdHRlcm4YAiABKAkSEgoKb3BlcmF0aW9ucxgDIAMoCSLXAQoQQ3JlZGVudGlhbENvbmZpZxIKCgJpZBgBIAEoCRIaChJ2aXJ0dWFsX2NsdXN0ZXJfaWQYAiABKAkSEAoIdXNlcm5hbWUYAyABKAkSFQoNcGFzc3dvcmRfaGFzaBgEIAEoCRI0Cgh0ZW1wbGF0ZRgFIAEoDjIiLmlkcC5nYXRld2F5LnYxLlBlcm1pc3Npb25UZW1wbGF0ZRI8ChJjdXN0b21fcGVybWlzc2lvbnMYBiADKAsyIC5pZHAuZ2F0ZXdheS52MS5DdXN0b21QZXJtaXNzaW9uIksKF1Vwc2VydENyZWRlbnRpYWxSZXF1ZXN0EjAKBmNvbmZpZxgBIAEoCzIgLmlkcC5nYXRld2F5LnYxLkNyZWRlbnRpYWxDb25maWciKwoYVXBzZXJ0Q3JlZGVudGlhbFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgiMAoXUmV2b2tlQ3JlZGVudGlhbFJlcXVlc3QSFQoNY3JlZGVudGlhbF9pZBgBIAEoCSIrChhSZXZva2VDcmVkZW50aWFsUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCI0ChZMaXN0Q3JlZGVudGlhbHNSZXF1ZXN0EhoKEnZpcnR1YWxfY2x1c3Rlcl9pZBgBIAEoCSJQChdMaXN0Q3JlZGVudGlhbHNSZXNwb25zZRI1CgtjcmVkZW50aWFscxgBIAMoCzIgLmlkcC5nYXRld2F5LnYxLkNyZWRlbnRpYWxDb25maWci7AEKDFBvbGljeUNvbmZpZxIKCgJpZBgBIAEoCRITCgtlbnZpcm9ubWVudBgCIAEoCRIWCg5tYXhfcGFydGl0aW9ucxgDIAEoBRIWCg5taW5fcGFydGl0aW9ucxgEIAEoBRIYChBtYXhfcmV0ZW50aW9uX21zGAUgASgDEh4KFm1pbl9yZXBsaWNhdGlvbl9mYWN0b3IYBiABKAUSIAoYYWxsb3dlZF9jbGVhbnVwX3BvbGljaWVzGAcgAygJEhYKDm5hbWluZ19wYXR0ZXJuGAggASgJEhcKD21heF9uYW1lX2xlbmd0aBgJIAEoBSJDChNVcHNlcnRQb2xpY3lSZXF1ZXN0EiwKBmNvbmZpZxgBIAEoCzIcLmlkcC5nYXRld2F5LnYxLlBvbGljeUNvbmZpZyInChRVcHNlcnRQb2xpY3lSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIigKE0RlbGV0ZVBvbGljeVJlcXVlc3QSEQoJcG9saWN5X2lkGAEgASgJIicKFERlbGV0ZVBvbGljeVJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgiKgoTTGlzdFBvbGljaWVzUmVxdWVzdBITCgtlbnZpcm9ubWVudBgBIAEoCSJGChRMaXN0UG9saWNpZXNSZXNwb25zZRIuCghwb2xpY2llcxgBIAMoCzIcLmlkcC5nYXRld2F5LnYxLlBvbGljeUNvbmZpZyKUAQoNVG9waWNBQ0xFbnRyeRIKCgJpZBgBIAEoCRIVCg1jcmVkZW50aWFsX2lkGAIgASgJEhsKE3RvcGljX3BoeXNpY2FsX25hbWUYAyABKAkSEwoLcGVybWlzc2lvbnMYBCADKAkSLgoKZXhwaXJlc19hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiRQoVVXBzZXJ0VG9waWNBQ0xSZXF1ZXN0EiwKBWVudHJ5GAEgASgLMh0uaWRwLmdhdGV3YXkudjEuVG9waWNBQ0xFbnRyeSIpChZVcHNlcnRUb3BpY0FDTFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgiJwoVUmV2b2tlVG9waWNBQ0xSZXF1ZXN0Eg4KBmFjbF9pZBgBIAEoCSIpChZSZXZva2VUb3BpY0FDTFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgiLQoUTGlzdFRvcGljQUNMc1JlcXVlc3QSFQoNY3JlZGVudGlhbF9pZBgBIAEoCSJHChVMaXN0VG9waWNBQ0xzUmVzcG9uc2USLgoHZW50cmllcxgBIAMoCzIdLmlkcC5nYXRld2F5LnYxLlRvcGljQUNMRW50cnkioAIKE1RvcGljQ3JlYXRlZFJlcXVlc3QSGgoSdmlydHVhbF9jbHVzdGVyX2lkGAEgASgJEhQKDHZpcnR1YWxfbmFtZRgCIAEoCRIVCg1waHlzaWNhbF9uYW1lGAMgASgJEhIKCnBhcnRpdGlvbnMYBCABKAUSGgoScmVwbGljYXRpb25fZmFjdG9yGAUgASgFEj8KBmNvbmZpZxgGIAMoCzIvLmlkcC5nYXRld2F5LnYxLlRvcGljQ3JlYXRlZFJlcXVlc3QuQ29uZmlnRW50cnkSIAoYY3JlYXRlZF9ieV9jcmVkZW50aWFsX2lkGAcgASgJGi0KC0NvbmZpZ0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiOQoUVG9waWNDcmVhdGVkUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIQCgh0b3BpY19pZBgCIAEoCSKAAQoTVG9waWNEZWxldGVkUmVxdWVzdBIaChJ2aXJ0dWFsX2NsdXN0ZXJfaWQYASABKAkSFAoMdmlydHVhbF9uYW1lGAIgASgJEhUKDXBoeXNpY2FsX25hbWUYAyABKAkSIAoYZGVsZXRlZF9ieV9jcmVkZW50aWFsX2lkGAQgASgJIicKFFRvcGljRGVsZXRlZFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgi5QEKGVRvcGljQ29uZmlnVXBkYXRlZFJlcXVlc3QSGgoSdmlydHVhbF9jbHVzdGVyX2lkGAEgASgJEhQKDHZpcnR1YWxfbmFtZRgCIAEoCRJFCgZjb25maWcYAyADKAsyNS5pZHAuZ2F0ZXdheS52MS5Ub3BpY0NvbmZpZ1VwZGF0ZWRSZXF1ZXN0LkNvbmZpZ0VudHJ5EiAKGHVwZGF0ZWRfYnlfY3JlZGVudGlhbF9pZBgEIAEoCRotCgtDb25maWdFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIi0KGlRvcGljQ29uZmlnVXBkYXRlZFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgicgoPUG9saWN5VmlvbGF0aW9uEg0KBWZpZWxkGAEgASgJEhIKCmNvbnN0cmFpbnQYAiABKAkSDwoHbWVzc2FnZRgDIAEoCRIUCgxhY3R1YWxfdmFsdWUYBCABKAkSFQoNYWxsb3dlZF92YWx1ZRgFIAEoCSq8AQoSUGVybWlzc2lvblRlbXBsYXRlEiMKH1BFUk1JU1NJT05fVEVNUExBVEVfVU5TUEVDSUZJRUQQABIgChxQRVJNSVNTSU9OX1RFTVBMQVRFX1BST0RVQ0VSEAESIAocUEVSTUlTU0lPTl9URU1QTEFURV9DT05TVU1FUhACEh0KGVBFUk1JU1NJT05fVEVNUExBVEVfQURNSU4QAxIeChpQRVJNSVNTSU9OX1RFTVBMQVRFX0NVU1RPTRAEMoEMChNCaWZyb3N0QWRtaW5TZXJ2aWNlEnEKFFVwc2VydFZpcnR1YWxDbHVzdGVyEisuaWRwLmdhdGV3YXkudjEuVXBzZXJ0VmlydHVhbENsdXN0ZXJSZXF1ZXN0GiwuaWRwLmdhdGV3YXkudjEuVXBzZXJ0VmlydHVhbENsdXN0ZXJSZXNwb25zZRJxChREZWxldGVWaXJ0dWFsQ2x1c3RlchIrLmlkcC5nYXRld2F5LnYxLkRlbGV0ZVZpcnR1YWxDbHVzdGVyUmVxdWVzdBosLmlkcC5nYXRld2F5LnYxLkRlbGV0ZVZpcnR1YWxDbHVzdGVyUmVzcG9uc2USgAEKGVNldFZpcnR1YWxDbHVzdGVyUmVhZE9ubHkSMC5pZHAuZ2F0ZXdheS52MS5TZXRWaXJ0dWFsQ2x1c3RlclJlYWRPbmx5UmVxdWVzdBoxLmlkcC5nYXRld2F5LnYxLlNldFZpcnR1YWxDbHVzdGVyUmVhZE9ubHlSZXNwb25zZRJlChBVcHNlcnRDcmVkZW50aWFsEicuaWRwLmdhdGV3YXkudjEuVXBzZXJ0Q3JlZGVudGlhbFJlcXVlc3QaKC5pZHAuZ2F0ZXdheS52MS5VcHNlcnRDcmVkZW50aWFsUmVzcG9uc2USZQoQUmV2b2tlQ3JlZGVudGlhbBInLmlkcC5nYXRld2F5LnYxLlJldm9rZUNyZWRlbnRpYWxSZXF1ZXN0GiguaWRwLmdhdGV3YXkudjEuUmV2b2tlQ3JlZGVudGlhbFJlc3BvbnNlEmIKD0xpc3RDcmVkZW50aWFscxImLmlkcC5nYXRld2F5LnYxLkxpc3RDcmVkZW50aWFsc1JlcXVlc3QaJy5pZHAuZ2F0ZXdheS52MS5MaXN0Q3JlZGVudGlhbHNSZXNwb25zZRJcCg1HZXRGdWxsQ29uZmlnEiQuaWRwLmdhdGV3YXkudjEuR2V0RnVsbENvbmZpZ1JlcXVlc3QaJS5pZHAuZ2F0ZXdheS52MS5HZXRGdWxsQ29uZmlnUmVzcG9uc2USUAoJR2V0U3RhdHVzEiAuaWRwLmdhdGV3YXkudjEuR2V0U3RhdHVzUmVxdWVzdBohLmlkcC5nYXRld2F5LnYxLkdldFN0YXR1c1Jlc3BvbnNlEm4KE0xpc3RWaXJ0dWFsQ2x1c3RlcnMSKi5pZHAuZ2F0ZXdheS52MS5MaXN0VmlydHVhbENsdXN0ZXJzUmVxdWVzdBorLmlkcC5nYXRld2F5LnYxLkxpc3RWaXJ0dWFsQ2x1c3RlcnNSZXNwb25zZRJZCgxVcHNlcnRQb2xpY3kSIy5pZHAuZ2F0ZXdheS52MS5VcHNlcnRQb2xpY3lSZXF1ZXN0GiQuaWRwLmdhdGV3YXkudjEuVXBzZXJ0UG9saWN5UmVzcG9uc2USWQoMRGVsZXRlUG9saWN5EiMuaWRwLmdhdGV3YXkudjEuRGVsZXRlUG9saWN5UmVxdWVzdBokLmlkcC5nYXRld2F5LnYxLkRlbGV0ZVBvbGljeVJlc3BvbnNlElkKDExpc3RQb2xpY2llcxIjLmlkcC5nYXRld2F5LnYxLkxpc3RQb2xpY2llc1JlcXVlc3QaJC5pZHAuZ2F0ZXdheS52MS5MaXN0UG9saWNpZXNSZXNwb25zZRJfCg5VcHNlcnRUb3BpY0FDTBIlLmlkcC5nYXRld2F5LnYxLlVwc2VydFRvcGljQUNMUmVxdWVzdBomLmlkcC5nYXRld2F5LnYxLlVwc2VydFRvcGljQUNMUmVzcG9uc2USXwoOUmV2b2tlVG9waWNBQ0wSJS5pZHAuZ2F0ZXdheS52MS5SZXZva2VUb3BpY0FDTFJlcXVlc3QaJi5pZHAuZ2F0ZXdheS52MS5SZXZva2VUb3BpY0FDTFJlc3BvbnNlElwKDUxpc3RUb3BpY0FDTHMSJC5pZHAuZ2F0ZXdheS52MS5MaXN0VG9waWNBQ0xzUmVxdWVzdBolLmlkcC5nYXRld2F5LnYxLkxpc3RUb3BpY0FDTHNSZXNwb25zZTK7AgoWQmlmcm9zdENhbGxiYWNrU2VydmljZRJZCgxUb3BpY0NyZWF0ZWQSIy5pZHAuZ2F0ZXdheS52MS5Ub3BpY0NyZWF0ZWRSZXF1ZXN0GiQuaWRwLmdhdGV3YXkudjEuVG9waWNDcmVhdGVkUmVzcG9uc2USWQoMVG9waWNEZWxldGVkEiMuaWRwLmdhdGV3YXkudjEuVG9waWNEZWxldGVkUmVxdWVzdBokLmlkcC5nYXRld2F5LnYxLlRvcGljRGVsZXRlZFJlc3BvbnNlEmsKElRvcGljQ29uZmlnVXBkYXRlZBIpLmlkcC5nYXRld2F5LnYxLlRvcGljQ29uZmlnVXBkYXRlZFJlcXVlc3QaKi5pZHAuZ2F0ZXdheS52MS5Ub3BpY0NvbmZpZ1VwZGF0ZWRSZXNwb25zZUJfCg5pZHAuZ2F0ZXdheS52MUIHR2F0ZXdheVAAWkJnaXRodWIuY29tL2RyZXdwYXltZW50L29yYml0L3Byb3RvL2dlbi9nby9pZHAvZ2F0ZXdheS92MTtnYXRld2F5djFiBnByb3RvMw", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message idp.gateway.v1.VirtualClusterConfig
@@ -225,6 +226,11 @@ export type GetFullConfigResponse = Message<"idp.gateway.v1.GetFullConfigRespons
    * @generated from field: repeated idp.gateway.v1.PolicyConfig policies = 3;
    */
   policies: PolicyConfig[];
+
+  /**
+   * @generated from field: repeated idp.gateway.v1.TopicACLEntry topic_acls = 5;
+   */
+  topicAcls: TopicACLEntry[];
 };
 
 /**
@@ -654,6 +660,155 @@ export const ListPoliciesResponseSchema: GenMessage<ListPoliciesResponse> = /*@_
   messageDesc(file_idp_gateway_v1_gateway, 27);
 
 /**
+ * @generated from message idp.gateway.v1.TopicACLEntry
+ */
+export type TopicACLEntry = Message<"idp.gateway.v1.TopicACLEntry"> & {
+  /**
+   * Share ID from Orbit
+   *
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * Service account granted access
+   *
+   * @generated from field: string credential_id = 2;
+   */
+  credentialId: string;
+
+  /**
+   * Full physical topic name
+   *
+   * @generated from field: string topic_physical_name = 3;
+   */
+  topicPhysicalName: string;
+
+  /**
+   * "read", "write"
+   *
+   * @generated from field: repeated string permissions = 4;
+   */
+  permissions: string[];
+
+  /**
+   * @generated from field: google.protobuf.Timestamp expires_at = 5;
+   */
+  expiresAt?: Timestamp;
+};
+
+/**
+ * Describes the message idp.gateway.v1.TopicACLEntry.
+ * Use `create(TopicACLEntrySchema)` to create a new message.
+ */
+export const TopicACLEntrySchema: GenMessage<TopicACLEntry> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 28);
+
+/**
+ * @generated from message idp.gateway.v1.UpsertTopicACLRequest
+ */
+export type UpsertTopicACLRequest = Message<"idp.gateway.v1.UpsertTopicACLRequest"> & {
+  /**
+   * @generated from field: idp.gateway.v1.TopicACLEntry entry = 1;
+   */
+  entry?: TopicACLEntry;
+};
+
+/**
+ * Describes the message idp.gateway.v1.UpsertTopicACLRequest.
+ * Use `create(UpsertTopicACLRequestSchema)` to create a new message.
+ */
+export const UpsertTopicACLRequestSchema: GenMessage<UpsertTopicACLRequest> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 29);
+
+/**
+ * @generated from message idp.gateway.v1.UpsertTopicACLResponse
+ */
+export type UpsertTopicACLResponse = Message<"idp.gateway.v1.UpsertTopicACLResponse"> & {
+  /**
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+};
+
+/**
+ * Describes the message idp.gateway.v1.UpsertTopicACLResponse.
+ * Use `create(UpsertTopicACLResponseSchema)` to create a new message.
+ */
+export const UpsertTopicACLResponseSchema: GenMessage<UpsertTopicACLResponse> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 30);
+
+/**
+ * @generated from message idp.gateway.v1.RevokeTopicACLRequest
+ */
+export type RevokeTopicACLRequest = Message<"idp.gateway.v1.RevokeTopicACLRequest"> & {
+  /**
+   * @generated from field: string acl_id = 1;
+   */
+  aclId: string;
+};
+
+/**
+ * Describes the message idp.gateway.v1.RevokeTopicACLRequest.
+ * Use `create(RevokeTopicACLRequestSchema)` to create a new message.
+ */
+export const RevokeTopicACLRequestSchema: GenMessage<RevokeTopicACLRequest> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 31);
+
+/**
+ * @generated from message idp.gateway.v1.RevokeTopicACLResponse
+ */
+export type RevokeTopicACLResponse = Message<"idp.gateway.v1.RevokeTopicACLResponse"> & {
+  /**
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+};
+
+/**
+ * Describes the message idp.gateway.v1.RevokeTopicACLResponse.
+ * Use `create(RevokeTopicACLResponseSchema)` to create a new message.
+ */
+export const RevokeTopicACLResponseSchema: GenMessage<RevokeTopicACLResponse> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 32);
+
+/**
+ * @generated from message idp.gateway.v1.ListTopicACLsRequest
+ */
+export type ListTopicACLsRequest = Message<"idp.gateway.v1.ListTopicACLsRequest"> & {
+  /**
+   * Optional: filter by credential
+   *
+   * @generated from field: string credential_id = 1;
+   */
+  credentialId: string;
+};
+
+/**
+ * Describes the message idp.gateway.v1.ListTopicACLsRequest.
+ * Use `create(ListTopicACLsRequestSchema)` to create a new message.
+ */
+export const ListTopicACLsRequestSchema: GenMessage<ListTopicACLsRequest> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 33);
+
+/**
+ * @generated from message idp.gateway.v1.ListTopicACLsResponse
+ */
+export type ListTopicACLsResponse = Message<"idp.gateway.v1.ListTopicACLsResponse"> & {
+  /**
+   * @generated from field: repeated idp.gateway.v1.TopicACLEntry entries = 1;
+   */
+  entries: TopicACLEntry[];
+};
+
+/**
+ * Describes the message idp.gateway.v1.ListTopicACLsResponse.
+ * Use `create(ListTopicACLsResponseSchema)` to create a new message.
+ */
+export const ListTopicACLsResponseSchema: GenMessage<ListTopicACLsResponse> = /*@__PURE__*/
+  messageDesc(file_idp_gateway_v1_gateway, 34);
+
+/**
  * @generated from message idp.gateway.v1.TopicCreatedRequest
  */
 export type TopicCreatedRequest = Message<"idp.gateway.v1.TopicCreatedRequest"> & {
@@ -702,7 +857,7 @@ export type TopicCreatedRequest = Message<"idp.gateway.v1.TopicCreatedRequest"> 
  * Use `create(TopicCreatedRequestSchema)` to create a new message.
  */
 export const TopicCreatedRequestSchema: GenMessage<TopicCreatedRequest> = /*@__PURE__*/
-  messageDesc(file_idp_gateway_v1_gateway, 28);
+  messageDesc(file_idp_gateway_v1_gateway, 35);
 
 /**
  * @generated from message idp.gateway.v1.TopicCreatedResponse
@@ -726,7 +881,7 @@ export type TopicCreatedResponse = Message<"idp.gateway.v1.TopicCreatedResponse"
  * Use `create(TopicCreatedResponseSchema)` to create a new message.
  */
 export const TopicCreatedResponseSchema: GenMessage<TopicCreatedResponse> = /*@__PURE__*/
-  messageDesc(file_idp_gateway_v1_gateway, 29);
+  messageDesc(file_idp_gateway_v1_gateway, 36);
 
 /**
  * @generated from message idp.gateway.v1.TopicDeletedRequest
@@ -758,7 +913,7 @@ export type TopicDeletedRequest = Message<"idp.gateway.v1.TopicDeletedRequest"> 
  * Use `create(TopicDeletedRequestSchema)` to create a new message.
  */
 export const TopicDeletedRequestSchema: GenMessage<TopicDeletedRequest> = /*@__PURE__*/
-  messageDesc(file_idp_gateway_v1_gateway, 30);
+  messageDesc(file_idp_gateway_v1_gateway, 37);
 
 /**
  * @generated from message idp.gateway.v1.TopicDeletedResponse
@@ -775,7 +930,7 @@ export type TopicDeletedResponse = Message<"idp.gateway.v1.TopicDeletedResponse"
  * Use `create(TopicDeletedResponseSchema)` to create a new message.
  */
 export const TopicDeletedResponseSchema: GenMessage<TopicDeletedResponse> = /*@__PURE__*/
-  messageDesc(file_idp_gateway_v1_gateway, 31);
+  messageDesc(file_idp_gateway_v1_gateway, 38);
 
 /**
  * @generated from message idp.gateway.v1.TopicConfigUpdatedRequest
@@ -807,7 +962,7 @@ export type TopicConfigUpdatedRequest = Message<"idp.gateway.v1.TopicConfigUpdat
  * Use `create(TopicConfigUpdatedRequestSchema)` to create a new message.
  */
 export const TopicConfigUpdatedRequestSchema: GenMessage<TopicConfigUpdatedRequest> = /*@__PURE__*/
-  messageDesc(file_idp_gateway_v1_gateway, 32);
+  messageDesc(file_idp_gateway_v1_gateway, 39);
 
 /**
  * @generated from message idp.gateway.v1.TopicConfigUpdatedResponse
@@ -824,7 +979,7 @@ export type TopicConfigUpdatedResponse = Message<"idp.gateway.v1.TopicConfigUpda
  * Use `create(TopicConfigUpdatedResponseSchema)` to create a new message.
  */
 export const TopicConfigUpdatedResponseSchema: GenMessage<TopicConfigUpdatedResponse> = /*@__PURE__*/
-  messageDesc(file_idp_gateway_v1_gateway, 33);
+  messageDesc(file_idp_gateway_v1_gateway, 40);
 
 /**
  * @generated from message idp.gateway.v1.PolicyViolation
@@ -867,7 +1022,7 @@ export type PolicyViolation = Message<"idp.gateway.v1.PolicyViolation"> & {
  * Use `create(PolicyViolationSchema)` to create a new message.
  */
 export const PolicyViolationSchema: GenMessage<PolicyViolation> = /*@__PURE__*/
-  messageDesc(file_idp_gateway_v1_gateway, 34);
+  messageDesc(file_idp_gateway_v1_gateway, 41);
 
 /**
  * @generated from enum idp.gateway.v1.PermissionTemplate
@@ -1014,6 +1169,32 @@ export const BifrostAdminService: GenService<{
     methodKind: "unary";
     input: typeof ListPoliciesRequestSchema;
     output: typeof ListPoliciesResponseSchema;
+  },
+  /**
+   * Topic ACL management (for cross-application sharing)
+   *
+   * @generated from rpc idp.gateway.v1.BifrostAdminService.UpsertTopicACL
+   */
+  upsertTopicACL: {
+    methodKind: "unary";
+    input: typeof UpsertTopicACLRequestSchema;
+    output: typeof UpsertTopicACLResponseSchema;
+  },
+  /**
+   * @generated from rpc idp.gateway.v1.BifrostAdminService.RevokeTopicACL
+   */
+  revokeTopicACL: {
+    methodKind: "unary";
+    input: typeof RevokeTopicACLRequestSchema;
+    output: typeof RevokeTopicACLResponseSchema;
+  },
+  /**
+   * @generated from rpc idp.gateway.v1.BifrostAdminService.ListTopicACLs
+   */
+  listTopicACLs: {
+    methodKind: "unary";
+    input: typeof ListTopicACLsRequestSchema;
+    output: typeof ListTopicACLsResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_idp_gateway_v1_gateway, 0);
