@@ -20,6 +20,10 @@ export { KafkaTopicSharePolicies } from './KafkaTopicSharePolicies'
 // Policies
 export { KafkaTopicPolicies } from './KafkaTopicPolicies'
 
+// Quotas & Approvals
+export { KafkaApplicationQuotas } from './KafkaApplicationQuotas'
+export { KafkaApplicationRequests } from './KafkaApplicationRequests'
+
 // Usage & Lineage
 export { KafkaUsageMetrics } from './KafkaUsageMetrics'
 export { KafkaConsumerGroups } from './KafkaConsumerGroups'
