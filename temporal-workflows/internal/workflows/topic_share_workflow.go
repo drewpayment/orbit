@@ -2,67 +2,17 @@
 package workflows
 
 import (
-	"context"
 	"time"
 
+	"github.com/drewpayment/orbit/temporal-workflows/internal/activities"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
 
 const (
-	// TopicShareTaskQueue is the task queue for topic share workflows
+	// TopicShareTaskQueue is the task queue for topic share workflows.
+	// Used when registering workflows in temporal-workflows/cmd/worker/main.go
 	TopicShareTaskQueue = "topic-share"
-)
-
-// Activity input/output types for topic sharing
-
-// UpdateShareStatusInput is the input for updating share status
-type UpdateShareStatusInput struct {
-	ShareID string `json:"shareId"`
-	Status  string `json:"status"`
-	Error   string `json:"error,omitempty"`
-}
-
-// UpsertTopicACLInput is the input for upserting topic ACLs to Bifrost
-type UpsertTopicACLInput struct {
-	TopicPhysicalName string    `json:"topicPhysicalName"`
-	CredentialID      string    `json:"credentialId"`
-	Permissions       []string  `json:"permissions"`
-	ExpiresAt         *time.Time `json:"expiresAt,omitempty"`
-}
-
-// UpsertTopicACLOutput is the output from upserting topic ACLs
-type UpsertTopicACLOutput struct {
-	Success    bool     `json:"success"`
-	ACLsCreated []string `json:"aclsCreated,omitempty"`
-}
-
-// SendShareApprovedNotificationInput is the input for sending share approval notifications
-type SendShareApprovedNotificationInput struct {
-	ShareID         string `json:"shareId"`
-	TopicOwnerEmail string `json:"topicOwnerEmail"`
-	RequesterEmail  string `json:"requesterEmail"`
-}
-
-// RevokeTopicACLInput is the input for revoking topic ACLs from Bifrost
-type RevokeTopicACLInput struct {
-	ShareID string `json:"shareId"`
-}
-
-// Activity function stubs - these will be replaced with actual implementations when registering with worker
-var (
-	updateShareStatusActivityStub = func(ctx context.Context, input UpdateShareStatusInput) error {
-		panic("updateShareStatusActivityStub not implemented - register actual activity implementation")
-	}
-	upsertTopicACLActivityStub = func(ctx context.Context, input UpsertTopicACLInput) (*UpsertTopicACLOutput, error) {
-		panic("upsertTopicACLActivityStub not implemented - register actual activity implementation")
-	}
-	sendShareApprovedNotificationActivityStub = func(ctx context.Context, input SendShareApprovedNotificationInput) error {
-		panic("sendShareApprovedNotificationActivityStub not implemented - register actual activity implementation")
-	}
-	revokeTopicACLActivityStub = func(ctx context.Context, input RevokeTopicACLInput) error {
-		panic("revokeTopicACLActivityStub not implemented - register actual activity implementation")
-	}
 )
 
 // TopicShareApprovedInput is the input for the topic share approval workflow
@@ -96,7 +46,7 @@ type TopicShareRevokedResult struct {
 }
 
 // TopicShareApprovedWorkflow orchestrates the provisioning of topic access after approval
-func TopicShareApprovedWorkflow(ctx workflow.Context, input TopicShareApprovedInput) (*TopicShareApprovedResult, error) {
+func TopicShareApprovedWorkflow(ctx workflow.Context, input TopicShareApprovedInput) (TopicShareApprovedResult, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting TopicShareApprovedWorkflow",
 		"shareId", input.ShareID,
@@ -117,15 +67,17 @@ func TopicShareApprovedWorkflow(ctx workflow.Context, input TopicShareApprovedIn
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
+	var topicShareActivities *activities.TopicShareActivitiesImpl
+
 	// Step 1: Update share status to "provisioning"
 	logger.Info("Step 1: Updating share status to provisioning", "shareId", input.ShareID)
-	err := workflow.ExecuteActivity(ctx, updateShareStatusActivityStub, UpdateShareStatusInput{
+	err := workflow.ExecuteActivity(ctx, topicShareActivities.UpdateShareStatus, activities.UpdateShareStatusInput{
 		ShareID: input.ShareID,
 		Status:  "provisioning",
 	}).Get(ctx, nil)
 	if err != nil {
 		logger.Error("Failed to update share status to provisioning", "error", err)
-		return &TopicShareApprovedResult{
+		return TopicShareApprovedResult{
 			Success: false,
 			ShareID: input.ShareID,
 			Error:   err.Error(),
@@ -136,8 +88,9 @@ func TopicShareApprovedWorkflow(ctx workflow.Context, input TopicShareApprovedIn
 	logger.Info("Step 2: Upserting topic ACL to Bifrost",
 		"topicPhysicalName", input.TopicPhysicalName,
 		"credentialId", input.CredentialID)
-	var aclOutput *UpsertTopicACLOutput
-	err = workflow.ExecuteActivity(ctx, upsertTopicACLActivityStub, UpsertTopicACLInput{
+	var aclOutput activities.UpsertTopicACLOutput
+	err = workflow.ExecuteActivity(ctx, topicShareActivities.UpsertTopicACL, activities.UpsertTopicACLInput{
+		ShareID:           input.ShareID,
 		TopicPhysicalName: input.TopicPhysicalName,
 		CredentialID:      input.CredentialID,
 		Permissions:       input.Permissions,
@@ -148,13 +101,13 @@ func TopicShareApprovedWorkflow(ctx workflow.Context, input TopicShareApprovedIn
 		logger.Error("Failed to upsert topic ACL, rolling back to failed status", "error", err)
 
 		// Rollback: Update share status to "failed"
-		_ = workflow.ExecuteActivity(ctx, updateShareStatusActivityStub, UpdateShareStatusInput{
+		_ = workflow.ExecuteActivity(ctx, topicShareActivities.UpdateShareStatus, activities.UpdateShareStatusInput{
 			ShareID: input.ShareID,
 			Status:  "failed",
 			Error:   err.Error(),
 		}).Get(ctx, nil)
 
-		return &TopicShareApprovedResult{
+		return TopicShareApprovedResult{
 			Success: false,
 			ShareID: input.ShareID,
 			Error:   err.Error(),
@@ -163,7 +116,7 @@ func TopicShareApprovedWorkflow(ctx workflow.Context, input TopicShareApprovedIn
 
 	// Step 3: Update share status to "approved"
 	logger.Info("Step 3: Updating share status to approved", "shareId", input.ShareID)
-	err = workflow.ExecuteActivity(ctx, updateShareStatusActivityStub, UpdateShareStatusInput{
+	err = workflow.ExecuteActivity(ctx, topicShareActivities.UpdateShareStatus, activities.UpdateShareStatusInput{
 		ShareID: input.ShareID,
 		Status:  "approved",
 	}).Get(ctx, nil)
@@ -188,7 +141,7 @@ func TopicShareApprovedWorkflow(ctx workflow.Context, input TopicShareApprovedIn
 		},
 	})
 
-	notificationErr := workflow.ExecuteActivity(notificationCtx, sendShareApprovedNotificationActivityStub, SendShareApprovedNotificationInput{
+	notificationErr := workflow.ExecuteActivity(notificationCtx, topicShareActivities.SendShareApprovedNotification, activities.SendShareApprovedNotificationInput{
 		ShareID:         input.ShareID,
 		TopicOwnerEmail: input.TopicOwnerEmail,
 		RequesterEmail:  input.RequesterEmail,
@@ -201,14 +154,14 @@ func TopicShareApprovedWorkflow(ctx workflow.Context, input TopicShareApprovedIn
 
 	logger.Info("TopicShareApprovedWorkflow completed successfully", "shareId", input.ShareID)
 
-	return &TopicShareApprovedResult{
+	return TopicShareApprovedResult{
 		Success: true,
 		ShareID: input.ShareID,
 	}, nil
 }
 
 // TopicShareRevokedWorkflow orchestrates the revocation of topic access
-func TopicShareRevokedWorkflow(ctx workflow.Context, input TopicShareRevokedInput) (*TopicShareRevokedResult, error) {
+func TopicShareRevokedWorkflow(ctx workflow.Context, input TopicShareRevokedInput) (TopicShareRevokedResult, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting TopicShareRevokedWorkflow", "shareId", input.ShareID)
 
@@ -224,15 +177,17 @@ func TopicShareRevokedWorkflow(ctx workflow.Context, input TopicShareRevokedInpu
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
+	var topicShareActivities *activities.TopicShareActivitiesImpl
+
 	// Step 1: Revoke topic ACL from Bifrost
 	logger.Info("Step 1: Revoking topic ACL", "shareId", input.ShareID)
-	err := workflow.ExecuteActivity(ctx, revokeTopicACLActivityStub, RevokeTopicACLInput{
+	err := workflow.ExecuteActivity(ctx, topicShareActivities.RevokeTopicACL, activities.RevokeTopicACLInput{
 		ShareID: input.ShareID,
 	}).Get(ctx, nil)
 
 	if err != nil {
 		logger.Error("Failed to revoke topic ACL", "error", err)
-		return &TopicShareRevokedResult{
+		return TopicShareRevokedResult{
 			Success: false,
 			Error:   err.Error(),
 		}, nil
@@ -240,7 +195,7 @@ func TopicShareRevokedWorkflow(ctx workflow.Context, input TopicShareRevokedInpu
 
 	// Step 2: Update share status to "revoked"
 	logger.Info("Step 2: Updating share status to revoked", "shareId", input.ShareID)
-	err = workflow.ExecuteActivity(ctx, updateShareStatusActivityStub, UpdateShareStatusInput{
+	err = workflow.ExecuteActivity(ctx, topicShareActivities.UpdateShareStatus, activities.UpdateShareStatusInput{
 		ShareID: input.ShareID,
 		Status:  "revoked",
 	}).Get(ctx, nil)
@@ -252,7 +207,7 @@ func TopicShareRevokedWorkflow(ctx workflow.Context, input TopicShareRevokedInpu
 
 	logger.Info("TopicShareRevokedWorkflow completed successfully", "shareId", input.ShareID)
 
-	return &TopicShareRevokedResult{
+	return TopicShareRevokedResult{
 		Success: true,
 	}, nil
 }
