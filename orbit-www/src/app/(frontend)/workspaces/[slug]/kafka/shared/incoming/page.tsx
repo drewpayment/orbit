@@ -52,7 +52,7 @@ export default async function IncomingSharesPage({ params }: IncomingPageProps) 
   const canManage = ['owner', 'admin'].includes(userRole)
 
   return (
-    <div className="container py-6">
+    <>
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Incoming Share Requests</h1>
         <p className="text-muted-foreground">
@@ -65,6 +65,6 @@ export default async function IncomingSharesPage({ params }: IncomingPageProps) 
         type="incoming"
         canManage={canManage}
       />
-    </div>
+    </>
   )
 }

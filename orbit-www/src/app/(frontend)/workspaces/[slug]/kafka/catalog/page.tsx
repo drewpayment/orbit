@@ -52,7 +52,7 @@ export default async function CatalogPage({ params }: CatalogPageProps) {
   }
 
   return (
-    <div className="container py-6">
+    <>
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Topic Catalog</h1>
         <p className="text-muted-foreground">
@@ -66,6 +66,6 @@ export default async function CatalogPage({ params }: CatalogPageProps) {
           currentWorkspaceName={workspace.name}
         />
       </Suspense>
-    </div>
+    </>
   )
 }

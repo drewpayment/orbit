@@ -49,7 +49,7 @@ export default async function OutgoingSharesPage({ params }: OutgoingPageProps) 
   }
 
   return (
-    <div className="container py-6">
+    <>
       <div className="mb-6">
         <h1 className="text-2xl font-bold">My Access Requests</h1>
         <p className="text-muted-foreground">
@@ -62,6 +62,6 @@ export default async function OutgoingSharesPage({ params }: OutgoingPageProps) 
         type="outgoing"
         canManage={false}
       />
-    </div>
+    </>
   )
 }
