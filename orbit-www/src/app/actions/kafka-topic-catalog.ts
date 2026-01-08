@@ -71,7 +71,7 @@ export type RequestTopicAccessResult = {
  */
 async function checkAutoApprove(
   payload: Awaited<ReturnType<typeof getPayload>>,
-  topicId: string,
+  _topicId: string, // Reserved for topic-specific policies in the future
   ownerWorkspaceId: string,
   requestingWorkspaceId: string,
   accessLevel: string
