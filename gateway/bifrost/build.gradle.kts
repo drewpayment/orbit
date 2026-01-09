@@ -46,12 +46,19 @@ dependencies {
     // Metrics
     implementation("io.micrometer:micrometer-registry-prometheus:1.12.0")
 
+    // Ktor for admin endpoint
+    implementation("io.ktor:ktor-server-core:2.3.7")
+    implementation("io.ktor:ktor-server-netty:2.3.7")
+
     // Testing
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.1")
     testImplementation("io.mockk:mockk:1.13.8")
     testImplementation("org.testcontainers:kafka:1.19.3")
     testImplementation("org.testcontainers:junit-jupiter:1.19.3")
+    testImplementation("io.ktor:ktor-server-test-host:2.3.7")
+    testImplementation("io.ktor:ktor-client-content-negotiation:2.3.7")
+    testImplementation("io.micrometer:micrometer-registry-prometheus:1.12.0")
 }
 
 protobuf {
