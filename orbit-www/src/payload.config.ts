@@ -48,6 +48,7 @@ import {
   KafkaClientActivity,
   KafkaApplicationQuotas,
   KafkaApplicationRequests,
+  KafkaChargebackRates,
 } from './collections/kafka'
 
 const filename = fileURLToPath(import.meta.url)
@@ -100,6 +101,7 @@ export default buildConfig({
     KafkaClientActivity,
     KafkaApplicationQuotas,
     KafkaApplicationRequests,
+    KafkaChargebackRates,
   ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',

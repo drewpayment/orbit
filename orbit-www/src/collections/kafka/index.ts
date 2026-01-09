@@ -28,3 +28,6 @@ export { KafkaApplicationRequests } from './KafkaApplicationRequests'
 export { KafkaUsageMetrics } from './KafkaUsageMetrics'
 export { KafkaConsumerGroups } from './KafkaConsumerGroups'
 export { KafkaClientActivity } from './KafkaClientActivity'
+
+// Billing
+export { KafkaChargebackRates } from './KafkaChargebackRates'
