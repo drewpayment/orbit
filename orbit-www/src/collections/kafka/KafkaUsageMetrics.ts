@@ -5,7 +5,7 @@ export const KafkaUsageMetrics: CollectionConfig = {
   admin: {
     useAsTitle: 'id',
     group: 'Kafka',
-    defaultColumns: ['topic', 'timestamp', 'messagesIn', 'messagesOut', 'bytesIn', 'bytesOut'],
+    defaultColumns: ['application', 'virtualCluster', 'topic', 'hourBucket', 'messagesIn', 'messagesOut', 'bytesIn', 'bytesOut'],
     description: 'Time-series metrics for Kafka topics',
   },
   access: {
@@ -57,6 +57,44 @@ export const KafkaUsageMetrics: CollectionConfig = {
       type: 'relationship',
       relationTo: 'kafka-clusters',
       index: true,
+    },
+    {
+      name: 'application',
+      type: 'relationship',
+      relationTo: 'kafka-applications',
+      required: true,
+      index: true,
+      admin: {
+        description: 'Kafka application these metrics belong to',
+      },
+    },
+    {
+      name: 'virtualCluster',
+      type: 'relationship',
+      relationTo: 'kafka-virtual-clusters',
+      required: true,
+      index: true,
+      admin: {
+        description: 'Virtual cluster these metrics belong to',
+      },
+    },
+    {
+      name: 'serviceAccount',
+      type: 'relationship',
+      relationTo: 'kafka-service-accounts',
+      index: true,
+      admin: {
+        description: 'Service account that generated these metrics (optional)',
+      },
+    },
+    {
+      name: 'hourBucket',
+      type: 'date',
+      required: true,
+      index: true,
+      admin: {
+        description: 'Start of the hour this record represents (UTC)',
+      },
     },
     {
       name: 'timestamp',
