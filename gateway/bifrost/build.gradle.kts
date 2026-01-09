@@ -43,6 +43,9 @@ dependencies {
     // Configuration
     implementation("com.typesafe:config:1.4.3")
 
+    // Metrics
+    implementation("io.micrometer:micrometer-registry-prometheus:1.12.0")
+
     // Testing
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.1")
