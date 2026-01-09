@@ -378,6 +378,26 @@ services:
       - temporal-server
     restart: unless-stopped
 
+  # Prometheus (Metrics Collection)
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: orbit-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=15d'
+    networks:
+      - orbit-network
+    restart: unless-stopped
+
+networks:
+  orbit-network:
+    driver: bridge
+
 volumes:
   temporal-postgresql:
   temporal-elasticsearch:
@@ -388,3 +408,4 @@ volumes:
   build-workdir:
   minio-data:
   redpanda-data:
+  prometheus-data:
