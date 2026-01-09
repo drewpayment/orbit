@@ -105,6 +105,7 @@ export interface Config {
     'kafka-client-activity': KafkaClientActivity;
     'kafka-application-quotas': KafkaApplicationQuota;
     'kafka-application-requests': KafkaApplicationRequest;
+    'kafka-chargeback-rates': KafkaChargebackRate;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -149,6 +150,7 @@ export interface Config {
     'kafka-client-activity': KafkaClientActivitySelect<false> | KafkaClientActivitySelect<true>;
     'kafka-application-quotas': KafkaApplicationQuotasSelect<false> | KafkaApplicationQuotasSelect<true>;
     'kafka-application-requests': KafkaApplicationRequestsSelect<false> | KafkaApplicationRequestsSelect<true>;
+    'kafka-chargeback-rates': KafkaChargebackRatesSelect<false> | KafkaChargebackRatesSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -2034,6 +2036,22 @@ export interface KafkaUsageMetric {
   topic: string | KafkaTopic;
   cluster?: (string | null) | KafkaCluster;
   /**
+   * Kafka application these metrics belong to
+   */
+  application: string | KafkaApplication;
+  /**
+   * Virtual cluster these metrics belong to
+   */
+  virtualCluster: string | KafkaVirtualCluster;
+  /**
+   * Service account that generated these metrics (optional)
+   */
+  serviceAccount?: (string | null) | KafkaServiceAccount;
+  /**
+   * Start of the hour this record represents (UTC)
+   */
+  hourBucket: string;
+  /**
    * Metric timestamp
    */
   timestamp: string;
@@ -2283,6 +2301,37 @@ export interface KafkaApplicationRequest {
   createdAt: string;
 }
 /**
+ * System-wide chargeback rates for Kafka usage billing
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-chargeback-rates".
+ */
+export interface KafkaChargebackRate {
+  id: string;
+  /**
+   * Cost per GB of ingress (produce) traffic. Example: 0.10 = $0.10/GB
+   */
+  costPerGBIn: number;
+  /**
+   * Cost per GB of egress (consume) traffic. Example: 0.05 = $0.05/GB
+   */
+  costPerGBOut: number;
+  /**
+   * Cost per million messages. Example: 0.01 = $0.01/million
+   */
+  costPerMillionMessages: number;
+  /**
+   * Date from which these rates apply. Most recent rate before billing period start is used.
+   */
+  effectiveDate: string;
+  /**
+   * Internal notes about this rate change
+   */
+  notes?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
@@ -2440,6 +2489,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'kafka-application-requests';
         value: string | KafkaApplicationRequest;
+      } | null)
+    | ({
+        relationTo: 'kafka-chargeback-rates';
+        value: string | KafkaChargebackRate;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -3320,6 +3373,10 @@ export interface KafkaUsageMetricsSelect<T extends boolean = true> {
   workspace?: T;
   topic?: T;
   cluster?: T;
+  application?: T;
+  virtualCluster?: T;
+  serviceAccount?: T;
+  hourBucket?: T;
   timestamp?: T;
   granularity?: T;
   messagesIn?: T;
@@ -3404,6 +3461,19 @@ export interface KafkaApplicationRequestsSelect<T extends boolean = true> {
   rejectedBy?: T;
   rejectedAt?: T;
   rejectionReason?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-chargeback-rates_select".
+ */
+export interface KafkaChargebackRatesSelect<T extends boolean = true> {
+  costPerGBIn?: T;
+  costPerGBOut?: T;
+  costPerMillionMessages?: T;
+  effectiveDate?: T;
+  notes?: T;
   updatedAt?: T;
   createdAt?: T;
 }
