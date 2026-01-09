@@ -1,6 +1,5 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "orbit-www",
@@ -55,6 +54,7 @@
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "cross-env": "^7.0.3",
+        "date-fns": "^4.1.0",
         "dotenv": "16.4.7",
         "graphql": "^16.8.1",
         "jose": "^6.1.3",
