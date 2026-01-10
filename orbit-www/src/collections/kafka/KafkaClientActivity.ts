@@ -112,6 +112,42 @@ export const KafkaClientActivity: CollectionConfig = {
         description: 'Associated share grant (if cross-workspace access)',
       },
     },
+    // Bifrost integration fields (Phase 8)
+    {
+      name: 'virtualCluster',
+      type: 'relationship',
+      relationTo: 'kafka-virtual-clusters',
+      index: true,
+      admin: {
+        description: 'Virtual cluster this activity belongs to',
+      },
+    },
+    {
+      name: 'application',
+      type: 'relationship',
+      relationTo: 'kafka-applications',
+      index: true,
+      admin: {
+        description: 'Application this activity belongs to',
+      },
+    },
+    // Volume metrics (Phase 8)
+    {
+      name: 'bytesTransferred',
+      type: 'number',
+      defaultValue: 0,
+      admin: {
+        description: 'Bytes transferred in this activity window',
+      },
+    },
+    {
+      name: 'messageCount',
+      type: 'number',
+      defaultValue: 0,
+      admin: {
+        description: 'Messages transferred in this activity window',
+      },
+    },
     {
       name: 'timestamp',
       type: 'date',

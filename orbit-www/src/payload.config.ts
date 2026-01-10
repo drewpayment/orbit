@@ -46,6 +46,8 @@ import {
   KafkaUsageMetrics,
   KafkaConsumerGroups,
   KafkaClientActivity,
+  KafkaLineageEdge,
+  KafkaLineageSnapshot,
 } from './collections/kafka'
 
 const filename = fileURLToPath(import.meta.url)
@@ -96,6 +98,8 @@ export default buildConfig({
     KafkaUsageMetrics,
     KafkaConsumerGroups,
     KafkaClientActivity,
+    KafkaLineageEdge,
+    KafkaLineageSnapshot,
   ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
