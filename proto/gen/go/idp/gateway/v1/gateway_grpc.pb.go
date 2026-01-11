@@ -670,6 +670,7 @@ const (
 	BifrostCallbackService_TopicCreated_FullMethodName       = "/idp.gateway.v1.BifrostCallbackService/TopicCreated"
 	BifrostCallbackService_TopicDeleted_FullMethodName       = "/idp.gateway.v1.BifrostCallbackService/TopicDeleted"
 	BifrostCallbackService_TopicConfigUpdated_FullMethodName = "/idp.gateway.v1.BifrostCallbackService/TopicConfigUpdated"
+	BifrostCallbackService_EmitClientActivity_FullMethodName = "/idp.gateway.v1.BifrostCallbackService/EmitClientActivity"
 )
 
 // BifrostCallbackServiceClient is the client API for BifrostCallbackService service.
@@ -680,6 +681,8 @@ type BifrostCallbackServiceClient interface {
 	TopicCreated(ctx context.Context, in *TopicCreatedRequest, opts ...grpc.CallOption) (*TopicCreatedResponse, error)
 	TopicDeleted(ctx context.Context, in *TopicDeletedRequest, opts ...grpc.CallOption) (*TopicDeletedResponse, error)
 	TopicConfigUpdated(ctx context.Context, in *TopicConfigUpdatedRequest, opts ...grpc.CallOption) (*TopicConfigUpdatedResponse, error)
+	// Client activity reporting (for lineage tracking)
+	EmitClientActivity(ctx context.Context, in *EmitClientActivityRequest, opts ...grpc.CallOption) (*EmitClientActivityResponse, error)
 }
 
 type bifrostCallbackServiceClient struct {
@@ -720,6 +723,16 @@ func (c *bifrostCallbackServiceClient) TopicConfigUpdated(ctx context.Context, i
 	return out, nil
 }
 
+func (c *bifrostCallbackServiceClient) EmitClientActivity(ctx context.Context, in *EmitClientActivityRequest, opts ...grpc.CallOption) (*EmitClientActivityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EmitClientActivityResponse)
+	err := c.cc.Invoke(ctx, BifrostCallbackService_EmitClientActivity_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BifrostCallbackServiceServer is the server API for BifrostCallbackService service.
 // All implementations must embed UnimplementedBifrostCallbackServiceServer
 // for forward compatibility.
@@ -728,6 +741,8 @@ type BifrostCallbackServiceServer interface {
 	TopicCreated(context.Context, *TopicCreatedRequest) (*TopicCreatedResponse, error)
 	TopicDeleted(context.Context, *TopicDeletedRequest) (*TopicDeletedResponse, error)
 	TopicConfigUpdated(context.Context, *TopicConfigUpdatedRequest) (*TopicConfigUpdatedResponse, error)
+	// Client activity reporting (for lineage tracking)
+	EmitClientActivity(context.Context, *EmitClientActivityRequest) (*EmitClientActivityResponse, error)
 	mustEmbedUnimplementedBifrostCallbackServiceServer()
 }
 
@@ -746,6 +761,9 @@ func (UnimplementedBifrostCallbackServiceServer) TopicDeleted(context.Context, *
 }
 func (UnimplementedBifrostCallbackServiceServer) TopicConfigUpdated(context.Context, *TopicConfigUpdatedRequest) (*TopicConfigUpdatedResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method TopicConfigUpdated not implemented")
+}
+func (UnimplementedBifrostCallbackServiceServer) EmitClientActivity(context.Context, *EmitClientActivityRequest) (*EmitClientActivityResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method EmitClientActivity not implemented")
 }
 func (UnimplementedBifrostCallbackServiceServer) mustEmbedUnimplementedBifrostCallbackServiceServer() {
 }
@@ -823,6 +841,24 @@ func _BifrostCallbackService_TopicConfigUpdated_Handler(srv interface{}, ctx con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BifrostCallbackService_EmitClientActivity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EmitClientActivityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostCallbackServiceServer).EmitClientActivity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostCallbackService_EmitClientActivity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostCallbackServiceServer).EmitClientActivity(ctx, req.(*EmitClientActivityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BifrostCallbackService_ServiceDesc is the grpc.ServiceDesc for BifrostCallbackService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -841,6 +877,10 @@ var BifrostCallbackService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "TopicConfigUpdated",
 			Handler:    _BifrostCallbackService_TopicConfigUpdated_Handler,
+		},
+		{
+			MethodName: "EmitClientActivity",
+			Handler:    _BifrostCallbackService_EmitClientActivity_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

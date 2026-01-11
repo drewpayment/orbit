@@ -91,6 +91,9 @@ const (
 	// BifrostCallbackServiceTopicConfigUpdatedProcedure is the fully-qualified name of the
 	// BifrostCallbackService's TopicConfigUpdated RPC.
 	BifrostCallbackServiceTopicConfigUpdatedProcedure = "/idp.gateway.v1.BifrostCallbackService/TopicConfigUpdated"
+	// BifrostCallbackServiceEmitClientActivityProcedure is the fully-qualified name of the
+	// BifrostCallbackService's EmitClientActivity RPC.
+	BifrostCallbackServiceEmitClientActivityProcedure = "/idp.gateway.v1.BifrostCallbackService/EmitClientActivity"
 )
 
 // BifrostAdminServiceClient is a client for the idp.gateway.v1.BifrostAdminService service.
@@ -546,6 +549,8 @@ type BifrostCallbackServiceClient interface {
 	TopicCreated(context.Context, *connect.Request[v1.TopicCreatedRequest]) (*connect.Response[v1.TopicCreatedResponse], error)
 	TopicDeleted(context.Context, *connect.Request[v1.TopicDeletedRequest]) (*connect.Response[v1.TopicDeletedResponse], error)
 	TopicConfigUpdated(context.Context, *connect.Request[v1.TopicConfigUpdatedRequest]) (*connect.Response[v1.TopicConfigUpdatedResponse], error)
+	// Client activity reporting (for lineage tracking)
+	EmitClientActivity(context.Context, *connect.Request[v1.EmitClientActivityRequest]) (*connect.Response[v1.EmitClientActivityResponse], error)
 }
 
 // NewBifrostCallbackServiceClient constructs a client for the idp.gateway.v1.BifrostCallbackService
@@ -577,6 +582,12 @@ func NewBifrostCallbackServiceClient(httpClient connect.HTTPClient, baseURL stri
 			connect.WithSchema(bifrostCallbackServiceMethods.ByName("TopicConfigUpdated")),
 			connect.WithClientOptions(opts...),
 		),
+		emitClientActivity: connect.NewClient[v1.EmitClientActivityRequest, v1.EmitClientActivityResponse](
+			httpClient,
+			baseURL+BifrostCallbackServiceEmitClientActivityProcedure,
+			connect.WithSchema(bifrostCallbackServiceMethods.ByName("EmitClientActivity")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -585,6 +596,7 @@ type bifrostCallbackServiceClient struct {
 	topicCreated       *connect.Client[v1.TopicCreatedRequest, v1.TopicCreatedResponse]
 	topicDeleted       *connect.Client[v1.TopicDeletedRequest, v1.TopicDeletedResponse]
 	topicConfigUpdated *connect.Client[v1.TopicConfigUpdatedRequest, v1.TopicConfigUpdatedResponse]
+	emitClientActivity *connect.Client[v1.EmitClientActivityRequest, v1.EmitClientActivityResponse]
 }
 
 // TopicCreated calls idp.gateway.v1.BifrostCallbackService.TopicCreated.
@@ -602,6 +614,11 @@ func (c *bifrostCallbackServiceClient) TopicConfigUpdated(ctx context.Context, r
 	return c.topicConfigUpdated.CallUnary(ctx, req)
 }
 
+// EmitClientActivity calls idp.gateway.v1.BifrostCallbackService.EmitClientActivity.
+func (c *bifrostCallbackServiceClient) EmitClientActivity(ctx context.Context, req *connect.Request[v1.EmitClientActivityRequest]) (*connect.Response[v1.EmitClientActivityResponse], error) {
+	return c.emitClientActivity.CallUnary(ctx, req)
+}
+
 // BifrostCallbackServiceHandler is an implementation of the idp.gateway.v1.BifrostCallbackService
 // service.
 type BifrostCallbackServiceHandler interface {
@@ -609,6 +626,8 @@ type BifrostCallbackServiceHandler interface {
 	TopicCreated(context.Context, *connect.Request[v1.TopicCreatedRequest]) (*connect.Response[v1.TopicCreatedResponse], error)
 	TopicDeleted(context.Context, *connect.Request[v1.TopicDeletedRequest]) (*connect.Response[v1.TopicDeletedResponse], error)
 	TopicConfigUpdated(context.Context, *connect.Request[v1.TopicConfigUpdatedRequest]) (*connect.Response[v1.TopicConfigUpdatedResponse], error)
+	// Client activity reporting (for lineage tracking)
+	EmitClientActivity(context.Context, *connect.Request[v1.EmitClientActivityRequest]) (*connect.Response[v1.EmitClientActivityResponse], error)
 }
 
 // NewBifrostCallbackServiceHandler builds an HTTP handler from the service implementation. It
@@ -636,6 +655,12 @@ func NewBifrostCallbackServiceHandler(svc BifrostCallbackServiceHandler, opts ..
 		connect.WithSchema(bifrostCallbackServiceMethods.ByName("TopicConfigUpdated")),
 		connect.WithHandlerOptions(opts...),
 	)
+	bifrostCallbackServiceEmitClientActivityHandler := connect.NewUnaryHandler(
+		BifrostCallbackServiceEmitClientActivityProcedure,
+		svc.EmitClientActivity,
+		connect.WithSchema(bifrostCallbackServiceMethods.ByName("EmitClientActivity")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/idp.gateway.v1.BifrostCallbackService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case BifrostCallbackServiceTopicCreatedProcedure:
@@ -644,6 +669,8 @@ func NewBifrostCallbackServiceHandler(svc BifrostCallbackServiceHandler, opts ..
 			bifrostCallbackServiceTopicDeletedHandler.ServeHTTP(w, r)
 		case BifrostCallbackServiceTopicConfigUpdatedProcedure:
 			bifrostCallbackServiceTopicConfigUpdatedHandler.ServeHTTP(w, r)
+		case BifrostCallbackServiceEmitClientActivityProcedure:
+			bifrostCallbackServiceEmitClientActivityHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -663,4 +690,8 @@ func (UnimplementedBifrostCallbackServiceHandler) TopicDeleted(context.Context, 
 
 func (UnimplementedBifrostCallbackServiceHandler) TopicConfigUpdated(context.Context, *connect.Request[v1.TopicConfigUpdatedRequest]) (*connect.Response[v1.TopicConfigUpdatedResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostCallbackService.TopicConfigUpdated is not implemented"))
+}
+
+func (UnimplementedBifrostCallbackServiceHandler) EmitClientActivity(context.Context, *connect.Request[v1.EmitClientActivityRequest]) (*connect.Response[v1.EmitClientActivityResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostCallbackService.EmitClientActivity is not implemented"))
 }

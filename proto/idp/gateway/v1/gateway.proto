@@ -256,6 +256,9 @@ service BifrostCallbackService {
   rpc TopicCreated(TopicCreatedRequest) returns (TopicCreatedResponse);
   rpc TopicDeleted(TopicDeletedRequest) returns (TopicDeletedResponse);
   rpc TopicConfigUpdated(TopicConfigUpdatedRequest) returns (TopicConfigUpdatedResponse);
+
+  // Client activity reporting (for lineage tracking)
+  rpc EmitClientActivity(EmitClientActivityRequest) returns (EmitClientActivityResponse);
 }
 
 message TopicCreatedRequest {
@@ -305,4 +308,32 @@ message PolicyViolation {
   string message = 3;         // Human-readable error
   string actual_value = 4;
   string allowed_value = 5;
+}
+
+// ============================================================================
+// Client Activity Messages (for Lineage Tracking)
+// ============================================================================
+
+// Single client activity record from Bifrost gateway
+message ClientActivityRecord {
+  string virtual_cluster_id = 1;    // Virtual cluster this activity belongs to
+  string service_account_id = 2;    // Service account performing the activity
+  string topic_virtual_name = 3;    // Topic name as client sees it (without prefix)
+  string direction = 4;             // "produce" or "consume"
+  string consumer_group_id = 5;     // Consumer group ID (for consume activity only)
+  int64 bytes = 6;                  // Total bytes transferred in this window
+  int64 message_count = 7;          // Total messages transferred in this window
+  google.protobuf.Timestamp window_start = 8;  // Start of measurement window
+  google.protobuf.Timestamp window_end = 9;    // End of measurement window
+}
+
+// Request to emit client activity batch to Orbit
+message EmitClientActivityRequest {
+  repeated ClientActivityRecord records = 1;
+}
+
+// Response from client activity emission
+message EmitClientActivityResponse {
+  bool success = 1;
+  int32 records_processed = 2;
 }

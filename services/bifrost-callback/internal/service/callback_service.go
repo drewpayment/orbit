@@ -47,6 +47,24 @@ type TopicConfigUpdatedInput struct {
 	UpdatedByCredentialID string            `json:"updated_by_credential_id"`
 }
 
+// ClientActivityRecord represents a single activity record for lineage tracking.
+type ClientActivityRecord struct {
+	VirtualClusterID string `json:"virtual_cluster_id"`
+	ServiceAccountID string `json:"service_account_id"`
+	TopicVirtualName string `json:"topic_virtual_name"`
+	Direction        string `json:"direction"` // "produce" or "consume"
+	ConsumerGroupID  string `json:"consumer_group_id,omitempty"`
+	Bytes            int64  `json:"bytes"`
+	MessageCount     int64  `json:"message_count"`
+	WindowStart      string `json:"window_start"` // RFC3339 timestamp
+	WindowEnd        string `json:"window_end"`   // RFC3339 timestamp
+}
+
+// ProcessActivityBatchInput contains the input for the ActivityProcessingWorkflow.
+type ProcessActivityBatchInput struct {
+	Records []ClientActivityRecord `json:"records"`
+}
+
 // CallbackService implements the BifrostCallbackService gRPC server.
 // It receives callbacks from the Bifrost gateway when topics are created,
 // deleted, or have their configuration updated, and triggers corresponding
@@ -153,6 +171,65 @@ func (s *CallbackService) TopicConfigUpdated(ctx context.Context, req *gatewayv1
 
 	return &gatewayv1.TopicConfigUpdatedResponse{
 		Success: true,
+	}, nil
+}
+
+// EmitClientActivity handles batched client activity records from Bifrost.
+// It triggers an ActivityProcessingWorkflow to process the records and update
+// lineage edges in Orbit's data model.
+func (s *CallbackService) EmitClientActivity(ctx context.Context, req *gatewayv1.EmitClientActivityRequest) (*gatewayv1.EmitClientActivityResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("request cannot be nil")
+	}
+
+	if len(req.Records) == 0 {
+		return &gatewayv1.EmitClientActivityResponse{
+			Success:          true,
+			RecordsProcessed: 0,
+		}, nil
+	}
+
+	// Convert proto records to workflow input
+	records := make([]ClientActivityRecord, len(req.Records))
+	for i, r := range req.Records {
+		windowStart := ""
+		windowEnd := ""
+		if r.WindowStart != nil {
+			windowStart = r.WindowStart.AsTime().Format("2006-01-02T15:04:05Z07:00")
+		}
+		if r.WindowEnd != nil {
+			windowEnd = r.WindowEnd.AsTime().Format("2006-01-02T15:04:05Z07:00")
+		}
+
+		records[i] = ClientActivityRecord{
+			VirtualClusterID: r.VirtualClusterId,
+			ServiceAccountID: r.ServiceAccountId,
+			TopicVirtualName: r.TopicVirtualName,
+			Direction:        r.Direction,
+			ConsumerGroupID:  r.ConsumerGroupId,
+			Bytes:            r.Bytes,
+			MessageCount:     r.MessageCount,
+			WindowStart:      windowStart,
+			WindowEnd:        windowEnd,
+		}
+	}
+
+	// Generate a unique workflow ID for this batch
+	workflowID := generateWorkflowID("activity-processing", uuid.New().String()[:8])
+
+	// Build workflow input
+	input := ProcessActivityBatchInput{
+		Records: records,
+	}
+
+	// Start the activity processing workflow
+	if err := s.temporalClient.StartWorkflow(ctx, "ActivityProcessingWorkflow", workflowID, input); err != nil {
+		return nil, fmt.Errorf("failed to start ActivityProcessingWorkflow: %w", err)
+	}
+
+	return &gatewayv1.EmitClientActivityResponse{
+		Success:          true,
+		RecordsProcessed: int32(len(records)),
 	}, nil
 }
 

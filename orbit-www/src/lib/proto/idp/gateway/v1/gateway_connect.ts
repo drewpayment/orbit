@@ -5,7 +5,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { DeletePolicyRequest, DeletePolicyResponse, DeleteVirtualClusterRequest, DeleteVirtualClusterResponse, GetFullConfigRequest, GetFullConfigResponse, GetStatusRequest, GetStatusResponse, ListCredentialsRequest, ListCredentialsResponse, ListPoliciesRequest, ListPoliciesResponse, ListTopicACLsRequest, ListTopicACLsResponse, ListVirtualClustersRequest, ListVirtualClustersResponse, RevokeCredentialRequest, RevokeCredentialResponse, RevokeTopicACLRequest, RevokeTopicACLResponse, SetVirtualClusterReadOnlyRequest, SetVirtualClusterReadOnlyResponse, TopicConfigUpdatedRequest, TopicConfigUpdatedResponse, TopicCreatedRequest, TopicCreatedResponse, TopicDeletedRequest, TopicDeletedResponse, UpsertCredentialRequest, UpsertCredentialResponse, UpsertPolicyRequest, UpsertPolicyResponse, UpsertTopicACLRequest, UpsertTopicACLResponse, UpsertVirtualClusterRequest, UpsertVirtualClusterResponse } from "./gateway_pb.js";
+import { DeletePolicyRequest, DeletePolicyResponse, DeleteVirtualClusterRequest, DeleteVirtualClusterResponse, EmitClientActivityRequest, EmitClientActivityResponse, GetFullConfigRequest, GetFullConfigResponse, GetStatusRequest, GetStatusResponse, ListCredentialsRequest, ListCredentialsResponse, ListPoliciesRequest, ListPoliciesResponse, ListTopicACLsRequest, ListTopicACLsResponse, ListVirtualClustersRequest, ListVirtualClustersResponse, RevokeCredentialRequest, RevokeCredentialResponse, RevokeTopicACLRequest, RevokeTopicACLResponse, SetVirtualClusterReadOnlyRequest, SetVirtualClusterReadOnlyResponse, TopicConfigUpdatedRequest, TopicConfigUpdatedResponse, TopicCreatedRequest, TopicCreatedResponse, TopicDeletedRequest, TopicDeletedResponse, UpsertCredentialRequest, UpsertCredentialResponse, UpsertPolicyRequest, UpsertPolicyResponse, UpsertTopicACLRequest, UpsertTopicACLResponse, UpsertVirtualClusterRequest, UpsertVirtualClusterResponse } from "./gateway_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -197,6 +197,17 @@ export const BifrostCallbackService = {
       name: "TopicConfigUpdated",
       I: TopicConfigUpdatedRequest,
       O: TopicConfigUpdatedResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Client activity reporting (for lineage tracking)
+     *
+     * @generated from rpc idp.gateway.v1.BifrostCallbackService.EmitClientActivity
+     */
+    emitClientActivity: {
+      name: "EmitClientActivity",
+      I: EmitClientActivityRequest,
+      O: EmitClientActivityResponse,
       kind: MethodKind.Unary,
     },
   }

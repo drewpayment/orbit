@@ -19,7 +19,12 @@ data class FilterContext(
      * This ID is set by the client and returned in the response header,
      * enabling accurate request/response correlation across async boundaries.
      */
-    val correlationId: Int = 0
+    val correlationId: Int = 0,
+    /**
+     * Consumer group ID for this connection (populated from JoinGroup/SyncGroup requests).
+     * Used for lineage tracking to identify which consumer group is consuming from topics.
+     */
+    val consumerGroupId: String? = null
 ) {
     val topicPrefix: String get() = virtualCluster?.topicPrefix ?: ""
     val groupPrefix: String get() = virtualCluster?.groupPrefix ?: ""
