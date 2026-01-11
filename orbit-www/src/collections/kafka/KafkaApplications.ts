@@ -199,6 +199,41 @@ export const KafkaApplications: CollectionConfig = {
       },
     },
     {
+      name: 'gracePeriodDaysOverride',
+      type: 'number',
+      admin: {
+        description: 'Custom grace period in days (overrides environment default)',
+        condition: (data) => data?.status === 'decommissioning',
+      },
+    },
+    {
+      name: 'gracePeriodEndsAt',
+      type: 'date',
+      admin: {
+        readOnly: true,
+        position: 'sidebar',
+        description: 'When the grace period expires',
+        condition: (data) => data?.status === 'decommissioning',
+      },
+    },
+    {
+      name: 'cleanupWorkflowId',
+      type: 'text',
+      admin: {
+        readOnly: true,
+        description: 'Temporal workflow ID for scheduled cleanup',
+        condition: (data) => data?.status === 'decommissioning',
+      },
+    },
+    {
+      name: 'decommissionReason',
+      type: 'textarea',
+      admin: {
+        description: 'Optional reason for decommissioning',
+        condition: (data) => data?.status === 'decommissioning' || data?.status === 'deleted',
+      },
+    },
+    {
       name: 'createdBy',
       type: 'relationship',
       relationTo: 'users',
