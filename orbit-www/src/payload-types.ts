@@ -106,6 +106,8 @@ export interface Config {
     'kafka-application-quotas': KafkaApplicationQuota;
     'kafka-application-requests': KafkaApplicationRequest;
     'kafka-chargeback-rates': KafkaChargebackRate;
+    'kafka-lineage-edges': KafkaLineageEdge;
+    'kafka-lineage-snapshots': KafkaLineageSnapshot;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -151,6 +153,8 @@ export interface Config {
     'kafka-application-quotas': KafkaApplicationQuotasSelect<false> | KafkaApplicationQuotasSelect<true>;
     'kafka-application-requests': KafkaApplicationRequestsSelect<false> | KafkaApplicationRequestsSelect<true>;
     'kafka-chargeback-rates': KafkaChargebackRatesSelect<false> | KafkaChargebackRatesSelect<true>;
+    'kafka-lineage-edges': KafkaLineageEdgesSelect<false> | KafkaLineageEdgesSelect<true>;
+    'kafka-lineage-snapshots': KafkaLineageSnapshotsSelect<false> | KafkaLineageSnapshotsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -2196,6 +2200,22 @@ export interface KafkaClientActivity {
    */
   share?: (string | null) | KafkaTopicShare;
   /**
+   * Virtual cluster this activity belongs to
+   */
+  virtualCluster?: (string | null) | KafkaVirtualCluster;
+  /**
+   * Application this activity belongs to
+   */
+  application?: (string | null) | KafkaApplication;
+  /**
+   * Bytes transferred in this activity window
+   */
+  bytesTransferred?: number | null;
+  /**
+   * Messages transferred in this activity window
+   */
+  messageCount?: number | null;
+  /**
    * Activity timestamp
    */
   timestamp: string;
@@ -2328,6 +2348,196 @@ export interface KafkaChargebackRate {
    * Internal notes about this rate change
    */
   notes?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Aggregated data flow relationships between applications and topics
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-lineage-edges".
+ */
+export interface KafkaLineageEdge {
+  id: string;
+  /**
+   * Application that is producing/consuming
+   */
+  sourceApplication?: (string | null) | KafkaApplication;
+  /**
+   * Service account used for this connection
+   */
+  sourceServiceAccount?: (string | null) | KafkaServiceAccount;
+  /**
+   * Workspace of the source application
+   */
+  sourceWorkspace?: (string | null) | Workspace;
+  /**
+   * Topic being accessed
+   */
+  topic: string | KafkaTopic;
+  /**
+   * Application that owns the topic
+   */
+  targetApplication?: (string | null) | KafkaApplication;
+  /**
+   * Workspace that owns the topic
+   */
+  targetWorkspace: string | Workspace;
+  /**
+   * Data flow direction
+   */
+  direction: 'produce' | 'consume';
+  /**
+   * Bytes transferred in the last 24 hours
+   */
+  bytesLast24h?: number | null;
+  /**
+   * Messages transferred in the last 24 hours
+   */
+  messagesLast24h?: number | null;
+  /**
+   * Total bytes transferred since first seen
+   */
+  bytesAllTime?: number | null;
+  /**
+   * Total messages transferred since first seen
+   */
+  messagesAllTime?: number | null;
+  /**
+   * When this connection was first observed
+   */
+  firstSeen: string;
+  /**
+   * When this connection was last observed
+   */
+  lastSeen: string;
+  /**
+   * Connection seen in last 24 hours
+   */
+  isActive?: boolean | null;
+  /**
+   * Source workspace differs from topic workspace
+   */
+  isCrossWorkspace?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Daily lineage snapshots for trend analysis
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-lineage-snapshots".
+ */
+export interface KafkaLineageSnapshot {
+  id: string;
+  /**
+   * Topic this snapshot is for
+   */
+  topic: string | KafkaTopic;
+  /**
+   * Workspace that owns the topic
+   */
+  workspace: string | Workspace;
+  /**
+   * Date of this snapshot (truncated to day)
+   */
+  snapshotDate: string;
+  /**
+   * Applications producing to this topic on this day
+   */
+  producers?:
+    | {
+        /**
+         * Application ID
+         */
+        applicationId: string;
+        /**
+         * Application name (denormalized for historical reference)
+         */
+        applicationName?: string | null;
+        /**
+         * Service account ID
+         */
+        serviceAccountId?: string | null;
+        /**
+         * Workspace ID
+         */
+        workspaceId?: string | null;
+        /**
+         * Workspace name (denormalized)
+         */
+        workspaceName?: string | null;
+        /**
+         * Bytes produced on this day
+         */
+        bytes?: number | null;
+        /**
+         * Messages produced on this day
+         */
+        messages?: number | null;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * Applications consuming from this topic on this day
+   */
+  consumers?:
+    | {
+        /**
+         * Application ID
+         */
+        applicationId: string;
+        /**
+         * Application name (denormalized for historical reference)
+         */
+        applicationName?: string | null;
+        /**
+         * Service account ID
+         */
+        serviceAccountId?: string | null;
+        /**
+         * Workspace ID
+         */
+        workspaceId?: string | null;
+        /**
+         * Workspace name (denormalized)
+         */
+        workspaceName?: string | null;
+        /**
+         * Bytes consumed on this day
+         */
+        bytes?: number | null;
+        /**
+         * Messages consumed on this day
+         */
+        messages?: number | null;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * Total bytes produced to topic on this day
+   */
+  totalBytesIn?: number | null;
+  /**
+   * Total bytes consumed from topic on this day
+   */
+  totalBytesOut?: number | null;
+  /**
+   * Total messages produced to topic on this day
+   */
+  totalMessagesIn?: number | null;
+  /**
+   * Total messages consumed from topic on this day
+   */
+  totalMessagesOut?: number | null;
+  /**
+   * Number of unique producers on this day
+   */
+  producerCount?: number | null;
+  /**
+   * Number of unique consumers on this day
+   */
+  consumerCount?: number | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -2493,6 +2703,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'kafka-chargeback-rates';
         value: string | KafkaChargebackRate;
+      } | null)
+    | ({
+        relationTo: 'kafka-lineage-edges';
+        value: string | KafkaLineageEdge;
+      } | null)
+    | ({
+        relationTo: 'kafka-lineage-snapshots';
+        value: string | KafkaLineageSnapshot;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -3424,6 +3642,10 @@ export interface KafkaClientActivitySelect<T extends boolean = true> {
   sourceWorkspace?: T;
   serviceAccount?: T;
   share?: T;
+  virtualCluster?: T;
+  application?: T;
+  bytesTransferred?: T;
+  messageCount?: T;
   timestamp?: T;
   metadata?: T;
   ipAddress?: T;
@@ -3474,6 +3696,70 @@ export interface KafkaChargebackRatesSelect<T extends boolean = true> {
   costPerMillionMessages?: T;
   effectiveDate?: T;
   notes?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-lineage-edges_select".
+ */
+export interface KafkaLineageEdgesSelect<T extends boolean = true> {
+  sourceApplication?: T;
+  sourceServiceAccount?: T;
+  sourceWorkspace?: T;
+  topic?: T;
+  targetApplication?: T;
+  targetWorkspace?: T;
+  direction?: T;
+  bytesLast24h?: T;
+  messagesLast24h?: T;
+  bytesAllTime?: T;
+  messagesAllTime?: T;
+  firstSeen?: T;
+  lastSeen?: T;
+  isActive?: T;
+  isCrossWorkspace?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-lineage-snapshots_select".
+ */
+export interface KafkaLineageSnapshotsSelect<T extends boolean = true> {
+  topic?: T;
+  workspace?: T;
+  snapshotDate?: T;
+  producers?:
+    | T
+    | {
+        applicationId?: T;
+        applicationName?: T;
+        serviceAccountId?: T;
+        workspaceId?: T;
+        workspaceName?: T;
+        bytes?: T;
+        messages?: T;
+        id?: T;
+      };
+  consumers?:
+    | T
+    | {
+        applicationId?: T;
+        applicationName?: T;
+        serviceAccountId?: T;
+        workspaceId?: T;
+        workspaceName?: T;
+        bytes?: T;
+        messages?: T;
+        id?: T;
+      };
+  totalBytesIn?: T;
+  totalBytesOut?: T;
+  totalMessagesIn?: T;
+  totalMessagesOut?: T;
+  producerCount?: T;
+  consumerCount?: T;
   updatedAt?: T;
   createdAt?: T;
 }

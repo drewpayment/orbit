@@ -23,7 +23,9 @@ import {
   Loader2,
   Share2,
   GitBranch,
+  Network,
 } from 'lucide-react'
+import { TopicLineagePanel } from '@/components/kafka/TopicLineagePanel'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import {
@@ -31,12 +33,10 @@ import {
   listSchemas,
   listTopicShares,
   getTopicMetrics,
-  getTopicLineage,
   type KafkaTopic,
   type KafkaSchema,
   type KafkaTopicShare,
   type TopicMetrics,
-  type LineageNode,
 } from '../actions'
 import { TopicDetailsCard, SchemaViewer } from '@/components/features/kafka'
 
@@ -55,10 +55,6 @@ export function TopicDetailClient({
   const [schemas, setSchemas] = useState<KafkaSchema[]>([])
   const [shares, setShares] = useState<KafkaTopicShare[]>([])
   const [metrics, setMetrics] = useState<TopicMetrics[]>([])
-  const [lineage, setLineage] = useState<{ producers: LineageNode[]; consumers: LineageNode[] }>({
-    producers: [],
-    consumers: [],
-  })
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
 
@@ -99,23 +95,12 @@ export function TopicDetailClient({
     }
   }, [topicId])
 
-  const loadLineage = useCallback(async () => {
-    const result = await getTopicLineage(topicId)
-    if (result.success) {
-      setLineage({
-        producers: result.producers || [],
-        consumers: result.consumers || [],
-      })
-    }
-  }, [topicId])
-
   useEffect(() => {
     loadTopic()
     loadSchemas()
     loadShares()
     loadMetrics()
-    loadLineage()
-  }, [loadTopic, loadSchemas, loadShares, loadMetrics, loadLineage])
+  }, [loadTopic, loadSchemas, loadShares, loadMetrics])
 
   if (loading) {
     return (
@@ -208,7 +193,7 @@ export function TopicDetailClient({
             Metrics
           </TabsTrigger>
           <TabsTrigger value="lineage" className="flex items-center gap-2">
-            <GitBranch className="h-4 w-4" />
+            <Network className="h-4 w-4" />
             Lineage
           </TabsTrigger>
           <TabsTrigger value="sharing" className="flex items-center gap-2">
@@ -276,63 +261,7 @@ export function TopicDetailClient({
         </TabsContent>
 
         <TabsContent value="lineage" className="mt-6">
-          <div className="grid md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Producers</CardTitle>
-                <CardDescription>
-                  Services producing messages to this topic
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {lineage.producers.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <p>No producers detected</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {lineage.producers.map((node, i) => (
-                      <div key={i} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                        <div>
-                          <p className="font-medium">{node.serviceAccountName}</p>
-                          <p className="text-sm text-gray-500">{node.workspaceName}</p>
-                        </div>
-                        <Badge variant="outline">{formatBytes(node.bytesTransferred)}</Badge>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Consumers</CardTitle>
-                <CardDescription>
-                  Services consuming messages from this topic
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {lineage.consumers.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <p>No consumers detected</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {lineage.consumers.map((node, i) => (
-                      <div key={i} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                        <div>
-                          <p className="font-medium">{node.serviceAccountName}</p>
-                          <p className="text-sm text-gray-500">{node.workspaceName}</p>
-                        </div>
-                        <Badge variant="outline">{formatBytes(node.bytesTransferred)}</Badge>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+          <TopicLineagePanel topicId={topicId} topicName={topic.name} />
         </TabsContent>
 
         <TabsContent value="sharing" className="mt-6">

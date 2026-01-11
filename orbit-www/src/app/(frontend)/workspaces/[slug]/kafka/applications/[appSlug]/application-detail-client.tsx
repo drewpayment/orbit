@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, Settings, Server, CheckCircle2, Clock, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Settings, Server, CheckCircle2, Clock, AlertCircle, Network } from 'lucide-react'
 import { TopicsPanel } from '@/components/features/kafka/TopicsPanel'
 import { ServiceAccountsPanel } from '@/components/features/kafka/ServiceAccountsPanel'
 
@@ -102,12 +102,20 @@ export function ApplicationDetailClient({
             )}
           </div>
         </div>
-        <Button variant="outline" asChild>
-          <Link href={`/workspaces/${workspaceSlug}/kafka/applications/${application.slug}/settings`}>
-            <Settings className="h-4 w-4 mr-1" />
-            Settings
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" asChild>
+            <Link href={`/workspaces/${workspaceSlug}/kafka/applications/${application.slug}/lineage`}>
+              <Network className="h-4 w-4 mr-1" />
+              Data Lineage
+            </Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href={`/workspaces/${workspaceSlug}/kafka/applications/${application.slug}/settings`}>
+              <Settings className="h-4 w-4 mr-1" />
+              Settings
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Virtual Clusters Overview */}
