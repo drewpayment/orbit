@@ -51,6 +51,7 @@ import {
   KafkaChargebackRates,
   KafkaLineageEdge,
   KafkaLineageSnapshot,
+  KafkaOffsetCheckpoints,
 } from './collections/kafka'
 
 const filename = fileURLToPath(import.meta.url)
@@ -106,6 +107,7 @@ export default buildConfig({
     KafkaChargebackRates,
     KafkaLineageEdge,
     KafkaLineageSnapshot,
+    KafkaOffsetCheckpoints,
   ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',

@@ -31,5 +31,8 @@ export { KafkaClientActivity } from './KafkaClientActivity'
 export { KafkaLineageEdge } from './KafkaLineageEdge'
 export { KafkaLineageSnapshot } from './KafkaLineageSnapshot'
 
+// Lifecycle & Disaster Recovery
+export { KafkaOffsetCheckpoints } from './KafkaOffsetCheckpoints'
+
 // Billing
 export { KafkaChargebackRates } from './KafkaChargebackRates'
