@@ -83,6 +83,7 @@ export function VirtualClusterCreateTopicDialog({
   const [compression, setCompression] = useState<'none' | 'gzip' | 'snappy' | 'lz4' | 'zstd'>(
     'none'
   )
+  const [visibility, setVisibility] = useState<'private' | 'workspace' | 'discoverable' | 'public'>('private')
 
   const resetForm = () => {
     setName('')
@@ -92,6 +93,7 @@ export function VirtualClusterCreateTopicDialog({
     setRetentionMs(604800000)
     setCleanupPolicy('delete')
     setCompression('none')
+    setVisibility('private')
     setError(null)
     setViolations([])
   }
@@ -123,6 +125,7 @@ export function VirtualClusterCreateTopicDialog({
         retentionMs,
         cleanupPolicy,
         compression,
+        visibility,
       })
 
       if (result.success) {
@@ -310,6 +313,32 @@ export function VirtualClusterCreateTopicDialog({
                 <SelectItem value="zstd">Zstd</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <LabelWithTooltip
+              htmlFor="visibility"
+              label="Visibility"
+              tooltip="Controls who can discover and request access to this topic. Private is only the owning application, Discoverable allows others to find it in the catalog."
+            />
+            <Select
+              value={visibility}
+              onValueChange={(v) => setVisibility(v as typeof visibility)}
+              disabled={isPending}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="private">Private (Owning Application)</SelectItem>
+                <SelectItem value="workspace">Workspace (Same Workspace)</SelectItem>
+                <SelectItem value="discoverable">Discoverable (Catalog Listed)</SelectItem>
+                <SelectItem value="public">Public (All Applications)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Controls who can discover and request access to this topic
+            </p>
           </div>
 
           <DialogFooter>

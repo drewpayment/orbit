@@ -5,7 +5,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { DeletePolicyRequest, DeletePolicyResponse, DeleteVirtualClusterRequest, DeleteVirtualClusterResponse, GetFullConfigRequest, GetFullConfigResponse, GetStatusRequest, GetStatusResponse, ListCredentialsRequest, ListCredentialsResponse, ListPoliciesRequest, ListPoliciesResponse, ListVirtualClustersRequest, ListVirtualClustersResponse, RevokeCredentialRequest, RevokeCredentialResponse, SetVirtualClusterReadOnlyRequest, SetVirtualClusterReadOnlyResponse, TopicConfigUpdatedRequest, TopicConfigUpdatedResponse, TopicCreatedRequest, TopicCreatedResponse, TopicDeletedRequest, TopicDeletedResponse, UpsertCredentialRequest, UpsertCredentialResponse, UpsertPolicyRequest, UpsertPolicyResponse, UpsertVirtualClusterRequest, UpsertVirtualClusterResponse } from "./gateway_pb.js";
+import { DeletePolicyRequest, DeletePolicyResponse, DeleteVirtualClusterRequest, DeleteVirtualClusterResponse, GetFullConfigRequest, GetFullConfigResponse, GetStatusRequest, GetStatusResponse, ListCredentialsRequest, ListCredentialsResponse, ListPoliciesRequest, ListPoliciesResponse, ListTopicACLsRequest, ListTopicACLsResponse, ListVirtualClustersRequest, ListVirtualClustersResponse, RevokeCredentialRequest, RevokeCredentialResponse, RevokeTopicACLRequest, RevokeTopicACLResponse, SetVirtualClusterReadOnlyRequest, SetVirtualClusterReadOnlyResponse, TopicConfigUpdatedRequest, TopicConfigUpdatedResponse, TopicCreatedRequest, TopicCreatedResponse, TopicDeletedRequest, TopicDeletedResponse, UpsertCredentialRequest, UpsertCredentialResponse, UpsertPolicyRequest, UpsertPolicyResponse, UpsertTopicACLRequest, UpsertTopicACLResponse, UpsertVirtualClusterRequest, UpsertVirtualClusterResponse } from "./gateway_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -130,6 +130,35 @@ export const BifrostAdminService = {
       name: "ListPolicies",
       I: ListPoliciesRequest,
       O: ListPoliciesResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Topic ACL management (for cross-application sharing)
+     *
+     * @generated from rpc idp.gateway.v1.BifrostAdminService.UpsertTopicACL
+     */
+    upsertTopicACL: {
+      name: "UpsertTopicACL",
+      I: UpsertTopicACLRequest,
+      O: UpsertTopicACLResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc idp.gateway.v1.BifrostAdminService.RevokeTopicACL
+     */
+    revokeTopicACL: {
+      name: "RevokeTopicACL",
+      I: RevokeTopicACLRequest,
+      O: RevokeTopicACLResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc idp.gateway.v1.BifrostAdminService.ListTopicACLs
+     */
+    listTopicACLs: {
+      name: "ListTopicACLs",
+      I: ListTopicACLsRequest,
+      O: ListTopicACLsResponse,
       kind: MethodKind.Unary,
     },
   }

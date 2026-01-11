@@ -1,6 +1,9 @@
 // gateway/bifrost/src/main/kotlin/io/orbit/bifrost/admin/BifrostAdminServiceImpl.kt
 package io.orbit.bifrost.admin
 
+import com.google.protobuf.Timestamp
+import io.orbit.bifrost.acl.ACLEntry
+import io.orbit.bifrost.acl.ACLStore
 import io.orbit.bifrost.auth.Credential
 import io.orbit.bifrost.auth.CredentialStore
 import io.orbit.bifrost.auth.CustomPermission
@@ -11,13 +14,15 @@ import io.orbit.bifrost.policy.PolicyConfig as PolicyConfigDomain
 import idp.gateway.v1.*
 import idp.gateway.v1.BifrostAdminServiceGrpcKt
 import mu.KotlinLogging
+import java.time.Instant
 
 private val logger = KotlinLogging.logger {}
 
 class BifrostAdminServiceImpl(
     private val store: VirtualClusterStore,
     private val credentialStore: CredentialStore = CredentialStore(),
-    private val policyStore: PolicyStore = PolicyStore()
+    private val policyStore: PolicyStore = PolicyStore(),
+    private val aclStore: ACLStore = ACLStore()
 ) : BifrostAdminServiceGrpcKt.BifrostAdminServiceCoroutineImplBase() {
 
     override suspend fun upsertVirtualCluster(
@@ -64,6 +69,7 @@ class BifrostAdminServiceImpl(
             .addAllVirtualClusters(store.getAll())
             .addAllCredentials(credentialStore.getAll().map { it.toProto() })
             .addAllPolicies(policyStore.getAll().map { it.toProto() })
+            .addAllTopicAcls(aclStore.getAll().map { it.toProto() })
             .build()
     }
 
@@ -257,5 +263,85 @@ class BifrostAdminServiceImpl(
             .setNamingPattern(namingPattern)
             .setMaxNameLength(maxNameLength)
             .build()
+    }
+
+    // ========================================================================
+    // Topic ACL Management
+    // ========================================================================
+
+    override suspend fun upsertTopicACL(
+        request: Gateway.UpsertTopicACLRequest
+    ): Gateway.UpsertTopicACLResponse {
+        logger.info { "UpsertTopicACL: ${request.entry.id}" }
+
+        val entry = request.entry.toKotlin()
+        aclStore.upsert(entry)
+
+        return Gateway.UpsertTopicACLResponse.newBuilder()
+            .setSuccess(true)
+            .build()
+    }
+
+    override suspend fun revokeTopicACL(
+        request: Gateway.RevokeTopicACLRequest
+    ): Gateway.RevokeTopicACLResponse {
+        logger.info { "RevokeTopicACL: ${request.aclId}" }
+        val success = aclStore.revoke(request.aclId)
+        return Gateway.RevokeTopicACLResponse.newBuilder()
+            .setSuccess(success)
+            .build()
+    }
+
+    override suspend fun listTopicACLs(
+        request: Gateway.ListTopicACLsRequest
+    ): Gateway.ListTopicACLsResponse {
+        val entries = if (request.credentialId.isNotEmpty()) {
+            aclStore.getByCredential(request.credentialId)
+        } else {
+            aclStore.getAll()
+        }
+
+        return Gateway.ListTopicACLsResponse.newBuilder()
+            .addAllEntries(entries.map { it.toProto() })
+            .build()
+    }
+
+    // ========================================================================
+    // ACLEntry conversion functions
+    // ========================================================================
+
+    private fun Gateway.TopicACLEntry.toKotlin(): ACLEntry {
+        val expiresAtInstant = if (hasExpiresAt() && expiresAt.seconds > 0) {
+            Instant.ofEpochSecond(expiresAt.seconds, expiresAt.nanos.toLong())
+        } else {
+            null
+        }
+
+        return ACLEntry(
+            id = id,
+            credentialId = credentialId,
+            topicPhysicalName = topicPhysicalName,
+            permissions = permissionsList.toSet(),
+            expiresAt = expiresAtInstant
+        )
+    }
+
+    private fun ACLEntry.toProto(): Gateway.TopicACLEntry {
+        val builder = Gateway.TopicACLEntry.newBuilder()
+            .setId(id)
+            .setCredentialId(credentialId)
+            .setTopicPhysicalName(topicPhysicalName)
+            .addAllPermissions(permissions)
+
+        expiresAt?.let {
+            builder.setExpiresAt(
+                Timestamp.newBuilder()
+                    .setSeconds(it.epochSecond)
+                    .setNanos(it.nano)
+                    .build()
+            )
+        }
+
+        return builder.build()
     }
 }

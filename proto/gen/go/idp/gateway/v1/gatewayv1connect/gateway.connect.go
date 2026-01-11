@@ -73,6 +73,15 @@ const (
 	// BifrostAdminServiceListPoliciesProcedure is the fully-qualified name of the BifrostAdminService's
 	// ListPolicies RPC.
 	BifrostAdminServiceListPoliciesProcedure = "/idp.gateway.v1.BifrostAdminService/ListPolicies"
+	// BifrostAdminServiceUpsertTopicACLProcedure is the fully-qualified name of the
+	// BifrostAdminService's UpsertTopicACL RPC.
+	BifrostAdminServiceUpsertTopicACLProcedure = "/idp.gateway.v1.BifrostAdminService/UpsertTopicACL"
+	// BifrostAdminServiceRevokeTopicACLProcedure is the fully-qualified name of the
+	// BifrostAdminService's RevokeTopicACL RPC.
+	BifrostAdminServiceRevokeTopicACLProcedure = "/idp.gateway.v1.BifrostAdminService/RevokeTopicACL"
+	// BifrostAdminServiceListTopicACLsProcedure is the fully-qualified name of the
+	// BifrostAdminService's ListTopicACLs RPC.
+	BifrostAdminServiceListTopicACLsProcedure = "/idp.gateway.v1.BifrostAdminService/ListTopicACLs"
 	// BifrostCallbackServiceTopicCreatedProcedure is the fully-qualified name of the
 	// BifrostCallbackService's TopicCreated RPC.
 	BifrostCallbackServiceTopicCreatedProcedure = "/idp.gateway.v1.BifrostCallbackService/TopicCreated"
@@ -103,6 +112,10 @@ type BifrostAdminServiceClient interface {
 	UpsertPolicy(context.Context, *connect.Request[v1.UpsertPolicyRequest]) (*connect.Response[v1.UpsertPolicyResponse], error)
 	DeletePolicy(context.Context, *connect.Request[v1.DeletePolicyRequest]) (*connect.Response[v1.DeletePolicyResponse], error)
 	ListPolicies(context.Context, *connect.Request[v1.ListPoliciesRequest]) (*connect.Response[v1.ListPoliciesResponse], error)
+	// Topic ACL management (for cross-application sharing)
+	UpsertTopicACL(context.Context, *connect.Request[v1.UpsertTopicACLRequest]) (*connect.Response[v1.UpsertTopicACLResponse], error)
+	RevokeTopicACL(context.Context, *connect.Request[v1.RevokeTopicACLRequest]) (*connect.Response[v1.RevokeTopicACLResponse], error)
+	ListTopicACLs(context.Context, *connect.Request[v1.ListTopicACLsRequest]) (*connect.Response[v1.ListTopicACLsResponse], error)
 }
 
 // NewBifrostAdminServiceClient constructs a client for the idp.gateway.v1.BifrostAdminService
@@ -188,6 +201,24 @@ func NewBifrostAdminServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(bifrostAdminServiceMethods.ByName("ListPolicies")),
 			connect.WithClientOptions(opts...),
 		),
+		upsertTopicACL: connect.NewClient[v1.UpsertTopicACLRequest, v1.UpsertTopicACLResponse](
+			httpClient,
+			baseURL+BifrostAdminServiceUpsertTopicACLProcedure,
+			connect.WithSchema(bifrostAdminServiceMethods.ByName("UpsertTopicACL")),
+			connect.WithClientOptions(opts...),
+		),
+		revokeTopicACL: connect.NewClient[v1.RevokeTopicACLRequest, v1.RevokeTopicACLResponse](
+			httpClient,
+			baseURL+BifrostAdminServiceRevokeTopicACLProcedure,
+			connect.WithSchema(bifrostAdminServiceMethods.ByName("RevokeTopicACL")),
+			connect.WithClientOptions(opts...),
+		),
+		listTopicACLs: connect.NewClient[v1.ListTopicACLsRequest, v1.ListTopicACLsResponse](
+			httpClient,
+			baseURL+BifrostAdminServiceListTopicACLsProcedure,
+			connect.WithSchema(bifrostAdminServiceMethods.ByName("ListTopicACLs")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -205,6 +236,9 @@ type bifrostAdminServiceClient struct {
 	upsertPolicy              *connect.Client[v1.UpsertPolicyRequest, v1.UpsertPolicyResponse]
 	deletePolicy              *connect.Client[v1.DeletePolicyRequest, v1.DeletePolicyResponse]
 	listPolicies              *connect.Client[v1.ListPoliciesRequest, v1.ListPoliciesResponse]
+	upsertTopicACL            *connect.Client[v1.UpsertTopicACLRequest, v1.UpsertTopicACLResponse]
+	revokeTopicACL            *connect.Client[v1.RevokeTopicACLRequest, v1.RevokeTopicACLResponse]
+	listTopicACLs             *connect.Client[v1.ListTopicACLsRequest, v1.ListTopicACLsResponse]
 }
 
 // UpsertVirtualCluster calls idp.gateway.v1.BifrostAdminService.UpsertVirtualCluster.
@@ -267,6 +301,21 @@ func (c *bifrostAdminServiceClient) ListPolicies(ctx context.Context, req *conne
 	return c.listPolicies.CallUnary(ctx, req)
 }
 
+// UpsertTopicACL calls idp.gateway.v1.BifrostAdminService.UpsertTopicACL.
+func (c *bifrostAdminServiceClient) UpsertTopicACL(ctx context.Context, req *connect.Request[v1.UpsertTopicACLRequest]) (*connect.Response[v1.UpsertTopicACLResponse], error) {
+	return c.upsertTopicACL.CallUnary(ctx, req)
+}
+
+// RevokeTopicACL calls idp.gateway.v1.BifrostAdminService.RevokeTopicACL.
+func (c *bifrostAdminServiceClient) RevokeTopicACL(ctx context.Context, req *connect.Request[v1.RevokeTopicACLRequest]) (*connect.Response[v1.RevokeTopicACLResponse], error) {
+	return c.revokeTopicACL.CallUnary(ctx, req)
+}
+
+// ListTopicACLs calls idp.gateway.v1.BifrostAdminService.ListTopicACLs.
+func (c *bifrostAdminServiceClient) ListTopicACLs(ctx context.Context, req *connect.Request[v1.ListTopicACLsRequest]) (*connect.Response[v1.ListTopicACLsResponse], error) {
+	return c.listTopicACLs.CallUnary(ctx, req)
+}
+
 // BifrostAdminServiceHandler is an implementation of the idp.gateway.v1.BifrostAdminService
 // service.
 type BifrostAdminServiceHandler interface {
@@ -287,6 +336,10 @@ type BifrostAdminServiceHandler interface {
 	UpsertPolicy(context.Context, *connect.Request[v1.UpsertPolicyRequest]) (*connect.Response[v1.UpsertPolicyResponse], error)
 	DeletePolicy(context.Context, *connect.Request[v1.DeletePolicyRequest]) (*connect.Response[v1.DeletePolicyResponse], error)
 	ListPolicies(context.Context, *connect.Request[v1.ListPoliciesRequest]) (*connect.Response[v1.ListPoliciesResponse], error)
+	// Topic ACL management (for cross-application sharing)
+	UpsertTopicACL(context.Context, *connect.Request[v1.UpsertTopicACLRequest]) (*connect.Response[v1.UpsertTopicACLResponse], error)
+	RevokeTopicACL(context.Context, *connect.Request[v1.RevokeTopicACLRequest]) (*connect.Response[v1.RevokeTopicACLResponse], error)
+	ListTopicACLs(context.Context, *connect.Request[v1.ListTopicACLsRequest]) (*connect.Response[v1.ListTopicACLsResponse], error)
 }
 
 // NewBifrostAdminServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -368,6 +421,24 @@ func NewBifrostAdminServiceHandler(svc BifrostAdminServiceHandler, opts ...conne
 		connect.WithSchema(bifrostAdminServiceMethods.ByName("ListPolicies")),
 		connect.WithHandlerOptions(opts...),
 	)
+	bifrostAdminServiceUpsertTopicACLHandler := connect.NewUnaryHandler(
+		BifrostAdminServiceUpsertTopicACLProcedure,
+		svc.UpsertTopicACL,
+		connect.WithSchema(bifrostAdminServiceMethods.ByName("UpsertTopicACL")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bifrostAdminServiceRevokeTopicACLHandler := connect.NewUnaryHandler(
+		BifrostAdminServiceRevokeTopicACLProcedure,
+		svc.RevokeTopicACL,
+		connect.WithSchema(bifrostAdminServiceMethods.ByName("RevokeTopicACL")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bifrostAdminServiceListTopicACLsHandler := connect.NewUnaryHandler(
+		BifrostAdminServiceListTopicACLsProcedure,
+		svc.ListTopicACLs,
+		connect.WithSchema(bifrostAdminServiceMethods.ByName("ListTopicACLs")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/idp.gateway.v1.BifrostAdminService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case BifrostAdminServiceUpsertVirtualClusterProcedure:
@@ -394,6 +465,12 @@ func NewBifrostAdminServiceHandler(svc BifrostAdminServiceHandler, opts ...conne
 			bifrostAdminServiceDeletePolicyHandler.ServeHTTP(w, r)
 		case BifrostAdminServiceListPoliciesProcedure:
 			bifrostAdminServiceListPoliciesHandler.ServeHTTP(w, r)
+		case BifrostAdminServiceUpsertTopicACLProcedure:
+			bifrostAdminServiceUpsertTopicACLHandler.ServeHTTP(w, r)
+		case BifrostAdminServiceRevokeTopicACLProcedure:
+			bifrostAdminServiceRevokeTopicACLHandler.ServeHTTP(w, r)
+		case BifrostAdminServiceListTopicACLsProcedure:
+			bifrostAdminServiceListTopicACLsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -449,6 +526,18 @@ func (UnimplementedBifrostAdminServiceHandler) DeletePolicy(context.Context, *co
 
 func (UnimplementedBifrostAdminServiceHandler) ListPolicies(context.Context, *connect.Request[v1.ListPoliciesRequest]) (*connect.Response[v1.ListPoliciesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.ListPolicies is not implemented"))
+}
+
+func (UnimplementedBifrostAdminServiceHandler) UpsertTopicACL(context.Context, *connect.Request[v1.UpsertTopicACLRequest]) (*connect.Response[v1.UpsertTopicACLResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.UpsertTopicACL is not implemented"))
+}
+
+func (UnimplementedBifrostAdminServiceHandler) RevokeTopicACL(context.Context, *connect.Request[v1.RevokeTopicACLRequest]) (*connect.Response[v1.RevokeTopicACLResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.RevokeTopicACL is not implemented"))
+}
+
+func (UnimplementedBifrostAdminServiceHandler) ListTopicACLs(context.Context, *connect.Request[v1.ListTopicACLsRequest]) (*connect.Response[v1.ListTopicACLsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.ListTopicACLs is not implemented"))
 }
 
 // BifrostCallbackServiceClient is a client for the idp.gateway.v1.BifrostCallbackService service.

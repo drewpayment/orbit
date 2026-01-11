@@ -1,7 +1,7 @@
 // gateway/bifrost/src/test/kotlin/io/orbit/bifrost/filter/GroupRewriteFilterTest.kt
 package io.orbit.bifrost.filter
 
-import io.orbit.bifrost.proto.VirtualClusterConfig
+import idp.gateway.v1.Gateway.VirtualClusterConfig
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
 

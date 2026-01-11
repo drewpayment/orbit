@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
+import { canCreateApplication, getWorkspaceQuotaInfo, type QuotaInfo } from '@/lib/kafka/quotas'
 
 export interface CreateApplicationInput {
   name: string
@@ -16,6 +17,10 @@ export interface CreateApplicationResult {
   success: boolean
   applicationId?: string
   error?: string
+  /** Set when quota is exceeded - use this to show quota exceeded modal */
+  quotaExceeded?: boolean
+  /** Quota info when quotaExceeded is true */
+  quotaInfo?: QuotaInfo
 }
 
 export async function createApplication(
@@ -48,6 +53,18 @@ export async function createApplication(
 
     if (membership.docs.length === 0) {
       return { success: false, error: 'Not a member of this workspace' }
+    }
+
+    // Check quota before creating
+    const canCreate = await canCreateApplication(payload, input.workspaceId)
+    if (!canCreate) {
+      const quotaInfo = await getWorkspaceQuotaInfo(payload, input.workspaceId)
+      return {
+        success: false,
+        error: 'Workspace has reached its application quota',
+        quotaExceeded: true,
+        quotaInfo,
+      }
     }
 
     // Check if slug already exists in workspace

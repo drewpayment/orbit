@@ -20,9 +20,16 @@ export { KafkaTopicSharePolicies } from './KafkaTopicSharePolicies'
 // Policies
 export { KafkaTopicPolicies } from './KafkaTopicPolicies'
 
+// Quotas & Approvals
+export { KafkaApplicationQuotas } from './KafkaApplicationQuotas'
+export { KafkaApplicationRequests } from './KafkaApplicationRequests'
+
 // Usage & Lineage
 export { KafkaUsageMetrics } from './KafkaUsageMetrics'
 export { KafkaConsumerGroups } from './KafkaConsumerGroups'
 export { KafkaClientActivity } from './KafkaClientActivity'
 export { KafkaLineageEdge } from './KafkaLineageEdge'
 export { KafkaLineageSnapshot } from './KafkaLineageSnapshot'
+
+// Billing
+export { KafkaChargebackRates } from './KafkaChargebackRates'

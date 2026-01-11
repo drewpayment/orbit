@@ -3,7 +3,7 @@ package io.orbit.bifrost.filter
 
 import io.orbit.bifrost.policy.PolicyConfig
 import io.orbit.bifrost.policy.PolicyStore
-import io.orbit.bifrost.proto.VirtualClusterConfig
+import idp.gateway.v1.Gateway.VirtualClusterConfig
 import kotlinx.coroutines.runBlocking
 import org.apache.kafka.common.message.CreateTopicsRequestData
 import org.apache.kafka.common.message.MetadataRequestData
@@ -47,14 +47,14 @@ class PolicyEnforcementFilterTest {
                 .setReplicationFactor(spec.replicationFactor)
             spec.retentionMs?.let { retention ->
                 topicData.configs().add(
-                    CreateTopicsRequestData.CreateableTopicConfig()
+                    CreateTopicsRequestData.CreatableTopicConfig()
                         .setName("retention.ms")
                         .setValue(retention.toString())
                 )
             }
             spec.cleanupPolicy?.let { policy ->
                 topicData.configs().add(
-                    CreateTopicsRequestData.CreateableTopicConfig()
+                    CreateTopicsRequestData.CreatableTopicConfig()
                         .setName("cleanup.policy")
                         .setValue(policy)
                 )

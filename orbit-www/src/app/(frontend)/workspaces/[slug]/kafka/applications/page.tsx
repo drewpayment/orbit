@@ -35,8 +35,6 @@ export default async function KafkaApplicationsPage({ params }: PageProps) {
   const workspace = workspaceResult.docs[0]
 
   return (
-    <div className="container mx-auto py-6">
-      <ApplicationsClient workspaceId={workspace.id} workspaceSlug={slug} />
-    </div>
+    <ApplicationsClient workspaceId={workspace.id} workspaceSlug={slug} />
   )
 }

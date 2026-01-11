@@ -1,0 +1,21 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Development: scrapes the local bifrost service
+  # Production environments (stage/prod) are configured for parity but will fail gracefully in dev
+  - job_name: 'bifrost-dev'
+    static_configs:
+      - targets: ['bifrost:9093']
+    metrics_path: /metrics
+
+  - job_name: 'bifrost-stage'
+    static_configs:
+      - targets: ['bifrost-stage:9093']
+    metrics_path: /metrics
+
+  - job_name: 'bifrost-prod'
+    static_configs:
+      - targets: ['bifrost-prod:9093']
+    metrics_path: /metrics

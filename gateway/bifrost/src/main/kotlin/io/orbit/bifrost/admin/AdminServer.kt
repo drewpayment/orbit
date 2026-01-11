@@ -3,6 +3,7 @@ package io.orbit.bifrost.admin
 
 import io.grpc.Server
 import io.grpc.ServerBuilder
+import io.orbit.bifrost.acl.ACLStore
 import io.orbit.bifrost.auth.CredentialStore
 import io.orbit.bifrost.config.VirtualClusterStore
 import io.orbit.bifrost.policy.PolicyStore
@@ -15,13 +16,14 @@ class AdminServer(
     private val port: Int,
     private val virtualClusterStore: VirtualClusterStore,
     private val credentialStore: CredentialStore,
-    private val policyStore: PolicyStore
+    private val policyStore: PolicyStore,
+    private val aclStore: ACLStore
 ) {
     private var server: Server? = null
 
     fun start() {
         server = ServerBuilder.forPort(port)
-            .addService(BifrostAdminServiceImpl(virtualClusterStore, credentialStore, policyStore))
+            .addService(BifrostAdminServiceImpl(virtualClusterStore, credentialStore, policyStore, aclStore))
             .build()
             .start()
 
