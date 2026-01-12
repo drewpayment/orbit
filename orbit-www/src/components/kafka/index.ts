@@ -1,4 +1,5 @@
 export { ChargebackTable } from './ChargebackTable'
+export { DecommissionDialog } from './DecommissionDialog'
 export { EnvironmentBreakdownTable } from './EnvironmentBreakdownTable'
 export { MonthPicker } from './MonthPicker'
 export { UsageSummaryCards } from './UsageSummaryCards'
