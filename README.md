@@ -15,7 +15,7 @@ Orbit bridges this gap by providing:
 - **Self-service with guardrails** - Teams provision resources autonomously within policy boundaries
 - **Lineage tracking** - Every deployed application traces back to its origin template
 - **Unified catalog** - Single pane of glass for services, APIs, topics, and docs across your organization
-- **GitOps-native** - Configuration lives in repos with `.orbit.yaml` manifests; UI and git stay in sync
+- **GitOps-ready** - Designed for `.orbit.yaml` manifest sync between UI and repositories (coming soon)
 
 ## ✨ Key Features
 
