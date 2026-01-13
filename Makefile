@@ -27,6 +27,10 @@ test-go: ## Run Go tests with coverage
 	@cd services/repository && go test -v -race -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
 	@cd services/api-catalog && go test -v -race -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
 	@cd services/knowledge && go test -v -race -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
+	@cd services/build-service && go test -v -race -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
+	@cd services/kafka && go test -v -race -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
+	@cd services/bifrost-callback && go test -v -race -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
+	@cd services/plugins && go test -v -race -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
 	@cd temporal-workflows && go test -v -race -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
 
 test-frontend: ## Run frontend tests
@@ -44,6 +48,10 @@ lint-go: ## Lint Go code
 	@cd services/repository && golangci-lint run
 	@cd services/api-catalog && golangci-lint run
 	@cd services/knowledge && golangci-lint run
+	@cd services/build-service && golangci-lint run
+	@cd services/kafka && golangci-lint run
+	@cd services/bifrost-callback && golangci-lint run
+	@cd services/plugins && golangci-lint run
 	@cd temporal-workflows && golangci-lint run
 
 lint-frontend: ## Lint frontend code
@@ -55,6 +63,10 @@ security: ## Run security scans
 	@cd services/repository && gosec ./...
 	@cd services/api-catalog && gosec ./...
 	@cd services/knowledge && gosec ./...
+	@cd services/build-service && gosec ./...
+	@cd services/kafka && gosec ./...
+	@cd services/bifrost-callback && gosec ./...
+	@cd services/plugins && gosec ./...
 	@cd temporal-workflows && gosec ./...
 	@cd orbit-www && pnpm audit --audit-level moderate
 
@@ -63,6 +75,10 @@ build: ## Build all services
 	@cd services/repository && go build -o bin/repository ./cmd/server
 	@cd services/api-catalog && go build -o bin/api-catalog ./cmd/server
 	@cd services/knowledge && go build -o bin/knowledge ./cmd/server
+	@cd services/build-service && go build -o bin/build-service ./cmd/server
+	@cd services/kafka && go build -o bin/kafka ./cmd/server
+	@cd services/bifrost-callback && go build -o bin/bifrost-callback ./cmd/server
+	@cd services/plugins && go build -o bin/plugins ./cmd/server
 	@cd temporal-workflows && go build -o bin/worker ./cmd/worker
 	@cd orbit-www && pnpm build
 

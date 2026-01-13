@@ -108,6 +108,7 @@ export interface Config {
     'kafka-chargeback-rates': KafkaChargebackRate;
     'kafka-lineage-edges': KafkaLineageEdge;
     'kafka-lineage-snapshots': KafkaLineageSnapshot;
+    'kafka-offset-checkpoints': KafkaOffsetCheckpoint;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -155,6 +156,7 @@ export interface Config {
     'kafka-chargeback-rates': KafkaChargebackRatesSelect<false> | KafkaChargebackRatesSelect<true>;
     'kafka-lineage-edges': KafkaLineageEdgesSelect<false> | KafkaLineageEdgesSelect<true>;
     'kafka-lineage-snapshots': KafkaLineageSnapshotsSelect<false> | KafkaLineageSnapshotsSelect<true>;
+    'kafka-offset-checkpoints': KafkaOffsetCheckpointsSelect<false> | KafkaOffsetCheckpointsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -1513,6 +1515,22 @@ export interface KafkaApplication {
   deletedAt?: string | null;
   deletedBy?: (string | null) | User;
   forceDeleted?: boolean | null;
+  /**
+   * Custom grace period in days (overrides environment default)
+   */
+  gracePeriodDaysOverride?: number | null;
+  /**
+   * When the grace period expires
+   */
+  gracePeriodEndsAt?: string | null;
+  /**
+   * Temporal workflow ID for scheduled cleanup
+   */
+  cleanupWorkflowId?: string | null;
+  /**
+   * Optional reason for decommissioning
+   */
+  decommissionReason?: string | null;
   createdBy?: (string | null) | User;
   updatedAt: string;
   createdAt: string;
@@ -2542,6 +2560,41 @@ export interface KafkaLineageSnapshot {
   createdAt: string;
 }
 /**
+ * Consumer group offset snapshots for disaster recovery
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-offset-checkpoints".
+ */
+export interface KafkaOffsetCheckpoint {
+  id: string;
+  /**
+   * Consumer group whose offsets are checkpointed
+   */
+  consumerGroup: string | KafkaConsumerGroup;
+  /**
+   * Virtual cluster containing the consumer group
+   */
+  virtualCluster: string | KafkaVirtualCluster;
+  /**
+   * When this checkpoint was taken
+   */
+  checkpointedAt: string;
+  /**
+   * Partition to offset mapping (e.g., {"0": 12345, "1": 67890})
+   */
+  offsets:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
@@ -2711,6 +2764,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'kafka-lineage-snapshots';
         value: string | KafkaLineageSnapshot;
+      } | null)
+    | ({
+        relationTo: 'kafka-offset-checkpoints';
+        value: string | KafkaOffsetCheckpoint;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -3380,6 +3437,10 @@ export interface KafkaApplicationsSelect<T extends boolean = true> {
   deletedAt?: T;
   deletedBy?: T;
   forceDeleted?: T;
+  gracePeriodDaysOverride?: T;
+  gracePeriodEndsAt?: T;
+  cleanupWorkflowId?: T;
+  decommissionReason?: T;
   createdBy?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -3760,6 +3821,18 @@ export interface KafkaLineageSnapshotsSelect<T extends boolean = true> {
   totalMessagesOut?: T;
   producerCount?: T;
   consumerCount?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-offset-checkpoints_select".
+ */
+export interface KafkaOffsetCheckpointsSelect<T extends boolean = true> {
+  consumerGroup?: T;
+  virtualCluster?: T;
+  checkpointedAt?: T;
+  offsets?: T;
   updatedAt?: T;
   createdAt?: T;
 }

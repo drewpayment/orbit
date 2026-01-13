@@ -1,267 +1,222 @@
-# Orbit (IDP)
+<p align="center">
+  <img src="assets/orbit_master.png" alt="Orbit Logo" width="400">
+</p>
 
-A comprehensive multi-tenant SaaS platform designed to accelerate developer productivity by providing centralized repository management, API schema cataloging, and collaborative knowledge sharing across development teams.
+# Orbit
 
-## 🚀 Overview
+An Internal Developer Portal (IDP) that gives platform teams self-service infrastructure while maintaining governance. Orbit centralizes repository management, application lifecycle tracking, API/schema cataloging, Kafka self-service, and collaborative documentation.
 
-Orbit serves as the single source of truth for development teams, enabling them to:
+## What Problem Does Orbit Solve?
 
-- **Create repositories from templates** with automated configuration and best practices
-- **Manage API schemas** with automatic client library generation across multiple languages
-- **Maintain collaborative documentation** with real-time editing and team-based access control
-- **Discover services and dependencies** through a centralized catalog with visual dependency mapping
+Platform teams face a common challenge: developers need fast, autonomous access to infrastructure (repos, deployments, Kafka topics, documentation), but without guardrails this leads to sprawl, inconsistency, and lost context.
+
+Orbit bridges this gap by providing:
+
+- **Self-service with guardrails** - Teams provision resources autonomously within policy boundaries
+- **Lineage tracking** - Every deployed application traces back to its origin template
+- **Unified catalog** - Single pane of glass for services, APIs, topics, and docs across your organization
+- **GitOps-native** - Configuration lives in repos with `.orbit.yaml` manifests; UI and git stay in sync
 
 ## ✨ Key Features
 
-### 🏗️ Repository Management
-- **Template-based Repository Creation**: Generate new services, libraries, and applications from pre-approved organizational templates
-- **Git Integration**: Seamless integration with GitHub, GitLab, and other Git providers
-- **Dependency Tracking**: Visual dependency graphs and impact analysis across services
-- **Automated Configuration**: Generate Kubernetes manifests, CI/CD pipelines, and infrastructure configuration
+### 🏗️ Repository & Template Management
+Create new services from organization-approved templates with automated configuration. Templates generate repositories with CI/CD pipelines, Kubernetes manifests, and documentation pre-configured. Track which template spawned each service for consistent updates across your fleet.
 
-### 📋 API Schema Catalog
-- **Multi-format Support**: OpenAPI, GraphQL, Protocol Buffers, and Avro schema management
-- **Code Generation**: Automatic client library generation in TypeScript, Go, Python, Java, and more
-- **Version Management**: Schema versioning with breaking change detection and compatibility analysis
-- **Consumer Tracking**: Monitor API usage and notify consumers of schema changes
+### 📦 Application Lifecycle Catalog
+End-to-end tracking from template instantiation through deployment to production. The catalog provides card grid and visual graph views showing application lineage, deployment status, and live health monitoring. Pluggable deployment generators support Terraform, Helm, and Docker Compose.
+
+### 🔄 Kafka Self-Service (Project Bifrost)
+Self-service Kafka access with virtual clusters per application/environment. Teams get autonomous topic creation, schema management, and consumer group tracking while platform admins maintain governance through quotas and approval workflows. The Bifrost gateway handles multi-tenant routing, authentication, and policy enforcement.
 
 ### 📚 Knowledge Management
-- **Collaborative Documentation**: Real-time collaborative editing with rich text and Markdown support
-- **Hierarchical Organization**: Nested knowledge spaces for logical information architecture
-- **Full-text Search**: Fast, relevant search across all documentation and API schemas
-- **Access Control**: Fine-grained permissions per workspace and knowledge space
+Collaborative documentation with hierarchical knowledge spaces per workspace. Real-time editing, full-text search via MeiliSearch, and fine-grained access control. Organize runbooks, architecture docs, and team knowledge in one place.
 
 ### ⚡ Workflow Orchestration
-- **Long-running Operations**: Durable workflow execution for complex multi-step processes like code generation
-- **Progress Tracking**: Real-time progress updates for repository creation and code generation
-- **Retry and Error Handling**: Built-in reliability with automatic retry mechanisms
-- **Scheduled Tasks**: Automated backups, synchronization, and maintenance operations
+Durable execution for long-running operations via Temporal. Repository cloning, code generation, deployments, and health monitoring run as reliable workflows with progress tracking, automatic retries, and visibility into every step.
+
+### 🔐 Multi-Tenant Architecture
+Workspace-level isolation with row-level security. Each workspace gets its own resources, permissions, and quotas. OAuth 2.0 integration with GitHub, Google, and Azure AD.
 
 ## 🏛️ Architecture
 
-### Multi-Service Architecture
 ```
-Frontend (Payload 3.0 + NextJS 15)
-├── Content Management System
-├── User Interface & Public Pages  
-└── Temporal Workflow Management
-
-Backend Services (Go)
-├── Repository Service
-├── API Catalog Service  
-├── Knowledge Service
-└── Temporal Workflow Service
-
-Data Layer
-├── PostgreSQL (Primary Database)
-├── SQLite (Payload Development)
-├── Redis (Caching & Sessions)
-├── MeiliSearch (Full-text Search)
-└── MinIO/S3 (Object Storage)
+┌─────────────────────────────────────────────────────────────────┐
+│                         Orbit Platform                          │
+├─────────────────────────────────────────────────────────────────┤
+│  Frontend                                                       │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  Payload CMS 3.0 + Next.js 15 (TypeScript, React 19)    │   │
+│  │  • Admin UI & Public Pages                               │   │
+│  │  • Content Management                                    │   │
+│  │  • Temporal Workflow Management                          │   │
+│  └─────────────────────────────────────────────────────────┘   │
+├─────────────────────────────────────────────────────────────────┤
+│  Backend Services (Go 1.21+)                                    │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐            │
+│  │  Repository  │ │  API Catalog │ │  Knowledge   │            │
+│  │   Service    │ │   Service    │ │   Service    │            │
+│  └──────────────┘ └──────────────┘ └──────────────┘            │
+│  ┌──────────────┐ ┌──────────────────────────────┐             │
+│  │   Temporal   │ │      Bifrost Gateway         │             │
+│  │   Workers    │ │   (Kafka Multi-Tenant)       │             │
+│  └──────────────┘ └──────────────────────────────┘             │
+├─────────────────────────────────────────────────────────────────┤
+│  Data Layer                                                     │
+│  ┌────────┐ ┌───────┐ ┌────────────┐ ┌─────────┐ ┌──────────┐ │
+│  │Postgres│ │ Redis │ │ MeiliSearch│ │ MinIO/S3│ │ Redpanda │ │
+│  └────────┘ └───────┘ └────────────┘ └─────────┘ └──────────┘ │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### Technology Stack
+### Tech Stack Summary
 
-**Frontend**
-- Payload 3.0 with NextJS 15 for content management and server-side rendering
-- TypeScript throughout for type safety and developer experience
-- SQLite for development, PostgreSQL for production
+| Layer | Technology |
+|-------|------------|
+| Frontend | Payload CMS 3.0, Next.js 15, TypeScript, React 19 |
+| Backend | Go 1.21+ microservices, gRPC (Protocol Buffers) |
+| Workflows | Temporal for durable execution |
+| Database | PostgreSQL (prod), SQLite (dev), MongoDB (Payload) |
+| Caching | Redis |
+| Search | MeiliSearch |
+| Storage | MinIO / S3 |
+| Messaging | Redpanda (Kafka-compatible) |
 
-**Backend**
-- Go 1.21+ microservices for high performance and Kubernetes-native deployment
-- Protocol Buffers (gRPC) for type-safe inter-service communication
-- Temporal for workflow orchestration and durable execution
-
-**Data & Infrastructure**
-- PostgreSQL 15+ with multi-tenant architecture and JSON support
-- Redis for caching, sessions, and real-time features
-- MeiliSearch for fast, relevant full-text search
-- Docker containerization with Kubernetes deployment
-
-## 🎯 Use Cases
-
-### Platform Teams
-- Standardize service creation across the organization
-- Enforce architectural patterns and best practices
-- Provide self-service infrastructure provisioning
-- Maintain centralized documentation and runbooks
-
-### Development Teams
-- Quickly bootstrap new services from proven templates
-- Generate and consume API clients automatically
-- Discover existing services and avoid reinventing solutions
-- Collaborate on technical documentation and specifications
-
-### API Governance
-- Maintain an organization-wide API catalog
-- Track API consumers and usage patterns
-- Enforce schema validation and breaking change policies
-- Generate comprehensive API documentation automatically
-
-## 🔧 Core Workflows
-
-### Service Creation Workflow
-1. **Template Selection**: Choose from organization-approved service templates
-2. **Configuration**: Customize variables like database type, authentication method, and deployment target
-3. **Repository Generation**: Automated creation of Git repository with proper structure and configuration
-4. **CI/CD Setup**: Automatic generation of build pipelines and deployment manifests
-5. **Documentation**: Auto-generated README, API docs, and deployment guides
-
-### API Development Lifecycle
-1. **Schema Definition**: Create or upload API schemas (OpenAPI, protobuf, etc.)
-2. **Validation**: Automated schema validation and breaking change detection
-3. **Code Generation**: Generate client libraries in multiple programming languages
-4. **Publishing**: Publish schemas to the organization-wide API catalog
-5. **Consumption Tracking**: Monitor which services consume each API
-
-### Knowledge Collaboration
-1. **Space Creation**: Set up team-specific documentation spaces
-2. **Content Creation**: Collaborative editing with live preview and auto-save
-3. **Review Process**: Comment and approval workflows for documentation quality
-4. **Discovery**: Full-text search across all organizational knowledge
-5. **Access Management**: Role-based permissions and visibility controls
-
-## 🚦 Getting Started
+## 🚀 Getting Started
 
 ### Prerequisites
+
 - Docker and Docker Compose
-- Node.js 18+ and Go 1.21+
-- PostgreSQL 15+ (or use Docker Compose)
+- Node.js 18.20.2+ or 20.9.0+
+- Go 1.21+
+- [Bun](https://bun.sh/) (for frontend)
 
 ### Quick Start
+
+Clone the repository:
+
 ```bash
-# Clone the repository
 git clone git@github.com:drewpayment/orbit.git
 cd orbit
+```
 
-# Start all services
+**Option A: Hybrid Setup (Recommended)**
+
+Run infrastructure in Docker, frontend locally for faster hot-reload:
+
+```bash
+# Start infrastructure (Postgres, Redis, Temporal, Redpanda, etc.)
 make dev-local
 
-# Initialize the database
-make db-migrate
-
-# Start the Payload development server
+# In another terminal, start the frontend
 cd orbit-www && bun run dev
-
-# Access the application
-open http://localhost:3000
 ```
 
-### First Steps
-1. Create your first workspace
-2. Import existing repositories or create new ones from templates
-3. Upload API schemas to begin cataloging your services
-4. Set up knowledge spaces for team documentation
+**Option B: Full Docker**
 
-## 📊 Performance & Scale
+Run everything in containers:
 
-### Performance Targets
-- **API Response Time**: <200ms for 95th percentile requests
-- **Code Generation**: <30 seconds for large schemas
-- **Repository Sync**: <2 minutes for 10,000 files
-- **Search Results**: <1 second for typical queries
-
-### Scalability
-- **Concurrent Users**: 500 per workspace
-- **Multi-tenant Architecture**: Workspace-level isolation with shared infrastructure
-- **Horizontal Scaling**: Stateless services with Kubernetes orchestration
-- **Caching Strategy**: Multi-layer caching with Redis for optimal performance
-
-## 🔒 Security & Compliance
-
-### Authentication & Authorization
-- OAuth 2.0 integration with GitHub, Google, Azure AD
-- Role-based access control (RBAC) at workspace and resource levels
-- JWT tokens with refresh mechanism for secure API access
-
-### Data Protection
-- TLS 1.3 encryption for all communications
-- AES-256 encryption for data at rest
-- Audit logging for all user activities
-- SOC 2 Type II compliance readiness
-
-### Multi-Tenancy
-- Workspace-level data isolation
-- Row-level security policies
-- Encrypted secrets management
-- Compliance with GDPR and other privacy regulations
-
-## 🛠️ Development
-
-### Project Structure
-```
-orbit-www/          # Payload 3.0 application with integrated NextJS
-services/           # Go microservices
-  ├── repository/   # Repository management service
-  ├── api-catalog/  # API schema catalog service
-  ├── knowledge/    # Knowledge management service
-  └── temporal-workflows/  # Temporal workflow service
-proto/              # Protocol buffer definitions
-infrastructure/     # Docker, Kubernetes, Terraform
-specs/              # Feature specifications and documentation
+```bash
+make dev
 ```
 
-### Contributing
-1. Fork the repository
-2. Create a feature branch
-3. Follow the coding standards and run tests
-4. Submit a pull request with detailed description
+### Access the Services
 
-### Testing Strategy
-- **Unit Tests**: 90% coverage for business logic
-- **Integration Tests**: API contract validation
-- **End-to-End Tests**: Critical user journey validation
-- **Performance Tests**: Load testing with Artillery
+| Service | URL |
+|---------|-----|
+| Frontend | http://localhost:3000 |
+| Temporal UI | http://localhost:8080 |
+| Redpanda Console | http://localhost:8083 |
+| MinIO Console | http://localhost:9001 |
 
-## 📈 Roadmap
+### Common Commands
 
-### Phase 1: Foundation (Current)
-- ✅ Multi-tenant workspace management
-- ✅ Repository template system
-- ✅ Basic API schema catalog
-- ✅ Knowledge space collaboration
+```bash
+# Run all tests
+make test
 
-### Phase 2: Enhancement
-- 🔄 Advanced code generation with custom templates
-- 🔄 Visual dependency mapping
-- 🔄 Integration with external CI/CD systems
-- 🔄 Advanced search with filters and facets
+# Lint code
+make lint
 
-### Phase 3: Advanced Features
-- 📅 Service mesh integration
-- 📅 Cost analysis and optimization recommendations
-- 📅 Advanced analytics and insights
-- 📅 Plugin system for extensibility
+# Generate protobuf code
+make proto-gen
 
-### Phase 4: Enterprise
-- 📅 Advanced compliance and governance
-- 📅 Multi-region deployment
-- 📅 Enterprise SSO and audit integration
-- 📅 Custom workflow orchestration
+# View all available commands
+make help
+```
 
-## 🤝 Community & Support
+### Environment Setup
+
+Copy the example environment file and configure:
+
+```bash
+cp orbit-www/.env.example orbit-www/.env
+```
+
+Key variables to configure:
+- `DATABASE_URI` - MongoDB connection string
+- `PAYLOAD_SECRET` - Secret for Payload CMS
+- GitHub App credentials (for repository integration)
+
+See [DEV_SETUP.md](./DEV_SETUP.md) for complete environment configuration, troubleshooting, and Kafka setup instructions.
+
+## 📁 Project Structure
+
+```
+orbit/
+├── orbit-www/              # Payload CMS + Next.js frontend
+│   ├── src/
+│   │   ├── app/            # Next.js App Router pages
+│   │   ├── collections/    # Payload CMS collections
+│   │   ├── components/     # React components
+│   │   └── lib/            # Utilities & generated proto clients
+│   └── payload.config.ts
+│
+├── services/               # Go microservices
+│   ├── repository/         # Repository management
+│   ├── api-catalog/        # API schema catalog
+│   └── knowledge/          # Knowledge management
+│
+├── temporal-workflows/     # Temporal worker & workflows
+│   ├── cmd/worker/         # Worker entry point
+│   └── internal/           # Workflow implementations
+│
+├── proto/                  # Protocol Buffer definitions
+│   └── gen/go/             # Generated Go code
+│
+├── infrastructure/         # Docker, Kubernetes configs
+│
+└── docs/                   # Documentation & plans
+    └── plans/              # Implementation plans
+```
+
+Each Go service follows clean architecture: `cmd/` for entry points, `internal/domain/` for business logic, `internal/grpc/` for API layer, and `internal/temporal/` for workflow activities.
+
+## 🤝 Contributing
+
+We welcome contributions! Here's how to get started:
+
+1. **Fork the repository** and create a feature branch
+2. **Follow existing patterns** - check similar code in the codebase for conventions
+3. **Write tests** - Go services target 90% coverage; frontend uses Vitest
+4. **Run checks before submitting**:
+   ```bash
+   make lint    # Lint all code
+   make test    # Run all tests
+   ```
+5. **Submit a pull request** with a clear description of changes
+
+### Coding Standards
+
+- **Go**: Follow standard Go conventions; `golangci-lint` enforces style
+- **TypeScript**: ESLint + Prettier; strict mode enabled
+- **Commits**: Clear, descriptive messages; reference issues when applicable
+- **PRs**: Include context on what and why; keep changes focused
 
 ### Getting Help
-- 📖 [Documentation](./docs/) - Comprehensive guides and API references
-- 💬 [Discussions](./discussions/) - Community questions and feature requests
-- 🐛 [Issues](./issues/) - Bug reports and feature requests
-- 📧 [Email Support](mailto:support@company.com) - Direct support channel
 
-### Contributing
-We welcome contributions from the community! Please see our [Contributing Guide](./CONTRIBUTING.md) for details on:
-- Code of Conduct
-- Development setup
-- Coding standards
-- Pull request process
-- Issue reporting
+- Open an issue for bugs or feature requests
+- Check existing issues and docs/plans/ for context on ongoing work
 
 ## 📄 License
 
-## License
-   This project is licensed under the Elastic License 2.0 - see the [LICENSE](./LICENSE) file for details.
-
----
-
-**Built with ❤️ for developers, by developers**
-
-*Orbit empowers teams to focus on building great products by eliminating the friction in service creation, API management, and knowledge sharing.*
+This project is licensed under the Elastic License 2.0 - see the [LICENSE](./LICENSE) file for details.
