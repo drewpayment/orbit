@@ -70,12 +70,24 @@ services:
       context: .
       dockerfile: temporal-workflows/Dockerfile
     depends_on:
-      - temporal-server
+      temporal-server:
+        condition: service_started
+      bifrost:
+        condition: service_started
+      redpanda:
+        condition: service_healthy
     environment:
       - TEMPORAL_ADDRESS=temporal-server:7233
       - TEMPORAL_NAMESPACE=default
       - ORBIT_API_URL=http://host.docker.internal:3000
       - ORBIT_INTERNAL_API_KEY=${ORBIT_INTERNAL_API_KEY:-orbit-internal-dev-key}
+      - BIFROST_ADMIN_URL=bifrost:50060
+      - BUILD_SERVICE_ADDRESS=build-service:50054
+      - GIT_WORK_DIR=/tmp/orbit-repos
+      - TEMPLATE_WORK_DIR=/tmp/orbit-templates
+      - DEPLOYMENT_WORK_DIR=/tmp/orbit-deployments
+    volumes:
+      - temporal-worker-data:/tmp
     restart: unless-stopped
 
   buildkit:
@@ -409,3 +421,4 @@ volumes:
   minio-data:
   redpanda-data:
   prometheus-data:
+  temporal-worker-data:
