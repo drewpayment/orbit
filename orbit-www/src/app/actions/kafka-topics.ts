@@ -5,6 +5,7 @@ import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
+import { getTemporalClient } from '@/lib/temporal/client'
 
 export type CreateTopicInput = {
   virtualClusterId: string
@@ -125,19 +126,45 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
 
     // 4. If no approval needed, trigger provisioning workflow
     if (violations.length === 0) {
-      await triggerTopicProvisioningWorkflow(topic.id, {
+      // Get bootstrap servers from physical cluster
+      const physicalCluster =
+        typeof virtualCluster.physicalCluster === 'string'
+          ? await payload.findByID({
+              collection: 'kafka-clusters',
+              id: virtualCluster.physicalCluster,
+            })
+          : virtualCluster.physicalCluster
+
+      const connectionConfig = physicalCluster?.connectionConfig as
+        | { bootstrapServers?: string }
+        | undefined
+      const bootstrapServers = connectionConfig?.bootstrapServers ?? ''
+
+      const workflowId = await triggerTopicProvisioningWorkflow(topic.id, {
         topicId: topic.id,
-        workspaceId,
-        environment: virtualCluster.environment,
+        virtualClusterId: input.virtualClusterId,
+        topicPrefix: virtualCluster.topicPrefix ?? '',
         topicName: input.name,
-        fullTopicName: `${virtualCluster.topicPrefix}${input.name}`,
         partitions: input.partitions,
         replicationFactor: input.replicationFactor,
         retentionMs: input.retentionMs ?? 604800000,
         cleanupPolicy: input.cleanupPolicy ?? 'delete',
         compression: input.compression ?? 'none',
         config: input.config ?? {},
+        bootstrapServers,
       })
+
+      // Store workflow ID on the topic record for tracking
+      if (workflowId) {
+        await payload.update({
+          collection: 'kafka-topics',
+          id: topic.id,
+          data: {
+            workflowId: workflowId,
+          },
+          overrideAccess: true,
+        })
+      }
     }
 
     revalidatePath(`/[workspace]/kafka/applications/[appSlug]`)
@@ -214,21 +241,22 @@ export async function deleteTopic(topicId: string): Promise<{ success: boolean; 
       return { success: false, error: 'Topic is already deleted or being deleted' }
     }
 
-    // Update status to deleting
+    // Trigger deletion workflow
+    const workflowId = await triggerTopicDeletionWorkflow(topicId, {
+      topicId,
+      fullName: topic.fullTopicName ?? '',
+      clusterId: typeof topic.cluster === 'string' ? topic.cluster : topic.cluster?.id,
+    })
+
+    // Update status to deleting and store workflow ID
     await payload.update({
       collection: 'kafka-topics',
       id: topicId,
       data: {
         status: 'deleting',
+        workflowId: workflowId,
       },
       overrideAccess: true,
-    })
-
-    // Trigger deletion workflow
-    await triggerTopicDeletionWorkflow(topicId, {
-      topicId,
-      fullName: topic.fullTopicName ?? '',
-      clusterId: typeof topic.cluster === 'string' ? topic.cluster : topic.cluster?.id,
     })
 
     revalidatePath(`/[workspace]/kafka/applications/[appSlug]`)
@@ -287,23 +315,56 @@ export async function approveTopic(
     // Get virtual cluster for context
     const virtualCluster =
       typeof topic.virtualCluster === 'string'
-        ? await payload.findByID({ collection: 'kafka-virtual-clusters', id: topic.virtualCluster })
+        ? await payload.findByID({
+            collection: 'kafka-virtual-clusters',
+            id: topic.virtualCluster,
+            depth: 1,
+          })
         : topic.virtualCluster
 
+    const virtualClusterId =
+      typeof topic.virtualCluster === 'string' ? topic.virtualCluster : topic.virtualCluster?.id
+
+    // Get bootstrap servers from physical cluster
+    const physicalCluster =
+      typeof virtualCluster?.physicalCluster === 'string'
+        ? await payload.findByID({
+            collection: 'kafka-clusters',
+            id: virtualCluster.physicalCluster,
+          })
+        : virtualCluster?.physicalCluster
+
+    const connectionConfig = physicalCluster?.connectionConfig as
+      | { bootstrapServers?: string }
+      | undefined
+    const bootstrapServers = connectionConfig?.bootstrapServers ?? ''
+
     // Trigger provisioning workflow
-    await triggerTopicProvisioningWorkflow(topicId, {
+    const workflowId = await triggerTopicProvisioningWorkflow(topicId, {
       topicId,
-      workspaceId: typeof topic.workspace === 'string' ? topic.workspace : topic.workspace.id,
-      environment: virtualCluster?.environment ?? topic.environment,
+      virtualClusterId: virtualClusterId ?? '',
+      topicPrefix: virtualCluster?.topicPrefix ?? '',
       topicName: topic.name,
-      fullTopicName: topic.fullTopicName ?? '',
       partitions: topic.partitions,
       replicationFactor: topic.replicationFactor,
       retentionMs: topic.retentionMs ?? 604800000,
       cleanupPolicy: topic.cleanupPolicy ?? 'delete',
       compression: topic.compression ?? 'none',
       config: (topic.config as Record<string, string>) ?? {},
+      bootstrapServers,
     })
+
+    // Store workflow ID on the topic record for tracking
+    if (workflowId) {
+      await payload.update({
+        collection: 'kafka-topics',
+        id: topicId,
+        data: {
+          workflowId: workflowId,
+        },
+        overrideAccess: true,
+      })
+    }
 
     revalidatePath(`/[workspace]/kafka/applications/[appSlug]`)
 
@@ -499,33 +560,85 @@ async function checkAutoApproval(
   return false
 }
 
+/**
+ * Input type for TopicProvisioningWorkflow (must match Go struct)
+ */
+type TopicProvisioningWorkflowInput = {
+  TopicID: string
+  VirtualClusterID: string
+  TopicPrefix: string
+  TopicName: string
+  Partitions: number
+  ReplicationFactor: number
+  RetentionMs: number
+  CleanupPolicy: string
+  Compression: string
+  Config: Record<string, string>
+  BootstrapServers: string
+}
+
+/**
+ * Input type for TopicDeletionWorkflow (must match Go struct)
+ */
+type TopicDeletionWorkflowInput = {
+  TopicID: string
+  PhysicalName: string
+  ClusterID: string
+}
+
 async function triggerTopicProvisioningWorkflow(
   topicId: string,
   input: {
     topicId: string
-    workspaceId: string
-    environment: string
+    virtualClusterId: string
+    topicPrefix: string
     topicName: string
-    fullTopicName: string
     partitions: number
     replicationFactor: number
     retentionMs: number
     cleanupPolicy: string
     compression: string
     config: Record<string, string>
+    bootstrapServers: string
   }
-) {
-  // TODO: Implement Temporal client call
-  // For now, log the workflow trigger
-  console.log('Triggering TopicProvisioningWorkflow:', input)
+): Promise<string | null> {
+  const workflowId = `topic-provision-${topicId}`
 
-  // In production, this would call the Temporal client:
-  // const client = await getTemporalClient()
-  // await client.workflow.start(TopicProvisioningWorkflow, {
-  //   taskQueue: 'kafka-topic-provisioning',
-  //   workflowId: `topic-provision-${topicId}`,
-  //   args: [input],
-  // })
+  // Transform input to match Go struct field names (PascalCase)
+  const workflowInput: TopicProvisioningWorkflowInput = {
+    TopicID: input.topicId,
+    VirtualClusterID: input.virtualClusterId,
+    TopicPrefix: input.topicPrefix,
+    TopicName: input.topicName,
+    Partitions: input.partitions,
+    ReplicationFactor: input.replicationFactor,
+    RetentionMs: input.retentionMs,
+    CleanupPolicy: input.cleanupPolicy,
+    Compression: input.compression,
+    Config: input.config,
+    BootstrapServers: input.bootstrapServers,
+  }
+
+  try {
+    const client = await getTemporalClient()
+
+    const handle = await client.workflow.start('TopicProvisioningWorkflow', {
+      taskQueue: 'orbit-workflows',
+      workflowId,
+      args: [workflowInput],
+    })
+
+    console.log(
+      `[Kafka] Started TopicProvisioningWorkflow: ${handle.workflowId} for topic ${input.topicName}`
+    )
+
+    return handle.workflowId
+  } catch (error) {
+    console.error('[Kafka] Failed to start TopicProvisioningWorkflow:', error)
+    // Don't throw - the topic record is already created with status 'provisioning'
+    // The workflow can be retried manually if needed
+    return null
+  }
 }
 
 async function triggerTopicDeletionWorkflow(
@@ -535,7 +648,30 @@ async function triggerTopicDeletionWorkflow(
     fullName: string
     clusterId?: string
   }
-) {
-  // TODO: Implement Temporal client call
-  console.log('Triggering TopicDeletionWorkflow:', input)
+): Promise<string | null> {
+  const workflowId = `topic-deletion-${topicId}`
+
+  // Transform input to match Go struct field names (PascalCase)
+  const workflowInput: TopicDeletionWorkflowInput = {
+    TopicID: input.topicId,
+    PhysicalName: input.fullName,
+    ClusterID: input.clusterId ?? '',
+  }
+
+  try {
+    const client = await getTemporalClient()
+
+    const handle = await client.workflow.start('TopicDeletionWorkflow', {
+      taskQueue: 'orbit-workflows',
+      workflowId,
+      args: [workflowInput],
+    })
+
+    console.log(`[Kafka] Started TopicDeletionWorkflow: ${handle.workflowId} for topic ${topicId}`)
+
+    return handle.workflowId
+  } catch (error) {
+    console.error('[Kafka] Failed to start TopicDeletionWorkflow:', error)
+    return null
+  }
 }

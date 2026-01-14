@@ -5,7 +5,7 @@ import config from '@payload-config'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
-import { kafkaClient } from '@/lib/grpc/kafka-client'
+import { getTemporalClient } from '@/lib/temporal/client'
 
 // ============================================================================
 // Types
@@ -256,6 +256,10 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
     ...(input.config || {}),
   }
 
+  // Get bootstrap servers from cluster connection config
+  const connectionConfig = (cluster.connectionConfig as { bootstrapServers?: string }) || {}
+  const bootstrapServers = connectionConfig.bootstrapServers || ''
+
   // Create topic in Payload with status 'provisioning'
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const created = await (payload.create as any)({
@@ -279,49 +283,33 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
     },
   })
 
-  // Call Go service to create topic on Kafka cluster using direct method
-  // (bypasses UUID requirement by passing connection config directly)
+  // Trigger Temporal workflow to provision topic
   try {
-    const connectionConfig = (cluster.connectionConfig as Record<string, string>) || {}
-    const credentials = (cluster.credentials as Record<string, string>) || {}
-
-    console.log('[createTopic] Cluster ID:', cluster.id)
-    console.log('[createTopic] Connection config:', JSON.stringify(connectionConfig))
-    console.log('[createTopic] Has credentials:', Object.keys(credentials).length > 0)
-
-    const response = await kafkaClient.createTopicDirect({
-      topicName: fullTopicName,
+    const workflowId = await triggerTopicProvisioningWorkflow(created.id, {
+      topicId: created.id,
+      virtualClusterId: '', // Not using virtual clusters in this path
+      topicPrefix: `${input.environment}.${workspace.slug}.`,
+      topicName: input.name,
       partitions: input.partitions || 3,
       replicationFactor: input.replicationFactor || 3,
+      retentionMs: input.retentionMs || 604800000,
+      cleanupPolicy: input.cleanupPolicy || 'delete',
+      compression: input.compression || 'none',
       config: topicConfig,
-      connectionConfig,
-      credentials,
+      bootstrapServers,
     })
 
-    if (!response.success && response.error) {
-      // Update topic status to failed
+    // Store workflow ID on the topic record for tracking
+    if (workflowId) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (payload.update as any)({
         collection: 'kafka-topics',
         id: created.id,
         data: {
-          status: 'failed',
-          provisioningError: response.error,
+          workflowId: workflowId,
         },
       })
-
-      return { success: false, error: response.error }
     }
-
-    // Update topic status to active
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (payload.update as any)({
-      collection: 'kafka-topics',
-      id: created.id,
-      data: {
-        status: 'active',
-      },
-    })
 
     // Re-fetch to get full topic data
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -336,9 +324,10 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
     return {
       success: true,
       topic: mapPayloadTopicToKafkaTopic(updatedTopic as PayloadKafkaTopic),
+      workflowId: workflowId || undefined,
     }
   } catch (error) {
-    console.error('Failed to provision Kafka topic:', error)
+    console.error('Failed to start topic provisioning workflow:', error)
 
     // Update topic status to failed
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -347,13 +336,13 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
       id: created.id,
       data: {
         status: 'failed',
-        provisioningError: error instanceof Error ? error.message : 'Failed to provision topic',
+        provisioningError: error instanceof Error ? error.message : 'Failed to start provisioning workflow',
       },
     })
 
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to provision topic',
+      error: error instanceof Error ? error.message : 'Failed to start provisioning workflow',
     }
   }
 }
@@ -605,76 +594,24 @@ export async function deleteTopic(topicId: string): Promise<DeleteTopicResult> {
       return { success: false, error: 'Permission denied. You must be an admin or owner of this workspace.' }
     }
 
-    // Update status to 'deleting'
+    // Trigger Temporal workflow to delete topic
+    const clusterId = typeof topic.cluster === 'object' ? topic.cluster?.id : topic.cluster
+
+    const workflowId = await triggerTopicDeletionWorkflow(topicId, {
+      topicId,
+      fullName: topic.fullTopicName || '',
+      clusterId: clusterId || undefined,
+    })
+
+    // Update status to 'deleting' and store workflow ID
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (payload.update as any)({
       collection: 'kafka-topics',
       id: topicId,
-      data: { status: 'deleting' },
-    })
-
-    // Call Go service to delete topic from Kafka cluster if it was provisioned
-    if (topic.fullTopicName && topic.status === 'active') {
-      // Get cluster connection config and credentials
-      const clusterId = typeof topic.cluster === 'object' ? topic.cluster?.id : topic.cluster
-      if (clusterId) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const cluster = await (payload.findByID as any)({
-          collection: 'kafka-clusters',
-          id: clusterId,
-          depth: 0,
-        })
-
-        if (cluster) {
-          try {
-            const response = await kafkaClient.deleteTopicByName({
-              topicName: topic.fullTopicName,
-              connectionConfig: cluster.connectionConfig || {},
-              credentials: cluster.credentials || {},
-            })
-
-            if (!response.success && response.error) {
-              // Revert status back
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              await (payload.update as any)({
-                collection: 'kafka-topics',
-                id: topicId,
-                data: {
-                  status: 'failed',
-                  provisioningError: `Delete failed: ${response.error}`,
-                },
-              })
-
-              return { success: false, error: response.error }
-            }
-          } catch (error) {
-            console.error('Failed to delete Kafka topic from cluster:', error)
-
-            // Revert status back
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            await (payload.update as any)({
-              collection: 'kafka-topics',
-              id: topicId,
-              data: {
-                status: 'failed',
-                provisioningError: `Delete failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-              },
-            })
-
-            return {
-              success: false,
-              error: error instanceof Error ? error.message : 'Failed to delete topic from Kafka cluster',
-            }
-          }
-        }
-      }
-    }
-
-    // Delete from Payload
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (payload.delete as any)({
-      collection: 'kafka-topics',
-      id: topicId,
+      data: {
+        status: 'deleting',
+        workflowId: workflowId,
+      },
     })
 
     revalidatePath(`/workspaces/[slug]/kafka`)
@@ -1391,4 +1328,124 @@ export async function deleteCluster(clusterId: string): Promise<DeleteClusterRes
   // TODO: Verify platform admin role
   // TODO: Call actual gRPC service when available
   return { success: false, error: 'Not implemented' }
+}
+
+// ============================================================================
+// Temporal Workflow Helpers
+// ============================================================================
+
+/**
+ * Input type for TopicProvisioningWorkflow (must match Go struct)
+ */
+type TopicProvisioningWorkflowInput = {
+  TopicID: string
+  VirtualClusterID: string
+  TopicPrefix: string
+  TopicName: string
+  Partitions: number
+  ReplicationFactor: number
+  RetentionMs: number
+  CleanupPolicy: string
+  Compression: string
+  Config: Record<string, string>
+  BootstrapServers: string
+}
+
+/**
+ * Input type for TopicDeletionWorkflow (must match Go struct)
+ */
+type TopicDeletionWorkflowInput = {
+  TopicID: string
+  PhysicalName: string
+  ClusterID: string
+}
+
+async function triggerTopicProvisioningWorkflow(
+  topicId: string,
+  input: {
+    topicId: string
+    virtualClusterId: string
+    topicPrefix: string
+    topicName: string
+    partitions: number
+    replicationFactor: number
+    retentionMs: number
+    cleanupPolicy: string
+    compression: string
+    config: Record<string, string>
+    bootstrapServers: string
+  }
+): Promise<string | null> {
+  const workflowId = `topic-provision-${topicId}`
+
+  // Transform input to match Go struct field names (PascalCase)
+  const workflowInput: TopicProvisioningWorkflowInput = {
+    TopicID: input.topicId,
+    VirtualClusterID: input.virtualClusterId,
+    TopicPrefix: input.topicPrefix,
+    TopicName: input.topicName,
+    Partitions: input.partitions,
+    ReplicationFactor: input.replicationFactor,
+    RetentionMs: input.retentionMs,
+    CleanupPolicy: input.cleanupPolicy,
+    Compression: input.compression,
+    Config: input.config,
+    BootstrapServers: input.bootstrapServers,
+  }
+
+  try {
+    const client = await getTemporalClient()
+
+    const handle = await client.workflow.start('TopicProvisioningWorkflow', {
+      taskQueue: 'orbit-workflows',
+      workflowId,
+      args: [workflowInput],
+    })
+
+    console.log(
+      `[Kafka] Started TopicProvisioningWorkflow: ${handle.workflowId} for topic ${input.topicName}`
+    )
+
+    return handle.workflowId
+  } catch (error) {
+    console.error('[Kafka] Failed to start TopicProvisioningWorkflow:', error)
+    // Don't throw - the topic record is already created with status 'provisioning'
+    // The workflow can be retried manually if needed
+    return null
+  }
+}
+
+async function triggerTopicDeletionWorkflow(
+  topicId: string,
+  input: {
+    topicId: string
+    fullName: string
+    clusterId?: string
+  }
+): Promise<string | null> {
+  const workflowId = `topic-deletion-${topicId}`
+
+  // Transform input to match Go struct field names (PascalCase)
+  const workflowInput: TopicDeletionWorkflowInput = {
+    TopicID: input.topicId,
+    PhysicalName: input.fullName,
+    ClusterID: input.clusterId ?? '',
+  }
+
+  try {
+    const client = await getTemporalClient()
+
+    const handle = await client.workflow.start('TopicDeletionWorkflow', {
+      taskQueue: 'orbit-workflows',
+      workflowId,
+      args: [workflowInput],
+    })
+
+    console.log(`[Kafka] Started TopicDeletionWorkflow: ${handle.workflowId} for topic ${topicId}`)
+
+    return handle.workflowId
+  } catch (error) {
+    console.error('[Kafka] Failed to start TopicDeletionWorkflow:', error)
+    return null
+  }
 }
