@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/sdk/worker"
 
 	"github.com/drewpayment/orbit/temporal-workflows/internal/activities"
+	internalClients "github.com/drewpayment/orbit/temporal-workflows/internal/clients"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/services"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/workflows"
 	"github.com/drewpayment/orbit/temporal-workflows/pkg/clients"
@@ -221,15 +222,34 @@ func main() {
 
 	log.Printf("Build service address: %s", buildServiceAddr)
 
-	// Register virtual cluster provisioning workflow
-	w.RegisterWorkflow(workflows.VirtualClusterProvisionWorkflow)
+	// =======================================================================
+	// Kafka/Bifrost Activities
+	// =======================================================================
 
-	// Create and register virtual cluster activities
+	// Bifrost admin URL for gRPC
 	bifrostAdminURL := os.Getenv("BIFROST_ADMIN_URL")
 	if bifrostAdminURL == "" {
 		bifrostAdminURL = "localhost:50060"
 	}
-	vcActivities := activities.NewVirtualClusterActivities(orbitAPIURL, bifrostAdminURL, logger)
+
+	// Create shared Payload CMS client for Kafka activities
+	kafkaPayloadClient := internalClients.NewPayloadClient(orbitAPIURL, orbitInternalAPIKey, logger)
+
+	// Create Bifrost gRPC client
+	bifrostClient, err := internalClients.NewBifrostClient(bifrostAdminURL, logger)
+	if err != nil {
+		log.Printf("Warning: Failed to create Bifrost client: %v", err)
+		log.Println("Virtual cluster activities will not work until Bifrost is available")
+		bifrostClient = nil
+	} else {
+		defer bifrostClient.Close()
+	}
+
+	// Register virtual cluster provisioning workflow
+	w.RegisterWorkflow(workflows.VirtualClusterProvisionWorkflow)
+
+	// Create and register virtual cluster activities
+	vcActivities := activities.NewVirtualClusterActivities(kafkaPayloadClient, bifrostClient, logger)
 	w.RegisterActivity(vcActivities.GetEnvironmentMapping)
 	w.RegisterActivity(vcActivities.CreateVirtualCluster)
 	w.RegisterActivity(vcActivities.PushToBifrost)
@@ -251,10 +271,26 @@ func main() {
 	w.RegisterWorkflow(workflows.TopicConfigSyncWorkflow)
 
 	// Create and register topic sync activities
-	topicSyncActivities := activities.NewTopicSyncActivities(orbitAPIURL, logger)
+	topicSyncActivities := activities.NewTopicSyncActivities(kafkaPayloadClient, logger)
 	w.RegisterActivity(topicSyncActivities.CreateTopicRecord)
 	w.RegisterActivity(topicSyncActivities.MarkTopicDeleted)
 	w.RegisterActivity(topicSyncActivities.UpdateTopicConfig)
+
+	// Register Kafka topic provisioning workflows
+	w.RegisterWorkflow(workflows.TopicProvisioningWorkflow)
+	w.RegisterWorkflow(workflows.TopicDeletionWorkflow)
+
+	// Create and register Kafka activities
+	kafkaActivities := activities.NewKafkaActivities(kafkaPayloadClient, logger)
+	w.RegisterActivity(kafkaActivities.ProvisionTopic)
+	w.RegisterActivity(kafkaActivities.UpdateTopicStatus)
+	w.RegisterActivity(kafkaActivities.DeleteTopic)
+	w.RegisterActivity(kafkaActivities.ValidateSchema)
+	w.RegisterActivity(kafkaActivities.RegisterSchema)
+	w.RegisterActivity(kafkaActivities.UpdateSchemaStatus)
+	w.RegisterActivity(kafkaActivities.ProvisionAccess)
+	w.RegisterActivity(kafkaActivities.RevokeAccess)
+	w.RegisterActivity(kafkaActivities.UpdateShareStatus)
 
 	log.Println("Starting Temporal worker...")
 	log.Printf("Temporal address: %s", temporalAddress)

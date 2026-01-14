@@ -16,8 +16,8 @@ const (
 // TopicProvisioningWorkflowInput defines input for the topic provisioning workflow
 type TopicProvisioningWorkflowInput struct {
 	TopicID           string
-	WorkspaceID       string
-	Environment       string
+	VirtualClusterID  string
+	TopicPrefix       string
 	TopicName         string
 	Partitions        int
 	ReplicationFactor int
@@ -25,15 +25,15 @@ type TopicProvisioningWorkflowInput struct {
 	CleanupPolicy     string
 	Compression       string
 	Config            map[string]string
+	BootstrapServers  string
 }
 
 // TopicProvisioningWorkflowResult defines the output of the topic provisioning workflow
 type TopicProvisioningWorkflowResult struct {
-	TopicID   string
-	FullName  string
-	ClusterID string
-	Status    string
-	Error     string
+	TopicID      string
+	PhysicalName string
+	Status       string
+	Error        string
 }
 
 // TopicProvisioningWorkflow orchestrates the provisioning of a Kafka topic
@@ -42,7 +42,7 @@ func TopicProvisioningWorkflow(ctx workflow.Context, input TopicProvisioningWork
 	logger.Info("Starting topic provisioning workflow",
 		"TopicID", input.TopicID,
 		"TopicName", input.TopicName,
-		"Environment", input.Environment,
+		"VirtualClusterID", input.VirtualClusterID,
 	)
 
 	// Configure activity options with retry policy
@@ -78,8 +78,8 @@ func TopicProvisioningWorkflow(ctx workflow.Context, input TopicProvisioningWork
 	)
 	provisionInput := activities.KafkaTopicProvisionInput{
 		TopicID:           input.TopicID,
-		WorkspaceID:       input.WorkspaceID,
-		Environment:       input.Environment,
+		VirtualClusterID:  input.VirtualClusterID,
+		TopicPrefix:       input.TopicPrefix,
 		TopicName:         input.TopicName,
 		Partitions:        input.Partitions,
 		ReplicationFactor: input.ReplicationFactor,
@@ -87,6 +87,7 @@ func TopicProvisioningWorkflow(ctx workflow.Context, input TopicProvisioningWork
 		CleanupPolicy:     input.CleanupPolicy,
 		Compression:       input.Compression,
 		Config:            input.Config,
+		BootstrapServers:  input.BootstrapServers,
 	}
 
 	var provisionOutput *activities.KafkaTopicProvisionOutput
@@ -108,12 +109,12 @@ func TopicProvisioningWorkflow(ctx workflow.Context, input TopicProvisioningWork
 		}, err
 	}
 
-	// Step 3: Update status to active
+	// Step 3: Update status to active with physical name
 	logger.Info("Step 3: Updating topic status to active")
 	err = workflow.ExecuteActivity(ctx, kafkaActivities.UpdateTopicStatus, activities.KafkaUpdateTopicStatusInput{
-		TopicID:   input.TopicID,
-		Status:    "active",
-		ClusterID: provisionOutput.ClusterID,
+		TopicID:      input.TopicID,
+		Status:       "active",
+		PhysicalName: provisionOutput.PhysicalName,
 	}).Get(ctx, nil)
 	if err != nil {
 		logger.Error("Failed to update topic status to active", "Error", err)
@@ -122,23 +123,21 @@ func TopicProvisioningWorkflow(ctx workflow.Context, input TopicProvisioningWork
 
 	logger.Info("Topic provisioning workflow completed successfully",
 		"TopicID", input.TopicID,
-		"FullName", provisionOutput.FullName,
-		"ClusterID", provisionOutput.ClusterID,
+		"PhysicalName", provisionOutput.PhysicalName,
 	)
 
 	return TopicProvisioningWorkflowResult{
-		TopicID:   input.TopicID,
-		FullName:  provisionOutput.FullName,
-		ClusterID: provisionOutput.ClusterID,
-		Status:    "active",
+		TopicID:      input.TopicID,
+		PhysicalName: provisionOutput.PhysicalName,
+		Status:       "active",
 	}, nil
 }
 
 // TopicDeletionWorkflowInput defines input for the topic deletion workflow
 type TopicDeletionWorkflowInput struct {
-	TopicID   string
-	FullName  string
-	ClusterID string
+	TopicID      string
+	PhysicalName string
+	ClusterID    string
 }
 
 // TopicDeletionWorkflowResult defines the output of the topic deletion workflow
@@ -153,7 +152,7 @@ func TopicDeletionWorkflow(ctx workflow.Context, input TopicDeletionWorkflowInpu
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting topic deletion workflow",
 		"TopicID", input.TopicID,
-		"FullName", input.FullName,
+		"PhysicalName", input.PhysicalName,
 	)
 
 	// Configure activity options
@@ -172,7 +171,7 @@ func TopicDeletionWorkflow(ctx workflow.Context, input TopicDeletionWorkflowInpu
 
 	// Step 1: Delete topic from Kafka cluster
 	logger.Info("Step 1: Deleting topic from Kafka cluster")
-	err := workflow.ExecuteActivity(ctx, kafkaActivities.DeleteTopic, input.TopicID, input.FullName, input.ClusterID).Get(ctx, nil)
+	err := workflow.ExecuteActivity(ctx, kafkaActivities.DeleteTopic, input.TopicID, input.PhysicalName, input.ClusterID).Get(ctx, nil)
 	if err != nil {
 		logger.Error("Failed to delete topic from cluster", "Error", err)
 

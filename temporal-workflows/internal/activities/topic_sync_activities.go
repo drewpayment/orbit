@@ -3,7 +3,11 @@ package activities
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"time"
+
+	"github.com/drewpayment/orbit/temporal-workflows/internal/clients"
 )
 
 // CreateTopicRecordInput is the input for creating a topic record in Orbit
@@ -14,7 +18,7 @@ type CreateTopicRecordInput struct {
 	Partitions            int               `json:"partitions"`
 	ReplicationFactor     int               `json:"replicationFactor"`
 	Config                map[string]string `json:"config"`
-	CreatedByCredentialID string            `json:"createdByCredentialId"`
+	CreatedByCredentialID string            `json:"createdByCredentialId,omitempty"`
 }
 
 // CreateTopicRecordOutput is the output of creating a topic record
@@ -28,7 +32,7 @@ type MarkTopicDeletedInput struct {
 	VirtualClusterID      string `json:"virtualClusterId"`
 	VirtualName           string `json:"virtualName"`
 	PhysicalName          string `json:"physicalName"`
-	DeletedByCredentialID string `json:"deletedByCredentialId"`
+	DeletedByCredentialID string `json:"deletedByCredentialId,omitempty"`
 }
 
 // UpdateTopicConfigInput is the input for updating topic configuration
@@ -36,7 +40,7 @@ type UpdateTopicConfigInput struct {
 	VirtualClusterID      string            `json:"virtualClusterId"`
 	VirtualName           string            `json:"virtualName"`
 	Config                map[string]string `json:"config"`
-	UpdatedByCredentialID string            `json:"updatedByCredentialId"`
+	UpdatedByCredentialID string            `json:"updatedByCredentialId,omitempty"`
 }
 
 // TopicSyncActivities defines the interface for topic sync activities
@@ -53,88 +57,181 @@ type TopicSyncActivities interface {
 
 // TopicSyncActivitiesImpl implements TopicSyncActivities
 type TopicSyncActivitiesImpl struct {
-	payloadURL string
-	logger     *slog.Logger
+	payloadClient *clients.PayloadClient
+	logger        *slog.Logger
 }
 
 // NewTopicSyncActivities creates a new TopicSyncActivities implementation
-func NewTopicSyncActivities(payloadURL string, logger *slog.Logger) *TopicSyncActivitiesImpl {
+func NewTopicSyncActivities(payloadClient *clients.PayloadClient, logger *slog.Logger) *TopicSyncActivitiesImpl {
 	return &TopicSyncActivitiesImpl{
-		payloadURL: payloadURL,
-		logger:     logger,
+		payloadClient: payloadClient,
+		logger:        logger,
 	}
 }
 
-// CreateTopicRecord creates a topic record in Orbit via Payload CMS API
+// CreateTopicRecord creates a topic record in Orbit via Payload CMS API.
+// This is called when a topic is created through the Bifrost gateway passthrough,
+// so we need to sync the topic metadata back to Orbit.
 func (a *TopicSyncActivitiesImpl) CreateTopicRecord(ctx context.Context, input CreateTopicRecordInput) (*CreateTopicRecordOutput, error) {
 	a.logger.Info("CreateTopicRecord",
-		"virtualClusterId", input.VirtualClusterID,
-		"virtualName", input.VirtualName,
-		"physicalName", input.PhysicalName,
-		"partitions", input.Partitions,
-		"replicationFactor", input.ReplicationFactor,
-		"createdByCredentialId", input.CreatedByCredentialID)
+		slog.String("virtualClusterId", input.VirtualClusterID),
+		slog.String("virtualName", input.VirtualName),
+		slog.String("physicalName", input.PhysicalName),
+	)
 
-	// TODO: Call Payload CMS API to create topic record
-	// POST /api/kafka-topics
-	// {
-	//   "virtualClusterId": input.VirtualClusterID,
-	//   "virtualName": input.VirtualName,
-	//   "physicalName": input.PhysicalName,
-	//   "partitions": input.Partitions,
-	//   "replicationFactor": input.ReplicationFactor,
-	//   "config": input.Config,
-	//   "createdByCredentialId": input.CreatedByCredentialID,
-	//   "status": "active",
-	//   "source": "gateway_passthrough"
-	// }
+	// Check if topic already exists
+	existingQuery := clients.NewQueryBuilder().
+		WhereEquals("virtualCluster", input.VirtualClusterID).
+		WhereEquals("name", input.VirtualName).
+		Limit(1).
+		Build()
+
+	existingDocs, err := a.payloadClient.Find(ctx, "kafka-topics", existingQuery)
+	if err != nil {
+		return nil, fmt.Errorf("checking existing topic: %w", err)
+	}
+
+	if len(existingDocs) > 0 {
+		// Topic already exists, return it
+		existing := existingDocs[0]
+		topicID, _ := existing["id"].(string)
+		status, _ := existing["status"].(string)
+
+		return &CreateTopicRecordOutput{
+			TopicID: topicID,
+			Status:  status,
+		}, nil
+	}
+
+	// Convert config map to JSON-compatible format
+	var configJSON any
+	if input.Config != nil {
+		configJSON = input.Config
+	}
+
+	// Create new topic record
+	data := map[string]any{
+		"virtualCluster":    input.VirtualClusterID,
+		"name":              input.VirtualName,
+		"physicalName":      input.PhysicalName,
+		"partitions":        input.Partitions,
+		"replicationFactor": input.ReplicationFactor,
+		"config":            configJSON,
+		"status":            "active",
+		"source":            "gateway_passthrough",
+	}
+
+	if input.CreatedByCredentialID != "" {
+		data["createdByCredential"] = input.CreatedByCredentialID
+	}
+
+	result, err := a.payloadClient.Create(ctx, "kafka-topics", data)
+	if err != nil {
+		return nil, fmt.Errorf("creating topic record: %w", err)
+	}
+
+	topicID, _ := result["id"].(string)
 
 	return &CreateTopicRecordOutput{
-		TopicID: "placeholder-topic-id",
+		TopicID: topicID,
 		Status:  "active",
 	}, nil
 }
 
-// MarkTopicDeleted marks a topic as deleted in Orbit via Payload CMS API
+// MarkTopicDeleted marks a topic as deleted in Orbit via Payload CMS API.
+// This is called when a topic is deleted through the Bifrost gateway passthrough.
 func (a *TopicSyncActivitiesImpl) MarkTopicDeleted(ctx context.Context, input MarkTopicDeletedInput) error {
 	a.logger.Info("MarkTopicDeleted",
-		"virtualClusterId", input.VirtualClusterID,
-		"virtualName", input.VirtualName,
-		"physicalName", input.PhysicalName,
-		"deletedByCredentialId", input.DeletedByCredentialID)
+		slog.String("virtualClusterId", input.VirtualClusterID),
+		slog.String("virtualName", input.VirtualName),
+	)
 
-	// TODO: Call Payload CMS API to mark topic as deleted
-	// First, find the topic by virtualClusterId and virtualName
-	// GET /api/kafka-topics?where[virtualClusterId][equals]=...&where[virtualName][equals]=...
-	// Then, update the topic status to deleted
-	// PATCH /api/kafka-topics/:id
-	// {
-	//   "status": "deleted",
-	//   "deletedAt": now,
-	//   "deletedByCredentialId": input.DeletedByCredentialID
-	// }
+	// Find the topic by virtualClusterId and virtualName
+	query := clients.NewQueryBuilder().
+		WhereEquals("virtualCluster", input.VirtualClusterID).
+		WhereEquals("name", input.VirtualName).
+		Limit(1).
+		Build()
+
+	docs, err := a.payloadClient.Find(ctx, "kafka-topics", query)
+	if err != nil {
+		return fmt.Errorf("finding topic: %w", err)
+	}
+
+	if len(docs) == 0 {
+		// Topic not found in Orbit - this is okay, it may have been created
+		// outside of Orbit's management
+		a.logger.Warn("Topic not found in Orbit, skipping delete sync",
+			slog.String("virtualName", input.VirtualName),
+		)
+		return nil
+	}
+
+	topicID, _ := docs[0]["id"].(string)
+
+	// Update the topic status to deleted
+	data := map[string]any{
+		"status":    "deleted",
+		"deletedAt": time.Now().Format(time.RFC3339),
+	}
+
+	if input.DeletedByCredentialID != "" {
+		data["deletedByCredential"] = input.DeletedByCredentialID
+	}
+
+	if err := a.payloadClient.Update(ctx, "kafka-topics", topicID, data); err != nil {
+		return fmt.Errorf("marking topic as deleted: %w", err)
+	}
 
 	return nil
 }
 
-// UpdateTopicConfig updates topic configuration in Orbit via Payload CMS API
+// UpdateTopicConfig updates topic configuration in Orbit via Payload CMS API.
+// This is called when topic config is changed through the Bifrost gateway passthrough.
 func (a *TopicSyncActivitiesImpl) UpdateTopicConfig(ctx context.Context, input UpdateTopicConfigInput) error {
 	a.logger.Info("UpdateTopicConfig",
-		"virtualClusterId", input.VirtualClusterID,
-		"virtualName", input.VirtualName,
-		"config", input.Config,
-		"updatedByCredentialId", input.UpdatedByCredentialID)
+		slog.String("virtualClusterId", input.VirtualClusterID),
+		slog.String("virtualName", input.VirtualName),
+	)
 
-	// TODO: Call Payload CMS API to update topic config
-	// First, find the topic by virtualClusterId and virtualName
-	// GET /api/kafka-topics?where[virtualClusterId][equals]=...&where[virtualName][equals]=...
-	// Then, update the topic config
-	// PATCH /api/kafka-topics/:id
-	// {
-	//   "config": input.Config,
-	//   "updatedAt": now,
-	//   "updatedByCredentialId": input.UpdatedByCredentialID
-	// }
+	// Find the topic by virtualClusterId and virtualName
+	query := clients.NewQueryBuilder().
+		WhereEquals("virtualCluster", input.VirtualClusterID).
+		WhereEquals("name", input.VirtualName).
+		Limit(1).
+		Build()
+
+	docs, err := a.payloadClient.Find(ctx, "kafka-topics", query)
+	if err != nil {
+		return fmt.Errorf("finding topic: %w", err)
+	}
+
+	if len(docs) == 0 {
+		// Topic not found in Orbit
+		a.logger.Warn("Topic not found in Orbit, skipping config sync",
+			slog.String("virtualName", input.VirtualName),
+		)
+		return nil
+	}
+
+	topicID, _ := docs[0]["id"].(string)
+
+	// Update the topic config
+	data := map[string]any{
+		"config":    input.Config,
+		"updatedAt": time.Now().Format(time.RFC3339),
+	}
+
+	if input.UpdatedByCredentialID != "" {
+		data["updatedByCredential"] = input.UpdatedByCredentialID
+	}
+
+	if err := a.payloadClient.Update(ctx, "kafka-topics", topicID, data); err != nil {
+		return fmt.Errorf("updating topic config: %w", err)
+	}
 
 	return nil
 }
+
+// Ensure TopicSyncActivitiesImpl implements TopicSyncActivities
+var _ TopicSyncActivities = (*TopicSyncActivitiesImpl)(nil)
