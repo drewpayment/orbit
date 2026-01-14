@@ -1,5 +1,6 @@
 // storage-adapter-import-placeholder
 import { mongooseAdapter } from '@payloadcms/db-mongodb';
+import { resendAdapter } from '@payloadcms/email-resend'
 import { payloadCloudPlugin } from '@payloadcms/payload-cloud'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
@@ -39,12 +40,14 @@ import {
   KafkaVirtualClusters,
   KafkaTopics,
   KafkaSchemas,
+  KafkaSchemaVersions,
   KafkaServiceAccounts,
   KafkaTopicShares,
   KafkaTopicSharePolicies,
   KafkaTopicPolicies,
   KafkaUsageMetrics,
   KafkaConsumerGroups,
+  KafkaConsumerGroupLagHistory,
   KafkaClientActivity,
   KafkaApplicationQuotas,
   KafkaApplicationRequests,
@@ -95,12 +98,14 @@ export default buildConfig({
     KafkaVirtualClusters,
     KafkaTopics,
     KafkaSchemas,
+    KafkaSchemaVersions,
     KafkaServiceAccounts,
     KafkaTopicShares,
     KafkaTopicSharePolicies,
     KafkaTopicPolicies,
     KafkaUsageMetrics,
     KafkaConsumerGroups,
+    KafkaConsumerGroupLagHistory,
     KafkaClientActivity,
     KafkaApplicationQuotas,
     KafkaApplicationRequests,
@@ -122,4 +127,9 @@ export default buildConfig({
     payloadCloudPlugin(),
     // storage-adapter-placeholder
   ],
+  email: resendAdapter({
+    defaultFromAddress: process.env.RESEND_FROM_EMAIL || 'noreply@orbit.dev',
+    defaultFromName: 'Orbit',
+    apiKey: process.env.RESEND_API_KEY || '',
+  }),
 })
