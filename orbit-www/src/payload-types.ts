@@ -96,12 +96,14 @@ export interface Config {
     'kafka-virtual-clusters': KafkaVirtualCluster;
     'kafka-topics': KafkaTopic;
     'kafka-schemas': KafkaSchema;
+    'kafka-schema-versions': KafkaSchemaVersion;
     'kafka-service-accounts': KafkaServiceAccount;
     'kafka-topic-shares': KafkaTopicShare;
     'kafka-topic-share-policies': KafkaTopicSharePolicy;
     'kafka-topic-policies': KafkaTopicPolicy;
     'kafka-usage-metrics': KafkaUsageMetric;
     'kafka-consumer-groups': KafkaConsumerGroup;
+    'kafka-consumer-group-lag-history': KafkaConsumerGroupLagHistory;
     'kafka-client-activity': KafkaClientActivity;
     'kafka-application-quotas': KafkaApplicationQuota;
     'kafka-application-requests': KafkaApplicationRequest;
@@ -144,12 +146,14 @@ export interface Config {
     'kafka-virtual-clusters': KafkaVirtualClustersSelect<false> | KafkaVirtualClustersSelect<true>;
     'kafka-topics': KafkaTopicsSelect<false> | KafkaTopicsSelect<true>;
     'kafka-schemas': KafkaSchemasSelect<false> | KafkaSchemasSelect<true>;
+    'kafka-schema-versions': KafkaSchemaVersionsSelect<false> | KafkaSchemaVersionsSelect<true>;
     'kafka-service-accounts': KafkaServiceAccountsSelect<false> | KafkaServiceAccountsSelect<true>;
     'kafka-topic-shares': KafkaTopicSharesSelect<false> | KafkaTopicSharesSelect<true>;
     'kafka-topic-share-policies': KafkaTopicSharePoliciesSelect<false> | KafkaTopicSharePoliciesSelect<true>;
     'kafka-topic-policies': KafkaTopicPoliciesSelect<false> | KafkaTopicPoliciesSelect<true>;
     'kafka-usage-metrics': KafkaUsageMetricsSelect<false> | KafkaUsageMetricsSelect<true>;
     'kafka-consumer-groups': KafkaConsumerGroupsSelect<false> | KafkaConsumerGroupsSelect<true>;
+    'kafka-consumer-group-lag-history': KafkaConsumerGroupLagHistorySelect<false> | KafkaConsumerGroupLagHistorySelect<true>;
     'kafka-client-activity': KafkaClientActivitySelect<false> | KafkaClientActivitySelect<true>;
     'kafka-application-quotas': KafkaApplicationQuotasSelect<false> | KafkaApplicationQuotasSelect<true>;
     'kafka-application-requests': KafkaApplicationRequestsSelect<false> | KafkaApplicationRequestsSelect<true>;
@@ -1779,7 +1783,62 @@ export interface KafkaSchema {
    */
   schemaId?: number | null;
   compatibility?: ('backward' | 'forward' | 'full' | 'none') | null;
-  status: 'pending' | 'registered' | 'failed';
+  status: 'pending' | 'registered' | 'failed' | 'stale';
+  /**
+   * Latest version number (cached)
+   */
+  latestVersion?: number | null;
+  /**
+   * Total versions registered
+   */
+  versionCount?: number | null;
+  /**
+   * When first version was registered
+   */
+  firstRegisteredAt?: string | null;
+  /**
+   * When latest version was registered
+   */
+  lastRegisteredAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Historical versions of Kafka schemas
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-schema-versions".
+ */
+export interface KafkaSchemaVersion {
+  id: string;
+  schema: string | KafkaSchema;
+  workspace: string | Workspace;
+  version: number;
+  /**
+   * Global Schema Registry ID
+   */
+  schemaId: number;
+  /**
+   * Full schema definition
+   */
+  content: string;
+  /**
+   * Schema hash for deduplication
+   */
+  fingerprint?: string | null;
+  compatibilityMode?: ('backward' | 'forward' | 'full' | 'none') | null;
+  /**
+   * Was this version compatible when registered
+   */
+  isCompatible?: boolean | null;
+  /**
+   * When registered in Schema Registry
+   */
+  registeredAt?: string | null;
+  /**
+   * When synced to Orbit
+   */
+  syncedAt?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -2172,6 +2231,22 @@ export interface KafkaConsumerGroup {
    */
   share?: (string | null) | KafkaTopicShare;
   /**
+   * Topics this group consumes
+   */
+  subscribedTopics?: (string | KafkaTopic)[] | null;
+  /**
+   * Broker coordinating this group
+   */
+  coordinatorBroker?: string | null;
+  /**
+   * Partition assignment strategy (e.g., range, roundrobin)
+   */
+  assignmentStrategy?: string | null;
+  /**
+   * Lifecycle status of this consumer group
+   */
+  status?: ('active' | 'inactive' | 'archived') | null;
+  /**
    * When this group was first discovered
    */
   firstSeen?: string | null;
@@ -2179,6 +2254,36 @@ export interface KafkaConsumerGroup {
    * When this group was last seen active
    */
   lastSeen?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Historical lag snapshots for consumer groups
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-consumer-group-lag-history".
+ */
+export interface KafkaConsumerGroupLagHistory {
+  id: string;
+  consumerGroup: string | KafkaConsumerGroup;
+  virtualCluster?: (string | null) | KafkaVirtualCluster;
+  workspace: string | Workspace;
+  timestamp: string;
+  totalLag: number;
+  /**
+   * { "topic-0": 150, "topic-1": 42, ... }
+   */
+  partitionLag?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  memberCount?: number | null;
+  state?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -2718,6 +2823,10 @@ export interface PayloadLockedDocument {
         value: string | KafkaSchema;
       } | null)
     | ({
+        relationTo: 'kafka-schema-versions';
+        value: string | KafkaSchemaVersion;
+      } | null)
+    | ({
         relationTo: 'kafka-service-accounts';
         value: string | KafkaServiceAccount;
       } | null)
@@ -2740,6 +2849,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'kafka-consumer-groups';
         value: string | KafkaConsumerGroup;
+      } | null)
+    | ({
+        relationTo: 'kafka-consumer-group-lag-history';
+        value: string | KafkaConsumerGroupLagHistory;
       } | null)
     | ({
         relationTo: 'kafka-client-activity';
@@ -3514,6 +3627,28 @@ export interface KafkaSchemasSelect<T extends boolean = true> {
   schemaId?: T;
   compatibility?: T;
   status?: T;
+  latestVersion?: T;
+  versionCount?: T;
+  firstRegisteredAt?: T;
+  lastRegisteredAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-schema-versions_select".
+ */
+export interface KafkaSchemaVersionsSelect<T extends boolean = true> {
+  schema?: T;
+  workspace?: T;
+  version?: T;
+  schemaId?: T;
+  content?: T;
+  fingerprint?: T;
+  compatibilityMode?: T;
+  isCompatible?: T;
+  registeredAt?: T;
+  syncedAt?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -3684,8 +3819,28 @@ export interface KafkaConsumerGroupsSelect<T extends boolean = true> {
   ownerWorkspace?: T;
   serviceAccount?: T;
   share?: T;
+  subscribedTopics?: T;
+  coordinatorBroker?: T;
+  assignmentStrategy?: T;
+  status?: T;
   firstSeen?: T;
   lastSeen?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "kafka-consumer-group-lag-history_select".
+ */
+export interface KafkaConsumerGroupLagHistorySelect<T extends boolean = true> {
+  consumerGroup?: T;
+  virtualCluster?: T;
+  workspace?: T;
+  timestamp?: T;
+  totalLag?: T;
+  partitionLag?: T;
+  memberCount?: T;
+  state?: T;
   updatedAt?: T;
   createdAt?: T;
 }

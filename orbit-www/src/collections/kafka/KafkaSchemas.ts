@@ -182,9 +182,43 @@ export const KafkaSchemas: CollectionConfig = {
         { label: 'Pending', value: 'pending' },
         { label: 'Registered', value: 'registered' },
         { label: 'Failed', value: 'failed' },
+        { label: 'Stale', value: 'stale' },
       ],
       admin: {
         position: 'sidebar',
+      },
+    },
+    // Version tracking fields (Phase 7)
+    {
+      name: 'latestVersion',
+      type: 'number',
+      admin: {
+        description: 'Latest version number (cached)',
+        readOnly: true,
+      },
+    },
+    {
+      name: 'versionCount',
+      type: 'number',
+      admin: {
+        description: 'Total versions registered',
+        readOnly: true,
+      },
+    },
+    {
+      name: 'firstRegisteredAt',
+      type: 'date',
+      admin: {
+        description: 'When first version was registered',
+        readOnly: true,
+      },
+    },
+    {
+      name: 'lastRegisteredAt',
+      type: 'date',
+      admin: {
+        description: 'When latest version was registered',
+        readOnly: true,
       },
     },
   ],

@@ -11,6 +11,7 @@ export { KafkaVirtualClusters } from './KafkaVirtualClusters'
 // Workspace-level resources
 export { KafkaTopics } from './KafkaTopics'
 export { KafkaSchemas } from './KafkaSchemas'
+export { KafkaSchemaVersions } from './KafkaSchemaVersions'
 export { KafkaServiceAccounts } from './KafkaServiceAccounts'
 
 // Cross-workspace sharing
@@ -27,6 +28,7 @@ export { KafkaApplicationRequests } from './KafkaApplicationRequests'
 // Usage & Lineage
 export { KafkaUsageMetrics } from './KafkaUsageMetrics'
 export { KafkaConsumerGroups } from './KafkaConsumerGroups'
+export { KafkaConsumerGroupLagHistory } from './KafkaConsumerGroupLagHistory'
 export { KafkaClientActivity } from './KafkaClientActivity'
 export { KafkaLineageEdge } from './KafkaLineageEdge'
 export { KafkaLineageSnapshot } from './KafkaLineageSnapshot'

@@ -130,6 +130,44 @@ export const KafkaConsumerGroups: CollectionConfig = {
         description: 'Associated share grant (if cross-workspace)',
       },
     },
+    // Phase 7 extensions
+    {
+      name: 'subscribedTopics',
+      type: 'relationship',
+      relationTo: 'kafka-topics',
+      hasMany: true,
+      admin: {
+        description: 'Topics this group consumes',
+      },
+    },
+    {
+      name: 'coordinatorBroker',
+      type: 'text',
+      admin: {
+        description: 'Broker coordinating this group',
+      },
+    },
+    {
+      name: 'assignmentStrategy',
+      type: 'text',
+      admin: {
+        description: 'Partition assignment strategy (e.g., range, roundrobin)',
+      },
+    },
+    {
+      name: 'status',
+      type: 'select',
+      defaultValue: 'active',
+      options: [
+        { label: 'Active', value: 'active' },
+        { label: 'Inactive', value: 'inactive' },
+        { label: 'Archived', value: 'archived' },
+      ],
+      admin: {
+        position: 'sidebar',
+        description: 'Lifecycle status of this consumer group',
+      },
+    },
     {
       name: 'firstSeen',
       type: 'date',
