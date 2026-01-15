@@ -59,6 +59,7 @@ dependencies {
     testImplementation("io.ktor:ktor-server-test-host:2.3.7")
     testImplementation("io.ktor:ktor-client-content-negotiation:2.3.7")
     testImplementation("io.micrometer:micrometer-registry-prometheus:1.12.0")
+    testImplementation("io.grpc:grpc-testing:1.60.0")
 }
 
 protobuf {

@@ -1,6 +1,13 @@
 package io.orbit.bifrost.callback
 
+import com.google.protobuf.Timestamp
+import idp.gateway.v1.BifrostCallbackServiceGrpc
+import idp.gateway.v1.Gateway.ClientActivityRecord
+import idp.gateway.v1.Gateway.EmitClientActivityRequest
+import io.grpc.ManagedChannel
+import io.grpc.ManagedChannelBuilder
 import mu.KotlinLogging
+import java.util.concurrent.TimeUnit
 
 private val logger = KotlinLogging.logger {}
 
@@ -21,6 +28,11 @@ interface BifrostCallbackClient {
      * @throws Exception if the gRPC call fails
      */
     fun emitClientActivity(records: List<ActivityRecord>)
+
+    /**
+     * Gracefully shuts down the client and releases resources.
+     */
+    fun shutdown()
 }
 
 /**
@@ -30,68 +42,101 @@ class NoOpBifrostCallbackClient : BifrostCallbackClient {
     override fun emitClientActivity(records: List<ActivityRecord>) {
         logger.debug { "NoOp callback client: would emit ${records.size} activity records" }
     }
+
+    override fun shutdown() {
+        // No-op
+    }
 }
 
 /**
  * gRPC implementation of BifrostCallbackClient.
  *
- * This implementation will be fully functional once the EmitClientActivity RPC
- * is added to the proto definitions (Task 5).
- *
- * @param host Orbit callback service host
- * @param port Orbit callback service port
+ * This implementation sends client activity records to Orbit's BifrostCallbackService
+ * via gRPC for lineage tracking.
  */
-class GrpcBifrostCallbackClient(
-    private val host: String,
-    private val port: Int
+class GrpcBifrostCallbackClient private constructor(
+    private val channel: ManagedChannel,
+    private val stub: BifrostCallbackServiceGrpc.BifrostCallbackServiceBlockingStub,
+    private val ownsChannel: Boolean
 ) : BifrostCallbackClient {
 
-    // TODO: Initialize gRPC channel and stub once proto messages are generated
-    // private val channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext().build()
-    // private val stub = BifrostCallbackServiceGrpc.newBlockingStub(channel)
+    /**
+     * Creates a new client connecting to the specified host and port.
+     *
+     * @param host Orbit callback service host
+     * @param port Orbit callback service port
+     */
+    constructor(host: String, port: Int) : this(
+        channel = ManagedChannelBuilder.forAddress(host, port)
+            .usePlaintext()
+            .build(),
+        ownsChannel = true
+    )
+
+    /**
+     * Creates a new client using an existing channel (for testing).
+     *
+     * @param channel Pre-configured ManagedChannel
+     */
+    constructor(channel: ManagedChannel) : this(
+        channel = channel,
+        ownsChannel = false
+    )
+
+    private constructor(channel: ManagedChannel, ownsChannel: Boolean) : this(
+        channel = channel,
+        stub = BifrostCallbackServiceGrpc.newBlockingStub(channel),
+        ownsChannel = ownsChannel
+    )
 
     override fun emitClientActivity(records: List<ActivityRecord>) {
         if (records.isEmpty()) {
             return
         }
 
-        logger.info { "Emitting ${records.size} activity records to Orbit at $host:$port" }
+        logger.info { "Emitting ${records.size} activity records to Orbit" }
 
-        // TODO: Convert ActivityRecord to proto messages and call RPC
-        // This will be implemented after Task 5 (proto messages)
-        //
-        // val request = EmitClientActivityRequest.newBuilder()
-        //     .addAllRecords(records.map { record ->
-        //         ClientActivityRecord.newBuilder()
-        //             .setVirtualClusterId(record.virtualClusterId)
-        //             .setServiceAccountId(record.serviceAccountId)
-        //             .setTopicVirtualName(record.topicVirtualName)
-        //             .setDirection(record.direction)
-        //             .setConsumerGroupId(record.consumerGroupId ?: "")
-        //             .setBytes(record.bytes)
-        //             .setMessageCount(record.messageCount)
-        //             .setWindowStart(Timestamps.fromMillis(record.windowStart.toEpochMilli()))
-        //             .setWindowEnd(Timestamps.fromMillis(record.windowEnd.toEpochMilli()))
-        //             .build()
-        //     })
-        //     .build()
-        //
-        // stub.emitClientActivity(request)
+        val protoRecords = records.map { record ->
+            ClientActivityRecord.newBuilder()
+                .setVirtualClusterId(record.virtualClusterId)
+                .setServiceAccountId(record.serviceAccountId)
+                .setTopicVirtualName(record.topicVirtualName)
+                .setDirection(record.direction)
+                .setConsumerGroupId(record.consumerGroupId ?: "")
+                .setBytes(record.bytes)
+                .setMessageCount(record.messageCount)
+                .setWindowStart(record.windowStart.toProtoTimestamp())
+                .setWindowEnd(record.windowEnd.toProtoTimestamp())
+                .build()
+        }
 
-        // For now, just log the activity (will be replaced with actual gRPC call)
-        records.forEach { record ->
+        val request = EmitClientActivityRequest.newBuilder()
+            .addAllRecords(protoRecords)
+            .build()
+
+        try {
+            val response = stub.emitClientActivity(request)
             logger.debug {
-                "Activity: vCluster=${record.virtualClusterId}, " +
-                    "topic=${record.topicVirtualName}, " +
-                    "direction=${record.direction}, " +
-                    "bytes=${record.bytes}, " +
-                    "messages=${record.messageCount}"
+                "Activity emission completed: success=${response.success}, " +
+                    "recordsProcessed=${response.recordsProcessed}"
             }
+        } catch (e: Exception) {
+            logger.error(e) { "Failed to emit client activity records" }
+            throw e
         }
     }
 
-    fun shutdown() {
-        // TODO: Shutdown gRPC channel
-        // channel.shutdown().awaitTermination(5, TimeUnit.SECONDS)
+    override fun shutdown() {
+        if (ownsChannel) {
+            logger.info { "Shutting down BifrostCallbackClient channel" }
+            channel.shutdown().awaitTermination(5, TimeUnit.SECONDS)
+        }
+    }
+
+    private fun java.time.Instant.toProtoTimestamp(): Timestamp {
+        return Timestamp.newBuilder()
+            .setSeconds(this.epochSecond)
+            .setNanos(this.nano)
+            .build()
     }
 }
