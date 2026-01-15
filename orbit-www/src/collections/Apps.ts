@@ -10,9 +10,26 @@ export const Apps: CollectionConfig = {
   },
   hooks: {
     afterChange: [
-      async ({ doc }) => {
-        // Always call manageSchedule - it's idempotent (deletes and recreates)
-        // This ensures schedule exists even after manual deletion or service restart
+      async ({ doc, previousDoc, operation }) => {
+        // Only manage health check workflow when health config actually changes
+        // This prevents a feedback loop where status updates trigger workflow restarts
+        const currentConfig = doc.healthConfig
+        const previousConfig = previousDoc?.healthConfig
+
+        // Check if health config changed (comparing relevant fields)
+        const configChanged = operation === 'create' ||
+          currentConfig?.url !== previousConfig?.url ||
+          currentConfig?.method !== previousConfig?.method ||
+          currentConfig?.expectedStatus !== previousConfig?.expectedStatus ||
+          currentConfig?.interval !== previousConfig?.interval ||
+          currentConfig?.timeout !== previousConfig?.timeout
+
+        if (!configChanged) {
+          // Health config unchanged - skip workflow management
+          // This allows status updates without restarting the workflow
+          return doc
+        }
+
         const healthConfig = doc.healthConfig?.url ? {
           url: doc.healthConfig.url,
           method: doc.healthConfig.method || 'GET',
@@ -21,9 +38,10 @@ export const Apps: CollectionConfig = {
           timeout: doc.healthConfig.timeout || 10,
         } : undefined
 
-        console.log('[Apps Hook] Calling manageSchedule:', {
+        console.log('[Apps Hook] Health config changed, calling manageSchedule:', {
           appId: doc.id,
           hasUrl: !!doc.healthConfig?.url,
+          operation,
         })
 
         // Fire and forget - don't block the save
