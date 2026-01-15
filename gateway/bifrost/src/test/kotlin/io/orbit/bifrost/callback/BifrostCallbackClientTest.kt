@@ -1,7 +1,6 @@
 // gateway/bifrost/src/test/kotlin/io/orbit/bifrost/callback/BifrostCallbackClientTest.kt
 package io.orbit.bifrost.callback
 
-import com.google.protobuf.util.Timestamps
 import idp.gateway.v1.BifrostCallbackServiceGrpc
 import idp.gateway.v1.Gateway.ClientActivityRecord
 import idp.gateway.v1.Gateway.EmitClientActivityRequest

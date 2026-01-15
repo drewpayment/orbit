@@ -190,7 +190,7 @@ func (c *PayloadClient) Update(ctx context.Context, collection string, id string
 	// Use internal API route for collections that need elevated access
 	var reqURL string
 	switch collection {
-	case "kafka-topics", "kafka-virtual-clusters", "kafka-schemas", "kafka-topic-shares":
+	case "kafka-topics", "kafka-virtual-clusters", "kafka-schemas", "kafka-topic-shares", "kafka-lineage-edges":
 		reqURL = fmt.Sprintf("%s/api/internal/%s/%s", c.baseURL, collection, id)
 	default:
 		reqURL = fmt.Sprintf("%s/api/%s/%s", c.baseURL, collection, id)
@@ -236,7 +236,7 @@ func (c *PayloadClient) Delete(ctx context.Context, collection string, id string
 	// Use internal API route for collections that need elevated access
 	var reqURL string
 	switch collection {
-	case "kafka-topics", "kafka-virtual-clusters", "kafka-schemas", "kafka-topic-shares":
+	case "kafka-topics", "kafka-virtual-clusters", "kafka-schemas", "kafka-topic-shares", "kafka-lineage-edges":
 		reqURL = fmt.Sprintf("%s/api/internal/%s/%s", c.baseURL, collection, id)
 	default:
 		reqURL = fmt.Sprintf("%s/api/%s/%s", c.baseURL, collection, id)

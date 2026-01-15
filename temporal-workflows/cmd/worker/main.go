@@ -260,8 +260,8 @@ func main() {
 	w.RegisterWorkflow(workflows.CredentialUpsertWorkflow)
 	w.RegisterWorkflow(workflows.CredentialRevokeWorkflow)
 
-	// Create and register credential activities
-	credActivities := activities.NewCredentialActivities(bifrostAdminURL, logger)
+	// Create and register credential activities (uses same BifrostClient as virtual cluster activities)
+	credActivities := activities.NewCredentialActivities(bifrostClient, logger)
 	w.RegisterActivity(credActivities.SyncCredentialToBifrost)
 	w.RegisterActivity(credActivities.RevokeCredentialFromBifrost)
 
@@ -291,6 +291,19 @@ func main() {
 	w.RegisterActivity(kafkaActivities.ProvisionAccess)
 	w.RegisterActivity(kafkaActivities.RevokeAccess)
 	w.RegisterActivity(kafkaActivities.UpdateShareStatus)
+
+	// Register lineage processing workflows
+	w.RegisterWorkflow(workflows.ActivityProcessingWorkflow)
+	w.RegisterWorkflow(workflows.LineageAggregationWorkflow)
+	w.RegisterWorkflow(workflows.ScheduledLineageMaintenanceWorkflow)
+
+	// Create and register lineage activities
+	lineageActivities := activities.NewLineageActivities(kafkaPayloadClient, logger)
+	w.RegisterActivity(lineageActivities.ProcessActivityBatch)
+	w.RegisterActivity(lineageActivities.ResetStale24hMetrics)
+	w.RegisterActivity(lineageActivities.MarkInactiveEdges)
+	w.RegisterActivity(lineageActivities.CreateDailySnapshots)
+	log.Printf("Lineage activities registered with Payload URL: %s", orbitAPIURL)
 
 	log.Println("Starting Temporal worker...")
 	log.Printf("Temporal address: %s", temporalAddress)
