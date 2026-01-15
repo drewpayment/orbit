@@ -50,7 +50,7 @@ services:
     volumes:
       - ./infrastructure/temporal/dynamicconfig:/etc/temporal/config/dynamicconfig
     healthcheck:
-      test: ["CMD", "temporal", "workflow", "list", "--namespace", "default", "--limit", "1"]
+      test: ["CMD", "temporal", "--address", "temporal-server:7233", "workflow", "list", "--namespace", "default", "--limit", "1"]
       interval: 10s
       timeout: 10s
       retries: 10
