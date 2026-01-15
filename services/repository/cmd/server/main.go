@@ -58,15 +58,41 @@ type TemporalClient struct {
 	client client.Client
 }
 
-// NewTemporalClient creates a new Temporal client wrapper
+// NewTemporalClient creates a new Temporal client wrapper with retry logic
 func NewTemporalClient(hostPort string) (*TemporalClient, error) {
-	c, err := client.Dial(client.Options{
-		HostPort: hostPort,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to Temporal: %w", err)
+	return NewTemporalClientWithRetry(hostPort, 10, 2*time.Second)
+}
+
+// NewTemporalClientWithRetry creates a Temporal client with configurable retry logic
+func NewTemporalClientWithRetry(hostPort string, maxRetries int, initialBackoff time.Duration) (*TemporalClient, error) {
+	var lastErr error
+	backoff := initialBackoff
+	maxBackoff := 30 * time.Second
+
+	for i := 0; i < maxRetries; i++ {
+		c, err := client.Dial(client.Options{
+			HostPort: hostPort,
+		})
+		if err == nil {
+			if i > 0 {
+				log.Printf("Successfully connected to Temporal after %d attempts", i+1)
+			}
+			return &TemporalClient{client: c}, nil
+		}
+		lastErr = err
+
+		if i < maxRetries-1 {
+			log.Printf("Failed to connect to Temporal (attempt %d/%d): %v, retrying in %v",
+				i+1, maxRetries, err, backoff)
+			time.Sleep(backoff)
+			// Exponential backoff with cap
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+		}
 	}
-	return &TemporalClient{client: c}, nil
+	return nil, fmt.Errorf("failed to connect to Temporal after %d attempts: %w", maxRetries, lastErr)
 }
 
 // Close closes the Temporal client
