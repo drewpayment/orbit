@@ -49,6 +49,12 @@ services:
       - 8233:8233
     volumes:
       - ./infrastructure/temporal/dynamicconfig:/etc/temporal/config/dynamicconfig
+    healthcheck:
+      test: ["CMD", "temporal", "workflow", "list", "--namespace", "default", "--limit", "1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
 
   # temporal-admin-tools moved to docker-compose.debug.yml
   # Usage: docker compose -f docker-compose.yml -f docker-compose.debug.yml up -d temporal-admin-tools
@@ -56,7 +62,8 @@ services:
   temporal-ui:
     container_name: temporal-ui
     depends_on:
-      - temporal-server
+      temporal-server:
+        condition: service_healthy
     environment:
       - TEMPORAL_ADDRESS=temporal-server:7233
       - TEMPORAL_CORS_ORIGINS=http://localhost:3000,http://localhost:3001
@@ -71,7 +78,7 @@ services:
       dockerfile: temporal-workflows/Dockerfile
     depends_on:
       temporal-server:
-        condition: service_started
+        condition: service_healthy
       bifrost:
         condition: service_started
       redpanda:
@@ -354,7 +361,8 @@ services:
       - TEMPORAL_ADDRESS=temporal-server:7233
       - TEMPORAL_NAMESPACE=default
     depends_on:
-      - temporal-server
+      temporal-server:
+        condition: service_healthy
     restart: unless-stopped
 
   # Go Services
@@ -369,8 +377,10 @@ services:
       - GRPC_PORT=50055
       - ENVIRONMENT=development
     depends_on:
-      - temporal-server
-      - redpanda
+      temporal-server:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
     restart: unless-stopped
 
   repository-service:
@@ -387,7 +397,8 @@ services:
       - TEMPORAL_HOST=temporal-server:7233
       - TEMPLATE_WORK_DIR=/tmp/orbit-templates
     depends_on:
-      - temporal-server
+      temporal-server:
+        condition: service_healthy
     restart: unless-stopped
 
   # Prometheus (Metrics Collection)
