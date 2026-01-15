@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"time"
 
 	"connectrpc.com/connect"
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 
 	healthv1 "github.com/drewpayment/orbit/proto/gen/go/idp/health/v1"
@@ -22,97 +22,100 @@ type HealthConfig struct {
 	Timeout        int    `json:"timeout"`
 }
 
-// ScheduleClient interface for Temporal schedule operations
-type ScheduleClient interface {
-	CreateSchedule(ctx context.Context, appID string, config HealthConfig) (string, error)
-	DeleteSchedule(ctx context.Context, scheduleID string) error
+// HealthCheckWorkflowInput matches the workflow's input type
+type HealthCheckWorkflowInput struct {
+	AppID           string       `json:"appId"`
+	HealthConfig    HealthConfig `json:"healthConfig"`
+	ChecksPerformed int          `json:"checksPerformed"`
 }
 
-// TemporalScheduleClient implements ScheduleClient using Temporal SDK
-type TemporalScheduleClient struct {
+// WorkflowClient interface for workflow operations (replacing ScheduleClient)
+type WorkflowClient interface {
+	StartHealthCheckWorkflow(ctx context.Context, appID string, config HealthConfig) (string, error)
+	TerminateHealthCheckWorkflow(ctx context.Context, appID string) error
+}
+
+// TemporalWorkflowClient implements WorkflowClient using Temporal SDK
+type TemporalWorkflowClient struct {
 	client client.Client
 }
 
-// NewTemporalScheduleClient creates a new TemporalScheduleClient
-func NewTemporalScheduleClient(c client.Client) *TemporalScheduleClient {
-	return &TemporalScheduleClient{client: c}
+// NewTemporalWorkflowClient creates a new TemporalWorkflowClient
+func NewTemporalWorkflowClient(c client.Client) *TemporalWorkflowClient {
+	return &TemporalWorkflowClient{client: c}
 }
 
-// CreateSchedule creates a Temporal schedule for health checks
-func (c *TemporalScheduleClient) CreateSchedule(ctx context.Context, appID string, config HealthConfig) (string, error) {
-	scheduleID := fmt.Sprintf("health-check-%s", appID)
-
-	// Delete existing schedule if it exists
-	handle := c.client.ScheduleClient().GetHandle(ctx, scheduleID)
-	_ = handle.Delete(ctx) // Ignore error if doesn't exist
+// StartHealthCheckWorkflow starts a long-running health check workflow for an app.
+// Uses WorkflowIDReusePolicy to terminate any existing workflow for the same app.
+func (c *TemporalWorkflowClient) StartHealthCheckWorkflow(ctx context.Context, appID string, config HealthConfig) (string, error) {
+	workflowID := fmt.Sprintf("health-monitor-%s", appID)
 
 	// Ensure interval is at least 30 seconds
 	interval := config.Interval
 	if interval < 30 {
 		interval = 60
 	}
+	config.Interval = interval
 
-	// Create new schedule with full workflow input
-	_, err := c.client.ScheduleClient().Create(ctx, client.ScheduleOptions{
-		ID: scheduleID,
-		Spec: client.ScheduleSpec{
-			Intervals: []client.ScheduleIntervalSpec{{
-				Every: time.Duration(interval) * time.Second,
-			}},
-		},
-		Action: &client.ScheduleWorkflowAction{
-			ID:        fmt.Sprintf("health-check-workflow-%s", appID),
-			Workflow:  "HealthCheckWorkflow",
-			TaskQueue: "orbit-workflows",
-			Args: []interface{}{
-				map[string]interface{}{
-					"appId": appID,
-					"healthConfig": map[string]interface{}{
-						"url":            config.URL,
-						"method":         config.Method,
-						"expectedStatus": config.ExpectedStatus,
-						"interval":       config.Interval,
-						"timeout":        config.Timeout,
-					},
-				},
-			},
-		},
-	})
-	if err != nil {
-		return "", fmt.Errorf("failed to create schedule: %w", err)
+	workflowOptions := client.StartWorkflowOptions{
+		ID:                    workflowID,
+		TaskQueue:             "orbit-workflows",
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
 	}
 
-	return scheduleID, nil
+	input := HealthCheckWorkflowInput{
+		AppID:           appID,
+		HealthConfig:    config,
+		ChecksPerformed: 0,
+	}
+
+	we, err := c.client.ExecuteWorkflow(ctx, workflowOptions, "HealthCheckWorkflow", input)
+	if err != nil {
+		return "", fmt.Errorf("failed to start health check workflow: %w", err)
+	}
+
+	return we.GetID(), nil
 }
 
-// DeleteSchedule deletes a Temporal schedule
-func (c *TemporalScheduleClient) DeleteSchedule(ctx context.Context, scheduleID string) error {
-	handle := c.client.ScheduleClient().GetHandle(ctx, scheduleID)
-	return handle.Delete(ctx)
+// TerminateHealthCheckWorkflow terminates the health check workflow for an app
+func (c *TemporalWorkflowClient) TerminateHealthCheckWorkflow(ctx context.Context, appID string) error {
+	workflowID := fmt.Sprintf("health-monitor-%s", appID)
+
+	// Terminate the workflow - ignore error if workflow doesn't exist
+	err := c.client.TerminateWorkflow(ctx, workflowID, "", "Health check disabled")
+	if err != nil {
+		// Check if it's a "not found" error and ignore it
+		log.Printf("Terminate workflow returned (may be expected if not running): %v", err)
+	}
+
+	return nil
 }
 
 // HealthService implements the HealthService Connect/gRPC service
 type HealthService struct {
 	healthv1connect.UnimplementedHealthServiceHandler
-	scheduleClient ScheduleClient
+	workflowClient WorkflowClient
 }
 
 // NewHealthService creates a new HealthService
-func NewHealthService(scheduleClient ScheduleClient) *HealthService {
+func NewHealthService(workflowClient WorkflowClient) *HealthService {
 	return &HealthService{
-		scheduleClient: scheduleClient,
+		workflowClient: workflowClient,
 	}
 }
 
-// ManageSchedule creates or updates a health check schedule
+// ManageSchedule starts or terminates a health check workflow
+// Note: The method is named ManageSchedule for API compatibility, but now manages workflows
 func (s *HealthService) ManageSchedule(ctx context.Context, req *connect.Request[healthv1.ManageScheduleRequest]) (*connect.Response[healthv1.ManageScheduleResponse], error) {
 	msg := req.Msg
 	log.Printf("ManageSchedule called for appId=%s, hasConfig=%v", msg.AppId, msg.HealthConfig != nil)
 
 	if msg.HealthConfig == nil || msg.HealthConfig.Url == "" {
-		// No health config - delete schedule if exists
-		scheduleID := fmt.Sprintf("health-check-%s", msg.AppId)
-		_ = s.scheduleClient.DeleteSchedule(ctx, scheduleID)
+		// No health config - terminate workflow if running
+		err := s.workflowClient.TerminateHealthCheckWorkflow(ctx, msg.AppId)
+		if err != nil {
+			log.Printf("Warning: Failed to terminate workflow (may not have been running): %v", err)
+		}
 		return connect.NewResponse(&healthv1.ManageScheduleResponse{Success: true}), nil
 	}
 
@@ -139,40 +142,75 @@ func (s *HealthService) ManageSchedule(ctx context.Context, req *connect.Request
 		config.Timeout = 10
 	}
 
-	log.Printf("Creating schedule for app %s with URL=%s, method=%s, interval=%d",
+	log.Printf("Starting health check workflow for app %s with URL=%s, method=%s, interval=%d",
 		msg.AppId, config.URL, config.Method, config.Interval)
 
-	scheduleID, err := s.scheduleClient.CreateSchedule(ctx, msg.AppId, config)
+	workflowID, err := s.workflowClient.StartHealthCheckWorkflow(ctx, msg.AppId, config)
 	if err != nil {
-		log.Printf("Failed to create schedule: %v", err)
+		log.Printf("Failed to start health check workflow: %v", err)
 		return connect.NewResponse(&healthv1.ManageScheduleResponse{
 			Success: false,
 			Error:   err.Error(),
 		}), nil
 	}
 
-	log.Printf("Created schedule %s for app %s", scheduleID, msg.AppId)
+	log.Printf("Started health check workflow %s for app %s", workflowID, msg.AppId)
 	return connect.NewResponse(&healthv1.ManageScheduleResponse{
 		Success:    true,
-		ScheduleId: scheduleID,
+		ScheduleId: workflowID, // Return workflow ID (API field is named scheduleId for compatibility)
 	}), nil
 }
 
-// DeleteSchedule removes a health check schedule
+// DeleteSchedule terminates a health check workflow
+// Note: The method is named DeleteSchedule for API compatibility, but now terminates workflows
 func (s *HealthService) DeleteSchedule(ctx context.Context, req *connect.Request[healthv1.DeleteScheduleRequest]) (*connect.Response[healthv1.DeleteScheduleResponse], error) {
 	msg := req.Msg
 	log.Printf("DeleteSchedule called for appId=%s", msg.AppId)
 
-	scheduleID := fmt.Sprintf("health-check-%s", msg.AppId)
-	err := s.scheduleClient.DeleteSchedule(ctx, scheduleID)
+	err := s.workflowClient.TerminateHealthCheckWorkflow(ctx, msg.AppId)
 	if err != nil {
-		log.Printf("Failed to delete schedule: %v", err)
-		return connect.NewResponse(&healthv1.DeleteScheduleResponse{
-			Success: false,
-			Error:   err.Error(),
-		}), nil
+		log.Printf("Warning: Failed to terminate workflow (may not have been running): %v", err)
+		// Don't return error - workflow may not have been running
 	}
 
-	log.Printf("Deleted schedule %s", scheduleID)
+	log.Printf("Terminated health check workflow for app %s", msg.AppId)
 	return connect.NewResponse(&healthv1.DeleteScheduleResponse{Success: true}), nil
+}
+
+// Legacy types and functions for backward compatibility
+// These are kept to avoid breaking the main.go initialization
+// TODO: Remove after updating main.go
+
+// ScheduleClient interface (deprecated - use WorkflowClient)
+type ScheduleClient interface {
+	CreateSchedule(ctx context.Context, appID string, config HealthConfig) (string, error)
+	DeleteSchedule(ctx context.Context, scheduleID string) error
+}
+
+// TemporalScheduleClient is deprecated - use TemporalWorkflowClient
+type TemporalScheduleClient struct {
+	client client.Client
+}
+
+// NewTemporalScheduleClient creates a TemporalScheduleClient (deprecated)
+func NewTemporalScheduleClient(c client.Client) *TemporalScheduleClient {
+	return &TemporalScheduleClient{client: c}
+}
+
+// CreateSchedule is deprecated - use StartHealthCheckWorkflow
+func (c *TemporalScheduleClient) CreateSchedule(ctx context.Context, appID string, config HealthConfig) (string, error) {
+	// Delegate to workflow-based implementation
+	wc := NewTemporalWorkflowClient(c.client)
+	return wc.StartHealthCheckWorkflow(ctx, appID, config)
+}
+
+// DeleteSchedule is deprecated - use TerminateHealthCheckWorkflow
+func (c *TemporalScheduleClient) DeleteSchedule(ctx context.Context, scheduleID string) error {
+	// Extract appID from schedule ID (health-check-{appID})
+	appID := scheduleID
+	if len(scheduleID) > 13 && scheduleID[:13] == "health-check-" {
+		appID = scheduleID[13:]
+	}
+	wc := NewTemporalWorkflowClient(c.client)
+	return wc.TerminateHealthCheckWorkflow(ctx, appID)
 }

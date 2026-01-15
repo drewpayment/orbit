@@ -310,8 +310,8 @@ func main() {
 
 	// Register HealthService (Connect handler)
 	if temporalClient != nil {
-		temporalScheduleClient := grpcserver.NewTemporalScheduleClient(temporalClient.client)
-		healthService := grpcserver.NewHealthService(temporalScheduleClient)
+		temporalWorkflowClient := grpcserver.NewTemporalWorkflowClient(temporalClient.client)
+		healthService := grpcserver.NewHealthService(temporalWorkflowClient)
 		healthPath, healthHandler := healthv1connect.NewHealthServiceHandler(healthService)
 		mux.Handle(healthPath, healthHandler)
 		log.Println("HealthService registered (Connect)")
