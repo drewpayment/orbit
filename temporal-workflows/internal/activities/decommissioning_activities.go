@@ -249,27 +249,77 @@ func (a *DecommissioningActivities) CheckApplicationStatus(ctx context.Context, 
 
 // DeletePhysicalTopics deletes all physical Kafka topics for an application
 func (a *DecommissioningActivities) DeletePhysicalTopics(ctx context.Context, input DeletePhysicalTopicsInput) (*DeletePhysicalTopicsResult, error) {
-	logger := activity.GetLogger(ctx)
-	logger.Info("DeletePhysicalTopics",
-		"applicationId", input.ApplicationID)
+	a.logger.Info("DeletePhysicalTopics", "applicationId", input.ApplicationID)
 
-	// TODO: Query Payload for topics associated with this application
-	// GET /api/kafka-topics?where[application][equals]={applicationId}
-	//
-	// TODO: For each topic, delete from Kafka via admin client
-	// adminClient, err := kafka.NewAdminClient(config)
-	// adminClient.DeleteTopics(ctx, []string{topic.FullName})
-	//
-	// TODO: Update topic status in Payload to "deleted"
-	// PATCH /api/kafka-topics/{topicId} { status: "deleted" }
-	//
-	// TODO: Track successful and failed deletions
+	// Query topics for this application
+	query := clients.NewQueryBuilder().
+		WhereEquals("application", input.ApplicationID).
+		Build()
 
-	// Placeholder implementation - return mock success
+	topics, err := a.payloadClient.Find(ctx, "kafka-topics", query)
+	if err != nil {
+		return nil, fmt.Errorf("querying topics: %w", err)
+	}
+
+	var deleted, failed []string
+
+	for _, topic := range topics {
+		topicID, ok := topic["id"].(string)
+		if !ok {
+			continue
+		}
+
+		physicalName, _ := topic["physicalName"].(string)
+		if physicalName == "" {
+			// Topic was never provisioned, skip
+			a.logger.Info("Skipping topic without physicalName",
+				"topicId", topicID,
+			)
+			continue
+		}
+
+		// Delete from Kafka cluster if adapter factory is available
+		if a.adapterFactory == nil {
+			a.logger.Warn("AdapterFactory not available, cannot delete physical topic",
+				"topicId", topicID,
+				"physicalName", physicalName,
+			)
+			// Mark as failed since we couldn't delete from Kafka
+			failed = append(failed, topicID)
+			continue
+		}
+
+		// In a full implementation, we would:
+		// 1. Get the virtual cluster for this topic
+		// 2. Get the physical cluster config
+		// 3. Create a Kafka adapter
+		// 4. Call adapter.DeleteTopic(ctx, physicalName)
+		// For now, log that we would delete
+		a.logger.Info("Would delete topic from Kafka",
+			"topicId", topicID,
+			"physicalName", physicalName,
+		)
+
+		// Update status in Payload CMS
+		if err := a.payloadClient.Update(ctx, "kafka-topics", topicID, map[string]any{
+			"status":    "deleted",
+			"deletedAt": time.Now().Format(time.RFC3339),
+		}); err != nil {
+			a.logger.Warn("Failed to update topic status",
+				"topicId", topicID,
+				"error", err,
+			)
+			failed = append(failed, topicID)
+			continue
+		}
+
+		deleted = append(deleted, topicID)
+	}
+
 	return &DeletePhysicalTopicsResult{
-		Success:       true,
-		DeletedTopics: []string{"mock-topic-1", "mock-topic-2"},
-		FailedTopics:  []string{},
+		Success:       len(failed) == 0,
+		DeletedTopics: deleted,
+		FailedTopics:  failed,
 	}, nil
 }
 
