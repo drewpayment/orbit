@@ -152,28 +152,68 @@ func NewDecommissioningActivities(
 
 // SetVirtualClustersReadOnly sets all virtual clusters for an application to read-only mode
 func (a *DecommissioningActivities) SetVirtualClustersReadOnly(ctx context.Context, input SetVirtualClustersReadOnlyInput) (*SetVirtualClustersReadOnlyResult, error) {
-	logger := activity.GetLogger(ctx)
-	logger.Info("SetVirtualClustersReadOnly",
+	a.logger.Info("SetVirtualClustersReadOnly",
 		"applicationId", input.ApplicationID,
 		"readOnly", input.ReadOnly)
 
-	// TODO: Query Payload for virtual clusters associated with this application
-	// GET /api/virtual-clusters?where[application][equals]={applicationId}
-	//
-	// TODO: For each virtual cluster, call Bifrost SetVirtualClusterReadOnly RPC
-	// conn, err := grpc.Dial(a.bifrostURL, grpc.WithInsecure())
-	// client := gatewayv1.NewBifrostAdminServiceClient(conn)
-	// client.SetVirtualClusterReadOnly(ctx, &gatewayv1.SetVirtualClusterReadOnlyRequest{
-	//     VirtualClusterId: vc.ID,
-	//     ReadOnly: input.ReadOnly,
-	// })
-	//
-	// TODO: Update virtual cluster status in Payload
+	// Query Payload for virtual clusters associated with this application
+	query := clients.NewQueryBuilder().
+		WhereEquals("application", input.ApplicationID).
+		Build()
 
-	// Placeholder implementation - return mock success
+	vcs, err := a.payloadClient.Find(ctx, "kafka-virtual-clusters", query)
+	if err != nil {
+		return nil, fmt.Errorf("querying virtual clusters: %w", err)
+	}
+
+	if len(vcs) == 0 {
+		a.logger.Info("No virtual clusters found for application")
+		return &SetVirtualClustersReadOnlyResult{
+			Success:                  true,
+			UpdatedVirtualClusterIDs: []string{},
+		}, nil
+	}
+
+	// For each virtual cluster, call Bifrost SetVirtualClusterReadOnly
+	var updated []string
+	var errors []string
+
+	for _, vc := range vcs {
+		vcID, ok := vc["id"].(string)
+		if !ok {
+			continue
+		}
+
+		if a.bifrostClient == nil {
+			errors = append(errors, fmt.Sprintf("%s: bifrost client not available", vcID))
+			continue
+		}
+
+		err := a.bifrostClient.SetVirtualClusterReadOnly(ctx, vcID, input.ReadOnly)
+		if err != nil {
+			a.logger.Warn("Failed to set virtual cluster read-only",
+				"vcId", vcID,
+				"error", err)
+			errors = append(errors, fmt.Sprintf("%s: %v", vcID, err))
+			continue
+		}
+
+		updated = append(updated, vcID)
+		a.logger.Info("Virtual cluster set to read-only",
+			"vcId", vcID,
+			"readOnly", input.ReadOnly)
+	}
+
+	success := len(errors) == 0
+	var errorMsg string
+	if len(errors) > 0 {
+		errorMsg = fmt.Sprintf("failed to update %d virtual clusters: %v", len(errors), errors)
+	}
+
 	return &SetVirtualClustersReadOnlyResult{
-		Success:                  true,
-		UpdatedVirtualClusterIDs: []string{"mock-vc-1", "mock-vc-2"},
+		Success:                  success,
+		UpdatedVirtualClusterIDs: updated,
+		Error:                    errorMsg,
 	}, nil
 }
 

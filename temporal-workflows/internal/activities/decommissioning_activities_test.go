@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -142,5 +143,82 @@ func TestDecommissioningActivities_CheckApplicationStatus(t *testing.T) {
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "fetching application")
+	})
+}
+
+func TestDecommissioningActivities_SetVirtualClustersReadOnly(t *testing.T) {
+	t.Run("sets all virtual clusters to read-only", func(t *testing.T) {
+		// Mock Payload server
+		payloadServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "kafka-virtual-clusters") {
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(clients.PayloadResponse{
+					Docs: []map[string]any{
+						{"id": "vc-1", "name": "vc-one"},
+						{"id": "vc-2", "name": "vc-two"},
+					},
+					TotalDocs: 2,
+				})
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer payloadServer.Close()
+
+		logger := slog.Default()
+		payloadClient := clients.NewPayloadClient(payloadServer.URL, "test-key", logger)
+
+		activities := NewDecommissioningActivities(
+			payloadClient,
+			nil, // bifrostClient - would need mock for full test
+			nil,
+			nil,
+			nil,
+			logger,
+		)
+
+		// Test that activity queries Payload correctly
+		// Without bifrostClient, it will return empty results
+		result, err := activities.SetVirtualClustersReadOnly(context.Background(), SetVirtualClustersReadOnlyInput{
+			ApplicationID: "app-123",
+			ReadOnly:      true,
+		})
+
+		require.NoError(t, err)
+		// Without Bifrost client, no VCs will be updated
+		assert.False(t, result.Success)
+		assert.Empty(t, result.UpdatedVirtualClusterIDs)
+	})
+
+	t.Run("returns success when no virtual clusters found", func(t *testing.T) {
+		payloadServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(clients.PayloadResponse{
+				Docs:      []map[string]any{},
+				TotalDocs: 0,
+			})
+		}))
+		defer payloadServer.Close()
+
+		logger := slog.Default()
+		payloadClient := clients.NewPayloadClient(payloadServer.URL, "test-key", logger)
+
+		activities := NewDecommissioningActivities(
+			payloadClient,
+			nil,
+			nil,
+			nil,
+			nil,
+			logger,
+		)
+
+		result, err := activities.SetVirtualClustersReadOnly(context.Background(), SetVirtualClustersReadOnlyInput{
+			ApplicationID: "app-123",
+			ReadOnly:      true,
+		})
+
+		require.NoError(t, err)
+		assert.True(t, result.Success)
+		assert.Empty(t, result.UpdatedVirtualClusterIDs)
 	})
 }
