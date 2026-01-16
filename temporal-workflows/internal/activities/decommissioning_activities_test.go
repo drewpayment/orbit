@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -712,6 +713,26 @@ func TestDecommissioningActivities_DeleteVirtualClustersFromBifrost(t *testing.T
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "querying virtual clusters")
+	})
+}
+
+func TestDecommissioningActivities_ScheduleCleanupWorkflow(t *testing.T) {
+	t.Run("returns error when Temporal client is nil", func(t *testing.T) {
+		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+		// No Temporal client - should handle gracefully
+		activities := NewDecommissioningActivities(nil, nil, nil, nil, nil, logger)
+
+		scheduledFor := time.Now().Add(24 * time.Hour)
+		result, err := activities.ScheduleCleanupWorkflow(context.Background(), ScheduleCleanupWorkflowInput{
+			ApplicationID: "app-123",
+			WorkspaceID:   "ws-456",
+			ScheduledFor:  scheduledFor,
+		})
+
+		// Should return error when Temporal client is nil
+		require.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "Temporal client not available")
 	})
 }
 

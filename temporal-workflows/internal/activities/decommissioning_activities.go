@@ -525,35 +525,52 @@ func (a *DecommissioningActivities) MarkApplicationDeleted(ctx context.Context, 
 
 // ScheduleCleanupWorkflow schedules a cleanup workflow to run at a future time
 func (a *DecommissioningActivities) ScheduleCleanupWorkflow(ctx context.Context, input ScheduleCleanupWorkflowInput) (*ScheduleCleanupWorkflowResult, error) {
-	logger := activity.GetLogger(ctx)
-	logger.Info("ScheduleCleanupWorkflow",
+	a.logger.Info("ScheduleCleanupWorkflow",
 		"applicationId", input.ApplicationID,
 		"workspaceId", input.WorkspaceID,
-		"scheduledFor", input.ScheduledFor)
+		"scheduledFor", input.ScheduledFor,
+	)
 
-	// TODO: Create Temporal schedule for ApplicationCleanupWorkflow
-	// scheduleClient := temporal.NewScheduleClient(connection)
-	// handle, err := scheduleClient.Create(ctx, temporal.ScheduleOptions{
-	//     ID: "cleanup-" + input.ApplicationID,
-	//     Spec: temporal.ScheduleSpec{
-	//         StartAt: input.ScheduledFor,
-	//     },
-	//     Action: &temporal.ScheduleWorkflowAction{
-	//         Workflow: "ApplicationCleanupWorkflow",
-	//         Args: []interface{}{ApplicationCleanupWorkflowInput{
-	//             ApplicationID: input.ApplicationID,
-	//             WorkspaceID:   input.WorkspaceID,
-	//         }},
-	//     },
-	// })
-	//
-	// workflowID := handle.GetID()
+	if a.temporalClient == nil {
+		return nil, fmt.Errorf("Temporal client not available")
+	}
 
-	// Placeholder implementation - return mock success
-	workflowID := "scheduled-cleanup-" + input.ApplicationID
+	scheduleID := fmt.Sprintf("cleanup-%s", input.ApplicationID)
+
+	handle, err := a.temporalClient.ScheduleClient().Create(ctx, client.ScheduleOptions{
+		ID: scheduleID,
+		Spec: client.ScheduleSpec{
+			// Schedule for one-time execution at the specified time
+			Calendars: []client.ScheduleCalendarSpec{
+				{
+					Year:       []client.ScheduleRange{{Start: input.ScheduledFor.Year()}},
+					Month:      []client.ScheduleRange{{Start: int(input.ScheduledFor.Month())}},
+					DayOfMonth: []client.ScheduleRange{{Start: input.ScheduledFor.Day()}},
+					Hour:       []client.ScheduleRange{{Start: input.ScheduledFor.Hour()}},
+					Minute:     []client.ScheduleRange{{Start: input.ScheduledFor.Minute()}},
+					Second:     []client.ScheduleRange{{Start: input.ScheduledFor.Second()}},
+				},
+			},
+		},
+		Action: &client.ScheduleWorkflowAction{
+			ID:        fmt.Sprintf("cleanup-wf-%s-%d", input.ApplicationID, time.Now().Unix()),
+			Workflow:  "ApplicationCleanupWorkflow",
+			TaskQueue: "application-cleanup",
+			Args: []interface{}{
+				map[string]string{
+					"applicationId": input.ApplicationID,
+					"workspaceId":   input.WorkspaceID,
+				},
+			},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("creating cleanup schedule: %w", err)
+	}
+
 	return &ScheduleCleanupWorkflowResult{
 		Success:    true,
-		WorkflowID: workflowID,
+		WorkflowID: handle.GetID(),
 	}, nil
 }
 
