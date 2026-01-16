@@ -31,14 +31,14 @@ interface KafkaApplicationWithLifecycle extends KafkaApplication {
 
 /**
  * Workflow input type matching Go ApplicationDecommissioningInput struct.
- * Field names use PascalCase to match Go JSON tags.
+ * Field names use camelCase to match Go JSON tags.
  */
 type ApplicationDecommissioningWorkflowInput = {
-  ApplicationID: string
-  WorkspaceID: string
-  GracePeriodEndsAt: string // ISO8601 timestamp
-  ForceDelete: boolean
-  Reason?: string
+  applicationId: string
+  workspaceId: string
+  gracePeriodEndsAt: string // ISO8601 timestamp
+  forceDelete: boolean
+  reason?: string
 }
 
 export interface DecommissionApplicationInput {
@@ -304,25 +304,59 @@ export async function decommissionApplication(
 
     // Trigger decommissioning workflow to set up cleanup schedule
     const workflowId = await triggerDecommissioningWorkflow(input.applicationId, {
-      ApplicationID: input.applicationId,
-      WorkspaceID: accessCheck.workspaceId!,
-      GracePeriodEndsAt: gracePeriodEndsAt.toISOString(),
-      ForceDelete: false,
-      Reason: input.reason,
+      applicationId: input.applicationId,
+      workspaceId: accessCheck.workspaceId!,
+      gracePeriodEndsAt: gracePeriodEndsAt.toISOString(),
+      forceDelete: false,
+      reason: input.reason,
     })
 
-    // Store workflow ID on application for tracking
-    if (workflowId) {
+    // If workflow failed to start, rollback the decommissioning
+    if (!workflowId) {
+      // Restore application status
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await payload.update({
         collection: 'kafka-applications',
         id: input.applicationId,
         data: {
-          decommissionWorkflowId: workflowId,
+          status: 'active',
+          decommissioningStartedAt: null,
+          gracePeriodEndsAt: null,
+          gracePeriodDaysOverride: null,
+          decommissionReason: null,
         } as any,
         overrideAccess: true,
       })
+
+      // Restore virtual clusters to active
+      for (const vc of virtualClusters.docs) {
+        if (vc.status === 'active') {
+          // These were set to read_only above, restore them
+          await payload.update({
+            collection: 'kafka-virtual-clusters',
+            id: vc.id,
+            data: { status: 'active' },
+            overrideAccess: true,
+          })
+        }
+      }
+
+      return {
+        success: false,
+        error: 'Failed to start decommissioning workflow. Please try again.',
+      }
     }
+
+    // Store workflow ID on application for tracking
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await payload.update({
+      collection: 'kafka-applications',
+      id: input.applicationId,
+      data: {
+        decommissionWorkflowId: workflowId,
+      } as any,
+      overrideAccess: true,
+    })
 
     return {
       success: true,
@@ -533,7 +567,33 @@ export async function forceDeleteApplication(
       overrideAccess: true,
     })
 
-    // Mark all topics as deleted
+    // Cancel any existing cleanup schedule first (if application was already decommissioning)
+    const scheduleCanceled = await cancelCleanupSchedule(applicationId)
+    if (!scheduleCanceled && app.cleanupWorkflowId) {
+      console.warn(
+        `[Kafka] Failed to cancel cleanup schedule for application ${applicationId}. ` +
+          'Manual cleanup may still occur at scheduled time.'
+      )
+    }
+
+    // Trigger immediate cleanup workflow BEFORE marking anything as deleted
+    // This ensures the workflow can clean up physical resources
+    const workflowId = await triggerDecommissioningWorkflow(applicationId, {
+      applicationId: applicationId,
+      workspaceId: accessCheck.workspaceId!,
+      gracePeriodEndsAt: new Date().toISOString(), // Immediate
+      forceDelete: true,
+      reason: reason || app.decommissionReason || 'Force deleted',
+    })
+
+    if (!workflowId) {
+      return {
+        success: false,
+        error: 'Failed to start force delete workflow. Physical resources were not cleaned up.',
+      }
+    }
+
+    // Now mark all topics as deleted in the database
     let deletedTopics = 0
     for (const topic of topics.docs) {
       await payload.update({
@@ -561,7 +621,7 @@ export async function forceDeleteApplication(
       deletedVirtualClusters++
     }
 
-    // Mark application as deleted
+    // Mark application as deleted with workflow ID
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Lifecycle fields exist in collection but may not be in generated types yet
     await payload.update({
       collection: 'kafka-applications',
@@ -572,34 +632,10 @@ export async function forceDeleteApplication(
         deletedBy: session.user.id,
         forceDeleted: true,
         decommissionReason: reason || app.decommissionReason,
+        decommissionWorkflowId: workflowId,
       } as any,
       overrideAccess: true,
     })
-
-    // Cancel any existing cleanup schedule (if application was already decommissioning)
-    await cancelCleanupSchedule(applicationId)
-
-    // Trigger immediate cleanup workflow with ForceDelete=true
-    const workflowId = await triggerDecommissioningWorkflow(applicationId, {
-      ApplicationID: applicationId,
-      WorkspaceID: accessCheck.workspaceId!,
-      GracePeriodEndsAt: new Date().toISOString(), // Immediate
-      ForceDelete: true,
-      Reason: reason || app.decommissionReason || 'Force deleted',
-    })
-
-    // Store workflow ID for tracking
-    if (workflowId) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await payload.update({
-        collection: 'kafka-applications',
-        id: applicationId,
-        data: {
-          decommissionWorkflowId: workflowId,
-        } as any,
-        overrideAccess: true,
-      })
-    }
 
     return {
       success: true,
