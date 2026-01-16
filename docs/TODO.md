@@ -2,7 +2,7 @@
 
 This document tracks planned features, incomplete implementations, and technical debt across the Orbit codebase.
 
-**Last Updated:** 2026-01-15 (Server Action Temporal Integration completed)
+**Last Updated:** 2026-01-16 (Decommissioning Activities Implementation completed)
 
 ---
 
@@ -67,12 +67,13 @@ The following are fully implemented and functional:
 
 ### High Priority - Temporal Activity Implementation
 
-**Status:** Topic Provisioning Path implemented, other activities stubbed
+**Status:** All core activities implemented (Topic, Schema, Access, Lineage, Decommissioning)
 **Location:** `temporal-workflows/internal/activities/`
 
 #### Shared Infrastructure (COMPLETED)
 - [x] `PayloadClient` - Generic HTTP client for Payload CMS REST API (`internal/clients/payload_client.go`)
 - [x] `BifrostClient` - gRPC client for Bifrost Admin Service (`internal/clients/bifrost_client.go`)
+- [x] `StorageClient` - MinIO/S3 client for metrics archiving (`internal/clients/storage_client.go`)
 
 #### virtual_cluster_activities.go (COMPLETED - Topic Provisioning Path)
 - [x] `GetEnvironmentMapping` - Queries kafka-environment-mappings for default cluster
@@ -111,17 +112,23 @@ The following are fully implemented and functional:
 - [x] `MarkInactiveEdges` - Marks edges as inactive if not seen within threshold
 - [x] `CreateDailySnapshots` - Creates daily lineage snapshots for all active topics
 
-#### decommissioning_activities.go (Lifecycle Management)
-- [ ] `SetVirtualClustersReadOnly` - Returns mock success
-- [ ] `CheckpointConsumerOffsets` - Returns mock success
-- [ ] `NotifyWorkspaceAdmins` - Returns mock success
-- [ ] `ArchiveApplicationData` - Returns mock success
-- [ ] `CleanupServiceAccounts` - Returns mock success
-- [ ] `RevokeAllCredentials` - Returns mock success
-- [ ] `DeletePhysicalTopics` - Returns mock success
-- [ ] `RemoveFromBifrost` - Returns mock success
-- [ ] `CreateAuditRecord` - Returns mock success
-- [ ] `RestoreConsumerOffsets` - Returns mock success
+#### decommissioning_activities.go (COMPLETED - Lifecycle Management)
+- [x] `CheckApplicationStatus` - Verifies application can proceed with decommissioning
+- [x] `SetVirtualClustersReadOnly` - Sets VCs to read-only in Bifrost gateway
+- [x] `MarkApplicationDeleted` - Updates application status to 'deleted' in Payload CMS
+- [x] `UpdateApplicationWorkflowID` - Records cleanup workflow ID in application
+- [x] `RevokeAllCredentials` - Revokes service account credentials from Bifrost
+- [x] `DeletePhysicalTopics` - Deletes Kafka topics from clusters via adapter
+- [x] `DeleteVirtualClustersFromBifrost` - Removes VCs from Bifrost gateway
+- [x] `ArchiveMetricsData` - Archives usage metrics to S3/MinIO
+- [x] `ScheduleCleanupWorkflow` - Creates Temporal schedule for cleanup
+- [x] `ExecuteImmediateCleanup` - Orchestrates immediate cleanup (composes other activities)
+
+#### decommissioning_activities.go (Future - Not Yet Implemented)
+- [ ] `CheckpointConsumerOffsets` - Checkpoint consumer offsets before deletion
+- [ ] `NotifyWorkspaceAdmins` - Send notifications to workspace admins
+- [ ] `CreateAuditRecord` - Create audit trail for decommissioning
+- [ ] `RestoreConsumerOffsets` - Restore consumer offsets from checkpoint
 
 ---
 
@@ -198,8 +205,8 @@ End-to-end integration test to validate the complete lineage data flow:
 #### Offset Recovery (Need workflow completion + server action)
 - [ ] `kafka-offset-recovery.ts` - `executeOffsetRestore` returns placeholder (line 373)
 
-#### Application Lifecycle (Decommissioning activities still stubbed)
-- [ ] `kafka-application-lifecycle.ts` - Temporal workflow triggers (lines 236, 353, 487-488)
+#### Application Lifecycle (Decommissioning activities now implemented)
+- [ ] `kafka-application-lifecycle.ts` - Wire server actions to decommissioning workflows (lines 236, 353, 487-488)
 
 ---
 
@@ -256,11 +263,13 @@ All repository implementations are in-memory stubs. Consider connecting to Paylo
 ---
 
 ### Temporal Worker Dependencies
-**Status:** PayloadClient and BifrostClient implemented
+**Status:** PayloadClient, BifrostClient, and StorageClient implemented
 **Location:** `temporal-workflows/cmd/worker/main.go`
 
 - [x] `PayloadClient` - Payload CMS API communication (implemented in `internal/clients/payload_client.go`)
 - [x] `BifrostClient` - Bifrost gateway gRPC client (implemented in `internal/clients/bifrost_client.go`)
+- [x] `StorageClient` - MinIO/S3 client for metrics archiving (implemented in `internal/clients/storage_client.go`)
+- [x] `KafkaAdapterFactory` - Creates Kafka/Schema Registry adapters (implemented in `internal/clients/kafka_adapter_factory.go`)
 - [ ] `EncryptionService` - Secret encryption/decryption
 - [ ] `GitHubClient` - GitHub API interactions
 
