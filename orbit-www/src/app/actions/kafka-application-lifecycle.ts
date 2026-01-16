@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
+import { getTemporalClient } from '@/lib/temporal/client'
 import {
   calculateGracePeriodEnd,
   calculateLifecycleState,
@@ -24,7 +25,20 @@ interface KafkaApplicationWithLifecycle extends KafkaApplication {
   gracePeriodEndsAt?: string | null
   gracePeriodDaysOverride?: number | null
   cleanupWorkflowId?: string | null
+  decommissionWorkflowId?: string | null
   decommissionReason?: string | null
+}
+
+/**
+ * Workflow input type matching Go ApplicationDecommissioningInput struct.
+ * Field names use PascalCase to match Go JSON tags.
+ */
+type ApplicationDecommissioningWorkflowInput = {
+  ApplicationID: string
+  WorkspaceID: string
+  GracePeriodEndsAt: string // ISO8601 timestamp
+  ForceDelete: boolean
+  Reason?: string
 }
 
 export interface DecommissionApplicationInput {
@@ -110,6 +124,61 @@ async function verifyWorkspaceAdminAccess(
   }
 
   return { allowed: true, workspaceId }
+}
+
+/**
+ * Trigger the ApplicationDecommissioningWorkflow in Temporal.
+ *
+ * @param applicationId - Application ID (used for workflow ID)
+ * @param input - Workflow input matching Go struct
+ * @returns Workflow ID if started successfully, null otherwise
+ */
+async function triggerDecommissioningWorkflow(
+  applicationId: string,
+  input: ApplicationDecommissioningWorkflowInput
+): Promise<string | null> {
+  const workflowId = `app-decommission-${applicationId}`
+
+  try {
+    const client = await getTemporalClient()
+
+    const handle = await client.workflow.start('ApplicationDecommissioningWorkflow', {
+      taskQueue: 'orbit-workflows',
+      workflowId,
+      args: [input],
+    })
+
+    console.log(
+      `[Kafka] Started ApplicationDecommissioningWorkflow: ${handle.workflowId} for application ${applicationId}`
+    )
+
+    return handle.workflowId
+  } catch (error) {
+    console.error('[Kafka] Failed to start ApplicationDecommissioningWorkflow:', error)
+    return null
+  }
+}
+
+/**
+ * Cancel a scheduled cleanup workflow by deleting the Temporal schedule.
+ *
+ * @param applicationId - Application ID (schedule ID is `cleanup-{applicationId}`)
+ * @returns true if schedule was deleted, false if it didn't exist or deletion failed
+ */
+async function cancelCleanupSchedule(applicationId: string): Promise<boolean> {
+  const scheduleId = `cleanup-${applicationId}`
+
+  try {
+    const client = await getTemporalClient()
+    const scheduleHandle = client.schedule.getHandle(scheduleId)
+    await scheduleHandle.delete()
+    console.log(`[Kafka] Deleted cleanup schedule: ${scheduleId}`)
+    return true
+  } catch (error) {
+    // Schedule may not exist, which is fine
+    console.log(`[Kafka] Could not delete schedule ${scheduleId}:`, error)
+    return false
+  }
 }
 
 // ============================================================================
@@ -233,7 +302,27 @@ export async function decommissionApplication(
       }
     }
 
-    // TODO: Trigger Temporal workflow for scheduled cleanup after grace period
+    // Trigger decommissioning workflow to set up cleanup schedule
+    const workflowId = await triggerDecommissioningWorkflow(input.applicationId, {
+      ApplicationID: input.applicationId,
+      WorkspaceID: accessCheck.workspaceId!,
+      GracePeriodEndsAt: gracePeriodEndsAt.toISOString(),
+      ForceDelete: false,
+      Reason: input.reason,
+    })
+
+    // Store workflow ID on application for tracking
+    if (workflowId) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await payload.update({
+        collection: 'kafka-applications',
+        id: input.applicationId,
+        data: {
+          decommissionWorkflowId: workflowId,
+        } as any,
+        overrideAccess: true,
+      })
+    }
 
     return {
       success: true,
@@ -350,7 +439,10 @@ export async function cancelDecommissioning(
       overrideAccess: true,
     })
 
-    // TODO: Cancel Temporal cleanup workflow if one was started
+    // Cancel the scheduled cleanup workflow if one exists
+    if (app.cleanupWorkflowId) {
+      await cancelCleanupSchedule(applicationId)
+    }
 
     return {
       success: true,
@@ -484,8 +576,30 @@ export async function forceDeleteApplication(
       overrideAccess: true,
     })
 
-    // TODO: Cancel any active Temporal workflows for this application
-    // TODO: Trigger cleanup workflow to remove physical resources
+    // Cancel any existing cleanup schedule (if application was already decommissioning)
+    await cancelCleanupSchedule(applicationId)
+
+    // Trigger immediate cleanup workflow with ForceDelete=true
+    const workflowId = await triggerDecommissioningWorkflow(applicationId, {
+      ApplicationID: applicationId,
+      WorkspaceID: accessCheck.workspaceId!,
+      GracePeriodEndsAt: new Date().toISOString(), // Immediate
+      ForceDelete: true,
+      Reason: reason || app.decommissionReason || 'Force deleted',
+    })
+
+    // Store workflow ID for tracking
+    if (workflowId) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await payload.update({
+        collection: 'kafka-applications',
+        id: applicationId,
+        data: {
+          decommissionWorkflowId: workflowId,
+        } as any,
+        overrideAccess: true,
+      })
+    }
 
     return {
       success: true,

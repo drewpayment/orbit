@@ -2,7 +2,7 @@
 
 This document tracks planned features, incomplete implementations, and technical debt across the Orbit codebase.
 
-**Last Updated:** 2026-01-16 (Decommissioning Activities Implementation completed)
+**Last Updated:** 2026-01-16 (Application Lifecycle Temporal Integration completed)
 
 ---
 
@@ -205,8 +205,11 @@ End-to-end integration test to validate the complete lineage data flow:
 #### Offset Recovery (Need workflow completion + server action)
 - [ ] `kafka-offset-recovery.ts` - `executeOffsetRestore` returns placeholder (line 373)
 
-#### Application Lifecycle (Decommissioning activities now implemented)
-- [ ] `kafka-application-lifecycle.ts` - Wire server actions to decommissioning workflows (lines 236, 353, 487-488)
+#### Application Lifecycle (COMPLETED)
+- [x] `kafka-application-lifecycle.ts` - Wire server actions to decommissioning workflows
+  - `decommissionApplication()` - Triggers `ApplicationDecommissioningWorkflow` with `ForceDelete: false`
+  - `cancelDecommissioning()` - Cancels scheduled cleanup via Temporal Schedule API
+  - `forceDeleteApplication()` - Triggers `ApplicationDecommissioningWorkflow` with `ForceDelete: true`
 
 ---
 
