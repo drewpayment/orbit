@@ -383,27 +383,62 @@ func (a *DecommissioningActivities) RevokeAllCredentials(ctx context.Context, in
 
 // DeleteVirtualClustersFromBifrost removes all virtual clusters from Bifrost for an application
 func (a *DecommissioningActivities) DeleteVirtualClustersFromBifrost(ctx context.Context, input DeleteVirtualClustersFromBifrostInput) (*DeleteVirtualClustersFromBifrostResult, error) {
-	logger := activity.GetLogger(ctx)
-	logger.Info("DeleteVirtualClustersFromBifrost",
-		"applicationId", input.ApplicationID)
+	a.logger.Info("DeleteVirtualClustersFromBifrost", "applicationId", input.ApplicationID)
 
-	// TODO: Query Payload for virtual clusters associated with this application
-	// GET /api/virtual-clusters?where[application][equals]={applicationId}
-	//
-	// TODO: For each virtual cluster, call Bifrost DeleteVirtualCluster RPC
-	// conn, err := grpc.Dial(a.bifrostURL, grpc.WithInsecure())
-	// client := gatewayv1.NewBifrostAdminServiceClient(conn)
-	// client.DeleteVirtualCluster(ctx, &gatewayv1.DeleteVirtualClusterRequest{
-	//     VirtualClusterId: vc.ID,
-	// })
-	//
-	// TODO: Update virtual cluster status in Payload to "deleted"
-	// PATCH /api/virtual-clusters/{id} { status: "deleted" }
+	// Query virtual clusters for this application
+	query := clients.NewQueryBuilder().
+		WhereEquals("application", input.ApplicationID).
+		Build()
 
-	// Placeholder implementation - return mock success
+	vcs, err := a.payloadClient.Find(ctx, "kafka-virtual-clusters", query)
+	if err != nil {
+		return nil, fmt.Errorf("querying virtual clusters: %w", err)
+	}
+
+	var deleted []string
+	var failed []string
+
+	for _, vc := range vcs {
+		vcID, ok := vc["id"].(string)
+		if !ok {
+			continue
+		}
+
+		// Delete from Bifrost if client is available
+		if a.bifrostClient != nil {
+			if err := a.bifrostClient.DeleteVirtualCluster(ctx, vcID); err != nil {
+				a.logger.Warn("Failed to delete virtual cluster from Bifrost",
+					"vcId", vcID,
+					"error", err,
+				)
+				failed = append(failed, vcID)
+				continue
+			}
+		} else {
+			a.logger.Warn("BifrostClient not available, skipping gateway deletion",
+				"vcId", vcID,
+			)
+			// Continue anyway to update status in Payload
+		}
+
+		// Update status in Payload CMS
+		if err := a.payloadClient.Update(ctx, "kafka-virtual-clusters", vcID, map[string]any{
+			"status": "deleted",
+		}); err != nil {
+			a.logger.Warn("Failed to update virtual cluster status",
+				"vcId", vcID,
+				"error", err,
+			)
+			failed = append(failed, vcID)
+			continue
+		}
+
+		deleted = append(deleted, vcID)
+	}
+
 	return &DeleteVirtualClustersFromBifrostResult{
-		Success:                  true,
-		DeletedVirtualClusterIDs: []string{"mock-vc-1", "mock-vc-2"},
+		Success:                  len(failed) == 0,
+		DeletedVirtualClusterIDs: deleted,
 	}, nil
 }
 

@@ -585,3 +585,132 @@ func TestDecommissioningActivities_DeletePhysicalTopics(t *testing.T) {
 		assert.Equal(t, []string{"topic-1"}, result.FailedTopics)
 	})
 }
+
+func TestDecommissioningActivities_DeleteVirtualClustersFromBifrost(t *testing.T) {
+	t.Run("deletes virtual clusters and updates status", func(t *testing.T) {
+		var patchedVCs []string
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Find virtual clusters query
+			if r.Method == "GET" && strings.Contains(r.URL.Path, "/api/kafka-virtual-clusters") {
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(map[string]any{
+					"docs": []map[string]any{
+						{"id": "vc-1", "status": "active"},
+						{"id": "vc-2", "status": "active"},
+					},
+				})
+				return
+			}
+			// Patch virtual cluster status (internal API route)
+			if r.Method == "PATCH" && strings.Contains(r.URL.Path, "/api/internal/kafka-virtual-clusters/") {
+				parts := strings.Split(r.URL.Path, "/")
+				vcID := parts[len(parts)-1]
+				patchedVCs = append(patchedVCs, vcID)
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(map[string]any{"id": vcID, "status": "deleted"})
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+
+		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+		payloadClient := clients.NewPayloadClient(server.URL, "test-key", logger)
+		// BifrostClient is nil - deletion from gateway will be skipped but status still updated
+		activities := NewDecommissioningActivities(payloadClient, nil, nil, nil, nil, logger)
+
+		result, err := activities.DeleteVirtualClustersFromBifrost(context.Background(), DeleteVirtualClustersFromBifrostInput{
+			ApplicationID: "app-123",
+		})
+
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.True(t, result.Success)
+		assert.ElementsMatch(t, []string{"vc-1", "vc-2"}, result.DeletedVirtualClusterIDs)
+		assert.ElementsMatch(t, []string{"vc-1", "vc-2"}, patchedVCs)
+	})
+
+	t.Run("returns success when no virtual clusters found", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" && strings.Contains(r.URL.Path, "/api/kafka-virtual-clusters") {
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(map[string]any{
+					"docs": []map[string]any{},
+				})
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+
+		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+		payloadClient := clients.NewPayloadClient(server.URL, "test-key", logger)
+		activities := NewDecommissioningActivities(payloadClient, nil, nil, nil, nil, logger)
+
+		result, err := activities.DeleteVirtualClustersFromBifrost(context.Background(), DeleteVirtualClustersFromBifrostInput{
+			ApplicationID: "app-123",
+		})
+
+		require.NoError(t, err)
+		assert.True(t, result.Success)
+		assert.Empty(t, result.DeletedVirtualClusterIDs)
+	})
+
+	t.Run("tracks failed status updates", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" && strings.Contains(r.URL.Path, "/api/kafka-virtual-clusters") {
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(map[string]any{
+					"docs": []map[string]any{
+						{"id": "vc-1", "status": "active"},
+						{"id": "vc-2", "status": "active"},
+					},
+				})
+				return
+			}
+			// First VC succeeds, second fails (internal API route)
+			if r.Method == "PATCH" && strings.Contains(r.URL.Path, "/api/internal/kafka-virtual-clusters/vc-1") {
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(map[string]any{"id": "vc-1", "status": "deleted"})
+				return
+			}
+			if r.Method == "PATCH" && strings.Contains(r.URL.Path, "/api/internal/kafka-virtual-clusters/vc-2") {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+
+		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+		payloadClient := clients.NewPayloadClient(server.URL, "test-key", logger)
+		activities := NewDecommissioningActivities(payloadClient, nil, nil, nil, nil, logger)
+
+		result, err := activities.DeleteVirtualClustersFromBifrost(context.Background(), DeleteVirtualClustersFromBifrostInput{
+			ApplicationID: "app-123",
+		})
+
+		require.NoError(t, err)
+		assert.False(t, result.Success) // Partial failure
+		assert.Equal(t, []string{"vc-1"}, result.DeletedVirtualClusterIDs)
+	})
+
+	t.Run("returns error when query fails", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+		payloadClient := clients.NewPayloadClient(server.URL, "test-key", logger)
+		activities := NewDecommissioningActivities(payloadClient, nil, nil, nil, nil, logger)
+
+		_, err := activities.DeleteVirtualClustersFromBifrost(context.Background(), DeleteVirtualClustersFromBifrostInput{
+			ApplicationID: "app-123",
+		})
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "querying virtual clusters")
+	})
+}
