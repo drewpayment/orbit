@@ -105,6 +105,29 @@ func main() {
 		deploymentWorkDir = "/tmp/orbit-deployments"
 	}
 
+	// MinIO/S3 configuration for archiving
+	minioEndpoint := os.Getenv("MINIO_ENDPOINT")
+	if minioEndpoint == "" {
+		minioEndpoint = "localhost:9000"
+	}
+
+	minioAccessKey := os.Getenv("MINIO_ACCESS_KEY")
+	if minioAccessKey == "" {
+		minioAccessKey = "minioadmin"
+	}
+
+	minioSecretKey := os.Getenv("MINIO_SECRET_KEY")
+	if minioSecretKey == "" {
+		minioSecretKey = "minioadmin"
+	}
+
+	minioBucket := os.Getenv("MINIO_BUCKET")
+	if minioBucket == "" {
+		minioBucket = "orbit-archives"
+	}
+
+	minioUseSSL := os.Getenv("MINIO_USE_SSL") == "true"
+
 	orbitInternalAPIKey := os.Getenv("ORBIT_INTERNAL_API_KEY")
 	if orbitInternalAPIKey == "" {
 		log.Println("Warning: ORBIT_INTERNAL_API_KEY not set, GitHub operations will fail")
@@ -307,6 +330,52 @@ func main() {
 	w.RegisterActivity(lineageActivities.MarkInactiveEdges)
 	w.RegisterActivity(lineageActivities.CreateDailySnapshots)
 	log.Printf("Lineage activities registered with Payload URL: %s", orbitAPIURL)
+
+	// Create storage client for archiving
+	storageClient, err := internalClients.NewStorageClient(
+		minioEndpoint,
+		minioAccessKey,
+		minioSecretKey,
+		minioBucket,
+		minioUseSSL,
+		logger,
+	)
+	if err != nil {
+		log.Printf("Warning: Failed to create storage client: %v", err)
+		log.Println("Archiving activities will not work until MinIO is available")
+		storageClient = nil
+	} else {
+		defer storageClient.Close()
+		// Ensure bucket exists
+		if err := storageClient.EnsureBucket(context.Background()); err != nil {
+			log.Printf("Warning: Failed to ensure bucket exists: %v", err)
+		}
+	}
+
+	// Register decommissioning/cleanup workflows
+	w.RegisterWorkflow(workflows.ApplicationDecommissioningWorkflow)
+	w.RegisterWorkflow(workflows.ApplicationCleanupWorkflow)
+
+	// Create and register decommissioning activities
+	decommissioningActivities := activities.NewDecommissioningActivities(
+		kafkaPayloadClient,
+		bifrostClient,
+		kafkaAdapterFactory,
+		storageClient,
+		c, // Temporal client for schedule creation
+		logger,
+	)
+	w.RegisterActivity(decommissioningActivities.CheckApplicationStatus)
+	w.RegisterActivity(decommissioningActivities.SetVirtualClustersReadOnly)
+	w.RegisterActivity(decommissioningActivities.MarkApplicationDeleted)
+	w.RegisterActivity(decommissioningActivities.UpdateApplicationWorkflowID)
+	w.RegisterActivity(decommissioningActivities.RevokeAllCredentials)
+	w.RegisterActivity(decommissioningActivities.DeletePhysicalTopics)
+	w.RegisterActivity(decommissioningActivities.DeleteVirtualClustersFromBifrost)
+	w.RegisterActivity(decommissioningActivities.ArchiveMetricsData)
+	w.RegisterActivity(decommissioningActivities.ScheduleCleanupWorkflow)
+	w.RegisterActivity(decommissioningActivities.ExecuteImmediateCleanup)
+	log.Printf("Decommissioning activities registered with MinIO endpoint: %s", minioEndpoint)
 
 	log.Println("Starting Temporal worker...")
 	log.Printf("Temporal address: %s", temporalAddress)
