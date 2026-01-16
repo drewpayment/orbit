@@ -259,3 +259,34 @@ func TestDecommissioningActivities_MarkApplicationDeleted(t *testing.T) {
 	assert.Equal(t, true, patchBody["forceDeleted"])
 	assert.NotEmpty(t, patchBody["deletedAt"])
 }
+
+func TestDecommissioningActivities_UpdateApplicationWorkflowID(t *testing.T) {
+	var patchCalled bool
+	var patchBody map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "PATCH" && strings.Contains(r.URL.Path, "/api/kafka-applications/app-123") {
+			patchCalled = true
+			body, _ := io.ReadAll(r.Body)
+			json.Unmarshal(body, &patchBody)
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]any{"id": "app-123"})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	payloadClient := clients.NewPayloadClient(server.URL, "test-key", logger)
+	activities := NewDecommissioningActivities(payloadClient, nil, nil, nil, nil, logger)
+
+	err := activities.UpdateApplicationWorkflowID(context.Background(), UpdateApplicationWorkflowIDInput{
+		ApplicationID: "app-123",
+		WorkflowID:    "cleanup-wf-app-123-1234567890",
+	})
+
+	require.NoError(t, err)
+	assert.True(t, patchCalled, "PATCH should be called")
+	assert.Equal(t, "cleanup-wf-app-123-1234567890", patchBody["cleanupWorkflowId"])
+}

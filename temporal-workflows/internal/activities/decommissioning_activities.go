@@ -404,18 +404,14 @@ func (a *DecommissioningActivities) ScheduleCleanupWorkflow(ctx context.Context,
 
 // UpdateApplicationWorkflowID updates the cleanup workflow ID for an application
 func (a *DecommissioningActivities) UpdateApplicationWorkflowID(ctx context.Context, input UpdateApplicationWorkflowIDInput) error {
-	logger := activity.GetLogger(ctx)
-	logger.Info("UpdateApplicationWorkflowID",
+	a.logger.Info("UpdateApplicationWorkflowID",
 		"applicationId", input.ApplicationID,
-		"workflowId", input.WorkflowID)
+		"workflowId", input.WorkflowID,
+	)
 
-	// TODO: Update application's cleanupWorkflowId field in Payload
-	// PATCH /api/applications/{applicationId}
-	// {
-	//     cleanupWorkflowId: input.WorkflowID
-	// }
-
-	return nil
+	return a.payloadClient.Update(ctx, "kafka-applications", input.ApplicationID, map[string]any{
+		"cleanupWorkflowId": input.WorkflowID,
+	})
 }
 
 // ExecuteImmediateCleanup performs immediate cleanup of all application resources
