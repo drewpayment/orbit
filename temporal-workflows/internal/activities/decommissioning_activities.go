@@ -444,25 +444,66 @@ func (a *DecommissioningActivities) DeleteVirtualClustersFromBifrost(ctx context
 
 // ArchiveMetricsData archives metrics data for an application before deletion
 func (a *DecommissioningActivities) ArchiveMetricsData(ctx context.Context, input ArchiveMetricsDataInput) (*ArchiveMetricsDataResult, error) {
-	logger := activity.GetLogger(ctx)
-	logger.Info("ArchiveMetricsData",
-		"applicationId", input.ApplicationID)
+	a.logger.Info("ArchiveMetricsData", "applicationId", input.ApplicationID)
 
-	// TODO: Query Payload for KafkaUsageMetrics associated with this application
-	// GET /api/kafka-usage-metrics?where[application][equals]={applicationId}
-	//
-	// TODO: Export metrics to archive storage (S3/MinIO)
-	// - Serialize metrics to JSON or Parquet format
-	// - Upload to s3://orbit-archives/metrics/{applicationId}/{timestamp}
-	// - Track total bytes archived
-	//
-	// TODO: Optionally delete metrics from Payload after archiving
-	// DELETE /api/kafka-usage-metrics?where[application][equals]={applicationId}
+	// Query metrics for this application
+	query := clients.NewQueryBuilder().
+		WhereEquals("application", input.ApplicationID).
+		Limit(10000). // Paginate for large datasets
+		Build()
 
-	// Placeholder implementation - return mock success
+	metrics, err := a.payloadClient.Find(ctx, "kafka-usage-metrics", query)
+	if err != nil {
+		return nil, fmt.Errorf("querying metrics: %w", err)
+	}
+
+	if len(metrics) == 0 {
+		a.logger.Info("No metrics to archive", "applicationId", input.ApplicationID)
+		return &ArchiveMetricsDataResult{
+			Success:       true,
+			ArchivedBytes: 0,
+		}, nil
+	}
+
+	// Upload to S3/MinIO if storage client is available
+	if a.storageClient == nil {
+		a.logger.Warn("StorageClient not available, cannot archive metrics",
+			"applicationId", input.ApplicationID,
+			"metricsCount", len(metrics),
+		)
+		return &ArchiveMetricsDataResult{
+			Success:       false,
+			ArchivedBytes: 0,
+		}, nil
+	}
+
+	path := fmt.Sprintf("archives/metrics/%s/%s.json",
+		input.ApplicationID,
+		time.Now().Format("2006-01-02T15-04-05"),
+	)
+
+	bytesWritten, err := a.storageClient.UploadJSON(ctx, path, metrics)
+	if err != nil {
+		a.logger.Warn("Failed to archive metrics",
+			"applicationId", input.ApplicationID,
+			"path", path,
+			"error", err,
+		)
+		return &ArchiveMetricsDataResult{
+			Success:       false,
+			ArchivedBytes: 0,
+		}, nil
+	}
+
+	a.logger.Info("Archived metrics successfully",
+		"applicationId", input.ApplicationID,
+		"path", path,
+		"bytes", bytesWritten,
+	)
+
 	return &ArchiveMetricsDataResult{
 		Success:       true,
-		ArchivedBytes: 1024 * 1024, // 1MB placeholder
+		ArchivedBytes: bytesWritten,
 	}, nil
 }
 

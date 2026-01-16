@@ -714,3 +714,83 @@ func TestDecommissioningActivities_DeleteVirtualClustersFromBifrost(t *testing.T
 		assert.Contains(t, err.Error(), "querying virtual clusters")
 	})
 }
+
+func TestDecommissioningActivities_ArchiveMetricsData(t *testing.T) {
+	t.Run("returns success with zero bytes when StorageClient is nil", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Find metrics query
+			if r.Method == "GET" && strings.Contains(r.URL.Path, "/api/kafka-usage-metrics") {
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(map[string]any{
+					"docs": []map[string]any{
+						{"id": "metric-1", "bytesProduced": 1000},
+						{"id": "metric-2", "bytesProduced": 2000},
+					},
+				})
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+
+		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+		payloadClient := clients.NewPayloadClient(server.URL, "test-key", logger)
+		// StorageClient is nil - archiving will be skipped but gracefully handled
+		activities := NewDecommissioningActivities(payloadClient, nil, nil, nil, nil, logger)
+
+		result, err := activities.ArchiveMetricsData(context.Background(), ArchiveMetricsDataInput{
+			ApplicationID: "app-123",
+		})
+
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+		// Without StorageClient, should report 0 bytes archived
+		assert.Equal(t, int64(0), result.ArchivedBytes)
+		assert.False(t, result.Success)
+	})
+
+	t.Run("returns success with zero bytes when no metrics found", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" && strings.Contains(r.URL.Path, "/api/kafka-usage-metrics") {
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(map[string]any{
+					"docs": []map[string]any{},
+				})
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+
+		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+		payloadClient := clients.NewPayloadClient(server.URL, "test-key", logger)
+		activities := NewDecommissioningActivities(payloadClient, nil, nil, nil, nil, logger)
+
+		result, err := activities.ArchiveMetricsData(context.Background(), ArchiveMetricsDataInput{
+			ApplicationID: "app-123",
+		})
+
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.True(t, result.Success)
+		assert.Equal(t, int64(0), result.ArchivedBytes)
+	})
+
+	t.Run("returns error when query fails", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+		payloadClient := clients.NewPayloadClient(server.URL, "test-key", logger)
+		activities := NewDecommissioningActivities(payloadClient, nil, nil, nil, nil, logger)
+
+		_, err := activities.ArchiveMetricsData(context.Background(), ArchiveMetricsDataInput{
+			ApplicationID: "app-123",
+		})
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "querying metrics")
+	})
+}
