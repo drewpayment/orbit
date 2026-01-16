@@ -37,7 +37,12 @@ The following are fully implemented and functional:
   - Domain models, gRPC handlers, service layer
   - Contract tests (1,293 lines)
   - Schema Registry adapter (full HTTP client)
-  - Apache Kafka adapter: ValidateConnection, CreateTopic, DeleteTopic, ListTopics
+  - Apache Kafka adapter: All methods implemented (topics, ACLs, consumer groups, configs)
+    - SASL/TLS authentication (PLAIN, SCRAM-SHA-256, SCRAM-SHA-512)
+    - Topic operations: Create, Delete, List, Describe, UpdateConfig
+    - ACL operations: Create, Delete, List
+    - Consumer group operations: List, GetLag
+    - Metrics: GetTopicMetrics (partition/replica counts)
 
 - [x] **Bifrost Gateway** (`gateway/bifrost/`)
   - All filters: Auth, Policy, TopicRewrite, GroupRewrite, TopicACL, ActivityTracking
@@ -121,24 +126,7 @@ The following are fully implemented and functional:
 
 ---
 
-### High Priority - Apache Kafka Adapter Gaps
-
-**Status:** Several methods return `ErrNotConfigured`
-**Location:** `services/kafka/internal/adapters/apache/client.go`
-
-- [ ] `DescribeTopic` - Returns ErrNotConfigured (line 251)
-- [ ] `UpdateTopicConfig` - Returns ErrNotConfigured (line 258)
-- [ ] `CreateACL` - Returns ErrNotConfigured (line 292)
-- [ ] `DeleteACL` - Returns ErrNotConfigured (line 299)
-- [ ] `ListACLs` - Returns ErrNotConfigured (line 306)
-- [ ] `GetTopicMetrics` - Returns ErrNotConfigured (line 313)
-- [ ] `GetConsumerGroupLag` - Returns ErrNotConfigured (line 319)
-- [ ] `ListConsumerGroups` - Returns ErrNotConfigured (line 326)
-- [ ] SASL/TLS configuration - TODO at lines 69-72
-
----
-
-### High Priority - Bifrost Callback Client (COMPLETED)
+### Bifrost Callback Client (COMPLETED)
 
 **Status:** GrpcBifrostCallbackClient fully implemented
 **Location:** `gateway/bifrost/src/main/kotlin/io/orbit/bifrost/callback/BifrostCallbackClient.kt`

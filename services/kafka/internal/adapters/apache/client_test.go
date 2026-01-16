@@ -1,7 +1,6 @@
 package apache
 
 import (
-	"context"
 	"testing"
 
 	"github.com/drewpayment/orbit/services/kafka/internal/adapters"
@@ -134,30 +133,9 @@ func TestClient_ImplementsInterface(t *testing.T) {
 	var _ adapters.KafkaAdapter = (*Client)(nil)
 }
 
-func TestClient_StubMethodsReturnNotConfigured(t *testing.T) {
-	config := Config{
-		BootstrapServers: []string{"localhost:9092"},
-	}
-	client, err := NewClient(config)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	ctx := context.Background()
-
-	// Test that stub methods return ErrNotConfigured
-	if err := client.ValidateConnection(ctx); err != ErrNotConfigured {
-		t.Errorf("ValidateConnection() should return ErrNotConfigured, got %v", err)
-	}
-
-	if err := client.CreateTopic(ctx, adapters.TopicSpec{Name: "test"}); err != ErrNotConfigured {
-		t.Errorf("CreateTopic() should return ErrNotConfigured, got %v", err)
-	}
-
-	if _, err := client.ListTopics(ctx); err != ErrNotConfigured {
-		t.Errorf("ListTopics() should return ErrNotConfigured, got %v", err)
-	}
-}
+// Note: All methods that previously returned ErrNotConfigured are now implemented.
+// Integration tests for these methods require a running Kafka cluster and are
+// located in the tests/integration directory.
 
 func TestNewClientFromCluster(t *testing.T) {
 	tests := []struct {

@@ -12,6 +12,7 @@ import (
 	"github.com/drewpayment/orbit/services/kafka/internal/adapters"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/twmb/franz-go/pkg/kmsg"
 )
 
 var (
@@ -28,6 +29,7 @@ type Config struct {
 	SASLPassword     string
 	TLSEnabled       bool
 	TLSSkipVerify    bool
+	TLSCACert        string // PEM-encoded CA certificate (optional)
 }
 
 // Validate checks if the configuration is valid
@@ -66,10 +68,25 @@ func (c *Client) newKgoClient() (*kgo.Client, error) {
 		kgo.Dialer(c.createDialer()),
 	}
 
-	// TODO: Add SASL/TLS configuration when needed
-	// if c.config.SASLUsername != "" {
-	//     opts = append(opts, kgo.SASL(...))
-	// }
+	// Add SASL authentication if configured
+	saslMechanism, err := buildSASLMechanism(c.config.SASLMechanism, c.config.SASLUsername, c.config.SASLPassword)
+	if err != nil {
+		return nil, fmt.Errorf("failed to configure SASL: %w", err)
+	}
+	if saslMechanism != nil {
+		opts = append(opts, kgo.SASL(saslMechanism))
+	}
+
+	// Add TLS configuration if enabled
+	if shouldEnableTLS(c.config.TLSEnabled, c.config.SecurityProtocol) {
+		tlsConfig, err := buildTLSConfig(true, c.config.TLSSkipVerify, c.config.TLSCACert)
+		if err != nil {
+			return nil, fmt.Errorf("failed to configure TLS: %w", err)
+		}
+		if tlsConfig != nil {
+			opts = append(opts, kgo.DialTLSConfig(tlsConfig))
+		}
+	}
 
 	return kgo.NewClient(opts...)
 }
@@ -249,16 +266,98 @@ func (c *Client) DeleteTopic(ctx context.Context, topicName string) error {
 
 // DescribeTopic gets information about a topic
 func (c *Client) DescribeTopic(ctx context.Context, topicName string) (*adapters.TopicInfo, error) {
-	// TODO: Implement with franz-go
-	// topics, err := adminClient.ListTopics(ctx, topicName)
-	return nil, ErrNotConfigured
+	client, err := c.newKgoClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kafka client: %w", err)
+	}
+	defer client.Close()
+
+	adminClient := kadm.NewClient(client)
+
+	// List topics to get partition/replication info
+	topics, err := adminClient.ListTopics(ctx, topicName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list topics: %w", err)
+	}
+
+	topic, ok := topics[topicName]
+	if !ok {
+		return nil, adapters.ErrTopicNotFound
+	}
+
+	// Check if the topic actually exists (kadm returns an entry with Err for non-existent topics)
+	if topic.Err != nil {
+		return nil, adapters.ErrTopicNotFound
+	}
+
+	// Get topic config
+	configs, err := adminClient.DescribeTopicConfigs(ctx, topicName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to describe topic configs: %w", err)
+	}
+
+	configMap := make(map[string]string)
+	_, err = configs.On(topicName, func(rc *kadm.ResourceConfig) error {
+		for _, cfg := range rc.Configs {
+			if cfg.Value != nil {
+				configMap[cfg.Key] = *cfg.Value
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		// Ignore error - just means no config found for this topic
+		// The error is typically "resource not found" which we can safely ignore
+	}
+
+	// Calculate replication factor from first partition
+	replicationFactor := 0
+	if len(topic.Partitions) > 0 {
+		replicationFactor = len(topic.Partitions[0].Replicas)
+	}
+
+	return &adapters.TopicInfo{
+		Name:              topicName,
+		Partitions:        len(topic.Partitions),
+		ReplicationFactor: replicationFactor,
+		Config:            configMap,
+		Internal:          topic.IsInternal,
+	}, nil
 }
 
 // UpdateTopicConfig updates topic configuration
 func (c *Client) UpdateTopicConfig(ctx context.Context, topicName string, config map[string]string) error {
-	// TODO: Implement with franz-go
-	// adminClient.AlterTopicConfigs(ctx, configs)
-	return ErrNotConfigured
+	client, err := c.newKgoClient()
+	if err != nil {
+		return fmt.Errorf("failed to create kafka client: %w", err)
+	}
+	defer client.Close()
+
+	adminClient := kadm.NewClient(client)
+
+	// Build alter configs
+	alterConfigs := make([]kadm.AlterConfig, 0, len(config))
+	for key, value := range config {
+		alterConfigs = append(alterConfigs, kadm.AlterConfig{
+			Name:  key,
+			Value: &value,
+		})
+	}
+
+	// Alter topic configs
+	resp, err := adminClient.AlterTopicConfigs(ctx, alterConfigs, topicName)
+	if err != nil {
+		return fmt.Errorf("failed to alter topic configs: %w", err)
+	}
+
+	// Check for topic-level errors
+	for _, r := range resp {
+		if r.Err != nil {
+			return fmt.Errorf("failed to alter config for topic %s: %w", r.Name, r.Err)
+		}
+	}
+
+	return nil
 }
 
 // ListTopics lists all topics on the Kafka cluster
@@ -290,43 +389,304 @@ func (c *Client) ListTopics(ctx context.Context) ([]string, error) {
 
 // CreateACL creates an ACL entry
 func (c *Client) CreateACL(ctx context.Context, acl adapters.ACLSpec) error {
-	// TODO: Implement with franz-go
-	// adminClient.CreateACLs(ctx, &aclBuilder)
-	return ErrNotConfigured
+	client, err := c.newKgoClient()
+	if err != nil {
+		return fmt.Errorf("failed to create kafka client: %w", err)
+	}
+	defer client.Close()
+
+	adminClient := kadm.NewClient(client)
+
+	// Build ACL
+	builder := kadm.NewACLs().
+		ResourcePatternType(mapPatternType(acl.PatternType)).
+		Operations(mapOperation(acl.Operation))
+
+	// Add resource based on type
+	switch acl.ResourceType {
+	case adapters.ResourceTypeTopic:
+		builder = builder.Topics(acl.ResourceName)
+	case adapters.ResourceTypeGroup:
+		builder = builder.Groups(acl.ResourceName)
+	case adapters.ResourceTypeCluster:
+		builder = builder.Clusters()
+	case adapters.ResourceTypeTransactional:
+		builder = builder.TransactionalIDs(acl.ResourceName)
+	}
+
+	// Add principal with host
+	host := acl.Host
+	if host == "" {
+		host = "*"
+	}
+	if isAllowPermission(acl.PermissionType) {
+		builder = builder.Allow(acl.Principal).AllowHosts(host)
+	} else {
+		builder = builder.Deny(acl.Principal).DenyHosts(host)
+	}
+
+	// Create ACL
+	results, err := adminClient.CreateACLs(ctx, builder)
+	if err != nil {
+		return fmt.Errorf("failed to create ACL: %w", err)
+	}
+
+	// Check for errors in results
+	for _, r := range results {
+		if r.Err != nil {
+			return fmt.Errorf("failed to create ACL: %w", r.Err)
+		}
+	}
+
+	return nil
 }
 
 // DeleteACL deletes an ACL entry
 func (c *Client) DeleteACL(ctx context.Context, acl adapters.ACLSpec) error {
-	// TODO: Implement with franz-go
-	// adminClient.DeleteACLs(ctx, &aclBuilder)
-	return ErrNotConfigured
+	client, err := c.newKgoClient()
+	if err != nil {
+		return fmt.Errorf("failed to create kafka client: %w", err)
+	}
+	defer client.Close()
+
+	adminClient := kadm.NewClient(client)
+
+	// Build ACL filter
+	builder := kadm.NewACLs().
+		ResourcePatternType(mapPatternType(acl.PatternType)).
+		Operations(mapOperation(acl.Operation))
+
+	// Add resource based on type
+	switch acl.ResourceType {
+	case adapters.ResourceTypeTopic:
+		builder = builder.Topics(acl.ResourceName)
+	case adapters.ResourceTypeGroup:
+		builder = builder.Groups(acl.ResourceName)
+	case adapters.ResourceTypeCluster:
+		builder = builder.Clusters()
+	case adapters.ResourceTypeTransactional:
+		builder = builder.TransactionalIDs(acl.ResourceName)
+	}
+
+	// Add principal with host
+	host := acl.Host
+	if host == "" {
+		host = "*"
+	}
+	if isAllowPermission(acl.PermissionType) {
+		builder = builder.Allow(acl.Principal).AllowHosts(host)
+	} else {
+		builder = builder.Deny(acl.Principal).DenyHosts(host)
+	}
+
+	// Delete ACLs
+	results, err := adminClient.DeleteACLs(ctx, builder)
+	if err != nil {
+		return fmt.Errorf("failed to delete ACL: %w", err)
+	}
+
+	// Check if any ACLs were deleted
+	deletedCount := 0
+	for _, r := range results {
+		if r.Err == nil {
+			deletedCount++
+		}
+	}
+
+	if deletedCount == 0 {
+		return fmt.Errorf("no ACLs matched for deletion")
+	}
+
+	return nil
 }
 
 // ListACLs lists all ACLs
 func (c *Client) ListACLs(ctx context.Context) ([]adapters.ACLInfo, error) {
-	// TODO: Implement with franz-go
-	// adminClient.DescribeACLs(ctx, nil)
-	return nil, ErrNotConfigured
+	client, err := c.newKgoClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kafka client: %w", err)
+	}
+	defer client.Close()
+
+	// Use direct kmsg request to list all ACLs
+	// The kadm wrapper doesn't properly support listing all ACLs with "Any" filters
+	req := kmsg.NewPtrDescribeACLsRequest()
+	req.ResourceType = kmsg.ACLResourceTypeAny
+	req.ResourcePatternType = kmsg.ACLResourcePatternTypeAny
+	req.Operation = kmsg.ACLOperationAny
+	req.PermissionType = kmsg.ACLPermissionTypeAny
+	// nil Principal and Host means match all
+	req.Principal = nil
+	req.Host = nil
+
+	resp, err := req.RequestWith(ctx, client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list ACLs: %w", err)
+	}
+
+	if resp.ErrorCode != 0 {
+		errMsg := ""
+		if resp.ErrorMessage != nil {
+			errMsg = *resp.ErrorMessage
+		}
+		return nil, fmt.Errorf("failed to list ACLs: error code %d: %s", resp.ErrorCode, errMsg)
+	}
+
+	// Extract ACLs from response
+	var acls []adapters.ACLInfo
+	for _, resource := range resp.Resources {
+		for _, acl := range resource.ACLs {
+			acls = append(acls, adapters.ACLInfo{
+				ResourceType:   mapResourceTypeFromKmsg(resource.ResourceType),
+				ResourceName:   resource.ResourceName,
+				PatternType:    mapPatternTypeFromKmsg(resource.ResourcePatternType),
+				Principal:      acl.Principal,
+				Host:           acl.Host,
+				Operation:      mapOperationFromKmsg(acl.Operation),
+				PermissionType: mapPermissionTypeFromKmsg(acl.PermissionType),
+			})
+		}
+	}
+
+	return acls, nil
 }
 
 // GetTopicMetrics returns metrics for a topic
+// Note: This returns structural metrics only (partitions, replicas).
+// Throughput metrics (bytes/sec, messages/sec) require JMX or external monitoring.
 func (c *Client) GetTopicMetrics(ctx context.Context, topicName string) (*adapters.TopicMetrics, error) {
-	// TODO: Implement - may require JMX or external metrics
-	return nil, ErrNotConfigured
+	client, err := c.newKgoClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kafka client: %w", err)
+	}
+	defer client.Close()
+
+	adminClient := kadm.NewClient(client)
+
+	// Get topic details
+	topics, err := adminClient.ListTopics(ctx, topicName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list topics: %w", err)
+	}
+
+	topic, ok := topics[topicName]
+	if !ok {
+		return nil, adapters.ErrTopicNotFound
+	}
+
+	// Calculate total replica count
+	replicaCount := 0
+	for _, partition := range topic.Partitions {
+		replicaCount += len(partition.Replicas)
+	}
+
+	return &adapters.TopicMetrics{
+		TopicName:      topicName,
+		PartitionCount: len(topic.Partitions),
+		ReplicaCount:   replicaCount,
+		// BytesInPerSec, BytesOutPerSec, MessagesInPerSec, LogSizeBytes
+		// require JMX or external metrics - left as zero
+	}, nil
 }
 
 // GetConsumerGroupLag returns lag info for a consumer group
 func (c *Client) GetConsumerGroupLag(ctx context.Context, groupID string) (*adapters.ConsumerGroupLag, error) {
-	// TODO: Implement with franz-go
-	// adminClient.Lag(ctx, groupID)
-	return nil, ErrNotConfigured
+	client, err := c.newKgoClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kafka client: %w", err)
+	}
+	defer client.Close()
+
+	adminClient := kadm.NewClient(client)
+
+	// First check if the group exists by describing it
+	// DescribeGroups returns State="Dead" for non-existent groups
+	groups, err := adminClient.DescribeGroups(ctx, groupID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to describe consumer group: %w", err)
+	}
+
+	group, ok := groups[groupID]
+	if !ok || group.State == "Dead" {
+		return nil, fmt.Errorf("consumer group %s not found", groupID)
+	}
+
+	// Get lag for the group
+	lag, err := adminClient.Lag(ctx, groupID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get consumer group lag: %w", err)
+	}
+
+	groupLag, ok := lag[groupID]
+	if !ok {
+		return nil, fmt.Errorf("consumer group %s not found", groupID)
+	}
+
+	// Aggregate lag by topic
+	topicLags := make(map[string]int64)
+	var totalLag int64
+	for topic, partitionLags := range groupLag.Lag {
+		var topicTotal int64
+		for _, pl := range partitionLags {
+			topicTotal += pl.Lag
+		}
+		topicLags[topic] = topicTotal
+		totalLag += topicTotal
+	}
+
+	return &adapters.ConsumerGroupLag{
+		GroupID:   groupID,
+		State:     group.State,
+		Members:   len(group.Members),
+		TopicLags: topicLags,
+		TotalLag:  totalLag,
+	}, nil
 }
 
 // ListConsumerGroups lists all consumer groups
 func (c *Client) ListConsumerGroups(ctx context.Context) ([]adapters.ConsumerGroupInfo, error) {
-	// TODO: Implement with franz-go
-	// adminClient.ListGroups(ctx)
-	return nil, ErrNotConfigured
+	client, err := c.newKgoClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kafka client: %w", err)
+	}
+	defer client.Close()
+
+	adminClient := kadm.NewClient(client)
+
+	// List all groups
+	groups, err := adminClient.ListGroups(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list consumer groups: %w", err)
+	}
+
+	// Get group IDs for describe
+	groupIDs := make([]string, 0, len(groups))
+	for _, g := range groups.Sorted() {
+		groupIDs = append(groupIDs, g.Group)
+	}
+
+	if len(groupIDs) == 0 {
+		return []adapters.ConsumerGroupInfo{}, nil
+	}
+
+	// Describe groups to get state/protocol details
+	described, err := adminClient.DescribeGroups(ctx, groupIDs...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to describe consumer groups: %w", err)
+	}
+
+	result := make([]adapters.ConsumerGroupInfo, 0, len(described))
+	for _, g := range described.Sorted() {
+		result = append(result, adapters.ConsumerGroupInfo{
+			GroupID:      g.Group,
+			State:        g.State,
+			Protocol:     g.Protocol,
+			ProtocolType: g.ProtocolType,
+			Members:      len(g.Members),
+		})
+	}
+
+	return result, nil
 }
 
 // TopicSpecToConfig converts topic spec config to pointer map
