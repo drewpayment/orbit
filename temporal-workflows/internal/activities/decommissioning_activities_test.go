@@ -3,6 +3,7 @@ package activities
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -221,4 +222,40 @@ func TestDecommissioningActivities_SetVirtualClustersReadOnly(t *testing.T) {
 		assert.True(t, result.Success)
 		assert.Empty(t, result.UpdatedVirtualClusterIDs)
 	})
+}
+
+func TestDecommissioningActivities_MarkApplicationDeleted(t *testing.T) {
+	// Track PATCH request
+	var patchCalled bool
+	var patchBody map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "PATCH" && strings.Contains(r.URL.Path, "/api/kafka-applications/app-123") {
+			patchCalled = true
+			body, _ := io.ReadAll(r.Body)
+			json.Unmarshal(body, &patchBody)
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]any{"id": "app-123", "status": "deleted"})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	payloadClient := clients.NewPayloadClient(server.URL, "test-key", logger)
+	activities := NewDecommissioningActivities(payloadClient, nil, nil, nil, nil, logger)
+
+	err := activities.MarkApplicationDeleted(context.Background(), MarkApplicationDeletedInput{
+		ApplicationID: "app-123",
+		DeletedBy:     "user@example.com",
+		ForceDeleted:  true,
+	})
+
+	require.NoError(t, err)
+	assert.True(t, patchCalled, "PATCH should be called")
+	assert.Equal(t, "deleted", patchBody["status"])
+	assert.Equal(t, "user@example.com", patchBody["deletedBy"])
+	assert.Equal(t, true, patchBody["forceDeleted"])
+	assert.NotEmpty(t, patchBody["deletedAt"])
 }

@@ -354,31 +354,18 @@ func (a *DecommissioningActivities) ArchiveMetricsData(ctx context.Context, inpu
 
 // MarkApplicationDeleted marks an application as deleted in Payload
 func (a *DecommissioningActivities) MarkApplicationDeleted(ctx context.Context, input MarkApplicationDeletedInput) error {
-	logger := activity.GetLogger(ctx)
-	logger.Info("MarkApplicationDeleted",
+	a.logger.Info("MarkApplicationDeleted",
 		"applicationId", input.ApplicationID,
 		"deletedBy", input.DeletedBy,
-		"forceDeleted", input.ForceDeleted)
+		"forceDeleted", input.ForceDeleted,
+	)
 
-	// TODO: Update application status in Payload
-	// PATCH /api/applications/{applicationId}
-	// {
-	//     status: "deleted",
-	//     deletedAt: time.Now().Format(time.RFC3339),
-	//     deletedBy: input.DeletedBy,
-	//     forceDeleted: input.ForceDeleted
-	// }
-	//
-	// TODO: Emit deletion event for audit trail
-	// POST /api/audit-events
-	// {
-	//     type: "application.deleted",
-	//     applicationId: input.ApplicationID,
-	//     actor: input.DeletedBy,
-	//     metadata: { forceDeleted: input.ForceDeleted }
-	// }
-
-	return nil
+	return a.payloadClient.Update(ctx, "kafka-applications", input.ApplicationID, map[string]any{
+		"status":       "deleted",
+		"deletedAt":    time.Now().Format(time.RFC3339),
+		"deletedBy":    input.DeletedBy,
+		"forceDeleted": input.ForceDeleted,
+	})
 }
 
 // ScheduleCleanupWorkflow schedules a cleanup workflow to run at a future time
