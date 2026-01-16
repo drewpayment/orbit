@@ -6,6 +6,9 @@ import (
 	"time"
 
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/client"
+
+	"github.com/drewpayment/orbit/temporal-workflows/internal/clients"
 )
 
 // SetVirtualClustersReadOnlyInput is the input for setting virtual clusters to read-only
@@ -119,17 +122,30 @@ type ExecuteImmediateCleanupResult struct {
 
 // DecommissioningActivities contains activities for application decommissioning
 type DecommissioningActivities struct {
-	payloadURL string
-	bifrostURL string
-	logger     *slog.Logger
+	payloadClient  *clients.PayloadClient
+	bifrostClient  *clients.BifrostClient
+	adapterFactory *clients.KafkaAdapterFactory
+	storageClient  *clients.StorageClient
+	temporalClient client.Client
+	logger         *slog.Logger
 }
 
 // NewDecommissioningActivities creates a new DecommissioningActivities
-func NewDecommissioningActivities(payloadURL, bifrostURL string, logger *slog.Logger) *DecommissioningActivities {
+func NewDecommissioningActivities(
+	payloadClient *clients.PayloadClient,
+	bifrostClient *clients.BifrostClient,
+	adapterFactory *clients.KafkaAdapterFactory,
+	storageClient *clients.StorageClient,
+	temporalClient client.Client,
+	logger *slog.Logger,
+) *DecommissioningActivities {
 	return &DecommissioningActivities{
-		payloadURL: payloadURL,
-		bifrostURL: bifrostURL,
-		logger:     logger,
+		payloadClient:  payloadClient,
+		bifrostClient:  bifrostClient,
+		adapterFactory: adapterFactory,
+		storageClient:  storageClient,
+		temporalClient: temporalClient,
+		logger:         logger,
 	}
 }
 
