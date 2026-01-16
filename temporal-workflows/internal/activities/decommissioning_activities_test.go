@@ -717,6 +717,23 @@ func TestDecommissioningActivities_DeleteVirtualClustersFromBifrost(t *testing.T
 }
 
 func TestDecommissioningActivities_ScheduleCleanupWorkflow(t *testing.T) {
+	t.Run("returns error when scheduled time is in the past", func(t *testing.T) {
+		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+		activities := NewDecommissioningActivities(nil, nil, nil, nil, nil, logger)
+
+		// Schedule for the past
+		scheduledFor := time.Now().Add(-1 * time.Hour)
+		result, err := activities.ScheduleCleanupWorkflow(context.Background(), ScheduleCleanupWorkflowInput{
+			ApplicationID: "app-123",
+			WorkspaceID:   "ws-456",
+			ScheduledFor:  scheduledFor,
+		})
+
+		require.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "scheduled time must be in the future")
+	})
+
 	t.Run("returns error when Temporal client is nil", func(t *testing.T) {
 		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 		// No Temporal client - should handle gracefully

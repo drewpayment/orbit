@@ -39,10 +39,10 @@ export function WorkspaceApplicationsCard({
     <Card className="h-full">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <Link href="/apps" className="flex items-center gap-2 hover:text-foreground/80 transition-colors">
             <LayoutGrid className="h-5 w-5" />
             <CardTitle className="text-base">Applications</CardTitle>
-          </div>
+          </Link>
           <Button size="sm" className="bg-orange-500 hover:bg-orange-600" asChild>
             <Link href="/apps/new">
               <Plus className="h-4 w-4 mr-1" />

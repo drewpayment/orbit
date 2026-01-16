@@ -46,10 +46,10 @@ export function WorkspaceRegistriesCard({
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <Link href={`/settings/registries?workspace=${encodeURIComponent(workspaceSlug)}`} className="flex items-center gap-2 hover:text-foreground/80 transition-colors">
             <Box className="h-5 w-5" />
             <CardTitle className="text-base">Registries</CardTitle>
-          </div>
+          </Link>
           <Button size="sm" className="bg-orange-500 hover:bg-orange-600" asChild>
             <Link href={`/settings/registries?workspace=${encodeURIComponent(workspaceSlug)}&action=new`}>
               <Plus className="h-4 w-4 mr-1" />

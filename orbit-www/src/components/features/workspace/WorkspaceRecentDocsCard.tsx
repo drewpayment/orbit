@@ -23,10 +23,10 @@ export function WorkspaceRecentDocsCard({
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <Link href={`/workspaces/${encodeURIComponent(workspaceSlug)}/knowledge`} className="flex items-center gap-2 hover:text-foreground/80 transition-colors">
             <FileText className="h-5 w-5" />
             <CardTitle className="text-base">Recent Documents</CardTitle>
-          </div>
+          </Link>
           <Button size="sm" className="bg-orange-500 hover:bg-orange-600" asChild>
             <Link href={`/workspaces/${encodeURIComponent(workspaceSlug)}/knowledge`}>
               <FolderOpen className="h-4 w-4 mr-1" />

@@ -251,9 +251,10 @@ func (a *DecommissioningActivities) CheckApplicationStatus(ctx context.Context, 
 func (a *DecommissioningActivities) DeletePhysicalTopics(ctx context.Context, input DeletePhysicalTopicsInput) (*DeletePhysicalTopicsResult, error) {
 	a.logger.Info("DeletePhysicalTopics", "applicationId", input.ApplicationID)
 
-	// Query topics for this application
+	// Query topics for this application with depth to get virtual cluster info
 	query := clients.NewQueryBuilder().
 		WhereEquals("application", input.ApplicationID).
+		Depth(2). // Include virtual cluster and cluster relationships
 		Build()
 
 	topics, err := a.payloadClient.Find(ctx, "kafka-topics", query)
@@ -289,13 +290,42 @@ func (a *DecommissioningActivities) DeletePhysicalTopics(ctx context.Context, in
 			continue
 		}
 
-		// In a full implementation, we would:
-		// 1. Get the virtual cluster for this topic
-		// 2. Get the physical cluster config
-		// 3. Create a Kafka adapter
-		// 4. Call adapter.DeleteTopic(ctx, physicalName)
-		// For now, log that we would delete
-		a.logger.Info("Would delete topic from Kafka",
+		// Get cluster config for this topic
+		connectionConfig, credentials, err := a.getClusterConfigForTopic(ctx, topic)
+		if err != nil {
+			a.logger.Warn("Failed to get cluster config for topic",
+				"topicId", topicID,
+				"error", err,
+			)
+			failed = append(failed, topicID)
+			continue
+		}
+
+		// Create Kafka adapter
+		adapter, err := a.adapterFactory.CreateKafkaAdapterFromConfig(connectionConfig, credentials)
+		if err != nil {
+			a.logger.Warn("Failed to create Kafka adapter",
+				"topicId", topicID,
+				"error", err,
+			)
+			failed = append(failed, topicID)
+			continue
+		}
+
+		// Delete the topic from Kafka
+		if err := adapter.DeleteTopic(ctx, physicalName); err != nil {
+			a.logger.Warn("Failed to delete topic from Kafka",
+				"topicId", topicID,
+				"physicalName", physicalName,
+				"error", err,
+			)
+			adapter.Close()
+			failed = append(failed, topicID)
+			continue
+		}
+		adapter.Close()
+
+		a.logger.Info("Deleted topic from Kafka",
 			"topicId", topicID,
 			"physicalName", physicalName,
 		)
@@ -321,6 +351,63 @@ func (a *DecommissioningActivities) DeletePhysicalTopics(ctx context.Context, in
 		DeletedTopics: deleted,
 		FailedTopics:  failed,
 	}, nil
+}
+
+// getClusterConfigForTopic extracts the cluster connection config from a topic's virtual cluster chain
+func (a *DecommissioningActivities) getClusterConfigForTopic(ctx context.Context, topic map[string]any) (map[string]any, map[string]string, error) {
+	// Get virtual cluster ID from topic
+	vcID, ok := topic["virtualCluster"].(string)
+	if !ok {
+		// Try nested object (if depth populated)
+		if vc, ok := topic["virtualCluster"].(map[string]any); ok {
+			vcID, _ = vc["id"].(string)
+		}
+	}
+	if vcID == "" {
+		return nil, nil, fmt.Errorf("topic has no virtual cluster")
+	}
+
+	// Get virtual cluster to find physical cluster
+	vc, err := a.payloadClient.Get(ctx, "kafka-virtual-clusters", vcID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("fetching virtual cluster: %w", err)
+	}
+
+	// Get physical cluster ID
+	clusterID, ok := vc["cluster"].(string)
+	if !ok {
+		if cluster, ok := vc["cluster"].(map[string]any); ok {
+			clusterID, _ = cluster["id"].(string)
+		}
+	}
+	if clusterID == "" {
+		return nil, nil, fmt.Errorf("virtual cluster has no physical cluster")
+	}
+
+	// Get physical cluster config
+	cluster, err := a.payloadClient.Get(ctx, "kafka-clusters", clusterID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("fetching cluster: %w", err)
+	}
+
+	// Extract connection config
+	connectionConfig, ok := cluster["connectionConfig"].(map[string]any)
+	if !ok {
+		return nil, nil, fmt.Errorf("cluster has no connection config")
+	}
+
+	// Extract credentials (if any)
+	credentials := make(map[string]string)
+	if creds, ok := cluster["credentials"].(map[string]any); ok {
+		if u, ok := creds["username"].(string); ok {
+			credentials["username"] = u
+		}
+		if p, ok := creds["password"].(string); ok {
+			credentials["password"] = p
+		}
+	}
+
+	return connectionConfig, credentials, nil
 }
 
 // RevokeAllCredentials revokes all credentials for an application
@@ -531,6 +618,11 @@ func (a *DecommissioningActivities) ScheduleCleanupWorkflow(ctx context.Context,
 		"scheduledFor", input.ScheduledFor,
 	)
 
+	// Validate scheduled time is in the future
+	if input.ScheduledFor.Before(time.Now()) {
+		return nil, fmt.Errorf("scheduled time must be in the future: %v", input.ScheduledFor)
+	}
+
 	if a.temporalClient == nil {
 		return nil, fmt.Errorf("Temporal client not available")
 	}
@@ -540,7 +632,7 @@ func (a *DecommissioningActivities) ScheduleCleanupWorkflow(ctx context.Context,
 	handle, err := a.temporalClient.ScheduleClient().Create(ctx, client.ScheduleOptions{
 		ID: scheduleID,
 		Spec: client.ScheduleSpec{
-			// Schedule for one-time execution at the specified time
+			// Schedule for one-time execution at the specified time using Calendar
 			Calendars: []client.ScheduleCalendarSpec{
 				{
 					Year:       []client.ScheduleRange{{Start: input.ScheduledFor.Year()}},
@@ -551,6 +643,8 @@ func (a *DecommissioningActivities) ScheduleCleanupWorkflow(ctx context.Context,
 					Second:     []client.ScheduleRange{{Start: input.ScheduledFor.Second()}},
 				},
 			},
+			// Prevent execution before the scheduled time
+			StartAt: input.ScheduledFor,
 		},
 		Action: &client.ScheduleWorkflowAction{
 			ID:        fmt.Sprintf("cleanup-wf-%s-%d", input.ApplicationID, time.Now().Unix()),
@@ -596,7 +690,7 @@ func (a *DecommissioningActivities) ExecuteImmediateCleanup(ctx context.Context,
 	// This activity composes other activities for immediate cleanup
 	// It's used when force delete is requested and we need to skip the grace period
 
-	// TODO: Delete physical topics
+	// Delete physical topics from Kafka clusters
 	topicsResult, err := a.DeletePhysicalTopics(ctx, DeletePhysicalTopicsInput{
 		ApplicationID: input.ApplicationID,
 	})
@@ -605,7 +699,7 @@ func (a *DecommissioningActivities) ExecuteImmediateCleanup(ctx context.Context,
 		return nil, err
 	}
 
-	// TODO: Revoke all credentials
+	// Revoke all service account credentials
 	credsResult, err := a.RevokeAllCredentials(ctx, RevokeAllCredentialsInput{
 		ApplicationID: input.ApplicationID,
 	})
@@ -614,7 +708,7 @@ func (a *DecommissioningActivities) ExecuteImmediateCleanup(ctx context.Context,
 		return nil, err
 	}
 
-	// TODO: Delete virtual clusters from Bifrost
+	// Delete virtual clusters from Bifrost gateway
 	_, err = a.DeleteVirtualClustersFromBifrost(ctx, DeleteVirtualClustersFromBifrostInput{
 		ApplicationID: input.ApplicationID,
 	})
@@ -623,7 +717,7 @@ func (a *DecommissioningActivities) ExecuteImmediateCleanup(ctx context.Context,
 		return nil, err
 	}
 
-	// TODO: Archive metrics data
+	// Archive metrics data to S3/MinIO (non-fatal if fails)
 	_, err = a.ArchiveMetricsData(ctx, ArchiveMetricsDataInput{
 		ApplicationID: input.ApplicationID,
 	})
