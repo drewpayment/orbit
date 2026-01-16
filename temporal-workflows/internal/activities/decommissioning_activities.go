@@ -275,30 +275,59 @@ func (a *DecommissioningActivities) DeletePhysicalTopics(ctx context.Context, in
 
 // RevokeAllCredentials revokes all credentials for an application
 func (a *DecommissioningActivities) RevokeAllCredentials(ctx context.Context, input RevokeAllCredentialsInput) (*RevokeAllCredentialsResult, error) {
-	logger := activity.GetLogger(ctx)
-	logger.Info("RevokeAllCredentials",
-		"applicationId", input.ApplicationID)
+	a.logger.Info("RevokeAllCredentials", "applicationId", input.ApplicationID)
 
-	// TODO: Query Payload for service accounts associated with this application
-	// GET /api/service-accounts?where[application][equals]={applicationId}
-	//
-	// TODO: For each service account, call Bifrost RevokeCredential RPC
-	// conn, err := grpc.Dial(a.bifrostURL, grpc.WithInsecure())
-	// client := gatewayv1.NewBifrostAdminServiceClient(conn)
-	// client.RevokeCredential(ctx, &gatewayv1.RevokeCredentialRequest{
-	//     CredentialId: sa.CredentialId,
-	// })
-	//
-	// TODO: Update service account status in Payload to "revoked"
-	// PATCH /api/service-accounts/{id} { status: "revoked" }
-	//
-	// TODO: Track successful and failed revocations
+	// Query service accounts for this application
+	query := clients.NewQueryBuilder().
+		WhereEquals("application", input.ApplicationID).
+		WhereEquals("status", "active").
+		Build()
 
-	// Placeholder implementation - return mock success
+	accounts, err := a.payloadClient.Find(ctx, "kafka-service-accounts", query)
+	if err != nil {
+		return nil, fmt.Errorf("querying service accounts: %w", err)
+	}
+
+	var revoked, failed []string
+
+	for _, account := range accounts {
+		accountID, ok := account["id"].(string)
+		if !ok {
+			continue
+		}
+
+		// Revoke from Bifrost if client is available
+		if a.bifrostClient != nil {
+			if err := a.bifrostClient.RevokeCredential(ctx, accountID); err != nil {
+				a.logger.Warn("Failed to revoke credential from Bifrost",
+					"accountId", accountID,
+					"error", err,
+				)
+				failed = append(failed, accountID)
+				continue
+			}
+		}
+
+		// Update status in Payload CMS
+		if err := a.payloadClient.Update(ctx, "kafka-service-accounts", accountID, map[string]any{
+			"status":    "revoked",
+			"revokedAt": time.Now().Format(time.RFC3339),
+		}); err != nil {
+			a.logger.Warn("Failed to update service account status",
+				"accountId", accountID,
+				"error", err,
+			)
+			failed = append(failed, accountID)
+			continue
+		}
+
+		revoked = append(revoked, accountID)
+	}
+
 	return &RevokeAllCredentialsResult{
-		Success:            true,
-		RevokedCredentials: []string{"mock-cred-1", "mock-cred-2"},
-		FailedCredentials:  []string{},
+		Success:            len(failed) == 0,
+		RevokedCredentials: revoked,
+		FailedCredentials:  failed,
 	}, nil
 }
 

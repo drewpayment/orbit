@@ -290,3 +290,135 @@ func TestDecommissioningActivities_UpdateApplicationWorkflowID(t *testing.T) {
 	assert.True(t, patchCalled, "PATCH should be called")
 	assert.Equal(t, "cleanup-wf-app-123-1234567890", patchBody["cleanupWorkflowId"])
 }
+
+func TestDecommissioningActivities_RevokeAllCredentials(t *testing.T) {
+	t.Run("revokes all credentials and updates status", func(t *testing.T) {
+		var patchedAccounts []string
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Find service accounts query
+			if r.Method == "GET" && strings.Contains(r.URL.Path, "/api/kafka-service-accounts") {
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(map[string]any{
+					"docs": []map[string]any{
+						{"id": "sa-1", "status": "active"},
+						{"id": "sa-2", "status": "active"},
+					},
+				})
+				return
+			}
+			// Patch service account status
+			if r.Method == "PATCH" && strings.Contains(r.URL.Path, "/api/kafka-service-accounts/") {
+				parts := strings.Split(r.URL.Path, "/")
+				accountID := parts[len(parts)-1]
+				patchedAccounts = append(patchedAccounts, accountID)
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(map[string]any{"id": accountID, "status": "revoked"})
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+
+		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+		payloadClient := clients.NewPayloadClient(server.URL, "test-key", logger)
+		// BifrostClient is nil - should handle gracefully
+		activities := NewDecommissioningActivities(payloadClient, nil, nil, nil, nil, logger)
+
+		result, err := activities.RevokeAllCredentials(context.Background(), RevokeAllCredentialsInput{
+			ApplicationID: "app-123",
+		})
+
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.True(t, result.Success)
+		assert.ElementsMatch(t, []string{"sa-1", "sa-2"}, result.RevokedCredentials)
+		assert.Empty(t, result.FailedCredentials)
+		assert.ElementsMatch(t, []string{"sa-1", "sa-2"}, patchedAccounts)
+	})
+
+	t.Run("returns success with empty results when no service accounts", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" && strings.Contains(r.URL.Path, "/api/kafka-service-accounts") {
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(map[string]any{
+					"docs": []map[string]any{},
+				})
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+
+		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+		payloadClient := clients.NewPayloadClient(server.URL, "test-key", logger)
+		activities := NewDecommissioningActivities(payloadClient, nil, nil, nil, nil, logger)
+
+		result, err := activities.RevokeAllCredentials(context.Background(), RevokeAllCredentialsInput{
+			ApplicationID: "app-123",
+		})
+
+		require.NoError(t, err)
+		assert.True(t, result.Success)
+		assert.Empty(t, result.RevokedCredentials)
+		assert.Empty(t, result.FailedCredentials)
+	})
+
+	t.Run("tracks failed updates in FailedCredentials", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" && strings.Contains(r.URL.Path, "/api/kafka-service-accounts") {
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(map[string]any{
+					"docs": []map[string]any{
+						{"id": "sa-1", "status": "active"},
+						{"id": "sa-2", "status": "active"},
+					},
+				})
+				return
+			}
+			// First account succeeds, second fails
+			if r.Method == "PATCH" && strings.Contains(r.URL.Path, "/api/kafka-service-accounts/sa-1") {
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(map[string]any{"id": "sa-1", "status": "revoked"})
+				return
+			}
+			if r.Method == "PATCH" && strings.Contains(r.URL.Path, "/api/kafka-service-accounts/sa-2") {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+
+		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+		payloadClient := clients.NewPayloadClient(server.URL, "test-key", logger)
+		activities := NewDecommissioningActivities(payloadClient, nil, nil, nil, nil, logger)
+
+		result, err := activities.RevokeAllCredentials(context.Background(), RevokeAllCredentialsInput{
+			ApplicationID: "app-123",
+		})
+
+		require.NoError(t, err)
+		assert.False(t, result.Success) // Partial failure
+		assert.Equal(t, []string{"sa-1"}, result.RevokedCredentials)
+		assert.Equal(t, []string{"sa-2"}, result.FailedCredentials)
+	})
+
+	t.Run("returns error when query fails", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+		payloadClient := clients.NewPayloadClient(server.URL, "test-key", logger)
+		activities := NewDecommissioningActivities(payloadClient, nil, nil, nil, nil, logger)
+
+		_, err := activities.RevokeAllCredentials(context.Background(), RevokeAllCredentialsInput{
+			ApplicationID: "app-123",
+		})
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "querying service accounts")
+	})
+}
