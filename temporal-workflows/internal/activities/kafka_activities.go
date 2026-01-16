@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/drewpayment/orbit/services/kafka/pkg/adapters"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/clients"
 )
 
@@ -109,20 +110,135 @@ type KafkaActivities interface {
 
 // KafkaActivitiesImpl implements KafkaActivities
 type KafkaActivitiesImpl struct {
-	payloadClient *clients.PayloadClient
-	logger        *slog.Logger
+	payloadClient  *clients.PayloadClient
+	adapterFactory *clients.KafkaAdapterFactory
+	logger         *slog.Logger
 }
 
 // NewKafkaActivities creates a new KafkaActivities implementation
-func NewKafkaActivities(payloadClient *clients.PayloadClient, logger *slog.Logger) *KafkaActivitiesImpl {
+func NewKafkaActivities(payloadClient *clients.PayloadClient, adapterFactory *clients.KafkaAdapterFactory, logger *slog.Logger) *KafkaActivitiesImpl {
 	return &KafkaActivitiesImpl{
-		payloadClient: payloadClient,
-		logger:        logger,
+		payloadClient:  payloadClient,
+		adapterFactory: adapterFactory,
+		logger:         logger,
 	}
 }
 
+// getClusterConfigForTopic fetches the cluster connection config for a topic
+func (a *KafkaActivitiesImpl) getClusterConfigForTopic(ctx context.Context, topicID string) (map[string]any, map[string]string, error) {
+	// 1. Get the topic to find its virtual cluster
+	topic, err := a.payloadClient.Get(ctx, "kafka-topics", topicID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("fetching topic: %w", err)
+	}
+
+	// 2. Get virtual cluster ID
+	vcID, ok := topic["virtualCluster"].(string)
+	if !ok {
+		// Try nested object
+		if vc, ok := topic["virtualCluster"].(map[string]any); ok {
+			vcID, _ = vc["id"].(string)
+		}
+	}
+	if vcID == "" {
+		return nil, nil, fmt.Errorf("topic has no virtual cluster")
+	}
+
+	// 3. Get virtual cluster to find physical cluster
+	vc, err := a.payloadClient.Get(ctx, "kafka-virtual-clusters", vcID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("fetching virtual cluster: %w", err)
+	}
+
+	// 4. Get physical cluster ID
+	clusterID, ok := vc["cluster"].(string)
+	if !ok {
+		if cluster, ok := vc["cluster"].(map[string]any); ok {
+			clusterID, _ = cluster["id"].(string)
+		}
+	}
+	if clusterID == "" {
+		return nil, nil, fmt.Errorf("virtual cluster has no physical cluster")
+	}
+
+	// 5. Get physical cluster config
+	cluster, err := a.payloadClient.Get(ctx, "kafka-clusters", clusterID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("fetching cluster: %w", err)
+	}
+
+	// 6. Extract connection config
+	connectionConfig, ok := cluster["connectionConfig"].(map[string]any)
+	if !ok {
+		return nil, nil, fmt.Errorf("cluster has no connection config")
+	}
+
+	// 7. Extract credentials (if any)
+	credentials := make(map[string]string)
+	if creds, ok := cluster["credentials"].(map[string]any); ok {
+		if u, ok := creds["username"].(string); ok {
+			credentials["username"] = u
+		}
+		if p, ok := creds["password"].(string); ok {
+			credentials["password"] = p
+		}
+	}
+
+	return connectionConfig, credentials, nil
+}
+
+// getSchemaRegistryURL fetches the schema registry URL for a topic's cluster
+func (a *KafkaActivitiesImpl) getSchemaRegistryURL(ctx context.Context, topicID string) (string, string, string, error) {
+	// Get topic -> virtual cluster -> cluster -> schema registry
+	topic, err := a.payloadClient.Get(ctx, "kafka-topics", topicID)
+	if err != nil {
+		return "", "", "", fmt.Errorf("fetching topic: %w", err)
+	}
+
+	vcID, ok := topic["virtualCluster"].(string)
+	if !ok {
+		if vc, ok := topic["virtualCluster"].(map[string]any); ok {
+			vcID, _ = vc["id"].(string)
+		}
+	}
+	if vcID == "" {
+		return "", "", "", fmt.Errorf("topic has no virtual cluster")
+	}
+
+	vc, err := a.payloadClient.Get(ctx, "kafka-virtual-clusters", vcID)
+	if err != nil {
+		return "", "", "", fmt.Errorf("fetching virtual cluster: %w", err)
+	}
+
+	clusterID, ok := vc["cluster"].(string)
+	if !ok {
+		if cluster, ok := vc["cluster"].(map[string]any); ok {
+			clusterID, _ = cluster["id"].(string)
+		}
+	}
+
+	cluster, err := a.payloadClient.Get(ctx, "kafka-clusters", clusterID)
+	if err != nil {
+		return "", "", "", fmt.Errorf("fetching cluster: %w", err)
+	}
+
+	// Get schema registry URL from cluster
+	schemaRegistryURL, _ := cluster["schemaRegistryUrl"].(string)
+	if schemaRegistryURL == "" {
+		return "", "", "", fmt.Errorf("cluster has no schema registry URL configured")
+	}
+
+	// Get credentials if configured
+	var username, password string
+	if creds, ok := cluster["schemaRegistryCredentials"].(map[string]any); ok {
+		username, _ = creds["username"].(string)
+		password, _ = creds["password"].(string)
+	}
+
+	return schemaRegistryURL, username, password, nil
+}
+
 // ProvisionTopic provisions a topic on the Kafka cluster.
-// This creates the physical topic on the Kafka cluster using the provided prefix.
 func (a *KafkaActivitiesImpl) ProvisionTopic(ctx context.Context, input KafkaTopicProvisionInput) (*KafkaTopicProvisionOutput, error) {
 	a.logger.Info("ProvisionTopic",
 		slog.String("topicId", input.TopicID),
@@ -133,16 +249,50 @@ func (a *KafkaActivitiesImpl) ProvisionTopic(ctx context.Context, input KafkaTop
 	// Generate the physical topic name
 	physicalName := input.TopicPrefix + input.TopicName
 
-	// TODO: Actually create the topic on Kafka using franz-go
-	// This requires adding franz-go as a dependency and creating a KafkaClient
-	// For MVP, we log and return success - the actual creation will be added later
-	//
-	// Implementation would:
-	// 1. Create franz-go client with bootstrap servers
-	// 2. Use kadm.CreateTopics with the spec
-	// 3. Handle errors appropriately
+	// Create adapter from bootstrap servers in input
+	if input.BootstrapServers == "" {
+		return nil, fmt.Errorf("bootstrap servers required")
+	}
 
-	a.logger.Info("Topic provisioned (simulated)",
+	adapter, err := a.adapterFactory.CreateKafkaAdapterFromConfig(
+		map[string]any{"bootstrapServers": input.BootstrapServers},
+		map[string]string{},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("creating kafka adapter: %w", err)
+	}
+	defer adapter.Close()
+
+	// Build topic config
+	config := make(map[string]string)
+	if input.RetentionMs > 0 {
+		config["retention.ms"] = fmt.Sprintf("%d", input.RetentionMs)
+	}
+	if input.CleanupPolicy != "" {
+		config["cleanup.policy"] = input.CleanupPolicy
+	}
+	if input.Compression != "" {
+		config["compression.type"] = input.Compression
+	}
+	// Merge any additional config
+	for k, v := range input.Config {
+		config[k] = v
+	}
+
+	// Create topic spec
+	spec := adapters.TopicSpec{
+		Name:              physicalName,
+		Partitions:        input.Partitions,
+		ReplicationFactor: input.ReplicationFactor,
+		Config:            config,
+	}
+
+	// Create the topic
+	if err := adapter.CreateTopic(ctx, spec); err != nil {
+		return nil, fmt.Errorf("creating topic: %w", err)
+	}
+
+	a.logger.Info("Topic provisioned successfully",
 		slog.String("physicalName", physicalName),
 		slog.Int("partitions", input.Partitions),
 		slog.Int("replicationFactor", input.ReplicationFactor),
@@ -188,10 +338,28 @@ func (a *KafkaActivitiesImpl) DeleteTopic(ctx context.Context, topicID, physical
 	a.logger.Info("DeleteTopic",
 		slog.String("topicId", topicID),
 		slog.String("physicalName", physicalName),
+		slog.String("clusterId", clusterID),
 	)
 
-	// TODO: Implement actual Kafka topic deletion using franz-go
-	// This would use kadm.DeleteTopics
+	// Get cluster config
+	connectionConfig, credentials, err := a.getClusterConfigForTopic(ctx, topicID)
+	if err != nil {
+		return fmt.Errorf("getting cluster config: %w", err)
+	}
+
+	// Create adapter
+	adapter, err := a.adapterFactory.CreateKafkaAdapterFromConfig(connectionConfig, credentials)
+	if err != nil {
+		return fmt.Errorf("creating kafka adapter: %w", err)
+	}
+	defer adapter.Close()
+
+	// Delete the topic
+	if err := adapter.DeleteTopic(ctx, physicalName); err != nil {
+		return fmt.Errorf("deleting topic: %w", err)
+	}
+
+	a.logger.Info("Topic deleted successfully", slog.String("physicalName", physicalName))
 
 	return nil
 }
@@ -200,33 +368,126 @@ func (a *KafkaActivitiesImpl) DeleteTopic(ctx context.Context, topicID, physical
 func (a *KafkaActivitiesImpl) ValidateSchema(ctx context.Context, input KafkaSchemaValidationInput) (*KafkaSchemaValidationOutput, error) {
 	a.logger.Info("ValidateSchema",
 		slog.String("schemaId", input.SchemaID),
+		slog.String("topicId", input.TopicID),
 		slog.String("format", input.Format),
 	)
 
-	// TODO: Implement actual schema validation via Schema Registry
-	// This would call the Schema Registry's compatibility check endpoint
+	// Get schema registry URL from cluster config
+	registryURL, username, password, err := a.getSchemaRegistryURL(ctx, input.TopicID)
+	if err != nil {
+		return nil, fmt.Errorf("getting schema registry URL: %w", err)
+	}
+
+	// Create schema registry adapter
+	adapter, err := a.adapterFactory.CreateSchemaRegistryAdapterFromURL(registryURL, username, password)
+	if err != nil {
+		return nil, fmt.Errorf("creating schema registry adapter: %w", err)
+	}
+
+	// Get topic name for subject
+	topic, err := a.payloadClient.Get(ctx, "kafka-topics", input.TopicID)
+	if err != nil {
+		return nil, fmt.Errorf("fetching topic: %w", err)
+	}
+
+	topicName, _ := topic["name"].(string)
+	if topicName == "" {
+		return nil, fmt.Errorf("topic has no name")
+	}
+
+	subject := fmt.Sprintf("%s-%s", topicName, input.Type) // e.g., "my-topic-value"
+
+	// Check compatibility
+	schemaSpec := adapters.SchemaSpec{
+		Schema:     input.Content,
+		SchemaType: mapSchemaFormat(input.Format),
+	}
+
+	compatible, err := adapter.CheckCompatibility(ctx, subject, schemaSpec)
+	if err != nil {
+		return nil, fmt.Errorf("checking compatibility: %w", err)
+	}
+
+	a.logger.Info("Schema validation completed",
+		slog.String("subject", subject),
+		slog.Bool("compatible", compatible),
+	)
 
 	return &KafkaSchemaValidationOutput{
 		SchemaID:     input.SchemaID,
-		IsCompatible: true,
+		IsCompatible: compatible,
 		ValidatedAt:  time.Now(),
 	}, nil
+}
+
+// mapSchemaFormat maps our format strings to Schema Registry format
+func mapSchemaFormat(format string) string {
+	switch format {
+	case "avro":
+		return "AVRO"
+	case "protobuf":
+		return "PROTOBUF"
+	case "json":
+		return "JSON"
+	default:
+		return "AVRO"
+	}
 }
 
 // RegisterSchema registers a schema with the Schema Registry.
 func (a *KafkaActivitiesImpl) RegisterSchema(ctx context.Context, input KafkaSchemaValidationInput) (*KafkaSchemaValidationOutput, error) {
 	a.logger.Info("RegisterSchema",
 		slog.String("schemaId", input.SchemaID),
+		slog.String("topicId", input.TopicID),
 		slog.String("format", input.Format),
 	)
 
-	// TODO: Implement actual schema registration via Schema Registry
-	// This would POST to the Schema Registry to register the schema
+	// Get schema registry URL from cluster config
+	registryURL, username, password, err := a.getSchemaRegistryURL(ctx, input.TopicID)
+	if err != nil {
+		return nil, fmt.Errorf("getting schema registry URL: %w", err)
+	}
+
+	// Create schema registry adapter
+	adapter, err := a.adapterFactory.CreateSchemaRegistryAdapterFromURL(registryURL, username, password)
+	if err != nil {
+		return nil, fmt.Errorf("creating schema registry adapter: %w", err)
+	}
+
+	// Get topic name for subject
+	topic, err := a.payloadClient.Get(ctx, "kafka-topics", input.TopicID)
+	if err != nil {
+		return nil, fmt.Errorf("fetching topic: %w", err)
+	}
+
+	topicName, _ := topic["name"].(string)
+	if topicName == "" {
+		return nil, fmt.Errorf("topic has no name")
+	}
+
+	subject := fmt.Sprintf("%s-%s", topicName, input.Type)
+
+	// Register schema
+	schemaSpec := adapters.SchemaSpec{
+		Schema:     input.Content,
+		SchemaType: mapSchemaFormat(input.Format),
+	}
+
+	result, err := adapter.RegisterSchema(ctx, subject, schemaSpec)
+	if err != nil {
+		return nil, fmt.Errorf("registering schema: %w", err)
+	}
+
+	a.logger.Info("Schema registered successfully",
+		slog.String("subject", subject),
+		slog.Int("registryId", result.ID),
+		slog.Int("version", result.Version),
+	)
 
 	return &KafkaSchemaValidationOutput{
 		SchemaID:    input.SchemaID,
-		RegistryID:  1,
-		Version:     1,
+		RegistryID:  int32(result.ID),
+		Version:     int32(result.Version),
 		ValidatedAt: time.Now(),
 	}, nil
 }
@@ -267,13 +528,118 @@ func (a *KafkaActivitiesImpl) ProvisionAccess(ctx context.Context, input KafkaAc
 		slog.String("permission", input.Permission),
 	)
 
-	// TODO: Implement actual ACL creation via Kafka adapter
+	// Get cluster config from topic
+	connectionConfig, credentials, err := a.getClusterConfigForTopic(ctx, input.TopicID)
+	if err != nil {
+		return nil, fmt.Errorf("getting cluster config: %w", err)
+	}
+
+	// Create adapter
+	adapter, err := a.adapterFactory.CreateKafkaAdapterFromConfig(connectionConfig, credentials)
+	if err != nil {
+		return nil, fmt.Errorf("creating kafka adapter: %w", err)
+	}
+	defer adapter.Close()
+
+	// Get topic details for physical name
+	topic, err := a.payloadClient.Get(ctx, "kafka-topics", input.TopicID)
+	if err != nil {
+		return nil, fmt.Errorf("fetching topic: %w", err)
+	}
+
+	physicalName, _ := topic["physicalName"].(string)
+	if physicalName == "" {
+		// Fallback to name with prefix
+		name, _ := topic["name"].(string)
+		prefix, _ := topic["prefix"].(string)
+		physicalName = prefix + name
+	}
+
+	// Get workspace to find service account principal
+	workspace, err := a.payloadClient.Get(ctx, "workspaces", input.WorkspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("fetching workspace: %w", err)
+	}
+
+	// Get service account name from workspace's Kafka config
+	var principal string
+	if kafkaConfig, ok := workspace["kafkaConfig"].(map[string]any); ok {
+		if sa, ok := kafkaConfig["serviceAccountName"].(string); ok {
+			principal = "User:" + sa
+		}
+	}
+	if principal == "" {
+		// Fallback to workspace slug
+		if slug, ok := workspace["slug"].(string); ok {
+			principal = "User:" + slug
+		} else {
+			return nil, fmt.Errorf("workspace has no service account configured")
+		}
+	}
+
+	// Build ACLs based on permission level
+	acls := buildACLsForPermission(principal, physicalName, input.Permission)
+
+	// Create each ACL
+	var created []string
+	for _, acl := range acls {
+		if err := adapter.CreateACL(ctx, acl); err != nil {
+			return nil, fmt.Errorf("creating ACL for %s: %w", acl.Operation, err)
+		}
+		created = append(created, fmt.Sprintf("%s-%s-%s", acl.ResourceName, acl.Principal, acl.Operation))
+	}
+
+	a.logger.Info("Access provisioned successfully",
+		slog.Int("aclCount", len(created)),
+	)
 
 	return &KafkaAccessProvisionOutput{
 		ShareID:       input.ShareID,
-		ACLsCreated:   []string{fmt.Sprintf("%s-%s-acl", input.TopicID, input.Permission)},
+		ACLsCreated:   created,
 		ProvisionedAt: time.Now(),
 	}, nil
+}
+
+// buildACLsForPermission creates ACL specs for a given permission level
+func buildACLsForPermission(principal, topicName, permission string) []adapters.ACLSpec {
+	var acls []adapters.ACLSpec
+
+	// Always add DESCRIBE
+	acls = append(acls, adapters.ACLSpec{
+		ResourceType:   adapters.ResourceTypeTopic,
+		ResourceName:   topicName,
+		PatternType:    adapters.PatternTypeLiteral,
+		Principal:      principal,
+		Host:           "*",
+		Operation:      adapters.ACLOperationDescribe,
+		PermissionType: adapters.ACLPermissionAllow,
+	})
+
+	if permission == "read" || permission == "read_write" {
+		acls = append(acls, adapters.ACLSpec{
+			ResourceType:   adapters.ResourceTypeTopic,
+			ResourceName:   topicName,
+			PatternType:    adapters.PatternTypeLiteral,
+			Principal:      principal,
+			Host:           "*",
+			Operation:      adapters.ACLOperationRead,
+			PermissionType: adapters.ACLPermissionAllow,
+		})
+	}
+
+	if permission == "write" || permission == "read_write" {
+		acls = append(acls, adapters.ACLSpec{
+			ResourceType:   adapters.ResourceTypeTopic,
+			ResourceName:   topicName,
+			PatternType:    adapters.PatternTypeLiteral,
+			Principal:      principal,
+			Host:           "*",
+			Operation:      adapters.ACLOperationWrite,
+			PermissionType: adapters.ACLPermissionAllow,
+		})
+	}
+
+	return acls
 }
 
 // RevokeAccess revokes access for a topic share.
@@ -281,9 +647,83 @@ func (a *KafkaActivitiesImpl) RevokeAccess(ctx context.Context, shareID, topicID
 	a.logger.Info("RevokeAccess",
 		slog.String("shareId", shareID),
 		slog.String("topicId", topicID),
+		slog.String("workspaceId", workspaceID),
 	)
 
-	// TODO: Implement actual ACL deletion via Kafka adapter
+	// Get cluster config from topic
+	connectionConfig, credentials, err := a.getClusterConfigForTopic(ctx, topicID)
+	if err != nil {
+		return fmt.Errorf("getting cluster config: %w", err)
+	}
+
+	// Create adapter
+	adapter, err := a.adapterFactory.CreateKafkaAdapterFromConfig(connectionConfig, credentials)
+	if err != nil {
+		return fmt.Errorf("creating kafka adapter: %w", err)
+	}
+	defer adapter.Close()
+
+	// Get topic details
+	topic, err := a.payloadClient.Get(ctx, "kafka-topics", topicID)
+	if err != nil {
+		return fmt.Errorf("fetching topic: %w", err)
+	}
+
+	physicalName, _ := topic["physicalName"].(string)
+	if physicalName == "" {
+		name, _ := topic["name"].(string)
+		prefix, _ := topic["prefix"].(string)
+		physicalName = prefix + name
+	}
+
+	// Get workspace service account
+	workspace, err := a.payloadClient.Get(ctx, "workspaces", workspaceID)
+	if err != nil {
+		return fmt.Errorf("fetching workspace: %w", err)
+	}
+
+	var principal string
+	if kafkaConfig, ok := workspace["kafkaConfig"].(map[string]any); ok {
+		if sa, ok := kafkaConfig["serviceAccountName"].(string); ok {
+			principal = "User:" + sa
+		}
+	}
+	if principal == "" {
+		if slug, ok := workspace["slug"].(string); ok {
+			principal = "User:" + slug
+		} else {
+			return fmt.Errorf("workspace has no service account configured")
+		}
+	}
+
+	// Delete all ACLs for this principal on this topic
+	operations := []adapters.ACLOperation{
+		adapters.ACLOperationDescribe,
+		adapters.ACLOperationRead,
+		adapters.ACLOperationWrite,
+	}
+
+	for _, op := range operations {
+		acl := adapters.ACLSpec{
+			ResourceType:   adapters.ResourceTypeTopic,
+			ResourceName:   physicalName,
+			PatternType:    adapters.PatternTypeLiteral,
+			Principal:      principal,
+			Host:           "*",
+			Operation:      op,
+			PermissionType: adapters.ACLPermissionAllow,
+		}
+
+		if err := adapter.DeleteACL(ctx, acl); err != nil {
+			// Log but continue - ACL might not exist
+			a.logger.Warn("Failed to delete ACL (may not exist)",
+				slog.String("operation", string(op)),
+				slog.Any("error", err),
+			)
+		}
+	}
+
+	a.logger.Info("Access revoked successfully", slog.String("topicId", topicID))
 
 	return nil
 }

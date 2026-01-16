@@ -10,7 +10,7 @@ import (
 
 const (
 	// KafkaSchemaValidationTaskQueue is the task queue for schema validation workflows
-	KafkaSchemaValidationTaskQueue = "kafka-schema-validation"
+	KafkaSchemaValidationTaskQueue = "orbit-workflows"
 )
 
 // SchemaValidationWorkflowInput defines input for the schema validation workflow

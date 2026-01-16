@@ -679,8 +679,87 @@ export async function registerSchema(input: RegisterSchemaInput): Promise<Regist
     return { success: false, error: 'Not authenticated' }
   }
 
-  // TODO: Call actual gRPC service when available
-  return { success: false, error: 'Not implemented' }
+  const payload = await getPayload({ config })
+
+  try {
+    // 1. Fetch topic to get workspace ID
+    const topic = await payload.findByID({
+      collection: 'kafka-topics',
+      id: input.topicId,
+      depth: 1,
+      overrideAccess: true,
+    })
+
+    if (!topic) {
+      return { success: false, error: 'Topic not found' }
+    }
+
+    const workspaceId = typeof topic.workspace === 'string'
+      ? topic.workspace
+      : topic.workspace.id
+
+    // 2. Create schema record in Payload (status: pending)
+    const schema = await payload.create({
+      collection: 'kafka-schemas',
+      data: {
+        workspace: workspaceId,
+        topic: input.topicId,
+        type: input.type,
+        format: input.format,
+        content: input.content,
+        compatibility: input.compatibility || 'backward',
+        status: 'pending',
+      },
+      overrideAccess: true,
+    })
+
+    // 3. Start Temporal workflow
+    const client = await getTemporalClient()
+    const workflowId = `schema-validation-${schema.id}`
+
+    await client.workflow.start('SchemaValidationWorkflow', {
+      taskQueue: 'orbit-workflows',
+      workflowId,
+      args: [{
+        SchemaID: schema.id,
+        TopicID: input.topicId,
+        WorkspaceID: workspaceId,
+        Type: input.type,
+        Format: input.format,
+        Content: input.content,
+        Compatibility: input.compatibility || 'backward',
+        AutoRegister: true,
+      }],
+    })
+
+    console.log(`[Kafka] Started SchemaValidationWorkflow: ${workflowId}`)
+
+    // 4. Return success with schema info
+    return {
+      success: true,
+      schema: {
+        id: schema.id,
+        workspaceId: workspaceId,
+        topicId: input.topicId,
+        subject: schema.subject || '',
+        type: schema.type as 'key' | 'value',
+        format: schema.format as 'avro' | 'protobuf' | 'json',
+        version: schema.version || 0,
+        schemaId: schema.schemaId || 0,
+        content: schema.content,
+        compatibility: schema.compatibility as 'backward' | 'forward' | 'full' | 'none',
+        status: schema.status as string,
+        createdAt: schema.createdAt,
+        updatedAt: schema.updatedAt,
+      },
+    }
+  } catch (error) {
+    console.error('[Kafka] Failed to register schema:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to register schema',
+    }
+  }
 }
 
 export interface ListSchemasResult {

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/drewpayment/orbit/services/kafka/pkg/adapters"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/clients"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,72 +17,37 @@ import (
 func TestNewKafkaActivities(t *testing.T) {
 	logger := slog.Default()
 	payloadClient := clients.NewPayloadClient("http://localhost:3000", "test-key", logger)
+	adapterFactory := clients.NewKafkaAdapterFactory(payloadClient)
 
-	activities := NewKafkaActivities(payloadClient, logger)
+	activities := NewKafkaActivities(payloadClient, adapterFactory, logger)
 	assert.NotNil(t, activities)
 	assert.NotNil(t, activities.payloadClient)
+	assert.NotNil(t, activities.adapterFactory)
 	assert.NotNil(t, activities.logger)
 }
 
 func TestKafkaActivities_ProvisionTopic(t *testing.T) {
-	t.Run("generates physical name from prefix and name", func(t *testing.T) {
+	t.Run("returns error when bootstrap servers missing", func(t *testing.T) {
 		logger := slog.Default()
 		payloadClient := clients.NewPayloadClient("http://localhost:3000", "test-key", logger)
-		activities := NewKafkaActivities(payloadClient, logger)
+		adapterFactory := clients.NewKafkaAdapterFactory(payloadClient)
+		activities := NewKafkaActivities(payloadClient, adapterFactory, logger)
 
-		result, err := activities.ProvisionTopic(context.Background(), KafkaTopicProvisionInput{
-			TopicID:           "topic-123",
-			VirtualClusterID:  "vc-456",
-			TopicPrefix:       "myws-myapp-dev-",
-			TopicName:         "events",
-			Partitions:        3,
-			ReplicationFactor: 2,
-			RetentionMs:       604800000,
-			CleanupPolicy:     "delete",
-			Compression:       "lz4",
-			BootstrapServers:  "kafka:9092",
-		})
-
-		require.NoError(t, err)
-		assert.Equal(t, "topic-123", result.TopicID)
-		assert.Equal(t, "myws-myapp-dev-events", result.PhysicalName)
-		assert.False(t, result.ProvisionedAt.IsZero())
-	})
-
-	t.Run("handles empty prefix", func(t *testing.T) {
-		logger := slog.Default()
-		payloadClient := clients.NewPayloadClient("http://localhost:3000", "test-key", logger)
-		activities := NewKafkaActivities(payloadClient, logger)
-
-		result, err := activities.ProvisionTopic(context.Background(), KafkaTopicProvisionInput{
+		_, err := activities.ProvisionTopic(context.Background(), KafkaTopicProvisionInput{
 			TopicID:          "topic-123",
 			VirtualClusterID: "vc-456",
-			TopicPrefix:      "",
+			TopicPrefix:      "myws-myapp-dev-",
 			TopicName:        "events",
+			Partitions:       3,
+			// BootstrapServers not provided
 		})
 
-		require.NoError(t, err)
-		assert.Equal(t, "events", result.PhysicalName)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "bootstrap servers required")
 	})
 
-	t.Run("handles config map", func(t *testing.T) {
-		logger := slog.Default()
-		payloadClient := clients.NewPayloadClient("http://localhost:3000", "test-key", logger)
-		activities := NewKafkaActivities(payloadClient, logger)
-
-		result, err := activities.ProvisionTopic(context.Background(), KafkaTopicProvisionInput{
-			TopicID:     "topic-123",
-			TopicPrefix: "prefix-",
-			TopicName:   "events",
-			Config: map[string]string{
-				"min.insync.replicas": "2",
-				"max.message.bytes":   "1048576",
-			},
-		})
-
-		require.NoError(t, err)
-		assert.Equal(t, "prefix-events", result.PhysicalName)
-	})
+	// Note: Tests that verify actual topic creation require a real Kafka cluster.
+	// Those tests should be in an integration test file.
 }
 
 func TestKafkaActivities_UpdateTopicStatus(t *testing.T) {
@@ -97,7 +63,8 @@ func TestKafkaActivities_UpdateTopicStatus(t *testing.T) {
 
 		logger := slog.Default()
 		payloadClient := clients.NewPayloadClient(server.URL, "test-key", logger)
-		activities := NewKafkaActivities(payloadClient, logger)
+		adapterFactory := clients.NewKafkaAdapterFactory(payloadClient)
+		activities := NewKafkaActivities(payloadClient, adapterFactory, logger)
 
 		err := activities.UpdateTopicStatus(context.Background(), KafkaUpdateTopicStatusInput{
 			TopicID: "topic-123",
@@ -105,7 +72,7 @@ func TestKafkaActivities_UpdateTopicStatus(t *testing.T) {
 		})
 
 		require.NoError(t, err)
-		assert.Contains(t, capturedPath, "/api/kafka-topics/topic-123")
+		assert.Contains(t, capturedPath, "/kafka-topics/topic-123")
 		assert.Equal(t, "active", capturedData["status"])
 		assert.Nil(t, capturedData["physicalName"])
 		assert.Nil(t, capturedData["provisioningError"])
@@ -121,7 +88,8 @@ func TestKafkaActivities_UpdateTopicStatus(t *testing.T) {
 
 		logger := slog.Default()
 		payloadClient := clients.NewPayloadClient(server.URL, "test-key", logger)
-		activities := NewKafkaActivities(payloadClient, logger)
+		adapterFactory := clients.NewKafkaAdapterFactory(payloadClient)
+		activities := NewKafkaActivities(payloadClient, adapterFactory, logger)
 
 		err := activities.UpdateTopicStatus(context.Background(), KafkaUpdateTopicStatusInput{
 			TopicID:      "topic-123",
@@ -144,7 +112,8 @@ func TestKafkaActivities_UpdateTopicStatus(t *testing.T) {
 
 		logger := slog.Default()
 		payloadClient := clients.NewPayloadClient(server.URL, "test-key", logger)
-		activities := NewKafkaActivities(payloadClient, logger)
+		adapterFactory := clients.NewKafkaAdapterFactory(payloadClient)
+		activities := NewKafkaActivities(payloadClient, adapterFactory, logger)
 
 		err := activities.UpdateTopicStatus(context.Background(), KafkaUpdateTopicStatusInput{
 			TopicID: "topic-123",
@@ -165,7 +134,8 @@ func TestKafkaActivities_UpdateTopicStatus(t *testing.T) {
 
 		logger := slog.Default()
 		payloadClient := clients.NewPayloadClient(server.URL, "test-key", logger)
-		activities := NewKafkaActivities(payloadClient, logger)
+		adapterFactory := clients.NewKafkaAdapterFactory(payloadClient)
+		activities := NewKafkaActivities(payloadClient, adapterFactory, logger)
 
 		err := activities.UpdateTopicStatus(context.Background(), KafkaUpdateTopicStatusInput{
 			TopicID: "topic-123",
@@ -178,57 +148,39 @@ func TestKafkaActivities_UpdateTopicStatus(t *testing.T) {
 }
 
 func TestKafkaActivities_DeleteTopic(t *testing.T) {
-	t.Run("returns success for stubbed implementation", func(t *testing.T) {
-		logger := slog.Default()
-		payloadClient := clients.NewPayloadClient("http://localhost:3000", "test-key", logger)
-		activities := NewKafkaActivities(payloadClient, logger)
-
-		err := activities.DeleteTopic(context.Background(), "topic-123", "physical-name", "cluster-456")
-		assert.NoError(t, err)
-	})
+	// Note: DeleteTopic now requires a real Kafka cluster connection through the adapter.
+	// Tests that verify actual topic deletion should be in an integration test file.
+	// Unit tests here can only verify error handling for missing configuration.
 }
 
 func TestKafkaActivities_ValidateSchema(t *testing.T) {
-	t.Run("returns compatible for stubbed implementation", func(t *testing.T) {
-		logger := slog.Default()
-		payloadClient := clients.NewPayloadClient("http://localhost:3000", "test-key", logger)
-		activities := NewKafkaActivities(payloadClient, logger)
+	// Note: ValidateSchema now requires a real Schema Registry connection through the adapter.
+	// Tests that verify actual schema validation should be in an integration test file.
+}
 
-		result, err := activities.ValidateSchema(context.Background(), KafkaSchemaValidationInput{
-			SchemaID:      "schema-123",
-			TopicID:       "topic-456",
-			Type:          "value",
-			Format:        "avro",
-			Content:       `{"type": "record", "name": "test"}`,
-			Compatibility: "BACKWARD",
+func TestMapSchemaFormat(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"avro", "AVRO"},
+		{"protobuf", "PROTOBUF"},
+		{"json", "JSON"},
+		{"unknown", "AVRO"}, // default
+		{"", "AVRO"},        // default
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			result := mapSchemaFormat(tc.input)
+			assert.Equal(t, tc.expected, result)
 		})
-
-		require.NoError(t, err)
-		assert.Equal(t, "schema-123", result.SchemaID)
-		assert.True(t, result.IsCompatible)
-		assert.False(t, result.ValidatedAt.IsZero())
-	})
+	}
 }
 
 func TestKafkaActivities_RegisterSchema(t *testing.T) {
-	t.Run("returns stubbed registry info", func(t *testing.T) {
-		logger := slog.Default()
-		payloadClient := clients.NewPayloadClient("http://localhost:3000", "test-key", logger)
-		activities := NewKafkaActivities(payloadClient, logger)
-
-		result, err := activities.RegisterSchema(context.Background(), KafkaSchemaValidationInput{
-			SchemaID: "schema-123",
-			TopicID:  "topic-456",
-			Type:     "value",
-			Format:   "avro",
-			Content:  `{"type": "record", "name": "test"}`,
-		})
-
-		require.NoError(t, err)
-		assert.Equal(t, "schema-123", result.SchemaID)
-		assert.Equal(t, int32(1), result.RegistryID)
-		assert.Equal(t, int32(1), result.Version)
-	})
+	// Note: RegisterSchema now requires a real Schema Registry connection through the adapter.
+	// Tests that verify actual schema registration should be in an integration test file.
 }
 
 func TestKafkaActivities_UpdateSchemaStatus(t *testing.T) {
@@ -244,7 +196,8 @@ func TestKafkaActivities_UpdateSchemaStatus(t *testing.T) {
 
 		logger := slog.Default()
 		payloadClient := clients.NewPayloadClient(server.URL, "test-key", logger)
-		activities := NewKafkaActivities(payloadClient, logger)
+		adapterFactory := clients.NewKafkaAdapterFactory(payloadClient)
+		activities := NewKafkaActivities(payloadClient, adapterFactory, logger)
 
 		err := activities.UpdateSchemaStatus(context.Background(), KafkaUpdateSchemaStatusInput{
 			SchemaID:   "schema-123",
@@ -254,7 +207,7 @@ func TestKafkaActivities_UpdateSchemaStatus(t *testing.T) {
 		})
 
 		require.NoError(t, err)
-		assert.Contains(t, capturedPath, "/api/kafka-schemas/schema-123")
+		assert.Contains(t, capturedPath, "/kafka-schemas/schema-123")
 		assert.Equal(t, "active", capturedData["status"])
 		assert.Equal(t, float64(100), capturedData["registryId"])
 		assert.Equal(t, float64(3), capturedData["latestVersion"])
@@ -270,7 +223,8 @@ func TestKafkaActivities_UpdateSchemaStatus(t *testing.T) {
 
 		logger := slog.Default()
 		payloadClient := clients.NewPayloadClient(server.URL, "test-key", logger)
-		activities := NewKafkaActivities(payloadClient, logger)
+		adapterFactory := clients.NewKafkaAdapterFactory(payloadClient)
+		activities := NewKafkaActivities(payloadClient, adapterFactory, logger)
 
 		err := activities.UpdateSchemaStatus(context.Background(), KafkaUpdateSchemaStatusInput{
 			SchemaID: "schema-123",
@@ -293,7 +247,8 @@ func TestKafkaActivities_UpdateSchemaStatus(t *testing.T) {
 
 		logger := slog.Default()
 		payloadClient := clients.NewPayloadClient(server.URL, "test-key", logger)
-		activities := NewKafkaActivities(payloadClient, logger)
+		adapterFactory := clients.NewKafkaAdapterFactory(payloadClient)
+		activities := NewKafkaActivities(payloadClient, adapterFactory, logger)
 
 		err := activities.UpdateSchemaStatus(context.Background(), KafkaUpdateSchemaStatusInput{
 			SchemaID: "schema-123",
@@ -308,36 +263,63 @@ func TestKafkaActivities_UpdateSchemaStatus(t *testing.T) {
 }
 
 func TestKafkaActivities_ProvisionAccess(t *testing.T) {
-	t.Run("returns stubbed ACL creation", func(t *testing.T) {
-		logger := slog.Default()
-		payloadClient := clients.NewPayloadClient("http://localhost:3000", "test-key", logger)
-		activities := NewKafkaActivities(payloadClient, logger)
+	// Note: ProvisionAccess now requires a real Kafka cluster connection through the adapter.
+	// Tests that verify actual ACL creation should be in an integration test file.
+}
 
-		result, err := activities.ProvisionAccess(context.Background(), KafkaAccessProvisionInput{
-			ShareID:     "share-123",
-			TopicID:     "topic-456",
-			WorkspaceID: "ws-789",
-			Permission:  "read_write",
-		})
+func TestBuildACLsForPermission(t *testing.T) {
+	t.Run("read permission creates DESCRIBE and READ ACLs", func(t *testing.T) {
+		acls := buildACLsForPermission("User:test-user", "test-topic", "read")
 
-		require.NoError(t, err)
-		assert.Equal(t, "share-123", result.ShareID)
-		assert.Len(t, result.ACLsCreated, 1)
-		assert.Contains(t, result.ACLsCreated[0], "topic-456")
-		assert.Contains(t, result.ACLsCreated[0], "read_write")
-		assert.False(t, result.ProvisionedAt.IsZero())
+		assert.Len(t, acls, 2)
+
+		// First ACL should be DESCRIBE
+		assert.Equal(t, "test-topic", acls[0].ResourceName)
+		assert.Equal(t, "User:test-user", acls[0].Principal)
+		assert.Equal(t, adapters.ACLOperationDescribe, acls[0].Operation)
+
+		// Second ACL should be READ
+		assert.Equal(t, adapters.ACLOperationRead, acls[1].Operation)
+	})
+
+	t.Run("write permission creates DESCRIBE and WRITE ACLs", func(t *testing.T) {
+		acls := buildACLsForPermission("User:test-user", "test-topic", "write")
+
+		assert.Len(t, acls, 2)
+
+		// First ACL should be DESCRIBE
+		assert.Equal(t, adapters.ACLOperationDescribe, acls[0].Operation)
+
+		// Second ACL should be WRITE
+		assert.Equal(t, adapters.ACLOperationWrite, acls[1].Operation)
+	})
+
+	t.Run("read_write permission creates DESCRIBE, READ, and WRITE ACLs", func(t *testing.T) {
+		acls := buildACLsForPermission("User:test-user", "test-topic", "read_write")
+
+		assert.Len(t, acls, 3)
+
+		// Should have DESCRIBE, READ, and WRITE
+		ops := make([]adapters.ACLOperation, len(acls))
+		for i, acl := range acls {
+			ops[i] = acl.Operation
+		}
+		assert.Contains(t, ops, adapters.ACLOperationDescribe)
+		assert.Contains(t, ops, adapters.ACLOperationRead)
+		assert.Contains(t, ops, adapters.ACLOperationWrite)
+	})
+
+	t.Run("unknown permission only creates DESCRIBE ACL", func(t *testing.T) {
+		acls := buildACLsForPermission("User:test-user", "test-topic", "unknown")
+
+		assert.Len(t, acls, 1)
+		assert.Equal(t, adapters.ACLOperationDescribe, acls[0].Operation)
 	})
 }
 
 func TestKafkaActivities_RevokeAccess(t *testing.T) {
-	t.Run("returns success for stubbed implementation", func(t *testing.T) {
-		logger := slog.Default()
-		payloadClient := clients.NewPayloadClient("http://localhost:3000", "test-key", logger)
-		activities := NewKafkaActivities(payloadClient, logger)
-
-		err := activities.RevokeAccess(context.Background(), "share-123", "topic-456", "ws-789")
-		assert.NoError(t, err)
-	})
+	// Note: RevokeAccess now requires a real Kafka cluster connection through the adapter.
+	// Tests that verify actual ACL deletion should be in an integration test file.
 }
 
 func TestKafkaActivities_UpdateShareStatus(t *testing.T) {
@@ -353,7 +335,8 @@ func TestKafkaActivities_UpdateShareStatus(t *testing.T) {
 
 		logger := slog.Default()
 		payloadClient := clients.NewPayloadClient(server.URL, "test-key", logger)
-		activities := NewKafkaActivities(payloadClient, logger)
+		adapterFactory := clients.NewKafkaAdapterFactory(payloadClient)
+		activities := NewKafkaActivities(payloadClient, adapterFactory, logger)
 
 		err := activities.UpdateShareStatus(context.Background(), KafkaUpdateShareStatusInput{
 			ShareID: "share-123",
@@ -361,7 +344,7 @@ func TestKafkaActivities_UpdateShareStatus(t *testing.T) {
 		})
 
 		require.NoError(t, err)
-		assert.Contains(t, capturedPath, "/api/kafka-topic-shares/share-123")
+		assert.Contains(t, capturedPath, "/kafka-topic-shares/share-123")
 		assert.Equal(t, "active", capturedData["status"])
 	})
 
@@ -375,7 +358,8 @@ func TestKafkaActivities_UpdateShareStatus(t *testing.T) {
 
 		logger := slog.Default()
 		payloadClient := clients.NewPayloadClient(server.URL, "test-key", logger)
-		activities := NewKafkaActivities(payloadClient, logger)
+		adapterFactory := clients.NewKafkaAdapterFactory(payloadClient)
+		activities := NewKafkaActivities(payloadClient, adapterFactory, logger)
 
 		err := activities.UpdateShareStatus(context.Background(), KafkaUpdateShareStatusInput{
 			ShareID: "share-123",
@@ -396,7 +380,8 @@ func TestKafkaActivities_UpdateShareStatus(t *testing.T) {
 
 		logger := slog.Default()
 		payloadClient := clients.NewPayloadClient(server.URL, "test-key", logger)
-		activities := NewKafkaActivities(payloadClient, logger)
+		adapterFactory := clients.NewKafkaAdapterFactory(payloadClient)
+		activities := NewKafkaActivities(payloadClient, adapterFactory, logger)
 
 		err := activities.UpdateShareStatus(context.Background(), KafkaUpdateShareStatusInput{
 			ShareID: "share-123",

@@ -2,7 +2,7 @@
 
 This document tracks planned features, incomplete implementations, and technical debt across the Orbit codebase.
 
-**Last Updated:** 2026-01-15
+**Last Updated:** 2026-01-15 (Server Action Temporal Integration completed)
 
 ---
 
@@ -80,22 +80,21 @@ The following are fully implemented and functional:
 - [x] `PushToBifrost` - Calls BifrostClient.UpsertVirtualCluster via gRPC
 - [x] `UpdateVirtualClusterStatus` - Updates status field in Payload CMS
 
-#### kafka_activities.go (COMPLETED - Topic Provisioning Working)
-- [x] `ProvisionTopic` - Generates physical topic name, workflow runs successfully (see 2026-01-14 workflow run)
+#### kafka_activities.go (COMPLETED - Phase 2 Real Adapter Integration)
+- [x] `ProvisionTopic` - Creates topic on Kafka cluster via Apache adapter
 - [x] `UpdateTopicStatus` - Updates topic status in Payload CMS via internal API
 - [x] `UpdateSchemaStatus` - Updates schema status in Payload CMS
 - [x] `UpdateShareStatus` - Updates share status in Payload CMS
-- [x] `DeleteTopic` - Implemented (marks topic deleted)
-- [x] `ValidateSchema` - Stubbed (returns compatible=true)
-- [x] `RegisterSchema` - Stubbed (returns mock IDs)
-- [x] `ProvisionAccess` - Stubbed (returns mock ACLs)
-- [x] `RevokeAccess` - Stubbed (returns nil)
+- [x] `DeleteTopic` - Deletes topic from Kafka cluster via Apache adapter
+- [x] `ValidateSchema` - Checks compatibility via Schema Registry adapter
+- [x] `RegisterSchema` - Registers schema via Schema Registry adapter
+- [x] `ProvisionAccess` - Creates Kafka ACLs via Apache adapter
+- [x] `RevokeAccess` - Deletes Kafka ACLs via Apache adapter
 
-**Future enhancements (when needed for production Kafka clusters):**
-- [ ] `ValidateSchema` - Add Schema Registry compatibility check
-- [ ] `RegisterSchema` - Add Schema Registry POST call
-- [ ] `ProvisionAccess` - Add Kafka ACL creation
-- [ ] `RevokeAccess` - Add Kafka ACL deletion
+#### KafkaAdapterFactory (NEW - Phase 2)
+- [x] `CreateKafkaAdapterFromConfig` - Creates Apache Kafka adapter from cluster config
+- [x] `CreateSchemaRegistryAdapterFromURL` - Creates Schema Registry adapter
+- [x] Cluster config lookup helpers in activities (`getClusterConfigForTopic`, `getSchemaRegistryURL`)
 
 #### topic_sync_activities.go (COMPLETED)
 - [x] `CreateTopicRecord` - Creates topic in Payload CMS (for gateway passthrough)
@@ -175,16 +174,31 @@ End-to-end integration test to validate the complete lineage data flow:
 
 ---
 
-### Medium Priority - Server Action Temporal Integration
+### High Priority - Server Action Temporal Integration
 
-**Status:** Topic provisioning/deletion implemented, others are placeholders
+**Status:** Schema and Access workflows wired to UI
 **Location:** `orbit-www/src/app/actions/`
 
+**Note:** Phase 2 completed real Kafka adapter implementations. Server actions now trigger the workflows.
+
+#### Topic Operations (COMPLETED)
 - [x] `kafka-topics.ts` - `triggerTopicProvisioningWorkflow`, `triggerTopicDeletionWorkflow` implemented
-- [ ] `kafka-topic-shares.ts` - `triggerShareApprovedWorkflow`, `triggerShareRevokedWorkflow` (lines 131-166)
-- [ ] `kafka-topic-catalog.ts` - `triggerShareApprovedWorkflow`, `sendShareRequestNotification` (lines 128-143)
+
+#### Schema Operations (COMPLETED)
+- [x] `actions.ts` - `registerSchema` - Starts SchemaValidationWorkflow
+
+#### Access/Share Operations (COMPLETED)
+- [x] `kafka-topic-shares.ts` - `triggerShareApprovedWorkflow` - Starts AccessProvisioningWorkflow
+- [x] `kafka-topic-shares.ts` - `triggerShareRevokedWorkflow` - Starts AccessRevocationWorkflow
+- [x] `kafka-topic-catalog.ts` - `triggerShareApprovedWorkflow` (auto-approval path)
+
+#### Service Account Operations (Need workflow + server action)
 - [ ] `kafka-service-accounts.ts` - Temporal workflow triggers (lines 140, 202, 242)
+
+#### Offset Recovery (Need workflow completion + server action)
 - [ ] `kafka-offset-recovery.ts` - `executeOffsetRestore` returns placeholder (line 373)
+
+#### Application Lifecycle (Decommissioning activities still stubbed)
 - [ ] `kafka-application-lifecycle.ts` - Temporal workflow triggers (lines 236, 353, 487-488)
 
 ---

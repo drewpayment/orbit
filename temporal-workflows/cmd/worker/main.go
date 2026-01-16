@@ -280,8 +280,11 @@ func main() {
 	w.RegisterWorkflow(workflows.TopicProvisioningWorkflow)
 	w.RegisterWorkflow(workflows.TopicDeletionWorkflow)
 
-	// Create and register Kafka activities
-	kafkaActivities := activities.NewKafkaActivities(kafkaPayloadClient, logger)
+	// Create adapter factory for Kafka activities
+	kafkaAdapterFactory := internalClients.NewKafkaAdapterFactory(kafkaPayloadClient)
+
+	// Create and register Kafka activities (with adapter factory)
+	kafkaActivities := activities.NewKafkaActivities(kafkaPayloadClient, kafkaAdapterFactory, logger)
 	w.RegisterActivity(kafkaActivities.ProvisionTopic)
 	w.RegisterActivity(kafkaActivities.UpdateTopicStatus)
 	w.RegisterActivity(kafkaActivities.DeleteTopic)

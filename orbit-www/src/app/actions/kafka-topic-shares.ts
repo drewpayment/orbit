@@ -5,6 +5,7 @@ import config from '@payload-config'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
+import { getTemporalClient } from '@/lib/temporal/client'
 
 // ============================================================================
 // Type Definitions
@@ -128,31 +129,60 @@ async function isWorkspaceMember(
 }
 
 /**
- * Trigger workflow for approved share (placeholder for Temporal integration)
+ * Trigger workflow for approved share
  */
 async function triggerShareApprovedWorkflow(
-  share: { id: string; topic: { id: string; name: string } }
+  share: {
+    id: string
+    topic: { id: string; name: string; fullTopicName?: string | null }
+    targetWorkspace: { id: string }
+    permission?: string
+    expiresAt?: string | null
+  }
 ): Promise<void> {
-  // TODO: Implement Temporal client call
-  console.log('Triggering ShareApprovedWorkflow:', {
-    shareId: share.id,
-    topicId: share.topic.id,
-    topicName: share.topic.name,
+  const client = await getTemporalClient()
+  const workflowId = `access-provision-${share.id}`
+
+  await client.workflow.start('AccessProvisioningWorkflow', {
+    taskQueue: 'orbit-workflows',
+    workflowId,
+    args: [{
+      ShareID: share.id,
+      TopicID: share.topic.id,
+      TopicName: share.topic.fullTopicName || share.topic.name,
+      WorkspaceID: share.targetWorkspace.id,
+      Permission: share.permission || 'read',
+      ExpiresAt: share.expiresAt ? new Date(share.expiresAt).toISOString() : null,
+    }],
   })
+
+  console.log(`[Kafka] Started AccessProvisioningWorkflow: ${workflowId}`)
 }
 
 /**
- * Trigger workflow for revoked share (placeholder for Temporal integration)
+ * Trigger workflow for revoked share
  */
 async function triggerShareRevokedWorkflow(
-  share: { id: string; topic: { id: string; name: string } }
+  share: {
+    id: string
+    topic: { id: string }
+    targetWorkspace: { id: string }
+  }
 ): Promise<void> {
-  // TODO: Implement Temporal client call
-  console.log('Triggering ShareRevokedWorkflow:', {
-    shareId: share.id,
-    topicId: share.topic.id,
-    topicName: share.topic.name,
+  const client = await getTemporalClient()
+  const workflowId = `access-revoke-${share.id}`
+
+  await client.workflow.start('AccessRevocationWorkflow', {
+    taskQueue: 'orbit-workflows',
+    workflowId,
+    args: [{
+      ShareID: share.id,
+      TopicID: share.topic.id,
+      WorkspaceID: share.targetWorkspace.id,
+    }],
   })
+
+  console.log(`[Kafka] Started AccessRevocationWorkflow: ${workflowId}`)
 }
 
 /**
@@ -237,13 +267,21 @@ export async function approveShare(
 
     // Get topic info for workflow
     const topic = typeof share.topic === 'string'
-      ? { id: share.topic, name: 'Unknown' }
-      : { id: share.topic.id, name: share.topic.name ?? 'Unknown' }
+      ? { id: share.topic, name: 'Unknown', fullTopicName: undefined }
+      : { id: share.topic.id, name: share.topic.name ?? 'Unknown', fullTopicName: share.topic.fullTopicName }
+
+    // Get target workspace info
+    const targetWorkspace = typeof share.targetWorkspace === 'string'
+      ? { id: share.targetWorkspace }
+      : { id: share.targetWorkspace.id }
 
     // Trigger approval workflow
     await triggerShareApprovedWorkflow({
       id: share.id,
       topic,
+      targetWorkspace,
+      permission: share.accessLevel,
+      expiresAt: share.expiresAt,
     })
 
     // Revalidate share-related pages
@@ -415,13 +453,19 @@ export async function revokeShare(
 
     // Get topic info for workflow
     const topic = typeof share.topic === 'string'
-      ? { id: share.topic, name: 'Unknown' }
-      : { id: share.topic.id, name: share.topic.name ?? 'Unknown' }
+      ? { id: share.topic }
+      : { id: share.topic.id }
+
+    // Get target workspace info
+    const targetWorkspace = typeof share.targetWorkspace === 'string'
+      ? { id: share.targetWorkspace }
+      : { id: share.targetWorkspace.id }
 
     // Trigger revoke workflow
     await triggerShareRevokedWorkflow({
       id: share.id,
       topic,
+      targetWorkspace,
     })
 
     // Revalidate share-related pages

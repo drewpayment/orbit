@@ -10,7 +10,7 @@ import (
 
 const (
 	// KafkaAccessProvisioningTaskQueue is the task queue for access provisioning workflows
-	KafkaAccessProvisioningTaskQueue = "kafka-access-provisioning"
+	KafkaAccessProvisioningTaskQueue = "orbit-workflows"
 )
 
 // AccessProvisioningWorkflowInput defines input for the access provisioning workflow

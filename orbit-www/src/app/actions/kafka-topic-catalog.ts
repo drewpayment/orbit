@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
+import { getTemporalClient } from '@/lib/temporal/client'
 
 // ============================================================================
 // Type Definitions
@@ -125,11 +126,52 @@ async function checkAutoApprove(
 }
 
 /**
- * Trigger workflow for approved share (placeholder for Temporal integration)
+ * Trigger workflow for approved share (auto-approval path)
  */
 async function triggerShareApprovedWorkflow(shareId: string, topicId: string): Promise<void> {
-  // TODO: Implement Temporal client call
-  console.log('Triggering ShareApprovedWorkflow:', { shareId, topicId })
+  const payload = await getPayload({ config })
+
+  // Fetch full share record to get all needed data
+  const share = await payload.findByID({
+    collection: 'kafka-topic-shares',
+    id: shareId,
+    depth: 2,
+    overrideAccess: true,
+  })
+
+  if (!share) {
+    throw new Error(`Share ${shareId} not found`)
+  }
+
+  // Get topic physical name
+  const topic = typeof share.topic === 'string'
+    ? await payload.findByID({ collection: 'kafka-topics', id: share.topic, overrideAccess: true })
+    : share.topic
+
+  const topicName = topic?.fullTopicName || topic?.name || ''
+
+  // Get target workspace ID
+  const targetWorkspaceId = typeof share.targetWorkspace === 'string'
+    ? share.targetWorkspace
+    : share.targetWorkspace.id
+
+  const client = await getTemporalClient()
+  const workflowId = `access-provision-${shareId}`
+
+  await client.workflow.start('AccessProvisioningWorkflow', {
+    taskQueue: 'orbit-workflows',
+    workflowId,
+    args: [{
+      ShareID: shareId,
+      TopicID: topicId,
+      TopicName: topicName,
+      WorkspaceID: targetWorkspaceId,
+      Permission: share.accessLevel || 'read',
+      ExpiresAt: share.expiresAt ? new Date(share.expiresAt).toISOString() : null,
+    }],
+  })
+
+  console.log(`[Kafka] Started AccessProvisioningWorkflow (auto-approved): ${workflowId}`)
 }
 
 /**
