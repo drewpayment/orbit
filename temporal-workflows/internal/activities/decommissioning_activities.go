@@ -2,6 +2,7 @@ package activities
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -178,22 +179,31 @@ func (a *DecommissioningActivities) SetVirtualClustersReadOnly(ctx context.Conte
 
 // CheckApplicationStatus checks if an application can proceed with decommissioning
 func (a *DecommissioningActivities) CheckApplicationStatus(ctx context.Context, input CheckApplicationStatusInput) (*CheckApplicationStatusResult, error) {
-	logger := activity.GetLogger(ctx)
-	logger.Info("CheckApplicationStatus",
-		"applicationId", input.ApplicationID)
+	a.logger.Info("CheckApplicationStatus",
+		slog.String("applicationId", input.ApplicationID))
 
-	// TODO: Query Payload for application status
-	// GET /api/applications/{applicationId}
-	//
-	// TODO: Check if application is in a valid state for decommissioning
-	// - status should be "decommissioning" or "pending_deletion"
-	// - no active workflows in progress
-	// - all dependent resources accounted for
+	// Query Payload for application
+	app, err := a.payloadClient.Get(ctx, "kafka-applications", input.ApplicationID)
+	if err != nil {
+		return nil, fmt.Errorf("fetching application: %w", err)
+	}
 
-	// Placeholder implementation - return mock success
+	// Extract status
+	status, ok := app["status"].(string)
+	if !ok {
+		return nil, fmt.Errorf("application has no status field")
+	}
+
+	// Can only proceed if status is "decommissioning"
+	canProceed := status == "decommissioning"
+
+	a.logger.Info("Application status checked",
+		slog.String("status", status),
+		slog.Bool("canProceed", canProceed))
+
 	return &CheckApplicationStatusResult{
-		Status:     "decommissioning",
-		CanProceed: true,
+		Status:     status,
+		CanProceed: canProceed,
 	}, nil
 }
 
