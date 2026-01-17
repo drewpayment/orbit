@@ -187,6 +187,51 @@ func (a *KafkaActivitiesImpl) getClusterConfigForTopic(ctx context.Context, topi
 	return connectionConfig, credentials, nil
 }
 
+// getClusterConfigForVirtualCluster fetches the cluster connection config directly from a virtual cluster ID
+func (a *KafkaActivitiesImpl) getClusterConfigForVirtualCluster(ctx context.Context, virtualClusterID string) (map[string]any, map[string]string, error) {
+	// 1. Get virtual cluster to find physical cluster
+	vc, err := a.payloadClient.Get(ctx, "kafka-virtual-clusters", virtualClusterID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("fetching virtual cluster: %w", err)
+	}
+
+	// 2. Get physical cluster ID - handle both string ID and populated object
+	clusterID, ok := vc["cluster"].(string)
+	if !ok {
+		if cluster, ok := vc["cluster"].(map[string]any); ok {
+			clusterID, _ = cluster["id"].(string)
+		}
+	}
+	if clusterID == "" {
+		return nil, nil, fmt.Errorf("virtual cluster has no physical cluster")
+	}
+
+	// 3. Get physical cluster config
+	cluster, err := a.payloadClient.Get(ctx, "kafka-clusters", clusterID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("fetching cluster: %w", err)
+	}
+
+	// 4. Extract connection config
+	connectionConfig, ok := cluster["connectionConfig"].(map[string]any)
+	if !ok {
+		return nil, nil, fmt.Errorf("cluster has no connection config")
+	}
+
+	// 5. Extract credentials (if any)
+	credentials := make(map[string]string)
+	if creds, ok := cluster["credentials"].(map[string]any); ok {
+		if u, ok := creds["username"].(string); ok {
+			credentials["username"] = u
+		}
+		if p, ok := creds["password"].(string); ok {
+			credentials["password"] = p
+		}
+	}
+
+	return connectionConfig, credentials, nil
+}
+
 // getSchemaRegistryURL fetches the schema registry URL for a topic's cluster
 func (a *KafkaActivitiesImpl) getSchemaRegistryURL(ctx context.Context, topicID string) (string, string, string, error) {
 	// Get topic -> virtual cluster -> cluster -> schema registry
@@ -244,6 +289,7 @@ func (a *KafkaActivitiesImpl) ProvisionTopic(ctx context.Context, input KafkaTop
 		slog.String("topicId", input.TopicID),
 		slog.String("topicName", input.TopicName),
 		slog.String("topicPrefix", input.TopicPrefix),
+		slog.String("virtualClusterId", input.VirtualClusterID),
 		slog.String("bootstrapServers", input.BootstrapServers),
 	)
 
@@ -253,16 +299,23 @@ func (a *KafkaActivitiesImpl) ProvisionTopic(ctx context.Context, input KafkaTop
 	var connectionConfig map[string]any
 	var credentials map[string]string
 
-	// If bootstrap servers provided directly, use them; otherwise look up from topic's cluster
+	// If bootstrap servers provided directly, use them; otherwise look up from virtual cluster
 	if input.BootstrapServers != "" {
 		connectionConfig = map[string]any{"bootstrapServers": input.BootstrapServers}
 		credentials = map[string]string{}
+	} else if input.VirtualClusterID != "" {
+		// Look up cluster config from virtual cluster (preferred path)
+		var err error
+		connectionConfig, credentials, err = a.getClusterConfigForVirtualCluster(ctx, input.VirtualClusterID)
+		if err != nil {
+			return nil, fmt.Errorf("getting cluster config from virtual cluster: %w", err)
+		}
 	} else {
-		// Look up cluster config from topic
+		// Fallback: Look up cluster config from topic's virtual cluster relationship
 		var err error
 		connectionConfig, credentials, err = a.getClusterConfigForTopic(ctx, input.TopicID)
 		if err != nil {
-			return nil, fmt.Errorf("getting cluster config: %w", err)
+			return nil, fmt.Errorf("getting cluster config from topic: %w", err)
 		}
 	}
 
