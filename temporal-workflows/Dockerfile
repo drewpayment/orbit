@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /build
 
@@ -8,6 +8,7 @@ RUN apk add --no-cache git
 
 # Copy go mod files first for better caching
 COPY proto/go.mod proto/go.sum ./proto/
+COPY services/kafka/go.mod services/kafka/go.sum ./services/kafka/
 COPY temporal-workflows/go.mod temporal-workflows/go.sum ./temporal-workflows/
 
 # Download dependencies
@@ -17,6 +18,7 @@ RUN go mod download
 # Copy source code
 WORKDIR /build
 COPY proto/ ./proto/
+COPY services/kafka/ ./services/kafka/
 COPY temporal-workflows/ ./temporal-workflows/
 
 # Build the worker

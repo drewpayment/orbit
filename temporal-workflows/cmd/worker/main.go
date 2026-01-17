@@ -303,6 +303,10 @@ func main() {
 	w.RegisterWorkflow(workflows.TopicProvisioningWorkflow)
 	w.RegisterWorkflow(workflows.TopicDeletionWorkflow)
 
+	// Register Kafka access provisioning/revocation workflows
+	w.RegisterWorkflow(workflows.AccessProvisioningWorkflow)
+	w.RegisterWorkflow(workflows.AccessRevocationWorkflow)
+
 	// Create adapter factory for Kafka activities
 	kafkaAdapterFactory := internalClients.NewKafkaAdapterFactory(kafkaPayloadClient)
 
