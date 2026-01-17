@@ -5,6 +5,8 @@ import config from '@payload-config'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
 import { getTemporalClient } from '@/lib/temporal/client'
+import { WorkflowExecutionAlreadyStartedError } from '@temporalio/client'
+import type { KafkaServiceAccount } from '@/payload-types'
 import {
   generateSecurePassword,
   hashPassword,
@@ -69,9 +71,8 @@ async function triggerCredentialUpsertWorkflow(
 
     return handle.workflowId
   } catch (error) {
-    // Check if workflow is already running (duplicate start)
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    if (errorMessage.includes('already started') || errorMessage.includes('already running')) {
+    // Check if workflow is already running using Temporal's specific error type
+    if (error instanceof WorkflowExecutionAlreadyStartedError) {
       console.log(
         `[Kafka] CredentialUpsertWorkflow already running for service account ${serviceAccountId}`
       )
@@ -112,9 +113,8 @@ async function triggerCredentialRevokeWorkflow(
 
     return handle.workflowId
   } catch (error) {
-    // Check if workflow is already running (duplicate revoke)
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    if (errorMessage.includes('already started') || errorMessage.includes('already running')) {
+    // Check if workflow is already running using Temporal's specific error type
+    if (error instanceof WorkflowExecutionAlreadyStartedError) {
       console.log(
         `[Kafka] CredentialRevokeWorkflow already running for service account ${serviceAccountId}`
       )
@@ -139,8 +139,7 @@ async function verifyServiceAccountAccess(
 ): Promise<{
   allowed: boolean
   error?: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  serviceAccount?: any
+  serviceAccount?: KafkaServiceAccount
   virtualClusterId?: string
 }> {
   // Get the service account with depth to get application/workspace
@@ -354,11 +353,31 @@ export async function createServiceAccount(
     })
 
     if (!workflowId) {
-      // Credential created but sync failed - mark as pending sync
-      console.warn(
-        `[Kafka] Service account ${serviceAccount.id} created but Bifrost sync failed. ` +
-          'Manual sync may be required.'
-      )
+      // Rollback: delete the service account since Bifrost sync failed
+      // This ensures consistency - credential only exists if synced to Bifrost
+      try {
+        await payload.delete({
+          collection: 'kafka-service-accounts',
+          id: serviceAccount.id,
+          overrideAccess: true,
+        })
+      } catch (rollbackError) {
+        // CRITICAL: Rollback failed - orphaned service account in database
+        console.error(
+          `[Kafka] CRITICAL: Failed to rollback service account ${serviceAccount.id}. ` +
+            'Orphaned record may exist.',
+          rollbackError
+        )
+        return {
+          success: false,
+          error:
+            'Failed to sync credential to Bifrost and cleanup failed. Please contact support.',
+        }
+      }
+      return {
+        success: false,
+        error: 'Failed to sync credential to Bifrost. Service account was not created.',
+      }
     }
 
     return {
@@ -405,6 +424,21 @@ export async function rotateServiceAccountPassword(
       return { success: false, error: 'Cannot rotate revoked service account' }
     }
 
+    // Rate limiting: enforce minimum 5 minutes between rotations
+    if (serviceAccount.lastRotatedAt) {
+      const lastRotated = new Date(serviceAccount.lastRotatedAt)
+      const cooldownMs = 5 * 60 * 1000 // 5 minutes
+      const timeSinceLastRotation = Date.now() - lastRotated.getTime()
+
+      if (timeSinceLastRotation < cooldownMs) {
+        const remainingSeconds = Math.ceil((cooldownMs - timeSinceLastRotation) / 1000)
+        return {
+          success: false,
+          error: `Please wait ${remainingSeconds} seconds before rotating again.`,
+        }
+      }
+    }
+
     // Store original password hash for potential rollback
     const originalPasswordHash = serviceAccount.passwordHash
     const originalLastRotatedAt = serviceAccount.lastRotatedAt
@@ -436,15 +470,29 @@ export async function rotateServiceAccountPassword(
 
       if (!workflowId) {
         // Rollback: restore original password hash since Bifrost sync failed
-        await payload.update({
-          collection: 'kafka-service-accounts',
-          id: serviceAccountId,
-          data: {
-            passwordHash: originalPasswordHash,
-            lastRotatedAt: originalLastRotatedAt,
-          },
-          overrideAccess: true,
-        })
+        try {
+          await payload.update({
+            collection: 'kafka-service-accounts',
+            id: serviceAccountId,
+            data: {
+              passwordHash: originalPasswordHash,
+              lastRotatedAt: originalLastRotatedAt,
+            },
+            overrideAccess: true,
+          })
+        } catch (rollbackError) {
+          // CRITICAL: Rollback failed - system is in inconsistent state
+          console.error(
+            `[Kafka] CRITICAL: Failed to rollback password for service account ${serviceAccountId}. ` +
+              'Manual intervention required.',
+            rollbackError
+          )
+          return {
+            success: false,
+            error:
+              'Password rotation failed and rollback failed. Please contact support immediately.',
+          }
+        }
         return {
           success: false,
           error: 'Failed to sync credential to Bifrost. Password was not rotated.',
