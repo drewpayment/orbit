@@ -40,6 +40,8 @@ type CredentialRevokeWorkflowInput = {
 
 /**
  * Trigger the CredentialUpsertWorkflow to sync a credential to Bifrost.
+ * Uses a deterministic workflow ID based on service account ID for idempotency.
+ * If a workflow is already running for this credential, Temporal will reject the duplicate.
  *
  * @param serviceAccountId - Service account ID (used for workflow ID)
  * @param input - Workflow input matching Go struct
@@ -49,7 +51,8 @@ async function triggerCredentialUpsertWorkflow(
   serviceAccountId: string,
   input: CredentialUpsertWorkflowInput
 ): Promise<string | null> {
-  const workflowId = `credential-upsert-${serviceAccountId}-${Date.now()}`
+  // Use deterministic ID for idempotency - only one sync can run at a time per credential
+  const workflowId = `credential-upsert-${serviceAccountId}`
 
   try {
     const client = await getTemporalClient()
@@ -66,6 +69,14 @@ async function triggerCredentialUpsertWorkflow(
 
     return handle.workflowId
   } catch (error) {
+    // Check if workflow is already running (duplicate start)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    if (errorMessage.includes('already started') || errorMessage.includes('already running')) {
+      console.log(
+        `[Kafka] CredentialUpsertWorkflow already running for service account ${serviceAccountId}`
+      )
+      return workflowId // Return the existing workflow ID
+    }
     console.error('[Kafka] Failed to start CredentialUpsertWorkflow:', error)
     return null
   }
@@ -73,6 +84,7 @@ async function triggerCredentialUpsertWorkflow(
 
 /**
  * Trigger the CredentialRevokeWorkflow to revoke a credential from Bifrost.
+ * Uses a deterministic workflow ID based on service account ID for idempotency.
  *
  * @param serviceAccountId - Service account ID (used for workflow ID)
  * @param input - Workflow input matching Go struct
@@ -82,7 +94,8 @@ async function triggerCredentialRevokeWorkflow(
   serviceAccountId: string,
   input: CredentialRevokeWorkflowInput
 ): Promise<string | null> {
-  const workflowId = `credential-revoke-${serviceAccountId}-${Date.now()}`
+  // Use deterministic ID - revoke should be idempotent
+  const workflowId = `credential-revoke-${serviceAccountId}`
 
   try {
     const client = await getTemporalClient()
@@ -99,9 +112,91 @@ async function triggerCredentialRevokeWorkflow(
 
     return handle.workflowId
   } catch (error) {
+    // Check if workflow is already running (duplicate revoke)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    if (errorMessage.includes('already started') || errorMessage.includes('already running')) {
+      console.log(
+        `[Kafka] CredentialRevokeWorkflow already running for service account ${serviceAccountId}`
+      )
+      return workflowId // Return the existing workflow ID
+    }
     console.error('[Kafka] Failed to start CredentialRevokeWorkflow:', error)
     return null
   }
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Verify that the current user has admin/owner access to the service account's workspace.
+ */
+async function verifyServiceAccountAccess(
+  payload: Awaited<ReturnType<typeof getPayload>>,
+  userId: string,
+  serviceAccountId: string
+): Promise<{
+  allowed: boolean
+  error?: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  serviceAccount?: any
+  virtualClusterId?: string
+}> {
+  // Get the service account with depth to get application/workspace
+  const serviceAccount = await payload.findByID({
+    collection: 'kafka-service-accounts',
+    id: serviceAccountId,
+    depth: 2,
+    overrideAccess: true,
+  })
+
+  if (!serviceAccount) {
+    return { allowed: false, error: 'Service account not found' }
+  }
+
+  // Get application from service account
+  const app =
+    typeof serviceAccount.application === 'string'
+      ? await payload.findByID({
+          collection: 'kafka-applications',
+          id: serviceAccount.application,
+          overrideAccess: true,
+        })
+      : serviceAccount.application
+
+  if (!app) {
+    return { allowed: false, error: 'Application not found' }
+  }
+
+  const workspaceId = typeof app.workspace === 'string' ? app.workspace : app.workspace.id
+
+  // Check if user is admin/owner of the workspace
+  const membership = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { workspace: { equals: workspaceId } },
+        { user: { equals: userId } },
+        { role: { in: ['owner', 'admin'] } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    limit: 1,
+    overrideAccess: true,
+  })
+
+  if (membership.docs.length === 0) {
+    return { allowed: false, error: 'Insufficient permissions' }
+  }
+
+  // Get virtual cluster ID
+  const virtualClusterId =
+    typeof serviceAccount.virtualCluster === 'string'
+      ? serviceAccount.virtualCluster
+      : serviceAccount.virtualCluster?.id
+
+  return { allowed: true, serviceAccount, virtualClusterId }
 }
 
 // ============================================================================
@@ -114,9 +209,9 @@ export interface CreateServiceAccountInput {
   virtualClusterId: string
   permissionTemplate: 'producer' | 'consumer' | 'admin' | 'custom'
   customPermissions?: {
-    resourceType: string
+    resourceType: 'topic' | 'group' | 'transactional_id'
     resourcePattern: string
-    operations: string[]
+    operations: ('create' | 'delete' | 'read' | 'write' | 'alter' | 'describe')[]
   }[]
 }
 
@@ -149,6 +244,20 @@ export async function createServiceAccount(
 
     if (!virtualCluster) {
       return { success: false, error: 'Virtual cluster not found' }
+    }
+
+    // Validate virtual cluster status - only allow service account creation for active clusters
+    if (virtualCluster.status !== 'active') {
+      const statusMessages: Record<string, string> = {
+        provisioning: 'Virtual cluster is still provisioning. Please wait for it to become active.',
+        read_only: 'Virtual cluster is in read-only mode. Cannot create new service accounts.',
+        deleting: 'Virtual cluster is being deleted. Cannot create new service accounts.',
+        deleted: 'Virtual cluster has been deleted.',
+      }
+      return {
+        success: false,
+        error: statusMessages[virtualCluster.status] || 'Virtual cluster is not active',
+      }
     }
 
     const app =
@@ -281,14 +390,13 @@ export async function rotateServiceAccountPassword(
 
     const payload = await getPayload({ config })
 
-    // Get service account and verify permissions
-    const serviceAccount = await payload.findByID({
-      collection: 'kafka-service-accounts',
-      id: serviceAccountId,
-      depth: 2,
-      overrideAccess: true,
-    })
+    // Verify workspace admin access
+    const accessCheck = await verifyServiceAccountAccess(payload, session.user.id, serviceAccountId)
+    if (!accessCheck.allowed) {
+      return { success: false, error: accessCheck.error }
+    }
 
+    const serviceAccount = accessCheck.serviceAccount
     if (!serviceAccount) {
       return { success: false, error: 'Service account not found' }
     }
@@ -296,6 +404,10 @@ export async function rotateServiceAccountPassword(
     if (serviceAccount.status === 'revoked') {
       return { success: false, error: 'Cannot rotate revoked service account' }
     }
+
+    // Store original password hash for potential rollback
+    const originalPasswordHash = serviceAccount.passwordHash
+    const originalLastRotatedAt = serviceAccount.lastRotatedAt
 
     // Generate new password
     const password = generateSecurePassword()
@@ -312,27 +424,31 @@ export async function rotateServiceAccountPassword(
       overrideAccess: true,
     })
 
-    // Get virtual cluster ID for workflow
-    const virtualClusterId =
-      typeof serviceAccount.virtualCluster === 'string'
-        ? serviceAccount.virtualCluster
-        : serviceAccount.virtualCluster?.id
-
     // Trigger workflow to sync updated credential to Bifrost
-    if (virtualClusterId) {
+    if (accessCheck.virtualClusterId) {
       const workflowId = await triggerCredentialUpsertWorkflow(serviceAccountId, {
         credentialId: serviceAccountId,
-        virtualClusterId,
+        virtualClusterId: accessCheck.virtualClusterId,
         username: serviceAccount.username,
         passwordHash: passwordHashValue,
         template: serviceAccount.permissionTemplate,
       })
 
       if (!workflowId) {
-        console.warn(
-          `[Kafka] Service account ${serviceAccountId} password rotated but Bifrost sync failed. ` +
-            'Manual sync may be required.'
-        )
+        // Rollback: restore original password hash since Bifrost sync failed
+        await payload.update({
+          collection: 'kafka-service-accounts',
+          id: serviceAccountId,
+          data: {
+            passwordHash: originalPasswordHash,
+            lastRotatedAt: originalLastRotatedAt,
+          },
+          overrideAccess: true,
+        })
+        return {
+          success: false,
+          error: 'Failed to sync credential to Bifrost. Password was not rotated.',
+        }
       }
     }
 
@@ -361,6 +477,22 @@ export async function revokeServiceAccount(
     }
 
     const payload = await getPayload({ config })
+
+    // Verify workspace admin access
+    const accessCheck = await verifyServiceAccountAccess(payload, session.user.id, serviceAccountId)
+    if (!accessCheck.allowed) {
+      return { success: false, error: accessCheck.error }
+    }
+
+    const serviceAccount = accessCheck.serviceAccount
+    if (!serviceAccount) {
+      return { success: false, error: 'Service account not found' }
+    }
+
+    // Don't revoke if already revoked
+    if (serviceAccount.status === 'revoked') {
+      return { success: false, error: 'Service account is already revoked' }
+    }
 
     // Update status to revoked
     await payload.update({
