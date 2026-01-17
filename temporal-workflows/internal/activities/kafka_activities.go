@@ -244,20 +244,29 @@ func (a *KafkaActivitiesImpl) ProvisionTopic(ctx context.Context, input KafkaTop
 		slog.String("topicId", input.TopicID),
 		slog.String("topicName", input.TopicName),
 		slog.String("topicPrefix", input.TopicPrefix),
+		slog.String("bootstrapServers", input.BootstrapServers),
 	)
 
 	// Generate the physical topic name
 	physicalName := input.TopicPrefix + input.TopicName
 
-	// Create adapter from bootstrap servers in input
-	if input.BootstrapServers == "" {
-		return nil, fmt.Errorf("bootstrap servers required")
+	var connectionConfig map[string]any
+	var credentials map[string]string
+
+	// If bootstrap servers provided directly, use them; otherwise look up from topic's cluster
+	if input.BootstrapServers != "" {
+		connectionConfig = map[string]any{"bootstrapServers": input.BootstrapServers}
+		credentials = map[string]string{}
+	} else {
+		// Look up cluster config from topic
+		var err error
+		connectionConfig, credentials, err = a.getClusterConfigForTopic(ctx, input.TopicID)
+		if err != nil {
+			return nil, fmt.Errorf("getting cluster config: %w", err)
+		}
 	}
 
-	adapter, err := a.adapterFactory.CreateKafkaAdapterFromConfig(
-		map[string]any{"bootstrapServers": input.BootstrapServers},
-		map[string]string{},
-	)
+	adapter, err := a.adapterFactory.CreateKafkaAdapterFromConfig(connectionConfig, credentials)
 	if err != nil {
 		return nil, fmt.Errorf("creating kafka adapter: %w", err)
 	}
