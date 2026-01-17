@@ -2,7 +2,7 @@
 
 This document tracks planned features, incomplete implementations, and technical debt across the Orbit codebase.
 
-**Last Updated:** 2026-01-16 (Service Account Temporal Integration completed)
+**Last Updated:** 2026-01-17 (Topic Retry UI feature planned)
 
 ---
 
@@ -207,6 +207,16 @@ End-to-end integration test to validate the complete lineage data flow:
 
 #### Offset Recovery (Need workflow completion + server action)
 - [ ] `kafka-offset-recovery.ts` - `executeOffsetRestore` returns placeholder (line 373)
+
+#### Topic Retry from UI (Planned)
+- [ ] Add "Retry Provisioning" action to topic row menu for failed topics
+- [ ] Show error details in a modal/popover when clicking on Failed status badge
+- [ ] Implement `retryTopicProvisioning()` server action that:
+  - Resets topic status from `failed` to `provisioning`
+  - Clears previous `provisioningError`
+  - Triggers new `TopicProvisioningWorkflow`
+- [ ] Consider workflow history link to Temporal UI for debugging
+- [ ] Same pattern for failed schema registration and access provisioning
 
 #### Application Lifecycle (COMPLETED)
 - [x] `kafka-application-lifecycle.ts` - Wire server actions to decommissioning workflows
