@@ -4,11 +4,109 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
+import { getTemporalClient } from '@/lib/temporal/client'
 import {
   generateSecurePassword,
   hashPassword,
   generateServiceAccountUsername,
 } from '@/collections/kafka/KafkaServiceAccounts'
+
+// ============================================================================
+// Workflow Types
+// ============================================================================
+
+/**
+ * Workflow input type matching Go CredentialUpsertWorkflowInput struct.
+ * Field names use camelCase to match Go JSON tags.
+ */
+type CredentialUpsertWorkflowInput = {
+  credentialId: string
+  virtualClusterId: string
+  username: string
+  passwordHash: string
+  template: string
+}
+
+/**
+ * Workflow input type matching Go CredentialRevokeWorkflowInput struct.
+ */
+type CredentialRevokeWorkflowInput = {
+  credentialId: string
+}
+
+// ============================================================================
+// Workflow Helper Functions
+// ============================================================================
+
+/**
+ * Trigger the CredentialUpsertWorkflow to sync a credential to Bifrost.
+ *
+ * @param serviceAccountId - Service account ID (used for workflow ID)
+ * @param input - Workflow input matching Go struct
+ * @returns Workflow ID if started successfully, null otherwise
+ */
+async function triggerCredentialUpsertWorkflow(
+  serviceAccountId: string,
+  input: CredentialUpsertWorkflowInput
+): Promise<string | null> {
+  const workflowId = `credential-upsert-${serviceAccountId}-${Date.now()}`
+
+  try {
+    const client = await getTemporalClient()
+
+    const handle = await client.workflow.start('CredentialUpsertWorkflow', {
+      taskQueue: 'orbit-workflows',
+      workflowId,
+      args: [input],
+    })
+
+    console.log(
+      `[Kafka] Started CredentialUpsertWorkflow: ${handle.workflowId} for service account ${serviceAccountId}`
+    )
+
+    return handle.workflowId
+  } catch (error) {
+    console.error('[Kafka] Failed to start CredentialUpsertWorkflow:', error)
+    return null
+  }
+}
+
+/**
+ * Trigger the CredentialRevokeWorkflow to revoke a credential from Bifrost.
+ *
+ * @param serviceAccountId - Service account ID (used for workflow ID)
+ * @param input - Workflow input matching Go struct
+ * @returns Workflow ID if started successfully, null otherwise
+ */
+async function triggerCredentialRevokeWorkflow(
+  serviceAccountId: string,
+  input: CredentialRevokeWorkflowInput
+): Promise<string | null> {
+  const workflowId = `credential-revoke-${serviceAccountId}-${Date.now()}`
+
+  try {
+    const client = await getTemporalClient()
+
+    const handle = await client.workflow.start('CredentialRevokeWorkflow', {
+      taskQueue: 'orbit-workflows',
+      workflowId,
+      args: [input],
+    })
+
+    console.log(
+      `[Kafka] Started CredentialRevokeWorkflow: ${handle.workflowId} for service account ${serviceAccountId}`
+    )
+
+    return handle.workflowId
+  } catch (error) {
+    console.error('[Kafka] Failed to start CredentialRevokeWorkflow:', error)
+    return null
+  }
+}
+
+// ============================================================================
+// Types
+// ============================================================================
 
 export interface CreateServiceAccountInput {
   name: string
@@ -137,7 +235,22 @@ export async function createServiceAccount(
       overrideAccess: true,
     })
 
-    // TODO: Trigger Temporal workflow to sync credential to Bifrost
+    // Trigger workflow to sync credential to Bifrost
+    const workflowId = await triggerCredentialUpsertWorkflow(serviceAccount.id, {
+      credentialId: serviceAccount.id,
+      virtualClusterId: input.virtualClusterId,
+      username,
+      passwordHash: passwordHashValue,
+      template: input.permissionTemplate,
+    })
+
+    if (!workflowId) {
+      // Credential created but sync failed - mark as pending sync
+      console.warn(
+        `[Kafka] Service account ${serviceAccount.id} created but Bifrost sync failed. ` +
+          'Manual sync may be required.'
+      )
+    }
 
     return {
       success: true,
@@ -199,7 +312,29 @@ export async function rotateServiceAccountPassword(
       overrideAccess: true,
     })
 
-    // TODO: Trigger Temporal workflow to sync new credential to Bifrost
+    // Get virtual cluster ID for workflow
+    const virtualClusterId =
+      typeof serviceAccount.virtualCluster === 'string'
+        ? serviceAccount.virtualCluster
+        : serviceAccount.virtualCluster?.id
+
+    // Trigger workflow to sync updated credential to Bifrost
+    if (virtualClusterId) {
+      const workflowId = await triggerCredentialUpsertWorkflow(serviceAccountId, {
+        credentialId: serviceAccountId,
+        virtualClusterId,
+        username: serviceAccount.username,
+        passwordHash: passwordHashValue,
+        template: serviceAccount.permissionTemplate,
+      })
+
+      if (!workflowId) {
+        console.warn(
+          `[Kafka] Service account ${serviceAccountId} password rotated but Bifrost sync failed. ` +
+            'Manual sync may be required.'
+        )
+      }
+    }
 
     return {
       success: true,
@@ -239,7 +374,17 @@ export async function revokeServiceAccount(
       overrideAccess: true,
     })
 
-    // TODO: Trigger Temporal workflow to revoke credential from Bifrost
+    // Trigger workflow to revoke credential from Bifrost
+    const workflowId = await triggerCredentialRevokeWorkflow(serviceAccountId, {
+      credentialId: serviceAccountId,
+    })
+
+    if (!workflowId) {
+      console.warn(
+        `[Kafka] Service account ${serviceAccountId} revoked in database but Bifrost revoke failed. ` +
+          'Manual revocation may be required.'
+      )
+    }
 
     return { success: true }
   } catch (error) {

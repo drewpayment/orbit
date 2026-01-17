@@ -2,7 +2,7 @@
 
 This document tracks planned features, incomplete implementations, and technical debt across the Orbit codebase.
 
-**Last Updated:** 2026-01-16 (Application Lifecycle Temporal Integration completed)
+**Last Updated:** 2026-01-16 (Service Account Temporal Integration completed)
 
 ---
 
@@ -199,8 +199,11 @@ End-to-end integration test to validate the complete lineage data flow:
 - [x] `kafka-topic-shares.ts` - `triggerShareRevokedWorkflow` - Starts AccessRevocationWorkflow
 - [x] `kafka-topic-catalog.ts` - `triggerShareApprovedWorkflow` (auto-approval path)
 
-#### Service Account Operations (Need workflow + server action)
-- [ ] `kafka-service-accounts.ts` - Temporal workflow triggers (lines 140, 202, 242)
+#### Service Account Operations (COMPLETED)
+- [x] `kafka-service-accounts.ts` - Temporal workflow triggers
+  - `createServiceAccount()` - Triggers `CredentialUpsertWorkflow` to sync to Bifrost
+  - `rotateServiceAccountPassword()` - Triggers `CredentialUpsertWorkflow` with new password
+  - `revokeServiceAccount()` - Triggers `CredentialRevokeWorkflow` to revoke from Bifrost
 
 #### Offset Recovery (Need workflow completion + server action)
 - [ ] `kafka-offset-recovery.ts` - `executeOffsetRestore` returns placeholder (line 373)
