@@ -47,15 +47,29 @@ func NewPayloadClient(baseURL, apiKey string, logger *slog.Logger) *PayloadClien
 }
 
 // Get retrieves a single document by ID from a collection.
+// For kafka collections, uses the internal API route that bypasses access control.
 func (c *PayloadClient) Get(ctx context.Context, collection string, id string) (map[string]any, error) {
-	url := fmt.Sprintf("%s/api/%s/%s", c.baseURL, collection, id)
+	// Use internal API route for collections that need elevated access
+	var reqURL string
+	switch collection {
+	case "kafka-topics", "kafka-virtual-clusters", "kafka-clusters", "kafka-schemas", "kafka-topic-shares", "kafka-lineage-edges", "kafka-applications", "workspaces":
+		reqURL = fmt.Sprintf("%s/api/internal/%s/%s", c.baseURL, collection, id)
+	default:
+		reqURL = fmt.Sprintf("%s/api/%s/%s", c.baseURL, collection, id)
+	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 
 	c.addHeaders(req)
+
+	c.logger.Debug("payload get request",
+		slog.String("collection", collection),
+		slog.String("id", id),
+		slog.String("url", reqURL),
+	)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

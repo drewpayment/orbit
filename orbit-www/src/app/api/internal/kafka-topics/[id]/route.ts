@@ -5,6 +5,63 @@ import configPromise from '@payload-config'
 const INTERNAL_API_KEY = process.env.ORBIT_INTERNAL_API_KEY
 
 /**
+ * GET /api/internal/kafka-topics/[id]
+ * Retrieves a Kafka topic by ID with related data.
+ * Used by Temporal workflows to fetch topic and cluster configuration.
+ */
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  // Validate API key
+  const apiKey = request.headers.get('X-API-Key')
+  if (!INTERNAL_API_KEY || apiKey !== INTERNAL_API_KEY) {
+    return NextResponse.json(
+      { error: 'Unauthorized', code: 'UNAUTHORIZED' },
+      { status: 401 }
+    )
+  }
+
+  try {
+    const { id } = await params
+
+    const payload = await getPayload({ config: configPromise })
+
+    // Fetch topic with depth to include related virtualCluster and its physicalCluster
+    const topic = await payload.findByID({
+      collection: 'kafka-topics',
+      id,
+      depth: 2, // Include virtualCluster -> physicalCluster chain
+      overrideAccess: true,
+    })
+
+    if (!topic) {
+      return NextResponse.json(
+        { error: 'Topic not found', code: 'NOT_FOUND' },
+        { status: 404 }
+      )
+    }
+
+    return NextResponse.json(topic)
+  } catch (error) {
+    console.error('[Internal API] Kafka topic get error:', error)
+
+    // Check if it's a not found error
+    if (error instanceof Error && error.message.includes('not found')) {
+      return NextResponse.json(
+        { error: 'Topic not found', code: 'NOT_FOUND' },
+        { status: 404 }
+      )
+    }
+
+    return NextResponse.json(
+      { error: 'Internal server error', code: 'INTERNAL_ERROR' },
+      { status: 500 }
+    )
+  }
+}
+
+/**
  * PATCH /api/internal/kafka-topics/[id]
  * Updates a Kafka topic's status and other fields.
  * Used by Temporal workflows to update topic provisioning status.
