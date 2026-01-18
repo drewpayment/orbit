@@ -100,7 +100,7 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
         environment: vc.environment as 'dev' | 'stage' | 'prod',
         status: vc.status,
         advertisedHost: vc.advertisedHost,
-        topicPrefix: vc.topicPrefix,
+        advertisedPort: vc.advertisedPort,
       }))}
       canManage={memberRole === 'owner' || memberRole === 'admin' || memberRole === 'member'}
       canApprove={memberRole === 'owner' || memberRole === 'admin'}

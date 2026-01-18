@@ -15,7 +15,7 @@ interface VirtualCluster {
   environment: 'dev' | 'stage' | 'prod'
   status: string
   advertisedHost: string
-  topicPrefix: string
+  advertisedPort?: number
 }
 
 interface Application {
@@ -155,19 +155,13 @@ export function ApplicationDetailClient({
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <div className="text-sm font-medium text-muted-foreground">
-                          Bootstrap Server
-                        </div>
-                        <code className="text-sm bg-muted px-2 py-1 rounded">
-                          {vc.advertisedHost}
-                        </code>
+                    <div>
+                      <div className="text-sm font-medium text-muted-foreground">
+                        Bootstrap Server
                       </div>
-                      <div>
-                        <div className="text-sm font-medium text-muted-foreground">Topic Prefix</div>
-                        <code className="text-sm bg-muted px-2 py-1 rounded">{vc.topicPrefix}</code>
-                      </div>
+                      <code className="text-sm bg-muted px-2 py-1 rounded">
+                        {vc.advertisedHost}:{vc.advertisedPort || 9092}
+                      </code>
                     </div>
                   </CardContent>
                 </Card>
