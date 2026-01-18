@@ -1,0 +1,23 @@
+# Traefik static configuration for Orbit local development
+# Handles wildcard DNS routing for Bifrost virtual clusters
+
+api:
+  dashboard: true
+  insecure: true
+
+log:
+  level: INFO
+
+entryPoints:
+  # Kafka/Bifrost TCP passthrough
+  kafka:
+    address: ":9092"
+
+  # Traefik dashboard
+  traefik:
+    address: ":8090"
+
+providers:
+  file:
+    filename: /etc/traefik/dynamic.yml
+    watch: true

@@ -1,0 +1,18 @@
+# Traefik dynamic configuration
+# Routes all Kafka traffic to Bifrost (routing happens inside Bifrost based on credentials)
+
+tcp:
+  routers:
+    # All Kafka traffic goes to Bifrost
+    # Bifrost routes to the correct virtual cluster based on the authenticated user
+    bifrost-kafka:
+      entryPoints:
+        - kafka
+      rule: "HostSNI(`*`)"
+      service: bifrost
+
+  services:
+    bifrost:
+      loadBalancer:
+        servers:
+          - address: "bifrost:9092"
