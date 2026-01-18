@@ -7,6 +7,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 
 	gatewayv1 "github.com/drewpayment/orbit/proto/gen/go/idp/gateway/v1"
 )
@@ -22,6 +23,9 @@ type Server struct {
 func NewServer(service *Service, port int) *Server {
 	grpcServer := grpc.NewServer()
 	gatewayv1.RegisterBifrostAdminServiceServer(grpcServer, service)
+
+	// Enable server reflection for grpcurl and other tools
+	reflection.Register(grpcServer)
 
 	return &Server{
 		grpcServer: grpcServer,
