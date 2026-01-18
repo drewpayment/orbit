@@ -29,6 +29,7 @@ export type TopicCatalogEntry = {
   partitions: number
   hasActiveShare: boolean
   shareStatus?: 'none' | 'pending' | 'approved' | 'rejected' | 'revoked' | 'expired'
+  shareId?: string
 }
 
 export type SearchTopicCatalogInput = {
@@ -62,6 +63,28 @@ export type RequestTopicAccessResult = {
   shareId?: string
   error?: string
   autoApproved?: boolean
+}
+
+export type ConnectionDetails = {
+  bootstrapServers: string
+  topicName: string
+  authMethod: 'SASL/SCRAM-SHA-256' | 'SASL/SCRAM-SHA-512' | 'SASL/PLAIN'
+  tlsEnabled: boolean
+  serviceAccounts: Array<{
+    id: string
+    name: string
+    username: string
+    status: 'active' | 'revoked'
+  }>
+  applicationId: string
+  applicationName: string
+  shareStatus: string
+}
+
+export type GetConnectionDetailsResult = {
+  success: boolean
+  connectionDetails?: ConnectionDetails
+  error?: string
 }
 
 // ============================================================================
@@ -347,7 +370,7 @@ export async function searchTopicCatalog(
     })
 
     // Build share status map
-    const shareStatusMap = new Map<string, { hasActive: boolean; status: string }>()
+    const shareStatusMap = new Map<string, { hasActive: boolean; status: string; shareId: string }>()
     for (const share of existingShares.docs) {
       const topicId = typeof share.topic === 'string' ? share.topic : share.topic.id
       const existing = shareStatusMap.get(topicId)
@@ -358,6 +381,7 @@ export async function searchTopicCatalog(
         shareStatusMap.set(topicId, {
           hasActive: share.status === 'approved',
           status: share.status,
+          shareId: share.id,
         })
       }
     }
@@ -392,6 +416,7 @@ export async function searchTopicCatalog(
         partitions: topic.partitions,
         hasActiveShare: shareInfo?.hasActive ?? false,
         shareStatus: shareInfo?.status as TopicCatalogEntry['shareStatus'] ?? 'none',
+        shareId: shareInfo?.shareId,
       }
     })
 
@@ -542,6 +567,162 @@ export async function requestTopicAccess(
     }
   } catch (error) {
     console.error('Failed to request topic access:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }
+  }
+}
+
+/**
+ * Get connection details for an approved topic share
+ *
+ * Returns bootstrap servers, topic name, auth method, and service accounts
+ * for connecting to a shared topic.
+ */
+export async function getConnectionDetails(
+  shareId: string
+): Promise<GetConnectionDetailsResult> {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+
+  if (!session?.user) {
+    return { success: false, error: 'Not authenticated' }
+  }
+
+  const payload = await getPayload({ config })
+  const userId = session.user.id
+
+  try {
+    // Fetch the share with related data
+    const share = await payload.findByID({
+      collection: 'kafka-topic-shares',
+      id: shareId,
+      depth: 2,
+      overrideAccess: true,
+    })
+
+    if (!share) {
+      return { success: false, error: 'Share not found' }
+    }
+
+    // Get workspace IDs
+    const ownerWorkspaceId = typeof share.ownerWorkspace === 'string'
+      ? share.ownerWorkspace
+      : share.ownerWorkspace.id
+    const targetWorkspaceId = typeof share.targetWorkspace === 'string'
+      ? share.targetWorkspace
+      : share.targetWorkspace.id
+
+    // Verify user has access (member of owner or target workspace)
+    const memberships = await payload.find({
+      collection: 'workspace-members',
+      where: {
+        and: [
+          { user: { equals: userId } },
+          { status: { equals: 'active' } },
+          {
+            or: [
+              { workspace: { equals: ownerWorkspaceId } },
+              { workspace: { equals: targetWorkspaceId } },
+            ],
+          },
+        ],
+      },
+      limit: 1,
+      overrideAccess: true,
+    })
+
+    if (memberships.docs.length === 0) {
+      return { success: false, error: 'Access denied' }
+    }
+
+    // Get topic details
+    const topic = typeof share.topic === 'string'
+      ? await payload.findByID({ collection: 'kafka-topics', id: share.topic, overrideAccess: true })
+      : share.topic
+
+    if (!topic) {
+      return { success: false, error: 'Topic not found' }
+    }
+
+    // Get Bifrost config
+    const { getBifrostConfig } = await import('@/lib/bifrost-config')
+    const bifrostConfig = await getBifrostConfig()
+
+    // Determine bootstrap servers and topic name based on connection mode
+    let bootstrapServers: string
+    let topicName: string
+
+    if (bifrostConfig.connectionMode === 'bifrost') {
+      bootstrapServers = bifrostConfig.advertisedHost
+      topicName = topic.name // Short name - Bifrost rewrites
+    } else {
+      // Direct mode - use physical cluster details
+      const cluster = typeof topic.cluster === 'string'
+        ? await payload.findByID({ collection: 'kafka-clusters', id: topic.cluster, overrideAccess: true })
+        : topic.cluster
+
+      // bootstrapServers is stored in connectionConfig JSON field
+      const connectionConfig = cluster?.connectionConfig as { bootstrapServers?: string } | null
+      bootstrapServers = connectionConfig?.bootstrapServers || bifrostConfig.advertisedHost
+      topicName = topic.fullTopicName || topic.name
+    }
+
+    // Find the requesting application to get service accounts
+    // First, find applications in the target workspace
+    const apps = await payload.find({
+      collection: 'kafka-applications',
+      where: {
+        workspace: { equals: targetWorkspaceId },
+      },
+      limit: 100,
+      overrideAccess: true,
+    })
+
+    // Get service accounts for these applications
+    const appIds = apps.docs.map(a => a.id)
+    const serviceAccountsResult = await payload.find({
+      collection: 'kafka-service-accounts',
+      where: {
+        and: [
+          { application: { in: appIds } },
+          { status: { equals: 'active' } },
+        ],
+      },
+      depth: 1,
+      limit: 100,
+      overrideAccess: true,
+    })
+
+    const serviceAccounts = serviceAccountsResult.docs.map(sa => {
+      return {
+        id: sa.id,
+        name: sa.name,
+        username: sa.username,
+        status: sa.status as 'active' | 'revoked',
+      }
+    })
+
+    // Get first app for display (or use target workspace info)
+    const primaryApp = apps.docs[0]
+
+    return {
+      success: true,
+      connectionDetails: {
+        bootstrapServers,
+        topicName,
+        authMethod: bifrostConfig.defaultAuthMethod,
+        tlsEnabled: bifrostConfig.tlsEnabled,
+        serviceAccounts,
+        applicationId: primaryApp?.id || '',
+        applicationName: primaryApp?.name || 'No application',
+        shareStatus: share.status,
+      },
+    }
+  } catch (error) {
+    console.error('Failed to get connection details:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
