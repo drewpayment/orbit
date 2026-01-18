@@ -2,7 +2,7 @@
 
 This document tracks planned features, incomplete implementations, and technical debt across the Orbit codebase.
 
-**Last Updated:** 2026-01-17 (Topic Retry UI feature planned)
+**Last Updated:** 2026-01-17 (Consumer Connection Information feature completed)
 
 ---
 
@@ -217,6 +217,27 @@ End-to-end integration test to validate the complete lineage data flow:
   - Triggers new `TopicProvisioningWorkflow`
 - [ ] Consider workflow history link to Temporal UI for debugging
 - [ ] Same pattern for failed schema registration and access provisioning
+
+#### Virtual Cluster Topic Creation (Planned)
+- [ ] Update main Kafka topics page to use virtual cluster-aware topic creation
+  - Current: `CreateTopicDialog` uses legacy path (environment mappings, no virtual clusters)
+  - Target: Use `VirtualClusterCreateTopicDialog` or integrate virtual cluster selection
+- [ ] Add virtual cluster selector to topic creation flow on main topics page
+- [ ] Consider: Should topics always belong to an application/virtual cluster?
+- [ ] Migrate legacy topics (created without virtual cluster) to virtual cluster model
+- [ ] Deprecate or remove `CreateTopicDialog` in favor of virtual cluster-aware dialog
+
+#### Consumer Connection Information (COMPLETED)
+- [x] BifrostConfig collection for admin-configurable connection settings
+- [x] getBifrostConfig helper with sensible defaults
+- [x] getConnectionDetails server action with share validation
+- [x] Code snippet templates for Java, Python, Node.js, Go
+- [x] ServiceAccountSelector component with credential display
+- [x] CodeSnippetsDialog component with language tabs
+- [x] ConnectionDetailsPanel with Sheet UI showing all connection info
+- [x] TopicCatalog integration - "Connect" button for approved shares
+- [x] SharedTopicsList integration - connection details for shared topics
+- [ ] Future: Auto-generate service account when share is approved
 
 #### Application Lifecycle (COMPLETED)
 - [x] `kafka-application-lifecycle.ts` - Wire server actions to decommissioning workflows
