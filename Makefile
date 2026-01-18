@@ -29,7 +29,7 @@ test-go: ## Run Go tests with coverage
 	@cd services/knowledge && go test -v -race -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
 	@cd services/build-service && go test -v -race -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
 	@cd services/kafka && go test -v -race -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
-	@cd services/bifrost-callback && go test -v -race -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
+	@cd services/bifrost && go test -v -race -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
 	@cd services/plugins && go test -v -race -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
 	@cd temporal-workflows && go test -v -race -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
 
@@ -50,7 +50,7 @@ lint-go: ## Lint Go code
 	@cd services/knowledge && golangci-lint run
 	@cd services/build-service && golangci-lint run
 	@cd services/kafka && golangci-lint run
-	@cd services/bifrost-callback && golangci-lint run
+	@cd services/bifrost && golangci-lint run
 	@cd services/plugins && golangci-lint run
 	@cd temporal-workflows && golangci-lint run
 
@@ -65,7 +65,7 @@ security: ## Run security scans
 	@cd services/knowledge && gosec ./...
 	@cd services/build-service && gosec ./...
 	@cd services/kafka && gosec ./...
-	@cd services/bifrost-callback && gosec ./...
+	@cd services/bifrost && gosec ./...
 	@cd services/plugins && gosec ./...
 	@cd temporal-workflows && gosec ./...
 	@cd orbit-www && pnpm audit --audit-level moderate
@@ -77,7 +77,7 @@ build: ## Build all services
 	@cd services/knowledge && go build -o bin/knowledge ./cmd/server
 	@cd services/build-service && go build -o bin/build-service ./cmd/server
 	@cd services/kafka && go build -o bin/kafka ./cmd/server
-	@cd services/bifrost-callback && go build -o bin/bifrost-callback ./cmd/server
+	@cd services/bifrost && go build -o bin/bifrost ./cmd/bifrost
 	@cd services/plugins && go build -o bin/plugins ./cmd/server
 	@cd temporal-workflows && go build -o bin/worker ./cmd/worker
 	@cd orbit-www && pnpm build

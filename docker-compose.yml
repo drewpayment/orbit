@@ -80,7 +80,7 @@ services:
       temporal-server:
         condition: service_healthy
       bifrost:
-        condition: service_started
+        condition: service_healthy
       redpanda:
         condition: service_healthy
     environment:
@@ -341,10 +341,11 @@ services:
       - ./infrastructure/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./infrastructure/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
     depends_on:
-      - bifrost
+      bifrost:
+        condition: service_healthy
     restart: unless-stopped
 
-  # Bifrost Gateway (Kafka Virtual Clusters)
+  # Bifrost Gateway (Go - Multi-tenant Kafka Proxy)
   # Routes Kafka traffic based on authenticated credentials
   # Direct access: bifrost.orbit.orb.local:9092
   # Via Traefik: traefik.orbit.orb.local:9092
@@ -352,35 +353,28 @@ services:
     container_name: orbit-bifrost
     build:
       context: .
-      dockerfile: gateway/bifrost/Dockerfile
+      dockerfile: services/bifrost/Dockerfile
     ports:
       - "50060:50060"  # Admin gRPC
+      - "8084:8080"    # Metrics (use 8084 externally since 8080 is often used)
+    # Note: Kafka proxy (9092) is accessed via Traefik, not exposed directly
     environment:
+      - BIFROST_PROXY_PORT=9092
       - BIFROST_ADMIN_PORT=50060
+      - BIFROST_METRICS_PORT=8080
       - KAFKA_BOOTSTRAP_SERVERS=redpanda:9092
-      - BIFROST_CALLBACK_URL=bifrost-callback:50061
+      - BIFROST_LOG_LEVEL=info
     depends_on:
       redpanda:
         condition: service_healthy
-      bifrost-callback:
-        condition: service_started
-    restart: unless-stopped
-
-  # Bifrost Callback Service (Gateway → Orbit sync)
-  bifrost-callback:
-    container_name: orbit-bifrost-callback
-    build:
-      context: .
-      dockerfile: services/bifrost-callback/Dockerfile
-    ports:
-      - "50061:50061"  # gRPC
-    environment:
-      - GRPC_PORT=50061
-      - TEMPORAL_ADDRESS=temporal-server:7233
-      - TEMPORAL_NAMESPACE=default
-    depends_on:
-      temporal-server:
-        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - orbit-network
     restart: unless-stopped
 
   # Go Services

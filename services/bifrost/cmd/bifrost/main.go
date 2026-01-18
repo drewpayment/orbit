@@ -3,11 +3,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -17,6 +19,7 @@ import (
 	"github.com/drewpayment/orbit/services/bifrost/internal/auth"
 	"github.com/drewpayment/orbit/services/bifrost/internal/config"
 	"github.com/drewpayment/orbit/services/bifrost/internal/metrics"
+	"github.com/drewpayment/orbit/services/bifrost/internal/proxy"
 )
 
 func main() {
@@ -48,48 +51,85 @@ func main() {
 	adminService := admin.NewService(vcStore, credStore)
 	adminServer := admin.NewServer(adminService, cfg.AdminPort)
 
-	// Initialize SASL handler (for future proxy integration)
-	_ = auth.NewSASLHandler(credStore, vcStore)
+	// Initialize SASL handler
+	saslHandler := auth.NewSASLHandler(credStore, vcStore)
+
+	// Create metrics HTTP server with proper lifecycle management
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
+	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("READY"))
+	})
+
+	metricsServer := &http.Server{
+		Addr:    ":" + strconv.Itoa(cfg.MetricsPort),
+		Handler: mux,
+	}
+
+	// Error channel for server failures
+	errChan := make(chan error, 3)
 
 	// Start metrics HTTP server
 	go func() {
-		mux := http.NewServeMux()
-		mux.Handle("/metrics", promhttp.Handler())
-		mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("OK"))
-		})
-		mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("READY"))
-		})
-
-		addr := ":" + strconv.Itoa(cfg.MetricsPort)
-		logrus.Infof("Metrics server listening on %s", addr)
-		if err := http.ListenAndServe(addr, mux); err != nil {
-			logrus.Fatalf("Metrics server failed: %v", err)
+		logrus.Infof("Metrics server listening on %s", metricsServer.Addr)
+		if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			errChan <- fmt.Errorf("metrics server failed: %w", err)
 		}
 	}()
 
 	// Start admin gRPC server
 	go func() {
 		if err := adminServer.Start(); err != nil {
-			logrus.Fatalf("Admin server failed: %v", err)
+			errChan <- fmt.Errorf("admin server failed: %w", err)
 		}
 	}()
 
-	// TODO: Start Kafka proxy (Task 10)
-	logrus.Warn("Kafka proxy not yet implemented - only Admin API available")
+	// Start Kafka proxy
+	kafkaProxy := proxy.NewBifrostProxy(
+		":"+strconv.Itoa(cfg.ProxyPort),
+		saslHandler,
+		vcStore,
+		collector,
+	)
+	if err := kafkaProxy.Start(); err != nil {
+		errChan <- fmt.Errorf("proxy failed to start: %w", err)
+	}
 
-	// Wait for shutdown signal
+	// Wait for shutdown signal or server error
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	logrus.Info("Bifrost Gateway started successfully")
-	<-ctx.Done()
+
+	select {
+	case <-ctx.Done():
+		logrus.Info("Shutdown signal received")
+	case err := <-errChan:
+		logrus.Errorf("Server error: %v", err)
+	}
 
 	logrus.Info("Shutting down...")
+
+	// Graceful shutdown with timeout
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Stop Kafka proxy first (stops accepting connections)
+	kafkaProxy.Stop()
+
+	// Shutdown metrics server gracefully
+	if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+		logrus.Errorf("Metrics server shutdown error: %v", err)
+	}
+
+	// Stop admin server
 	adminServer.Stop()
+
 	logrus.Info("Bifrost Gateway stopped")
 }
 

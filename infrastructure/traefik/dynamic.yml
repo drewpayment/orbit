@@ -3,8 +3,7 @@
 # With Orbstack, Traefik is accessible at: traefik.orbit.orb.local
 # Kafka clients connect to: traefik.orbit.orb.local:9092
 #
-# When Bifrost Kafka proxy is implemented, change redpanda:9092 to bifrost:9092
-# Bifrost will route to the correct virtual cluster based on credentials.
+# Bifrost routes Kafka traffic to virtual clusters based on authenticated credentials.
 
 tcp:
   routers:
@@ -12,21 +11,14 @@ tcp:
       entryPoints:
         - kafka
       rule: "HostSNI(`*`)"
-      service: redpanda
+      service: bifrost
 
   services:
-    # Direct to Redpanda while Bifrost Kafka proxy is being developed
-    # TODO: Change to bifrost:9092 when Kroxylicious integration is complete
-    redpanda:
+    # Bifrost proxy for multi-tenant Kafka access
+    bifrost:
       loadBalancer:
         servers:
-          - address: "redpanda:9092"
-
-    # Bifrost proxy - enable when Kafka proxy is implemented
-    # bifrost:
-    #   loadBalancer:
-    #     servers:
-    #       - address: "bifrost:9092"
+          - address: "bifrost:9092"
 
 http:
   routers:
