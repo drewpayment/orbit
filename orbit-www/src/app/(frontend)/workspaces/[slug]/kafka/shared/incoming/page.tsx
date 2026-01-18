@@ -62,6 +62,7 @@ export default async function IncomingSharesPage({ params }: IncomingPageProps) 
 
       <SharedTopicsList
         workspaceId={workspace.id}
+        workspaceSlug={workspace.slug}
         type="incoming"
         canManage={canManage}
       />

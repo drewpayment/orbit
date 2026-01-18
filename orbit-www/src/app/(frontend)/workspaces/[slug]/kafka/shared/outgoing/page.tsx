@@ -59,6 +59,7 @@ export default async function OutgoingSharesPage({ params }: OutgoingPageProps) 
 
       <SharedTopicsList
         workspaceId={workspace.id}
+        workspaceSlug={workspace.slug}
         type="outgoing"
         canManage={false}
       />

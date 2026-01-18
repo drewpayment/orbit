@@ -9,7 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
-import { MoreHorizontal, Check, X, Trash2 } from 'lucide-react'
+import { MoreHorizontal, Check, X, Trash2, Link2 } from 'lucide-react'
 import {
   listPendingShares,
   approveShare,
@@ -17,9 +17,11 @@ import {
   revokeShare,
   type ShareListItem
 } from '@/app/actions/kafka-topic-shares'
+import { ConnectionDetailsPanel } from './ConnectionDetailsPanel'
 
 interface SharedTopicsListProps {
   workspaceId: string
+  workspaceSlug: string
   type: 'incoming' | 'outgoing'
   canManage: boolean
 }
@@ -31,7 +33,7 @@ const statusColors: Record<string, string> = {
   revoked: 'bg-gray-100 text-gray-800',
 }
 
-export function SharedTopicsList({ workspaceId, type, canManage }: SharedTopicsListProps) {
+export function SharedTopicsList({ workspaceId, workspaceSlug, type, canManage }: SharedTopicsListProps) {
   const [shares, setShares] = useState<ShareListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [isPending, startTransition] = useTransition()
@@ -41,6 +43,10 @@ export function SharedTopicsList({ workspaceId, type, canManage }: SharedTopicsL
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false)
   const [selectedShare, setSelectedShare] = useState<ShareListItem | null>(null)
   const [rejectReason, setRejectReason] = useState('')
+
+  // Connection details panel state
+  const [connectionPanelOpen, setConnectionPanelOpen] = useState(false)
+  const [selectedShareForConnection, setSelectedShareForConnection] = useState<ShareListItem | null>(null)
 
   const loadShares = useCallback(async () => {
     setLoading(true)
@@ -114,6 +120,11 @@ export function SharedTopicsList({ workspaceId, type, canManage }: SharedTopicsL
     setRevokeDialogOpen(true)
   }
 
+  const handleViewConnectionDetails = (share: ShareListItem) => {
+    setSelectedShareForConnection(share)
+    setConnectionPanelOpen(true)
+  }
+
   return (
     <>
       <Card>
@@ -143,7 +154,9 @@ export function SharedTopicsList({ workspaceId, type, canManage }: SharedTopicsL
                   <TableHead>Access Level</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Reason</TableHead>
-                  {canManage && type === 'incoming' && <TableHead className="text-right">Actions</TableHead>}
+                  {(canManage && type === 'incoming') || type === 'outgoing' ? (
+                    <TableHead className="text-right">Actions</TableHead>
+                  ) : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -191,12 +204,37 @@ export function SharedTopicsList({ workspaceId, type, canManage }: SharedTopicsL
                           </DropdownMenu>
                         )}
                         {share.status === 'approved' && (
+                          <div className="flex gap-1 justify-end">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleViewConnectionDetails(share)}
+                              title="View connection details"
+                            >
+                              <Link2 className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openRevokeDialog(share)}
+                              title="Revoke access"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        )}
+                      </TableCell>
+                    )}
+                    {type === 'outgoing' && (
+                      <TableCell className="text-right">
+                        {share.status === 'approved' && (
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => openRevokeDialog(share)}
+                            onClick={() => handleViewConnectionDetails(share)}
+                            title="View connection details"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Link2 className="h-4 w-4" />
                           </Button>
                         )}
                       </TableCell>
@@ -257,6 +295,16 @@ export function SharedTopicsList({ workspaceId, type, canManage }: SharedTopicsL
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Connection Details Panel */}
+      {selectedShareForConnection && (
+        <ConnectionDetailsPanel
+          open={connectionPanelOpen}
+          onOpenChange={setConnectionPanelOpen}
+          shareId={selectedShareForConnection.id}
+          workspaceSlug={workspaceSlug}
+        />
+      )}
     </>
   )
 }
