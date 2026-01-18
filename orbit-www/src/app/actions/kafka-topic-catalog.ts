@@ -731,3 +731,147 @@ export async function getConnectionDetails(
     }
   }
 }
+
+/**
+ * Get connection details for your own topic (not via a share)
+ *
+ * Use this when viewing connection details for a topic in your own workspace.
+ */
+export async function getOwnTopicConnectionDetails(
+  topicId: string
+): Promise<GetConnectionDetailsResult> {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+
+  if (!session?.user) {
+    return { success: false, error: 'Not authenticated' }
+  }
+
+  const payload = await getPayload({ config })
+  const userId = session.user.id
+
+  try {
+    // Fetch the topic with related data
+    const topic = await payload.findByID({
+      collection: 'kafka-topics',
+      id: topicId,
+      depth: 2,
+      overrideAccess: true,
+    })
+
+    if (!topic) {
+      return { success: false, error: 'Topic not found' }
+    }
+
+    // Get the workspace ID from the topic
+    const workspaceId = typeof topic.workspace === 'string'
+      ? topic.workspace
+      : topic.workspace?.id
+
+    if (!workspaceId) {
+      return { success: false, error: 'Topic has no workspace' }
+    }
+
+    // Verify user is a member of this workspace
+    const memberships = await payload.find({
+      collection: 'workspace-members',
+      where: {
+        and: [
+          { user: { equals: userId } },
+          { status: { equals: 'active' } },
+          { workspace: { equals: workspaceId } },
+        ],
+      },
+      limit: 1,
+      overrideAccess: true,
+    })
+
+    if (memberships.docs.length === 0) {
+      return { success: false, error: 'Access denied - you must be a workspace member' }
+    }
+
+    // Get Bifrost config
+    const { getBifrostConfig } = await import('@/lib/bifrost-config')
+    const bifrostConfig = await getBifrostConfig()
+
+    // Determine bootstrap servers and topic name based on connection mode
+    let bootstrapServers: string
+    let topicName: string
+
+    if (bifrostConfig.connectionMode === 'bifrost') {
+      bootstrapServers = bifrostConfig.advertisedHost
+      topicName = topic.name // Short name - Bifrost rewrites
+    } else {
+      // Direct mode - use physical cluster details
+      const cluster = typeof topic.cluster === 'string'
+        ? await payload.findByID({ collection: 'kafka-clusters', id: topic.cluster, overrideAccess: true })
+        : topic.cluster
+
+      // bootstrapServers is stored in connectionConfig JSON field
+      const connectionConfig = cluster?.connectionConfig as { bootstrapServers?: string } | null
+      bootstrapServers = connectionConfig?.bootstrapServers || bifrostConfig.advertisedHost
+      topicName = topic.fullTopicName || topic.name
+    }
+
+    // Find applications in this workspace
+    const apps = await payload.find({
+      collection: 'kafka-applications',
+      where: {
+        workspace: { equals: workspaceId },
+      },
+      limit: 100,
+      overrideAccess: true,
+    })
+
+    // Get service accounts for these applications
+    const appIds = apps.docs.map(a => a.id)
+    const serviceAccountsResult = appIds.length > 0
+      ? await payload.find({
+          collection: 'kafka-service-accounts',
+          where: {
+            and: [
+              { application: { in: appIds } },
+              { status: { equals: 'active' } },
+            ],
+          },
+          depth: 1,
+          limit: 100,
+          overrideAccess: true,
+        })
+      : { docs: [] }
+
+    const serviceAccounts = serviceAccountsResult.docs.map(sa => {
+      return {
+        id: sa.id,
+        name: sa.name,
+        username: sa.username,
+        status: sa.status as 'active' | 'revoked',
+      }
+    })
+
+    // Get first app for display
+    const primaryApp = apps.docs[0]
+
+    return {
+      success: true,
+      connectionDetails: {
+        bootstrapServers,
+        topicName,
+        authMethod: bifrostConfig.defaultAuthMethod,
+        tlsEnabled: bifrostConfig.tlsEnabled,
+        serviceAccounts,
+        applicationId: primaryApp?.id || '',
+        applicationSlug: primaryApp?.slug || '',
+        applicationName: primaryApp?.name || 'No application',
+        shareStatus: 'approved', // Own topics are always "approved"
+      },
+    }
+  } catch (error) {
+    console.error('Failed to get own topic connection details:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }
+  }
+}

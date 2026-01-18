@@ -74,6 +74,8 @@ export function TopicCatalog({ currentWorkspaceId, currentWorkspaceName, current
   // Connection details panel state
   const [connectionPanelOpen, setConnectionPanelOpen] = useState(false)
   const [selectedShareId, setSelectedShareId] = useState<string | null>(null)
+  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null)
+  const [isOwnTopicConnection, setIsOwnTopicConnection] = useState(false)
 
   const loadTopics = useCallback(async () => {
     setLoading(true)
@@ -110,8 +112,16 @@ export function TopicCatalog({ currentWorkspaceId, currentWorkspaceName, current
     setRequestDialogOpen(true)
   }
 
-  const handleViewConnectionDetails = (shareId: string) => {
-    setSelectedShareId(shareId)
+  const handleViewConnectionDetails = (topic: TopicCatalogEntry, isOwnTopic: boolean) => {
+    if (isOwnTopic) {
+      setSelectedTopicId(topic.id)
+      setSelectedShareId(null)
+      setIsOwnTopicConnection(true)
+    } else {
+      setSelectedShareId(topic.shareId ?? null)
+      setSelectedTopicId(null)
+      setIsOwnTopicConnection(false)
+    }
     setConnectionPanelOpen(true)
   }
 
@@ -250,18 +260,11 @@ export function TopicCatalog({ currentWorkspaceId, currentWorkspaceName, current
                       </TableCell>
                       <TableCell>{getShareStatusBadge(topic)}</TableCell>
                       <TableCell className="text-right">
-                        {isOwnWorkspace ? (
-                          <Button variant="ghost" size="sm" asChild>
-                            <a href={`/${topic.workspace.slug}/kafka/applications`}>
-                              <ExternalLink className="h-4 w-4 mr-1" />
-                              View
-                            </a>
-                          </Button>
-                        ) : topic.shareStatus === 'approved' && topic.shareId ? (
+                        {isOwnWorkspace || (topic.shareStatus === 'approved' && topic.shareId) ? (
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleViewConnectionDetails(topic.shareId!)}
+                            onClick={() => handleViewConnectionDetails(topic, isOwnWorkspace)}
                           >
                             <Link2 className="h-4 w-4 mr-1" />
                             Connect
@@ -363,11 +366,13 @@ export function TopicCatalog({ currentWorkspaceId, currentWorkspaceName, current
         </Dialog>
 
         {/* Connection Details Panel */}
-        {selectedShareId && (
+        {(selectedShareId || selectedTopicId) && (
           <ConnectionDetailsPanel
             open={connectionPanelOpen}
             onOpenChange={setConnectionPanelOpen}
-            shareId={selectedShareId}
+            shareId={selectedShareId ?? undefined}
+            topicId={selectedTopicId ?? undefined}
+            isOwnTopic={isOwnTopicConnection}
             workspaceSlug={currentWorkspaceSlug}
           />
         )}

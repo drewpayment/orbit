@@ -374,9 +374,9 @@ func (a *DecommissioningActivities) getClusterConfigForTopic(ctx context.Context
 	}
 
 	// Get physical cluster ID
-	clusterID, ok := vc["cluster"].(string)
+	clusterID, ok := vc["physicalCluster"].(string)
 	if !ok {
-		if cluster, ok := vc["cluster"].(map[string]any); ok {
+		if cluster, ok := vc["physicalCluster"].(map[string]any); ok {
 			clusterID, _ = cluster["id"].(string)
 		}
 	}

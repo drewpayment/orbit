@@ -18,6 +18,7 @@ import { Copy, Check, Code, Clock, XCircle, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   getConnectionDetails,
+  getOwnTopicConnectionDetails,
   type ConnectionDetails,
 } from '@/app/actions/kafka-topic-catalog'
 import { ServiceAccountSelector, type ServiceAccountInfo } from './ServiceAccountSelector'
@@ -26,7 +27,9 @@ import { CodeSnippetsDialog } from './CodeSnippetsDialog'
 interface ConnectionDetailsPanelProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  shareId: string
+  shareId?: string
+  topicId?: string
+  isOwnTopic?: boolean
   workspaceSlug: string
 }
 
@@ -34,6 +37,8 @@ export function ConnectionDetailsPanel({
   open,
   onOpenChange,
   shareId,
+  topicId,
+  isOwnTopic = false,
   workspaceSlug,
 }: ConnectionDetailsPanelProps) {
   const [loading, setLoading] = useState(true)
@@ -43,16 +48,22 @@ export function ConnectionDetailsPanel({
   const [codeSnippetsOpen, setCodeSnippetsOpen] = useState(false)
 
   useEffect(() => {
-    if (open && shareId) {
+    if (open && (shareId || topicId)) {
       loadConnectionDetails()
     }
-  }, [open, shareId])
+  }, [open, shareId, topicId, isOwnTopic])
 
   const loadConnectionDetails = async () => {
     setLoading(true)
     setError(null)
     try {
-      const result = await getConnectionDetails(shareId)
+      // Use different API based on whether it's own topic or a share
+      const result = isOwnTopic && topicId
+        ? await getOwnTopicConnectionDetails(topicId)
+        : shareId
+          ? await getConnectionDetails(shareId)
+          : { success: false, error: 'No share ID or topic ID provided' }
+
       if (result.success && result.connectionDetails) {
         setConnectionDetails(result.connectionDetails)
       } else {

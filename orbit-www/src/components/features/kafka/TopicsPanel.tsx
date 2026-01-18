@@ -37,6 +37,7 @@ import {
   approveTopic,
 } from '@/app/actions/kafka-topics'
 import { VirtualClusterCreateTopicDialog } from './VirtualClusterCreateTopicDialog'
+import { ConnectionDetailsPanel } from './ConnectionDetailsPanel'
 import { formatDuration } from '@/lib/utils/format'
 
 type Topic = {
@@ -60,6 +61,8 @@ interface TopicsPanelProps {
   canManage: boolean
   canApprove: boolean
   userId?: string
+  workspaceSlug: string
+  applicationSlug: string
 }
 
 const statusColors: Record<string, string> = {
@@ -85,12 +88,15 @@ export function TopicsPanel({
   canManage,
   canApprove,
   userId,
+  workspaceSlug,
+  applicationSlug: _applicationSlug,
 }: TopicsPanelProps) {
   const [topics, setTopics] = useState<Topic[]>([])
   const [loading, setLoading] = useState(true)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [approveDialogOpen, setApproveDialogOpen] = useState(false)
+  const [connectionPanelOpen, setConnectionPanelOpen] = useState(false)
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -250,7 +256,13 @@ export function TopicsPanel({
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setSelectedTopic(topic)
+                              setConnectionPanelOpen(true)
+                            }}
+                            disabled={topic.status !== 'active'}
+                          >
                             <Eye className="h-4 w-4 mr-2" />
                             View Details
                           </DropdownMenuItem>
@@ -345,6 +357,20 @@ export function TopicsPanel({
         environment={environment}
         onSuccess={handleCreateSuccess}
       />
+
+      {/* Connection Details Panel */}
+      {selectedTopic && (
+        <ConnectionDetailsPanel
+          open={connectionPanelOpen}
+          onOpenChange={(open) => {
+            setConnectionPanelOpen(open)
+            if (!open) setSelectedTopic(null)
+          }}
+          topicId={selectedTopic.id}
+          isOwnTopic={true}
+          workspaceSlug={workspaceSlug}
+        />
+      )}
     </>
   )
 }

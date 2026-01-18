@@ -180,6 +180,8 @@ export function ApplicationDetailClient({
                   canManage={canManage}
                   canApprove={canApprove}
                   userId={userId}
+                  workspaceSlug={workspaceSlug}
+                  applicationSlug={application.slug}
                 />
 
                 {/* Service Accounts Panel */}

@@ -151,9 +151,9 @@ func (a *KafkaActivitiesImpl) getClusterConfigForTopic(ctx context.Context, topi
 		}
 
 		// 4a. Get physical cluster ID from virtual cluster
-		clusterID, ok = vc["cluster"].(string)
+		clusterID, ok = vc["physicalCluster"].(string)
 		if !ok {
-			if cluster, ok := vc["cluster"].(map[string]any); ok {
+			if cluster, ok := vc["physicalCluster"].(map[string]any); ok {
 				clusterID, _ = cluster["id"].(string)
 			}
 		}
@@ -209,9 +209,9 @@ func (a *KafkaActivitiesImpl) getClusterConfigForVirtualCluster(ctx context.Cont
 	}
 
 	// 2. Get physical cluster ID - handle both string ID and populated object
-	clusterID, ok := vc["cluster"].(string)
+	clusterID, ok := vc["physicalCluster"].(string)
 	if !ok {
-		if cluster, ok := vc["cluster"].(map[string]any); ok {
+		if cluster, ok := vc["physicalCluster"].(map[string]any); ok {
 			clusterID, _ = cluster["id"].(string)
 		}
 	}
@@ -268,9 +268,9 @@ func (a *KafkaActivitiesImpl) getSchemaRegistryURL(ctx context.Context, topicID 
 		return "", "", "", fmt.Errorf("fetching virtual cluster: %w", err)
 	}
 
-	clusterID, ok := vc["cluster"].(string)
+	clusterID, ok := vc["physicalCluster"].(string)
 	if !ok {
-		if cluster, ok := vc["cluster"].(map[string]any); ok {
+		if cluster, ok := vc["physicalCluster"].(map[string]any); ok {
 			clusterID, _ = cluster["id"].(string)
 		}
 	}
