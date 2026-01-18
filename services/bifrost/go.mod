@@ -12,6 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.7
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.7
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.6
+	github.com/drewpayment/orbit/proto v0.0.0-20260118145611-14edcfbbb1f0
 	github.com/elazarl/goproxy v1.8.0
 	github.com/elazarl/goproxy/ext v0.0.0-20260117161256-26d3e758aa11
 	github.com/fsnotify/fsnotify v1.9.0
@@ -58,6 +59,8 @@ require (
 	golang.org/x/crypto v0.47.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240528184218-531527333157 // indirect
+	google.golang.org/grpc v1.65.0 // indirect
 	google.golang.org/protobuf v1.36.8 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
