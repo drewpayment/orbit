@@ -7,6 +7,11 @@ import { PageContent } from '@/components/features/knowledge/PageContent'
 import { KnowledgeBreadcrumbs } from '@/components/features/knowledge/KnowledgeBreadcrumbs'
 import { revalidatePath } from 'next/cache'
 import type { BlockDocument } from '@/lib/blocks/types'
+import {
+  getWorkspaceBySlug,
+  getKnowledgeSpaceBySlug,
+  getKnowledgePageBySlug,
+} from '@/lib/data/cached-queries'
 
 interface PageProps {
   params: Promise<{
@@ -25,7 +30,7 @@ async function updatePage(pageId: string, workspaceSlug: string, spaceSlug: stri
     collection: 'knowledge-pages',
     id: pageId,
     data: {
-      content,
+      content: content as unknown as Record<string, unknown>,
       contentFormat: 'blocks',
     },
   })
@@ -35,65 +40,24 @@ async function updatePage(pageId: string, workspaceSlug: string, spaceSlug: stri
 
 export default async function KnowledgePageView({ params }: PageProps) {
   const { slug, spaceSlug, pageSlug } = await params
-  const payload = await getPayload({ config })
 
-  // Fetch workspace
-  const workspaceResult = await payload.find({
-    collection: 'workspaces',
-    where: {
-      slug: {
-        equals: slug,
-      },
-    },
-    limit: 1,
-  })
-
-  if (!workspaceResult.docs.length) {
+  // Use cached fetchers for request-level deduplication
+  // These will reuse results from layout.tsx if already fetched
+  const workspace = await getWorkspaceBySlug(slug)
+  if (!workspace) {
     notFound()
   }
 
-  const workspace = workspaceResult.docs[0]
-
-  // Fetch knowledge space
-  const spaceResult = await payload.find({
-    collection: 'knowledge-spaces',
-    where: {
-      slug: {
-        equals: spaceSlug,
-      },
-      workspace: {
-        equals: workspace.id,
-      },
-    },
-    limit: 1,
-  })
-
-  if (!spaceResult.docs.length) {
+  const space = await getKnowledgeSpaceBySlug(spaceSlug, workspace.id)
+  if (!space) {
     notFound()
   }
 
-  const space = spaceResult.docs[0]
-
-  // Fetch the specific page
-  const pageResult = await payload.find({
-    collection: 'knowledge-pages',
-    where: {
-      slug: {
-        equals: pageSlug,
-      },
-      knowledgeSpace: {
-        equals: space.id,
-      },
-    },
-    limit: 1,
-    depth: 2,
-  })
-
-  if (!pageResult.docs.length) {
+  // Use cached fetcher for the page
+  const page = await getKnowledgePageBySlug(pageSlug, space.id)
+  if (!page) {
     notFound()
   }
-
-  const page = pageResult.docs[0]
 
   // Get author info
   const author = typeof page.author === 'object' ? page.author : null

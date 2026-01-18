@@ -38,10 +38,10 @@ const formSchema = z.object({
   workspaceId: z.string().min(1, 'Workspace is required'),
   repositoryUrl: z.string().url().optional().or(z.literal('')),
   healthUrl: z.string().url('Must be a valid URL').optional().or(z.literal('')),
-  healthInterval: z.coerce.number().min(30).max(3600).optional(),
-  healthTimeout: z.coerce.number().min(1).max(60).optional(),
+  healthInterval: z.number().min(30).max(3600).optional(),
+  healthTimeout: z.number().min(1).max(60).optional(),
   healthMethod: z.enum(['GET', 'HEAD', 'POST']).optional(),
-  healthExpectedStatus: z.coerce.number().min(100).max(599).optional(),
+  healthExpectedStatus: z.number().min(100).max(599).optional(),
 })
 
 type FormData = z.infer<typeof formSchema>
@@ -185,7 +185,7 @@ export function CreateAppForm({ workspaces }: CreateAppFormProps) {
               {...form.register('repositoryUrl')}
             />
             <p className="text-sm text-muted-foreground">
-              Optional. Link to the application's source repository.
+              Optional. Link to the application&apos;s source repository.
             </p>
           </div>
         </CardContent>
@@ -199,7 +199,7 @@ export function CreateAppForm({ workspaces }: CreateAppFormProps) {
                 <div>
                   <CardTitle>Health Check Configuration</CardTitle>
                   <CardDescription>
-                    Configure how the application's health is monitored
+                    Configure how the application&apos;s health is monitored
                   </CardDescription>
                 </div>
                 <ChevronDown

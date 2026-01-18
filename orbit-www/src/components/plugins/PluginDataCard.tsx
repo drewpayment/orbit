@@ -31,7 +31,12 @@
 'use client'
 
 import { type ReactNode } from 'react'
-import type { PluginStatus } from '@/lib/grpc/plugins-client'
+
+// Simple status interface for displaying plugin health
+export interface SimplePluginStatus {
+  healthy: boolean
+  statusMessage: string
+}
 
 interface PluginDataCardProps {
   /** Display title for the plugin card */
@@ -50,7 +55,7 @@ interface PluginDataCardProps {
   isEmpty?: boolean
 
   /** Plugin health status */
-  status?: PluginStatus | null
+  status?: SimplePluginStatus | null
 
   /** Retry callback for error state */
   onRetry?: () => void

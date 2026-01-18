@@ -99,16 +99,20 @@ export async function duplicatePage(
     id: pageId,
   })
 
-  // Create duplicate
+  // Create duplicate with unique slug
+  const baseSlug = original.slug ? `${original.slug}-copy` : `page-${Date.now()}`
   const duplicate = await payload.create({
     collection: 'knowledge-pages',
     data: {
       title: `${original.title} (Copy)`,
+      slug: baseSlug,
       content: original.content,
       knowledgeSpace: original.knowledgeSpace,
       parentPage: original.parentPage,
       author: original.author,
       status: 'draft',
+      sortOrder: (original.sortOrder ?? 0) + 1,
+      version: 1,
     },
   })
 

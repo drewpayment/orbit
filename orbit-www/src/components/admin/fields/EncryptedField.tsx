@@ -5,17 +5,22 @@ import type { TextFieldClientProps } from 'payload'
 import { TextInput, useField } from '@payloadcms/ui'
 
 export const EncryptedField: React.FC<TextFieldClientProps> = (props) => {
-  const { path, label, required } = props
+  const { path, field } = props
+  const fieldLabel = field?.label
+  const required = field?.required
   const [showValue, setShowValue] = useState(false)
 
   const { value, setValue } = useField<string>({
     path,
   })
 
+  // Get label text - handle both string and localized label formats
+  const labelText = typeof fieldLabel === 'string' ? fieldLabel : 'Secret Value'
+
   return (
     <div className="field-type text">
       <label className="field-label">
-        {label || 'Secret Value'}
+        {labelText}
         {required && <span className="required">*</span>}
       </label>
 
@@ -23,12 +28,9 @@ export const EncryptedField: React.FC<TextFieldClientProps> = (props) => {
         <div style={{ flex: 1 }}>
           <TextInput
             path={path}
-            name={path}
             value={value || ''}
             onChange={setValue}
-            type={showValue ? 'text' : 'password'}
-            placeholder={showValue ? 'Enter secret value' : '••••••••••••'}
-            autoComplete="off"
+            showError={false}
           />
         </div>
 

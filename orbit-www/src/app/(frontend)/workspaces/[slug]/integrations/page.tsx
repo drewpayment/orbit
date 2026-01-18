@@ -17,19 +17,21 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { notFound } from 'next/navigation'
+import Link from 'next/link'
 import { JiraIssuesList } from '@/components/plugins/JiraIssuesList'
 import { GitHubPRsList } from '@/components/plugins/GitHubPRsList'
 import type { Workspace, PluginConfig } from '@/payload-types'
 
 interface WorkspaceIntegrationsPageProps {
-  params: {
+  params: Promise<{
     slug: string
-  }
+  }>
 }
 
 export default async function WorkspaceIntegrationsPage({
   params,
 }: WorkspaceIntegrationsPageProps) {
+  const { slug } = await params
   const payload = await getPayload({ config })
 
   // Fetch workspace by slug
@@ -37,7 +39,7 @@ export default async function WorkspaceIntegrationsPage({
     collection: 'workspaces',
     where: {
       slug: {
-        equals: params.slug,
+        equals: slug,
       },
     },
     limit: 1,
@@ -51,7 +53,7 @@ export default async function WorkspaceIntegrationsPage({
 
   // Fetch enabled plugins for this workspace
   const pluginConfigsResult = await payload.find({
-    collection: 'plugin-configs',
+    collection: 'plugin-config',
     where: {
       and: [
         {
@@ -83,7 +85,7 @@ export default async function WorkspaceIntegrationsPage({
           </p>
         </div>
 
-        <EmptyState workspaceSlug={params.slug} />
+        <EmptyState workspaceSlug={slug} />
       </div>
     )
   }
@@ -250,18 +252,18 @@ function EmptyState({ workspaceSlug }: { workspaceSlug: string }) {
         Get started by enabling your first integration.
       </p>
       <div className="mt-6 flex justify-center gap-3">
-        <a
+        <Link
           href="/admin/collections/plugin-registry"
           className="inline-flex items-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
         >
           Browse Plugins
-        </a>
-        <a
-          href={`/admin/collections/plugin-configs/create`}
+        </Link>
+        <Link
+          href="/admin/collections/plugin-configs/create"
           className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
         >
           Enable Integration
-        </a>
+        </Link>
       </div>
     </div>
   )
@@ -271,13 +273,14 @@ function EmptyState({ workspaceSlug }: { workspaceSlug: string }) {
  * Metadata for SEO
  */
 export async function generateMetadata({ params }: WorkspaceIntegrationsPageProps) {
+  const { slug } = await params
   const payload = await getPayload({ config })
 
   const workspaceResult = await payload.find({
     collection: 'workspaces',
     where: {
       slug: {
-        equals: params.slug,
+        equals: slug,
       },
     },
     limit: 1,

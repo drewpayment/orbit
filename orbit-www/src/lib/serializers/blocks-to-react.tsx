@@ -38,7 +38,7 @@ function serializeBlock(block: BlockNode, index: number): React.ReactNode {
 function serializeHeading(block: BlockNode, key: string): React.ReactNode {
   const level = (block.attrs?.level as number) || 1
   const content = serializeContent(block.content)
-  const Tag = `h${level}` as keyof JSX.IntrinsicElements
+  const Tag = `h${level}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6'
 
   return <Tag key={key}>{content}</Tag>
 }

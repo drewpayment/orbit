@@ -9,18 +9,19 @@ export const metadata: Metadata = {
 }
 
 interface PageProps {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 export default async function WorkspaceKnowledgePage({ params }: PageProps) {
+  const { id } = await params
   const payload = await getPayloadHMR({ config: configPromise })
-  
+
   // Fetch workspace
   const workspace = await payload.findByID({
     collection: 'workspaces',
-    id: params.id,
+    id,
   })
   
   if (!workspace) {

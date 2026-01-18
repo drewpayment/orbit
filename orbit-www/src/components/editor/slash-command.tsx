@@ -167,7 +167,8 @@ export function renderItems() {
         return true
       }
 
-      return component?.ref?.onKeyDown(props) || false
+      const ref = component?.ref as { onKeyDown?: (props: any) => boolean } | undefined
+      return ref?.onKeyDown?.(props) || false
     },
 
     onExit() {

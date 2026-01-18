@@ -1,4 +1,4 @@
-import type { CollectionConfig } from 'payload'
+import type { CollectionConfig, Where } from 'payload'
 import { encrypt } from '@/lib/encryption'
 
 export const RegistryConfigs: CollectionConfig = {
@@ -18,13 +18,13 @@ export const RegistryConfigs: CollectionConfig = {
         if (workspaceIds.length === 0) {
           return {
             id: { equals: 'nonexistent-id-to-return-empty-results' },
-          }
+          } as Where
         }
         return {
           workspace: {
             in: workspaceIds,
           },
-        }
+        } as Where
       }
       return true
     },

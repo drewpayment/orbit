@@ -25,8 +25,7 @@
 
 import { useEffect, useState } from 'react'
 import { pluginsClient } from '@/lib/grpc/plugins-client'
-import { PluginDataCard } from './PluginDataCard'
-import type { PluginStatus } from '@/lib/grpc/plugins-client'
+import { PluginDataCard, type SimplePluginStatus } from './PluginDataCard'
 
 interface JiraIssue {
   key: string
@@ -74,7 +73,7 @@ export function JiraIssuesList({
   const [issues, setIssues] = useState<JiraIssue[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [pluginStatus, setPluginStatus] = useState<PluginStatus | null>(null)
+  const [pluginStatus, setPluginStatus] = useState<SimplePluginStatus | null>(null)
   const [jiraBaseUrl, setJiraBaseUrl] = useState<string>('')
 
   const fetchIssues = async () => {
@@ -129,9 +128,6 @@ export function JiraIssuesList({
       setPluginStatus({
         healthy: true,
         statusMessage: 'Connected to Jira',
-        lastCheckedAt: BigInt(Date.now()),
-        requestCount: 0,
-        errorCount: 0,
       })
     } catch (err) {
       console.error('Failed to fetch Jira issues:', err)
@@ -139,9 +135,6 @@ export function JiraIssuesList({
       setPluginStatus({
         healthy: false,
         statusMessage: err instanceof Error ? err.message : 'Unknown error',
-        lastCheckedAt: BigInt(Date.now()),
-        requestCount: 0,
-        errorCount: 1,
       })
     } finally {
       setLoading(false)

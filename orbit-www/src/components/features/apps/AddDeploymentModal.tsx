@@ -38,7 +38,7 @@ const formSchema = z.object({
   name: z.string().min(1, 'Name is required').max(50),
   generator: z.enum(['docker-compose', 'terraform', 'helm', 'custom']),
   serviceName: z.string().min(1, 'Service name is required'),
-  port: z.coerce.number().min(1).max(65535).default(3000),
+  port: z.number().min(1).max(65535),
 })
 
 type FormData = z.infer<typeof formSchema>
@@ -189,7 +189,7 @@ export function AddDeploymentModal({
             />
 
             <div className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
-              This will generate a <code className="font-mono text-xs">docker-compose.yml</code> file using your app's repository image that you can review and commit.
+              This will generate a <code className="font-mono text-xs">docker-compose.yml</code> file using your app&apos;s repository image that you can review and commit.
             </div>
 
             <div className="grid grid-cols-2 gap-4">

@@ -79,15 +79,15 @@ export function NovelEditor({
         onChange(json)
       }
     },
+    onBlur: () => {
+      if (onBlur) {
+        onBlur()
+      }
+    },
     editorProps: {
       attributes: {
         class: `prose-editorial focus:outline-none ${className}`,
         role: 'textbox',
-      },
-      onBlur: () => {
-        if (onBlur) {
-          onBlur()
-        }
       },
       handleDOMEvents: {
         drop(view, event) {

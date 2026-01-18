@@ -36,48 +36,48 @@ describe('kafka-topic-shares actions', () => {
 
   describe('Type Definitions', () => {
     it('should export ApproveShareInput type', async () => {
-      const module = await import('./kafka-topic-shares')
-      expect(module).toBeDefined()
+      const kafkaSharesModule = await import('./kafka-topic-shares')
+      expect(kafkaSharesModule).toBeDefined()
     })
 
     it('should export ApproveShareResult type', async () => {
-      const module = await import('./kafka-topic-shares')
-      expect(module).toBeDefined()
+      const kafkaSharesModule = await import('./kafka-topic-shares')
+      expect(kafkaSharesModule).toBeDefined()
     })
 
     it('should export RejectShareInput type', async () => {
-      const module = await import('./kafka-topic-shares')
-      expect(module).toBeDefined()
+      const kafkaSharesModule = await import('./kafka-topic-shares')
+      expect(kafkaSharesModule).toBeDefined()
     })
 
     it('should export RejectShareResult type', async () => {
-      const module = await import('./kafka-topic-shares')
-      expect(module).toBeDefined()
+      const kafkaSharesModule = await import('./kafka-topic-shares')
+      expect(kafkaSharesModule).toBeDefined()
     })
 
     it('should export RevokeShareInput type', async () => {
-      const module = await import('./kafka-topic-shares')
-      expect(module).toBeDefined()
+      const kafkaSharesModule = await import('./kafka-topic-shares')
+      expect(kafkaSharesModule).toBeDefined()
     })
 
     it('should export RevokeShareResult type', async () => {
-      const module = await import('./kafka-topic-shares')
-      expect(module).toBeDefined()
+      const kafkaSharesModule = await import('./kafka-topic-shares')
+      expect(kafkaSharesModule).toBeDefined()
     })
 
     it('should export ListPendingSharesInput type', async () => {
-      const module = await import('./kafka-topic-shares')
-      expect(module).toBeDefined()
+      const kafkaSharesModule = await import('./kafka-topic-shares')
+      expect(kafkaSharesModule).toBeDefined()
     })
 
     it('should export ShareListItem type', async () => {
-      const module = await import('./kafka-topic-shares')
-      expect(module).toBeDefined()
+      const kafkaSharesModule = await import('./kafka-topic-shares')
+      expect(kafkaSharesModule).toBeDefined()
     })
 
     it('should export ListPendingSharesResult type', async () => {
-      const module = await import('./kafka-topic-shares')
-      expect(module).toBeDefined()
+      const kafkaSharesModule = await import('./kafka-topic-shares')
+      expect(kafkaSharesModule).toBeDefined()
     })
   })
 
@@ -571,20 +571,20 @@ describe('kafka-topic-shares actions', () => {
   describe('Helper Functions', () => {
     it('should have triggerShareApprovedWorkflow placeholder', async () => {
       // This is a placeholder function - just verify it's callable
-      const module = await import('./kafka-topic-shares')
-      expect(module).toBeDefined()
+      const kafkaSharesModule = await import('./kafka-topic-shares')
+      expect(kafkaSharesModule).toBeDefined()
     })
 
     it('should have triggerShareRevokedWorkflow placeholder', async () => {
       // This is a placeholder function - just verify it's callable
-      const module = await import('./kafka-topic-shares')
-      expect(module).toBeDefined()
+      const kafkaSharesModule = await import('./kafka-topic-shares')
+      expect(kafkaSharesModule).toBeDefined()
     })
 
     it('should have sendShareRejectedNotification placeholder', async () => {
       // This is a placeholder function - just verify it's callable
-      const module = await import('./kafka-topic-shares')
-      expect(module).toBeDefined()
+      const kafkaSharesModule = await import('./kafka-topic-shares')
+      expect(kafkaSharesModule).toBeDefined()
     })
   })
 })

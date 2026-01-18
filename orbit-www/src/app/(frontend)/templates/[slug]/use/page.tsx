@@ -27,24 +27,36 @@ const languageEmoji: Record<string, string> = {
 
 export default async function UseTemplatePage({ params }: PageProps) {
   const { slug } = await params
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+
+  // Phase 1: Parallelize initial setup
+  const [payload, reqHeaders] = await Promise.all([
+    getPayload({ config }),
+    headers(),
+  ])
+
+  const session = await auth.api.getSession({ headers: reqHeaders })
 
   if (!session?.user) {
     redirect('/login')
   }
 
-  const payload = await getPayload({ config })
-
-  // Fetch template
-  const templatesResult = await payload.find({
-    collection: 'templates',
-    where: {
-      slug: { equals: slug },
-    },
-    limit: 1,
-  })
+  // Phase 2: Fetch template and memberships in parallel (both independent)
+  const [templatesResult, memberships] = await Promise.all([
+    payload.find({
+      collection: 'templates',
+      where: { slug: { equals: slug } },
+      limit: 1,
+    }),
+    payload.find({
+      collection: 'workspace-members',
+      where: {
+        user: { equals: session.user.id },
+        status: { equals: 'active' },
+      },
+      depth: 1,
+      limit: 100,
+    }),
+  ])
 
   if (templatesResult.docs.length === 0) {
     notFound()
@@ -52,17 +64,6 @@ export default async function UseTemplatePage({ params }: PageProps) {
 
   const template = templatesResult.docs[0]
   const emoji = languageEmoji[template.language?.toLowerCase() || ''] || '📦'
-
-  // Get user's workspaces
-  const memberships = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      user: { equals: session.user.id },
-      status: { equals: 'active' },
-    },
-    depth: 1,
-    limit: 100,
-  })
 
   const workspaces = memberships.docs
     .map((m) => {
@@ -72,8 +73,7 @@ export default async function UseTemplatePage({ params }: PageProps) {
     })
     .filter((ws): ws is { id: string; name: string } => ws !== null)
 
-  // Get GitHub health status and available orgs
-  // Pass ALL workspace IDs the user has access to, so we show orgs linked to any of them
+  // Phase 3: Get GitHub health (depends on workspaces)
   const workspaceIds = workspaces.map(ws => ws.id)
   const githubHealth = workspaceIds.length > 0
     ? await getGitHubHealth(workspaceIds)

@@ -78,7 +78,7 @@ export function MovePageModal({
         <DialogHeader>
           <DialogTitle className="font-serif-display">Move Page</DialogTitle>
           <DialogDescription>
-            Select a new parent page for "{currentPage.title}"
+            Select a new parent page for &quot;{currentPage.title}&quot;
           </DialogDescription>
         </DialogHeader>
 

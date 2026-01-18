@@ -29,7 +29,15 @@ const PERMISSIONS = [
   { slug: 'admin:tenants', name: 'Manage Tenants', description: 'Manage all tenants', category: 'admin', scope: 'platform' },
 ] as const
 
-const ROLES = [
+const ROLES: Array<{
+  slug: string
+  name: string
+  description: string
+  scope: 'workspace' | 'platform'
+  isSystem: boolean
+  isDefault: boolean
+  permissionSlugs: readonly string[]
+}> = [
   {
     slug: 'super-admin',
     name: 'Super Admin',
@@ -132,6 +140,7 @@ async function seed() {
     const permissionIds = role.permissionSlugs
       .map(slug => permissionMap.get(slug))
       .filter((id): id is string | number => !!id)
+      .map(id => String(id))
 
     if (existing.docs.length === 0) {
       await payload.create({

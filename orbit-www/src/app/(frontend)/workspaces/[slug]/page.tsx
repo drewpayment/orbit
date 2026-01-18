@@ -30,12 +30,15 @@ interface PageProps {
 
 export default async function WorkspacePage({ params }: PageProps) {
   const { slug } = await params
-  const payload = await getPayload({ config })
 
-  // Get current user session
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  // Phase 1: Parallelize initial setup (payload, session, headers all independent)
+  const [payload, reqHeaders] = await Promise.all([
+    getPayload({ config }),
+    headers(),
+  ])
+
+  // Get session (needs headers)
+  const session = await auth.api.getSession({ headers: reqHeaders })
 
   // Fetch workspace with relationships
   const workspaceResult = await payload.find({
@@ -55,27 +58,64 @@ export default async function WorkspacePage({ params }: PageProps) {
 
   const workspace = workspaceResult.docs[0]
 
-  // Fetch members
-  const membersResult = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      workspace: {
-        equals: workspace.id,
+  // Phase 2: Parallelize all workspace-dependent fetches
+  // These are all independent once we have workspace.id
+  const [
+    membersResult,
+    membershipStatus,
+    spacesResult,
+    appsResult,
+    registryImagesResult,
+    kafkaTopicsResult,
+  ] = await Promise.all([
+    // Fetch members
+    payload.find({
+      collection: 'workspace-members',
+      where: {
+        workspace: { equals: workspace.id },
+        status: { equals: 'active' },
       },
-      status: {
-        equals: 'active',
-      },
-    },
-    limit: 100,
-  })
+      limit: 100,
+    }),
+    // Check membership status for current user
+    session?.user
+      ? checkMembershipStatus(workspace.id, session.user.id)
+      : Promise.resolve(undefined),
+    // Fetch knowledge spaces
+    payload.find({
+      collection: 'knowledge-spaces',
+      where: { workspace: { equals: workspace.id } },
+      limit: 100,
+      sort: 'name',
+    }),
+    // Fetch apps
+    payload.find({
+      collection: 'apps',
+      where: { workspace: { equals: workspace.id } },
+      sort: '-latestBuild.builtAt',
+      limit: 10,
+      depth: 1,
+    }),
+    // Fetch registry images (overrideAccess needed since server component has no user session)
+    payload.find({
+      collection: 'registry-images',
+      where: { workspace: { equals: workspace.id } },
+      sort: '-pushedAt',
+      limit: 10,
+      depth: 2,
+      overrideAccess: true,
+    }),
+    // Fetch Kafka topics
+    payload.find({
+      collection: 'kafka-topics',
+      where: { workspace: { equals: workspace.id } },
+      sort: '-createdAt',
+      limit: 5,
+      overrideAccess: true,
+    }),
+  ])
 
   const members = membersResult.docs
-
-  // Check membership status for current user
-  let membershipStatus
-  if (session?.user) {
-    membershipStatus = await checkMembershipStatus(workspace.id, session.user.id)
-  }
 
   // Extract members for simplified display
   const memberUsers = members
@@ -92,53 +132,13 @@ export default async function WorkspacePage({ params }: PageProps) {
     .filter((u): u is NonNullable<typeof u> => u !== null)
 
   // Extract parent and child workspaces
-  const parentWorkspace = workspace.parentWorkspace && typeof workspace.parentWorkspace === 'object' 
-    ? workspace.parentWorkspace 
+  const parentWorkspace = workspace.parentWorkspace && typeof workspace.parentWorkspace === 'object'
+    ? workspace.parentWorkspace
     : null
-  
+
   const childWorkspaces = workspace.childWorkspaces && Array.isArray(workspace.childWorkspaces)
     ? workspace.childWorkspaces.filter(w => typeof w === 'object')
     : []
-
-  // Fetch knowledge spaces for this workspace
-  const spacesResult = await payload.find({
-    collection: 'knowledge-spaces',
-    where: {
-      workspace: {
-        equals: workspace.id,
-      },
-    },
-    limit: 100,
-    sort: 'name',
-  })
-
-  // Fetch apps for this workspace
-  const appsResult = await payload.find({
-    collection: 'apps',
-    where: {
-      workspace: {
-        equals: workspace.id,
-      },
-    },
-    sort: '-latestBuild.builtAt',
-    limit: 10,
-    depth: 1,
-  })
-
-  // Fetch registry images for this workspace
-  // Note: overrideAccess needed since server component has no user session
-  const registryImagesResult = await payload.find({
-    collection: 'registry-images',
-    where: {
-      workspace: {
-        equals: workspace.id,
-      },
-    },
-    sort: '-pushedAt',
-    limit: 10,
-    depth: 2,
-    overrideAccess: true,
-  })
 
   // Transform registry images for display
   const registryImages = registryImagesResult.docs.map((img) => {
@@ -165,19 +165,6 @@ export default async function WorkspacePage({ params }: PageProps) {
     }
   })
 
-  // Fetch Kafka topics for this workspace
-  const kafkaTopicsResult = await payload.find({
-    collection: 'kafka-topics',
-    where: {
-      workspace: {
-        equals: workspace.id,
-      },
-    },
-    sort: '-createdAt',
-    limit: 5,
-    overrideAccess: true,
-  })
-
   // Transform Kafka topics for display
   const kafkaTopics = kafkaTopicsResult.docs.map((topic) => ({
     id: topic.id,
@@ -186,7 +173,7 @@ export default async function WorkspacePage({ params }: PageProps) {
     status: topic.status,
   }))
 
-  // Fetch recent knowledge pages across all spaces in this workspace
+  // Phase 3: Fetch recent pages (depends on spacesResult)
   const spaceIds = spacesResult.docs.map((s) => s.id)
   const recentPagesResult = spaceIds.length > 0
     ? await payload.find({

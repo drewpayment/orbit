@@ -15,17 +15,19 @@ interface PageProps {
 export default async function ApplicationDetailPage({ params }: PageProps) {
   const { slug: workspaceSlug, appSlug } = await params
 
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  // Phase 1: Parallelize initial setup
+  const [payload, reqHeaders] = await Promise.all([
+    getPayload({ config }),
+    headers(),
+  ])
+
+  const session = await auth.api.getSession({ headers: reqHeaders })
 
   if (!session?.user) {
     redirect('/sign-in')
   }
 
-  const payload = await getPayload({ config })
-
-  // Get workspace
+  // Phase 2: Get workspace first (needed for subsequent queries)
   const workspaces = await payload.find({
     collection: 'workspaces',
     where: { slug: { equals: workspaceSlug } },
@@ -37,19 +39,29 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
     notFound()
   }
 
-  // Check membership
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspace.id } },
-        { user: { equals: session.user.id } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-    overrideAccess: true,
-  })
+  // Phase 3: Fetch membership and application in parallel (both depend on workspace.id)
+  const [membership, applications] = await Promise.all([
+    payload.find({
+      collection: 'workspace-members',
+      where: {
+        and: [
+          { workspace: { equals: workspace.id } },
+          { user: { equals: session.user.id } },
+          { status: { equals: 'active' } },
+        ],
+      },
+      limit: 1,
+      overrideAccess: true,
+    }),
+    payload.find({
+      collection: 'kafka-applications',
+      where: {
+        and: [{ workspace: { equals: workspace.id } }, { slug: { equals: appSlug } }],
+      },
+      limit: 1,
+      overrideAccess: true,
+    }),
+  ])
 
   if (membership.docs.length === 0) {
     redirect(`/workspaces`)
@@ -57,22 +69,12 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
 
   const memberRole = membership.docs[0].role
 
-  // Get application
-  const applications = await payload.find({
-    collection: 'kafka-applications',
-    where: {
-      and: [{ workspace: { equals: workspace.id } }, { slug: { equals: appSlug } }],
-    },
-    limit: 1,
-    overrideAccess: true,
-  })
-
   const application = applications.docs[0]
   if (!application) {
     notFound()
   }
 
-  // Get virtual clusters
+  // Phase 4: Get virtual clusters (depends on application.id)
   const virtualClusters = await payload.find({
     collection: 'kafka-virtual-clusters',
     where: {

@@ -24,7 +24,6 @@ import { KafkaService } from '@/lib/proto/idp/kafka/v1/kafka_pb'
  */
 const transport = createGrpcTransport({
   baseUrl: process.env.KAFKA_SERVICE_URL || 'http://localhost:50055',
-  httpVersion: '2', // gRPC uses HTTP/2
 })
 
 /**

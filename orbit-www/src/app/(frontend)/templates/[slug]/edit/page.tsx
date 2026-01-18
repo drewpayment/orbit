@@ -160,7 +160,7 @@ export default async function TemplateEditPage({ params }: PageProps) {
               <CardContent>
                 <TemplateSyncStatus
                   templateId={template.id as string}
-                  syncStatus={template.syncStatus}
+                  syncStatus={template.syncStatus ?? 'pending'}
                   syncError={template.syncError}
                   lastSyncedAt={template.lastSyncedAt}
                   canSync={true}

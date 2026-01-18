@@ -76,7 +76,7 @@ export default function SupportPage() {
               <CardHeader>
                 <CardTitle>Contact Support</CardTitle>
                 <CardDescription>
-                  Choose how you'd like to reach us
+                  Choose how you&apos;d like to reach us
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -85,7 +85,7 @@ export default function SupportPage() {
                   <div className="flex-1">
                     <h4 className="font-semibold mb-1">Email Support</h4>
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                      Send us an email and we'll respond within 24 hours
+                      Send us an email and we&apos;ll respond within 24 hours
                     </p>
                     <a href="mailto:support@orbit.dev" className="text-sm text-blue-600 hover:underline">
                       support@orbit.dev
@@ -123,8 +123,8 @@ export default function SupportPage() {
                     <span className="text-gray-500 group-open:rotate-180 transition-transform">▼</span>
                   </summary>
                   <div className="mt-2 p-3 text-sm text-gray-600 dark:text-gray-400">
-                    Navigate to the Workspaces page and click "Create Workspace". Fill in the required information
-                    including name, slug, and description. Click "Save" to create your workspace.
+                    Navigate to the Workspaces page and click &quot;Create Workspace&quot;. Fill in the required information
+                    including name, slug, and description. Click &quot;Save&quot; to create your workspace.
                   </div>
                 </details>
 
@@ -134,8 +134,8 @@ export default function SupportPage() {
                     <span className="text-gray-500 group-open:rotate-180 transition-transform">▼</span>
                   </summary>
                   <div className="mt-2 p-3 text-sm text-gray-600 dark:text-gray-400">
-                    Go to your workspace settings, select "Members", and click "Invite Member". Enter their email
-                    address and select their role. They'll receive an invitation email.
+                    Go to your workspace settings, select &quot;Members&quot;, and click &quot;Invite Member&quot;. Enter their email
+                    address and select their role. They&apos;ll receive an invitation email.
                   </div>
                 </details>
 
@@ -156,7 +156,7 @@ export default function SupportPage() {
                     <span className="text-gray-500 group-open:rotate-180 transition-transform">▼</span>
                   </summary>
                   <div className="mt-2 p-3 text-sm text-gray-600 dark:text-gray-400">
-                    Yes, you can cancel your subscription at any time from the Billing page. You'll continue to
+                    Yes, you can cancel your subscription at any time from the Billing page. You&apos;ll continue to
                     have access until the end of your current billing period.
                   </div>
                 </details>
@@ -195,7 +195,7 @@ export default function SupportPage() {
               <CardHeader>
                 <CardTitle>Still Need Help?</CardTitle>
                 <CardDescription>
-                  We're here to assist you
+                  We&apos;re here to assist you
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex gap-4">

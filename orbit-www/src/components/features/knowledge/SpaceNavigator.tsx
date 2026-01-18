@@ -87,7 +87,7 @@ export function SpaceNavigator({
         const pageOrders = reorderedPages.map((page, index) => ({
           pageId: page.id,
           sortOrder: index,
-          parentId: page.parentId,
+          parentId: typeof page.parentPage === 'string' ? page.parentPage : page.parentPage?.id ?? null,
         }))
 
         onReorder(pageOrders)
@@ -188,7 +188,6 @@ export function SpaceNavigator({
                 onPageSelect={onPageSelect}
                 workspaceSlug={workspaceSlug}
                 spaceSlug={knowledgeSpace.slug}
-                isDragging={false}
               />
             ))}
           </nav>
@@ -218,7 +217,6 @@ export function SpaceNavigator({
                     onPageSelect={onPageSelect}
                     workspaceSlug={workspaceSlug}
                     spaceSlug={knowledgeSpace.slug}
-                    isDragging={activeId === node.id}
                   />
                 ))}
               </nav>

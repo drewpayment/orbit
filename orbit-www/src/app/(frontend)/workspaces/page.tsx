@@ -13,12 +13,13 @@ import { SiteHeader } from '@/components/site-header'
 import { Building2, Users } from 'lucide-react'
 
 export default async function WorkspacesPage() {
-  const payload = await getPayload({ config })
+  // Phase 1: Parallelize initial setup
+  const [payload, reqHeaders] = await Promise.all([
+    getPayload({ config }),
+    headers(),
+  ])
 
-  // Get current user session
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const session = await auth.api.getSession({ headers: reqHeaders })
 
   let userWorkspaces: Array<{
     id: string
@@ -31,42 +32,37 @@ export default async function WorkspacesPage() {
   }> = []
 
   if (session?.user) {
-    // Fetch workspaces where user is a member
+    // Phase 2: Fetch workspaces where user is a member
     const membershipsResult = await payload.find({
       collection: 'workspace-members',
       where: {
-        user: {
-          equals: session.user.id,
-        },
-        status: {
-          equals: 'active',
-        },
+        user: { equals: session.user.id },
+        status: { equals: 'active' },
       },
       limit: 100,
     })
 
-    // Get full workspace details with member counts
+    // Phase 3: Get full workspace details with member counts in parallel
+    // Also parallelize workspace + members fetch within each iteration
     userWorkspaces = await Promise.all(
       membershipsResult.docs.map(async (membership) => {
         const workspaceId = typeof membership.workspace === 'object' ? membership.workspace.id : membership.workspace
-        
-        const workspace = await payload.findByID({
-          collection: 'workspaces',
-          id: workspaceId,
-        })
 
-        const membersResult = await payload.find({
-          collection: 'workspace-members',
-          where: {
-            workspace: {
-              equals: workspaceId,
+        // Fetch workspace and member count in parallel
+        const [workspace, membersResult] = await Promise.all([
+          payload.findByID({
+            collection: 'workspaces',
+            id: workspaceId,
+          }),
+          payload.find({
+            collection: 'workspace-members',
+            where: {
+              workspace: { equals: workspaceId },
+              status: { equals: 'active' },
             },
-            status: {
-              equals: 'active',
-            },
-          },
-          limit: 0,
-        })
+            limit: 0,
+          }),
+        ])
 
         return {
           ...workspace,

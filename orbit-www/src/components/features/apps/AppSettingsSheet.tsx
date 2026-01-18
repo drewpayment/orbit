@@ -55,10 +55,10 @@ const appSettingsSchema = z.object({
       .url('Must be a valid URL')
       .optional()
       .or(z.literal('')),
-    method: z.enum(['GET', 'HEAD', 'POST']).default('GET'),
-    interval: z.coerce.number().min(30, 'Minimum 30 seconds').default(60),
-    timeout: z.coerce.number().min(1, 'Minimum 1 second').default(10),
-    expectedStatus: z.coerce.number().min(100).max(599).default(200),
+    method: z.enum(['GET', 'HEAD', 'POST']),
+    interval: z.number().min(30, 'Minimum 30 seconds'),
+    timeout: z.number().min(1, 'Minimum 1 second'),
+    expectedStatus: z.number().min(100).max(599),
   }),
   branch: z.string().optional(),
 })

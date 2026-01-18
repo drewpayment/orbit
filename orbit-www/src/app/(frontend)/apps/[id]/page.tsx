@@ -15,34 +15,35 @@ interface AppDetailPageProps {
 export default async function AppDetailPage({ params }: AppDetailPageProps) {
   const { id } = await params
 
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  // Phase 1: Parallelize initial setup
+  const [payload, reqHeaders] = await Promise.all([
+    getPayload({ config }),
+    headers(),
+  ])
+
+  const session = await auth.api.getSession({ headers: reqHeaders })
 
   if (!session?.user) {
     redirect('/login')
   }
 
-  const payload = await getPayload({ config })
-
   try {
-    const app = await payload.findByID({
-      collection: 'apps',
-      id,
-      depth: 2,
-    })
+    // Phase 2: Fetch app and deployments in parallel (both use id directly)
+    const [app, { docs: deployments }] = await Promise.all([
+      payload.findByID({
+        collection: 'apps',
+        id,
+        depth: 2,
+      }),
+      payload.find({
+        collection: 'deployments',
+        where: { app: { equals: id } },
+        sort: '-updatedAt',
+        depth: 1,
+      }),
+    ])
 
     if (!app) notFound()
-
-    // Fetch deployments for this app
-    const { docs: deployments } = await payload.find({
-      collection: 'deployments',
-      where: {
-        app: { equals: id },
-      },
-      sort: '-updatedAt',
-      depth: 1,
-    })
 
     return (
       <SidebarProvider>

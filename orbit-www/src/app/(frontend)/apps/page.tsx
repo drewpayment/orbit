@@ -11,11 +11,13 @@ import { SiteHeader } from '@/components/site-header'
 import { AppsCatalog } from '@/components/features/apps/AppsCatalog'
 
 export default async function AppsPage() {
-  const payload = await getPayload({ config })
+  // Phase 1: Parallelize initial setup
+  const [payload, reqHeaders] = await Promise.all([
+    getPayload({ config }),
+    headers(),
+  ])
 
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const session = await auth.api.getSession({ headers: reqHeaders })
 
   if (!session?.user) {
     return (
@@ -40,7 +42,7 @@ export default async function AppsPage() {
     )
   }
 
-  // Get user's workspace memberships
+  // Phase 2: Get user's workspace memberships
   const memberships = await payload.find({
     collection: 'workspace-members',
     where: {
@@ -54,7 +56,7 @@ export default async function AppsPage() {
     String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
   )
 
-  // Fetch apps for user's workspaces
+  // Phase 3: Fetch apps for user's workspaces
   const { docs: apps } = await payload.find({
     collection: 'apps',
     where: {

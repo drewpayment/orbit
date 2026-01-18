@@ -43,11 +43,14 @@ const complexityColors: Record<string, string> = {
 
 export default async function TemplateDetailPage({ params }: PageProps) {
   const { slug } = await params
-  const payload = await getPayload({ config })
 
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  // Phase 1: Parallelize initial setup
+  const [payload, reqHeaders] = await Promise.all([
+    getPayload({ config }),
+    headers(),
+  ])
+
+  const session = await auth.api.getSession({ headers: reqHeaders })
 
   if (!session?.user) {
     notFound()
@@ -218,7 +221,7 @@ export default async function TemplateDetailPage({ params }: PageProps) {
                   <div className="pt-4 border-t">
                     <TemplateSyncStatus
                       templateId={template.id as string}
-                      syncStatus={template.syncStatus}
+                      syncStatus={template.syncStatus ?? 'pending'}
                       syncError={template.syncError}
                       lastSyncedAt={template.lastSyncedAt}
                       canSync={canEdit}

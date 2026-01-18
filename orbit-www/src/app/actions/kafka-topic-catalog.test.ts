@@ -329,28 +329,28 @@ describe('kafka-topic-catalog actions', () => {
   describe('Type definitions', () => {
     it('should export TopicCatalogEntry type', async () => {
       // TypeScript will verify this at compile time
-      const module = await import('./kafka-topic-catalog')
-      expect(module).toBeDefined()
+      const kafkaCatalogModule = await import('./kafka-topic-catalog')
+      expect(kafkaCatalogModule).toBeDefined()
     })
 
     it('should export SearchTopicCatalogInput type', async () => {
-      const module = await import('./kafka-topic-catalog')
-      expect(module).toBeDefined()
+      const kafkaCatalogModule = await import('./kafka-topic-catalog')
+      expect(kafkaCatalogModule).toBeDefined()
     })
 
     it('should export SearchTopicCatalogResult type', async () => {
-      const module = await import('./kafka-topic-catalog')
-      expect(module).toBeDefined()
+      const kafkaCatalogModule = await import('./kafka-topic-catalog')
+      expect(kafkaCatalogModule).toBeDefined()
     })
 
     it('should export RequestTopicAccessInput type', async () => {
-      const module = await import('./kafka-topic-catalog')
-      expect(module).toBeDefined()
+      const kafkaCatalogModule = await import('./kafka-topic-catalog')
+      expect(kafkaCatalogModule).toBeDefined()
     })
 
     it('should export RequestTopicAccessResult type', async () => {
-      const module = await import('./kafka-topic-catalog')
-      expect(module).toBeDefined()
+      const kafkaCatalogModule = await import('./kafka-topic-catalog')
+      expect(kafkaCatalogModule).toBeDefined()
     })
   })
 })

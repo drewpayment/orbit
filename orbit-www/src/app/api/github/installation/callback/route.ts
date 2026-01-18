@@ -75,11 +75,7 @@ export async function GET(request: NextRequest) {
           tokenExpiresAt: expiresAt.toISOString(),
           tokenLastRefreshedAt: new Date().toISOString(),
           repositorySelection: installation.repository_selection,
-          selectedRepositories: installation.repositories?.map(repo => ({
-            fullName: repo.full_name,
-            id: repo.id,
-            private: repo.private,
-          })),
+          // Repositories are fetched separately via the installations API
           status: 'active',
         },
       })
@@ -109,23 +105,31 @@ export async function GET(request: NextRequest) {
     }
 
     // Create new installation record
+    const account = installation.account
+    if (!account) {
+      return NextResponse.json(
+        { error: 'Installation has no account associated' },
+        { status: 400 }
+      )
+    }
+
+    // Account can be either a User or an Enterprise - handle both types
+    const accountLogin = 'login' in account ? account.login : account.slug
+    const accountType = 'type' in account ? (account.type as 'Organization' | 'User') : 'Organization'
+
     const githubInstallation = await payload.create({
       collection: 'github-installations',
       data: {
         installationId: Number(installationId),
-        accountLogin: installation.account.login,
-        accountId: installation.account.id,
-        accountType: installation.account.type as 'Organization' | 'User',
-        accountAvatarUrl: installation.account.avatar_url,
+        accountLogin,
+        accountId: account.id,
+        accountType,
+        accountAvatarUrl: account.avatar_url,
         installationToken: encryptedToken,
         tokenExpiresAt: expiresAt.toISOString(),
         tokenLastRefreshedAt: new Date().toISOString(),
         repositorySelection: installation.repository_selection,
-        selectedRepositories: installation.repositories?.map(repo => ({
-          fullName: repo.full_name,
-          id: repo.id,
-          private: repo.private,
-        })),
+        // Repositories are fetched separately via the installations API
         allowedWorkspaces: [], // Admin will configure
         status: 'active',
         installedBy: payloadUser.docs[0].id,

@@ -1,11 +1,28 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
-import { NovelEditor } from '@/components/editor/NovelEditor'
+import dynamic from 'next/dynamic'
 import { serializeBlocks } from '@/lib/serializers/blocks-to-react'
 import type { BlockDocument } from '@/lib/blocks/types'
 import type { KnowledgePage } from '@/payload-types'
 import { toast } from 'sonner'
+import { Loader2 } from 'lucide-react'
+
+// Dynamically import NovelEditor to reduce initial bundle size (~500KB for TipTap + extensions)
+const NovelEditor = dynamic(
+  () => import('@/components/editor/NovelEditor').then((mod) => mod.NovelEditor),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="min-h-[400px] bg-muted/50 animate-pulse rounded-md flex items-center justify-center">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span>Loading editor...</span>
+        </div>
+      </div>
+    ),
+  }
+)
 
 interface PageEditorProps {
   page: KnowledgePage

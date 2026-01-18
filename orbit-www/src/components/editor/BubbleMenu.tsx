@@ -154,7 +154,7 @@ export function BubbleMenu({ editor }: BubbleMenuProps) {
             key={item.name}
             onClick={item.action}
             className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
-              (item && item.isActive())
+              (item?.isActive?.())
                 ? 'bg-gray-100 dark:bg-gray-700 text-blue-600 dark:text-blue-400'
                 : 'text-gray-700 dark:text-gray-300'
             }`}

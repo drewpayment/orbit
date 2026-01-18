@@ -8,8 +8,15 @@ import { TemplateSelect, TemplateType } from './steps/TemplateSelect';
 import { RepositoryConfig, RepositoryFormData } from './steps/RepositoryConfig';
 import { Review } from './steps/Review';
 import { repositoryClient } from '@/lib/grpc/repository-client';
+import { Visibility } from '@/lib/proto/common_pb';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errors';
+
+const visibilityMap: Record<'private' | 'internal' | 'public', Visibility> = {
+  private: Visibility.PRIVATE,
+  internal: Visibility.INTERNAL,
+  public: Visibility.PUBLIC,
+};
 
 interface RepositoryWizardProps {
   workspaceId: string;
@@ -69,13 +76,12 @@ export function RepositoryWizard({ workspaceId, onComplete }: RepositoryWizardPr
         name: formData.name,
         slug: formData.slug,
         description: formData.description,
-        visibility: formData.visibility,
-        templateType: selectedTemplate!,
-        gitUrl: formData.gitUrl || undefined,
+        visibility: visibilityMap[formData.visibility],
+        templateId: selectedTemplate || '',
       });
 
       toast.success('Repository created successfully');
-      onComplete(response.repository!.id);
+      onComplete(response.repository!.metadata!.id);
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {

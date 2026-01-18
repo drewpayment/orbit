@@ -77,8 +77,8 @@ export function PageTreeNode({
   }
 
   const saveRename = async () => {
-    if (newTitle.trim() && newTitle !== node.title) {
-      await renamePage(node.id, newTitle, workspaceSlug, spaceSlug as string)
+    if (newTitle.trim() && newTitle !== node.title && workspaceSlug && spaceSlug) {
+      await renamePage(node.id, newTitle, workspaceSlug, spaceSlug)
     }
     setIsRenaming(false)
   }

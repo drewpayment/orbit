@@ -205,13 +205,13 @@ export function getEmailContent(
 ): EmailContent {
   switch (template) {
     case 'approval-submitted':
-      return getApprovalSubmittedContent(data as ApprovalSubmittedData)
+      return getApprovalSubmittedContent(data as unknown as ApprovalSubmittedData)
     case 'approval-needed':
-      return getApprovalNeededContent(data as ApprovalNeededData)
+      return getApprovalNeededContent(data as unknown as ApprovalNeededData)
     case 'request-approved':
-      return getRequestApprovedContent(data as RequestApprovedData)
+      return getRequestApprovedContent(data as unknown as RequestApprovedData)
     case 'request-rejected':
-      return getRequestRejectedContent(data as RequestRejectedData)
+      return getRequestRejectedContent(data as unknown as RequestRejectedData)
     default:
       throw new Error(`Unknown template: ${template}`)
   }

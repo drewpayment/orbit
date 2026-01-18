@@ -20,9 +20,6 @@ export const PluginConfig: CollectionConfig = {
     read: async ({ req: { user, payload } }) => {
       if (!user) return false
 
-      // Admin can read all
-      if (user.roles?.includes('admin')) return true
-
       // Get user's workspaces
       const members = await payload.find({
         collection: 'workspace-members',
@@ -46,7 +43,7 @@ export const PluginConfig: CollectionConfig = {
     // Only workspace admins/owners can create plugin configs
     create: async ({ req: { user, payload }, data }) => {
       if (!user) return false
-      if (user.roles?.includes('admin')) return true
+      // Note: Admin role check removed - using workspace membership for access control
 
       // If no workspace is specified yet (rendering the form), allow the user to see it
       // The actual permission check will happen when they submit with a workspace selected
@@ -68,13 +65,13 @@ export const PluginConfig: CollectionConfig = {
     },
     // Only workspace admins/owners can update plugin configs
     update: async ({ req: { user, payload }, id }) => {
-      if (!user) return false
-      if (user.roles?.includes('admin')) return true
+      if (!user || !id) return false
+      // Note: Admin role check removed - using workspace membership for access control
 
       try {
         const config = await payload.findByID({
           collection: 'plugin-config',
-          id,
+          id: id as string,
         })
 
         const members = await payload.find({
@@ -97,13 +94,13 @@ export const PluginConfig: CollectionConfig = {
     },
     // Only workspace owners can delete plugin configs
     delete: async ({ req: { user, payload }, id }) => {
-      if (!user) return false
-      if (user.roles?.includes('admin')) return true
+      if (!user || !id) return false
+      // Note: Admin role check removed - using workspace membership for access control
 
       try {
         const config = await payload.findByID({
           collection: 'plugin-config',
-          id,
+          id: id as string,
         })
 
         const members = await payload.find({
@@ -157,6 +154,7 @@ export const PluginConfig: CollectionConfig = {
       hooks: {
         beforeChange: [
           async ({ data, req, operation }) => {
+            if (!data) return 'Unknown'
             if (operation === 'create' || operation === 'update') {
               // Fetch workspace and plugin to build display name
               try {
@@ -177,7 +175,7 @@ export const PluginConfig: CollectionConfig = {
                     : data.plugin
 
                 return `${workspace?.name} - ${plugin?.name}`
-              } catch (error) {
+              } catch {
                 return 'Unknown'
               }
             }
@@ -329,9 +327,7 @@ export const PluginConfig: CollectionConfig = {
   indexes: [
     {
       fields: ['workspace', 'plugin'],
-      options: {
-        unique: true,
-      },
+      unique: true,
     },
   ],
   hooks: {

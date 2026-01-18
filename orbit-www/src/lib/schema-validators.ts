@@ -1,4 +1,4 @@
-import type { SchemaType } from './grpc/api-catalog-client';
+import { SchemaType } from './grpc/api-catalog-client';
 
 export interface ValidationResult {
   valid: boolean;
@@ -199,11 +199,11 @@ export function validateGraphQL(content: string): ValidationResult {
  */
 export function validateSchema(content: string, schemaType: SchemaType): ValidationResult {
   switch (schemaType) {
-    case 'protobuf':
+    case SchemaType.PROTOBUF:
       return validateProtobuf(content);
-    case 'openapi':
+    case SchemaType.OPENAPI:
       return validateOpenAPI(content);
-    case 'graphql':
+    case SchemaType.GRAPHQL:
       return validateGraphQL(content);
     default:
       return { valid: true, errors: [] };

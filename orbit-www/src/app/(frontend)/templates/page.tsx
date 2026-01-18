@@ -12,11 +12,13 @@ import { SiteHeader } from '@/components/site-header'
 import { TemplateCatalog } from '@/components/features/templates/TemplateCatalog'
 
 export default async function TemplatesPage() {
-  const payload = await getPayload({ config })
+  // Phase 1: Parallelize initial setup
+  const [payload, reqHeaders] = await Promise.all([
+    getPayload({ config }),
+    headers(),
+  ])
 
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const session = await auth.api.getSession({ headers: reqHeaders })
 
   if (!session?.user) {
     return (
@@ -41,7 +43,7 @@ export default async function TemplatesPage() {
     )
   }
 
-  // Fetch templates (access control filters automatically)
+  // Phase 2: Fetch templates (access control filters automatically)
   const templatesResult = await payload.find({
     collection: 'templates',
     limit: 100,

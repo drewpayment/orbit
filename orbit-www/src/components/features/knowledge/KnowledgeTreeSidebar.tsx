@@ -271,7 +271,7 @@ export function KnowledgeTreeSidebar({
       {/* Header with space info */}
       <div className="p-4 border-b border-border/40">
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-2xl">{getIconEmoji(space.icon)}</span>
+          <span className="text-2xl">{getIconEmoji(space.icon ?? undefined)}</span>
           <h2 className="font-serif-display font-semibold text-lg">
             {space.name}
           </h2>

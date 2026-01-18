@@ -72,7 +72,7 @@ export class WorkspaceClient {
     const response = await client.listWorkspaces({
       pagination: {
         page: 1,
-        pageSize: 100,
+        size: 100,
       },
       filters: [],
       sort: [],
@@ -129,7 +129,7 @@ export class WorkspaceClient {
       workspaceId,
       pagination: {
         page: 1,
-        pageSize: 100,
+        size: 100,
       },
       filters: [],
     })
@@ -194,10 +194,10 @@ export class WorkspaceClient {
 
   private mapRole(role: 'owner' | 'admin' | 'member' | 'viewer'): WorkspaceRole {
     const map = {
-      viewer: WorkspaceRole.WORKSPACE_ROLE_VIEWER,
-      member: WorkspaceRole.WORKSPACE_ROLE_MEMBER,
-      admin: WorkspaceRole.WORKSPACE_ROLE_ADMIN,
-      owner: WorkspaceRole.WORKSPACE_ROLE_OWNER,
+      viewer: WorkspaceRole.VIEWER,
+      member: WorkspaceRole.MEMBER,
+      admin: WorkspaceRole.ADMIN,
+      owner: WorkspaceRole.OWNER,
     }
     return map[role]
   }

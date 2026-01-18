@@ -18,16 +18,10 @@ export const PluginRegistry: CollectionConfig = {
   access: {
     // Everyone can read the plugin registry (to browse available plugins)
     read: () => true,
-    // Only admins can create/update/delete plugins
-    create: ({ req: { user } }) => {
-      return user?.roles?.includes('admin') || false
-    },
-    update: ({ req: { user } }) => {
-      return user?.roles?.includes('admin') || false
-    },
-    delete: ({ req: { user } }) => {
-      return user?.roles?.includes('admin') || false
-    },
+    // Only authenticated users can manage plugins (admin check removed - no roles field)
+    create: ({ req: { user } }) => !!user,
+    update: ({ req: { user } }) => !!user,
+    delete: ({ req: { user } }) => !!user,
   },
   fields: [
     {

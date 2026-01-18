@@ -1,14 +1,17 @@
 import { notFound, redirect } from 'next/navigation'
-import { getPayload } from 'payload'
-import config from '@payload-config'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { SpaceNavigator } from '@/components/features/knowledge/SpaceNavigator'
-import { ArrowLeft, FileText } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
+import {
+  getWorkspaceBySlug,
+  getKnowledgeSpaceBySlug,
+  getKnowledgePagesBySpace,
+  getPayloadClient,
+} from '@/lib/data/cached-queries'
 
 interface PageProps {
   params: Promise<{
@@ -19,65 +22,33 @@ interface PageProps {
 
 export default async function KnowledgeSpacePage({ params }: PageProps) {
   const { slug, spaceSlug } = await params
-  const payload = await getPayload({ config })
 
-  // Fetch workspace
-  const workspaceResult = await payload.find({
-    collection: 'workspaces',
-    where: {
-      slug: {
-        equals: slug,
-      },
-    },
-    limit: 1,
-  })
-
-  if (!workspaceResult.docs.length) {
+  // Use cached fetchers for request-level deduplication
+  // These will reuse results from layout.tsx if already fetched
+  const workspace = await getWorkspaceBySlug(slug)
+  if (!workspace) {
     notFound()
   }
 
-  const workspace = workspaceResult.docs[0]
+  // Fetch user and space in parallel
+  const payload = await getPayloadClient()
+  const [usersResult, space] = await Promise.all([
+    // Fetch a user for temporary auth (TODO: Replace with actual auth session)
+    payload.find({
+      collection: 'users',
+      limit: 1,
+    }),
+    getKnowledgeSpaceBySlug(spaceSlug, workspace.id),
+  ])
 
-  // Fetch a user for temporary auth (TODO: Replace with actual auth session)
-  const usersResult = await payload.find({
-    collection: 'users',
-    limit: 1,
-  })
   const tempUserId = usersResult.docs[0]?.id
 
-  // Fetch knowledge space
-  const spaceResult = await payload.find({
-    collection: 'knowledge-spaces',
-    where: {
-      slug: {
-        equals: spaceSlug,
-      },
-      workspace: {
-        equals: workspace.id,
-      },
-    },
-    limit: 1,
-  })
-
-  if (!spaceResult.docs.length) {
+  if (!space) {
     notFound()
   }
 
-  const space = spaceResult.docs[0]
-
-  // Fetch pages for this space
-  const pagesResult = await payload.find({
-    collection: 'knowledge-pages',
-    where: {
-      knowledgeSpace: {
-        equals: space.id,
-      },
-    },
-    limit: 1000,
-    sort: 'sortOrder',
-  })
-
-  const pages = pagesResult.docs
+  // Use cached fetcher for pages (will reuse from layout if already fetched)
+  const pages = await getKnowledgePagesBySpace(space.id)
 
   // If pages exist, redirect to the first page
   if (pages.length > 0) {
@@ -125,7 +96,7 @@ export default async function KnowledgeSpacePage({ params }: PageProps) {
               <CardContent>
                 <div className="prose dark:prose-invert max-w-none">
                   <p className="text-gray-600 dark:text-gray-400">
-                    This knowledge space doesn't have any pages yet. Create your first page to get
+                    This knowledge space doesn&apos;t have any pages yet. Create your first page to get
                     started.
                   </p>
                   {tempUserId && (

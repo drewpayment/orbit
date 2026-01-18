@@ -1,6 +1,4 @@
 import { notFound } from 'next/navigation'
-import { getPayload } from 'payload'
-import config from '@payload-config'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
@@ -8,6 +6,10 @@ import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { BookOpen, FileText, Lock, Users, Globe } from 'lucide-react'
+import {
+  getWorkspaceBySlug,
+  getPayloadClient,
+} from '@/lib/data/cached-queries'
 
 interface PageProps {
   params: Promise<{
@@ -17,55 +19,37 @@ interface PageProps {
 
 export default async function KnowledgePage({ params }: PageProps) {
   const { slug } = await params
-  const payload = await getPayload({ config })
 
-  // Fetch workspace
-  const workspaceResult = await payload.find({
-    collection: 'workspaces',
-    where: {
-      slug: {
-        equals: slug,
-      },
-    },
-    limit: 1,
-  })
-
-  if (!workspaceResult.docs.length) {
+  // Use cached fetchers for request-level deduplication
+  const workspace = await getWorkspaceBySlug(slug)
+  if (!workspace) {
     notFound()
   }
 
-  const workspace = workspaceResult.docs[0]
+  const payload = await getPayloadClient()
 
   // Fetch knowledge spaces for this workspace
   const spacesResult = await payload.find({
     collection: 'knowledge-spaces',
-    where: {
-      workspace: {
-        equals: workspace.id,
-      },
-    },
+    where: { workspace: { equals: workspace.id } },
     limit: 100,
     sort: 'name',
   })
 
   const spaces = spacesResult.docs
 
-  // Fetch page counts for each space
+  // Fetch page counts for each space in parallel
   const spaceStats = await Promise.all(
     spaces.map(async (space) => {
       const pagesResult = await payload.find({
         collection: 'knowledge-pages',
-        where: {
-          knowledgeSpace: {
-            equals: space.id,
-          },
-        },
-        limit: 1000,
+        where: { knowledgeSpace: { equals: space.id } },
+        limit: 0, // Only need count, not docs
       })
 
       return {
         spaceId: space.id,
-        total: pagesResult.docs.length,
+        total: pagesResult.totalDocs,
       }
     })
   )
@@ -104,7 +88,7 @@ export default async function KnowledgePage({ params }: PageProps) {
     }
   }
 
-  const getIconEmoji = (icon: string | undefined) => {
+  const getIconEmoji = (icon: string | null | undefined) => {
     if (!icon) return '📚'
 
     // If already an emoji, return as-is

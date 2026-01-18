@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
     const expiresInSeconds = 3600 // 1 hour
     const token = await generatePullToken({
       workspaceSlug: workspace.slug,
-      appSlug: app.slug,
+      appSlug: app.name,
     })
 
     const expiresAt = new Date(Date.now() + expiresInSeconds * 1000).toISOString()

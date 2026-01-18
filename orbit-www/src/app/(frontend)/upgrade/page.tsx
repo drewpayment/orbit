@@ -139,7 +139,7 @@ export default function UpgradePage() {
               <CardHeader>
                 <CardTitle>Questions?</CardTitle>
                 <CardDescription>
-                  Need help choosing the right plan? We're here to help.
+                  Need help choosing the right plan? We&apos;re here to help.
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex gap-4">

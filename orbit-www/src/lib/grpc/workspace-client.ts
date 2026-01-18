@@ -98,7 +98,10 @@ export class WorkspaceClient {
       name: input.name,
       slug: input.slug,
       description: input.description,
-      settings: input.settings,
+      settings: {
+        ...input.settings,
+        allowed_template_types: input.settings.allowed_template_types ?? [],
+      },
       created_at: new Date(),
       updated_at: new Date(),
       created_by: 'current-user-id',

@@ -1,6 +1,6 @@
 'use server'
 
-import { getPayload } from 'payload'
+import { getPayload, type Where } from 'payload'
 import config from '@payload-config'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
@@ -510,7 +510,7 @@ export async function listPendingShares(
     }
 
     // Build query based on type
-    const workspaceCondition = input.type === 'incoming'
+    const workspaceCondition: Where = input.type === 'incoming'
       ? { ownerWorkspace: { equals: input.workspaceId } }
       : { targetWorkspace: { equals: input.workspaceId } }
 
@@ -522,7 +522,7 @@ export async function listPendingShares(
           workspaceCondition,
           { status: { equals: 'pending' } },
         ],
-      },
+      } as Where,
       sort: '-createdAt',
       depth: 2,
       limit: 100,

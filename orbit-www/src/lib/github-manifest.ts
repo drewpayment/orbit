@@ -1,5 +1,6 @@
 // orbit-www/src/lib/github-manifest.ts
 import { Octokit } from '@octokit/rest'
+import { randomBytes } from 'crypto'
 
 export interface GitHubRepoInfo {
   owner: string
@@ -127,6 +128,5 @@ export async function fileExists(
  * Generate a secure random webhook secret
  */
 export function generateWebhookSecret(): string {
-  const crypto = require('crypto')
-  return crypto.randomBytes(32).toString('hex')
+  return randomBytes(32).toString('hex')
 }

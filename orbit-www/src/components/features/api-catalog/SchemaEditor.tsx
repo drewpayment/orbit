@@ -1,17 +1,30 @@
 'use client';
 
 import React from 'react';
-import Editor from '@monaco-editor/react';
+import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Save, AlertCircle } from 'lucide-react';
-import { apiCatalogClient, type SchemaType } from '@/lib/grpc/api-catalog-client';
+import { apiCatalogClient, SchemaType } from '@/lib/grpc/api-catalog-client';
 import { validateSchema, type ValidationResult } from '@/lib/schema-validators';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errors';
+
+// Dynamically import Monaco Editor to reduce initial bundle size (~2MB)
+const Editor = dynamic(() => import('@monaco-editor/react'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[500px] bg-muted animate-pulse rounded-md flex items-center justify-center">
+      <div className="flex items-center gap-2 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        <span>Loading editor...</span>
+      </div>
+    </div>
+  ),
+});
 
 interface SchemaEditorProps {
   workspaceId: string;
@@ -21,14 +34,14 @@ interface SchemaEditorProps {
   onSave?: (data: { schemaContent: string; schemaType: SchemaType; name?: string }) => void;
 }
 
-const SCHEMA_TYPE_LANGUAGES: Record<SchemaType, string> = {
-  protobuf: 'protobuf',
-  openapi: 'yaml',
-  graphql: 'graphql',
+const SCHEMA_TYPE_LANGUAGES: Partial<Record<SchemaType, string>> = {
+  [SchemaType.PROTOBUF]: 'protobuf',
+  [SchemaType.OPENAPI]: 'yaml',
+  [SchemaType.GRAPHQL]: 'graphql',
 };
 
-const SCHEMA_TYPE_TEMPLATES: Record<SchemaType, string> = {
-  protobuf: `syntax = "proto3";
+const SCHEMA_TYPE_TEMPLATES: Partial<Record<SchemaType, string>> = {
+  [SchemaType.PROTOBUF]: `syntax = "proto3";
 
 package example;
 
@@ -44,7 +57,7 @@ message GetExampleResponse {
   string id = 1;
   string name = 2;
 }`,
-  openapi: `openapi: 3.0.0
+  [SchemaType.OPENAPI]: `openapi: 3.0.0
 info:
   title: Example API
   version: 1.0.0
@@ -66,7 +79,7 @@ paths:
                     type: string
                   name:
                     type: string`,
-  graphql: `type Query {
+  [SchemaType.GRAPHQL]: `type Query {
   example(id: ID!): Example
 }
 
@@ -89,14 +102,14 @@ input CreateExampleInput {
 
 export function SchemaEditor({
   workspaceId,
-  schemaType: initialSchemaType = 'protobuf',
+  schemaType: initialSchemaType = SchemaType.PROTOBUF,
   initialContent,
   schemaName,
   onSave,
 }: SchemaEditorProps) {
   const [schemaType, setSchemaType] = React.useState<SchemaType>(initialSchemaType);
   const [content, setContent] = React.useState<string>(
-    initialContent || SCHEMA_TYPE_TEMPLATES[initialSchemaType]
+    initialContent || SCHEMA_TYPE_TEMPLATES[initialSchemaType] || ''
   );
   const [validation, setValidation] = React.useState<ValidationResult>({ valid: true, errors: [] });
   const [isSaving, setIsSaving] = React.useState(false);
@@ -110,12 +123,12 @@ export function SchemaEditor({
   // Update template when schema type changes
   React.useEffect(() => {
     if (!initialContent) {
-      setContent(SCHEMA_TYPE_TEMPLATES[schemaType]);
+      setContent(SCHEMA_TYPE_TEMPLATES[schemaType] || '');
     }
   }, [schemaType, initialContent]);
 
-  const handleSchemaTypeChange = (value: SchemaType) => {
-    setSchemaType(value);
+  const handleSchemaTypeChange = (value: string) => {
+    setSchemaType(Number(value) as SchemaType);
   };
 
   const handleEditorChange = (value: string | undefined) => {
@@ -130,11 +143,16 @@ export function SchemaEditor({
 
     setIsSaving(true);
     try {
-      await apiCatalogClient.saveSchema({
+      await apiCatalogClient.createSchema({
         workspaceId,
         schemaType,
-        schemaContent: content,
-        name: schemaName,
+        rawContent: content,
+        name: schemaName || '',
+        slug: '',
+        version: '1.0.0',
+        description: '',
+        tags: [],
+        license: '',
       });
 
       toast.success('Schema saved successfully');
@@ -171,7 +189,7 @@ export function SchemaEditor({
           {/* Schema Type Selector */}
           <div className="space-y-2">
             <Label htmlFor="schema-type">Schema Type</Label>
-            <Select value={schemaType} onValueChange={handleSchemaTypeChange}>
+            <Select value={String(schemaType)} onValueChange={handleSchemaTypeChange}>
               <SelectTrigger
                 id="schema-type"
                 className="w-[200px]"
@@ -180,9 +198,9 @@ export function SchemaEditor({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="protobuf">Protocol Buffers</SelectItem>
-                <SelectItem value="openapi">OpenAPI</SelectItem>
-                <SelectItem value="graphql">GraphQL</SelectItem>
+                <SelectItem value={String(SchemaType.PROTOBUF)}>Protocol Buffers</SelectItem>
+                <SelectItem value={String(SchemaType.OPENAPI)}>OpenAPI</SelectItem>
+                <SelectItem value={String(SchemaType.GRAPHQL)}>GraphQL</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -196,7 +214,7 @@ export function SchemaEditor({
           >
             <Editor
               height="500px"
-              language={SCHEMA_TYPE_LANGUAGES[schemaType]}
+              language={SCHEMA_TYPE_LANGUAGES[schemaType] || 'text'}
               value={content}
               onChange={handleEditorChange}
               theme="vs-dark"

@@ -29,7 +29,7 @@ export const githubApp = new App({
 /**
  * Get Octokit instance for a specific installation
  */
-export async function getInstallationOctokit(installationId: number): Promise<Octokit> {
+export async function getInstallationOctokit(installationId: number) {
   return await githubApp.getInstallationOctokit(installationId)
 }
 
@@ -46,7 +46,7 @@ export async function createInstallationToken(
   // Build the request payload
   const requestOptions: {
     installation_id: number
-    permissions?: { packages?: string; contents?: string; metadata?: string }
+    permissions?: { packages?: 'read' | 'write'; contents?: 'read' | 'write'; metadata?: 'read' | 'write' }
   } = {
     installation_id: installationId,
   }
@@ -55,9 +55,9 @@ export async function createInstallationToken(
   // This is required for pushing to GitHub Container Registry (GHCR)
   if (options?.includePackages) {
     requestOptions.permissions = {
-      packages: 'write',
-      contents: 'read', // Needed for cloning repos
-      metadata: 'read', // Basic repo info
+      packages: 'write' as const,
+      contents: 'read' as const, // Needed for cloning repos
+      metadata: 'read' as const, // Basic repo info
     }
   }
 

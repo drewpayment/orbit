@@ -206,7 +206,7 @@ export default function FeedbackPage() {
                     <div>
                       <p className="font-medium">Acknowledgment</p>
                       <p className="text-gray-600 dark:text-gray-400">
-                        You'll receive a confirmation email within 24 hours
+                        You&apos;ll receive a confirmation email within 24 hours
                       </p>
                     </div>
                   </div>
@@ -230,7 +230,7 @@ export default function FeedbackPage() {
                     <div>
                       <p className="font-medium">Action</p>
                       <p className="text-gray-600 dark:text-gray-400">
-                        We'll respond or implement changes based on priority
+                        We&apos;ll respond or implement changes based on priority
                       </p>
                     </div>
                   </div>

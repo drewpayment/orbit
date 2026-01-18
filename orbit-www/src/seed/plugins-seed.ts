@@ -5,7 +5,37 @@
  * These match the hardcoded plugins in the Go plugins service (Phase 2).
  */
 
-export const pluginsSeedData = [
+type PluginStability = 'stable' | 'experimental' | 'beta' | 'deprecated'
+type PluginCategory = 'api-catalog' | 'ci-cd' | 'infrastructure' | 'cloud-resources' | 'security' | 'monitoring' | 'documentation' | 'collaboration' | 'other'
+type ConfigKeyType = 'number' | 'boolean' | 'url' | 'secret' | 'text'
+
+export const pluginsSeedData: Array<{
+  pluginId: string
+  name: string
+  description: string
+  category: PluginCategory
+  enabled: boolean
+  metadata: {
+    version: string
+    backstagePackage: string
+    apiBasePath: string
+    documentationUrl: string
+  }
+  configuration: {
+    requiredConfigKeys: Array<{ key: string; label: string; description: string; type: ConfigKeyType; isSecret?: boolean; defaultValue?: string }>
+    optionalConfigKeys: Array<{ key: string; label: string; description: string; type: ConfigKeyType; isSecret?: boolean; defaultValue?: string }>
+    supportedFeatures: Array<{ feature: string }>
+  }
+  requirements: {
+    minimumBackstageVersion: string
+    externalDependencies: Array<{ service: string; description?: string }>
+  }
+  status: {
+    stability: PluginStability
+    lastTested: string
+    knownIssues: string
+  }
+}> = [
   {
     pluginId: 'catalog',
     name: 'Software Catalog',
@@ -49,7 +79,7 @@ export const pluginsSeedData = [
     },
     status: {
       stability: 'stable',
-      lastTested: new Date('2025-10-19'),
+      lastTested: '2025-10-19',
       knownIssues: '',
     },
   },
@@ -110,7 +140,7 @@ export const pluginsSeedData = [
     },
     status: {
       stability: 'stable',
-      lastTested: new Date('2025-10-19'),
+      lastTested: '2025-10-19',
       knownIssues: '',
     },
   },
@@ -177,7 +207,7 @@ export const pluginsSeedData = [
     },
     status: {
       stability: 'stable',
-      lastTested: new Date('2025-10-19'),
+      lastTested: '2025-10-19',
       knownIssues: '',
     },
   },
