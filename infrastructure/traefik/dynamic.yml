@@ -1,18 +1,38 @@
-# Traefik dynamic configuration
-# Routes all Kafka traffic to Bifrost (routing happens inside Bifrost based on credentials)
+# Traefik dynamic configuration for Orbit local development
+#
+# With Orbstack, Traefik is accessible at: traefik.orbit.orb.local
+# Kafka clients connect to: traefik.orbit.orb.local:9092
+#
+# When Bifrost Kafka proxy is implemented, change redpanda:9092 to bifrost:9092
+# Bifrost will route to the correct virtual cluster based on credentials.
 
 tcp:
   routers:
-    # All Kafka traffic goes to Bifrost
-    # Bifrost routes to the correct virtual cluster based on the authenticated user
-    bifrost-kafka:
+    kafka:
       entryPoints:
         - kafka
       rule: "HostSNI(`*`)"
-      service: bifrost
+      service: redpanda
 
   services:
-    bifrost:
+    # Direct to Redpanda while Bifrost Kafka proxy is being developed
+    # TODO: Change to bifrost:9092 when Kroxylicious integration is complete
+    redpanda:
       loadBalancer:
         servers:
-          - address: "bifrost:9092"
+          - address: "redpanda:9092"
+
+    # Bifrost proxy - enable when Kafka proxy is implemented
+    # bifrost:
+    #   loadBalancer:
+    #     servers:
+    #       - address: "bifrost:9092"
+
+http:
+  routers:
+    # Traefik dashboard
+    dashboard:
+      rule: "Host(`traefik.orbit.orb.local`)"
+      service: api@internal
+      entryPoints:
+        - web

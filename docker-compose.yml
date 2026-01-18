@@ -328,26 +328,15 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # DNS for local development (resolves *.kafka.orbit.io)
-  dnsmasq:
-    container_name: orbit-dnsmasq
-    image: andyshinn/dnsmasq:latest
-    ports:
-      - "5353:53/tcp"
-      - "5353:53/udp"
-    cap_add:
-      - NET_ADMIN
-    volumes:
-      - ./infrastructure/dnsmasq/dnsmasq.conf:/etc/dnsmasq.conf:ro
-    restart: unless-stopped
-
-  # Traefik reverse proxy (routes *.kafka.orbit.io to Bifrost)
+  # Traefik reverse proxy for Kafka traffic
+  # With Orbstack, accessible at: traefik.orbit.orb.local
+  # Kafka endpoint: traefik.orbit.orb.local:9092
   traefik:
     container_name: orbit-traefik
     image: traefik:v3.0
     ports:
-      - "9092:9092"    # Kafka/Bifrost entrypoint
-      - "8090:8090"    # Traefik dashboard
+      - "9092:9092"    # Kafka/Bifrost TCP entrypoint
+      - "80:80"        # HTTP (dashboard)
     volumes:
       - ./infrastructure/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./infrastructure/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
@@ -356,13 +345,15 @@ services:
     restart: unless-stopped
 
   # Bifrost Gateway (Kafka Virtual Clusters)
+  # Routes Kafka traffic based on authenticated credentials
+  # Direct access: bifrost.orbit.orb.local:9092
+  # Via Traefik: traefik.orbit.orb.local:9092
   bifrost:
     container_name: orbit-bifrost
     build:
       context: .
       dockerfile: gateway/bifrost/Dockerfile
     ports:
-      - "9093:9092"    # Kafka proxy port (direct access, bypasses Traefik)
       - "50060:50060"  # Admin gRPC
     environment:
       - BIFROST_ADMIN_PORT=50060

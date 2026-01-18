@@ -1,5 +1,5 @@
 # Traefik static configuration for Orbit local development
-# Handles wildcard DNS routing for Bifrost virtual clusters
+# Routes Kafka traffic to Bifrost via Orbstack networking
 
 api:
   dashboard: true
@@ -9,13 +9,13 @@ log:
   level: INFO
 
 entryPoints:
-  # Kafka/Bifrost TCP passthrough
+  # Kafka/Bifrost TCP entrypoint
   kafka:
     address: ":9092"
 
   # Traefik dashboard
-  traefik:
-    address: ":8090"
+  web:
+    address: ":80"
 
 providers:
   file:

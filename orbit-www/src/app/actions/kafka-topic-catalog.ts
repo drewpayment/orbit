@@ -662,10 +662,9 @@ export async function getConnectionDetails(
     let topicName: string
 
     if (bifrostConfig.connectionMode === 'bifrost') {
-      // In bifrost mode, use the virtual cluster's advertised host:port
-      const host = virtualCluster?.advertisedHost || bifrostConfig.advertisedHost
-      const port = virtualCluster?.advertisedPort || 9092
-      bootstrapServers = `${host}:${port}`
+      // In bifrost mode, all traffic goes through a single gateway endpoint
+      // Bifrost routes to the correct virtual cluster based on credentials
+      bootstrapServers = bifrostConfig.advertisedHost
       topicName = topic.name // Short name - Bifrost rewrites
     } else {
       // Direct mode - use physical cluster details
@@ -813,10 +812,9 @@ export async function getOwnTopicConnectionDetails(
     let topicName: string
 
     if (bifrostConfig.connectionMode === 'bifrost') {
-      // In bifrost mode, use the virtual cluster's advertised host:port
-      const host = virtualCluster?.advertisedHost || bifrostConfig.advertisedHost
-      const port = virtualCluster?.advertisedPort || 9092
-      bootstrapServers = `${host}:${port}`
+      // In bifrost mode, all traffic goes through a single gateway endpoint
+      // Bifrost routes to the correct virtual cluster based on credentials
+      bootstrapServers = bifrostConfig.advertisedHost
       topicName = topic.name // Short name - Bifrost rewrites
     } else {
       // Direct mode - use physical cluster details

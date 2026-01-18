@@ -8,11 +8,18 @@ export type BifrostConfigData = {
   tlsEnabled: boolean
 }
 
+// Default Bifrost endpoint - can be overridden via BIFROST_ADVERTISED_HOST env var
+// For Orbstack local dev: traefik.orbit.orb.local:9092
+// For production: Set via bifrost-config collection or env var
+const getDefaultAdvertisedHost = () => {
+  return process.env.BIFROST_ADVERTISED_HOST || 'traefik.orbit.orb.local:9092'
+}
+
 const DEFAULT_CONFIG: BifrostConfigData = {
-  advertisedHost: 'localhost:9092',
+  advertisedHost: getDefaultAdvertisedHost(),
   defaultAuthMethod: 'SASL/SCRAM-SHA-256',
   connectionMode: 'bifrost',
-  tlsEnabled: true,
+  tlsEnabled: false, // Local dev uses SASL_PLAINTEXT
 }
 
 export async function getBifrostConfig(): Promise<BifrostConfigData> {

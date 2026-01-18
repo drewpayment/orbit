@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ArrowLeft, Settings, Server, CheckCircle2, Clock, AlertCircle, Network } from 'lucide-react'
@@ -14,8 +14,6 @@ interface VirtualCluster {
   id: string
   environment: 'dev' | 'stage' | 'prod'
   status: string
-  advertisedHost: string
-  advertisedPort?: number
 }
 
 interface Application {
@@ -74,7 +72,6 @@ export function ApplicationDetailClient({
   userId,
 }: ApplicationDetailClientProps) {
   const [selectedEnv, setSelectedEnv] = useState<string>(virtualClusters[0]?.environment ?? 'dev')
-  const selectedVc = virtualClusters.find((vc) => vc.environment === selectedEnv)
 
   const StatusIcon = statusConfig[application.status].icon
 
@@ -146,26 +143,6 @@ export function ApplicationDetailClient({
 
             {virtualClusters.map((vc) => (
               <TabsContent key={vc.id} value={vc.environment} className="space-y-6">
-                {/* Connection Info */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Connection Details</CardTitle>
-                    <CardDescription>
-                      Use these settings to connect to your virtual cluster
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div>
-                      <div className="text-sm font-medium text-muted-foreground">
-                        Bootstrap Server
-                      </div>
-                      <code className="text-sm bg-muted px-2 py-1 rounded">
-                        {vc.advertisedHost}:{vc.advertisedPort || 9092}
-                      </code>
-                    </div>
-                  </CardContent>
-                </Card>
-
                 {/* Topics Panel */}
                 <TopicsPanel
                   virtualClusterId={vc.id}
