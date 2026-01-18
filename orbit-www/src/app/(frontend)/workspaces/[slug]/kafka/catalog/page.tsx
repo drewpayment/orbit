@@ -64,6 +64,7 @@ export default async function CatalogPage({ params }: CatalogPageProps) {
         <TopicCatalog
           currentWorkspaceId={workspace.id}
           currentWorkspaceName={workspace.name}
+          currentWorkspaceSlug={workspace.slug}
         />
       </Suspense>
     </>

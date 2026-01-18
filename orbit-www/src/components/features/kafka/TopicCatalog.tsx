@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
-import { Search, Filter, ExternalLink, Lock, Globe, Building2 } from 'lucide-react'
+import { Search, Filter, ExternalLink, Lock, Globe, Building2, Link2 } from 'lucide-react'
+import { ConnectionDetailsPanel } from './ConnectionDetailsPanel'
 import {
   searchTopicCatalog,
   requestTopicAccess,
@@ -22,6 +23,7 @@ import {
 interface TopicCatalogProps {
   currentWorkspaceId: string
   currentWorkspaceName: string
+  currentWorkspaceSlug: string
 }
 
 const visibilityIcons = {
@@ -38,7 +40,7 @@ const visibilityLabels = {
   public: 'Public',
 }
 
-export function TopicCatalog({ currentWorkspaceId, currentWorkspaceName }: TopicCatalogProps) {
+export function TopicCatalog({ currentWorkspaceId, currentWorkspaceName, currentWorkspaceSlug }: TopicCatalogProps) {
   const [topics, setTopics] = useState<TopicCatalogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -68,6 +70,10 @@ export function TopicCatalog({ currentWorkspaceId, currentWorkspaceName }: Topic
   const [selectedTopic, setSelectedTopic] = useState<TopicCatalogEntry | null>(null)
   const [accessLevel, setAccessLevel] = useState<'read' | 'write' | 'read-write'>('read')
   const [accessReason, setAccessReason] = useState('')
+
+  // Connection details panel state
+  const [connectionPanelOpen, setConnectionPanelOpen] = useState(false)
+  const [selectedShareId, setSelectedShareId] = useState<string | null>(null)
 
   const loadTopics = useCallback(async () => {
     setLoading(true)
@@ -102,6 +108,11 @@ export function TopicCatalog({ currentWorkspaceId, currentWorkspaceName }: Topic
     setAccessLevel('read')
     setAccessReason('')
     setRequestDialogOpen(true)
+  }
+
+  const handleViewConnectionDetails = (shareId: string) => {
+    setSelectedShareId(shareId)
+    setConnectionPanelOpen(true)
   }
 
   const submitAccessRequest = async () => {
@@ -246,10 +257,17 @@ export function TopicCatalog({ currentWorkspaceId, currentWorkspaceName }: Topic
                               View
                             </a>
                           </Button>
+                        ) : topic.shareStatus === 'approved' && topic.shareId ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleViewConnectionDetails(topic.shareId!)}
+                          >
+                            <Link2 className="h-4 w-4 mr-1" />
+                            Connect
+                          </Button>
                         ) : topic.hasActiveShare ? (
-                          <span className="text-sm text-muted-foreground">
-                            {topic.shareStatus === 'approved' ? 'Granted' : 'Requested'}
-                          </span>
+                          <span className="text-sm text-muted-foreground">Requested</span>
                         ) : (
                           <Button
                             variant="outline"
@@ -343,6 +361,16 @@ export function TopicCatalog({ currentWorkspaceId, currentWorkspaceName }: Topic
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Connection Details Panel */}
+        {selectedShareId && (
+          <ConnectionDetailsPanel
+            open={connectionPanelOpen}
+            onOpenChange={setConnectionPanelOpen}
+            shareId={selectedShareId}
+            workspaceSlug={currentWorkspaceSlug}
+          />
+        )}
       </CardContent>
     </Card>
   )
