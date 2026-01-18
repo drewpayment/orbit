@@ -7,6 +7,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/drewpayment/orbit/services/bifrost/internal/auth"
 	"github.com/drewpayment/orbit/services/bifrost/internal/config"
@@ -68,22 +69,11 @@ func (s *Service) SetVirtualClusterReadOnly(ctx context.Context, req *gatewayv1.
 		"read_only":          req.ReadOnly,
 	}).Info("Setting virtual cluster read-only flag")
 
-	// Create a new config with the updated read-only flag
-	// We need to clone to avoid race conditions since Get returns direct reference
-	updatedVC := &gatewayv1.VirtualClusterConfig{
-		Id:                       vc.Id,
-		ApplicationId:            vc.ApplicationId,
-		ApplicationSlug:          vc.ApplicationSlug,
-		WorkspaceSlug:            vc.WorkspaceSlug,
-		Environment:              vc.Environment,
-		TopicPrefix:              vc.TopicPrefix,
-		GroupPrefix:              vc.GroupPrefix,
-		TransactionIdPrefix:      vc.TransactionIdPrefix,
-		AdvertisedHost:           vc.AdvertisedHost,
-		AdvertisedPort:           vc.AdvertisedPort,
-		PhysicalBootstrapServers: vc.PhysicalBootstrapServers,
-		ReadOnly:                 req.ReadOnly,
-	}
+	// Clone to avoid race conditions since Get returns direct reference
+	// Using proto.Clone ensures all fields are copied, including any new fields
+	// added to the protobuf definition in the future
+	updatedVC := proto.Clone(vc).(*gatewayv1.VirtualClusterConfig)
+	updatedVC.ReadOnly = req.ReadOnly
 	s.vcStore.Upsert(updatedVC)
 
 	return &gatewayv1.SetVirtualClusterReadOnlyResponse{Success: true}, nil
