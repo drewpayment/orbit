@@ -14,18 +14,19 @@ const (
 )
 
 // TopicProvisioningWorkflowInput defines input for the topic provisioning workflow
+// JSON tags match the PascalCase keys sent from TypeScript Temporal client
 type TopicProvisioningWorkflowInput struct {
-	TopicID           string
-	VirtualClusterID  string
-	TopicPrefix       string
-	TopicName         string
-	Partitions        int
-	ReplicationFactor int
-	RetentionMs       int64
-	CleanupPolicy     string
-	Compression       string
-	Config            map[string]string
-	BootstrapServers  string
+	TopicID           string            `json:"TopicID"`
+	VirtualClusterID  string            `json:"VirtualClusterID"`
+	TopicPrefix       string            `json:"TopicPrefix"`
+	TopicName         string            `json:"TopicName"`
+	Partitions        int               `json:"Partitions"`
+	ReplicationFactor int               `json:"ReplicationFactor"`
+	RetentionMs       int64             `json:"RetentionMs"`
+	CleanupPolicy     string            `json:"CleanupPolicy"`
+	Compression       string            `json:"Compression"`
+	Config            map[string]string `json:"Config"`
+	BootstrapServers  string            `json:"BootstrapServers"`
 }
 
 // TopicProvisioningWorkflowResult defines the output of the topic provisioning workflow

@@ -77,6 +77,7 @@ export type ConnectionDetails = {
     status: 'active' | 'revoked'
   }>
   applicationId: string
+  applicationSlug: string
   applicationName: string
   shareStatus: string
 }
@@ -717,6 +718,7 @@ export async function getConnectionDetails(
         tlsEnabled: bifrostConfig.tlsEnabled,
         serviceAccounts,
         applicationId: primaryApp?.id || '',
+        applicationSlug: primaryApp?.slug || '',
         applicationName: primaryApp?.name || 'No application',
         shareStatus: share.status,
       },

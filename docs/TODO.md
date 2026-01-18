@@ -2,7 +2,7 @@
 
 This document tracks planned features, incomplete implementations, and technical debt across the Orbit codebase.
 
-**Last Updated:** 2026-01-17 (Consumer Connection Information feature completed)
+**Last Updated:** 2026-01-18 (Virtual cluster provisioning with partial success tracking)
 
 ---
 
@@ -244,6 +244,21 @@ End-to-end integration test to validate the complete lineage data flow:
   - `decommissionApplication()` - Triggers `ApplicationDecommissioningWorkflow` with `ForceDelete: false`
   - `cancelDecommissioning()` - Cancels scheduled cleanup via Temporal Schedule API
   - `forceDeleteApplication()` - Triggers `ApplicationDecommissioningWorkflow` with `ForceDelete: true`
+
+#### Virtual Cluster Provisioning (COMPLETED)
+- [x] `kafka-applications.ts` - Wire `createApplication()` to trigger `VirtualClusterProvisionWorkflow`
+  - Creates application record in Payload CMS
+  - Triggers `VirtualClusterProvisionWorkflow` for dev, stage, and prod environments
+  - Stores workflow ID on application record for tracking
+- [x] `kafka-applications.ts` - `retryVirtualClusterProvisioning()` for existing applications
+  - Allows retrying provisioning for applications with missing/failed virtual clusters
+  - Uses same workflow trigger as `createApplication()`
+- [x] Partial success status tracking for virtual cluster provisioning
+  - Added `partial` status option to `provisioningStatus` field
+  - Added `provisioningDetails` JSON field for per-environment results (dev/stage/prod)
+  - Workflow continues on environment failures instead of stopping
+  - UI shows "Partial" badge with tooltip explaining which environments succeeded/failed
+  - Internal API routes for Temporal workflow communication
 
 ---
 

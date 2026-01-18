@@ -242,6 +242,58 @@ export const KafkaApplications: CollectionConfig = {
         position: 'sidebar',
       },
     },
+    // Virtual cluster provisioning fields
+    {
+      name: 'provisioningStatus',
+      type: 'select',
+      defaultValue: 'pending',
+      options: [
+        { label: 'Pending', value: 'pending' },
+        { label: 'In Progress', value: 'in_progress' },
+        { label: 'Completed', value: 'completed' },
+        { label: 'Partial', value: 'partial' },
+        { label: 'Failed', value: 'failed' },
+      ],
+      admin: {
+        position: 'sidebar',
+        description: 'Virtual cluster provisioning status',
+      },
+    },
+    {
+      name: 'provisioningDetails',
+      type: 'json',
+      admin: {
+        readOnly: true,
+        description: 'Per-environment provisioning results (environments succeeded/failed)',
+        condition: (data) =>
+          data?.provisioningStatus === 'partial' || data?.provisioningStatus === 'completed',
+      },
+    },
+    {
+      name: 'provisioningWorkflowId',
+      type: 'text',
+      admin: {
+        readOnly: true,
+        description: 'Temporal workflow ID for virtual cluster provisioning',
+      },
+    },
+    {
+      name: 'provisioningError',
+      type: 'textarea',
+      admin: {
+        readOnly: true,
+        description: 'Error message if provisioning failed',
+        condition: (data) => data?.provisioningStatus === 'failed',
+      },
+    },
+    {
+      name: 'provisioningCompletedAt',
+      type: 'date',
+      admin: {
+        readOnly: true,
+        condition: (data) => data?.provisioningStatus === 'completed',
+      },
+    },
   ],
   hooks: {
     beforeChange: [

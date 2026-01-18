@@ -26,14 +26,14 @@ export type ServiceAccountInfo = {
 
 interface ServiceAccountSelectorProps {
   serviceAccounts: ServiceAccountInfo[]
-  applicationId: string
+  applicationSlug: string
   workspaceSlug: string
   onPasswordRequest?: (accountId: string) => Promise<string | null>
 }
 
 export function ServiceAccountSelector({
   serviceAccounts,
-  applicationId,
+  applicationSlug,
   workspaceSlug,
   onPasswordRequest,
 }: ServiceAccountSelectorProps) {
@@ -85,7 +85,7 @@ export function ServiceAccountSelector({
               Create a service account to connect to this topic.
             </p>
             <Link
-              href={`/workspaces/${workspaceSlug}/kafka/applications/${applicationId}`}
+              href={`/workspaces/${workspaceSlug}/kafka/applications/${applicationSlug}`}
               className="inline-flex items-center gap-1 text-sm font-medium text-yellow-800 dark:text-yellow-200 hover:underline mt-2"
             >
               <Plus className="h-4 w-4" />
@@ -204,7 +204,7 @@ export function ServiceAccountSelector({
 
       <div className="flex justify-end">
         <Link
-          href={`/workspaces/${workspaceSlug}/kafka/applications/${applicationId}`}
+          href={`/workspaces/${workspaceSlug}/kafka/applications/${applicationSlug}`}
           className="text-sm text-muted-foreground hover:underline"
         >
           Manage service accounts

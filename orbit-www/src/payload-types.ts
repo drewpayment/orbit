@@ -92,6 +92,7 @@ export interface Config {
     'kafka-providers': KafkaProvider;
     'kafka-clusters': KafkaCluster;
     'kafka-environment-mappings': KafkaEnvironmentMapping;
+    'bifrost-config': BifrostConfig;
     'kafka-applications': KafkaApplication;
     'kafka-virtual-clusters': KafkaVirtualCluster;
     'kafka-topics': KafkaTopic;
@@ -142,6 +143,7 @@ export interface Config {
     'kafka-providers': KafkaProvidersSelect<false> | KafkaProvidersSelect<true>;
     'kafka-clusters': KafkaClustersSelect<false> | KafkaClustersSelect<true>;
     'kafka-environment-mappings': KafkaEnvironmentMappingsSelect<false> | KafkaEnvironmentMappingsSelect<true>;
+    'bifrost-config': BifrostConfigSelect<false> | BifrostConfigSelect<true>;
     'kafka-applications': KafkaApplicationsSelect<false> | KafkaApplicationsSelect<true>;
     'kafka-virtual-clusters': KafkaVirtualClustersSelect<false> | KafkaVirtualClustersSelect<true>;
     'kafka-topics': KafkaTopicsSelect<false> | KafkaTopicsSelect<true>;
@@ -1491,6 +1493,37 @@ export interface KafkaEnvironmentMapping {
   createdAt: string;
 }
 /**
+ * Bifrost gateway connection settings for Kafka clients
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "bifrost-config".
+ */
+export interface BifrostConfig {
+  id: string;
+  /**
+   * Configuration name (singleton)
+   */
+  name?: string | null;
+  /**
+   * The hostname:port clients use to connect (e.g., kafka.bifrost.orbit.io:9092)
+   */
+  advertisedHost: string;
+  /**
+   * Default authentication method for Kafka clients
+   */
+  defaultAuthMethod: 'SASL/SCRAM-SHA-256' | 'SASL/SCRAM-SHA-512' | 'SASL/PLAIN';
+  /**
+   * Bifrost: clients connect through proxy. Direct: clients connect to physical cluster.
+   */
+  connectionMode: 'bifrost' | 'direct';
+  /**
+   * Whether client connections require TLS
+   */
+  tlsEnabled?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * Kafka applications for self-service virtual clusters
  *
  * This interface was referenced by `Config`'s JSON-Schema
@@ -1536,6 +1569,31 @@ export interface KafkaApplication {
    */
   decommissionReason?: string | null;
   createdBy?: (string | null) | User;
+  /**
+   * Virtual cluster provisioning status
+   */
+  provisioningStatus?: ('pending' | 'in_progress' | 'completed' | 'partial' | 'failed') | null;
+  /**
+   * Per-environment provisioning results (environments succeeded/failed)
+   */
+  provisioningDetails?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Temporal workflow ID for virtual cluster provisioning
+   */
+  provisioningWorkflowId?: string | null;
+  /**
+   * Error message if provisioning failed
+   */
+  provisioningError?: string | null;
+  provisioningCompletedAt?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -2807,6 +2865,10 @@ export interface PayloadLockedDocument {
         value: string | KafkaEnvironmentMapping;
       } | null)
     | ({
+        relationTo: 'bifrost-config';
+        value: string | BifrostConfig;
+      } | null)
+    | ({
         relationTo: 'kafka-applications';
         value: string | KafkaApplication;
       } | null)
@@ -3538,6 +3600,19 @@ export interface KafkaEnvironmentMappingsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "bifrost-config_select".
+ */
+export interface BifrostConfigSelect<T extends boolean = true> {
+  name?: T;
+  advertisedHost?: T;
+  defaultAuthMethod?: T;
+  connectionMode?: T;
+  tlsEnabled?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "kafka-applications_select".
  */
 export interface KafkaApplicationsSelect<T extends boolean = true> {
@@ -3555,6 +3630,11 @@ export interface KafkaApplicationsSelect<T extends boolean = true> {
   cleanupWorkflowId?: T;
   decommissionReason?: T;
   createdBy?: T;
+  provisioningStatus?: T;
+  provisioningDetails?: T;
+  provisioningWorkflowId?: T;
+  provisioningError?: T;
+  provisioningCompletedAt?: T;
   updatedAt?: T;
   createdAt?: T;
 }

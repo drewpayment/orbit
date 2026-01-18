@@ -66,7 +66,7 @@ export async function getRegistryUsage(workspaceId: string): Promise<{
       collection: 'registry-images',
       where: { workspace: { equals: workspaceId } },
       limit: 1000,
-      overrideAccess: false,
+      overrideAccess: true, // Safe: membership already verified above
     })
 
     // Sum up the sizes

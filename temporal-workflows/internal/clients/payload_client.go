@@ -34,6 +34,22 @@ type PayloadResponse struct {
 	NextPage      *int             `json:"nextPage"`
 }
 
+// collectionsNeedingInternalAPI lists collections that require internal API routes
+// to bypass Payload CMS access control for Temporal worker operations.
+var collectionsNeedingInternalAPI = map[string]bool{
+	"kafka-topics":               true,
+	"kafka-virtual-clusters":     true,
+	"kafka-clusters":             true,
+	"kafka-schemas":              true,
+	"kafka-topic-shares":         true,
+	"kafka-lineage-edges":        true,
+	"kafka-applications":         true,
+	"kafka-environment-mappings": true,
+	"kafka-service-accounts":     true,
+	"kafka-usage-metrics":        true,
+	"workspaces":                 true,
+}
+
 // NewPayloadClient creates a new Payload CMS HTTP client.
 func NewPayloadClient(baseURL, apiKey string, logger *slog.Logger) *PayloadClient {
 	return &PayloadClient{
@@ -51,10 +67,9 @@ func NewPayloadClient(baseURL, apiKey string, logger *slog.Logger) *PayloadClien
 func (c *PayloadClient) Get(ctx context.Context, collection string, id string) (map[string]any, error) {
 	// Use internal API route for collections that need elevated access
 	var reqURL string
-	switch collection {
-	case "kafka-topics", "kafka-virtual-clusters", "kafka-clusters", "kafka-schemas", "kafka-topic-shares", "kafka-lineage-edges", "kafka-applications", "workspaces":
+	if collectionsNeedingInternalAPI[collection] {
 		reqURL = fmt.Sprintf("%s/api/internal/%s/%s", c.baseURL, collection, id)
-	default:
+	} else {
 		reqURL = fmt.Sprintf("%s/api/%s/%s", c.baseURL, collection, id)
 	}
 
@@ -97,7 +112,13 @@ func (c *PayloadClient) Get(ctx context.Context, collection string, id string) (
 // Find queries a collection with the given parameters.
 // Use BuildQuery to construct the query parameters.
 func (c *PayloadClient) Find(ctx context.Context, collection string, query url.Values) ([]map[string]any, error) {
-	reqURL := fmt.Sprintf("%s/api/%s", c.baseURL, collection)
+	// Use internal API route for collections that need elevated access
+	var reqURL string
+	if collectionsNeedingInternalAPI[collection] {
+		reqURL = fmt.Sprintf("%s/api/internal/%s", c.baseURL, collection)
+	} else {
+		reqURL = fmt.Sprintf("%s/api/%s", c.baseURL, collection)
+	}
 	if len(query) > 0 {
 		reqURL = fmt.Sprintf("%s?%s", reqURL, query.Encode())
 	}
@@ -153,15 +174,21 @@ func (c *PayloadClient) FindOne(ctx context.Context, collection string, query ur
 }
 
 // Create creates a new document in a collection.
+// For kafka collections, uses the internal API route that bypasses access control.
 func (c *PayloadClient) Create(ctx context.Context, collection string, data map[string]any) (map[string]any, error) {
-	url := fmt.Sprintf("%s/api/%s", c.baseURL, collection)
+	var reqURL string
+	if collectionsNeedingInternalAPI[collection] {
+		reqURL = fmt.Sprintf("%s/api/internal/%s", c.baseURL, collection)
+	} else {
+		reqURL = fmt.Sprintf("%s/api/%s", c.baseURL, collection)
+	}
 
 	body, err := json.Marshal(data)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling data: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
@@ -171,6 +198,7 @@ func (c *PayloadClient) Create(ctx context.Context, collection string, data map[
 
 	c.logger.Debug("payload create request",
 		slog.String("collection", collection),
+		slog.String("url", reqURL),
 		slog.String("data", string(body)),
 	)
 
@@ -225,6 +253,44 @@ func (c *PayloadClient) Update(ctx context.Context, collection string, id string
 
 	c.logger.Debug("payload update request",
 		slog.String("collection", collection),
+		slog.String("id", id),
+		slog.String("url", reqURL),
+		slog.String("data", string(body)),
+	)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("executing request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
+}
+
+// UpdateApplication updates a Kafka application's provisioning status.
+// Uses the internal API route to bypass access control.
+func (c *PayloadClient) UpdateApplication(ctx context.Context, id string, data map[string]any) error {
+	reqURL := fmt.Sprintf("%s/api/internal/kafka-applications/%s", c.baseURL, id)
+
+	body, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("marshaling data: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, reqURL, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("creating request: %w", err)
+	}
+
+	c.addHeaders(req)
+	req.Header.Set("Content-Type", "application/json")
+
+	c.logger.Debug("payload update application request",
 		slog.String("id", id),
 		slog.String("url", reqURL),
 		slog.String("data", string(body)),

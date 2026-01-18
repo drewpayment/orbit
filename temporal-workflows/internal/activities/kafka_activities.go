@@ -126,13 +126,15 @@ func NewKafkaActivities(payloadClient *clients.PayloadClient, adapterFactory *cl
 
 // getClusterConfigForTopic fetches the cluster connection config for a topic
 func (a *KafkaActivitiesImpl) getClusterConfigForTopic(ctx context.Context, topicID string) (map[string]any, map[string]string, error) {
-	// 1. Get the topic to find its virtual cluster
+	// 1. Get the topic to find its virtual cluster or direct cluster
 	topic, err := a.payloadClient.Get(ctx, "kafka-topics", topicID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("fetching topic: %w", err)
 	}
 
-	// 2. Get virtual cluster ID
+	var clusterID string
+
+	// 2. First try to get virtual cluster ID
 	vcID, ok := topic["virtualCluster"].(string)
 	if !ok {
 		// Try nested object
@@ -140,25 +142,36 @@ func (a *KafkaActivitiesImpl) getClusterConfigForTopic(ctx context.Context, topi
 			vcID, _ = vc["id"].(string)
 		}
 	}
-	if vcID == "" {
-		return nil, nil, fmt.Errorf("topic has no virtual cluster")
-	}
 
-	// 3. Get virtual cluster to find physical cluster
-	vc, err := a.payloadClient.Get(ctx, "kafka-virtual-clusters", vcID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("fetching virtual cluster: %w", err)
-	}
-
-	// 4. Get physical cluster ID
-	clusterID, ok := vc["cluster"].(string)
-	if !ok {
-		if cluster, ok := vc["cluster"].(map[string]any); ok {
-			clusterID, _ = cluster["id"].(string)
+	if vcID != "" {
+		// 3a. Get virtual cluster to find physical cluster
+		vc, err := a.payloadClient.Get(ctx, "kafka-virtual-clusters", vcID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("fetching virtual cluster: %w", err)
 		}
-	}
-	if clusterID == "" {
-		return nil, nil, fmt.Errorf("virtual cluster has no physical cluster")
+
+		// 4a. Get physical cluster ID from virtual cluster
+		clusterID, ok = vc["cluster"].(string)
+		if !ok {
+			if cluster, ok := vc["cluster"].(map[string]any); ok {
+				clusterID, _ = cluster["id"].(string)
+			}
+		}
+		if clusterID == "" {
+			return nil, nil, fmt.Errorf("virtual cluster has no physical cluster")
+		}
+	} else {
+		// 3b. Fallback: try to get cluster directly from topic
+		clusterID, ok = topic["cluster"].(string)
+		if !ok {
+			if cluster, ok := topic["cluster"].(map[string]any); ok {
+				clusterID, _ = cluster["id"].(string)
+			}
+		}
+		if clusterID == "" {
+			return nil, nil, fmt.Errorf("topic has no virtual cluster or direct cluster")
+		}
+		a.logger.Info("Using direct cluster from topic (legacy path)", slog.String("topicId", topicID), slog.String("clusterId", clusterID))
 	}
 
 	// 5. Get physical cluster config

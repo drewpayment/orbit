@@ -277,6 +277,7 @@ func main() {
 	w.RegisterActivity(vcActivities.CreateVirtualCluster)
 	w.RegisterActivity(vcActivities.PushToBifrost)
 	w.RegisterActivity(vcActivities.UpdateVirtualClusterStatus)
+	w.RegisterActivity(vcActivities.UpdateApplicationProvisioningStatus)
 	log.Printf("Bifrost admin URL: %s", bifrostAdminURL)
 
 	// Register credential sync workflows

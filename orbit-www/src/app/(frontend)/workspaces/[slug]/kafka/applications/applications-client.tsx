@@ -27,10 +27,21 @@ import {
   Clock,
   AlertCircle,
   ClipboardList,
+  AlertTriangle,
 } from 'lucide-react'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { listApplications, ApplicationData } from '@/app/actions/kafka-applications'
+import {
+  listApplications,
+  ApplicationData,
+  retryVirtualClusterProvisioning,
+} from '@/app/actions/kafka-applications'
 import { getWorkspaceAdminStatus } from '@/app/actions/kafka-application-requests'
 import { CreateApplicationDialog, MyRequestsList } from '@/components/features/kafka'
 
@@ -63,10 +74,39 @@ const envColors: Record<string, string> = {
   prod: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200',
 }
 
+const provisioningStatusConfig = {
+  pending: {
+    icon: Clock,
+    label: 'Pending',
+    className: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
+  },
+  in_progress: {
+    icon: RefreshCw,
+    label: 'Provisioning',
+    className: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+  },
+  completed: {
+    icon: CheckCircle2,
+    label: 'Ready',
+    className: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+  },
+  partial: {
+    icon: AlertTriangle,
+    label: 'Partial',
+    className: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+  },
+  failed: {
+    icon: AlertCircle,
+    label: 'Failed',
+    className: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+  },
+}
+
 export function ApplicationsClient({ workspaceId, workspaceSlug }: ApplicationsClientProps) {
   const [applications, setApplications] = useState<ApplicationData[]>([])
   const [loading, setLoading] = useState(true)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [retryingApps, setRetryingApps] = useState<Set<string>>(new Set())
   const [adminStatus, setAdminStatus] = useState<{ isAdmin: boolean; pendingCount: number }>({
     isAdmin: false,
     pendingCount: 0,
@@ -104,6 +144,27 @@ export function ApplicationsClient({ workspaceId, workspaceSlug }: ApplicationsC
     toast.success('Application created successfully')
   }
 
+  const handleRetryProvisioning = async (applicationId: string) => {
+    setRetryingApps((prev) => new Set(prev).add(applicationId))
+    try {
+      const result = await retryVirtualClusterProvisioning(applicationId)
+      if (result.success) {
+        toast.success('Provisioning restarted successfully')
+        loadApplications()
+      } else {
+        toast.error(result.error || 'Failed to retry provisioning')
+      }
+    } catch {
+      toast.error('Failed to retry provisioning')
+    } finally {
+      setRetryingApps((prev) => {
+        const next = new Set(prev)
+        next.delete(applicationId)
+        return next
+      })
+    }
+  }
+
   const renderStatusBadge = (status: ApplicationData['status']) => {
     const config = statusConfig[status]
     const StatusIcon = config.icon
@@ -112,6 +173,78 @@ export function ApplicationsClient({ workspaceId, workspaceSlug }: ApplicationsC
         <StatusIcon className="h-3 w-3 mr-1" />
         {config.label}
       </Badge>
+    )
+  }
+
+  const getProvisioningTooltipContent = (app: ApplicationData) => {
+    if (!app.provisioningDetails) {
+      return app.provisioningError || 'No details available'
+    }
+
+    const details = app.provisioningDetails
+    const lines: string[] = []
+
+    for (const env of ['dev', 'stage', 'prod'] as const) {
+      const result = details[env]
+      if (result) {
+        const statusEmoji =
+          result.status === 'success' ? '✓' : result.status === 'failed' ? '✗' : '○'
+        const message = result.error || result.message || result.status
+        lines.push(`${statusEmoji} ${env}: ${message}`)
+      }
+    }
+
+    return lines.length > 0 ? lines.join('\n') : app.provisioningError || 'No details available'
+  }
+
+  const renderProvisioningStatus = (app: ApplicationData) => {
+    const config = provisioningStatusConfig[app.provisioningStatus]
+    const StatusIcon = config.icon
+    const isRetrying = retryingApps.has(app.id)
+    const showRetry =
+      (app.provisioningStatus === 'failed' || app.provisioningStatus === 'partial') && !isRetrying
+
+    const badge = (
+      <Badge variant="secondary" className={config.className}>
+        <StatusIcon
+          className={`h-3 w-3 mr-1 ${app.provisioningStatus === 'in_progress' || isRetrying ? 'animate-spin' : ''}`}
+        />
+        {isRetrying ? 'Retrying...' : config.label}
+      </Badge>
+    )
+
+    // Wrap with tooltip for partial/failed status
+    const badgeWithTooltip =
+      app.provisioningStatus === 'partial' || app.provisioningStatus === 'failed' ? (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>{badge}</TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              <pre className="text-xs whitespace-pre-wrap font-sans">
+                {getProvisioningTooltipContent(app)}
+              </pre>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : (
+        badge
+      )
+
+    return (
+      <div className="flex items-center gap-2">
+        {badgeWithTooltip}
+        {showRetry && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs"
+            onClick={() => handleRetryProvisioning(app.id)}
+          >
+            <RefreshCw className="h-3 w-3 mr-1" />
+            Retry
+          </Button>
+        )}
+      </div>
     )
   }
 
@@ -199,17 +332,19 @@ export function ApplicationsClient({ workspaceId, workspaceSlug }: ApplicationsC
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-1">
-                        {app.virtualClusters?.map((vc) => (
-                          <Badge
-                            key={vc.id}
-                            variant="secondary"
-                            className={envColors[vc.environment]}
-                          >
-                            {vc.environment.toUpperCase()}
-                          </Badge>
-                        )) || (
-                          <span className="text-sm text-muted-foreground">Provisioning...</span>
+                      <div className="flex gap-1 flex-wrap items-center">
+                        {app.provisioningStatus === 'completed' && app.virtualClusters?.length ? (
+                          app.virtualClusters.map((vc) => (
+                            <Badge
+                              key={vc.id}
+                              variant="secondary"
+                              className={envColors[vc.environment]}
+                            >
+                              {vc.environment.toUpperCase()}
+                            </Badge>
+                          ))
+                        ) : (
+                          renderProvisioningStatus(app)
                         )}
                       </div>
                     </TableCell>

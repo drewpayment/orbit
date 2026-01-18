@@ -65,6 +65,16 @@ type UpdateVirtualClusterStatusInput struct {
 	ErrorMessage     string `json:"errorMessage,omitempty"`
 }
 
+// UpdateApplicationProvisioningStatusInput is the input for updating application provisioning status
+type UpdateApplicationProvisioningStatusInput struct {
+	ApplicationID       string                 `json:"applicationId"`
+	Status              string                 `json:"status"` // pending, in_progress, completed, partial, failed
+	ErrorMessage        string                 `json:"errorMessage,omitempty"`
+	WorkflowID          string                 `json:"workflowId,omitempty"`
+	SetCompletedAt      bool                   `json:"setCompletedAt,omitempty"`
+	ProvisioningDetails map[string]interface{} `json:"provisioningDetails,omitempty"`
+}
+
 // VirtualClusterActivities contains activities for virtual cluster provisioning
 type VirtualClusterActivities struct {
 	payloadClient *clients.PayloadClient
@@ -85,29 +95,55 @@ func NewVirtualClusterActivities(
 	}
 }
 
+// environmentAliases maps short environment names to common variations
+var environmentAliases = map[string][]string{
+	"dev":   {"dev", "development", "Development", "DEV"},
+	"stage": {"stage", "staging", "Staging", "STAGE"},
+	"prod":  {"prod", "production", "Production", "PROD"},
+}
+
 // GetEnvironmentMapping gets the cluster mapping for an environment.
 // Queries kafka-environment-mappings collection to find the default cluster for the environment.
+// Supports multiple environment name variations (e.g., "dev" matches "dev", "development", "Development").
 func (a *VirtualClusterActivities) GetEnvironmentMapping(
 	ctx context.Context,
 	input GetEnvironmentMappingInput,
 ) (*GetEnvironmentMappingResult, error) {
 	a.logger.Info("GetEnvironmentMapping", "environment", input.Environment)
 
-	// Query environment mappings for this environment with isDefault=true
-	query := clients.NewQueryBuilder().
-		WhereEquals("environment", input.Environment).
-		WhereEquals("isDefault", "true").
-		Depth(1). // Populate cluster relationship
-		Limit(1).
-		Build()
+	// Get environment name variations to try
+	envVariations := []string{input.Environment}
+	if aliases, ok := environmentAliases[input.Environment]; ok {
+		envVariations = aliases
+	}
 
-	docs, err := a.payloadClient.Find(ctx, "kafka-environment-mappings", query)
-	if err != nil {
-		return nil, fmt.Errorf("querying environment mappings: %w", err)
+	// Try each environment name variation
+	var docs []map[string]any
+	var err error
+	var matchedEnv string
+
+	for _, envName := range envVariations {
+		query := clients.NewQueryBuilder().
+			WhereEquals("environment", envName).
+			WhereEquals("isDefault", "true").
+			Depth(1). // Populate cluster relationship
+			Limit(1).
+			Build()
+
+		docs, err = a.payloadClient.Find(ctx, "kafka-environment-mappings", query)
+		if err != nil {
+			return nil, fmt.Errorf("querying environment mappings: %w", err)
+		}
+
+		if len(docs) > 0 {
+			matchedEnv = envName
+			a.logger.Info("Found environment mapping", "requested", input.Environment, "matched", matchedEnv)
+			break
+		}
 	}
 
 	if len(docs) == 0 {
-		return nil, fmt.Errorf("no default cluster mapping found for environment: %s", input.Environment)
+		return nil, fmt.Errorf("no default cluster mapping found for environment: %s (tried: %v)", input.Environment, envVariations)
 	}
 
 	mapping := docs[0]
@@ -136,7 +172,12 @@ func (a *VirtualClusterActivities) GetEnvironmentMapping(
 		return nil, fmt.Errorf("invalid connectionConfig in cluster")
 	}
 
+	// Try both camelCase and dotted key formats
 	bootstrapServers, _ := connectionConfig["bootstrapServers"].(string)
+	if bootstrapServers == "" {
+		// Also try the dotted format used by Kafka configuration
+		bootstrapServers, _ = connectionConfig["bootstrap.servers"].(string)
+	}
 	if bootstrapServers == "" {
 		return nil, fmt.Errorf("no bootstrapServers in cluster connectionConfig")
 	}
@@ -273,6 +314,47 @@ func (a *VirtualClusterActivities) UpdateVirtualClusterStatus(
 
 	if err := a.payloadClient.Update(ctx, "kafka-virtual-clusters", input.VirtualClusterID, data); err != nil {
 		return fmt.Errorf("updating virtual cluster status: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateApplicationProvisioningStatus updates the provisioning status of a Kafka application.
+// This is called at workflow start (in_progress), on success (completed), partial success, and on failure (failed).
+func (a *VirtualClusterActivities) UpdateApplicationProvisioningStatus(
+	ctx context.Context,
+	input UpdateApplicationProvisioningStatusInput,
+) error {
+	a.logger.Info("UpdateApplicationProvisioningStatus",
+		"applicationId", input.ApplicationID,
+		"status", input.Status)
+
+	data := map[string]any{
+		"provisioningStatus": input.Status,
+	}
+
+	// Include workflow ID if provided
+	if input.WorkflowID != "" {
+		data["provisioningWorkflowId"] = input.WorkflowID
+	}
+
+	// Include error message if provided (for failed/partial status)
+	if input.ErrorMessage != "" {
+		data["provisioningError"] = input.ErrorMessage
+	}
+
+	// Include per-environment details if provided
+	if input.ProvisioningDetails != nil {
+		data["provisioningDetails"] = input.ProvisioningDetails
+	}
+
+	// Set completed timestamp if requested
+	if input.SetCompletedAt {
+		data["provisioningCompletedAt"] = "now" // Payload will interpret this
+	}
+
+	if err := a.payloadClient.UpdateApplication(ctx, input.ApplicationID, data); err != nil {
+		return fmt.Errorf("updating application provisioning status: %w", err)
 	}
 
 	return nil

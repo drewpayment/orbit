@@ -36,6 +36,13 @@ export type PolicyViolation = {
 }
 
 export async function createTopic(input: CreateTopicInput): Promise<CreateTopicResult> {
+  // Debug: log input to trace virtualClusterId
+  console.log('[createTopic] Input received:', {
+    virtualClusterId: input.virtualClusterId,
+    name: input.name,
+    partitions: input.partitions,
+  })
+
   const session = await auth.api.getSession({
     headers: await headers(),
   })
@@ -48,6 +55,7 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
 
   try {
     // 1. Get the virtual cluster to find workspace and application
+    console.log('[createTopic] Fetching virtual cluster with ID:', input.virtualClusterId, 'type:', typeof input.virtualClusterId)
     const virtualCluster = await payload.findByID({
       collection: 'kafka-virtual-clusters',
       id: input.virtualClusterId,
@@ -57,6 +65,7 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
     if (!virtualCluster) {
       return { success: false, error: 'Virtual cluster not found' }
     }
+    console.log('[createTopic] Virtual cluster found:', virtualCluster.id, 'topicPrefix:', virtualCluster.topicPrefix)
 
     const application =
       typeof virtualCluster.application === 'string'
@@ -140,7 +149,8 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
         | undefined
       const bootstrapServers = connectionConfig?.bootstrapServers ?? ''
 
-      const workflowId = await triggerTopicProvisioningWorkflow(topic.id, {
+      // Debug: log workflow input before triggering
+      const workflowInput = {
         topicId: topic.id,
         virtualClusterId: input.virtualClusterId,
         topicPrefix: virtualCluster.topicPrefix ?? '',
@@ -152,7 +162,14 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
         compression: input.compression ?? 'none',
         config: input.config ?? {},
         bootstrapServers,
+      }
+      console.log('[createTopic] Triggering workflow with input:', {
+        topicId: workflowInput.topicId,
+        virtualClusterId: workflowInput.virtualClusterId,
+        topicPrefix: workflowInput.topicPrefix,
+        bootstrapServers: workflowInput.bootstrapServers,
       })
+      const workflowId = await triggerTopicProvisioningWorkflow(topic.id, workflowInput)
 
       // Store workflow ID on the topic record for tracking
       if (workflowId) {
@@ -295,6 +312,18 @@ export async function approveTopic(
     if (!topic) {
       return { success: false, error: 'Topic not found' }
     }
+
+    // Debug logging to understand virtualCluster state
+    console.log('[approveTopic] Topic fetched:', {
+      topicId: topic.id,
+      topicName: topic.name,
+      virtualClusterType: typeof topic.virtualCluster,
+      virtualClusterValue: topic.virtualCluster,
+      virtualClusterId:
+        typeof topic.virtualCluster === 'string'
+          ? topic.virtualCluster
+          : topic.virtualCluster?.id ?? 'NO_ID',
+    })
 
     if (topic.status !== 'pending-approval') {
       return { success: false, error: 'Topic is not pending approval' }
@@ -621,6 +650,9 @@ async function triggerTopicProvisioningWorkflow(
 
   try {
     const client = await getTemporalClient()
+
+    // Debug: Log exact payload being sent to Temporal
+    console.log('[Kafka] Workflow input being sent to Temporal:', JSON.stringify(workflowInput, null, 2))
 
     const handle = await client.workflow.start('TopicProvisioningWorkflow', {
       taskQueue: 'orbit-workflows',

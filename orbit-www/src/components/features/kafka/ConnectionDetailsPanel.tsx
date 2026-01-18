@@ -226,7 +226,7 @@ export function ConnectionDetailsPanel({
         {/* Service Accounts */}
         <ServiceAccountSelector
           serviceAccounts={serviceAccounts}
-          applicationId={connectionDetails.applicationId}
+          applicationSlug={connectionDetails.applicationSlug}
           workspaceSlug={workspaceSlug}
         />
 
