@@ -33,12 +33,15 @@ func (s *VirtualClusterStore) Upsert(vc *gatewayv1.VirtualClusterConfig) {
 	}
 
 	s.byID[vc.Id] = vc
+	// Only index by advertised host if it's non-empty
+	// (some virtual clusters may not have advertised hosts configured)
 	if vc.AdvertisedHost != "" {
 		s.byAdvertisedHost[vc.AdvertisedHost] = vc
 	}
 }
 
 // Get retrieves a virtual cluster by ID.
+// WARNING: Returns a direct reference to internal storage. Do not mutate.
 func (s *VirtualClusterStore) Get(id string) (*gatewayv1.VirtualClusterConfig, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -47,6 +50,7 @@ func (s *VirtualClusterStore) Get(id string) (*gatewayv1.VirtualClusterConfig, b
 }
 
 // GetByAdvertisedHost retrieves a virtual cluster by its advertised hostname.
+// WARNING: Returns a direct reference to internal storage. Do not mutate.
 func (s *VirtualClusterStore) GetByAdvertisedHost(host string) (*gatewayv1.VirtualClusterConfig, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -66,6 +70,8 @@ func (s *VirtualClusterStore) Delete(id string) {
 }
 
 // List returns all virtual clusters.
+// WARNING: The returned configs are direct references to internal storage.
+// Callers MUST NOT mutate the returned configs.
 func (s *VirtualClusterStore) List() []*gatewayv1.VirtualClusterConfig {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
