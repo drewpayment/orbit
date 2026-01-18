@@ -641,7 +641,7 @@ export async function getConnectionDetails(
 
     // Get topic details
     const topic = typeof share.topic === 'string'
-      ? await payload.findByID({ collection: 'kafka-topics', id: share.topic, overrideAccess: true })
+      ? await payload.findByID({ collection: 'kafka-topics', id: share.topic, depth: 2, overrideAccess: true })
       : share.topic
 
     if (!topic) {
@@ -652,12 +652,18 @@ export async function getConnectionDetails(
     const { getBifrostConfig } = await import('@/lib/bifrost-config')
     const bifrostConfig = await getBifrostConfig()
 
+    // Get the virtual cluster for this topic
+    const virtualCluster = typeof topic.virtualCluster === 'string'
+      ? await payload.findByID({ collection: 'kafka-virtual-clusters', id: topic.virtualCluster, overrideAccess: true })
+      : topic.virtualCluster
+
     // Determine bootstrap servers and topic name based on connection mode
     let bootstrapServers: string
     let topicName: string
 
     if (bifrostConfig.connectionMode === 'bifrost') {
-      bootstrapServers = bifrostConfig.advertisedHost
+      // In bifrost mode, use the virtual cluster's advertised host
+      bootstrapServers = virtualCluster?.advertisedHost || bifrostConfig.advertisedHost
       topicName = topic.name // Short name - Bifrost rewrites
     } else {
       // Direct mode - use physical cluster details
@@ -795,12 +801,18 @@ export async function getOwnTopicConnectionDetails(
     const { getBifrostConfig } = await import('@/lib/bifrost-config')
     const bifrostConfig = await getBifrostConfig()
 
+    // Get the virtual cluster for this topic
+    const virtualCluster = typeof topic.virtualCluster === 'string'
+      ? await payload.findByID({ collection: 'kafka-virtual-clusters', id: topic.virtualCluster, overrideAccess: true })
+      : topic.virtualCluster
+
     // Determine bootstrap servers and topic name based on connection mode
     let bootstrapServers: string
     let topicName: string
 
     if (bifrostConfig.connectionMode === 'bifrost') {
-      bootstrapServers = bifrostConfig.advertisedHost
+      // In bifrost mode, use the virtual cluster's advertised host
+      bootstrapServers = virtualCluster?.advertisedHost || bifrostConfig.advertisedHost
       topicName = topic.name // Short name - Bifrost rewrites
     } else {
       // Direct mode - use physical cluster details
