@@ -42,6 +42,13 @@ type ProcessorConfig struct {
 	AuthServer            *AuthServer
 	ForbiddenApiKeys      map[int16]struct{}
 	ProducerAcks0Disabled bool
+
+	// ResponseModifierConfig provides full response modification options.
+	// If set, this takes precedence over NetAddressMappingFunc.
+	ResponseModifierConfig *protocol.ResponseModifierConfig
+
+	// RequestModifierConfig provides request modification options.
+	RequestModifierConfig *protocol.RequestModifierConfig
 }
 
 type processor struct {
@@ -63,6 +70,10 @@ type processor struct {
 	brokerAddress string
 	// producer will never send request with acks=0
 	producerAcks0Disabled bool
+
+	// Extended config for Bifrost
+	responseModifierConfig *protocol.ResponseModifierConfig
+	requestModifierConfig  *protocol.RequestModifierConfig
 }
 
 func newProcessor(cfg ProcessorConfig, brokerAddress string) *processor {
@@ -107,6 +118,8 @@ func newProcessor(cfg ProcessorConfig, brokerAddress string) *processor {
 		authServer:                 cfg.AuthServer,
 		forbiddenApiKeys:           cfg.ForbiddenApiKeys,
 		producerAcks0Disabled:      cfg.ProducerAcks0Disabled,
+		responseModifierConfig:     cfg.ResponseModifierConfig,
+		requestModifierConfig:      cfg.RequestModifierConfig,
 	}
 }
 
@@ -220,6 +233,7 @@ func (p *processor) ResponsesLoop(dst DeadlineWriter, src DeadlineReader) (readE
 		timeout:                    p.readTimeout,
 		brokerAddress:              p.brokerAddress,
 		buf:                        make([]byte, p.responseBufferSize),
+		responseModifierConfig:     p.responseModifierConfig,
 	}
 	return ctx.responsesLoop(dst, src)
 }
@@ -231,6 +245,9 @@ type ResponsesLoopContext struct {
 	timeout                    time.Duration
 	brokerAddress              string
 	buf                        []byte // bufSize
+
+	// Extended config for Bifrost response modification
+	responseModifierConfig *protocol.ResponseModifierConfig
 }
 
 type ResponseHandler interface {

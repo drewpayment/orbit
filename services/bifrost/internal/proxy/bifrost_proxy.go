@@ -145,23 +145,56 @@ func (p *BifrostProxy) handleConnection(clientConn net.Conn) {
 
 	logrus.Infof("Connection %s: user=%s vc=%s upstream=%s", connID, ctx.Username, ctx.VirtualClusterID, ctx.BootstrapServers)
 
-	// Create BifrostConnection for state management (will be used for rewriting later)
+	// Create BifrostConnection for state management
 	bifrostConn := NewBifrostConnection(connID, clientConn, ctx, p.metrics)
-	_ = bifrostConn // Will be used for rewriting in later tasks
 
-	// Create processor for proxying (SASL already done)
-	// Identity address mapper - returns the same host/port (for now)
-	// Task 11 will wire in proper rewriting
+	// Create rewriter functions based on virtual cluster configuration
+	// Topic prefixer: adds tenant prefix to outgoing topics
+	topicPrefixer := func(topic string) string {
+		return bifrostConn.rewriter.PrefixTopic(topic)
+	}
+	// Topic unprefixer: removes tenant prefix from incoming topics
+	topicUnprefixer := func(topic string) string {
+		unprefixed, _ := bifrostConn.rewriter.UnprefixTopic(topic)
+		return unprefixed
+	}
+	// Topic filter: only include topics belonging to this tenant
+	topicFilter := func(topic string) bool {
+		return bifrostConn.rewriter.TopicBelongsToTenant(topic)
+	}
+
+	// Identity address mapper - returns the same host/port
+	// In production, this would map internal broker addresses to external addresses
 	identityMapper := func(host string, port int32, nodeId int32) (string, int32, error) {
 		return host, port, nil
 	}
 
-	proc := newProcessor(ProcessorConfig{
-		LocalSasl:             nil, // Auth complete
-		MaxOpenRequests:       256,
-		WriteTimeout:          30 * time.Second,
-		ReadTimeout:           30 * time.Second,
+	// Create response modifier config with topic rewriting
+	responseModifierConfig := &protocol.ResponseModifierConfig{
 		NetAddressMappingFunc: identityMapper,
+		TopicUnprefixer:       topicUnprefixer,
+		TopicFilter:           topicFilter,
+	}
+
+	// Create request modifier config with topic prefixing
+	requestModifierConfig := &protocol.RequestModifierConfig{
+		TopicPrefixer: topicPrefixer,
+		GroupPrefixer: func(group string) string {
+			return bifrostConn.rewriter.PrefixGroup(group)
+		},
+		TxnIDPrefixer: func(txnID string) string {
+			return bifrostConn.rewriter.PrefixTransactionID(txnID)
+		},
+	}
+
+	proc := newProcessor(ProcessorConfig{
+		LocalSasl:              nil, // Auth complete
+		MaxOpenRequests:        256,
+		WriteTimeout:           30 * time.Second,
+		ReadTimeout:            30 * time.Second,
+		NetAddressMappingFunc:  identityMapper,
+		ResponseModifierConfig: responseModifierConfig,
+		RequestModifierConfig:  requestModifierConfig,
 	}, ctx.BootstrapServers)
 
 	// Run proxy loops

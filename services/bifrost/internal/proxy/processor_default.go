@@ -223,7 +223,13 @@ func (handler *DefaultResponseHandler) handleResponse(dst DeadlineWriter, src De
 	}
 	readResponsesHeaderLength := int32(4 + len(unknownTaggedFields)) // 4 = Length + CorrelationID
 
-	responseModifier, err := protocol.GetResponseModifier(requestKeyVersion.ApiKey, requestKeyVersion.ApiVersion, ctx.netAddressMappingFunc)
+	// Get response modifier - use extended config if available
+	var responseModifier protocol.ResponseModifier
+	if ctx.responseModifierConfig != nil {
+		responseModifier, err = protocol.GetResponseModifierWithConfig(requestKeyVersion.ApiKey, requestKeyVersion.ApiVersion, *ctx.responseModifierConfig)
+	} else {
+		responseModifier, err = protocol.GetResponseModifier(requestKeyVersion.ApiKey, requestKeyVersion.ApiVersion, ctx.netAddressMappingFunc)
+	}
 	if err != nil {
 		return true, err
 	}

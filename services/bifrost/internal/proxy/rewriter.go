@@ -94,3 +94,13 @@ func (r *Rewriter) FilterTopics(topics []string) []string {
 func (r *Rewriter) HasTopicPrefix() bool {
 	return r.ctx.TopicPrefix != ""
 }
+
+// TopicBelongsToTenant checks if a topic belongs to this tenant.
+// Returns true if the topic has the tenant's prefix or if no prefix is configured.
+func (r *Rewriter) TopicBelongsToTenant(topic string) bool {
+	// Empty prefix matches everything (no multi-tenancy)
+	if r.ctx.TopicPrefix == "" {
+		return true
+	}
+	return strings.HasPrefix(topic, r.ctx.TopicPrefix)
+}

@@ -441,16 +441,222 @@ func modifyCoordinator(decodedStruct *Struct, fn config.NetAddressMappingFunc) e
 	return nil
 }
 
+// modifyMetadataResponseWithConfig handles both broker address mapping and topic rewriting.
+func modifyMetadataResponseWithConfig(decodedStruct *Struct, cfg ResponseModifierConfig) error {
+	if decodedStruct == nil {
+		return errors.New("decoded struct must not be nil")
+	}
+
+	// Handle broker address mapping
+	if cfg.NetAddressMappingFunc != nil {
+		brokersArray, ok := decodedStruct.Get(brokersKeyName).([]interface{})
+		if !ok {
+			return errors.New("brokers list not found")
+		}
+		for _, brokerElement := range brokersArray {
+			broker := brokerElement.(*Struct)
+			host, ok := broker.Get(hostKeyName).(string)
+			if !ok {
+				return errors.New("broker.host not found")
+			}
+			port, ok := broker.Get(portKeyName).(int32)
+			if !ok {
+				return errors.New("broker.port not found")
+			}
+			nodeId, ok := broker.Get(nodeKeyName).(int32)
+			if !ok {
+				return errors.New("broker.node_id not found")
+			}
+
+			if host == "" && port <= 0 {
+				continue
+			}
+
+			newHost, newPort, err := cfg.NetAddressMappingFunc(host, port, nodeId)
+			if err != nil {
+				return err
+			}
+			if host != newHost {
+				if err := broker.Replace(hostKeyName, newHost); err != nil {
+					return err
+				}
+			}
+			if port != newPort {
+				if err := broker.Replace(portKeyName, newPort); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	// Handle topic rewriting (unprefixing and filtering)
+	if cfg.TopicUnprefixer != nil || cfg.TopicFilter != nil {
+		if err := modifyTopicsInMetadataResponse(decodedStruct, cfg); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// modifyTopicsInMetadataResponse handles topic name unprefixing and filtering in metadata responses.
+func modifyTopicsInMetadataResponse(decodedStruct *Struct, cfg ResponseModifierConfig) error {
+	topicMetadata := decodedStruct.Get("topic_metadata")
+	if topicMetadata == nil {
+		return nil // No topics to modify
+	}
+
+	topicsArray, ok := topicMetadata.([]interface{})
+	if !ok {
+		return nil // Null or invalid topics array
+	}
+
+	// Build filtered list if TopicFilter is provided
+	var filteredTopics []interface{}
+	if cfg.TopicFilter != nil {
+		filteredTopics = make([]interface{}, 0, len(topicsArray))
+	}
+
+	for _, topicElement := range topicsArray {
+		topic := topicElement.(*Struct)
+
+		// Get topic name - different field names for different versions
+		// v0-v7: "topic", v8+: "name"
+		topicName := getTopicNameFromStruct(topic)
+		if topicName == "" {
+			if cfg.TopicFilter == nil {
+				continue // No filter, keep all topics
+			}
+			filteredTopics = append(filteredTopics, topicElement)
+			continue
+		}
+
+		// Apply filter if provided
+		if cfg.TopicFilter != nil && !cfg.TopicFilter(topicName) {
+			continue // Topic doesn't belong to this tenant
+		}
+
+		// Apply unprefixer if provided
+		if cfg.TopicUnprefixer != nil {
+			newName := cfg.TopicUnprefixer(topicName)
+			if newName != topicName {
+				if err := setTopicNameInStruct(topic, newName); err != nil {
+					return err
+				}
+			}
+		}
+
+		if cfg.TopicFilter != nil {
+			filteredTopics = append(filteredTopics, topicElement)
+		}
+	}
+
+	// Replace topics array if filtering was applied
+	if cfg.TopicFilter != nil {
+		if err := decodedStruct.Replace("topic_metadata", filteredTopics); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// getTopicNameFromStruct extracts the topic name from a topic metadata struct.
+// It handles both "topic" (v0-v7) and "name" (v8+) field names.
+func getTopicNameFromStruct(topic *Struct) string {
+	// Try "name" first (v8+)
+	if nameField := topic.Get("name"); nameField != nil {
+		switch n := nameField.(type) {
+		case string:
+			return n
+		case *string:
+			if n != nil {
+				return *n
+			}
+		}
+	}
+
+	// Try "topic" (v0-v7)
+	if topicField := topic.Get("topic"); topicField != nil {
+		if t, ok := topicField.(string); ok {
+			return t
+		}
+	}
+
+	return ""
+}
+
+// setTopicNameInStruct sets the topic name in a topic metadata struct.
+// It handles both "topic" (v0-v7) and "name" (v8+) field names.
+func setTopicNameInStruct(topic *Struct, newName string) error {
+	// Try "name" first (v8+)
+	if nameField := topic.Get("name"); nameField != nil {
+		switch nameField.(type) {
+		case string:
+			return topic.Replace("name", newName)
+		case *string:
+			return topic.Replace("name", &newName)
+		}
+	}
+
+	// Try "topic" (v0-v7)
+	if topicField := topic.Get("topic"); topicField != nil {
+		return topic.Replace("topic", newName)
+	}
+
+	return nil
+}
+
+// modifyFindCoordinatorResponseWithConfig handles broker address mapping in FindCoordinator responses.
+func modifyFindCoordinatorResponseWithConfig(decodedStruct *Struct, cfg ResponseModifierConfig) error {
+	if decodedStruct == nil {
+		return errors.New("decoded struct must not be nil")
+	}
+	if cfg.NetAddressMappingFunc == nil {
+		return nil // No address mapping needed
+	}
+
+	coordinators := decodedStruct.Get(coordinatorsKeyName)
+	if coordinators != nil {
+		coordinatorsArray, ok := coordinators.([]interface{})
+		if !ok {
+			return errors.New("coordinators list not found")
+		}
+		for _, coordinatorElement := range coordinatorsArray {
+			coordinatorStruct := coordinatorElement.(*Struct)
+			if err := modifyCoordinator(coordinatorStruct, cfg.NetAddressMappingFunc); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return modifyCoordinator(decodedStruct, cfg.NetAddressMappingFunc)
+}
+
 type ResponseModifier interface {
 	Apply(resp []byte) ([]byte, error)
 }
 
-type modifyResponseFunc func(decodedStruct *Struct, fn config.NetAddressMappingFunc) error
+// TopicUnprefixer removes the tenant prefix from topic names in responses.
+type TopicUnprefixer func(topic string) string
+
+// TopicFilter determines whether a topic should be included in responses.
+// Returns true if the topic belongs to the tenant and should be included.
+type TopicFilter func(topic string) bool
+
+// ResponseModifierConfig holds functions for response modification.
+type ResponseModifierConfig struct {
+	NetAddressMappingFunc config.NetAddressMappingFunc
+	TopicUnprefixer       TopicUnprefixer
+	TopicFilter           TopicFilter
+}
+
+type modifyResponseFunc func(decodedStruct *Struct, cfg ResponseModifierConfig) error
 
 type responseModifier struct {
-	schema                Schema
-	modifyResponseFunc    modifyResponseFunc
-	netAddressMappingFunc config.NetAddressMappingFunc
+	schema             Schema
+	modifyResponseFunc modifyResponseFunc
+	cfg                ResponseModifierConfig
 }
 
 func (f *responseModifier) Apply(resp []byte) ([]byte, error) {
@@ -458,33 +664,44 @@ func (f *responseModifier) Apply(resp []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = f.modifyResponseFunc(decodedStruct, f.netAddressMappingFunc)
+	err = f.modifyResponseFunc(decodedStruct, f.cfg)
 	if err != nil {
 		return nil, err
 	}
 	return EncodeSchema(decodedStruct, f.schema)
 }
 
+// GetResponseModifier returns a ResponseModifier for the given API key and version.
+// This is the legacy function that only supports address mapping.
+// Use GetResponseModifierWithConfig for full topic rewriting support.
 func GetResponseModifier(apiKey int16, apiVersion int16, addressMappingFunc config.NetAddressMappingFunc) (ResponseModifier, error) {
+	cfg := ResponseModifierConfig{
+		NetAddressMappingFunc: addressMappingFunc,
+	}
+	return GetResponseModifierWithConfig(apiKey, apiVersion, cfg)
+}
+
+// GetResponseModifierWithConfig returns a ResponseModifier with full configuration support.
+func GetResponseModifierWithConfig(apiKey int16, apiVersion int16, cfg ResponseModifierConfig) (ResponseModifier, error) {
 	switch apiKey {
 	case apiKeyMetadata:
-		return newResponseModifier(apiKey, apiVersion, addressMappingFunc, metadataResponseSchemaVersions, modifyMetadataResponse)
+		return newResponseModifier(apiKey, apiVersion, cfg, metadataResponseSchemaVersions, modifyMetadataResponseWithConfig)
 	case apiKeyFindCoordinator:
-		return newResponseModifier(apiKey, apiVersion, addressMappingFunc, findCoordinatorResponseSchemaVersions, modifyFindCoordinatorResponse)
+		return newResponseModifier(apiKey, apiVersion, cfg, findCoordinatorResponseSchemaVersions, modifyFindCoordinatorResponseWithConfig)
 	default:
 		return nil, nil
 	}
 }
 
-func newResponseModifier(apiKey int16, apiVersion int16, netAddressMappingFunc config.NetAddressMappingFunc, schemas []Schema, modifyResponseFunc modifyResponseFunc) (ResponseModifier, error) {
+func newResponseModifier(apiKey int16, apiVersion int16, cfg ResponseModifierConfig, schemas []Schema, modifyResponseFunc modifyResponseFunc) (ResponseModifier, error) {
 	schema, err := getResponseSchema(apiKey, apiVersion, schemas)
 	if err != nil {
 		return nil, err
 	}
 	return &responseModifier{
-		schema:                schema,
-		modifyResponseFunc:    modifyResponseFunc,
-		netAddressMappingFunc: netAddressMappingFunc,
+		schema:             schema,
+		modifyResponseFunc: modifyResponseFunc,
+		cfg:                cfg,
 	}, nil
 }
 
