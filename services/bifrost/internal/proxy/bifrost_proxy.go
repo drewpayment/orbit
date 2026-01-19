@@ -150,12 +150,18 @@ func (p *BifrostProxy) handleConnection(clientConn net.Conn) {
 	_ = bifrostConn // Will be used for rewriting in later tasks
 
 	// Create processor for proxying (SASL already done)
+	// Identity address mapper - returns the same host/port (for now)
+	// Task 11 will wire in proper rewriting
+	identityMapper := func(host string, port int32, nodeId int32) (string, int32, error) {
+		return host, port, nil
+	}
+
 	proc := newProcessor(ProcessorConfig{
-		LocalSasl:       nil, // Auth complete
-		MaxOpenRequests: 256,
-		WriteTimeout:    30 * time.Second,
-		ReadTimeout:     30 * time.Second,
-		// NetAddressMappingFunc will be added for broker address rewriting
+		LocalSasl:             nil, // Auth complete
+		MaxOpenRequests:       256,
+		WriteTimeout:          30 * time.Second,
+		ReadTimeout:           30 * time.Second,
+		NetAddressMappingFunc: identityMapper,
 	}, ctx.BootstrapServers)
 
 	// Run proxy loops
@@ -167,6 +173,8 @@ func (p *BifrostProxy) handleConnection(clientConn net.Conn) {
 		if err != nil && err != io.EOF {
 			logrus.Debugf("Connection %s: requests loop ended: %v", connID, err)
 		}
+		// Close broker connection to unblock ResponsesLoop
+		brokerConn.Close()
 		close(done)
 	}()
 
@@ -174,6 +182,8 @@ func (p *BifrostProxy) handleConnection(clientConn net.Conn) {
 	if err != nil && err != io.EOF {
 		logrus.Debugf("Connection %s: responses loop ended: %v", connID, err)
 	}
+	// Close client connection to unblock RequestsLoop (if ResponsesLoop exits first)
+	clientConn.Close()
 	<-done
 }
 

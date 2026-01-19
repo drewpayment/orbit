@@ -112,7 +112,7 @@ func newProcessor(cfg ProcessorConfig, brokerAddress string) *processor {
 
 func (p *processor) RequestsLoop(dst DeadlineWriter, src DeadlineReaderWriter) (readErr bool, err error) {
 
-	if p.authServer.enabled {
+	if p.authServer != nil && p.authServer.enabled {
 		if err = p.authServer.receiveAndSendGatewayAuth(src); err != nil {
 			return true, err
 		}

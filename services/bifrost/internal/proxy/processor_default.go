@@ -51,7 +51,7 @@ func (handler *DefaultRequestHandler) handleRequest(dst DeadlineWriter, src Dead
 		return true, fmt.Errorf("api key %d is forbidden", requestKeyVersion.ApiKey)
 	}
 
-	if ctx.localSasl.enabled {
+	if ctx.localSasl != nil && ctx.localSasl.enabled {
 		if ctx.localSaslDone {
 			if requestKeyVersion.ApiKey == apiKeySaslHandshake {
 				return false, errors.New("SASL Auth was already done")
