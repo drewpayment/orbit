@@ -14,6 +14,7 @@ type Collector struct {
 	bytesTotal        *prometheus.CounterVec
 	requestsTotal     *prometheus.CounterVec
 	requestDuration   *prometheus.HistogramVec
+	authTotal         *prometheus.CounterVec
 }
 
 // NewCollector creates a new metrics collector.
@@ -55,6 +56,13 @@ func NewCollector() *Collector {
 			},
 			[]string{"virtual_cluster", "api_key"},
 		),
+		authTotal: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "bifrost_auth_total",
+				Help: "Total authentication attempts",
+			},
+			[]string{"result"}, // "success" or "failure"
+		),
 	}
 }
 
@@ -65,6 +73,7 @@ func (c *Collector) Describe(ch chan<- *prometheus.Desc) {
 	c.bytesTotal.Describe(ch)
 	c.requestsTotal.Describe(ch)
 	c.requestDuration.Describe(ch)
+	c.authTotal.Describe(ch)
 }
 
 // Collect implements prometheus.Collector.
@@ -74,6 +83,7 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 	c.bytesTotal.Collect(ch)
 	c.requestsTotal.Collect(ch)
 	c.requestDuration.Collect(ch)
+	c.authTotal.Collect(ch)
 }
 
 // RecordConnection records a connection event.
@@ -96,4 +106,13 @@ func (c *Collector) RecordRequest(virtualCluster string, apiKey int16, durationS
 	apiKeyStr := strconv.Itoa(int(apiKey))
 	c.requestsTotal.WithLabelValues(virtualCluster, apiKeyStr).Inc()
 	c.requestDuration.WithLabelValues(virtualCluster, apiKeyStr).Observe(durationSeconds)
+}
+
+// RecordAuth records an authentication attempt.
+func (c *Collector) RecordAuth(success bool) {
+	result := "failure"
+	if success {
+		result = "success"
+	}
+	c.authTotal.WithLabelValues(result).Inc()
 }

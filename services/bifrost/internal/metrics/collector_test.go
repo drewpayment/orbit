@@ -71,6 +71,23 @@ func TestCollector_RecordRequest(t *testing.T) {
 	assert.Equal(t, float64(1), fetchCount)
 }
 
+func TestCollector_RecordAuth(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	c := NewCollector()
+	reg.MustRegister(c)
+
+	c.RecordAuth(true)
+	c.RecordAuth(true)
+	c.RecordAuth(false)
+
+	// Verify auth counts
+	successCount := testutil.ToFloat64(c.authTotal.WithLabelValues("success"))
+	assert.Equal(t, float64(2), successCount)
+
+	failureCount := testutil.ToFloat64(c.authTotal.WithLabelValues("failure"))
+	assert.Equal(t, float64(1), failureCount)
+}
+
 func TestCollector_DescribeAndCollect(t *testing.T) {
 	c := NewCollector()
 
@@ -88,8 +105,8 @@ func TestCollector_DescribeAndCollect(t *testing.T) {
 	for range descCh {
 		descCount++
 	}
-	// Should have 5 metric types described
-	assert.Equal(t, 5, descCount)
+	// Should have 6 metric types described
+	assert.Equal(t, 6, descCount)
 
 	// Test Collect
 	metricCh := make(chan prometheus.Metric, 20)

@@ -117,8 +117,10 @@ func (p *BifrostProxy) handleConnection(clientConn net.Conn) {
 	// This reads SaslHandshake and SaslAuthenticate requests and responds
 	if err := p.performSASLAuth(clientConn, localSasl); err != nil {
 		logrus.Warnf("Connection %s: SASL auth failed: %v", connID, err)
+		p.metrics.RecordAuth(false)
 		return
 	}
+	p.metrics.RecordAuth(true)
 
 	// Get connection context from successful auth
 	ctx := authenticator.GetContext()
