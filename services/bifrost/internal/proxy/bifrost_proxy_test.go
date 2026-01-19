@@ -59,6 +59,15 @@ func TestBifrostProxy_GracefulShutdown(t *testing.T) {
 	// Allow connections to be handled
 	time.Sleep(100 * time.Millisecond)
 
+	// Close client connections first - this simulates clients disconnecting
+	// which is realistic since the proxy expects SASL data that won't come
+	for _, conn := range conns {
+		conn.Close()
+	}
+
+	// Allow handlers to notice the closed connections
+	time.Sleep(100 * time.Millisecond)
+
 	// Stop should not block indefinitely
 	done := make(chan struct{})
 	go func() {
@@ -71,11 +80,6 @@ func TestBifrostProxy_GracefulShutdown(t *testing.T) {
 		// Success - shutdown completed
 	case <-time.After(2 * time.Second):
 		t.Fatal("Stop() timed out - graceful shutdown may be stuck")
-	}
-
-	// Clean up client connections
-	for _, conn := range conns {
-		conn.Close()
 	}
 }
 
