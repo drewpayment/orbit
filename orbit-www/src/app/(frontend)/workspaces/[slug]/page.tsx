@@ -19,7 +19,7 @@ import {
   WorkspaceRecentDocsCard,
   WorkspaceQuickLinksCard,
   WorkspaceMembersCardSimple,
-  WorkspaceKafkaTopicsCard,
+  WorkspaceKafkaOverviewCard,
 } from '@/components/features/workspace'
 
 interface PageProps {
@@ -66,7 +66,9 @@ export default async function WorkspacePage({ params }: PageProps) {
     spacesResult,
     appsResult,
     registryImagesResult,
-    kafkaTopicsResult,
+    virtualClusterCountResult,
+    topicCountResult,
+    pendingShareCountResult,
   ] = await Promise.all([
     // Fetch members
     payload.find({
@@ -105,12 +107,25 @@ export default async function WorkspacePage({ params }: PageProps) {
       depth: 2,
       overrideAccess: true,
     }),
-    // Fetch Kafka topics
-    payload.find({
+    // Fetch virtual cluster count
+    payload.count({
+      collection: 'kafka-virtual-clusters',
+      where: { workspace: { equals: workspace.id } },
+      overrideAccess: true,
+    }),
+    // Fetch topic count
+    payload.count({
       collection: 'kafka-topics',
       where: { workspace: { equals: workspace.id } },
-      sort: '-createdAt',
-      limit: 5,
+      overrideAccess: true,
+    }),
+    // Fetch pending share request count (incoming requests to this workspace)
+    payload.count({
+      collection: 'kafka-topic-shares',
+      where: {
+        targetWorkspace: { equals: workspace.id },
+        status: { equals: 'pending' },
+      },
       overrideAccess: true,
     }),
   ])
@@ -165,13 +180,10 @@ export default async function WorkspacePage({ params }: PageProps) {
     }
   })
 
-  // Transform Kafka topics for display
-  const kafkaTopics = kafkaTopicsResult.docs.map((topic) => ({
-    id: topic.id,
-    name: topic.name,
-    environment: topic.environment,
-    status: topic.status,
-  }))
+  // Extract Kafka counts for the overview card
+  const virtualClusterCount = virtualClusterCountResult.totalDocs
+  const topicCount = topicCountResult.totalDocs
+  const pendingShareCount = pendingShareCountResult.totalDocs
 
   // Phase 3: Fetch recent pages (depends on spacesResult)
   const spaceIds = spacesResult.docs.map((s) => s.id)
@@ -250,12 +262,13 @@ export default async function WorkspacePage({ params }: PageProps) {
                 <WorkspaceApplicationsCard apps={appsResult.docs} />
               </div>
 
-              {/* Middle Column - Kafka Topics + Registries + Recent Docs */}
+              {/* Middle Column - Kafka Overview + Registries + Recent Docs */}
               <div className="space-y-6">
-                <WorkspaceKafkaTopicsCard
-                  topics={kafkaTopics}
+                <WorkspaceKafkaOverviewCard
                   workspaceSlug={workspace.slug}
-                  totalCount={kafkaTopicsResult.totalDocs}
+                  virtualClusterCount={virtualClusterCount}
+                  topicCount={topicCount}
+                  pendingShareCount={pendingShareCount}
                 />
                 <WorkspaceRegistriesCard
                   images={registryImages}

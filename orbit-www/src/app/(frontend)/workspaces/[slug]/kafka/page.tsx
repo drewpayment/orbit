@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { KafkaTopicsClient } from './kafka-topics-client'
+import { VirtualClustersList } from '@/components/features/kafka'
 
 interface PageProps {
   params: Promise<{
@@ -31,26 +31,9 @@ export default async function KafkaPage({ params }: PageProps) {
   const workspace = workspaceResult.docs[0]
 
   return (
-    <>
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
-              Virtual Clusters
-            </h1>
-            <p className="text-lg text-gray-600 dark:text-gray-400">
-              Manage Kafka virtual clusters for {workspace.name}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Topics Client Component */}
-      <KafkaTopicsClient
-        workspaceId={workspace.id as string}
-        workspaceSlug={slug}
-      />
-    </>
+    <VirtualClustersList
+      workspaceId={workspace.id as string}
+      workspaceSlug={slug}
+    />
   )
 }
