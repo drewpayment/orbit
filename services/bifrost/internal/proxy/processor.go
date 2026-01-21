@@ -145,6 +145,7 @@ func (p *processor) RequestsLoop(dst DeadlineWriter, src DeadlineReaderWriter) (
 		localSasl:                  p.localSasl,
 		localSaslDone:              false, // sequential processing - mutex is required
 		producerAcks0Disabled:      p.producerAcks0Disabled,
+		requestModifierConfig:      p.requestModifierConfig,
 	}
 
 	return ctx.requestsLoop(dst, src)
@@ -164,6 +165,8 @@ type RequestsLoopContext struct {
 	localSaslDone bool
 
 	producerAcks0Disabled bool
+
+	requestModifierConfig *protocol.RequestModifierConfig
 }
 
 // used by local authentication

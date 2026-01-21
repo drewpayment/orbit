@@ -688,6 +688,16 @@ func GetResponseModifierWithConfig(apiKey int16, apiVersion int16, cfg ResponseM
 		return newResponseModifier(apiKey, apiVersion, cfg, metadataResponseSchemaVersions, modifyMetadataResponseWithConfig)
 	case apiKeyFindCoordinator:
 		return newResponseModifier(apiKey, apiVersion, cfg, findCoordinatorResponseSchemaVersions, modifyFindCoordinatorResponseWithConfig)
+	case apiKeyProduce:
+		if cfg.TopicUnprefixer == nil {
+			return nil, nil
+		}
+		return newResponseModifier(apiKey, apiVersion, cfg, produceResponseSchemaVersions, modifyProduceResponse)
+	case apiKeyListOffsets:
+		if cfg.TopicUnprefixer == nil {
+			return nil, nil
+		}
+		return newResponseModifier(apiKey, apiVersion, cfg, listOffsetsResponseSchemaVersions, modifyListOffsetsResponse)
 	default:
 		return nil, nil
 	}
@@ -710,4 +720,310 @@ func getResponseSchema(apiKey, apiVersion int16, schemas []Schema) (Schema, erro
 		return nil, fmt.Errorf("Unsupported response schema version %d for key %d ", apiVersion, apiKey)
 	}
 	return schemas[apiVersion], nil
+}
+
+// Produce response schemas
+var produceResponseSchemaVersions = createProduceResponseSchemaVersions()
+
+func createProduceResponseSchemaVersions() []Schema {
+	// Partition response for v0-v1
+	partitionV0 := NewSchema("produce_partition_v0",
+		&Mfield{Name: "index", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "base_offset", Ty: TypeInt64},
+	)
+
+	// Topic response for v0-v1
+	topicV0 := NewSchema("produce_topic_v0",
+		&Mfield{Name: "name", Ty: TypeStr},
+		&Array{Name: "partition_responses", Ty: partitionV0},
+	)
+
+	// Produce v0
+	produceV0 := NewSchema("produce_response_v0",
+		&Array{Name: "responses", Ty: topicV0},
+	)
+
+	// Produce v1 adds throttle_time
+	produceV1 := NewSchema("produce_response_v1",
+		&Array{Name: "responses", Ty: topicV0},
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+	)
+
+	// Partition response for v2+ adds log_append_time
+	partitionV2 := NewSchema("produce_partition_v2",
+		&Mfield{Name: "index", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "base_offset", Ty: TypeInt64},
+		&Mfield{Name: "log_append_time_ms", Ty: TypeInt64},
+	)
+
+	topicV2 := NewSchema("produce_topic_v2",
+		&Mfield{Name: "name", Ty: TypeStr},
+		&Array{Name: "partition_responses", Ty: partitionV2},
+	)
+
+	produceV2 := NewSchema("produce_response_v2",
+		&Array{Name: "responses", Ty: topicV2},
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+	)
+
+	// Partition response for v5+ adds log_start_offset
+	partitionV5 := NewSchema("produce_partition_v5",
+		&Mfield{Name: "index", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "base_offset", Ty: TypeInt64},
+		&Mfield{Name: "log_append_time_ms", Ty: TypeInt64},
+		&Mfield{Name: "log_start_offset", Ty: TypeInt64},
+	)
+
+	topicV5 := NewSchema("produce_topic_v5",
+		&Mfield{Name: "name", Ty: TypeStr},
+		&Array{Name: "partition_responses", Ty: partitionV5},
+	)
+
+	produceV5 := NewSchema("produce_response_v5",
+		&Array{Name: "responses", Ty: topicV5},
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+	)
+
+	// Partition response for v8+ adds record_errors, error_message
+	recordErrorV8 := NewSchema("record_error_v8",
+		&Mfield{Name: "batch_index", Ty: TypeInt32},
+		&Mfield{Name: "batch_index_error_message", Ty: TypeNullableStr},
+	)
+
+	partitionV8 := NewSchema("produce_partition_v8",
+		&Mfield{Name: "index", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "base_offset", Ty: TypeInt64},
+		&Mfield{Name: "log_append_time_ms", Ty: TypeInt64},
+		&Mfield{Name: "log_start_offset", Ty: TypeInt64},
+		&Array{Name: "record_errors", Ty: recordErrorV8},
+		&Mfield{Name: "error_message", Ty: TypeNullableStr},
+	)
+
+	topicV8 := NewSchema("produce_topic_v8",
+		&Mfield{Name: "name", Ty: TypeStr},
+		&Array{Name: "partition_responses", Ty: partitionV8},
+	)
+
+	produceV8 := NewSchema("produce_response_v8",
+		&Array{Name: "responses", Ty: topicV8},
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+	)
+
+	// v9+ uses compact arrays (flexible version)
+	recordErrorV9 := NewSchema("record_error_v9",
+		&Mfield{Name: "batch_index", Ty: TypeInt32},
+		&Mfield{Name: "batch_index_error_message", Ty: TypeCompactNullableStr},
+		&SchemaTaggedFields{Name: "record_error_tagged_fields"},
+	)
+
+	partitionV9 := NewSchema("produce_partition_v9",
+		&Mfield{Name: "index", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "base_offset", Ty: TypeInt64},
+		&Mfield{Name: "log_append_time_ms", Ty: TypeInt64},
+		&Mfield{Name: "log_start_offset", Ty: TypeInt64},
+		&CompactArray{Name: "record_errors", Ty: recordErrorV9},
+		&Mfield{Name: "error_message", Ty: TypeCompactNullableStr},
+		&SchemaTaggedFields{Name: "partition_tagged_fields"},
+	)
+
+	topicV9 := NewSchema("produce_topic_v9",
+		&Mfield{Name: "name", Ty: TypeCompactStr},
+		&CompactArray{Name: "partition_responses", Ty: partitionV9},
+		&SchemaTaggedFields{Name: "topic_tagged_fields"},
+	)
+
+	produceV9 := NewSchema("produce_response_v9",
+		&CompactArray{Name: "responses", Ty: topicV9},
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&SchemaTaggedFields{Name: "response_tagged_fields"},
+	)
+
+	return []Schema{
+		produceV0,  // v0
+		produceV1,  // v1
+		produceV2,  // v2
+		produceV2,  // v3
+		produceV2,  // v4
+		produceV5,  // v5
+		produceV5,  // v6
+		produceV5,  // v7
+		produceV8,  // v8
+		produceV9,  // v9
+		produceV9,  // v10
+		produceV9,  // v11
+	}
+}
+
+// modifyProduceResponse unprefixes topic names in Produce responses.
+func modifyProduceResponse(decodedStruct *Struct, cfg ResponseModifierConfig) error {
+	if cfg.TopicUnprefixer == nil {
+		return nil
+	}
+
+	responses := decodedStruct.Get("responses")
+	if responses == nil {
+		return nil
+	}
+
+	responsesArray, ok := responses.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	for _, topicElement := range responsesArray {
+		topic, ok := topicElement.(*Struct)
+		if !ok {
+			continue
+		}
+		topicName := getTopicNameFromStruct(topic)
+		if topicName != "" {
+			unprefixedName := cfg.TopicUnprefixer(topicName)
+			if unprefixedName != topicName {
+				if err := setTopicNameInStruct(topic, unprefixedName); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// ListOffsets response schemas
+var listOffsetsResponseSchemaVersions = createListOffsetsResponseSchemaVersions()
+
+func createListOffsetsResponseSchemaVersions() []Schema {
+	// Partition response for v0 (multiple offsets)
+	partitionV0 := NewSchema("list_offsets_partition_v0",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Array{Name: "old_style_offsets", Ty: TypeInt64},
+	)
+
+	// Topic response
+	topicV0 := NewSchema("list_offsets_topic_v0",
+		&Mfield{Name: "name", Ty: TypeStr},
+		&Array{Name: "partitions", Ty: partitionV0},
+	)
+
+	// ListOffsets v0
+	listOffsetsV0 := NewSchema("list_offsets_response_v0",
+		&Array{Name: "topics", Ty: topicV0},
+	)
+
+	// Partition response for v1+ (single offset + timestamp)
+	partitionV1 := NewSchema("list_offsets_partition_v1",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "timestamp", Ty: TypeInt64},
+		&Mfield{Name: "offset", Ty: TypeInt64},
+	)
+
+	topicV1 := NewSchema("list_offsets_topic_v1",
+		&Mfield{Name: "name", Ty: TypeStr},
+		&Array{Name: "partitions", Ty: partitionV1},
+	)
+
+	listOffsetsV1 := NewSchema("list_offsets_response_v1",
+		&Array{Name: "topics", Ty: topicV1},
+	)
+
+	// v2 adds throttle_time_ms
+	listOffsetsV2 := NewSchema("list_offsets_response_v2",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&Array{Name: "topics", Ty: topicV1},
+	)
+
+	// Partition response for v4+ (adds leader_epoch)
+	partitionV4 := NewSchema("list_offsets_partition_v4",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "timestamp", Ty: TypeInt64},
+		&Mfield{Name: "offset", Ty: TypeInt64},
+		&Mfield{Name: "leader_epoch", Ty: TypeInt32},
+	)
+
+	topicV4 := NewSchema("list_offsets_topic_v4",
+		&Mfield{Name: "name", Ty: TypeStr},
+		&Array{Name: "partitions", Ty: partitionV4},
+	)
+
+	listOffsetsV4 := NewSchema("list_offsets_response_v4",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&Array{Name: "topics", Ty: topicV4},
+	)
+
+	// v6+ uses compact arrays (flexible version)
+	partitionV6 := NewSchema("list_offsets_partition_v6",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "timestamp", Ty: TypeInt64},
+		&Mfield{Name: "offset", Ty: TypeInt64},
+		&Mfield{Name: "leader_epoch", Ty: TypeInt32},
+		&SchemaTaggedFields{Name: "partition_tagged_fields"},
+	)
+
+	topicV6 := NewSchema("list_offsets_topic_v6",
+		&Mfield{Name: "name", Ty: TypeCompactStr},
+		&CompactArray{Name: "partitions", Ty: partitionV6},
+		&SchemaTaggedFields{Name: "topic_tagged_fields"},
+	)
+
+	listOffsetsV6 := NewSchema("list_offsets_response_v6",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&CompactArray{Name: "topics", Ty: topicV6},
+		&SchemaTaggedFields{Name: "response_tagged_fields"},
+	)
+
+	return []Schema{
+		listOffsetsV0, // v0
+		listOffsetsV1, // v1
+		listOffsetsV2, // v2
+		listOffsetsV2, // v3
+		listOffsetsV4, // v4
+		listOffsetsV4, // v5
+		listOffsetsV6, // v6
+		listOffsetsV6, // v7
+		listOffsetsV6, // v8
+	}
+}
+
+// modifyListOffsetsResponse unprefixes topic names in ListOffsets responses.
+func modifyListOffsetsResponse(decodedStruct *Struct, cfg ResponseModifierConfig) error {
+	if cfg.TopicUnprefixer == nil {
+		return nil
+	}
+
+	topics := decodedStruct.Get("topics")
+	if topics == nil {
+		return nil
+	}
+
+	topicsArray, ok := topics.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	for _, topicElement := range topicsArray {
+		topic, ok := topicElement.(*Struct)
+		if !ok {
+			continue
+		}
+		topicName := getTopicNameFromStruct(topic)
+		if topicName != "" {
+			unprefixedName := cfg.TopicUnprefixer(topicName)
+			if unprefixedName != topicName {
+				if err := setTopicNameInStruct(topic, unprefixedName); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
 }

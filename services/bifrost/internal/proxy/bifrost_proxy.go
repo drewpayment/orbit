@@ -143,6 +143,12 @@ func (p *BifrostProxy) handleConnection(clientConn net.Conn) {
 	}
 	defer brokerConn.Close()
 
+	// Send ApiVersions to upstream broker (required by most brokers)
+	if err := p.sendUpstreamApiVersions(brokerConn); err != nil {
+		logrus.Errorf("Connection %s: upstream ApiVersions failed: %v", connID, err)
+		return
+	}
+
 	logrus.Infof("Connection %s: user=%s vc=%s upstream=%s", connID, ctx.Username, ctx.VirtualClusterID, ctx.BootstrapServers)
 
 	// Create BifrostConnection for state management
@@ -163,15 +169,21 @@ func (p *BifrostProxy) handleConnection(clientConn net.Conn) {
 		return bifrostConn.rewriter.TopicBelongsToTenant(topic)
 	}
 
-	// Identity address mapper - returns the same host/port
-	// In production, this would map internal broker addresses to external addresses
-	identityMapper := func(host string, port int32, nodeId int32) (string, int32, error) {
+	// Address mapper - maps internal broker addresses to the advertised address
+	// This ensures clients connect back through Bifrost, not directly to the broker
+	advertisedMapper := func(host string, port int32, nodeId int32) (string, int32, error) {
+		// Return the advertised address from the virtual cluster config
+		// This allows clients to connect back through the proxy
+		if ctx.AdvertisedHost != "" {
+			return ctx.AdvertisedHost, ctx.AdvertisedPort, nil
+		}
+		// Fallback to original if no advertised address configured
 		return host, port, nil
 	}
 
 	// Create response modifier config with topic rewriting
 	responseModifierConfig := &protocol.ResponseModifierConfig{
-		NetAddressMappingFunc: identityMapper,
+		NetAddressMappingFunc: advertisedMapper,
 		TopicUnprefixer:       topicUnprefixer,
 		TopicFilter:           topicFilter,
 	}
@@ -192,7 +204,7 @@ func (p *BifrostProxy) handleConnection(clientConn net.Conn) {
 		MaxOpenRequests:        256,
 		WriteTimeout:           30 * time.Second,
 		ReadTimeout:            30 * time.Second,
-		NetAddressMappingFunc:  identityMapper,
+		NetAddressMappingFunc:  advertisedMapper,
 		ResponseModifierConfig: responseModifierConfig,
 		RequestModifierConfig:  requestModifierConfig,
 	}, ctx.BootstrapServers)
@@ -211,9 +223,9 @@ func (p *BifrostProxy) handleConnection(clientConn net.Conn) {
 		close(done)
 	}()
 
-	_, err = proc.ResponsesLoop(clientConn, brokerConn)
-	if err != nil && err != io.EOF {
-		logrus.Debugf("Connection %s: responses loop ended: %v", connID, err)
+	readErr, err := proc.ResponsesLoop(clientConn, brokerConn)
+	if err != nil {
+		logrus.Debugf("Connection %s: responses loop ended: readErr=%v err=%v", connID, readErr, err)
 	}
 	// Close client connection to unblock RequestsLoop (if ResponsesLoop exits first)
 	clientConn.Close()
@@ -274,6 +286,8 @@ func (p *BifrostProxy) performSASLAuth(conn net.Conn, localSasl *LocalSasl) erro
 // handleApiVersionsLocal responds to ApiVersions request locally.
 // This is needed before SASL because we don't have an upstream connection yet.
 func (p *BifrostProxy) handleApiVersionsLocal(conn net.Conn, reqKV *protocol.RequestKeyVersion, keyVersionBuf []byte) error {
+	logrus.Debugf("handleApiVersionsLocal: version=%d, length=%d", reqKV.ApiVersion, reqKV.Length)
+
 	// Read the rest of the request
 	if int32(reqKV.Length) > protocol.MaxRequestSize {
 		return fmt.Errorf("request too large: %d", reqKV.Length)
@@ -284,58 +298,78 @@ func (p *BifrostProxy) handleApiVersionsLocal(conn net.Conn, reqKV *protocol.Req
 		return fmt.Errorf("read request body: %w", err)
 	}
 
-	// Decode to get correlation ID
+	// Extract correlation ID directly from the payload
+	// Format after keyVersionBuf[4:]: ApiKey(2) + ApiVersion(2) + CorrelationID(4) + ...
+	// keyVersionBuf[4:] starts at ApiKey, so bytes 4-7 are CorrelationID
 	payload := append(keyVersionBuf[4:], restBuf...)
-	apiVersionsReq := &protocol.ApiVersionsRequest{}
-	req := &protocol.Request{Body: apiVersionsReq}
-	if err := protocol.Decode(payload, req); err != nil {
-		return fmt.Errorf("decode ApiVersions request: %w", err)
+	if len(payload) < 8 {
+		return fmt.Errorf("payload too short for ApiVersions request")
 	}
+	correlationID := int32(payload[4])<<24 | int32(payload[5])<<16 | int32(payload[6])<<8 | int32(payload[7])
+	logrus.Debugf("handleApiVersionsLocal: correlationID=%d", correlationID)
 
 	// Build minimal ApiVersions response with supported APIs
+	// NOTE: These versions should match what the upstream broker (Redpanda) supports
+	// to avoid version mismatches. Query upstream with ApiVersions v0 to check.
 	apiVersions := []protocol.ApiVersionsResponseKey{
-		{ApiKey: 0, MinVersion: 0, MaxVersion: 9},   // Produce
-		{ApiKey: 1, MinVersion: 0, MaxVersion: 13},  // Fetch
-		{ApiKey: 2, MinVersion: 0, MaxVersion: 7},   // ListOffsets
-		{ApiKey: 3, MinVersion: 0, MaxVersion: 12},  // Metadata
-		{ApiKey: 8, MinVersion: 0, MaxVersion: 8},   // OffsetCommit
-		{ApiKey: 9, MinVersion: 0, MaxVersion: 8},   // OffsetFetch
-		{ApiKey: 10, MinVersion: 0, MaxVersion: 4},  // FindCoordinator
-		{ApiKey: 11, MinVersion: 0, MaxVersion: 9},  // JoinGroup
-		{ApiKey: 12, MinVersion: 0, MaxVersion: 4},  // Heartbeat
-		{ApiKey: 13, MinVersion: 0, MaxVersion: 5},  // LeaveGroup
-		{ApiKey: 14, MinVersion: 0, MaxVersion: 5},  // SyncGroup
-		{ApiKey: 15, MinVersion: 0, MaxVersion: 5},  // DescribeGroups
-		{ApiKey: 16, MinVersion: 0, MaxVersion: 4},  // ListGroups
-		{ApiKey: 17, MinVersion: 0, MaxVersion: 1},  // SaslHandshake
-		{ApiKey: 18, MinVersion: 0, MaxVersion: 3},  // ApiVersions
-		{ApiKey: 19, MinVersion: 0, MaxVersion: 7},  // CreateTopics
-		{ApiKey: 20, MinVersion: 0, MaxVersion: 6},  // DeleteTopics
-		{ApiKey: 36, MinVersion: 0, MaxVersion: 2},  // SaslAuthenticate
+		{ApiKey: 0, MinVersion: 0, MaxVersion: 7},  // Produce (Redpanda max)
+		{ApiKey: 1, MinVersion: 0, MaxVersion: 11}, // Fetch (Redpanda max)
+		{ApiKey: 2, MinVersion: 0, MaxVersion: 4},  // ListOffsets (Redpanda max)
+		{ApiKey: 3, MinVersion: 0, MaxVersion: 8},  // Metadata (Redpanda max is 8, NOT 12!)
+		{ApiKey: 8, MinVersion: 0, MaxVersion: 8},  // OffsetCommit
+		{ApiKey: 9, MinVersion: 0, MaxVersion: 7},  // OffsetFetch (Redpanda max)
+		{ApiKey: 10, MinVersion: 0, MaxVersion: 3}, // FindCoordinator (Redpanda max)
+		{ApiKey: 11, MinVersion: 0, MaxVersion: 6}, // JoinGroup (Redpanda max)
+		{ApiKey: 12, MinVersion: 0, MaxVersion: 4}, // Heartbeat
+		{ApiKey: 13, MinVersion: 0, MaxVersion: 4}, // LeaveGroup (Redpanda max)
+		{ApiKey: 14, MinVersion: 0, MaxVersion: 4}, // SyncGroup (Redpanda max)
+		{ApiKey: 15, MinVersion: 0, MaxVersion: 4}, // DescribeGroups (Redpanda max)
+		{ApiKey: 16, MinVersion: 0, MaxVersion: 4}, // ListGroups
+		{ApiKey: 17, MinVersion: 0, MaxVersion: 1}, // SaslHandshake
+		{ApiKey: 18, MinVersion: 0, MaxVersion: 3}, // ApiVersions (Redpanda max)
+		{ApiKey: 19, MinVersion: 0, MaxVersion: 6}, // CreateTopics (Redpanda max)
+		{ApiKey: 20, MinVersion: 0, MaxVersion: 4}, // DeleteTopics (Redpanda max)
+		{ApiKey: 36, MinVersion: 0, MaxVersion: 2}, // SaslAuthenticate
 	}
 
 	response := &protocol.ApiVersionsResponse{
 		Err:         protocol.ErrNoError,
 		ApiVersions: apiVersions,
+		ThrottleMs:  0,
 	}
 
-	bodyBuf, err := protocol.Encode(response)
-	if err != nil {
-		return fmt.Errorf("encode ApiVersions response: %w", err)
+	var bodyBuf []byte
+	var err error
+
+	// ApiVersions v3+ uses flexible encoding
+	if reqKV.ApiVersion >= 3 {
+		bodyBuf, err = response.EncodeFlexible()
+		if err != nil {
+			return fmt.Errorf("encode ApiVersions response (flexible): %w", err)
+		}
+	} else {
+		bodyBuf, err = protocol.Encode(response)
+		if err != nil {
+			return fmt.Errorf("encode ApiVersions response: %w", err)
+		}
 	}
 
 	// Create response header
+	// IMPORTANT: ApiVersions response ALWAYS uses v0 header (no tagged fields)
+	// even when the body uses flexible encoding for v3+. This is a special case
+	// in the Kafka protocol to support version negotiation fallback logic.
+	// See: https://github.com/twmb/franz-go/blob/master/pkg/kgo/broker.go
 	header := &protocol.ResponseHeader{
 		Length:        int32(len(bodyBuf) + 4), // +4 for correlationID
-		CorrelationID: req.CorrelationID,
+		CorrelationID: correlationID,
 	}
-
 	headerBuf, err := protocol.Encode(header)
 	if err != nil {
 		return fmt.Errorf("encode response header: %w", err)
 	}
 
 	// Write response
+	logrus.Debugf("handleApiVersionsLocal: sending response (v%d) header len=%d, body len=%d", reqKV.ApiVersion, len(headerBuf), len(bodyBuf))
 	if _, err := conn.Write(headerBuf); err != nil {
 		return fmt.Errorf("write header: %w", err)
 	}
@@ -343,6 +377,91 @@ func (p *BifrostProxy) handleApiVersionsLocal(conn net.Conn, reqKV *protocol.Req
 		return fmt.Errorf("write body: %w", err)
 	}
 
+	logrus.Debug("handleApiVersionsLocal: response sent successfully")
+	return nil
+}
+
+// sendUpstreamApiVersions sends an ApiVersions request to the upstream broker
+// and reads the response. This is required because Kafka brokers expect
+// ApiVersions as the first message on a new connection.
+func (p *BifrostProxy) sendUpstreamApiVersions(conn net.Conn) error {
+	// Build ApiVersions v4 request
+	// Request Header v2: ApiKey(2) + ApiVersion(2) + CorrelationID(4) + ClientID(NULLABLE_STRING with INT16 length) + TAG_BUFFER
+	// Request Body: ClientSoftwareName(COMPACT_STRING) + ClientSoftwareVersion(COMPACT_STRING) + TAG_BUFFER
+	correlationID := int32(0)
+
+	// Build request
+	body := make([]byte, 0, 48)
+	// ApiKey: 18 (ApiVersions)
+	body = append(body, 0x00, 0x12)
+	// ApiVersion: 4
+	body = append(body, 0x00, 0x04)
+	// CorrelationID
+	body = append(body, byte(correlationID>>24), byte(correlationID>>16), byte(correlationID>>8), byte(correlationID))
+	// ClientID: "bifrost" using NULLABLE_STRING (INT16 length, NOT compact!)
+	// This is because ApiVersions uses request header v2 but ClientID field uses INT16 length
+	body = append(body, 0x00, 0x07) // INT16 length = 7
+	body = append(body, []byte("bifrost")...)
+	// Request Header TAG_BUFFER (empty)
+	body = append(body, 0x00)
+	// ClientSoftwareName: "bifrost" as compact string (length+1 = 8)
+	body = append(body, 0x08) // length+1 = 8
+	body = append(body, []byte("bifrost")...)
+	// ClientSoftwareVersion: "1.0.0" as compact string (length+1 = 6)
+	body = append(body, 0x06) // length+1 = 6
+	body = append(body, []byte("1.0.0")...)
+	// Request Body TAG_BUFFER (empty)
+	body = append(body, 0x00)
+
+	// Build full request with length prefix
+	request := make([]byte, 4+len(body))
+	length := int32(len(body))
+	request[0] = byte(length >> 24)
+	request[1] = byte(length >> 16)
+	request[2] = byte(length >> 8)
+	request[3] = byte(length)
+	copy(request[4:], body)
+
+	logrus.Debugf("sendUpstreamApiVersions: sending %d bytes", len(request))
+
+	// Set timeout for handshake
+	if err := conn.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		return fmt.Errorf("set deadline: %w", err)
+	}
+	defer conn.SetDeadline(time.Time{}) // Clear deadline after handshake
+
+	// Send request
+	if _, err := conn.Write(request); err != nil {
+		return fmt.Errorf("write ApiVersions request: %w", err)
+	}
+
+	// Read response length
+	lenBuf := make([]byte, 4)
+	if _, err := io.ReadFull(conn, lenBuf); err != nil {
+		return fmt.Errorf("read response length: %w", err)
+	}
+	respLen := int32(lenBuf[0])<<24 | int32(lenBuf[1])<<16 | int32(lenBuf[2])<<8 | int32(lenBuf[3])
+	logrus.Debugf("sendUpstreamApiVersions: response length=%d", respLen)
+
+	if respLen > protocol.MaxResponseSize {
+		return fmt.Errorf("response too large: %d", respLen)
+	}
+
+	// Read response body (we just need to consume it, don't need to parse)
+	respBody := make([]byte, respLen)
+	if _, err := io.ReadFull(conn, respBody); err != nil {
+		return fmt.Errorf("read response body: %w", err)
+	}
+
+	// Verify correlation ID matches (first 4 bytes of response)
+	if len(respBody) >= 4 {
+		respCorrelationID := int32(respBody[0])<<24 | int32(respBody[1])<<16 | int32(respBody[2])<<8 | int32(respBody[3])
+		if respCorrelationID != correlationID {
+			return fmt.Errorf("correlation ID mismatch: expected %d, got %d", correlationID, respCorrelationID)
+		}
+	}
+
+	logrus.Debug("sendUpstreamApiVersions: handshake completed successfully")
 	return nil
 }
 

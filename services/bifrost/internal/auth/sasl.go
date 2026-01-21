@@ -28,6 +28,8 @@ type ConnectionContext struct {
 	GroupPrefix      string
 	TxnIDPrefix      string
 	BootstrapServers string
+	AdvertisedHost   string
+	AdvertisedPort   int32
 }
 
 // SASLHandler handles SASL/PLAIN authentication.
@@ -75,5 +77,7 @@ func (h *SASLHandler) Authenticate(username, password string) (*ConnectionContex
 		GroupPrefix:      vc.GroupPrefix,
 		TxnIDPrefix:      vc.TransactionIdPrefix,
 		BootstrapServers: vc.PhysicalBootstrapServers,
+		AdvertisedHost:   vc.AdvertisedHost,
+		AdvertisedPort:   vc.AdvertisedPort,
 	}, nil
 }

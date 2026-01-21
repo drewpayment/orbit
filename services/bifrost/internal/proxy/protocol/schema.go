@@ -11,12 +11,16 @@ import (
 
 var (
 	TypeBool               = &Bool{}
+	TypeInt8               = &Int8{}
 	TypeInt16              = &Int16{}
 	TypeInt32              = &Int32{}
+	TypeInt64              = &Int64{}
 	TypeStr                = &Str{}
 	TypeNullableStr        = &NullableStr{}
 	TypeCompactStr         = &CompactStr{}
 	TypeCompactNullableStr = &CompactNullableStr{}
+	TypeBytes              = &Bytes{}
+	TypeCompactBytes       = &CompactBytes{}
 	TypeUuid               = &Uuid{}
 )
 
@@ -158,6 +162,120 @@ func (f *Int32) GetFieldsByName() map[string]*boundField {
 
 func (f *Int32) GetName() string {
 	return "int32"
+}
+
+// Field int8
+
+type Int8 struct{}
+
+func (f *Int8) decode(pd packetDecoder) (interface{}, error) {
+	return pd.getInt8()
+}
+
+func (f *Int8) encode(pe packetEncoder, value interface{}) error {
+	in, ok := value.(int8)
+	if !ok {
+		return SchemaEncodingError{fmt.Sprintf("value %T not a int8", value)}
+	}
+	pe.putInt8(in)
+	return nil
+}
+
+func (f *Int8) GetFields() []boundField {
+	return nil
+}
+
+func (f *Int8) GetFieldsByName() map[string]*boundField {
+	return nil
+}
+
+func (f *Int8) GetName() string {
+	return "int8"
+}
+
+// Field int64
+
+type Int64 struct{}
+
+func (f *Int64) decode(pd packetDecoder) (interface{}, error) {
+	return pd.getInt64()
+}
+
+func (f *Int64) encode(pe packetEncoder, value interface{}) error {
+	in, ok := value.(int64)
+	if !ok {
+		return SchemaEncodingError{fmt.Sprintf("value %T not a int64", value)}
+	}
+	pe.putInt64(in)
+	return nil
+}
+
+func (f *Int64) GetFields() []boundField {
+	return nil
+}
+
+func (f *Int64) GetFieldsByName() map[string]*boundField {
+	return nil
+}
+
+func (f *Int64) GetName() string {
+	return "int64"
+}
+
+// Field bytes (raw bytes with int32 length prefix)
+
+type Bytes struct{}
+
+func (f *Bytes) decode(pd packetDecoder) (interface{}, error) {
+	return pd.getBytes()
+}
+
+func (f *Bytes) encode(pe packetEncoder, value interface{}) error {
+	in, ok := value.([]byte)
+	if !ok {
+		return SchemaEncodingError{fmt.Sprintf("value %T not a []byte", value)}
+	}
+	return pe.putBytes(in)
+}
+
+func (f *Bytes) GetFields() []boundField {
+	return nil
+}
+
+func (f *Bytes) GetFieldsByName() map[string]*boundField {
+	return nil
+}
+
+func (f *Bytes) GetName() string {
+	return "bytes"
+}
+
+// Field compact bytes (raw bytes with varint length prefix)
+
+type CompactBytes struct{}
+
+func (f *CompactBytes) decode(pd packetDecoder) (interface{}, error) {
+	return pd.getCompactBytes()
+}
+
+func (f *CompactBytes) encode(pe packetEncoder, value interface{}) error {
+	in, ok := value.([]byte)
+	if !ok {
+		return SchemaEncodingError{fmt.Sprintf("value %T not a []byte", value)}
+	}
+	return pe.putCompactBytes(in)
+}
+
+func (f *CompactBytes) GetFields() []boundField {
+	return nil
+}
+
+func (f *CompactBytes) GetFieldsByName() map[string]*boundField {
+	return nil
+}
+
+func (f *CompactBytes) GetName() string {
+	return "compact_bytes"
 }
 
 // Field string

@@ -3,6 +3,8 @@ package protocol
 
 import (
 	"fmt"
+
+	"github.com/sirupsen/logrus"
 )
 
 // RequestModifier modifies Kafka requests before forwarding to broker.
@@ -92,8 +94,14 @@ func newProduceRequestModifier(apiVersion int16, cfg RequestModifierConfig) (Req
 	if cfg.TopicPrefixer == nil {
 		return nil, nil
 	}
-	// TODO: Implement produce request topic rewriting
-	return nil, nil
+	schema, err := getProduceRequestSchema(apiVersion)
+	if err != nil {
+		return nil, err
+	}
+	return &produceRequestModifier{
+		schema:        schema,
+		topicPrefixer: cfg.TopicPrefixer,
+	}, nil
 }
 
 func newFetchRequestModifier(apiVersion int16, cfg RequestModifierConfig) (RequestModifier, error) {
@@ -108,8 +116,14 @@ func newListOffsetsRequestModifier(apiVersion int16, cfg RequestModifierConfig) 
 	if cfg.TopicPrefixer == nil {
 		return nil, nil
 	}
-	// TODO: Implement list offsets request topic rewriting
-	return nil, nil
+	schema, err := getListOffsetsRequestSchema(apiVersion)
+	if err != nil {
+		return nil, err
+	}
+	return &listOffsetsRequestModifier{
+		schema:        schema,
+		topicPrefixer: cfg.TopicPrefixer,
+	}, nil
 }
 
 func newMetadataRequestModifier(apiVersion int16, cfg RequestModifierConfig) (RequestModifier, error) {
@@ -229,23 +243,44 @@ func modifyMetadataRequest(decoded *Struct, prefixer TopicPrefixer) error {
 	topicsField := decoded.Get("topics")
 	if topicsField == nil {
 		// No topics specified (means "all topics") - nothing to modify
+		logrus.Debug("modifyMetadataRequest: topics field is nil, no modification needed")
 		return nil
 	}
 
 	topicsArray, ok := topicsField.([]interface{})
 	if !ok {
 		// Null topics array - nothing to modify
+		logrus.Debugf("modifyMetadataRequest: topics is not an array (%T), no modification needed", topicsField)
 		return nil
 	}
 
-	for _, topicElement := range topicsArray {
+	// Empty array means "no topics" - nothing to modify
+	if len(topicsArray) == 0 {
+		logrus.Debug("modifyMetadataRequest: topics array is empty, no modification needed")
+		return nil
+	}
+
+	logrus.Debugf("modifyMetadataRequest: processing %d topics", len(topicsArray))
+
+	// Check if we need to rebuild the array (for string-based topics)
+	var newTopicsArray []interface{}
+	needsRebuild := false
+
+	for i, topicElement := range topicsArray {
 		switch topic := topicElement.(type) {
 		case string:
-			// Older versions: topics is array of strings
-			// We can't modify in place for strings, need different approach
-			// For now, skip - this is a limitation
+			// Older versions (v0-v8): topics is array of strings
+			// Prefix the topic name and mark for rebuild
+			prefixedName := prefixer(topic)
+			if !needsRebuild {
+				// First modification - copy existing elements
+				newTopicsArray = make([]interface{}, len(topicsArray))
+				copy(newTopicsArray, topicsArray)
+				needsRebuild = true
+			}
+			newTopicsArray[i] = prefixedName
 		case *Struct:
-			// Newer versions: topics is array of structs with "name" field
+			// Newer versions (v9+): topics is array of structs with "name" field
 			nameField := topic.Get("name")
 			var topicName string
 			switch n := nameField.(type) {
@@ -265,6 +300,13 @@ func modifyMetadataRequest(decoded *Struct, prefixer TopicPrefixer) error {
 		}
 	}
 
+	// Replace the topics array if we rebuilt it
+	if needsRebuild {
+		if err := decoded.Replace("topics", newTopicsArray); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -276,26 +318,37 @@ func init() {
 }
 
 func createMetadataRequestSchemas() []Schema {
+	// Request header v1 (used for Metadata v0-v8): CorrelationID + ClientID
+	// Note: The request body passed to Apply() starts AFTER ApiKey/ApiVersion
+	// so it includes: CorrelationID (INT32), ClientID (NULLABLE_STRING), then request fields
+
 	// Metadata v0-v3: topics is nullable array of strings
 	metadataRequestV0 := NewSchema("metadata_request_v0",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
 		&Array{Name: "topics", Ty: TypeStr},
 	)
 
 	// Metadata v4+: adds allow_auto_topic_creation
 	metadataRequestV4 := NewSchema("metadata_request_v4",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
 		&Array{Name: "topics", Ty: TypeStr},
 		&Mfield{Name: "allow_auto_topic_creation", Ty: TypeBool},
 	)
 
-	// Metadata v8+: adds include_cluster_authorized_operations, include_topic_authorized_operations
+	// Metadata v8: adds include_cluster_authorized_operations, include_topic_authorized_operations
 	metadataRequestV8 := NewSchema("metadata_request_v8",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
 		&Array{Name: "topics", Ty: TypeStr},
 		&Mfield{Name: "allow_auto_topic_creation", Ty: TypeBool},
 		&Mfield{Name: "include_cluster_authorized_operations", Ty: TypeBool},
 		&Mfield{Name: "include_topic_authorized_operations", Ty: TypeBool},
 	)
 
-	// Metadata v9+: uses compact arrays and includes tagged fields
+	// Metadata v9+: uses compact arrays, compact strings, and tagged fields
+	// Request header v2: CorrelationID + ClientID (NULLABLE_STRING) + TAG_BUFFER
 	topicV9 := NewSchema("topic_v9",
 		&Mfield{Name: "topic_id", Ty: TypeUuid},
 		&Mfield{Name: "name", Ty: TypeCompactNullableStr},
@@ -303,6 +356,9 @@ func createMetadataRequestSchemas() []Schema {
 	)
 
 	metadataRequestV9 := NewSchema("metadata_request_v9",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&SchemaTaggedFields{Name: "header_tagged_fields"},
 		&CompactArray{Name: "topics", Ty: topicV9},
 		&Mfield{Name: "allow_auto_topic_creation", Ty: TypeBool},
 		&Mfield{Name: "include_cluster_authorized_operations", Ty: TypeBool},
@@ -337,4 +393,336 @@ func getMetadataRequestSchema(apiVersion int16) (Schema, error) {
 		return nil, fmt.Errorf("unsupported metadata request version %d", apiVersion)
 	}
 	return metadataRequestSchemas[apiVersion], nil
+}
+
+// produceRequestModifier rewrites topic names in Produce requests
+type produceRequestModifier struct {
+	schema        Schema
+	topicPrefixer TopicPrefixer
+}
+
+func (m *produceRequestModifier) Apply(requestBytes []byte) ([]byte, error) {
+	decoded, err := DecodeSchema(requestBytes, m.schema)
+	if err != nil {
+		return nil, fmt.Errorf("decode produce request: %w", err)
+	}
+
+	if err := modifyProduceRequest(decoded, m.topicPrefixer); err != nil {
+		return nil, fmt.Errorf("modify produce request: %w", err)
+	}
+
+	return EncodeSchema(decoded, m.schema)
+}
+
+func modifyProduceRequest(decoded *Struct, prefixer TopicPrefixer) error {
+	topicDataField := decoded.Get("topic_data")
+	if topicDataField == nil {
+		logrus.Debug("modifyProduceRequest: topic_data field is nil")
+		return nil
+	}
+
+	topicDataArray, ok := topicDataField.([]interface{})
+	if !ok {
+		logrus.Debugf("modifyProduceRequest: topic_data is not an array (%T)", topicDataField)
+		return nil
+	}
+
+	for _, topicElement := range topicDataArray {
+		topic, ok := topicElement.(*Struct)
+		if !ok {
+			continue
+		}
+		nameField := topic.Get("name")
+		if nameField == nil {
+			continue
+		}
+		var topicName string
+		switch n := nameField.(type) {
+		case string:
+			topicName = n
+		case *string:
+			if n != nil {
+				topicName = *n
+			}
+		}
+		if topicName != "" {
+			prefixedName := prefixer(topicName)
+			logrus.Debugf("modifyProduceRequest: prefixing topic %s -> %s", topicName, prefixedName)
+			if err := topic.Replace("name", prefixedName); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// Produce request schemas
+var produceRequestSchemas []Schema
+
+func init() {
+	produceRequestSchemas = createProduceRequestSchemas()
+}
+
+func createProduceRequestSchemas() []Schema {
+	// Partition data schema (common across versions)
+	partitionDataV0 := NewSchema("partition_data_v0",
+		&Mfield{Name: "index", Ty: TypeInt32},
+		&Mfield{Name: "records", Ty: TypeBytes},
+	)
+
+	// Topic data schema for v0-v2 (no transactional_id)
+	topicDataV0 := NewSchema("topic_data_v0",
+		&Mfield{Name: "name", Ty: TypeStr},
+		&Array{Name: "partition_data", Ty: partitionDataV0},
+	)
+
+	// Produce v0-v2: no transactional_id
+	produceRequestV0 := NewSchema("produce_request_v0",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "acks", Ty: TypeInt16},
+		&Mfield{Name: "timeout_ms", Ty: TypeInt32},
+		&Array{Name: "topic_data", Ty: topicDataV0},
+	)
+
+	// Produce v3+: adds transactional_id
+	produceRequestV3 := NewSchema("produce_request_v3",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "transactional_id", Ty: TypeNullableStr},
+		&Mfield{Name: "acks", Ty: TypeInt16},
+		&Mfield{Name: "timeout_ms", Ty: TypeInt32},
+		&Array{Name: "topic_data", Ty: topicDataV0},
+	)
+
+	// v9+ uses compact arrays (flexible version)
+	partitionDataV9 := NewSchema("partition_data_v9",
+		&Mfield{Name: "index", Ty: TypeInt32},
+		&Mfield{Name: "records", Ty: TypeCompactBytes},
+		&SchemaTaggedFields{Name: "partition_tagged_fields"},
+	)
+
+	topicDataV9 := NewSchema("topic_data_v9",
+		&Mfield{Name: "name", Ty: TypeCompactStr},
+		&CompactArray{Name: "partition_data", Ty: partitionDataV9},
+		&SchemaTaggedFields{Name: "topic_tagged_fields"},
+	)
+
+	produceRequestV9 := NewSchema("produce_request_v9",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&SchemaTaggedFields{Name: "header_tagged_fields"},
+		&Mfield{Name: "transactional_id", Ty: TypeCompactNullableStr},
+		&Mfield{Name: "acks", Ty: TypeInt16},
+		&Mfield{Name: "timeout_ms", Ty: TypeInt32},
+		&CompactArray{Name: "topic_data", Ty: topicDataV9},
+		&SchemaTaggedFields{Name: "request_tagged_fields"},
+	)
+
+	return []Schema{
+		produceRequestV0, // v0
+		produceRequestV0, // v1
+		produceRequestV0, // v2
+		produceRequestV3, // v3
+		produceRequestV3, // v4
+		produceRequestV3, // v5
+		produceRequestV3, // v6
+		produceRequestV3, // v7
+		produceRequestV3, // v8
+		produceRequestV9, // v9
+		produceRequestV9, // v10
+		produceRequestV9, // v11
+	}
+}
+
+func getProduceRequestSchema(apiVersion int16) (Schema, error) {
+	if apiVersion < 0 || int(apiVersion) >= len(produceRequestSchemas) {
+		return nil, fmt.Errorf("unsupported produce request version %d", apiVersion)
+	}
+	return produceRequestSchemas[apiVersion], nil
+}
+
+// listOffsetsRequestModifier rewrites topic names in ListOffsets requests
+type listOffsetsRequestModifier struct {
+	schema        Schema
+	topicPrefixer TopicPrefixer
+}
+
+func (m *listOffsetsRequestModifier) Apply(requestBytes []byte) ([]byte, error) {
+	decoded, err := DecodeSchema(requestBytes, m.schema)
+	if err != nil {
+		return nil, fmt.Errorf("decode list offsets request: %w", err)
+	}
+
+	if err := modifyListOffsetsRequest(decoded, m.topicPrefixer); err != nil {
+		return nil, fmt.Errorf("modify list offsets request: %w", err)
+	}
+
+	return EncodeSchema(decoded, m.schema)
+}
+
+func modifyListOffsetsRequest(decoded *Struct, prefixer TopicPrefixer) error {
+	topicsField := decoded.Get("topics")
+	if topicsField == nil {
+		logrus.Debug("modifyListOffsetsRequest: topics field is nil")
+		return nil
+	}
+
+	topicsArray, ok := topicsField.([]interface{})
+	if !ok {
+		logrus.Debugf("modifyListOffsetsRequest: topics is not an array (%T)", topicsField)
+		return nil
+	}
+
+	for _, topicElement := range topicsArray {
+		topic, ok := topicElement.(*Struct)
+		if !ok {
+			continue
+		}
+		nameField := topic.Get("name")
+		if nameField == nil {
+			continue
+		}
+		var topicName string
+		switch n := nameField.(type) {
+		case string:
+			topicName = n
+		case *string:
+			if n != nil {
+				topicName = *n
+			}
+		}
+		if topicName != "" {
+			prefixedName := prefixer(topicName)
+			logrus.Debugf("modifyListOffsetsRequest: prefixing topic %s -> %s", topicName, prefixedName)
+			if err := topic.Replace("name", prefixedName); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// ListOffsets request schemas
+var listOffsetsRequestSchemas []Schema
+
+func init() {
+	listOffsetsRequestSchemas = createListOffsetsRequestSchemas()
+}
+
+func createListOffsetsRequestSchemas() []Schema {
+	// Partition schema for v0
+	partitionV0 := NewSchema("list_offsets_partition_v0",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "timestamp", Ty: TypeInt64},
+		&Mfield{Name: "max_num_offsets", Ty: TypeInt32},
+	)
+
+	// Partition schema for v1+ (no max_num_offsets)
+	partitionV1 := NewSchema("list_offsets_partition_v1",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "timestamp", Ty: TypeInt64},
+	)
+
+	// Partition schema for v4+ (adds current_leader_epoch)
+	partitionV4 := NewSchema("list_offsets_partition_v4",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "current_leader_epoch", Ty: TypeInt32},
+		&Mfield{Name: "timestamp", Ty: TypeInt64},
+	)
+
+	// Topic schema for v0
+	topicV0 := NewSchema("list_offsets_topic_v0",
+		&Mfield{Name: "name", Ty: TypeStr},
+		&Array{Name: "partitions", Ty: partitionV0},
+	)
+
+	// Topic schema for v1-v3
+	topicV1 := NewSchema("list_offsets_topic_v1",
+		&Mfield{Name: "name", Ty: TypeStr},
+		&Array{Name: "partitions", Ty: partitionV1},
+	)
+
+	// Topic schema for v4-v5
+	topicV4 := NewSchema("list_offsets_topic_v4",
+		&Mfield{Name: "name", Ty: TypeStr},
+		&Array{Name: "partitions", Ty: partitionV4},
+	)
+
+	// ListOffsets v0
+	listOffsetsV0 := NewSchema("list_offsets_request_v0",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "replica_id", Ty: TypeInt32},
+		&Array{Name: "topics", Ty: topicV0},
+	)
+
+	// ListOffsets v1
+	listOffsetsV1 := NewSchema("list_offsets_request_v1",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "replica_id", Ty: TypeInt32},
+		&Array{Name: "topics", Ty: topicV1},
+	)
+
+	// ListOffsets v2+ adds isolation_level
+	listOffsetsV2 := NewSchema("list_offsets_request_v2",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "replica_id", Ty: TypeInt32},
+		&Mfield{Name: "isolation_level", Ty: TypeInt8},
+		&Array{Name: "topics", Ty: topicV1},
+	)
+
+	// ListOffsets v4+
+	listOffsetsV4 := NewSchema("list_offsets_request_v4",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "replica_id", Ty: TypeInt32},
+		&Mfield{Name: "isolation_level", Ty: TypeInt8},
+		&Array{Name: "topics", Ty: topicV4},
+	)
+
+	// ListOffsets v6+ uses compact encoding
+	partitionV6 := NewSchema("list_offsets_partition_v6",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "current_leader_epoch", Ty: TypeInt32},
+		&Mfield{Name: "timestamp", Ty: TypeInt64},
+		&SchemaTaggedFields{Name: "partition_tagged_fields"},
+	)
+
+	topicV6 := NewSchema("list_offsets_topic_v6",
+		&Mfield{Name: "name", Ty: TypeCompactStr},
+		&CompactArray{Name: "partitions", Ty: partitionV6},
+		&SchemaTaggedFields{Name: "topic_tagged_fields"},
+	)
+
+	listOffsetsV6 := NewSchema("list_offsets_request_v6",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&SchemaTaggedFields{Name: "header_tagged_fields"},
+		&Mfield{Name: "replica_id", Ty: TypeInt32},
+		&Mfield{Name: "isolation_level", Ty: TypeInt8},
+		&CompactArray{Name: "topics", Ty: topicV6},
+		&SchemaTaggedFields{Name: "request_tagged_fields"},
+	)
+
+	return []Schema{
+		listOffsetsV0, // v0
+		listOffsetsV1, // v1
+		listOffsetsV2, // v2
+		listOffsetsV2, // v3
+		listOffsetsV4, // v4
+		listOffsetsV4, // v5
+		listOffsetsV6, // v6
+		listOffsetsV6, // v7
+		listOffsetsV6, // v8
+	}
+}
+
+func getListOffsetsRequestSchema(apiVersion int16) (Schema, error) {
+	if apiVersion < 0 || int(apiVersion) >= len(listOffsetsRequestSchemas) {
+		return nil, fmt.Errorf("unsupported list offsets request version %d", apiVersion)
+	}
+	return listOffsetsRequestSchemas[apiVersion], nil
 }

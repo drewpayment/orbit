@@ -107,20 +107,82 @@ func (handler *DefaultRequestHandler) handleRequest(dst DeadlineWriter, src Dead
 		return true, err
 	}
 
-	// write - send to broker
-	if _, err = dst.Write(keyVersionBuf); err != nil {
-		return false, err
-	}
-	// write - send to broker
-	if len(readBytes) > 0 {
-		if _, err = dst.Write(readBytes); err != nil {
-			return false, err
+	// Get request modifier if config is available
+	var requestModifier protocol.RequestModifier
+	if ctx.requestModifierConfig != nil {
+		requestModifier, err = protocol.GetRequestModifier(requestKeyVersion.ApiKey, requestKeyVersion.ApiVersion, *ctx.requestModifierConfig)
+		if err != nil {
+			logrus.Warnf("Failed to get request modifier for key=%d version=%d: %v", requestKeyVersion.ApiKey, requestKeyVersion.ApiVersion, err)
+			// Continue without modification
+			requestModifier = nil
 		}
 	}
-	// 4 bytes were written as keyVersionBuf (ApiKey, ApiVersion)
-	if readErr, err = myCopyN(dst, src, int64(requestKeyVersion.Length-int32(4+len(readBytes))), ctx.buf); err != nil {
-		return readErr, err
+
+	// Calculate remaining request body length
+	remainingLen := int(requestKeyVersion.Length) - 4 - len(readBytes) // 4 = ApiKey(2) + ApiVersion(2)
+
+	if requestModifier != nil && remainingLen > 0 {
+		// Read entire request body for modification
+		if int32(remainingLen)+4 > protocol.MaxRequestSize {
+			return true, protocol.PacketDecodingError{Info: fmt.Sprintf("request of length %d too large", requestKeyVersion.Length)}
+		}
+
+		// Build full request body: readBytes + remaining
+		fullBody := make([]byte, len(readBytes)+remainingLen)
+		copy(fullBody, readBytes)
+		if _, err = io.ReadFull(src, fullBody[len(readBytes):]); err != nil {
+			return true, err
+		}
+
+		// Apply modifier
+		modifiedBody, err := requestModifier.Apply(fullBody)
+		if err != nil {
+			logrus.Warnf("Failed to apply request modifier: %v, forwarding unmodified", err)
+			modifiedBody = fullBody
+		}
+
+		// Write modified request: update length in header
+		newLength := int32(4 + len(modifiedBody)) // 4 = ApiKey(2) + ApiVersion(2)
+		newHeader := make([]byte, 8)
+		newHeader[0] = byte(newLength >> 24)
+		newHeader[1] = byte(newLength >> 16)
+		newHeader[2] = byte(newLength >> 8)
+		newHeader[3] = byte(newLength)
+		newHeader[4] = keyVersionBuf[4] // ApiKey high
+		newHeader[5] = keyVersionBuf[5] // ApiKey low
+		newHeader[6] = keyVersionBuf[6] // ApiVersion high
+		newHeader[7] = keyVersionBuf[7] // ApiVersion low
+
+		logrus.Debugf("Writing modified request to upstream: key=%d, version=%d, originalLength=%d, newLength=%d", requestKeyVersion.ApiKey, requestKeyVersion.ApiVersion, requestKeyVersion.Length, newLength)
+		if _, err = dst.Write(newHeader); err != nil {
+			logrus.Errorf("Failed to write modified header to upstream: %v", err)
+			return false, err
+		}
+		if _, err = dst.Write(modifiedBody); err != nil {
+			logrus.Errorf("Failed to write modified body to upstream: %v", err)
+			return false, err
+		}
+	} else {
+		// write - send to broker without modification
+		logrus.Debugf("Writing request to upstream: key=%d, version=%d, length=%d", requestKeyVersion.ApiKey, requestKeyVersion.ApiVersion, requestKeyVersion.Length)
+		if _, err = dst.Write(keyVersionBuf); err != nil {
+			logrus.Errorf("Failed to write header to upstream: %v", err)
+			return false, err
+		}
+		// write - send to broker
+		if len(readBytes) > 0 {
+			if _, err = dst.Write(readBytes); err != nil {
+				return false, err
+			}
+		}
+		// 4 bytes were written as keyVersionBuf (ApiKey, ApiVersion)
+		copyLen := int64(requestKeyVersion.Length - int32(4+len(readBytes)))
+		if readErr, err = myCopyN(dst, src, copyLen, ctx.buf); err != nil {
+			logrus.Errorf("Failed to copy request body to upstream (copyLen=%d): %v", copyLen, err)
+			return readErr, err
+		}
 	}
+	logrus.Debugf("Request forwarded to upstream successfully")
 	if requestKeyVersion.ApiKey == apiKeySaslHandshake {
 		if requestKeyVersion.ApiVersion == 0 {
 			return false, ctx.putNextHandlers(saslAuthV0RequestHandler, saslAuthV0ResponseHandler)
