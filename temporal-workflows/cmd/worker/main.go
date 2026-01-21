@@ -268,8 +268,9 @@ func main() {
 		defer bifrostClient.Close()
 	}
 
-	// Register virtual cluster provisioning workflow
+	// Register virtual cluster provisioning workflows
 	w.RegisterWorkflow(workflows.VirtualClusterProvisionWorkflow)
+	w.RegisterWorkflow(workflows.SingleVirtualClusterProvisionWorkflow)
 
 	// Create and register virtual cluster activities
 	vcActivities := activities.NewVirtualClusterActivities(kafkaPayloadClient, bifrostClient, logger)

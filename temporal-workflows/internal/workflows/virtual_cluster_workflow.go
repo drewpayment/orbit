@@ -259,3 +259,104 @@ func VirtualClusterProvisionWorkflow(ctx workflow.Context, input VirtualClusterP
 		Error:           errorMsg,
 	}, nil
 }
+
+// SingleVirtualClusterProvisionInput contains the input for provisioning a single virtual cluster
+type SingleVirtualClusterProvisionInput struct {
+	VirtualClusterID  string `json:"virtualClusterId"`
+	ApplicationID     string `json:"applicationId"`
+	ApplicationSlug   string `json:"applicationSlug"`
+	WorkspaceSlug     string `json:"workspaceSlug"`
+	Environment       string `json:"environment"`
+	TopicPrefix       string `json:"topicPrefix"`
+	GroupPrefix       string `json:"groupPrefix"`
+	AdvertisedHost    string `json:"advertisedHost"`
+	AdvertisedPort    int32  `json:"advertisedPort"`
+	PhysicalClusterID string `json:"physicalClusterId"`
+}
+
+// SingleVirtualClusterProvisionResult contains the result of provisioning a single virtual cluster
+type SingleVirtualClusterProvisionResult struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+}
+
+// SingleVirtualClusterProvisionWorkflow provisions a single virtual cluster to Bifrost.
+// This is used when creating a virtual cluster directly (not via application provisioning).
+func SingleVirtualClusterProvisionWorkflow(ctx workflow.Context, input SingleVirtualClusterProvisionInput) (*SingleVirtualClusterProvisionResult, error) {
+	logger := workflow.GetLogger(ctx)
+	logger.Info("Starting SingleVirtualClusterProvisionWorkflow",
+		"virtualClusterId", input.VirtualClusterID,
+		"environment", input.Environment)
+
+	activityOptions := workflow.ActivityOptions{
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    30 * time.Second,
+			MaximumAttempts:    5,
+		},
+	}
+	ctx = workflow.WithActivityOptions(ctx, activityOptions)
+
+	// Step 1: Get environment mapping to find physical cluster bootstrap servers
+	var mappingResult GetEnvironmentMappingResult
+	err := workflow.ExecuteActivity(ctx, "GetEnvironmentMapping", GetEnvironmentMappingInput{
+		Environment: input.Environment,
+	}).Get(ctx, &mappingResult)
+	if err != nil {
+		logger.Error("Failed to get environment mapping", "error", err)
+		// Update virtual cluster status to failed
+		_ = workflow.ExecuteActivity(ctx, "UpdateVirtualClusterStatus", UpdateVirtualClusterStatusInput{
+			VirtualClusterID: input.VirtualClusterID,
+			Status:           "failed",
+		}).Get(ctx, nil)
+		return &SingleVirtualClusterProvisionResult{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to get environment mapping: %v", err),
+		}, nil
+	}
+
+	// Step 2: Push config to Bifrost gateway
+	var pushResult PushToBifrostResult
+	err = workflow.ExecuteActivity(ctx, "PushToBifrost", PushToBifrostInput{
+		VirtualClusterID: input.VirtualClusterID,
+		ApplicationID:    input.ApplicationID,
+		ApplicationSlug:  input.ApplicationSlug,
+		WorkspaceSlug:    input.WorkspaceSlug,
+		Environment:      input.Environment,
+		TopicPrefix:      input.TopicPrefix,
+		GroupPrefix:      input.GroupPrefix,
+		AdvertisedHost:   input.AdvertisedHost,
+		BootstrapServers: mappingResult.BootstrapServers,
+	}).Get(ctx, &pushResult)
+	if err != nil {
+		logger.Error("Failed to push config to Bifrost", "error", err)
+		// Update virtual cluster status to failed
+		_ = workflow.ExecuteActivity(ctx, "UpdateVirtualClusterStatus", UpdateVirtualClusterStatusInput{
+			VirtualClusterID: input.VirtualClusterID,
+			Status:           "failed",
+		}).Get(ctx, nil)
+		return &SingleVirtualClusterProvisionResult{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to push to Bifrost: %v", err),
+		}, nil
+	}
+
+	// Step 3: Update virtual cluster status to active
+	err = workflow.ExecuteActivity(ctx, "UpdateVirtualClusterStatus", UpdateVirtualClusterStatusInput{
+		VirtualClusterID: input.VirtualClusterID,
+		Status:           "active",
+	}).Get(ctx, nil)
+	if err != nil {
+		logger.Error("Failed to update virtual cluster status", "error", err)
+		// Don't fail the workflow - Bifrost has the config, status is just metadata
+	}
+
+	logger.Info("SingleVirtualClusterProvisionWorkflow completed successfully",
+		"virtualClusterId", input.VirtualClusterID)
+
+	return &SingleVirtualClusterProvisionResult{
+		Success: true,
+	}, nil
+}
