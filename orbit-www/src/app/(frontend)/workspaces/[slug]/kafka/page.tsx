@@ -37,10 +37,10 @@ export default async function KafkaPage({ params }: PageProps) {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
-              Kafka Topics
+              Virtual Clusters
             </h1>
             <p className="text-lg text-gray-600 dark:text-gray-400">
-              Manage Kafka topics for {workspace.name}
+              Manage Kafka virtual clusters for {workspace.name}
             </p>
           </div>
         </div>
