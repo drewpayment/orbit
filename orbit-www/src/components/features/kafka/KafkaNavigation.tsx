@@ -12,7 +12,7 @@ export function KafkaNavigation({ slug }: KafkaNavigationProps) {
   const pathname = usePathname()
 
   const navItems = [
-    { href: `/workspaces/${slug}/kafka`, label: 'Topics', exact: true },
+    { href: `/workspaces/${slug}/kafka`, label: 'Virtual Clusters', exact: true },
     { href: `/workspaces/${slug}/kafka/catalog`, label: 'Topic Catalog' },
     { href: `/workspaces/${slug}/kafka/shared/incoming`, label: 'Incoming Shares' },
     { href: `/workspaces/${slug}/kafka/shared/outgoing`, label: 'My Requests' },
@@ -20,9 +20,9 @@ export function KafkaNavigation({ slug }: KafkaNavigationProps) {
 
   const isActive = (href: string, exact?: boolean) => {
     if (exact) {
-      // For exact match, also check if we're on a topic detail page
-      const topicDetailPattern = new RegExp(`^/workspaces/${slug}/kafka/[^/]+$`)
-      if (topicDetailPattern.test(pathname) && !pathname.includes('/catalog') && !pathname.includes('/shared')) {
+      // For exact match, also check if we're on a cluster detail page
+      const clusterDetailPattern = new RegExp(`^/workspaces/${slug}/kafka/clusters/[^/]+`)
+      if (clusterDetailPattern.test(pathname)) {
         return href === `/workspaces/${slug}/kafka`
       }
       return pathname === href
