@@ -270,6 +270,7 @@ export function VirtualClustersList({ workspaceId, workspaceSlug }: VirtualClust
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
         workspaceId={workspaceId}
+        workspaceSlug={workspaceSlug}
         onSuccess={handleCreateSuccess}
       />
     </>
