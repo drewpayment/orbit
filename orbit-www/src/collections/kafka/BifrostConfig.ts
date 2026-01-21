@@ -72,6 +72,24 @@ export const BifrostConfig: CollectionConfig = {
       },
     },
     {
+      name: 'routingMode',
+      type: 'select',
+      required: true,
+      defaultValue: 'sasl',
+      label: 'Routing Mode',
+      options: [
+        { label: 'SASL (Single Gateway)', value: 'sasl' },
+        { label: 'SNI (Per-Cluster Hostname)', value: 'sni' },
+        { label: 'Both (SNI with SASL fallback)', value: 'both' },
+      ],
+      admin: {
+        description:
+          'SASL: Single gateway endpoint, routing based on credentials (default for dev). ' +
+          'SNI: Per-cluster hostnames, routing based on TLS SNI (requires TLS + DNS). ' +
+          'Both: Uses SNI when TLS available, falls back to SASL.',
+      },
+    },
+    {
       name: 'tlsEnabled',
       type: 'checkbox',
       defaultValue: true,

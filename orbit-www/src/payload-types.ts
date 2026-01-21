@@ -1517,6 +1517,10 @@ export interface BifrostConfig {
    */
   connectionMode: 'bifrost' | 'direct';
   /**
+   * SASL: Single gateway endpoint, routing based on credentials (default for dev). SNI: Per-cluster hostnames, routing based on TLS SNI (requires TLS + DNS). Both: Uses SNI when TLS available, falls back to SASL.
+   */
+  routingMode: 'sasl' | 'sni' | 'both';
+  /**
    * Whether client connections require TLS
    */
   tlsEnabled?: boolean | null;
@@ -1606,13 +1610,21 @@ export interface KafkaApplication {
 export interface KafkaVirtualCluster {
   id: string;
   /**
-   * Parent Kafka application
+   * User-defined name for this virtual cluster
    */
-  application: string | KafkaApplication;
+  name?: string | null;
+  /**
+   * Workspace that owns this virtual cluster (for direct ownership)
+   */
+  workspace?: (string | null) | Workspace;
+  /**
+   * Legacy: Parent Kafka application (deprecated for new clusters)
+   */
+  application?: (string | null) | KafkaApplication;
   /**
    * Target environment
    */
-  environment: 'dev' | 'stage' | 'prod';
+  environment: 'dev' | 'staging' | 'qa' | 'prod';
   /**
    * Backing physical Kafka cluster
    */
@@ -3607,6 +3619,7 @@ export interface BifrostConfigSelect<T extends boolean = true> {
   advertisedHost?: T;
   defaultAuthMethod?: T;
   connectionMode?: T;
+  routingMode?: T;
   tlsEnabled?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -3643,6 +3656,8 @@ export interface KafkaApplicationsSelect<T extends boolean = true> {
  * via the `definition` "kafka-virtual-clusters_select".
  */
 export interface KafkaVirtualClustersSelect<T extends boolean = true> {
+  name?: T;
+  workspace?: T;
   application?: T;
   environment?: T;
   physicalCluster?: T;

@@ -34,20 +34,9 @@ import {
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { CreateVirtualClusterDialog } from './CreateVirtualClusterDialog'
+import { listVirtualClusters, type VirtualClusterData } from '@/app/actions/kafka-virtual-clusters'
 
-// Define types inline until server actions are created
-export interface VirtualClusterData {
-  id: string
-  name: string
-  environment: string
-  status: 'provisioning' | 'active' | 'read_only' | 'deleting' | 'deleted'
-  advertisedHost: string
-  advertisedPort: number
-  topicPrefix: string
-  groupPrefix: string
-  topicCount?: number
-  createdAt: string
-}
+export type { VirtualClusterData }
 
 interface VirtualClustersListProps {
   workspaceId: string
@@ -102,14 +91,12 @@ export function VirtualClustersList({ workspaceId, workspaceSlug }: VirtualClust
   const loadClusters = useCallback(async () => {
     setLoading(true)
     try {
-      // TODO: Replace with actual server action when kafka-virtual-clusters is created
-      // const result = await listVirtualClusters({ workspaceId })
-      // if (result.success && result.clusters) {
-      //   setClusters(result.clusters)
-      // } else {
-      //   toast.error(result.error || 'Failed to load virtual clusters')
-      // }
-      setClusters([])
+      const result = await listVirtualClusters({ workspaceId })
+      if (result.success && result.clusters) {
+        setClusters(result.clusters)
+      } else {
+        toast.error(result.error || 'Failed to load virtual clusters')
+      }
     } catch {
       toast.error('Failed to load virtual clusters')
     } finally {

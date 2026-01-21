@@ -662,9 +662,14 @@ export async function getConnectionDetails(
     let topicName: string
 
     if (bifrostConfig.connectionMode === 'bifrost') {
-      // In bifrost mode, all traffic goes through a single gateway endpoint
-      // Bifrost routes to the correct virtual cluster based on credentials
-      bootstrapServers = bifrostConfig.advertisedHost
+      // In bifrost mode, determine bootstrap servers based on routing mode
+      if (bifrostConfig.routingMode === 'sni' && virtualCluster) {
+        // SNI mode: use the virtual cluster's advertised host (requires TLS + DNS)
+        bootstrapServers = `${virtualCluster.advertisedHost}:${virtualCluster.advertisedPort}`
+      } else {
+        // SASL mode (default): use single gateway endpoint, routing via credentials
+        bootstrapServers = bifrostConfig.advertisedHost
+      }
       topicName = topic.name // Short name - Bifrost rewrites
     } else {
       // Direct mode - use physical cluster details
@@ -812,9 +817,14 @@ export async function getOwnTopicConnectionDetails(
     let topicName: string
 
     if (bifrostConfig.connectionMode === 'bifrost') {
-      // In bifrost mode, all traffic goes through a single gateway endpoint
-      // Bifrost routes to the correct virtual cluster based on credentials
-      bootstrapServers = bifrostConfig.advertisedHost
+      // In bifrost mode, determine bootstrap servers based on routing mode
+      if (bifrostConfig.routingMode === 'sni' && virtualCluster) {
+        // SNI mode: use the virtual cluster's advertised host (requires TLS + DNS)
+        bootstrapServers = `${virtualCluster.advertisedHost}:${virtualCluster.advertisedPort}`
+      } else {
+        // SASL mode (default): use single gateway endpoint, routing via credentials
+        bootstrapServers = bifrostConfig.advertisedHost
+      }
       topicName = topic.name // Short name - Bifrost rewrites
     } else {
       // Direct mode - use physical cluster details

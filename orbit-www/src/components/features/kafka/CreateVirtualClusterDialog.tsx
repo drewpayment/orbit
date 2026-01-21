@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/select'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { createVirtualCluster } from '@/app/actions/kafka-virtual-clusters'
 
 interface CreateVirtualClusterDialogProps {
   open: boolean
@@ -79,22 +80,17 @@ export function CreateVirtualClusterDialog({
 
     setLoading(true)
     try {
-      // TODO: Call createVirtualCluster when server actions are created
-      // const result = await createVirtualCluster({
-      //   name: name.trim(),
-      //   environment,
-      //   workspaceId,
-      // })
-      // if (result.success) {
-      //   resetForm()
-      //   onSuccess()
-      // } else {
-      //   toast.error(result.error || 'Failed to create virtual cluster')
-      // }
-
-      // Temporary: just simulate success
-      resetForm()
-      onSuccess()
+      const result = await createVirtualCluster({
+        name: name.trim(),
+        environment,
+        workspaceId,
+      })
+      if (result.success) {
+        resetForm()
+        onSuccess()
+      } else {
+        toast.error(result.error || 'Failed to create virtual cluster')
+      }
     } catch {
       toast.error('Failed to create virtual cluster')
     } finally {

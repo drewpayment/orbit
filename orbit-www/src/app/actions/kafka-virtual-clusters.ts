@@ -4,12 +4,11 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
-import { getTemporalClient } from '@/lib/temporal/client'
 import type { KafkaVirtualCluster, KafkaApplication, Workspace } from '@/payload-types'
+import { getTemporalClient } from '@/lib/temporal/client'
 
 // Environment type matching the collection options
-// Note: Task 6 will expand this to include 'staging' and 'qa'
-type VirtualClusterEnvironment = 'dev' | 'stage' | 'prod'
+type VirtualClusterEnvironment = 'dev' | 'staging' | 'qa' | 'prod'
 
 export interface VirtualClusterData {
   id: string
@@ -250,11 +249,26 @@ export async function createVirtualCluster(
     }
 
     // Find the physical cluster via environment mapping
+    // Support both short form (dev, staging) and display labels (Development, Staging)
+    const envLabels: Record<string, string[]> = {
+      dev: ['dev', 'development', 'Development'],
+      staging: ['staging', 'stage', 'Staging'],
+      qa: ['qa', 'QA'],
+      prod: ['prod', 'production', 'Production'],
+    }
+    const possibleEnvValues = envLabels[input.environment.toLowerCase()] || [input.environment]
+
     const mapping = await payload.find({
       collection: 'kafka-environment-mappings',
       where: {
-        environment: { equals: input.environment },
-        isDefault: { equals: true },
+        and: [
+          {
+            or: possibleEnvValues.map((env) => ({
+              environment: { equals: env },
+            })),
+          },
+          { isDefault: { equals: true } },
+        ],
       },
       limit: 1,
       overrideAccess: true,
@@ -280,15 +294,13 @@ export async function createVirtualCluster(
     const prefix = `${workspace.slug}-${input.name}-`
     const advertisedHost = `${input.name}.${input.environment}.kafka.orbit.io`
 
-    // Map environment to the collection's current options
-    // The collection currently supports: dev, stage, prod
-    // Task 6 will expand to include: staging, qa
+    // Map environment to the collection's options
     const envMapping: Record<string, VirtualClusterEnvironment> = {
       dev: 'dev',
       development: 'dev',
-      stage: 'stage',
-      staging: 'stage',
-      qa: 'dev', // Map QA to dev for now until Task 6 adds it
+      staging: 'staging',
+      stage: 'staging',
+      qa: 'qa',
       prod: 'prod',
       production: 'prod',
     }
@@ -338,24 +350,32 @@ export async function createVirtualCluster(
       collection: 'kafka-virtual-clusters',
       data: {
         application: applicationId,
+        name: input.name,
+        workspace: input.workspaceId,
         environment: mappedEnv,
         physicalCluster: physicalClusterId,
         topicPrefix: prefix,
         groupPrefix: prefix,
         advertisedHost,
         advertisedPort: 9092,
+        // Start as provisioning, workflow will update to active after Bifrost sync
         status: 'provisioning',
       },
       overrideAccess: true,
     })
 
-    // Trigger Temporal workflow to provision the cluster in Bifrost
-    await triggerVirtualClusterProvisionWorkflow({
-      clusterId: cluster.id,
-      clusterName: input.name,
-      workspaceId: input.workspaceId,
+    // Trigger workflow to sync virtual cluster to Bifrost
+    await triggerSingleVirtualClusterProvisionWorkflow({
+      virtualClusterId: cluster.id,
+      applicationId,
+      applicationSlug: defaultApp.docs.length > 0 ? defaultApp.docs[0].slug : `${workspace.slug}-default`,
       workspaceSlug: workspace.slug,
-      environment: input.environment,
+      environment: mappedEnv,
+      topicPrefix: prefix,
+      groupPrefix: prefix,
+      advertisedHost,
+      advertisedPort: 9092,
+      physicalClusterId,
     })
 
     return { success: true, clusterId: cluster.id }
@@ -476,16 +496,21 @@ export async function getVirtualCluster(
 }
 
 /**
- * Triggers a workflow to provision the virtual cluster in Bifrost
+ * Triggers the SingleVirtualClusterProvisionWorkflow to sync a virtual cluster to Bifrost.
  */
-async function triggerVirtualClusterProvisionWorkflow(input: {
-  clusterId: string
-  clusterName: string
-  workspaceId: string
+async function triggerSingleVirtualClusterProvisionWorkflow(input: {
+  virtualClusterId: string
+  applicationId: string
+  applicationSlug: string
   workspaceSlug: string
   environment: string
+  topicPrefix: string
+  groupPrefix: string
+  advertisedHost: string
+  advertisedPort: number
+  physicalClusterId: string
 }): Promise<string | null> {
-  const workflowId = `virtual-cluster-provision-${input.clusterId}`
+  const workflowId = `virtual-cluster-provision-${input.virtualClusterId}`
 
   try {
     const client = await getTemporalClient()
@@ -495,17 +520,22 @@ async function triggerVirtualClusterProvisionWorkflow(input: {
       workflowId,
       args: [
         {
-          ClusterID: input.clusterId,
-          ClusterName: input.clusterName,
-          WorkspaceID: input.workspaceId,
+          VirtualClusterID: input.virtualClusterId,
+          ApplicationID: input.applicationId,
+          ApplicationSlug: input.applicationSlug,
           WorkspaceSlug: input.workspaceSlug,
           Environment: input.environment,
+          TopicPrefix: input.topicPrefix,
+          GroupPrefix: input.groupPrefix,
+          AdvertisedHost: input.advertisedHost,
+          AdvertisedPort: input.advertisedPort,
+          PhysicalClusterID: input.physicalClusterId,
         },
       ],
     })
 
     console.log(
-      `[Kafka] Started SingleVirtualClusterProvisionWorkflow: ${handle.workflowId} for cluster ${input.clusterName}`
+      `[Kafka] Started SingleVirtualClusterProvisionWorkflow: ${handle.workflowId} for cluster ${input.virtualClusterId}`
     )
 
     return handle.workflowId
