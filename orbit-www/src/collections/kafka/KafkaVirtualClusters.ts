@@ -15,7 +15,7 @@ export const KafkaVirtualClusters: CollectionConfig = {
       // Admins can see all
       if (user.collection === 'users') return true
 
-      // Regular users see only virtual clusters for their workspace applications
+      // Regular users see only virtual clusters for their workspaces
       const memberships = await payload.find({
         collection: 'workspace-members',
         where: {
@@ -30,7 +30,7 @@ export const KafkaVirtualClusters: CollectionConfig = {
         String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
       )
 
-      // Find applications in user's workspaces
+      // Find applications in user's workspaces (for backward compat)
       const apps = await payload.find({
         collection: 'kafka-applications',
         where: {
@@ -42,8 +42,14 @@ export const KafkaVirtualClusters: CollectionConfig = {
 
       const appIds = apps.docs.map((a) => a.id)
 
+      // Return clusters that either:
+      // 1. Have direct workspace ownership, OR
+      // 2. Belong to an application in user's workspaces (legacy)
       return {
-        application: { in: appIds },
+        or: [
+          { workspace: { in: workspaceIds } },
+          { application: { in: appIds } },
+        ],
       } as Where
     },
     create: ({ req: { user } }) => {
@@ -59,13 +65,42 @@ export const KafkaVirtualClusters: CollectionConfig = {
   },
   fields: [
     {
+      name: 'name',
+      type: 'text',
+      required: false, // Optional for backward compatibility with existing records
+      index: true,
+      admin: {
+        description: 'User-defined name for this virtual cluster',
+      },
+      validate: (value: string | undefined | null) => {
+        if (!value) return true // Allow empty for backward compat
+        if (!/^[a-z][a-z0-9-]*$/.test(value)) {
+          return 'Name must start with a letter and contain only lowercase letters, numbers, and hyphens'
+        }
+        if (value.length > 63) {
+          return 'Name must be 63 characters or less'
+        }
+        return true
+      },
+    },
+    {
+      name: 'workspace',
+      type: 'relationship',
+      relationTo: 'workspaces',
+      required: false, // Optional for backward compatibility
+      index: true,
+      admin: {
+        description: 'Workspace that owns this virtual cluster (for direct ownership)',
+      },
+    },
+    {
       name: 'application',
       type: 'relationship',
       relationTo: 'kafka-applications',
-      required: true,
+      required: false, // Changed from true - now optional for backward compatibility
       index: true,
       admin: {
-        description: 'Parent Kafka application',
+        description: 'Legacy: Parent Kafka application (deprecated for new clusters)',
       },
     },
     {
@@ -74,7 +109,8 @@ export const KafkaVirtualClusters: CollectionConfig = {
       required: true,
       options: [
         { label: 'Development', value: 'dev' },
-        { label: 'Staging', value: 'stage' },
+        { label: 'Staging', value: 'staging' },
+        { label: 'QA', value: 'qa' },
         { label: 'Production', value: 'prod' },
       ],
       index: true,
