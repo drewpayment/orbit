@@ -698,6 +698,11 @@ func GetResponseModifierWithConfig(apiKey int16, apiVersion int16, cfg ResponseM
 			return nil, nil
 		}
 		return newResponseModifier(apiKey, apiVersion, cfg, listOffsetsResponseSchemaVersions, modifyListOffsetsResponse)
+	case apiKeyFetch:
+		if cfg.TopicUnprefixer == nil {
+			return nil, nil
+		}
+		return newResponseModifier(apiKey, apiVersion, cfg, fetchResponseSchemaVersions, modifyFetchResponse)
 	default:
 		return nil, nil
 	}
@@ -1019,6 +1024,279 @@ func modifyListOffsetsResponse(decodedStruct *Struct, cfg ResponseModifierConfig
 			unprefixedName := cfg.TopicUnprefixer(topicName)
 			if unprefixedName != topicName {
 				if err := setTopicNameInStruct(topic, unprefixedName); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// Fetch response schemas
+var fetchResponseSchemaVersions = createFetchResponseSchemaVersions()
+
+func createFetchResponseSchemaVersions() []Schema {
+	// Record batch is opaque bytes - we don't need to parse it for topic rewriting
+	// The topic name is in the response header, not in record batches
+
+	// Aborted transaction for v4+
+	abortedTxnV4 := NewSchema("aborted_txn_v4",
+		&Mfield{Name: "producer_id", Ty: TypeInt64},
+		&Mfield{Name: "first_offset", Ty: TypeInt64},
+	)
+
+	// Partition response v0
+	partitionV0 := NewSchema("fetch_partition_v0",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "high_watermark", Ty: TypeInt64},
+		&Mfield{Name: "records", Ty: TypeBytes},
+	)
+
+	// Topic response v0
+	topicV0 := NewSchema("fetch_topic_v0",
+		&Mfield{Name: "topic", Ty: TypeStr},
+		&Array{Name: "partitions", Ty: partitionV0},
+	)
+
+	// Fetch v0
+	fetchV0 := NewSchema("fetch_response_v0",
+		&Array{Name: "responses", Ty: topicV0},
+	)
+
+	// Fetch v1 adds throttle_time_ms
+	fetchV1 := NewSchema("fetch_response_v1",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&Array{Name: "responses", Ty: topicV0},
+	)
+
+	// Partition response v4 adds last_stable_offset, aborted_transactions
+	partitionV4 := NewSchema("fetch_partition_v4",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "high_watermark", Ty: TypeInt64},
+		&Mfield{Name: "last_stable_offset", Ty: TypeInt64},
+		&Array{Name: "aborted_transactions", Ty: abortedTxnV4},
+		&Mfield{Name: "records", Ty: TypeBytes},
+	)
+
+	topicV4 := NewSchema("fetch_topic_v4",
+		&Mfield{Name: "topic", Ty: TypeStr},
+		&Array{Name: "partitions", Ty: partitionV4},
+	)
+
+	fetchV4 := NewSchema("fetch_response_v4",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&Array{Name: "responses", Ty: topicV4},
+	)
+
+	// Partition response v5 adds log_start_offset
+	partitionV5 := NewSchema("fetch_partition_v5",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "high_watermark", Ty: TypeInt64},
+		&Mfield{Name: "last_stable_offset", Ty: TypeInt64},
+		&Mfield{Name: "log_start_offset", Ty: TypeInt64},
+		&Array{Name: "aborted_transactions", Ty: abortedTxnV4},
+		&Mfield{Name: "records", Ty: TypeBytes},
+	)
+
+	topicV5 := NewSchema("fetch_topic_v5",
+		&Mfield{Name: "topic", Ty: TypeStr},
+		&Array{Name: "partitions", Ty: partitionV5},
+	)
+
+	fetchV5 := NewSchema("fetch_response_v5",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&Array{Name: "responses", Ty: topicV5},
+	)
+
+	// Fetch v7 adds error_code and session_id at top level
+	fetchV7 := NewSchema("fetch_response_v7",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "session_id", Ty: TypeInt32},
+		&Array{Name: "responses", Ty: topicV5},
+	)
+
+	// Partition response v11 adds preferred_read_replica
+	partitionV11 := NewSchema("fetch_partition_v11",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "high_watermark", Ty: TypeInt64},
+		&Mfield{Name: "last_stable_offset", Ty: TypeInt64},
+		&Mfield{Name: "log_start_offset", Ty: TypeInt64},
+		&Array{Name: "aborted_transactions", Ty: abortedTxnV4},
+		&Mfield{Name: "preferred_read_replica", Ty: TypeInt32},
+		&Mfield{Name: "records", Ty: TypeBytes},
+	)
+
+	topicV11 := NewSchema("fetch_topic_v11",
+		&Mfield{Name: "topic", Ty: TypeStr},
+		&Array{Name: "partitions", Ty: partitionV11},
+	)
+
+	fetchV11 := NewSchema("fetch_response_v11",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "session_id", Ty: TypeInt32},
+		&Array{Name: "responses", Ty: topicV11},
+	)
+
+	// v12+ uses compact arrays (flexible version)
+	abortedTxnV12 := NewSchema("aborted_txn_v12",
+		&Mfield{Name: "producer_id", Ty: TypeInt64},
+		&Mfield{Name: "first_offset", Ty: TypeInt64},
+		&SchemaTaggedFields{Name: "aborted_txn_tagged_fields"},
+	)
+
+	partitionV12 := NewSchema("fetch_partition_v12",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "high_watermark", Ty: TypeInt64},
+		&Mfield{Name: "last_stable_offset", Ty: TypeInt64},
+		&Mfield{Name: "log_start_offset", Ty: TypeInt64},
+		&CompactArray{Name: "aborted_transactions", Ty: abortedTxnV12},
+		&Mfield{Name: "preferred_read_replica", Ty: TypeInt32},
+		&Mfield{Name: "records", Ty: TypeCompactBytes},
+		&SchemaTaggedFields{Name: "partition_tagged_fields"},
+	)
+
+	topicV12 := NewSchema("fetch_topic_v12",
+		&Mfield{Name: "topic", Ty: TypeCompactStr},
+		&CompactArray{Name: "partitions", Ty: partitionV12},
+		&SchemaTaggedFields{Name: "topic_tagged_fields"},
+	)
+
+	fetchV12 := NewSchema("fetch_response_v12",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "session_id", Ty: TypeInt32},
+		&CompactArray{Name: "responses", Ty: topicV12},
+		&SchemaTaggedFields{Name: "response_tagged_fields"},
+	)
+
+	// v13+ adds topic_id
+	topicV13 := NewSchema("fetch_topic_v13",
+		&Mfield{Name: "topic_id", Ty: TypeUuid},
+		&CompactArray{Name: "partitions", Ty: partitionV12},
+		&SchemaTaggedFields{Name: "topic_tagged_fields"},
+	)
+
+	fetchV13 := NewSchema("fetch_response_v13",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "session_id", Ty: TypeInt32},
+		&CompactArray{Name: "responses", Ty: topicV13},
+		&SchemaTaggedFields{Name: "response_tagged_fields"},
+	)
+
+	// v16 adds diverging_epoch and current_leader to partition
+	// and Node struct for current_leader
+	currentLeaderV16 := NewSchema("current_leader_v16",
+		&Mfield{Name: "leader_id", Ty: TypeInt32},
+		&Mfield{Name: "leader_epoch", Ty: TypeInt32},
+		&SchemaTaggedFields{Name: "leader_tagged_fields"},
+	)
+
+	// Snapshot info for v16
+	snapshotV16 := NewSchema("snapshot_v16",
+		&Mfield{Name: "end_offset", Ty: TypeInt64},
+		&Mfield{Name: "epoch", Ty: TypeInt32},
+		&SchemaTaggedFields{Name: "snapshot_tagged_fields"},
+	)
+
+	// Epoch info for diverging epoch
+	epochV16 := NewSchema("epoch_v16",
+		&Mfield{Name: "epoch", Ty: TypeInt32},
+		&Mfield{Name: "end_offset", Ty: TypeInt64},
+		&SchemaTaggedFields{Name: "epoch_tagged_fields"},
+	)
+
+	partitionV16 := NewSchema("fetch_partition_v16",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "high_watermark", Ty: TypeInt64},
+		&Mfield{Name: "last_stable_offset", Ty: TypeInt64},
+		&Mfield{Name: "log_start_offset", Ty: TypeInt64},
+		&Mfield{Name: "diverging_epoch", Ty: epochV16},
+		&Mfield{Name: "current_leader", Ty: currentLeaderV16},
+		&Mfield{Name: "snapshot_id", Ty: snapshotV16},
+		&CompactArray{Name: "aborted_transactions", Ty: abortedTxnV12},
+		&Mfield{Name: "preferred_read_replica", Ty: TypeInt32},
+		&Mfield{Name: "records", Ty: TypeCompactBytes},
+		&SchemaTaggedFields{Name: "partition_tagged_fields"},
+	)
+
+	topicV16 := NewSchema("fetch_topic_v16",
+		&Mfield{Name: "topic_id", Ty: TypeUuid},
+		&CompactArray{Name: "partitions", Ty: partitionV16},
+		&SchemaTaggedFields{Name: "topic_tagged_fields"},
+	)
+
+	fetchV16 := NewSchema("fetch_response_v16",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "session_id", Ty: TypeInt32},
+		&CompactArray{Name: "responses", Ty: topicV16},
+		&SchemaTaggedFields{Name: "response_tagged_fields"},
+	)
+
+	return []Schema{
+		fetchV0,  // v0
+		fetchV1,  // v1
+		fetchV1,  // v2
+		fetchV1,  // v3
+		fetchV4,  // v4
+		fetchV5,  // v5
+		fetchV5,  // v6
+		fetchV7,  // v7
+		fetchV7,  // v8
+		fetchV7,  // v9
+		fetchV7,  // v10
+		fetchV11, // v11
+		fetchV12, // v12
+		fetchV13, // v13
+		fetchV13, // v14
+		fetchV13, // v15
+		fetchV16, // v16
+	}
+}
+
+// modifyFetchResponse unprefixes topic names in Fetch responses.
+func modifyFetchResponse(decodedStruct *Struct, cfg ResponseModifierConfig) error {
+	if cfg.TopicUnprefixer == nil {
+		return nil
+	}
+
+	responses := decodedStruct.Get("responses")
+	if responses == nil {
+		return nil
+	}
+
+	responsesArray, ok := responses.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	for _, topicElement := range responsesArray {
+		topic, ok := topicElement.(*Struct)
+		if !ok {
+			continue
+		}
+		// v0-v12 uses "topic" field, v13+ uses topic_id (UUID) instead
+		// For v13+, the topic name is not present in the response
+		topicName := topic.Get("topic")
+		if topicName == nil {
+			// v13+ uses topic_id instead - no topic name to rewrite
+			continue
+		}
+
+		if name, ok := topicName.(string); ok && name != "" {
+			unprefixedName := cfg.TopicUnprefixer(name)
+			if unprefixedName != name {
+				if err := topic.Replace("topic", unprefixedName); err != nil {
 					return err
 				}
 			}

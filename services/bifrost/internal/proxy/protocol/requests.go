@@ -108,8 +108,14 @@ func newFetchRequestModifier(apiVersion int16, cfg RequestModifierConfig) (Reque
 	if cfg.TopicPrefixer == nil {
 		return nil, nil
 	}
-	// TODO: Implement fetch request topic rewriting
-	return nil, nil
+	schema, err := getFetchRequestSchema(apiVersion)
+	if err != nil {
+		return nil, err
+	}
+	return &fetchRequestModifier{
+		schema:        schema,
+		topicPrefixer: cfg.TopicPrefixer,
+	}, nil
 }
 
 func newListOffsetsRequestModifier(apiVersion int16, cfg RequestModifierConfig) (RequestModifier, error) {
@@ -725,4 +731,277 @@ func getListOffsetsRequestSchema(apiVersion int16) (Schema, error) {
 		return nil, fmt.Errorf("unsupported list offsets request version %d", apiVersion)
 	}
 	return listOffsetsRequestSchemas[apiVersion], nil
+}
+
+// fetchRequestModifier rewrites topic names in Fetch requests
+type fetchRequestModifier struct {
+	schema        Schema
+	topicPrefixer TopicPrefixer
+}
+
+func (m *fetchRequestModifier) Apply(requestBytes []byte) ([]byte, error) {
+	decoded, err := DecodeSchema(requestBytes, m.schema)
+	if err != nil {
+		return nil, fmt.Errorf("decode fetch request: %w", err)
+	}
+
+	if err := modifyFetchRequest(decoded, m.topicPrefixer); err != nil {
+		return nil, fmt.Errorf("modify fetch request: %w", err)
+	}
+
+	return EncodeSchema(decoded, m.schema)
+}
+
+func modifyFetchRequest(decoded *Struct, prefixer TopicPrefixer) error {
+	topicsField := decoded.Get("topics")
+	if topicsField == nil {
+		logrus.Debug("modifyFetchRequest: topics field is nil")
+		return nil
+	}
+
+	topicsArray, ok := topicsField.([]interface{})
+	if !ok {
+		logrus.Debugf("modifyFetchRequest: topics is not an array (%T)", topicsField)
+		return nil
+	}
+
+	for _, topicElement := range topicsArray {
+		topic, ok := topicElement.(*Struct)
+		if !ok {
+			continue
+		}
+		// Try "topic" field (v0-v12) then "topic_id" for UUID-based (v13+)
+		nameField := topic.Get("topic")
+		if nameField == nil {
+			// For v13+, topic name might be empty if using topic_id
+			continue
+		}
+		var topicName string
+		switch n := nameField.(type) {
+		case string:
+			topicName = n
+		case *string:
+			if n != nil {
+				topicName = *n
+			}
+		}
+		if topicName != "" {
+			prefixedName := prefixer(topicName)
+			logrus.Debugf("modifyFetchRequest: prefixing topic %s -> %s", topicName, prefixedName)
+			if err := topic.Replace("topic", prefixedName); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// Fetch request schemas
+var fetchRequestSchemas []Schema
+
+func init() {
+	fetchRequestSchemas = createFetchRequestSchemas()
+}
+
+func createFetchRequestSchemas() []Schema {
+	// Partition schema for v0-v4
+	partitionV0 := NewSchema("fetch_partition_v0",
+		&Mfield{Name: "partition", Ty: TypeInt32},
+		&Mfield{Name: "fetch_offset", Ty: TypeInt64},
+		&Mfield{Name: "partition_max_bytes", Ty: TypeInt32},
+	)
+
+	// Topic schema for v0-v4
+	topicV0 := NewSchema("fetch_topic_v0",
+		&Mfield{Name: "topic", Ty: TypeStr},
+		&Array{Name: "partitions", Ty: partitionV0},
+	)
+
+	// Fetch v0
+	fetchV0 := NewSchema("fetch_request_v0",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "replica_id", Ty: TypeInt32},
+		&Mfield{Name: "max_wait_ms", Ty: TypeInt32},
+		&Mfield{Name: "min_bytes", Ty: TypeInt32},
+		&Array{Name: "topics", Ty: topicV0},
+	)
+
+	// Fetch v3 adds max_bytes
+	fetchV3 := NewSchema("fetch_request_v3",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "replica_id", Ty: TypeInt32},
+		&Mfield{Name: "max_wait_ms", Ty: TypeInt32},
+		&Mfield{Name: "min_bytes", Ty: TypeInt32},
+		&Mfield{Name: "max_bytes", Ty: TypeInt32},
+		&Array{Name: "topics", Ty: topicV0},
+	)
+
+	// Fetch v4 adds isolation_level
+	fetchV4 := NewSchema("fetch_request_v4",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "replica_id", Ty: TypeInt32},
+		&Mfield{Name: "max_wait_ms", Ty: TypeInt32},
+		&Mfield{Name: "min_bytes", Ty: TypeInt32},
+		&Mfield{Name: "max_bytes", Ty: TypeInt32},
+		&Mfield{Name: "isolation_level", Ty: TypeInt8},
+		&Array{Name: "topics", Ty: topicV0},
+	)
+
+	// Partition schema for v5+ adds log_start_offset in response, but request adds current_leader_epoch
+	partitionV5 := NewSchema("fetch_partition_v5",
+		&Mfield{Name: "partition", Ty: TypeInt32},
+		&Mfield{Name: "fetch_offset", Ty: TypeInt64},
+		&Mfield{Name: "log_start_offset", Ty: TypeInt64},
+		&Mfield{Name: "partition_max_bytes", Ty: TypeInt32},
+	)
+
+	topicV5 := NewSchema("fetch_topic_v5",
+		&Mfield{Name: "topic", Ty: TypeStr},
+		&Array{Name: "partitions", Ty: partitionV5},
+	)
+
+	fetchV5 := NewSchema("fetch_request_v5",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "replica_id", Ty: TypeInt32},
+		&Mfield{Name: "max_wait_ms", Ty: TypeInt32},
+		&Mfield{Name: "min_bytes", Ty: TypeInt32},
+		&Mfield{Name: "max_bytes", Ty: TypeInt32},
+		&Mfield{Name: "isolation_level", Ty: TypeInt8},
+		&Array{Name: "topics", Ty: topicV5},
+	)
+
+	// Fetch v7 adds session_id, session_epoch, forgotten_topics_data
+	forgottenTopicV7 := NewSchema("forgotten_topic_v7",
+		&Mfield{Name: "topic", Ty: TypeStr},
+		&Array{Name: "partitions", Ty: TypeInt32},
+	)
+
+	fetchV7 := NewSchema("fetch_request_v7",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "replica_id", Ty: TypeInt32},
+		&Mfield{Name: "max_wait_ms", Ty: TypeInt32},
+		&Mfield{Name: "min_bytes", Ty: TypeInt32},
+		&Mfield{Name: "max_bytes", Ty: TypeInt32},
+		&Mfield{Name: "isolation_level", Ty: TypeInt8},
+		&Mfield{Name: "session_id", Ty: TypeInt32},
+		&Mfield{Name: "session_epoch", Ty: TypeInt32},
+		&Array{Name: "topics", Ty: topicV5},
+		&Array{Name: "forgotten_topics_data", Ty: forgottenTopicV7},
+	)
+
+	// Partition schema for v9+ adds current_leader_epoch
+	partitionV9 := NewSchema("fetch_partition_v9",
+		&Mfield{Name: "partition", Ty: TypeInt32},
+		&Mfield{Name: "current_leader_epoch", Ty: TypeInt32},
+		&Mfield{Name: "fetch_offset", Ty: TypeInt64},
+		&Mfield{Name: "log_start_offset", Ty: TypeInt64},
+		&Mfield{Name: "partition_max_bytes", Ty: TypeInt32},
+	)
+
+	topicV9 := NewSchema("fetch_topic_v9",
+		&Mfield{Name: "topic", Ty: TypeStr},
+		&Array{Name: "partitions", Ty: partitionV9},
+	)
+
+	fetchV9 := NewSchema("fetch_request_v9",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "replica_id", Ty: TypeInt32},
+		&Mfield{Name: "max_wait_ms", Ty: TypeInt32},
+		&Mfield{Name: "min_bytes", Ty: TypeInt32},
+		&Mfield{Name: "max_bytes", Ty: TypeInt32},
+		&Mfield{Name: "isolation_level", Ty: TypeInt8},
+		&Mfield{Name: "session_id", Ty: TypeInt32},
+		&Mfield{Name: "session_epoch", Ty: TypeInt32},
+		&Array{Name: "topics", Ty: topicV9},
+		&Array{Name: "forgotten_topics_data", Ty: forgottenTopicV7},
+	)
+
+	// Fetch v11 adds rack_id
+	fetchV11 := NewSchema("fetch_request_v11",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "replica_id", Ty: TypeInt32},
+		&Mfield{Name: "max_wait_ms", Ty: TypeInt32},
+		&Mfield{Name: "min_bytes", Ty: TypeInt32},
+		&Mfield{Name: "max_bytes", Ty: TypeInt32},
+		&Mfield{Name: "isolation_level", Ty: TypeInt8},
+		&Mfield{Name: "session_id", Ty: TypeInt32},
+		&Mfield{Name: "session_epoch", Ty: TypeInt32},
+		&Array{Name: "topics", Ty: topicV9},
+		&Array{Name: "forgotten_topics_data", Ty: forgottenTopicV7},
+		&Mfield{Name: "rack_id", Ty: TypeStr},
+	)
+
+	// Fetch v12+ uses compact arrays (flexible version)
+	partitionV12 := NewSchema("fetch_partition_v12",
+		&Mfield{Name: "partition", Ty: TypeInt32},
+		&Mfield{Name: "current_leader_epoch", Ty: TypeInt32},
+		&Mfield{Name: "fetch_offset", Ty: TypeInt64},
+		&Mfield{Name: "last_fetched_epoch", Ty: TypeInt32},
+		&Mfield{Name: "log_start_offset", Ty: TypeInt64},
+		&Mfield{Name: "partition_max_bytes", Ty: TypeInt32},
+		&SchemaTaggedFields{Name: "partition_tagged_fields"},
+	)
+
+	topicV12 := NewSchema("fetch_topic_v12",
+		&Mfield{Name: "topic", Ty: TypeCompactStr},
+		&CompactArray{Name: "partitions", Ty: partitionV12},
+		&SchemaTaggedFields{Name: "topic_tagged_fields"},
+	)
+
+	forgottenTopicV12 := NewSchema("forgotten_topic_v12",
+		&Mfield{Name: "topic", Ty: TypeCompactStr},
+		&CompactArray{Name: "partitions", Ty: TypeInt32},
+		&SchemaTaggedFields{Name: "forgotten_topic_tagged_fields"},
+	)
+
+	fetchV12 := NewSchema("fetch_request_v12",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&SchemaTaggedFields{Name: "header_tagged_fields"},
+		&Mfield{Name: "replica_id", Ty: TypeInt32},
+		&Mfield{Name: "max_wait_ms", Ty: TypeInt32},
+		&Mfield{Name: "min_bytes", Ty: TypeInt32},
+		&Mfield{Name: "max_bytes", Ty: TypeInt32},
+		&Mfield{Name: "isolation_level", Ty: TypeInt8},
+		&Mfield{Name: "session_id", Ty: TypeInt32},
+		&Mfield{Name: "session_epoch", Ty: TypeInt32},
+		&CompactArray{Name: "topics", Ty: topicV12},
+		&CompactArray{Name: "forgotten_topics_data", Ty: forgottenTopicV12},
+		&Mfield{Name: "rack_id", Ty: TypeCompactStr},
+		&SchemaTaggedFields{Name: "request_tagged_fields"},
+	)
+
+	return []Schema{
+		fetchV0,  // v0
+		fetchV0,  // v1
+		fetchV0,  // v2
+		fetchV3,  // v3
+		fetchV4,  // v4
+		fetchV5,  // v5
+		fetchV5,  // v6
+		fetchV7,  // v7
+		fetchV7,  // v8
+		fetchV9,  // v9
+		fetchV9,  // v10
+		fetchV11, // v11
+		fetchV12, // v12
+		fetchV12, // v13 (uses topic_id but we still need topic field)
+		fetchV12, // v14
+		fetchV12, // v15
+		fetchV12, // v16
+	}
+}
+
+func getFetchRequestSchema(apiVersion int16) (Schema, error) {
+	if apiVersion < 0 || int(apiVersion) >= len(fetchRequestSchemas) {
+		return nil, fmt.Errorf("unsupported fetch request version %d", apiVersion)
+	}
+	return fetchRequestSchemas[apiVersion], nil
 }
