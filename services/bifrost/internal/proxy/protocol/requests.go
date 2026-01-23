@@ -174,8 +174,14 @@ func newJoinGroupRequestModifier(apiVersion int16, cfg RequestModifierConfig) (R
 	if cfg.GroupPrefixer == nil {
 		return nil, nil
 	}
-	// TODO: Implement join group request rewriting
-	return nil, nil
+	schema, err := getJoinGroupRequestSchema(apiVersion)
+	if err != nil {
+		return nil, err
+	}
+	return &joinGroupRequestModifier{
+		schema:        schema,
+		groupPrefixer: cfg.GroupPrefixer,
+	}, nil
 }
 
 func newHeartbeatRequestModifier(apiVersion int16, cfg RequestModifierConfig) (RequestModifier, error) {
@@ -224,6 +230,143 @@ func newDeleteTopicsRequestModifier(apiVersion int16, cfg RequestModifierConfig)
 	}
 	// TODO: Implement delete topics request rewriting
 	return nil, nil
+}
+
+// joinGroupRequestModifier prefixes group_id in JoinGroup requests
+type joinGroupRequestModifier struct {
+	schema        Schema
+	groupPrefixer GroupPrefixer
+}
+
+func (m *joinGroupRequestModifier) Apply(requestBytes []byte) ([]byte, error) {
+	decoded, err := DecodeSchema(requestBytes, m.schema)
+	if err != nil {
+		return nil, fmt.Errorf("decode join group request: %w", err)
+	}
+
+	if err := modifyJoinGroupRequest(decoded, m.groupPrefixer); err != nil {
+		return nil, fmt.Errorf("modify join group request: %w", err)
+	}
+
+	return EncodeSchema(decoded, m.schema)
+}
+
+func modifyJoinGroupRequest(decoded *Struct, prefixer GroupPrefixer) error {
+	groupId := decoded.Get("group_id")
+	if groupId == nil {
+		return nil
+	}
+	if gid, ok := groupId.(string); ok && gid != "" {
+		return decoded.Replace("group_id", prefixer(gid))
+	}
+	return nil
+}
+
+var joinGroupRequestSchemas []Schema
+
+func init() {
+	joinGroupRequestSchemas = createJoinGroupRequestSchemas()
+}
+
+func createJoinGroupRequestSchemas() []Schema {
+	// Protocol metadata is opaque bytes
+	groupProtocolV0 := NewSchema("group_protocol_v0",
+		&Mfield{Name: "name", Ty: TypeStr},
+		&Mfield{Name: "metadata", Ty: TypeBytes},
+	)
+
+	// v0: non-flexible
+	joinGroupV0 := NewSchema("join_group_request_v0",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "group_id", Ty: TypeStr},
+		&Mfield{Name: "session_timeout_ms", Ty: TypeInt32},
+		&Mfield{Name: "member_id", Ty: TypeStr},
+		&Mfield{Name: "protocol_type", Ty: TypeStr},
+		&Array{Name: "protocols", Ty: groupProtocolV0},
+	)
+
+	// v1+ adds rebalance_timeout_ms
+	joinGroupV1 := NewSchema("join_group_request_v1",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "group_id", Ty: TypeStr},
+		&Mfield{Name: "session_timeout_ms", Ty: TypeInt32},
+		&Mfield{Name: "rebalance_timeout_ms", Ty: TypeInt32},
+		&Mfield{Name: "member_id", Ty: TypeStr},
+		&Mfield{Name: "protocol_type", Ty: TypeStr},
+		&Array{Name: "protocols", Ty: groupProtocolV0},
+	)
+
+	// v5 adds group_instance_id
+	joinGroupV5 := NewSchema("join_group_request_v5",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "group_id", Ty: TypeStr},
+		&Mfield{Name: "session_timeout_ms", Ty: TypeInt32},
+		&Mfield{Name: "rebalance_timeout_ms", Ty: TypeInt32},
+		&Mfield{Name: "member_id", Ty: TypeStr},
+		&Mfield{Name: "group_instance_id", Ty: TypeNullableStr},
+		&Mfield{Name: "protocol_type", Ty: TypeStr},
+		&Array{Name: "protocols", Ty: groupProtocolV0},
+	)
+
+	// v6+ flexible
+	groupProtocolV6 := NewSchema("group_protocol_v6",
+		&Mfield{Name: "name", Ty: TypeCompactStr},
+		&Mfield{Name: "metadata", Ty: TypeCompactBytes},
+		&SchemaTaggedFields{Name: "protocol_tagged_fields"},
+	)
+
+	joinGroupV6 := NewSchema("join_group_request_v6",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&SchemaTaggedFields{Name: "header_tagged_fields"},
+		&Mfield{Name: "group_id", Ty: TypeCompactStr},
+		&Mfield{Name: "session_timeout_ms", Ty: TypeInt32},
+		&Mfield{Name: "rebalance_timeout_ms", Ty: TypeInt32},
+		&Mfield{Name: "member_id", Ty: TypeCompactStr},
+		&Mfield{Name: "group_instance_id", Ty: TypeCompactNullableStr},
+		&Mfield{Name: "protocol_type", Ty: TypeCompactStr},
+		&CompactArray{Name: "protocols", Ty: groupProtocolV6},
+		&SchemaTaggedFields{Name: "request_tagged_fields"},
+	)
+
+	// v8 adds reason
+	joinGroupV8 := NewSchema("join_group_request_v8",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&SchemaTaggedFields{Name: "header_tagged_fields"},
+		&Mfield{Name: "group_id", Ty: TypeCompactStr},
+		&Mfield{Name: "session_timeout_ms", Ty: TypeInt32},
+		&Mfield{Name: "rebalance_timeout_ms", Ty: TypeInt32},
+		&Mfield{Name: "member_id", Ty: TypeCompactStr},
+		&Mfield{Name: "group_instance_id", Ty: TypeCompactNullableStr},
+		&Mfield{Name: "protocol_type", Ty: TypeCompactStr},
+		&CompactArray{Name: "protocols", Ty: groupProtocolV6},
+		&Mfield{Name: "reason", Ty: TypeCompactNullableStr},
+		&SchemaTaggedFields{Name: "request_tagged_fields"},
+	)
+
+	return []Schema{
+		joinGroupV0, // v0
+		joinGroupV1, // v1
+		joinGroupV1, // v2
+		joinGroupV1, // v3
+		joinGroupV1, // v4
+		joinGroupV5, // v5
+		joinGroupV6, // v6
+		joinGroupV6, // v7
+		joinGroupV8, // v8
+		joinGroupV8, // v9
+	}
+}
+
+func getJoinGroupRequestSchema(apiVersion int16) (Schema, error) {
+	if apiVersion < 0 || int(apiVersion) >= len(joinGroupRequestSchemas) {
+		return nil, fmt.Errorf("unsupported JoinGroup request version %d", apiVersion)
+	}
+	return joinGroupRequestSchemas[apiVersion], nil
 }
 
 // metadataRequestModifier rewrites topic names in Metadata requests

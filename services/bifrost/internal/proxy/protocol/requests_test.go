@@ -240,3 +240,46 @@ func TestModifyMetadataRequest_TopicsWithStructs(t *testing.T) {
 	require.NotNil(t, namePtr)
 	assert.Equal(t, "tenant:original-topic", *namePtr)
 }
+
+func TestJoinGroupRequestModifier_PrefixesGroupId(t *testing.T) {
+	cfg := RequestModifierConfig{
+		GroupPrefixer: func(group string) string { return "tenant:" + group },
+	}
+
+	mod, err := GetRequestModifier(apiKeyJoinGroup, 0, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// JoinGroup v0 request: correlation_id, client_id, group_id, session_timeout_ms,
+	// member_id, protocol_type, group_protocols
+	var requestBytes []byte
+	// correlation_id: 1
+	requestBytes = append(requestBytes, 0, 0, 0, 1)
+	// client_id: "test-client"
+	clientId := "test-client"
+	requestBytes = append(requestBytes, 0, byte(len(clientId)))
+	requestBytes = append(requestBytes, []byte(clientId)...)
+	// group_id: "my-group"
+	groupId := "my-group"
+	requestBytes = append(requestBytes, 0, byte(len(groupId)))
+	requestBytes = append(requestBytes, []byte(groupId)...)
+	// session_timeout_ms: 30000
+	requestBytes = append(requestBytes, 0, 0, 0x75, 0x30)
+	// member_id: empty string
+	requestBytes = append(requestBytes, 0, 0)
+	// protocol_type: "consumer"
+	protocolType := "consumer"
+	requestBytes = append(requestBytes, 0, byte(len(protocolType)))
+	requestBytes = append(requestBytes, []byte(protocolType)...)
+	// protocols: empty array
+	requestBytes = append(requestBytes, 0, 0, 0, 0)
+
+	result, err := mod.Apply(requestBytes)
+	require.NoError(t, err)
+
+	// Skip correlation_id (4) + client_id length (2) + client_id content
+	offset := 4 + 2 + len(clientId)
+	groupIdLen := int(result[offset])<<8 | int(result[offset+1])
+	resultGroupId := string(result[offset+2 : offset+2+groupIdLen])
+	assert.Equal(t, "tenant:my-group", resultGroupId)
+}
