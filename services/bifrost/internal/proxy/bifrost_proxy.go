@@ -181,11 +181,23 @@ func (p *BifrostProxy) handleConnection(clientConn net.Conn) {
 		return host, port, nil
 	}
 
-	// Create response modifier config with topic rewriting
+	// Group unprefixer: removes tenant prefix from incoming group IDs
+	groupUnprefixer := func(group string) string {
+		unprefixed, _ := bifrostConn.rewriter.UnprefixGroup(group)
+		return unprefixed
+	}
+	// Group filter: only include groups belonging to this tenant
+	groupFilter := func(group string) bool {
+		return bifrostConn.rewriter.GroupBelongsToTenant(group)
+	}
+
+	// Create response modifier config with topic and group rewriting
 	responseModifierConfig := &protocol.ResponseModifierConfig{
 		NetAddressMappingFunc: advertisedMapper,
 		TopicUnprefixer:       topicUnprefixer,
 		TopicFilter:           topicFilter,
+		GroupUnprefixer:       groupUnprefixer,
+		GroupFilter:           groupFilter,
 	}
 
 	// Create request modifier config with topic prefixing

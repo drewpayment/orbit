@@ -104,3 +104,19 @@ func (r *Rewriter) TopicBelongsToTenant(topic string) bool {
 	}
 	return strings.HasPrefix(topic, r.ctx.TopicPrefix)
 }
+
+// HasGroupPrefix checks if we have a group prefix configured.
+// Useful for determining if group rewriting is enabled.
+func (r *Rewriter) HasGroupPrefix() bool {
+	return r.ctx.GroupPrefix != ""
+}
+
+// GroupBelongsToTenant checks if a consumer group belongs to this tenant.
+// Returns true if the group has the tenant's prefix or if no prefix is configured.
+func (r *Rewriter) GroupBelongsToTenant(group string) bool {
+	// Empty prefix matches everything (no multi-tenancy)
+	if r.ctx.GroupPrefix == "" {
+		return true
+	}
+	return strings.HasPrefix(group, r.ctx.GroupPrefix)
+}

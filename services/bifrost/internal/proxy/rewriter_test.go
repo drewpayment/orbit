@@ -159,3 +159,47 @@ func TestRewriter_FilterTopicsNoMatches(t *testing.T) {
 	filtered := r.FilterTopics(topics)
 	assert.Empty(t, filtered)
 }
+
+func TestRewriter_HasGroupPrefix(t *testing.T) {
+	// With prefix
+	ctx := &auth.ConnectionContext{
+		GroupPrefix: "myapp-dev-",
+	}
+	r := NewRewriter(ctx)
+	assert.True(t, r.HasGroupPrefix())
+
+	// Without prefix
+	ctx2 := &auth.ConnectionContext{
+		GroupPrefix: "",
+	}
+	r2 := NewRewriter(ctx2)
+	assert.False(t, r2.HasGroupPrefix())
+}
+
+func TestRewriter_GroupBelongsToTenant(t *testing.T) {
+	ctx := &auth.ConnectionContext{
+		GroupPrefix: "myapp-dev-",
+	}
+	r := NewRewriter(ctx)
+
+	// Group with correct prefix belongs to tenant
+	assert.True(t, r.GroupBelongsToTenant("myapp-dev-my-consumers"))
+
+	// Group without prefix does not belong to tenant
+	assert.False(t, r.GroupBelongsToTenant("other-app-consumers"))
+
+	// Empty group does not belong to tenant
+	assert.False(t, r.GroupBelongsToTenant(""))
+}
+
+func TestRewriter_GroupBelongsToTenant_EmptyPrefix(t *testing.T) {
+	// When no prefix is configured, all groups belong to tenant
+	ctx := &auth.ConnectionContext{
+		GroupPrefix: "",
+	}
+	r := NewRewriter(ctx)
+
+	assert.True(t, r.GroupBelongsToTenant("any-group"))
+	assert.True(t, r.GroupBelongsToTenant("myapp-dev-my-consumers"))
+	assert.True(t, r.GroupBelongsToTenant(""))
+}

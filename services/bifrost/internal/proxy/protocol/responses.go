@@ -644,11 +644,20 @@ type TopicUnprefixer func(topic string) string
 // Returns true if the topic belongs to the tenant and should be included.
 type TopicFilter func(topic string) bool
 
+// GroupUnprefixer removes the tenant prefix from consumer group IDs in responses.
+type GroupUnprefixer func(groupId string) string
+
+// GroupFilter determines whether a consumer group should be included in responses.
+// Returns true if the group belongs to the tenant and should be included.
+type GroupFilter func(groupId string) bool
+
 // ResponseModifierConfig holds functions for response modification.
 type ResponseModifierConfig struct {
 	NetAddressMappingFunc config.NetAddressMappingFunc
 	TopicUnprefixer       TopicUnprefixer
 	TopicFilter           TopicFilter
+	GroupUnprefixer       GroupUnprefixer
+	GroupFilter           GroupFilter
 }
 
 type modifyResponseFunc func(decodedStruct *Struct, cfg ResponseModifierConfig) error
