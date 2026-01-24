@@ -380,4 +380,16 @@ describe('bifrost-admin module', () => {
       expect(typeof revokeCredential).toBe('function')
     })
   })
+
+  describe('status server actions', () => {
+    it('should export getGatewayStatus function', async () => {
+      const { getGatewayStatus } = await import('../bifrost-admin')
+      expect(typeof getGatewayStatus).toBe('function')
+    })
+
+    it('should export getFullConfig function', async () => {
+      const { getFullConfig } = await import('../bifrost-admin')
+      expect(typeof getFullConfig).toBe('function')
+    })
+  })
 })

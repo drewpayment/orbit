@@ -602,3 +602,66 @@ export async function revokeCredential(id: string): Promise<{
     return { success: false, error: errorMessage }
   }
 }
+
+// ============================================================================
+// Status Server Actions
+// ============================================================================
+
+/**
+ * Gets the current gateway status from Bifrost.
+ */
+export async function getGatewayStatus(): Promise<{
+  success: boolean
+  data?: GatewayStatus
+  error?: string
+}> {
+  try {
+    await requireAdmin()
+
+    const response = await bifrostClient.getStatus({})
+
+    return {
+      success: true,
+      data: {
+        status: response.status,
+        activeConnections: response.activeConnections,
+        virtualClusterCount: response.virtualClusterCount,
+        versionInfo: { ...response.versionInfo },
+      },
+    }
+  } catch (error) {
+    console.error('Failed to get gateway status:', error)
+    const errorMessage =
+      error instanceof Error ? error.message : 'Failed to get gateway status'
+    return { success: false, error: errorMessage }
+  }
+}
+
+/**
+ * Gets the full configuration from Bifrost.
+ */
+export async function getFullConfig(): Promise<{
+  success: boolean
+  data?: FullConfig
+  error?: string
+}> {
+  try {
+    await requireAdmin()
+
+    const response = await bifrostClient.getFullConfig({})
+
+    return {
+      success: true,
+      data: {
+        virtualClusters: response.virtualClusters.map(mapProtoToVirtualCluster),
+        credentials: response.credentials.map(mapProtoToCredential),
+        policies: response.policies.map(mapProtoToPolicy),
+      },
+    }
+  } catch (error) {
+    console.error('Failed to get full config:', error)
+    const errorMessage =
+      error instanceof Error ? error.message : 'Failed to get full config'
+    return { success: false, error: errorMessage }
+  }
+}
