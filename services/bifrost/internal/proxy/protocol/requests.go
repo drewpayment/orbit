@@ -202,8 +202,14 @@ func newLeaveGroupRequestModifier(apiVersion int16, cfg RequestModifierConfig) (
 	if cfg.GroupPrefixer == nil {
 		return nil, nil
 	}
-	// TODO: Implement leave group request rewriting
-	return nil, nil
+	schema, err := getLeaveGroupRequestSchema(apiVersion)
+	if err != nil {
+		return nil, err
+	}
+	return &leaveGroupRequestModifier{
+		schema:        schema,
+		groupPrefixer: cfg.GroupPrefixer,
+	}, nil
 }
 
 func newSyncGroupRequestModifier(apiVersion int16, cfg RequestModifierConfig) (RequestModifier, error) {
@@ -576,6 +582,114 @@ func getHeartbeatRequestSchema(apiVersion int16) (Schema, error) {
 		return nil, fmt.Errorf("unsupported Heartbeat request version %d", apiVersion)
 	}
 	return heartbeatRequestSchemas[apiVersion], nil
+}
+
+// leaveGroupRequestModifier prefixes group_id in LeaveGroup requests
+type leaveGroupRequestModifier struct {
+	schema        Schema
+	groupPrefixer GroupPrefixer
+}
+
+func (m *leaveGroupRequestModifier) Apply(requestBytes []byte) ([]byte, error) {
+	decoded, err := DecodeSchema(requestBytes, m.schema)
+	if err != nil {
+		return nil, fmt.Errorf("decode leave group request: %w", err)
+	}
+
+	if err := modifyLeaveGroupRequest(decoded, m.groupPrefixer); err != nil {
+		return nil, fmt.Errorf("modify leave group request: %w", err)
+	}
+
+	return EncodeSchema(decoded, m.schema)
+}
+
+func modifyLeaveGroupRequest(decoded *Struct, prefixer GroupPrefixer) error {
+	groupId := decoded.Get("group_id")
+	if groupId == nil {
+		return nil
+	}
+	if gid, ok := groupId.(string); ok && gid != "" {
+		return decoded.Replace("group_id", prefixer(gid))
+	}
+	return nil
+}
+
+var leaveGroupRequestSchemas []Schema
+
+func init() {
+	leaveGroupRequestSchemas = createLeaveGroupRequestSchemas()
+}
+
+func createLeaveGroupRequestSchemas() []Schema {
+	// v0-v2: simple format with single member
+	leaveGroupV0 := NewSchema("leave_group_request_v0",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "group_id", Ty: TypeStr},
+		&Mfield{Name: "member_id", Ty: TypeStr},
+	)
+
+	// v3+: multiple members can leave at once
+	memberV3 := NewSchema("leave_group_member_v3",
+		&Mfield{Name: "member_id", Ty: TypeStr},
+		&Mfield{Name: "group_instance_id", Ty: TypeNullableStr},
+	)
+
+	leaveGroupV3 := NewSchema("leave_group_request_v3",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "group_id", Ty: TypeStr},
+		&Array{Name: "members", Ty: memberV3},
+	)
+
+	// v4+ flexible
+	memberV4 := NewSchema("leave_group_member_v4",
+		&Mfield{Name: "member_id", Ty: TypeCompactStr},
+		&Mfield{Name: "group_instance_id", Ty: TypeCompactNullableStr},
+		&SchemaTaggedFields{Name: "member_tagged_fields"},
+	)
+
+	leaveGroupV4 := NewSchema("leave_group_request_v4",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&SchemaTaggedFields{Name: "header_tagged_fields"},
+		&Mfield{Name: "group_id", Ty: TypeCompactStr},
+		&CompactArray{Name: "members", Ty: memberV4},
+		&SchemaTaggedFields{Name: "request_tagged_fields"},
+	)
+
+	// v5 adds reason
+	memberV5 := NewSchema("leave_group_member_v5",
+		&Mfield{Name: "member_id", Ty: TypeCompactStr},
+		&Mfield{Name: "group_instance_id", Ty: TypeCompactNullableStr},
+		&Mfield{Name: "reason", Ty: TypeCompactNullableStr},
+		&SchemaTaggedFields{Name: "member_tagged_fields"},
+	)
+
+	leaveGroupV5 := NewSchema("leave_group_request_v5",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&SchemaTaggedFields{Name: "header_tagged_fields"},
+		&Mfield{Name: "group_id", Ty: TypeCompactStr},
+		&CompactArray{Name: "members", Ty: memberV5},
+		&SchemaTaggedFields{Name: "request_tagged_fields"},
+	)
+
+	return []Schema{
+		leaveGroupV0, // v0
+		leaveGroupV0, // v1
+		leaveGroupV0, // v2
+		leaveGroupV3, // v3
+		leaveGroupV4, // v4
+		leaveGroupV5, // v5
+	}
+}
+
+func getLeaveGroupRequestSchema(apiVersion int16) (Schema, error) {
+	if apiVersion < 0 || int(apiVersion) >= len(leaveGroupRequestSchemas) {
+		return nil, fmt.Errorf("unsupported LeaveGroup request version %d", apiVersion)
+	}
+	return leaveGroupRequestSchemas[apiVersion], nil
 }
 
 // metadataRequestModifier rewrites topic names in Metadata requests

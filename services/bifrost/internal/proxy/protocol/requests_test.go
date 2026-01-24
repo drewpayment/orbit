@@ -361,3 +361,39 @@ func TestHeartbeatRequestModifier_PrefixesGroupId(t *testing.T) {
 	resultGroupId := string(result[offset+2 : offset+2+groupIdLen])
 	assert.Equal(t, "tenant:my-group", resultGroupId)
 }
+
+func TestLeaveGroupRequestModifier_PrefixesGroupId(t *testing.T) {
+	cfg := RequestModifierConfig{
+		GroupPrefixer: func(group string) string { return "tenant:" + group },
+	}
+
+	mod, err := GetRequestModifier(apiKeyLeaveGroup, 0, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// LeaveGroup v0: correlation_id, client_id, group_id, member_id
+	var requestBytes []byte
+	// correlation_id: 1
+	requestBytes = append(requestBytes, 0, 0, 0, 1)
+	// client_id: "test-client"
+	clientId := "test-client"
+	requestBytes = append(requestBytes, 0, byte(len(clientId)))
+	requestBytes = append(requestBytes, []byte(clientId)...)
+	// group_id: "my-group"
+	groupId := "my-group"
+	requestBytes = append(requestBytes, 0, byte(len(groupId)))
+	requestBytes = append(requestBytes, []byte(groupId)...)
+	// member_id: "member-1"
+	memberId := "member-1"
+	requestBytes = append(requestBytes, 0, byte(len(memberId)))
+	requestBytes = append(requestBytes, []byte(memberId)...)
+
+	result, err := mod.Apply(requestBytes)
+	require.NoError(t, err)
+
+	// Skip correlation_id (4) + client_id length (2) + client_id content
+	offset := 4 + 2 + len(clientId)
+	groupIdLen := int(result[offset])<<8 | int(result[offset+1])
+	resultGroupId := string(result[offset+2 : offset+2+groupIdLen])
+	assert.Equal(t, "tenant:my-group", resultGroupId)
+}
