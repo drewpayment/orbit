@@ -11,6 +11,7 @@ import {
   type CustomPermission as ProtoCustomPermission,
   type PolicyConfig as ProtoPolicy,
 } from '@/lib/proto/idp/gateway/v1/gateway_pb'
+import { bifrostClient } from '@/lib/grpc/bifrost-client'
 
 // ============================================================================
 // Payload Type Definitions (for internal use)
@@ -323,4 +324,162 @@ export async function requireAdmin(): Promise<{ userId: string }> {
   }
 
   return { userId: session.user.id }
+}
+
+// ============================================================================
+// Virtual Cluster Server Actions
+// ============================================================================
+
+/**
+ * Lists all virtual clusters from Bifrost.
+ */
+export async function listVirtualClusters(): Promise<{
+  success: boolean
+  data?: VirtualClusterConfig[]
+  error?: string
+}> {
+  try {
+    await requireAdmin()
+
+    const response = await bifrostClient.listVirtualClusters({})
+
+    const virtualClusters = response.virtualClusters.map(mapProtoToVirtualCluster)
+
+    return { success: true, data: virtualClusters }
+  } catch (error) {
+    console.error('Failed to list virtual clusters:', error)
+    const errorMessage =
+      error instanceof Error ? error.message : 'Failed to list virtual clusters'
+    return { success: false, error: errorMessage }
+  }
+}
+
+/**
+ * Creates or updates a virtual cluster in Bifrost.
+ */
+export async function createVirtualCluster(data: {
+  id?: string
+  workspaceSlug: string
+  environment: string
+  topicPrefix: string
+  groupPrefix: string
+  transactionIdPrefix: string
+  advertisedHost: string
+  advertisedPort: number
+  physicalBootstrapServers: string
+  applicationId?: string
+  applicationSlug?: string
+}): Promise<{
+  success: boolean
+  data?: VirtualClusterConfig
+  error?: string
+}> {
+  try {
+    await requireAdmin()
+
+    const id = data.id || `vc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+
+    const response = await bifrostClient.upsertVirtualCluster({
+      config: {
+        id,
+        applicationId: data.applicationId || '',
+        applicationSlug: data.applicationSlug || '',
+        workspaceSlug: data.workspaceSlug,
+        environment: data.environment,
+        topicPrefix: data.topicPrefix,
+        groupPrefix: data.groupPrefix,
+        transactionIdPrefix: data.transactionIdPrefix,
+        advertisedHost: data.advertisedHost,
+        advertisedPort: data.advertisedPort,
+        physicalBootstrapServers: data.physicalBootstrapServers,
+        readOnly: false,
+      },
+    })
+
+    if (!response.success) {
+      return { success: false, error: 'Failed to create virtual cluster' }
+    }
+
+    // Return the created config
+    return {
+      success: true,
+      data: {
+        id,
+        applicationId: data.applicationId || '',
+        applicationSlug: data.applicationSlug || '',
+        workspaceSlug: data.workspaceSlug,
+        environment: data.environment,
+        topicPrefix: data.topicPrefix,
+        groupPrefix: data.groupPrefix,
+        transactionIdPrefix: data.transactionIdPrefix,
+        advertisedHost: data.advertisedHost,
+        advertisedPort: data.advertisedPort,
+        physicalBootstrapServers: data.physicalBootstrapServers,
+        readOnly: false,
+      },
+    }
+  } catch (error) {
+    console.error('Failed to create virtual cluster:', error)
+    const errorMessage =
+      error instanceof Error ? error.message : 'Failed to create virtual cluster'
+    return { success: false, error: errorMessage }
+  }
+}
+
+/**
+ * Deletes a virtual cluster from Bifrost.
+ */
+export async function deleteVirtualCluster(id: string): Promise<{
+  success: boolean
+  error?: string
+}> {
+  try {
+    await requireAdmin()
+
+    const response = await bifrostClient.deleteVirtualCluster({
+      virtualClusterId: id,
+    })
+
+    if (!response.success) {
+      return { success: false, error: 'Failed to delete virtual cluster' }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to delete virtual cluster:', error)
+    const errorMessage =
+      error instanceof Error ? error.message : 'Failed to delete virtual cluster'
+    return { success: false, error: errorMessage }
+  }
+}
+
+/**
+ * Toggles read-only mode for a virtual cluster.
+ */
+export async function setVirtualClusterReadOnly(
+  id: string,
+  readOnly: boolean
+): Promise<{
+  success: boolean
+  error?: string
+}> {
+  try {
+    await requireAdmin()
+
+    const response = await bifrostClient.setVirtualClusterReadOnly({
+      virtualClusterId: id,
+      readOnly,
+    })
+
+    if (!response.success) {
+      return { success: false, error: 'Failed to update virtual cluster' }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to set virtual cluster read-only:', error)
+    const errorMessage =
+      error instanceof Error ? error.message : 'Failed to update virtual cluster'
+    return { success: false, error: errorMessage }
+  }
 }

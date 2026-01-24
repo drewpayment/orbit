@@ -58,7 +58,12 @@ import {
   requireAdmin,
 } from '../bifrost-admin'
 
-import { PermissionTemplate } from '@/lib/proto/idp/gateway/v1/gateway_pb'
+import {
+  PermissionTemplate,
+  type VirtualClusterConfig as ProtoVirtualClusterConfig,
+  type CredentialConfig as ProtoCredentialConfig,
+  type PolicyConfig as ProtoPolicyConfig,
+} from '@/lib/proto/idp/gateway/v1/gateway_pb'
 
 describe('bifrost-admin module', () => {
   beforeEach(() => {
@@ -149,6 +154,7 @@ describe('bifrost-admin module', () => {
 
   describe('mapProtoToVirtualCluster', () => {
     it('should map proto VirtualClusterConfig to our interface', () => {
+      // Use type assertion since we're creating a mock proto object
       const proto = {
         id: 'vc-123',
         applicationId: 'app-456',
@@ -162,7 +168,7 @@ describe('bifrost-admin module', () => {
         advertisedPort: 9092,
         physicalBootstrapServers: 'broker1:9092,broker2:9092',
         readOnly: false,
-      }
+      } as unknown as ProtoVirtualClusterConfig
 
       const result = mapProtoToVirtualCluster(proto)
 
@@ -196,7 +202,7 @@ describe('bifrost-admin module', () => {
         advertisedPort: 9092,
         physicalBootstrapServers: 'kafka:9092',
         readOnly: true,
-      }
+      } as unknown as ProtoVirtualClusterConfig
 
       const result = mapProtoToVirtualCluster(proto)
       expect(result.readOnly).toBe(true)
@@ -212,7 +218,7 @@ describe('bifrost-admin module', () => {
         passwordHash: 'argon2:$hashvalue',
         template: PermissionTemplate.PRODUCER,
         customPermissions: [],
-      }
+      } as unknown as ProtoCredentialConfig
 
       const result = mapProtoToCredential(proto)
 
@@ -245,7 +251,7 @@ describe('bifrost-admin module', () => {
             operations: ['read'],
           },
         ],
-      }
+      } as unknown as ProtoCredentialConfig
 
       const result = mapProtoToCredential(proto)
 
@@ -274,7 +280,7 @@ describe('bifrost-admin module', () => {
           passwordHash: 'hash',
           template: proto,
           customPermissions: [],
-        })
+        } as unknown as ProtoCredentialConfig)
         expect(result.template).toBe(expected)
       }
     })
@@ -333,6 +339,28 @@ describe('bifrost-admin module', () => {
         namingPattern: '^[a-z][a-z0-9-]*$',
         maxNameLength: 255,
       })
+    })
+  })
+
+  describe('virtual cluster server actions', () => {
+    it('should export listVirtualClusters function', async () => {
+      const { listVirtualClusters } = await import('../bifrost-admin')
+      expect(typeof listVirtualClusters).toBe('function')
+    })
+
+    it('should export createVirtualCluster function', async () => {
+      const { createVirtualCluster } = await import('../bifrost-admin')
+      expect(typeof createVirtualCluster).toBe('function')
+    })
+
+    it('should export deleteVirtualCluster function', async () => {
+      const { deleteVirtualCluster } = await import('../bifrost-admin')
+      expect(typeof deleteVirtualCluster).toBe('function')
+    })
+
+    it('should export setVirtualClusterReadOnly function', async () => {
+      const { setVirtualClusterReadOnly } = await import('../bifrost-admin')
+      expect(typeof setVirtualClusterReadOnly).toBe('function')
     })
   })
 })
