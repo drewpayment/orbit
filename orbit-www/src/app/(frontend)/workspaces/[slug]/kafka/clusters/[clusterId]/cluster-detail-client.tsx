@@ -25,6 +25,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import { TopicsPanel } from '@/components/features/kafka/TopicsPanel'
 import { ServiceAccountsPanel } from '@/components/features/kafka/ServiceAccountsPanel'
+import { ConsumerGroupsPanel } from '@/components/features/kafka/ConsumerGroupsPanel'
 
 interface VirtualCluster {
   id: string
@@ -235,22 +236,10 @@ export function ClusterDetailClient({
 
           {/* Consumer Groups Tab */}
           <TabsContent value="consumer-groups">
-            <Card>
-              <CardHeader>
-                <CardTitle>Consumer Groups</CardTitle>
-                <CardDescription>
-                  Consumer groups within this virtual cluster
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <Users className="h-16 w-16 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Consumer Groups Coming Soon</h3>
-                <p className="text-muted-foreground text-center max-w-md">
-                  Consumer group monitoring and management will be available in a future update.
-                  You&apos;ll be able to view lag, reset offsets, and manage group membership.
-                </p>
-              </CardContent>
-            </Card>
+            <ConsumerGroupsPanel
+              virtualClusterId={cluster.id}
+              canManage={canManage && cluster.status === 'active'}
+            />
           </TabsContent>
 
           {/* Service Accounts Tab */}
