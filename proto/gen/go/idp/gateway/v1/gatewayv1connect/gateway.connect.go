@@ -82,6 +82,15 @@ const (
 	// BifrostAdminServiceListTopicACLsProcedure is the fully-qualified name of the
 	// BifrostAdminService's ListTopicACLs RPC.
 	BifrostAdminServiceListTopicACLsProcedure = "/idp.gateway.v1.BifrostAdminService/ListTopicACLs"
+	// BifrostAdminServiceListConsumerGroupsProcedure is the fully-qualified name of the
+	// BifrostAdminService's ListConsumerGroups RPC.
+	BifrostAdminServiceListConsumerGroupsProcedure = "/idp.gateway.v1.BifrostAdminService/ListConsumerGroups"
+	// BifrostAdminServiceDescribeConsumerGroupProcedure is the fully-qualified name of the
+	// BifrostAdminService's DescribeConsumerGroup RPC.
+	BifrostAdminServiceDescribeConsumerGroupProcedure = "/idp.gateway.v1.BifrostAdminService/DescribeConsumerGroup"
+	// BifrostAdminServiceResetConsumerGroupOffsetsProcedure is the fully-qualified name of the
+	// BifrostAdminService's ResetConsumerGroupOffsets RPC.
+	BifrostAdminServiceResetConsumerGroupOffsetsProcedure = "/idp.gateway.v1.BifrostAdminService/ResetConsumerGroupOffsets"
 	// BifrostCallbackServiceTopicCreatedProcedure is the fully-qualified name of the
 	// BifrostCallbackService's TopicCreated RPC.
 	BifrostCallbackServiceTopicCreatedProcedure = "/idp.gateway.v1.BifrostCallbackService/TopicCreated"
@@ -119,6 +128,10 @@ type BifrostAdminServiceClient interface {
 	UpsertTopicACL(context.Context, *connect.Request[v1.UpsertTopicACLRequest]) (*connect.Response[v1.UpsertTopicACLResponse], error)
 	RevokeTopicACL(context.Context, *connect.Request[v1.RevokeTopicACLRequest]) (*connect.Response[v1.RevokeTopicACLResponse], error)
 	ListTopicACLs(context.Context, *connect.Request[v1.ListTopicACLsRequest]) (*connect.Response[v1.ListTopicACLsResponse], error)
+	// Consumer group monitoring and management
+	ListConsumerGroups(context.Context, *connect.Request[v1.ListConsumerGroupsRequest]) (*connect.Response[v1.ListConsumerGroupsResponse], error)
+	DescribeConsumerGroup(context.Context, *connect.Request[v1.DescribeConsumerGroupRequest]) (*connect.Response[v1.DescribeConsumerGroupResponse], error)
+	ResetConsumerGroupOffsets(context.Context, *connect.Request[v1.ResetConsumerGroupOffsetsRequest]) (*connect.Response[v1.ResetConsumerGroupOffsetsResponse], error)
 }
 
 // NewBifrostAdminServiceClient constructs a client for the idp.gateway.v1.BifrostAdminService
@@ -222,6 +235,24 @@ func NewBifrostAdminServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(bifrostAdminServiceMethods.ByName("ListTopicACLs")),
 			connect.WithClientOptions(opts...),
 		),
+		listConsumerGroups: connect.NewClient[v1.ListConsumerGroupsRequest, v1.ListConsumerGroupsResponse](
+			httpClient,
+			baseURL+BifrostAdminServiceListConsumerGroupsProcedure,
+			connect.WithSchema(bifrostAdminServiceMethods.ByName("ListConsumerGroups")),
+			connect.WithClientOptions(opts...),
+		),
+		describeConsumerGroup: connect.NewClient[v1.DescribeConsumerGroupRequest, v1.DescribeConsumerGroupResponse](
+			httpClient,
+			baseURL+BifrostAdminServiceDescribeConsumerGroupProcedure,
+			connect.WithSchema(bifrostAdminServiceMethods.ByName("DescribeConsumerGroup")),
+			connect.WithClientOptions(opts...),
+		),
+		resetConsumerGroupOffsets: connect.NewClient[v1.ResetConsumerGroupOffsetsRequest, v1.ResetConsumerGroupOffsetsResponse](
+			httpClient,
+			baseURL+BifrostAdminServiceResetConsumerGroupOffsetsProcedure,
+			connect.WithSchema(bifrostAdminServiceMethods.ByName("ResetConsumerGroupOffsets")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -242,6 +273,9 @@ type bifrostAdminServiceClient struct {
 	upsertTopicACL            *connect.Client[v1.UpsertTopicACLRequest, v1.UpsertTopicACLResponse]
 	revokeTopicACL            *connect.Client[v1.RevokeTopicACLRequest, v1.RevokeTopicACLResponse]
 	listTopicACLs             *connect.Client[v1.ListTopicACLsRequest, v1.ListTopicACLsResponse]
+	listConsumerGroups        *connect.Client[v1.ListConsumerGroupsRequest, v1.ListConsumerGroupsResponse]
+	describeConsumerGroup     *connect.Client[v1.DescribeConsumerGroupRequest, v1.DescribeConsumerGroupResponse]
+	resetConsumerGroupOffsets *connect.Client[v1.ResetConsumerGroupOffsetsRequest, v1.ResetConsumerGroupOffsetsResponse]
 }
 
 // UpsertVirtualCluster calls idp.gateway.v1.BifrostAdminService.UpsertVirtualCluster.
@@ -319,6 +353,21 @@ func (c *bifrostAdminServiceClient) ListTopicACLs(ctx context.Context, req *conn
 	return c.listTopicACLs.CallUnary(ctx, req)
 }
 
+// ListConsumerGroups calls idp.gateway.v1.BifrostAdminService.ListConsumerGroups.
+func (c *bifrostAdminServiceClient) ListConsumerGroups(ctx context.Context, req *connect.Request[v1.ListConsumerGroupsRequest]) (*connect.Response[v1.ListConsumerGroupsResponse], error) {
+	return c.listConsumerGroups.CallUnary(ctx, req)
+}
+
+// DescribeConsumerGroup calls idp.gateway.v1.BifrostAdminService.DescribeConsumerGroup.
+func (c *bifrostAdminServiceClient) DescribeConsumerGroup(ctx context.Context, req *connect.Request[v1.DescribeConsumerGroupRequest]) (*connect.Response[v1.DescribeConsumerGroupResponse], error) {
+	return c.describeConsumerGroup.CallUnary(ctx, req)
+}
+
+// ResetConsumerGroupOffsets calls idp.gateway.v1.BifrostAdminService.ResetConsumerGroupOffsets.
+func (c *bifrostAdminServiceClient) ResetConsumerGroupOffsets(ctx context.Context, req *connect.Request[v1.ResetConsumerGroupOffsetsRequest]) (*connect.Response[v1.ResetConsumerGroupOffsetsResponse], error) {
+	return c.resetConsumerGroupOffsets.CallUnary(ctx, req)
+}
+
 // BifrostAdminServiceHandler is an implementation of the idp.gateway.v1.BifrostAdminService
 // service.
 type BifrostAdminServiceHandler interface {
@@ -343,6 +392,10 @@ type BifrostAdminServiceHandler interface {
 	UpsertTopicACL(context.Context, *connect.Request[v1.UpsertTopicACLRequest]) (*connect.Response[v1.UpsertTopicACLResponse], error)
 	RevokeTopicACL(context.Context, *connect.Request[v1.RevokeTopicACLRequest]) (*connect.Response[v1.RevokeTopicACLResponse], error)
 	ListTopicACLs(context.Context, *connect.Request[v1.ListTopicACLsRequest]) (*connect.Response[v1.ListTopicACLsResponse], error)
+	// Consumer group monitoring and management
+	ListConsumerGroups(context.Context, *connect.Request[v1.ListConsumerGroupsRequest]) (*connect.Response[v1.ListConsumerGroupsResponse], error)
+	DescribeConsumerGroup(context.Context, *connect.Request[v1.DescribeConsumerGroupRequest]) (*connect.Response[v1.DescribeConsumerGroupResponse], error)
+	ResetConsumerGroupOffsets(context.Context, *connect.Request[v1.ResetConsumerGroupOffsetsRequest]) (*connect.Response[v1.ResetConsumerGroupOffsetsResponse], error)
 }
 
 // NewBifrostAdminServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -442,6 +495,24 @@ func NewBifrostAdminServiceHandler(svc BifrostAdminServiceHandler, opts ...conne
 		connect.WithSchema(bifrostAdminServiceMethods.ByName("ListTopicACLs")),
 		connect.WithHandlerOptions(opts...),
 	)
+	bifrostAdminServiceListConsumerGroupsHandler := connect.NewUnaryHandler(
+		BifrostAdminServiceListConsumerGroupsProcedure,
+		svc.ListConsumerGroups,
+		connect.WithSchema(bifrostAdminServiceMethods.ByName("ListConsumerGroups")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bifrostAdminServiceDescribeConsumerGroupHandler := connect.NewUnaryHandler(
+		BifrostAdminServiceDescribeConsumerGroupProcedure,
+		svc.DescribeConsumerGroup,
+		connect.WithSchema(bifrostAdminServiceMethods.ByName("DescribeConsumerGroup")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bifrostAdminServiceResetConsumerGroupOffsetsHandler := connect.NewUnaryHandler(
+		BifrostAdminServiceResetConsumerGroupOffsetsProcedure,
+		svc.ResetConsumerGroupOffsets,
+		connect.WithSchema(bifrostAdminServiceMethods.ByName("ResetConsumerGroupOffsets")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/idp.gateway.v1.BifrostAdminService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case BifrostAdminServiceUpsertVirtualClusterProcedure:
@@ -474,6 +545,12 @@ func NewBifrostAdminServiceHandler(svc BifrostAdminServiceHandler, opts ...conne
 			bifrostAdminServiceRevokeTopicACLHandler.ServeHTTP(w, r)
 		case BifrostAdminServiceListTopicACLsProcedure:
 			bifrostAdminServiceListTopicACLsHandler.ServeHTTP(w, r)
+		case BifrostAdminServiceListConsumerGroupsProcedure:
+			bifrostAdminServiceListConsumerGroupsHandler.ServeHTTP(w, r)
+		case BifrostAdminServiceDescribeConsumerGroupProcedure:
+			bifrostAdminServiceDescribeConsumerGroupHandler.ServeHTTP(w, r)
+		case BifrostAdminServiceResetConsumerGroupOffsetsProcedure:
+			bifrostAdminServiceResetConsumerGroupOffsetsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -541,6 +618,18 @@ func (UnimplementedBifrostAdminServiceHandler) RevokeTopicACL(context.Context, *
 
 func (UnimplementedBifrostAdminServiceHandler) ListTopicACLs(context.Context, *connect.Request[v1.ListTopicACLsRequest]) (*connect.Response[v1.ListTopicACLsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.ListTopicACLs is not implemented"))
+}
+
+func (UnimplementedBifrostAdminServiceHandler) ListConsumerGroups(context.Context, *connect.Request[v1.ListConsumerGroupsRequest]) (*connect.Response[v1.ListConsumerGroupsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.ListConsumerGroups is not implemented"))
+}
+
+func (UnimplementedBifrostAdminServiceHandler) DescribeConsumerGroup(context.Context, *connect.Request[v1.DescribeConsumerGroupRequest]) (*connect.Response[v1.DescribeConsumerGroupResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.DescribeConsumerGroup is not implemented"))
+}
+
+func (UnimplementedBifrostAdminServiceHandler) ResetConsumerGroupOffsets(context.Context, *connect.Request[v1.ResetConsumerGroupOffsetsRequest]) (*connect.Response[v1.ResetConsumerGroupOffsetsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.ResetConsumerGroupOffsets is not implemented"))
 }
 
 // BifrostCallbackServiceClient is a client for the idp.gateway.v1.BifrostCallbackService service.

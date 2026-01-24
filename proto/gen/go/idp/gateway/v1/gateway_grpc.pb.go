@@ -36,6 +36,9 @@ const (
 	BifrostAdminService_UpsertTopicACL_FullMethodName            = "/idp.gateway.v1.BifrostAdminService/UpsertTopicACL"
 	BifrostAdminService_RevokeTopicACL_FullMethodName            = "/idp.gateway.v1.BifrostAdminService/RevokeTopicACL"
 	BifrostAdminService_ListTopicACLs_FullMethodName             = "/idp.gateway.v1.BifrostAdminService/ListTopicACLs"
+	BifrostAdminService_ListConsumerGroups_FullMethodName        = "/idp.gateway.v1.BifrostAdminService/ListConsumerGroups"
+	BifrostAdminService_DescribeConsumerGroup_FullMethodName     = "/idp.gateway.v1.BifrostAdminService/DescribeConsumerGroup"
+	BifrostAdminService_ResetConsumerGroupOffsets_FullMethodName = "/idp.gateway.v1.BifrostAdminService/ResetConsumerGroupOffsets"
 )
 
 // BifrostAdminServiceClient is the client API for BifrostAdminService service.
@@ -63,6 +66,10 @@ type BifrostAdminServiceClient interface {
 	UpsertTopicACL(ctx context.Context, in *UpsertTopicACLRequest, opts ...grpc.CallOption) (*UpsertTopicACLResponse, error)
 	RevokeTopicACL(ctx context.Context, in *RevokeTopicACLRequest, opts ...grpc.CallOption) (*RevokeTopicACLResponse, error)
 	ListTopicACLs(ctx context.Context, in *ListTopicACLsRequest, opts ...grpc.CallOption) (*ListTopicACLsResponse, error)
+	// Consumer group monitoring and management
+	ListConsumerGroups(ctx context.Context, in *ListConsumerGroupsRequest, opts ...grpc.CallOption) (*ListConsumerGroupsResponse, error)
+	DescribeConsumerGroup(ctx context.Context, in *DescribeConsumerGroupRequest, opts ...grpc.CallOption) (*DescribeConsumerGroupResponse, error)
+	ResetConsumerGroupOffsets(ctx context.Context, in *ResetConsumerGroupOffsetsRequest, opts ...grpc.CallOption) (*ResetConsumerGroupOffsetsResponse, error)
 }
 
 type bifrostAdminServiceClient struct {
@@ -223,6 +230,36 @@ func (c *bifrostAdminServiceClient) ListTopicACLs(ctx context.Context, in *ListT
 	return out, nil
 }
 
+func (c *bifrostAdminServiceClient) ListConsumerGroups(ctx context.Context, in *ListConsumerGroupsRequest, opts ...grpc.CallOption) (*ListConsumerGroupsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListConsumerGroupsResponse)
+	err := c.cc.Invoke(ctx, BifrostAdminService_ListConsumerGroups_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bifrostAdminServiceClient) DescribeConsumerGroup(ctx context.Context, in *DescribeConsumerGroupRequest, opts ...grpc.CallOption) (*DescribeConsumerGroupResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DescribeConsumerGroupResponse)
+	err := c.cc.Invoke(ctx, BifrostAdminService_DescribeConsumerGroup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bifrostAdminServiceClient) ResetConsumerGroupOffsets(ctx context.Context, in *ResetConsumerGroupOffsetsRequest, opts ...grpc.CallOption) (*ResetConsumerGroupOffsetsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResetConsumerGroupOffsetsResponse)
+	err := c.cc.Invoke(ctx, BifrostAdminService_ResetConsumerGroupOffsets_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BifrostAdminServiceServer is the server API for BifrostAdminService service.
 // All implementations must embed UnimplementedBifrostAdminServiceServer
 // for forward compatibility.
@@ -248,6 +285,10 @@ type BifrostAdminServiceServer interface {
 	UpsertTopicACL(context.Context, *UpsertTopicACLRequest) (*UpsertTopicACLResponse, error)
 	RevokeTopicACL(context.Context, *RevokeTopicACLRequest) (*RevokeTopicACLResponse, error)
 	ListTopicACLs(context.Context, *ListTopicACLsRequest) (*ListTopicACLsResponse, error)
+	// Consumer group monitoring and management
+	ListConsumerGroups(context.Context, *ListConsumerGroupsRequest) (*ListConsumerGroupsResponse, error)
+	DescribeConsumerGroup(context.Context, *DescribeConsumerGroupRequest) (*DescribeConsumerGroupResponse, error)
+	ResetConsumerGroupOffsets(context.Context, *ResetConsumerGroupOffsetsRequest) (*ResetConsumerGroupOffsetsResponse, error)
 	mustEmbedUnimplementedBifrostAdminServiceServer()
 }
 
@@ -302,6 +343,15 @@ func (UnimplementedBifrostAdminServiceServer) RevokeTopicACL(context.Context, *R
 }
 func (UnimplementedBifrostAdminServiceServer) ListTopicACLs(context.Context, *ListTopicACLsRequest) (*ListTopicACLsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListTopicACLs not implemented")
+}
+func (UnimplementedBifrostAdminServiceServer) ListConsumerGroups(context.Context, *ListConsumerGroupsRequest) (*ListConsumerGroupsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListConsumerGroups not implemented")
+}
+func (UnimplementedBifrostAdminServiceServer) DescribeConsumerGroup(context.Context, *DescribeConsumerGroupRequest) (*DescribeConsumerGroupResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DescribeConsumerGroup not implemented")
+}
+func (UnimplementedBifrostAdminServiceServer) ResetConsumerGroupOffsets(context.Context, *ResetConsumerGroupOffsetsRequest) (*ResetConsumerGroupOffsetsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResetConsumerGroupOffsets not implemented")
 }
 func (UnimplementedBifrostAdminServiceServer) mustEmbedUnimplementedBifrostAdminServiceServer() {}
 func (UnimplementedBifrostAdminServiceServer) testEmbeddedByValue()                             {}
@@ -594,6 +644,60 @@ func _BifrostAdminService_ListTopicACLs_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BifrostAdminService_ListConsumerGroups_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListConsumerGroupsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostAdminServiceServer).ListConsumerGroups(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostAdminService_ListConsumerGroups_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostAdminServiceServer).ListConsumerGroups(ctx, req.(*ListConsumerGroupsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BifrostAdminService_DescribeConsumerGroup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DescribeConsumerGroupRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostAdminServiceServer).DescribeConsumerGroup(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostAdminService_DescribeConsumerGroup_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostAdminServiceServer).DescribeConsumerGroup(ctx, req.(*DescribeConsumerGroupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BifrostAdminService_ResetConsumerGroupOffsets_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResetConsumerGroupOffsetsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostAdminServiceServer).ResetConsumerGroupOffsets(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostAdminService_ResetConsumerGroupOffsets_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostAdminServiceServer).ResetConsumerGroupOffsets(ctx, req.(*ResetConsumerGroupOffsetsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BifrostAdminService_ServiceDesc is the grpc.ServiceDesc for BifrostAdminService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -660,6 +764,18 @@ var BifrostAdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListTopicACLs",
 			Handler:    _BifrostAdminService_ListTopicACLs_Handler,
+		},
+		{
+			MethodName: "ListConsumerGroups",
+			Handler:    _BifrostAdminService_ListConsumerGroups_Handler,
+		},
+		{
+			MethodName: "DescribeConsumerGroup",
+			Handler:    _BifrostAdminService_DescribeConsumerGroup_Handler,
+		},
+		{
+			MethodName: "ResetConsumerGroupOffsets",
+			Handler:    _BifrostAdminService_ResetConsumerGroupOffsets_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

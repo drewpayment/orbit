@@ -5,7 +5,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { DeletePolicyRequest, DeletePolicyResponse, DeleteVirtualClusterRequest, DeleteVirtualClusterResponse, EmitClientActivityRequest, EmitClientActivityResponse, GetFullConfigRequest, GetFullConfigResponse, GetStatusRequest, GetStatusResponse, ListCredentialsRequest, ListCredentialsResponse, ListPoliciesRequest, ListPoliciesResponse, ListTopicACLsRequest, ListTopicACLsResponse, ListVirtualClustersRequest, ListVirtualClustersResponse, RevokeCredentialRequest, RevokeCredentialResponse, RevokeTopicACLRequest, RevokeTopicACLResponse, SetVirtualClusterReadOnlyRequest, SetVirtualClusterReadOnlyResponse, TopicConfigUpdatedRequest, TopicConfigUpdatedResponse, TopicCreatedRequest, TopicCreatedResponse, TopicDeletedRequest, TopicDeletedResponse, UpsertCredentialRequest, UpsertCredentialResponse, UpsertPolicyRequest, UpsertPolicyResponse, UpsertTopicACLRequest, UpsertTopicACLResponse, UpsertVirtualClusterRequest, UpsertVirtualClusterResponse } from "./gateway_pb.js";
+import { DeletePolicyRequest, DeletePolicyResponse, DeleteVirtualClusterRequest, DeleteVirtualClusterResponse, DescribeConsumerGroupRequest, DescribeConsumerGroupResponse, EmitClientActivityRequest, EmitClientActivityResponse, GetFullConfigRequest, GetFullConfigResponse, GetStatusRequest, GetStatusResponse, ListConsumerGroupsRequest, ListConsumerGroupsResponse, ListCredentialsRequest, ListCredentialsResponse, ListPoliciesRequest, ListPoliciesResponse, ListTopicACLsRequest, ListTopicACLsResponse, ListVirtualClustersRequest, ListVirtualClustersResponse, ResetConsumerGroupOffsetsRequest, ResetConsumerGroupOffsetsResponse, RevokeCredentialRequest, RevokeCredentialResponse, RevokeTopicACLRequest, RevokeTopicACLResponse, SetVirtualClusterReadOnlyRequest, SetVirtualClusterReadOnlyResponse, TopicConfigUpdatedRequest, TopicConfigUpdatedResponse, TopicCreatedRequest, TopicCreatedResponse, TopicDeletedRequest, TopicDeletedResponse, UpsertCredentialRequest, UpsertCredentialResponse, UpsertPolicyRequest, UpsertPolicyResponse, UpsertTopicACLRequest, UpsertTopicACLResponse, UpsertVirtualClusterRequest, UpsertVirtualClusterResponse } from "./gateway_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -159,6 +159,35 @@ export const BifrostAdminService = {
       name: "ListTopicACLs",
       I: ListTopicACLsRequest,
       O: ListTopicACLsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Consumer group monitoring and management
+     *
+     * @generated from rpc idp.gateway.v1.BifrostAdminService.ListConsumerGroups
+     */
+    listConsumerGroups: {
+      name: "ListConsumerGroups",
+      I: ListConsumerGroupsRequest,
+      O: ListConsumerGroupsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc idp.gateway.v1.BifrostAdminService.DescribeConsumerGroup
+     */
+    describeConsumerGroup: {
+      name: "DescribeConsumerGroup",
+      I: DescribeConsumerGroupRequest,
+      O: DescribeConsumerGroupResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc idp.gateway.v1.BifrostAdminService.ResetConsumerGroupOffsets
+     */
+    resetConsumerGroupOffsets: {
+      name: "ResetConsumerGroupOffsets",
+      I: ResetConsumerGroupOffsetsRequest,
+      O: ResetConsumerGroupOffsetsResponse,
       kind: MethodKind.Unary,
     },
   }

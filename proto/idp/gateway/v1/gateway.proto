@@ -41,6 +41,11 @@ service BifrostAdminService {
   rpc UpsertTopicACL(UpsertTopicACLRequest) returns (UpsertTopicACLResponse);
   rpc RevokeTopicACL(RevokeTopicACLRequest) returns (RevokeTopicACLResponse);
   rpc ListTopicACLs(ListTopicACLsRequest) returns (ListTopicACLsResponse);
+
+  // Consumer group monitoring and management
+  rpc ListConsumerGroups(ListConsumerGroupsRequest) returns (ListConsumerGroupsResponse);
+  rpc DescribeConsumerGroup(DescribeConsumerGroupRequest) returns (DescribeConsumerGroupResponse);
+  rpc ResetConsumerGroupOffsets(ResetConsumerGroupOffsetsRequest) returns (ResetConsumerGroupOffsetsResponse);
 }
 
 // ============================================================================
@@ -336,4 +341,83 @@ message EmitClientActivityRequest {
 message EmitClientActivityResponse {
   bool success = 1;
   int32 records_processed = 2;
+}
+
+// ============================================================================
+// Consumer Group Messages (Monitoring & Management)
+// ============================================================================
+
+enum ConsumerGroupState {
+  CONSUMER_GROUP_STATE_UNSPECIFIED = 0;
+  CONSUMER_GROUP_STATE_STABLE = 1;
+  CONSUMER_GROUP_STATE_PREPARING_REBALANCE = 2;
+  CONSUMER_GROUP_STATE_COMPLETING_REBALANCE = 3;
+  CONSUMER_GROUP_STATE_EMPTY = 4;
+  CONSUMER_GROUP_STATE_DEAD = 5;
+}
+
+enum OffsetResetType {
+  OFFSET_RESET_TYPE_UNSPECIFIED = 0;
+  OFFSET_RESET_TYPE_EARLIEST = 1;
+  OFFSET_RESET_TYPE_LATEST = 2;
+  OFFSET_RESET_TYPE_TIMESTAMP = 3;
+}
+
+message ConsumerGroupSummary {
+  string group_id = 1;                    // Virtual (unprefixed) group ID
+  ConsumerGroupState state = 2;
+  int32 member_count = 3;
+  repeated string topics = 4;             // Virtual topic names
+  int64 total_lag = 5;
+}
+
+message PartitionLag {
+  string topic = 1;                       // Virtual topic name
+  int32 partition = 2;
+  int64 current_offset = 3;
+  int64 end_offset = 4;
+  int64 lag = 5;
+  string consumer_id = 6;                 // Member owning this partition
+}
+
+message ConsumerGroupDetail {
+  string group_id = 1;
+  ConsumerGroupState state = 2;
+  int32 member_count = 3;
+  repeated string topics = 4;
+  int64 total_lag = 5;
+  repeated PartitionLag partitions = 6;
+}
+
+message ListConsumerGroupsRequest {
+  string virtual_cluster_id = 1;
+}
+
+message ListConsumerGroupsResponse {
+  repeated ConsumerGroupSummary groups = 1;
+  string error = 2;
+}
+
+message DescribeConsumerGroupRequest {
+  string virtual_cluster_id = 1;
+  string group_id = 2;                    // Virtual group ID
+}
+
+message DescribeConsumerGroupResponse {
+  ConsumerGroupDetail group = 1;
+  string error = 2;
+}
+
+message ResetConsumerGroupOffsetsRequest {
+  string virtual_cluster_id = 1;
+  string group_id = 2;                    // Virtual group ID
+  string topic = 3;                       // Virtual topic name (reset per-topic)
+  OffsetResetType reset_type = 4;
+  int64 timestamp = 5;                    // Only used if reset_type = TIMESTAMP
+}
+
+message ResetConsumerGroupOffsetsResponse {
+  bool success = 1;
+  string error = 2;
+  repeated PartitionLag new_offsets = 3;  // New offset positions after reset
 }

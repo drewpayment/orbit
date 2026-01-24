@@ -24,6 +24,8 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	github.com/sirupsen/logrus v1.9.4
 	github.com/stretchr/testify v1.11.1
+	github.com/twmb/franz-go v1.20.6
+	github.com/twmb/franz-go/pkg/kadm v1.17.1
 	github.com/xdg-go/scram v1.2.0
 	golang.org/x/net v0.49.0
 	google.golang.org/grpc v1.65.0
@@ -57,8 +59,6 @@ require (
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.66.1 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
-	github.com/twmb/franz-go v1.20.6 // indirect
-	github.com/twmb/franz-go/pkg/kadm v1.17.1 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.12.0 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect

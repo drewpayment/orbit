@@ -79,6 +79,116 @@ func (PermissionTemplate) EnumDescriptor() ([]byte, []int) {
 	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{0}
 }
 
+type ConsumerGroupState int32
+
+const (
+	ConsumerGroupState_CONSUMER_GROUP_STATE_UNSPECIFIED          ConsumerGroupState = 0
+	ConsumerGroupState_CONSUMER_GROUP_STATE_STABLE               ConsumerGroupState = 1
+	ConsumerGroupState_CONSUMER_GROUP_STATE_PREPARING_REBALANCE  ConsumerGroupState = 2
+	ConsumerGroupState_CONSUMER_GROUP_STATE_COMPLETING_REBALANCE ConsumerGroupState = 3
+	ConsumerGroupState_CONSUMER_GROUP_STATE_EMPTY                ConsumerGroupState = 4
+	ConsumerGroupState_CONSUMER_GROUP_STATE_DEAD                 ConsumerGroupState = 5
+)
+
+// Enum value maps for ConsumerGroupState.
+var (
+	ConsumerGroupState_name = map[int32]string{
+		0: "CONSUMER_GROUP_STATE_UNSPECIFIED",
+		1: "CONSUMER_GROUP_STATE_STABLE",
+		2: "CONSUMER_GROUP_STATE_PREPARING_REBALANCE",
+		3: "CONSUMER_GROUP_STATE_COMPLETING_REBALANCE",
+		4: "CONSUMER_GROUP_STATE_EMPTY",
+		5: "CONSUMER_GROUP_STATE_DEAD",
+	}
+	ConsumerGroupState_value = map[string]int32{
+		"CONSUMER_GROUP_STATE_UNSPECIFIED":          0,
+		"CONSUMER_GROUP_STATE_STABLE":               1,
+		"CONSUMER_GROUP_STATE_PREPARING_REBALANCE":  2,
+		"CONSUMER_GROUP_STATE_COMPLETING_REBALANCE": 3,
+		"CONSUMER_GROUP_STATE_EMPTY":                4,
+		"CONSUMER_GROUP_STATE_DEAD":                 5,
+	}
+)
+
+func (x ConsumerGroupState) Enum() *ConsumerGroupState {
+	p := new(ConsumerGroupState)
+	*p = x
+	return p
+}
+
+func (x ConsumerGroupState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ConsumerGroupState) Descriptor() protoreflect.EnumDescriptor {
+	return file_idp_gateway_v1_gateway_proto_enumTypes[1].Descriptor()
+}
+
+func (ConsumerGroupState) Type() protoreflect.EnumType {
+	return &file_idp_gateway_v1_gateway_proto_enumTypes[1]
+}
+
+func (x ConsumerGroupState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ConsumerGroupState.Descriptor instead.
+func (ConsumerGroupState) EnumDescriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{1}
+}
+
+type OffsetResetType int32
+
+const (
+	OffsetResetType_OFFSET_RESET_TYPE_UNSPECIFIED OffsetResetType = 0
+	OffsetResetType_OFFSET_RESET_TYPE_EARLIEST    OffsetResetType = 1
+	OffsetResetType_OFFSET_RESET_TYPE_LATEST      OffsetResetType = 2
+	OffsetResetType_OFFSET_RESET_TYPE_TIMESTAMP   OffsetResetType = 3
+)
+
+// Enum value maps for OffsetResetType.
+var (
+	OffsetResetType_name = map[int32]string{
+		0: "OFFSET_RESET_TYPE_UNSPECIFIED",
+		1: "OFFSET_RESET_TYPE_EARLIEST",
+		2: "OFFSET_RESET_TYPE_LATEST",
+		3: "OFFSET_RESET_TYPE_TIMESTAMP",
+	}
+	OffsetResetType_value = map[string]int32{
+		"OFFSET_RESET_TYPE_UNSPECIFIED": 0,
+		"OFFSET_RESET_TYPE_EARLIEST":    1,
+		"OFFSET_RESET_TYPE_LATEST":      2,
+		"OFFSET_RESET_TYPE_TIMESTAMP":   3,
+	}
+)
+
+func (x OffsetResetType) Enum() *OffsetResetType {
+	p := new(OffsetResetType)
+	*p = x
+	return p
+}
+
+func (x OffsetResetType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (OffsetResetType) Descriptor() protoreflect.EnumDescriptor {
+	return file_idp_gateway_v1_gateway_proto_enumTypes[2].Descriptor()
+}
+
+func (OffsetResetType) Type() protoreflect.EnumType {
+	return &file_idp_gateway_v1_gateway_proto_enumTypes[2]
+}
+
+func (x OffsetResetType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use OffsetResetType.Descriptor instead.
+func (OffsetResetType) EnumDescriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{2}
+}
+
 type VirtualClusterConfig struct {
 	state                    protoimpl.MessageState `protogen:"open.v1"`
 	Id                       string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -2542,6 +2652,586 @@ func (x *EmitClientActivityResponse) GetRecordsProcessed() int32 {
 	return 0
 }
 
+type ConsumerGroupSummary struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GroupId       string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"` // Virtual (unprefixed) group ID
+	State         ConsumerGroupState     `protobuf:"varint,2,opt,name=state,proto3,enum=idp.gateway.v1.ConsumerGroupState" json:"state,omitempty"`
+	MemberCount   int32                  `protobuf:"varint,3,opt,name=member_count,json=memberCount,proto3" json:"member_count,omitempty"`
+	Topics        []string               `protobuf:"bytes,4,rep,name=topics,proto3" json:"topics,omitempty"` // Virtual topic names
+	TotalLag      int64                  `protobuf:"varint,5,opt,name=total_lag,json=totalLag,proto3" json:"total_lag,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConsumerGroupSummary) Reset() {
+	*x = ConsumerGroupSummary{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConsumerGroupSummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConsumerGroupSummary) ProtoMessage() {}
+
+func (x *ConsumerGroupSummary) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConsumerGroupSummary.ProtoReflect.Descriptor instead.
+func (*ConsumerGroupSummary) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *ConsumerGroupSummary) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+func (x *ConsumerGroupSummary) GetState() ConsumerGroupState {
+	if x != nil {
+		return x.State
+	}
+	return ConsumerGroupState_CONSUMER_GROUP_STATE_UNSPECIFIED
+}
+
+func (x *ConsumerGroupSummary) GetMemberCount() int32 {
+	if x != nil {
+		return x.MemberCount
+	}
+	return 0
+}
+
+func (x *ConsumerGroupSummary) GetTopics() []string {
+	if x != nil {
+		return x.Topics
+	}
+	return nil
+}
+
+func (x *ConsumerGroupSummary) GetTotalLag() int64 {
+	if x != nil {
+		return x.TotalLag
+	}
+	return 0
+}
+
+type PartitionLag struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Topic         string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"` // Virtual topic name
+	Partition     int32                  `protobuf:"varint,2,opt,name=partition,proto3" json:"partition,omitempty"`
+	CurrentOffset int64                  `protobuf:"varint,3,opt,name=current_offset,json=currentOffset,proto3" json:"current_offset,omitempty"`
+	EndOffset     int64                  `protobuf:"varint,4,opt,name=end_offset,json=endOffset,proto3" json:"end_offset,omitempty"`
+	Lag           int64                  `protobuf:"varint,5,opt,name=lag,proto3" json:"lag,omitempty"`
+	ConsumerId    string                 `protobuf:"bytes,6,opt,name=consumer_id,json=consumerId,proto3" json:"consumer_id,omitempty"` // Member owning this partition
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PartitionLag) Reset() {
+	*x = PartitionLag{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PartitionLag) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PartitionLag) ProtoMessage() {}
+
+func (x *PartitionLag) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PartitionLag.ProtoReflect.Descriptor instead.
+func (*PartitionLag) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *PartitionLag) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+func (x *PartitionLag) GetPartition() int32 {
+	if x != nil {
+		return x.Partition
+	}
+	return 0
+}
+
+func (x *PartitionLag) GetCurrentOffset() int64 {
+	if x != nil {
+		return x.CurrentOffset
+	}
+	return 0
+}
+
+func (x *PartitionLag) GetEndOffset() int64 {
+	if x != nil {
+		return x.EndOffset
+	}
+	return 0
+}
+
+func (x *PartitionLag) GetLag() int64 {
+	if x != nil {
+		return x.Lag
+	}
+	return 0
+}
+
+func (x *PartitionLag) GetConsumerId() string {
+	if x != nil {
+		return x.ConsumerId
+	}
+	return ""
+}
+
+type ConsumerGroupDetail struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GroupId       string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	State         ConsumerGroupState     `protobuf:"varint,2,opt,name=state,proto3,enum=idp.gateway.v1.ConsumerGroupState" json:"state,omitempty"`
+	MemberCount   int32                  `protobuf:"varint,3,opt,name=member_count,json=memberCount,proto3" json:"member_count,omitempty"`
+	Topics        []string               `protobuf:"bytes,4,rep,name=topics,proto3" json:"topics,omitempty"`
+	TotalLag      int64                  `protobuf:"varint,5,opt,name=total_lag,json=totalLag,proto3" json:"total_lag,omitempty"`
+	Partitions    []*PartitionLag        `protobuf:"bytes,6,rep,name=partitions,proto3" json:"partitions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConsumerGroupDetail) Reset() {
+	*x = ConsumerGroupDetail{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConsumerGroupDetail) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConsumerGroupDetail) ProtoMessage() {}
+
+func (x *ConsumerGroupDetail) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConsumerGroupDetail.ProtoReflect.Descriptor instead.
+func (*ConsumerGroupDetail) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *ConsumerGroupDetail) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+func (x *ConsumerGroupDetail) GetState() ConsumerGroupState {
+	if x != nil {
+		return x.State
+	}
+	return ConsumerGroupState_CONSUMER_GROUP_STATE_UNSPECIFIED
+}
+
+func (x *ConsumerGroupDetail) GetMemberCount() int32 {
+	if x != nil {
+		return x.MemberCount
+	}
+	return 0
+}
+
+func (x *ConsumerGroupDetail) GetTopics() []string {
+	if x != nil {
+		return x.Topics
+	}
+	return nil
+}
+
+func (x *ConsumerGroupDetail) GetTotalLag() int64 {
+	if x != nil {
+		return x.TotalLag
+	}
+	return 0
+}
+
+func (x *ConsumerGroupDetail) GetPartitions() []*PartitionLag {
+	if x != nil {
+		return x.Partitions
+	}
+	return nil
+}
+
+type ListConsumerGroupsRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	VirtualClusterId string                 `protobuf:"bytes,1,opt,name=virtual_cluster_id,json=virtualClusterId,proto3" json:"virtual_cluster_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ListConsumerGroupsRequest) Reset() {
+	*x = ListConsumerGroupsRequest{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListConsumerGroupsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListConsumerGroupsRequest) ProtoMessage() {}
+
+func (x *ListConsumerGroupsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListConsumerGroupsRequest.ProtoReflect.Descriptor instead.
+func (*ListConsumerGroupsRequest) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *ListConsumerGroupsRequest) GetVirtualClusterId() string {
+	if x != nil {
+		return x.VirtualClusterId
+	}
+	return ""
+}
+
+type ListConsumerGroupsResponse struct {
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	Groups        []*ConsumerGroupSummary `protobuf:"bytes,1,rep,name=groups,proto3" json:"groups,omitempty"`
+	Error         string                  `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListConsumerGroupsResponse) Reset() {
+	*x = ListConsumerGroupsResponse{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListConsumerGroupsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListConsumerGroupsResponse) ProtoMessage() {}
+
+func (x *ListConsumerGroupsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListConsumerGroupsResponse.ProtoReflect.Descriptor instead.
+func (*ListConsumerGroupsResponse) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *ListConsumerGroupsResponse) GetGroups() []*ConsumerGroupSummary {
+	if x != nil {
+		return x.Groups
+	}
+	return nil
+}
+
+func (x *ListConsumerGroupsResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type DescribeConsumerGroupRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	VirtualClusterId string                 `protobuf:"bytes,1,opt,name=virtual_cluster_id,json=virtualClusterId,proto3" json:"virtual_cluster_id,omitempty"`
+	GroupId          string                 `protobuf:"bytes,2,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"` // Virtual group ID
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *DescribeConsumerGroupRequest) Reset() {
+	*x = DescribeConsumerGroupRequest{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DescribeConsumerGroupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DescribeConsumerGroupRequest) ProtoMessage() {}
+
+func (x *DescribeConsumerGroupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DescribeConsumerGroupRequest.ProtoReflect.Descriptor instead.
+func (*DescribeConsumerGroupRequest) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *DescribeConsumerGroupRequest) GetVirtualClusterId() string {
+	if x != nil {
+		return x.VirtualClusterId
+	}
+	return ""
+}
+
+func (x *DescribeConsumerGroupRequest) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+type DescribeConsumerGroupResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Group         *ConsumerGroupDetail   `protobuf:"bytes,1,opt,name=group,proto3" json:"group,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DescribeConsumerGroupResponse) Reset() {
+	*x = DescribeConsumerGroupResponse{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DescribeConsumerGroupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DescribeConsumerGroupResponse) ProtoMessage() {}
+
+func (x *DescribeConsumerGroupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DescribeConsumerGroupResponse.ProtoReflect.Descriptor instead.
+func (*DescribeConsumerGroupResponse) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *DescribeConsumerGroupResponse) GetGroup() *ConsumerGroupDetail {
+	if x != nil {
+		return x.Group
+	}
+	return nil
+}
+
+func (x *DescribeConsumerGroupResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type ResetConsumerGroupOffsetsRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	VirtualClusterId string                 `protobuf:"bytes,1,opt,name=virtual_cluster_id,json=virtualClusterId,proto3" json:"virtual_cluster_id,omitempty"`
+	GroupId          string                 `protobuf:"bytes,2,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"` // Virtual group ID
+	Topic            string                 `protobuf:"bytes,3,opt,name=topic,proto3" json:"topic,omitempty"`                    // Virtual topic name (reset per-topic)
+	ResetType        OffsetResetType        `protobuf:"varint,4,opt,name=reset_type,json=resetType,proto3,enum=idp.gateway.v1.OffsetResetType" json:"reset_type,omitempty"`
+	Timestamp        int64                  `protobuf:"varint,5,opt,name=timestamp,proto3" json:"timestamp,omitempty"` // Only used if reset_type = TIMESTAMP
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ResetConsumerGroupOffsetsRequest) Reset() {
+	*x = ResetConsumerGroupOffsetsRequest{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResetConsumerGroupOffsetsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResetConsumerGroupOffsetsRequest) ProtoMessage() {}
+
+func (x *ResetConsumerGroupOffsetsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResetConsumerGroupOffsetsRequest.ProtoReflect.Descriptor instead.
+func (*ResetConsumerGroupOffsetsRequest) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *ResetConsumerGroupOffsetsRequest) GetVirtualClusterId() string {
+	if x != nil {
+		return x.VirtualClusterId
+	}
+	return ""
+}
+
+func (x *ResetConsumerGroupOffsetsRequest) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+func (x *ResetConsumerGroupOffsetsRequest) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+func (x *ResetConsumerGroupOffsetsRequest) GetResetType() OffsetResetType {
+	if x != nil {
+		return x.ResetType
+	}
+	return OffsetResetType_OFFSET_RESET_TYPE_UNSPECIFIED
+}
+
+func (x *ResetConsumerGroupOffsetsRequest) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+type ResetConsumerGroupOffsetsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	NewOffsets    []*PartitionLag        `protobuf:"bytes,3,rep,name=new_offsets,json=newOffsets,proto3" json:"new_offsets,omitempty"` // New offset positions after reset
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResetConsumerGroupOffsetsResponse) Reset() {
+	*x = ResetConsumerGroupOffsetsResponse{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResetConsumerGroupOffsetsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResetConsumerGroupOffsetsResponse) ProtoMessage() {}
+
+func (x *ResetConsumerGroupOffsetsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResetConsumerGroupOffsetsResponse.ProtoReflect.Descriptor instead.
+func (*ResetConsumerGroupOffsetsResponse) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *ResetConsumerGroupOffsetsResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *ResetConsumerGroupOffsetsResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *ResetConsumerGroupOffsetsResponse) GetNewOffsets() []*PartitionLag {
+	if x != nil {
+		return x.NewOffsets
+	}
+	return nil
+}
+
 var File_idp_gateway_v1_gateway_proto protoreflect.FileDescriptor
 
 const file_idp_gateway_v1_gateway_proto_rawDesc = "" +
@@ -2715,13 +3405,72 @@ const file_idp_gateway_v1_gateway_proto_rawDesc = "" +
 	"\arecords\x18\x01 \x03(\v2$.idp.gateway.v1.ClientActivityRecordR\arecords\"c\n" +
 	"\x1aEmitClientActivityResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12+\n" +
-	"\x11records_processed\x18\x02 \x01(\x05R\x10recordsProcessed*\xbc\x01\n" +
+	"\x11records_processed\x18\x02 \x01(\x05R\x10recordsProcessed\"\xc3\x01\n" +
+	"\x14ConsumerGroupSummary\x12\x19\n" +
+	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x128\n" +
+	"\x05state\x18\x02 \x01(\x0e2\".idp.gateway.v1.ConsumerGroupStateR\x05state\x12!\n" +
+	"\fmember_count\x18\x03 \x01(\x05R\vmemberCount\x12\x16\n" +
+	"\x06topics\x18\x04 \x03(\tR\x06topics\x12\x1b\n" +
+	"\ttotal_lag\x18\x05 \x01(\x03R\btotalLag\"\xbb\x01\n" +
+	"\fPartitionLag\x12\x14\n" +
+	"\x05topic\x18\x01 \x01(\tR\x05topic\x12\x1c\n" +
+	"\tpartition\x18\x02 \x01(\x05R\tpartition\x12%\n" +
+	"\x0ecurrent_offset\x18\x03 \x01(\x03R\rcurrentOffset\x12\x1d\n" +
+	"\n" +
+	"end_offset\x18\x04 \x01(\x03R\tendOffset\x12\x10\n" +
+	"\x03lag\x18\x05 \x01(\x03R\x03lag\x12\x1f\n" +
+	"\vconsumer_id\x18\x06 \x01(\tR\n" +
+	"consumerId\"\x80\x02\n" +
+	"\x13ConsumerGroupDetail\x12\x19\n" +
+	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x128\n" +
+	"\x05state\x18\x02 \x01(\x0e2\".idp.gateway.v1.ConsumerGroupStateR\x05state\x12!\n" +
+	"\fmember_count\x18\x03 \x01(\x05R\vmemberCount\x12\x16\n" +
+	"\x06topics\x18\x04 \x03(\tR\x06topics\x12\x1b\n" +
+	"\ttotal_lag\x18\x05 \x01(\x03R\btotalLag\x12<\n" +
+	"\n" +
+	"partitions\x18\x06 \x03(\v2\x1c.idp.gateway.v1.PartitionLagR\n" +
+	"partitions\"I\n" +
+	"\x19ListConsumerGroupsRequest\x12,\n" +
+	"\x12virtual_cluster_id\x18\x01 \x01(\tR\x10virtualClusterId\"p\n" +
+	"\x1aListConsumerGroupsResponse\x12<\n" +
+	"\x06groups\x18\x01 \x03(\v2$.idp.gateway.v1.ConsumerGroupSummaryR\x06groups\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"g\n" +
+	"\x1cDescribeConsumerGroupRequest\x12,\n" +
+	"\x12virtual_cluster_id\x18\x01 \x01(\tR\x10virtualClusterId\x12\x19\n" +
+	"\bgroup_id\x18\x02 \x01(\tR\agroupId\"p\n" +
+	"\x1dDescribeConsumerGroupResponse\x129\n" +
+	"\x05group\x18\x01 \x01(\v2#.idp.gateway.v1.ConsumerGroupDetailR\x05group\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\xdf\x01\n" +
+	" ResetConsumerGroupOffsetsRequest\x12,\n" +
+	"\x12virtual_cluster_id\x18\x01 \x01(\tR\x10virtualClusterId\x12\x19\n" +
+	"\bgroup_id\x18\x02 \x01(\tR\agroupId\x12\x14\n" +
+	"\x05topic\x18\x03 \x01(\tR\x05topic\x12>\n" +
+	"\n" +
+	"reset_type\x18\x04 \x01(\x0e2\x1f.idp.gateway.v1.OffsetResetTypeR\tresetType\x12\x1c\n" +
+	"\ttimestamp\x18\x05 \x01(\x03R\ttimestamp\"\x92\x01\n" +
+	"!ResetConsumerGroupOffsetsResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x12=\n" +
+	"\vnew_offsets\x18\x03 \x03(\v2\x1c.idp.gateway.v1.PartitionLagR\n" +
+	"newOffsets*\xbc\x01\n" +
 	"\x12PermissionTemplate\x12#\n" +
 	"\x1fPERMISSION_TEMPLATE_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cPERMISSION_TEMPLATE_PRODUCER\x10\x01\x12 \n" +
 	"\x1cPERMISSION_TEMPLATE_CONSUMER\x10\x02\x12\x1d\n" +
 	"\x19PERMISSION_TEMPLATE_ADMIN\x10\x03\x12\x1e\n" +
-	"\x1aPERMISSION_TEMPLATE_CUSTOM\x10\x042\x81\f\n" +
+	"\x1aPERMISSION_TEMPLATE_CUSTOM\x10\x04*\xf7\x01\n" +
+	"\x12ConsumerGroupState\x12$\n" +
+	" CONSUMER_GROUP_STATE_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bCONSUMER_GROUP_STATE_STABLE\x10\x01\x12,\n" +
+	"(CONSUMER_GROUP_STATE_PREPARING_REBALANCE\x10\x02\x12-\n" +
+	")CONSUMER_GROUP_STATE_COMPLETING_REBALANCE\x10\x03\x12\x1e\n" +
+	"\x1aCONSUMER_GROUP_STATE_EMPTY\x10\x04\x12\x1d\n" +
+	"\x19CONSUMER_GROUP_STATE_DEAD\x10\x05*\x93\x01\n" +
+	"\x0fOffsetResetType\x12!\n" +
+	"\x1dOFFSET_RESET_TYPE_UNSPECIFIED\x10\x00\x12\x1e\n" +
+	"\x1aOFFSET_RESET_TYPE_EARLIEST\x10\x01\x12\x1c\n" +
+	"\x18OFFSET_RESET_TYPE_LATEST\x10\x02\x12\x1f\n" +
+	"\x1bOFFSET_RESET_TYPE_TIMESTAMP\x10\x032\xe7\x0e\n" +
 	"\x13BifrostAdminService\x12q\n" +
 	"\x14UpsertVirtualCluster\x12+.idp.gateway.v1.UpsertVirtualClusterRequest\x1a,.idp.gateway.v1.UpsertVirtualClusterResponse\x12q\n" +
 	"\x14DeleteVirtualCluster\x12+.idp.gateway.v1.DeleteVirtualClusterRequest\x1a,.idp.gateway.v1.DeleteVirtualClusterResponse\x12\x80\x01\n" +
@@ -2737,7 +3486,10 @@ const file_idp_gateway_v1_gateway_proto_rawDesc = "" +
 	"\fListPolicies\x12#.idp.gateway.v1.ListPoliciesRequest\x1a$.idp.gateway.v1.ListPoliciesResponse\x12_\n" +
 	"\x0eUpsertTopicACL\x12%.idp.gateway.v1.UpsertTopicACLRequest\x1a&.idp.gateway.v1.UpsertTopicACLResponse\x12_\n" +
 	"\x0eRevokeTopicACL\x12%.idp.gateway.v1.RevokeTopicACLRequest\x1a&.idp.gateway.v1.RevokeTopicACLResponse\x12\\\n" +
-	"\rListTopicACLs\x12$.idp.gateway.v1.ListTopicACLsRequest\x1a%.idp.gateway.v1.ListTopicACLsResponse2\xa8\x03\n" +
+	"\rListTopicACLs\x12$.idp.gateway.v1.ListTopicACLsRequest\x1a%.idp.gateway.v1.ListTopicACLsResponse\x12k\n" +
+	"\x12ListConsumerGroups\x12).idp.gateway.v1.ListConsumerGroupsRequest\x1a*.idp.gateway.v1.ListConsumerGroupsResponse\x12t\n" +
+	"\x15DescribeConsumerGroup\x12,.idp.gateway.v1.DescribeConsumerGroupRequest\x1a-.idp.gateway.v1.DescribeConsumerGroupResponse\x12\x80\x01\n" +
+	"\x19ResetConsumerGroupOffsets\x120.idp.gateway.v1.ResetConsumerGroupOffsetsRequest\x1a1.idp.gateway.v1.ResetConsumerGroupOffsetsResponse2\xa8\x03\n" +
 	"\x16BifrostCallbackService\x12Y\n" +
 	"\fTopicCreated\x12#.idp.gateway.v1.TopicCreatedRequest\x1a$.idp.gateway.v1.TopicCreatedResponse\x12Y\n" +
 	"\fTopicDeleted\x12#.idp.gateway.v1.TopicDeletedRequest\x1a$.idp.gateway.v1.TopicDeletedResponse\x12k\n" +
@@ -2757,125 +3509,149 @@ func file_idp_gateway_v1_gateway_proto_rawDescGZIP() []byte {
 	return file_idp_gateway_v1_gateway_proto_rawDescData
 }
 
-var file_idp_gateway_v1_gateway_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_idp_gateway_v1_gateway_proto_msgTypes = make([]protoimpl.MessageInfo, 48)
+var file_idp_gateway_v1_gateway_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_idp_gateway_v1_gateway_proto_msgTypes = make([]protoimpl.MessageInfo, 57)
 var file_idp_gateway_v1_gateway_proto_goTypes = []any{
 	(PermissionTemplate)(0),                   // 0: idp.gateway.v1.PermissionTemplate
-	(*VirtualClusterConfig)(nil),              // 1: idp.gateway.v1.VirtualClusterConfig
-	(*UpsertVirtualClusterRequest)(nil),       // 2: idp.gateway.v1.UpsertVirtualClusterRequest
-	(*UpsertVirtualClusterResponse)(nil),      // 3: idp.gateway.v1.UpsertVirtualClusterResponse
-	(*DeleteVirtualClusterRequest)(nil),       // 4: idp.gateway.v1.DeleteVirtualClusterRequest
-	(*DeleteVirtualClusterResponse)(nil),      // 5: idp.gateway.v1.DeleteVirtualClusterResponse
-	(*SetVirtualClusterReadOnlyRequest)(nil),  // 6: idp.gateway.v1.SetVirtualClusterReadOnlyRequest
-	(*SetVirtualClusterReadOnlyResponse)(nil), // 7: idp.gateway.v1.SetVirtualClusterReadOnlyResponse
-	(*GetFullConfigRequest)(nil),              // 8: idp.gateway.v1.GetFullConfigRequest
-	(*GetFullConfigResponse)(nil),             // 9: idp.gateway.v1.GetFullConfigResponse
-	(*GetStatusRequest)(nil),                  // 10: idp.gateway.v1.GetStatusRequest
-	(*GetStatusResponse)(nil),                 // 11: idp.gateway.v1.GetStatusResponse
-	(*ListVirtualClustersRequest)(nil),        // 12: idp.gateway.v1.ListVirtualClustersRequest
-	(*ListVirtualClustersResponse)(nil),       // 13: idp.gateway.v1.ListVirtualClustersResponse
-	(*CustomPermission)(nil),                  // 14: idp.gateway.v1.CustomPermission
-	(*CredentialConfig)(nil),                  // 15: idp.gateway.v1.CredentialConfig
-	(*UpsertCredentialRequest)(nil),           // 16: idp.gateway.v1.UpsertCredentialRequest
-	(*UpsertCredentialResponse)(nil),          // 17: idp.gateway.v1.UpsertCredentialResponse
-	(*RevokeCredentialRequest)(nil),           // 18: idp.gateway.v1.RevokeCredentialRequest
-	(*RevokeCredentialResponse)(nil),          // 19: idp.gateway.v1.RevokeCredentialResponse
-	(*ListCredentialsRequest)(nil),            // 20: idp.gateway.v1.ListCredentialsRequest
-	(*ListCredentialsResponse)(nil),           // 21: idp.gateway.v1.ListCredentialsResponse
-	(*PolicyConfig)(nil),                      // 22: idp.gateway.v1.PolicyConfig
-	(*UpsertPolicyRequest)(nil),               // 23: idp.gateway.v1.UpsertPolicyRequest
-	(*UpsertPolicyResponse)(nil),              // 24: idp.gateway.v1.UpsertPolicyResponse
-	(*DeletePolicyRequest)(nil),               // 25: idp.gateway.v1.DeletePolicyRequest
-	(*DeletePolicyResponse)(nil),              // 26: idp.gateway.v1.DeletePolicyResponse
-	(*ListPoliciesRequest)(nil),               // 27: idp.gateway.v1.ListPoliciesRequest
-	(*ListPoliciesResponse)(nil),              // 28: idp.gateway.v1.ListPoliciesResponse
-	(*TopicACLEntry)(nil),                     // 29: idp.gateway.v1.TopicACLEntry
-	(*UpsertTopicACLRequest)(nil),             // 30: idp.gateway.v1.UpsertTopicACLRequest
-	(*UpsertTopicACLResponse)(nil),            // 31: idp.gateway.v1.UpsertTopicACLResponse
-	(*RevokeTopicACLRequest)(nil),             // 32: idp.gateway.v1.RevokeTopicACLRequest
-	(*RevokeTopicACLResponse)(nil),            // 33: idp.gateway.v1.RevokeTopicACLResponse
-	(*ListTopicACLsRequest)(nil),              // 34: idp.gateway.v1.ListTopicACLsRequest
-	(*ListTopicACLsResponse)(nil),             // 35: idp.gateway.v1.ListTopicACLsResponse
-	(*TopicCreatedRequest)(nil),               // 36: idp.gateway.v1.TopicCreatedRequest
-	(*TopicCreatedResponse)(nil),              // 37: idp.gateway.v1.TopicCreatedResponse
-	(*TopicDeletedRequest)(nil),               // 38: idp.gateway.v1.TopicDeletedRequest
-	(*TopicDeletedResponse)(nil),              // 39: idp.gateway.v1.TopicDeletedResponse
-	(*TopicConfigUpdatedRequest)(nil),         // 40: idp.gateway.v1.TopicConfigUpdatedRequest
-	(*TopicConfigUpdatedResponse)(nil),        // 41: idp.gateway.v1.TopicConfigUpdatedResponse
-	(*PolicyViolation)(nil),                   // 42: idp.gateway.v1.PolicyViolation
-	(*ClientActivityRecord)(nil),              // 43: idp.gateway.v1.ClientActivityRecord
-	(*EmitClientActivityRequest)(nil),         // 44: idp.gateway.v1.EmitClientActivityRequest
-	(*EmitClientActivityResponse)(nil),        // 45: idp.gateway.v1.EmitClientActivityResponse
-	nil,                                       // 46: idp.gateway.v1.GetStatusResponse.VersionInfoEntry
-	nil,                                       // 47: idp.gateway.v1.TopicCreatedRequest.ConfigEntry
-	nil,                                       // 48: idp.gateway.v1.TopicConfigUpdatedRequest.ConfigEntry
-	(*timestamppb.Timestamp)(nil),             // 49: google.protobuf.Timestamp
+	(ConsumerGroupState)(0),                   // 1: idp.gateway.v1.ConsumerGroupState
+	(OffsetResetType)(0),                      // 2: idp.gateway.v1.OffsetResetType
+	(*VirtualClusterConfig)(nil),              // 3: idp.gateway.v1.VirtualClusterConfig
+	(*UpsertVirtualClusterRequest)(nil),       // 4: idp.gateway.v1.UpsertVirtualClusterRequest
+	(*UpsertVirtualClusterResponse)(nil),      // 5: idp.gateway.v1.UpsertVirtualClusterResponse
+	(*DeleteVirtualClusterRequest)(nil),       // 6: idp.gateway.v1.DeleteVirtualClusterRequest
+	(*DeleteVirtualClusterResponse)(nil),      // 7: idp.gateway.v1.DeleteVirtualClusterResponse
+	(*SetVirtualClusterReadOnlyRequest)(nil),  // 8: idp.gateway.v1.SetVirtualClusterReadOnlyRequest
+	(*SetVirtualClusterReadOnlyResponse)(nil), // 9: idp.gateway.v1.SetVirtualClusterReadOnlyResponse
+	(*GetFullConfigRequest)(nil),              // 10: idp.gateway.v1.GetFullConfigRequest
+	(*GetFullConfigResponse)(nil),             // 11: idp.gateway.v1.GetFullConfigResponse
+	(*GetStatusRequest)(nil),                  // 12: idp.gateway.v1.GetStatusRequest
+	(*GetStatusResponse)(nil),                 // 13: idp.gateway.v1.GetStatusResponse
+	(*ListVirtualClustersRequest)(nil),        // 14: idp.gateway.v1.ListVirtualClustersRequest
+	(*ListVirtualClustersResponse)(nil),       // 15: idp.gateway.v1.ListVirtualClustersResponse
+	(*CustomPermission)(nil),                  // 16: idp.gateway.v1.CustomPermission
+	(*CredentialConfig)(nil),                  // 17: idp.gateway.v1.CredentialConfig
+	(*UpsertCredentialRequest)(nil),           // 18: idp.gateway.v1.UpsertCredentialRequest
+	(*UpsertCredentialResponse)(nil),          // 19: idp.gateway.v1.UpsertCredentialResponse
+	(*RevokeCredentialRequest)(nil),           // 20: idp.gateway.v1.RevokeCredentialRequest
+	(*RevokeCredentialResponse)(nil),          // 21: idp.gateway.v1.RevokeCredentialResponse
+	(*ListCredentialsRequest)(nil),            // 22: idp.gateway.v1.ListCredentialsRequest
+	(*ListCredentialsResponse)(nil),           // 23: idp.gateway.v1.ListCredentialsResponse
+	(*PolicyConfig)(nil),                      // 24: idp.gateway.v1.PolicyConfig
+	(*UpsertPolicyRequest)(nil),               // 25: idp.gateway.v1.UpsertPolicyRequest
+	(*UpsertPolicyResponse)(nil),              // 26: idp.gateway.v1.UpsertPolicyResponse
+	(*DeletePolicyRequest)(nil),               // 27: idp.gateway.v1.DeletePolicyRequest
+	(*DeletePolicyResponse)(nil),              // 28: idp.gateway.v1.DeletePolicyResponse
+	(*ListPoliciesRequest)(nil),               // 29: idp.gateway.v1.ListPoliciesRequest
+	(*ListPoliciesResponse)(nil),              // 30: idp.gateway.v1.ListPoliciesResponse
+	(*TopicACLEntry)(nil),                     // 31: idp.gateway.v1.TopicACLEntry
+	(*UpsertTopicACLRequest)(nil),             // 32: idp.gateway.v1.UpsertTopicACLRequest
+	(*UpsertTopicACLResponse)(nil),            // 33: idp.gateway.v1.UpsertTopicACLResponse
+	(*RevokeTopicACLRequest)(nil),             // 34: idp.gateway.v1.RevokeTopicACLRequest
+	(*RevokeTopicACLResponse)(nil),            // 35: idp.gateway.v1.RevokeTopicACLResponse
+	(*ListTopicACLsRequest)(nil),              // 36: idp.gateway.v1.ListTopicACLsRequest
+	(*ListTopicACLsResponse)(nil),             // 37: idp.gateway.v1.ListTopicACLsResponse
+	(*TopicCreatedRequest)(nil),               // 38: idp.gateway.v1.TopicCreatedRequest
+	(*TopicCreatedResponse)(nil),              // 39: idp.gateway.v1.TopicCreatedResponse
+	(*TopicDeletedRequest)(nil),               // 40: idp.gateway.v1.TopicDeletedRequest
+	(*TopicDeletedResponse)(nil),              // 41: idp.gateway.v1.TopicDeletedResponse
+	(*TopicConfigUpdatedRequest)(nil),         // 42: idp.gateway.v1.TopicConfigUpdatedRequest
+	(*TopicConfigUpdatedResponse)(nil),        // 43: idp.gateway.v1.TopicConfigUpdatedResponse
+	(*PolicyViolation)(nil),                   // 44: idp.gateway.v1.PolicyViolation
+	(*ClientActivityRecord)(nil),              // 45: idp.gateway.v1.ClientActivityRecord
+	(*EmitClientActivityRequest)(nil),         // 46: idp.gateway.v1.EmitClientActivityRequest
+	(*EmitClientActivityResponse)(nil),        // 47: idp.gateway.v1.EmitClientActivityResponse
+	(*ConsumerGroupSummary)(nil),              // 48: idp.gateway.v1.ConsumerGroupSummary
+	(*PartitionLag)(nil),                      // 49: idp.gateway.v1.PartitionLag
+	(*ConsumerGroupDetail)(nil),               // 50: idp.gateway.v1.ConsumerGroupDetail
+	(*ListConsumerGroupsRequest)(nil),         // 51: idp.gateway.v1.ListConsumerGroupsRequest
+	(*ListConsumerGroupsResponse)(nil),        // 52: idp.gateway.v1.ListConsumerGroupsResponse
+	(*DescribeConsumerGroupRequest)(nil),      // 53: idp.gateway.v1.DescribeConsumerGroupRequest
+	(*DescribeConsumerGroupResponse)(nil),     // 54: idp.gateway.v1.DescribeConsumerGroupResponse
+	(*ResetConsumerGroupOffsetsRequest)(nil),  // 55: idp.gateway.v1.ResetConsumerGroupOffsetsRequest
+	(*ResetConsumerGroupOffsetsResponse)(nil), // 56: idp.gateway.v1.ResetConsumerGroupOffsetsResponse
+	nil,                           // 57: idp.gateway.v1.GetStatusResponse.VersionInfoEntry
+	nil,                           // 58: idp.gateway.v1.TopicCreatedRequest.ConfigEntry
+	nil,                           // 59: idp.gateway.v1.TopicConfigUpdatedRequest.ConfigEntry
+	(*timestamppb.Timestamp)(nil), // 60: google.protobuf.Timestamp
 }
 var file_idp_gateway_v1_gateway_proto_depIdxs = []int32{
-	1,  // 0: idp.gateway.v1.UpsertVirtualClusterRequest.config:type_name -> idp.gateway.v1.VirtualClusterConfig
-	1,  // 1: idp.gateway.v1.GetFullConfigResponse.virtual_clusters:type_name -> idp.gateway.v1.VirtualClusterConfig
-	15, // 2: idp.gateway.v1.GetFullConfigResponse.credentials:type_name -> idp.gateway.v1.CredentialConfig
-	22, // 3: idp.gateway.v1.GetFullConfigResponse.policies:type_name -> idp.gateway.v1.PolicyConfig
-	29, // 4: idp.gateway.v1.GetFullConfigResponse.topic_acls:type_name -> idp.gateway.v1.TopicACLEntry
-	46, // 5: idp.gateway.v1.GetStatusResponse.version_info:type_name -> idp.gateway.v1.GetStatusResponse.VersionInfoEntry
-	1,  // 6: idp.gateway.v1.ListVirtualClustersResponse.virtual_clusters:type_name -> idp.gateway.v1.VirtualClusterConfig
+	3,  // 0: idp.gateway.v1.UpsertVirtualClusterRequest.config:type_name -> idp.gateway.v1.VirtualClusterConfig
+	3,  // 1: idp.gateway.v1.GetFullConfigResponse.virtual_clusters:type_name -> idp.gateway.v1.VirtualClusterConfig
+	17, // 2: idp.gateway.v1.GetFullConfigResponse.credentials:type_name -> idp.gateway.v1.CredentialConfig
+	24, // 3: idp.gateway.v1.GetFullConfigResponse.policies:type_name -> idp.gateway.v1.PolicyConfig
+	31, // 4: idp.gateway.v1.GetFullConfigResponse.topic_acls:type_name -> idp.gateway.v1.TopicACLEntry
+	57, // 5: idp.gateway.v1.GetStatusResponse.version_info:type_name -> idp.gateway.v1.GetStatusResponse.VersionInfoEntry
+	3,  // 6: idp.gateway.v1.ListVirtualClustersResponse.virtual_clusters:type_name -> idp.gateway.v1.VirtualClusterConfig
 	0,  // 7: idp.gateway.v1.CredentialConfig.template:type_name -> idp.gateway.v1.PermissionTemplate
-	14, // 8: idp.gateway.v1.CredentialConfig.custom_permissions:type_name -> idp.gateway.v1.CustomPermission
-	15, // 9: idp.gateway.v1.UpsertCredentialRequest.config:type_name -> idp.gateway.v1.CredentialConfig
-	15, // 10: idp.gateway.v1.ListCredentialsResponse.credentials:type_name -> idp.gateway.v1.CredentialConfig
-	22, // 11: idp.gateway.v1.UpsertPolicyRequest.config:type_name -> idp.gateway.v1.PolicyConfig
-	22, // 12: idp.gateway.v1.ListPoliciesResponse.policies:type_name -> idp.gateway.v1.PolicyConfig
-	49, // 13: idp.gateway.v1.TopicACLEntry.expires_at:type_name -> google.protobuf.Timestamp
-	29, // 14: idp.gateway.v1.UpsertTopicACLRequest.entry:type_name -> idp.gateway.v1.TopicACLEntry
-	29, // 15: idp.gateway.v1.ListTopicACLsResponse.entries:type_name -> idp.gateway.v1.TopicACLEntry
-	47, // 16: idp.gateway.v1.TopicCreatedRequest.config:type_name -> idp.gateway.v1.TopicCreatedRequest.ConfigEntry
-	48, // 17: idp.gateway.v1.TopicConfigUpdatedRequest.config:type_name -> idp.gateway.v1.TopicConfigUpdatedRequest.ConfigEntry
-	49, // 18: idp.gateway.v1.ClientActivityRecord.window_start:type_name -> google.protobuf.Timestamp
-	49, // 19: idp.gateway.v1.ClientActivityRecord.window_end:type_name -> google.protobuf.Timestamp
-	43, // 20: idp.gateway.v1.EmitClientActivityRequest.records:type_name -> idp.gateway.v1.ClientActivityRecord
-	2,  // 21: idp.gateway.v1.BifrostAdminService.UpsertVirtualCluster:input_type -> idp.gateway.v1.UpsertVirtualClusterRequest
-	4,  // 22: idp.gateway.v1.BifrostAdminService.DeleteVirtualCluster:input_type -> idp.gateway.v1.DeleteVirtualClusterRequest
-	6,  // 23: idp.gateway.v1.BifrostAdminService.SetVirtualClusterReadOnly:input_type -> idp.gateway.v1.SetVirtualClusterReadOnlyRequest
-	16, // 24: idp.gateway.v1.BifrostAdminService.UpsertCredential:input_type -> idp.gateway.v1.UpsertCredentialRequest
-	18, // 25: idp.gateway.v1.BifrostAdminService.RevokeCredential:input_type -> idp.gateway.v1.RevokeCredentialRequest
-	20, // 26: idp.gateway.v1.BifrostAdminService.ListCredentials:input_type -> idp.gateway.v1.ListCredentialsRequest
-	8,  // 27: idp.gateway.v1.BifrostAdminService.GetFullConfig:input_type -> idp.gateway.v1.GetFullConfigRequest
-	10, // 28: idp.gateway.v1.BifrostAdminService.GetStatus:input_type -> idp.gateway.v1.GetStatusRequest
-	12, // 29: idp.gateway.v1.BifrostAdminService.ListVirtualClusters:input_type -> idp.gateway.v1.ListVirtualClustersRequest
-	23, // 30: idp.gateway.v1.BifrostAdminService.UpsertPolicy:input_type -> idp.gateway.v1.UpsertPolicyRequest
-	25, // 31: idp.gateway.v1.BifrostAdminService.DeletePolicy:input_type -> idp.gateway.v1.DeletePolicyRequest
-	27, // 32: idp.gateway.v1.BifrostAdminService.ListPolicies:input_type -> idp.gateway.v1.ListPoliciesRequest
-	30, // 33: idp.gateway.v1.BifrostAdminService.UpsertTopicACL:input_type -> idp.gateway.v1.UpsertTopicACLRequest
-	32, // 34: idp.gateway.v1.BifrostAdminService.RevokeTopicACL:input_type -> idp.gateway.v1.RevokeTopicACLRequest
-	34, // 35: idp.gateway.v1.BifrostAdminService.ListTopicACLs:input_type -> idp.gateway.v1.ListTopicACLsRequest
-	36, // 36: idp.gateway.v1.BifrostCallbackService.TopicCreated:input_type -> idp.gateway.v1.TopicCreatedRequest
-	38, // 37: idp.gateway.v1.BifrostCallbackService.TopicDeleted:input_type -> idp.gateway.v1.TopicDeletedRequest
-	40, // 38: idp.gateway.v1.BifrostCallbackService.TopicConfigUpdated:input_type -> idp.gateway.v1.TopicConfigUpdatedRequest
-	44, // 39: idp.gateway.v1.BifrostCallbackService.EmitClientActivity:input_type -> idp.gateway.v1.EmitClientActivityRequest
-	3,  // 40: idp.gateway.v1.BifrostAdminService.UpsertVirtualCluster:output_type -> idp.gateway.v1.UpsertVirtualClusterResponse
-	5,  // 41: idp.gateway.v1.BifrostAdminService.DeleteVirtualCluster:output_type -> idp.gateway.v1.DeleteVirtualClusterResponse
-	7,  // 42: idp.gateway.v1.BifrostAdminService.SetVirtualClusterReadOnly:output_type -> idp.gateway.v1.SetVirtualClusterReadOnlyResponse
-	17, // 43: idp.gateway.v1.BifrostAdminService.UpsertCredential:output_type -> idp.gateway.v1.UpsertCredentialResponse
-	19, // 44: idp.gateway.v1.BifrostAdminService.RevokeCredential:output_type -> idp.gateway.v1.RevokeCredentialResponse
-	21, // 45: idp.gateway.v1.BifrostAdminService.ListCredentials:output_type -> idp.gateway.v1.ListCredentialsResponse
-	9,  // 46: idp.gateway.v1.BifrostAdminService.GetFullConfig:output_type -> idp.gateway.v1.GetFullConfigResponse
-	11, // 47: idp.gateway.v1.BifrostAdminService.GetStatus:output_type -> idp.gateway.v1.GetStatusResponse
-	13, // 48: idp.gateway.v1.BifrostAdminService.ListVirtualClusters:output_type -> idp.gateway.v1.ListVirtualClustersResponse
-	24, // 49: idp.gateway.v1.BifrostAdminService.UpsertPolicy:output_type -> idp.gateway.v1.UpsertPolicyResponse
-	26, // 50: idp.gateway.v1.BifrostAdminService.DeletePolicy:output_type -> idp.gateway.v1.DeletePolicyResponse
-	28, // 51: idp.gateway.v1.BifrostAdminService.ListPolicies:output_type -> idp.gateway.v1.ListPoliciesResponse
-	31, // 52: idp.gateway.v1.BifrostAdminService.UpsertTopicACL:output_type -> idp.gateway.v1.UpsertTopicACLResponse
-	33, // 53: idp.gateway.v1.BifrostAdminService.RevokeTopicACL:output_type -> idp.gateway.v1.RevokeTopicACLResponse
-	35, // 54: idp.gateway.v1.BifrostAdminService.ListTopicACLs:output_type -> idp.gateway.v1.ListTopicACLsResponse
-	37, // 55: idp.gateway.v1.BifrostCallbackService.TopicCreated:output_type -> idp.gateway.v1.TopicCreatedResponse
-	39, // 56: idp.gateway.v1.BifrostCallbackService.TopicDeleted:output_type -> idp.gateway.v1.TopicDeletedResponse
-	41, // 57: idp.gateway.v1.BifrostCallbackService.TopicConfigUpdated:output_type -> idp.gateway.v1.TopicConfigUpdatedResponse
-	45, // 58: idp.gateway.v1.BifrostCallbackService.EmitClientActivity:output_type -> idp.gateway.v1.EmitClientActivityResponse
-	40, // [40:59] is the sub-list for method output_type
-	21, // [21:40] is the sub-list for method input_type
-	21, // [21:21] is the sub-list for extension type_name
-	21, // [21:21] is the sub-list for extension extendee
-	0,  // [0:21] is the sub-list for field type_name
+	16, // 8: idp.gateway.v1.CredentialConfig.custom_permissions:type_name -> idp.gateway.v1.CustomPermission
+	17, // 9: idp.gateway.v1.UpsertCredentialRequest.config:type_name -> idp.gateway.v1.CredentialConfig
+	17, // 10: idp.gateway.v1.ListCredentialsResponse.credentials:type_name -> idp.gateway.v1.CredentialConfig
+	24, // 11: idp.gateway.v1.UpsertPolicyRequest.config:type_name -> idp.gateway.v1.PolicyConfig
+	24, // 12: idp.gateway.v1.ListPoliciesResponse.policies:type_name -> idp.gateway.v1.PolicyConfig
+	60, // 13: idp.gateway.v1.TopicACLEntry.expires_at:type_name -> google.protobuf.Timestamp
+	31, // 14: idp.gateway.v1.UpsertTopicACLRequest.entry:type_name -> idp.gateway.v1.TopicACLEntry
+	31, // 15: idp.gateway.v1.ListTopicACLsResponse.entries:type_name -> idp.gateway.v1.TopicACLEntry
+	58, // 16: idp.gateway.v1.TopicCreatedRequest.config:type_name -> idp.gateway.v1.TopicCreatedRequest.ConfigEntry
+	59, // 17: idp.gateway.v1.TopicConfigUpdatedRequest.config:type_name -> idp.gateway.v1.TopicConfigUpdatedRequest.ConfigEntry
+	60, // 18: idp.gateway.v1.ClientActivityRecord.window_start:type_name -> google.protobuf.Timestamp
+	60, // 19: idp.gateway.v1.ClientActivityRecord.window_end:type_name -> google.protobuf.Timestamp
+	45, // 20: idp.gateway.v1.EmitClientActivityRequest.records:type_name -> idp.gateway.v1.ClientActivityRecord
+	1,  // 21: idp.gateway.v1.ConsumerGroupSummary.state:type_name -> idp.gateway.v1.ConsumerGroupState
+	1,  // 22: idp.gateway.v1.ConsumerGroupDetail.state:type_name -> idp.gateway.v1.ConsumerGroupState
+	49, // 23: idp.gateway.v1.ConsumerGroupDetail.partitions:type_name -> idp.gateway.v1.PartitionLag
+	48, // 24: idp.gateway.v1.ListConsumerGroupsResponse.groups:type_name -> idp.gateway.v1.ConsumerGroupSummary
+	50, // 25: idp.gateway.v1.DescribeConsumerGroupResponse.group:type_name -> idp.gateway.v1.ConsumerGroupDetail
+	2,  // 26: idp.gateway.v1.ResetConsumerGroupOffsetsRequest.reset_type:type_name -> idp.gateway.v1.OffsetResetType
+	49, // 27: idp.gateway.v1.ResetConsumerGroupOffsetsResponse.new_offsets:type_name -> idp.gateway.v1.PartitionLag
+	4,  // 28: idp.gateway.v1.BifrostAdminService.UpsertVirtualCluster:input_type -> idp.gateway.v1.UpsertVirtualClusterRequest
+	6,  // 29: idp.gateway.v1.BifrostAdminService.DeleteVirtualCluster:input_type -> idp.gateway.v1.DeleteVirtualClusterRequest
+	8,  // 30: idp.gateway.v1.BifrostAdminService.SetVirtualClusterReadOnly:input_type -> idp.gateway.v1.SetVirtualClusterReadOnlyRequest
+	18, // 31: idp.gateway.v1.BifrostAdminService.UpsertCredential:input_type -> idp.gateway.v1.UpsertCredentialRequest
+	20, // 32: idp.gateway.v1.BifrostAdminService.RevokeCredential:input_type -> idp.gateway.v1.RevokeCredentialRequest
+	22, // 33: idp.gateway.v1.BifrostAdminService.ListCredentials:input_type -> idp.gateway.v1.ListCredentialsRequest
+	10, // 34: idp.gateway.v1.BifrostAdminService.GetFullConfig:input_type -> idp.gateway.v1.GetFullConfigRequest
+	12, // 35: idp.gateway.v1.BifrostAdminService.GetStatus:input_type -> idp.gateway.v1.GetStatusRequest
+	14, // 36: idp.gateway.v1.BifrostAdminService.ListVirtualClusters:input_type -> idp.gateway.v1.ListVirtualClustersRequest
+	25, // 37: idp.gateway.v1.BifrostAdminService.UpsertPolicy:input_type -> idp.gateway.v1.UpsertPolicyRequest
+	27, // 38: idp.gateway.v1.BifrostAdminService.DeletePolicy:input_type -> idp.gateway.v1.DeletePolicyRequest
+	29, // 39: idp.gateway.v1.BifrostAdminService.ListPolicies:input_type -> idp.gateway.v1.ListPoliciesRequest
+	32, // 40: idp.gateway.v1.BifrostAdminService.UpsertTopicACL:input_type -> idp.gateway.v1.UpsertTopicACLRequest
+	34, // 41: idp.gateway.v1.BifrostAdminService.RevokeTopicACL:input_type -> idp.gateway.v1.RevokeTopicACLRequest
+	36, // 42: idp.gateway.v1.BifrostAdminService.ListTopicACLs:input_type -> idp.gateway.v1.ListTopicACLsRequest
+	51, // 43: idp.gateway.v1.BifrostAdminService.ListConsumerGroups:input_type -> idp.gateway.v1.ListConsumerGroupsRequest
+	53, // 44: idp.gateway.v1.BifrostAdminService.DescribeConsumerGroup:input_type -> idp.gateway.v1.DescribeConsumerGroupRequest
+	55, // 45: idp.gateway.v1.BifrostAdminService.ResetConsumerGroupOffsets:input_type -> idp.gateway.v1.ResetConsumerGroupOffsetsRequest
+	38, // 46: idp.gateway.v1.BifrostCallbackService.TopicCreated:input_type -> idp.gateway.v1.TopicCreatedRequest
+	40, // 47: idp.gateway.v1.BifrostCallbackService.TopicDeleted:input_type -> idp.gateway.v1.TopicDeletedRequest
+	42, // 48: idp.gateway.v1.BifrostCallbackService.TopicConfigUpdated:input_type -> idp.gateway.v1.TopicConfigUpdatedRequest
+	46, // 49: idp.gateway.v1.BifrostCallbackService.EmitClientActivity:input_type -> idp.gateway.v1.EmitClientActivityRequest
+	5,  // 50: idp.gateway.v1.BifrostAdminService.UpsertVirtualCluster:output_type -> idp.gateway.v1.UpsertVirtualClusterResponse
+	7,  // 51: idp.gateway.v1.BifrostAdminService.DeleteVirtualCluster:output_type -> idp.gateway.v1.DeleteVirtualClusterResponse
+	9,  // 52: idp.gateway.v1.BifrostAdminService.SetVirtualClusterReadOnly:output_type -> idp.gateway.v1.SetVirtualClusterReadOnlyResponse
+	19, // 53: idp.gateway.v1.BifrostAdminService.UpsertCredential:output_type -> idp.gateway.v1.UpsertCredentialResponse
+	21, // 54: idp.gateway.v1.BifrostAdminService.RevokeCredential:output_type -> idp.gateway.v1.RevokeCredentialResponse
+	23, // 55: idp.gateway.v1.BifrostAdminService.ListCredentials:output_type -> idp.gateway.v1.ListCredentialsResponse
+	11, // 56: idp.gateway.v1.BifrostAdminService.GetFullConfig:output_type -> idp.gateway.v1.GetFullConfigResponse
+	13, // 57: idp.gateway.v1.BifrostAdminService.GetStatus:output_type -> idp.gateway.v1.GetStatusResponse
+	15, // 58: idp.gateway.v1.BifrostAdminService.ListVirtualClusters:output_type -> idp.gateway.v1.ListVirtualClustersResponse
+	26, // 59: idp.gateway.v1.BifrostAdminService.UpsertPolicy:output_type -> idp.gateway.v1.UpsertPolicyResponse
+	28, // 60: idp.gateway.v1.BifrostAdminService.DeletePolicy:output_type -> idp.gateway.v1.DeletePolicyResponse
+	30, // 61: idp.gateway.v1.BifrostAdminService.ListPolicies:output_type -> idp.gateway.v1.ListPoliciesResponse
+	33, // 62: idp.gateway.v1.BifrostAdminService.UpsertTopicACL:output_type -> idp.gateway.v1.UpsertTopicACLResponse
+	35, // 63: idp.gateway.v1.BifrostAdminService.RevokeTopicACL:output_type -> idp.gateway.v1.RevokeTopicACLResponse
+	37, // 64: idp.gateway.v1.BifrostAdminService.ListTopicACLs:output_type -> idp.gateway.v1.ListTopicACLsResponse
+	52, // 65: idp.gateway.v1.BifrostAdminService.ListConsumerGroups:output_type -> idp.gateway.v1.ListConsumerGroupsResponse
+	54, // 66: idp.gateway.v1.BifrostAdminService.DescribeConsumerGroup:output_type -> idp.gateway.v1.DescribeConsumerGroupResponse
+	56, // 67: idp.gateway.v1.BifrostAdminService.ResetConsumerGroupOffsets:output_type -> idp.gateway.v1.ResetConsumerGroupOffsetsResponse
+	39, // 68: idp.gateway.v1.BifrostCallbackService.TopicCreated:output_type -> idp.gateway.v1.TopicCreatedResponse
+	41, // 69: idp.gateway.v1.BifrostCallbackService.TopicDeleted:output_type -> idp.gateway.v1.TopicDeletedResponse
+	43, // 70: idp.gateway.v1.BifrostCallbackService.TopicConfigUpdated:output_type -> idp.gateway.v1.TopicConfigUpdatedResponse
+	47, // 71: idp.gateway.v1.BifrostCallbackService.EmitClientActivity:output_type -> idp.gateway.v1.EmitClientActivityResponse
+	50, // [50:72] is the sub-list for method output_type
+	28, // [28:50] is the sub-list for method input_type
+	28, // [28:28] is the sub-list for extension type_name
+	28, // [28:28] is the sub-list for extension extendee
+	0,  // [0:28] is the sub-list for field type_name
 }
 
 func init() { file_idp_gateway_v1_gateway_proto_init() }
@@ -2888,8 +3664,8 @@ func file_idp_gateway_v1_gateway_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_idp_gateway_v1_gateway_proto_rawDesc), len(file_idp_gateway_v1_gateway_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   48,
+			NumEnums:      3,
+			NumMessages:   57,
 			NumExtensions: 0,
 			NumServices:   2,
 		},
