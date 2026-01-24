@@ -3447,3 +3447,291 @@ func TestOffsetCommitResponseModifier_MultipleTopics(t *testing.T) {
 	assert.Equal(t, "topic-1", topics[0].(*Struct).Get("name"))
 	assert.Equal(t, "topic-2", topics[1].(*Struct).Get("name"))
 }
+
+// OffsetFetch Response Modifier Tests
+
+func TestOffsetFetchResponseModifier_UnprefixesTopics(t *testing.T) {
+	cfg := ResponseModifierConfig{
+		TopicUnprefixer: func(topic string) string {
+			return strings.TrimPrefix(topic, "tenant:")
+		},
+	}
+
+	mod, err := GetResponseModifierWithConfig(apiKeyOffsetFetch, 0, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// OffsetFetch v0 response: topics[] with name and partitions[]
+	var responseBytes []byte
+	// topics array: 1 element
+	responseBytes = append(responseBytes, 0, 0, 0, 1)
+	// topic name: "tenant:my-topic"
+	topicName := "tenant:my-topic"
+	responseBytes = append(responseBytes, 0, byte(len(topicName)))
+	responseBytes = append(responseBytes, []byte(topicName)...)
+	// partitions array: 1 element
+	responseBytes = append(responseBytes, 0, 0, 0, 1)
+	// partition_index: 0
+	responseBytes = append(responseBytes, 0, 0, 0, 0)
+	// committed_offset: 100
+	responseBytes = append(responseBytes, 0, 0, 0, 0, 0, 0, 0, 100)
+	// committed_metadata: empty string
+	responseBytes = append(responseBytes, 0, 0)
+	// error_code: 0
+	responseBytes = append(responseBytes, 0, 0)
+
+	result, err := mod.Apply(responseBytes)
+	require.NoError(t, err)
+
+	// Verify topic is unprefixed
+	offset := 4
+	topicLen := int(result[offset])<<8 | int(result[offset+1])
+	resultTopic := string(result[offset+2 : offset+2+topicLen])
+	assert.Equal(t, "my-topic", resultTopic)
+}
+
+func TestOffsetFetchResponseModifier_V3_WithThrottleTime(t *testing.T) {
+	cfg := ResponseModifierConfig{
+		TopicUnprefixer: func(topic string) string {
+			return strings.TrimPrefix(topic, "tenant:")
+		},
+	}
+
+	mod, err := GetResponseModifierWithConfig(apiKeyOffsetFetch, 3, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// Build v3 response using schema
+	partitionSchema := NewSchema("partition",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "committed_offset", Ty: TypeInt64},
+		&Mfield{Name: "metadata", Ty: TypeNullableStr},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+	)
+
+	topicSchema := NewSchema("topic",
+		&Mfield{Name: "name", Ty: TypeStr},
+		&Array{Name: "partitions", Ty: partitionSchema},
+	)
+
+	emptyMetadata := ""
+	partition := &Struct{
+		Schema: partitionSchema,
+		Values: []interface{}{
+			int32(0),       // partition_index
+			int64(100),     // committed_offset
+			&emptyMetadata, // metadata
+			int16(0),       // error_code
+		},
+	}
+
+	topic := &Struct{
+		Schema: topicSchema,
+		Values: []interface{}{
+			"tenant:orders",          // name
+			[]interface{}{partition}, // partitions
+		},
+	}
+
+	responseSchema := offsetFetchResponseSchemaVersions[3]
+	original := &Struct{
+		Schema: responseSchema,
+		Values: []interface{}{
+			int32(100),           // throttle_time_ms
+			[]interface{}{topic}, // topics
+			int16(0),             // error_code
+		},
+	}
+
+	responseBytes, err := EncodeSchema(original, responseSchema)
+	require.NoError(t, err)
+
+	result, err := mod.Apply(responseBytes)
+	require.NoError(t, err)
+
+	// Decode and verify
+	decoded, err := DecodeSchema(result, responseSchema)
+	require.NoError(t, err)
+
+	// Verify throttle time preserved
+	assert.Equal(t, int32(100), decoded.Get("throttle_time_ms"))
+
+	// Verify topic is unprefixed
+	topics := decoded.Get("topics").([]interface{})
+	require.Len(t, topics, 1)
+	topicStruct := topics[0].(*Struct)
+	assert.Equal(t, "orders", topicStruct.Get("name"))
+}
+
+func TestOffsetFetchResponseModifier_V8_WithGroups(t *testing.T) {
+	cfg := ResponseModifierConfig{
+		TopicUnprefixer: func(topic string) string {
+			return strings.TrimPrefix(topic, "tenant:")
+		},
+	}
+
+	mod, err := GetResponseModifierWithConfig(apiKeyOffsetFetch, 8, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// Build v8 response using schema
+	// v8: throttle_time_ms, compact_groups[], tagged_fields
+	partitionSchema := NewSchema("partition",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "committed_offset", Ty: TypeInt64},
+		&Mfield{Name: "committed_leader_epoch", Ty: TypeInt32},
+		&Mfield{Name: "metadata", Ty: TypeCompactNullableStr},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&SchemaTaggedFields{Name: "partition_tagged_fields"},
+	)
+
+	topicSchema := NewSchema("topic",
+		&Mfield{Name: "name", Ty: TypeCompactStr},
+		&CompactArray{Name: "partitions", Ty: partitionSchema},
+		&SchemaTaggedFields{Name: "topic_tagged_fields"},
+	)
+
+	groupSchema := NewSchema("group",
+		&Mfield{Name: "group_id", Ty: TypeCompactStr},
+		&CompactArray{Name: "topics", Ty: topicSchema},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&SchemaTaggedFields{Name: "group_tagged_fields"},
+	)
+
+	emptyMetadata := ""
+	partition := &Struct{
+		Schema: partitionSchema,
+		Values: []interface{}{
+			int32(0),           // partition_index
+			int64(500),         // committed_offset
+			int32(-1),          // committed_leader_epoch
+			&emptyMetadata,     // metadata
+			int16(0),           // error_code
+			[]rawTaggedField{}, // tagged fields
+		},
+	}
+
+	topic := &Struct{
+		Schema: topicSchema,
+		Values: []interface{}{
+			"tenant:events",          // name (prefixed)
+			[]interface{}{partition}, // partitions
+			[]rawTaggedField{},       // tagged fields
+		},
+	}
+
+	group := &Struct{
+		Schema: groupSchema,
+		Values: []interface{}{
+			"my-group",           // group_id
+			[]interface{}{topic}, // topics
+			int16(0),             // error_code
+			[]rawTaggedField{},   // tagged fields
+		},
+	}
+
+	responseSchema := offsetFetchResponseSchemaVersions[8]
+	original := &Struct{
+		Schema: responseSchema,
+		Values: []interface{}{
+			int32(50),            // throttle_time_ms
+			[]interface{}{group}, // groups
+			[]rawTaggedField{},   // response_tagged_fields
+		},
+	}
+
+	responseBytes, err := EncodeSchema(original, responseSchema)
+	require.NoError(t, err)
+
+	result, err := mod.Apply(responseBytes)
+	require.NoError(t, err)
+
+	// Decode and verify
+	decoded, err := DecodeSchema(result, responseSchema)
+	require.NoError(t, err)
+
+	// Verify throttle time preserved
+	assert.Equal(t, int32(50), decoded.Get("throttle_time_ms"))
+
+	// Verify topic is unprefixed within group
+	groups := decoded.Get("groups").([]interface{})
+	require.Len(t, groups, 1)
+	groupStruct := groups[0].(*Struct)
+	topics := groupStruct.Get("topics").([]interface{})
+	require.Len(t, topics, 1)
+	topicStruct := topics[0].(*Struct)
+	assert.Equal(t, "events", topicStruct.Get("name"))
+}
+
+func TestOffsetFetchResponseModifier_ReturnsNilWithoutUnprefixer(t *testing.T) {
+	// Without TopicUnprefixer, should return nil
+	cfg := ResponseModifierConfig{}
+
+	mod, err := GetResponseModifierWithConfig(apiKeyOffsetFetch, 0, cfg)
+	require.NoError(t, err)
+	assert.Nil(t, mod, "should return nil when no TopicUnprefixer is configured")
+}
+
+func TestOffsetFetchResponseModifier_MultipleTopics(t *testing.T) {
+	cfg := ResponseModifierConfig{
+		TopicUnprefixer: func(topic string) string {
+			return strings.TrimPrefix(topic, "tenant:")
+		},
+	}
+
+	mod, err := GetResponseModifierWithConfig(apiKeyOffsetFetch, 0, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// Build response with multiple topics
+	partitionSchema := NewSchema("partition",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "committed_offset", Ty: TypeInt64},
+		&Mfield{Name: "metadata", Ty: TypeNullableStr},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+	)
+
+	topicSchema := NewSchema("topic",
+		&Mfield{Name: "name", Ty: TypeStr},
+		&Array{Name: "partitions", Ty: partitionSchema},
+	)
+
+	emptyMetadata := ""
+	partition := &Struct{
+		Schema: partitionSchema,
+		Values: []interface{}{int32(0), int64(100), &emptyMetadata, int16(0)},
+	}
+
+	topic1 := &Struct{
+		Schema: topicSchema,
+		Values: []interface{}{"tenant:topic-1", []interface{}{partition}},
+	}
+
+	topic2 := &Struct{
+		Schema: topicSchema,
+		Values: []interface{}{"tenant:topic-2", []interface{}{partition}},
+	}
+
+	responseSchema := offsetFetchResponseSchemaVersions[0]
+	original := &Struct{
+		Schema: responseSchema,
+		Values: []interface{}{
+			[]interface{}{topic1, topic2},
+		},
+	}
+
+	responseBytes, err := EncodeSchema(original, responseSchema)
+	require.NoError(t, err)
+
+	result, err := mod.Apply(responseBytes)
+	require.NoError(t, err)
+
+	// Decode and verify
+	decoded, err := DecodeSchema(result, responseSchema)
+	require.NoError(t, err)
+
+	topics := decoded.Get("topics").([]interface{})
+	require.Len(t, topics, 2)
+	assert.Equal(t, "topic-1", topics[0].(*Struct).Get("name"))
+	assert.Equal(t, "topic-2", topics[1].(*Struct).Get("name"))
+}

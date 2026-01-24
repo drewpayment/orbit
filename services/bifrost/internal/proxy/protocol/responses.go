@@ -708,6 +708,11 @@ func GetResponseModifierWithConfig(apiKey int16, apiVersion int16, cfg ResponseM
 			return nil, nil
 		}
 		return newResponseModifier(apiKey, apiVersion, cfg, offsetCommitResponseSchemaVersions, modifyOffsetCommitResponse)
+	case apiKeyOffsetFetch:
+		if cfg.TopicUnprefixer == nil {
+			return nil, nil
+		}
+		return newOffsetFetchResponseModifier(apiVersion, cfg)
 	default:
 		return nil, nil
 	}
@@ -1407,4 +1412,236 @@ func modifyOffsetCommitResponse(decodedStruct *Struct, cfg ResponseModifierConfi
 	}
 
 	return nil
+}
+
+// OffsetFetch response schemas
+var offsetFetchResponseSchemaVersions = createOffsetFetchResponseSchemaVersions()
+
+func createOffsetFetchResponseSchemaVersions() []Schema {
+	// Partition for v0-v1
+	partitionV0 := NewSchema("offset_fetch_partition_response_v0",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "committed_offset", Ty: TypeInt64},
+		&Mfield{Name: "metadata", Ty: TypeNullableStr},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+	)
+
+	topicV0 := NewSchema("offset_fetch_topic_response_v0",
+		&Mfield{Name: "name", Ty: TypeStr},
+		&Array{Name: "partitions", Ty: partitionV0},
+	)
+
+	// v0-v1
+	offsetFetchV0 := NewSchema("offset_fetch_response_v0",
+		&Array{Name: "topics", Ty: topicV0},
+	)
+
+	// v2 adds error_code at top level
+	offsetFetchV2 := NewSchema("offset_fetch_response_v2",
+		&Array{Name: "topics", Ty: topicV0},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+	)
+
+	// v3+ adds throttle_time_ms
+	offsetFetchV3 := NewSchema("offset_fetch_response_v3",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&Array{Name: "topics", Ty: topicV0},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+	)
+
+	// v5 adds committed_leader_epoch to partition
+	partitionV5 := NewSchema("offset_fetch_partition_response_v5",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "committed_offset", Ty: TypeInt64},
+		&Mfield{Name: "committed_leader_epoch", Ty: TypeInt32},
+		&Mfield{Name: "metadata", Ty: TypeNullableStr},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+	)
+
+	topicV5 := NewSchema("offset_fetch_topic_response_v5",
+		&Mfield{Name: "name", Ty: TypeStr},
+		&Array{Name: "partitions", Ty: partitionV5},
+	)
+
+	offsetFetchV5 := NewSchema("offset_fetch_response_v5",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&Array{Name: "topics", Ty: topicV5},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+	)
+
+	// v6+ flexible
+	partitionV6 := NewSchema("offset_fetch_partition_response_v6",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "committed_offset", Ty: TypeInt64},
+		&Mfield{Name: "committed_leader_epoch", Ty: TypeInt32},
+		&Mfield{Name: "metadata", Ty: TypeCompactNullableStr},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&SchemaTaggedFields{Name: "partition_tagged_fields"},
+	)
+
+	topicV6 := NewSchema("offset_fetch_topic_response_v6",
+		&Mfield{Name: "name", Ty: TypeCompactStr},
+		&CompactArray{Name: "partitions", Ty: partitionV6},
+		&SchemaTaggedFields{Name: "topic_tagged_fields"},
+	)
+
+	offsetFetchV6 := NewSchema("offset_fetch_response_v6",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&CompactArray{Name: "topics", Ty: topicV6},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&SchemaTaggedFields{Name: "response_tagged_fields"},
+	)
+
+	// v8+ uses groups array (batch response)
+	groupV8 := NewSchema("offset_fetch_group_response_v8",
+		&Mfield{Name: "group_id", Ty: TypeCompactStr},
+		&CompactArray{Name: "topics", Ty: topicV6},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&SchemaTaggedFields{Name: "group_tagged_fields"},
+	)
+
+	offsetFetchV8 := NewSchema("offset_fetch_response_v8",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&CompactArray{Name: "groups", Ty: groupV8},
+		&SchemaTaggedFields{Name: "response_tagged_fields"},
+	)
+
+	return []Schema{
+		offsetFetchV0, // v0
+		offsetFetchV0, // v1
+		offsetFetchV2, // v2
+		offsetFetchV3, // v3
+		offsetFetchV3, // v4
+		offsetFetchV5, // v5
+		offsetFetchV6, // v6
+		offsetFetchV6, // v7
+		offsetFetchV8, // v8
+		offsetFetchV8, // v9
+	}
+}
+
+// modifyOffsetFetchResponse unprefixes topic names in OffsetFetch responses.
+func modifyOffsetFetchResponse(decodedStruct *Struct, cfg ResponseModifierConfig, apiVersion int16) error {
+	if cfg.TopicUnprefixer == nil {
+		return nil
+	}
+
+	// v8+ uses groups array
+	if apiVersion >= 8 {
+		return modifyOffsetFetchResponseV8(decodedStruct, cfg.TopicUnprefixer)
+	}
+
+	// v0-v7 uses flat topics array
+	topics := decodedStruct.Get("topics")
+	if topics == nil {
+		return nil
+	}
+
+	topicsArray, ok := topics.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	for _, topicElement := range topicsArray {
+		topic, ok := topicElement.(*Struct)
+		if !ok {
+			continue
+		}
+		nameField := topic.Get("name")
+		if nameField == nil {
+			continue
+		}
+		if name, ok := nameField.(string); ok && name != "" {
+			unprefixedName := cfg.TopicUnprefixer(name)
+			if unprefixedName != name {
+				if err := topic.Replace("name", unprefixedName); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func modifyOffsetFetchResponseV8(decodedStruct *Struct, topicUnprefixer TopicUnprefixer) error {
+	groups := decodedStruct.Get("groups")
+	if groups == nil {
+		return nil
+	}
+
+	groupsArray, ok := groups.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	for _, groupElement := range groupsArray {
+		group, ok := groupElement.(*Struct)
+		if !ok {
+			continue
+		}
+
+		topics := group.Get("topics")
+		if topics == nil {
+			continue
+		}
+
+		topicsArray, ok := topics.([]interface{})
+		if !ok {
+			continue
+		}
+
+		for _, topicElement := range topicsArray {
+			topic, ok := topicElement.(*Struct)
+			if !ok {
+				continue
+			}
+			nameField := topic.Get("name")
+			if nameField == nil {
+				continue
+			}
+			if name, ok := nameField.(string); ok && name != "" {
+				unprefixedName := topicUnprefixer(name)
+				if unprefixedName != name {
+					if err := topic.Replace("name", unprefixedName); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// offsetFetchResponseModifier unprefixes topic names in OffsetFetch responses.
+type offsetFetchResponseModifier struct {
+	schema     Schema
+	apiVersion int16
+	cfg        ResponseModifierConfig
+}
+
+func (m *offsetFetchResponseModifier) Apply(responseBytes []byte) ([]byte, error) {
+	decoded, err := DecodeSchema(responseBytes, m.schema)
+	if err != nil {
+		return nil, fmt.Errorf("decode offset fetch response: %w", err)
+	}
+
+	if err := modifyOffsetFetchResponse(decoded, m.cfg, m.apiVersion); err != nil {
+		return nil, fmt.Errorf("modify offset fetch response: %w", err)
+	}
+
+	return EncodeSchema(decoded, m.schema)
+}
+
+func newOffsetFetchResponseModifier(apiVersion int16, cfg ResponseModifierConfig) (ResponseModifier, error) {
+	if apiVersion < 0 || int(apiVersion) >= len(offsetFetchResponseSchemaVersions) {
+		return nil, fmt.Errorf("unsupported OffsetFetch response version %d", apiVersion)
+	}
+	schema := offsetFetchResponseSchemaVersions[apiVersion]
+	return &offsetFetchResponseModifier{
+		schema:     schema,
+		apiVersion: apiVersion,
+		cfg:        cfg,
+	}, nil
 }
