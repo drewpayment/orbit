@@ -724,6 +724,8 @@ func GetResponseModifierWithConfig(apiKey int16, apiVersion int16, cfg ResponseM
 		return newOffsetFetchResponseModifier(apiVersion, cfg)
 	case apiKeyDescribeGroups:
 		return newDescribeGroupsResponseModifier(apiVersion, cfg)
+	case apiKeyListGroups:
+		return newListGroupsResponseModifier(apiVersion, cfg)
 	default:
 		return nil, nil
 	}
@@ -1836,5 +1838,169 @@ func newDescribeGroupsResponseModifier(apiVersion int16, cfg ResponseModifierCon
 	return &describeGroupsResponseModifier{
 		schema:          schema,
 		groupUnprefixer: cfg.GroupUnprefixer,
+	}, nil
+}
+
+// ListGroups response schemas
+var listGroupsResponseSchemas = createListGroupsResponseSchemas()
+
+func createListGroupsResponseSchemas() []Schema {
+	groupV0 := NewSchema("list_groups_group_v0",
+		&Mfield{Name: "group_id", Ty: TypeStr},
+		&Mfield{Name: "protocol_type", Ty: TypeStr},
+	)
+
+	// v0
+	listGroupsV0 := NewSchema("list_groups_response_v0",
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Array{Name: "groups", Ty: groupV0},
+	)
+
+	// v1+ adds throttle_time_ms
+	listGroupsV1 := NewSchema("list_groups_response_v1",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Array{Name: "groups", Ty: groupV0},
+	)
+
+	// v3+ flexible
+	groupV3 := NewSchema("list_groups_group_v3",
+		&Mfield{Name: "group_id", Ty: TypeCompactStr},
+		&Mfield{Name: "protocol_type", Ty: TypeCompactStr},
+		&SchemaTaggedFields{Name: "group_tagged_fields"},
+	)
+
+	listGroupsV3 := NewSchema("list_groups_response_v3",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&CompactArray{Name: "groups", Ty: groupV3},
+		&SchemaTaggedFields{Name: "response_tagged_fields"},
+	)
+
+	// v4 adds group_state
+	groupV4 := NewSchema("list_groups_group_v4",
+		&Mfield{Name: "group_id", Ty: TypeCompactStr},
+		&Mfield{Name: "protocol_type", Ty: TypeCompactStr},
+		&Mfield{Name: "group_state", Ty: TypeCompactStr},
+		&SchemaTaggedFields{Name: "group_tagged_fields"},
+	)
+
+	listGroupsV4 := NewSchema("list_groups_response_v4",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&CompactArray{Name: "groups", Ty: groupV4},
+		&SchemaTaggedFields{Name: "response_tagged_fields"},
+	)
+
+	// v5 adds group_type
+	groupV5 := NewSchema("list_groups_group_v5",
+		&Mfield{Name: "group_id", Ty: TypeCompactStr},
+		&Mfield{Name: "protocol_type", Ty: TypeCompactStr},
+		&Mfield{Name: "group_state", Ty: TypeCompactStr},
+		&Mfield{Name: "group_type", Ty: TypeCompactStr},
+		&SchemaTaggedFields{Name: "group_tagged_fields"},
+	)
+
+	listGroupsV5 := NewSchema("list_groups_response_v5",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&CompactArray{Name: "groups", Ty: groupV5},
+		&SchemaTaggedFields{Name: "response_tagged_fields"},
+	)
+
+	return []Schema{
+		listGroupsV0, // v0
+		listGroupsV1, // v1
+		listGroupsV1, // v2
+		listGroupsV3, // v3
+		listGroupsV4, // v4
+		listGroupsV5, // v5
+	}
+}
+
+// listGroupsResponseModifier filters and unprefixes groups in ListGroups responses
+type listGroupsResponseModifier struct {
+	schema          Schema
+	groupUnprefixer GroupUnprefixer
+	groupFilter     GroupFilter
+}
+
+func (m *listGroupsResponseModifier) Apply(responseBytes []byte) ([]byte, error) {
+	decoded, err := DecodeSchema(responseBytes, m.schema)
+	if err != nil {
+		return nil, fmt.Errorf("decode list groups response: %w", err)
+	}
+
+	if err := modifyListGroupsResponse(decoded, m.groupUnprefixer, m.groupFilter); err != nil {
+		return nil, fmt.Errorf("modify list groups response: %w", err)
+	}
+
+	return EncodeSchema(decoded, m.schema)
+}
+
+func modifyListGroupsResponse(decoded *Struct, groupUnprefixer GroupUnprefixer, groupFilter GroupFilter) error {
+	groups := decoded.Get("groups")
+	if groups == nil {
+		return nil
+	}
+
+	groupsArray, ok := groups.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	// Build new filtered array
+	var filteredGroups []interface{}
+	for _, groupElement := range groupsArray {
+		group, ok := groupElement.(*Struct)
+		if !ok {
+			continue
+		}
+
+		groupId := group.Get("group_id")
+		if groupId == nil {
+			continue
+		}
+
+		gid, ok := groupId.(string)
+		if !ok || gid == "" {
+			continue
+		}
+
+		// Filter: if GroupFilter is set, only include matching groups
+		if groupFilter != nil && !groupFilter(gid) {
+			continue
+		}
+
+		// Unprefix the group_id
+		if groupUnprefixer != nil {
+			unprefixedId := groupUnprefixer(gid)
+			if unprefixedId != gid {
+				if err := group.Replace("group_id", unprefixedId); err != nil {
+					return err
+				}
+			}
+		}
+
+		filteredGroups = append(filteredGroups, groupElement)
+	}
+
+	// Replace groups array with filtered version
+	return decoded.Replace("groups", filteredGroups)
+}
+
+func newListGroupsResponseModifier(apiVersion int16, cfg ResponseModifierConfig) (ResponseModifier, error) {
+	// Need either filter or unprefixer to do anything
+	if cfg.GroupUnprefixer == nil && cfg.GroupFilter == nil {
+		return nil, nil
+	}
+	if apiVersion < 0 || int(apiVersion) >= len(listGroupsResponseSchemas) {
+		return nil, fmt.Errorf("unsupported ListGroups response version %d", apiVersion)
+	}
+	schema := listGroupsResponseSchemas[apiVersion]
+	return &listGroupsResponseModifier{
+		schema:          schema,
+		groupUnprefixer: cfg.GroupUnprefixer,
+		groupFilter:     cfg.GroupFilter,
 	}, nil
 }

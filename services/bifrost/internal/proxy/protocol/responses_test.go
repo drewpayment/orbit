@@ -4020,3 +4020,159 @@ func TestDescribeGroupsResponseModifier_MultipleGroups(t *testing.T) {
 	assert.Equal(t, "group-1", groups[0].(*Struct).Get("group_id"))
 	assert.Equal(t, "group-2", groups[1].(*Struct).Get("group_id"))
 }
+
+func TestListGroupsResponseModifier_FiltersAndUnprefixesGroups(t *testing.T) {
+	cfg := ResponseModifierConfig{
+		GroupUnprefixer: func(group string) string {
+			return strings.TrimPrefix(group, "tenant:")
+		},
+		GroupFilter: func(group string) bool {
+			return strings.HasPrefix(group, "tenant:")
+		},
+	}
+
+	mod, err := GetResponseModifierWithConfig(apiKeyListGroups, 0, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// ListGroups v0 response: error_code, groups[]
+	var responseBytes []byte
+	// error_code: 0
+	responseBytes = append(responseBytes, 0, 0)
+	// groups array: 3 elements (2 belong to tenant, 1 doesn't)
+	responseBytes = append(responseBytes, 0, 0, 0, 3)
+
+	// group 1: "tenant:my-group" (belongs to tenant)
+	group1 := "tenant:my-group"
+	responseBytes = append(responseBytes, 0, byte(len(group1)))
+	responseBytes = append(responseBytes, []byte(group1)...)
+	protocolType := "consumer"
+	responseBytes = append(responseBytes, 0, byte(len(protocolType)))
+	responseBytes = append(responseBytes, []byte(protocolType)...)
+
+	// group 2: "other:foreign-group" (doesn't belong to tenant)
+	group2 := "other:foreign-group"
+	responseBytes = append(responseBytes, 0, byte(len(group2)))
+	responseBytes = append(responseBytes, []byte(group2)...)
+	responseBytes = append(responseBytes, 0, byte(len(protocolType)))
+	responseBytes = append(responseBytes, []byte(protocolType)...)
+
+	// group 3: "tenant:another-group" (belongs to tenant)
+	group3 := "tenant:another-group"
+	responseBytes = append(responseBytes, 0, byte(len(group3)))
+	responseBytes = append(responseBytes, []byte(group3)...)
+	responseBytes = append(responseBytes, 0, byte(len(protocolType)))
+	responseBytes = append(responseBytes, []byte(protocolType)...)
+
+	result, err := mod.Apply(responseBytes)
+	require.NoError(t, err)
+
+	// Verify only 2 groups remain (filtered out "other:foreign-group")
+	// Skip error_code (2)
+	offset := 2
+	numGroups := int(result[offset])<<24 | int(result[offset+1])<<16 | int(result[offset+2])<<8 | int(result[offset+3])
+	assert.Equal(t, 2, numGroups, "should have 2 groups after filtering")
+
+	// Verify first group is unprefixed
+	offset = offset + 4
+	group1Len := int(result[offset])<<8 | int(result[offset+1])
+	resultGroup1 := string(result[offset+2 : offset+2+group1Len])
+	assert.Equal(t, "my-group", resultGroup1, "group should be unprefixed")
+}
+
+func TestListGroupsResponseModifier_NoFilterReturnsAllUnprefixed(t *testing.T) {
+	// When GroupFilter is nil, don't filter - just unprefix
+	cfg := ResponseModifierConfig{
+		GroupUnprefixer: func(group string) string {
+			return strings.TrimPrefix(group, "tenant:")
+		},
+		// No GroupFilter - should not filter
+	}
+
+	mod, err := GetResponseModifierWithConfig(apiKeyListGroups, 0, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// ListGroups v0 response with 2 groups
+	var responseBytes []byte
+	// error_code: 0
+	responseBytes = append(responseBytes, 0, 0)
+	// groups array: 2 elements
+	responseBytes = append(responseBytes, 0, 0, 0, 2)
+
+	// group 1
+	group1 := "tenant:my-group"
+	responseBytes = append(responseBytes, 0, byte(len(group1)))
+	responseBytes = append(responseBytes, []byte(group1)...)
+	protocolType := "consumer"
+	responseBytes = append(responseBytes, 0, byte(len(protocolType)))
+	responseBytes = append(responseBytes, []byte(protocolType)...)
+
+	// group 2 (no prefix)
+	group2 := "other-group"
+	responseBytes = append(responseBytes, 0, byte(len(group2)))
+	responseBytes = append(responseBytes, []byte(group2)...)
+	responseBytes = append(responseBytes, 0, byte(len(protocolType)))
+	responseBytes = append(responseBytes, []byte(protocolType)...)
+
+	result, err := mod.Apply(responseBytes)
+	require.NoError(t, err)
+
+	// Both groups should remain (no filtering)
+	offset := 2
+	numGroups := int(result[offset])<<24 | int(result[offset+1])<<16 | int(result[offset+2])<<8 | int(result[offset+3])
+	assert.Equal(t, 2, numGroups, "both groups should remain when no filter")
+}
+
+func TestListGroupsResponseModifier_ReturnsNilWithoutConfig(t *testing.T) {
+	// Without GroupUnprefixer and GroupFilter, should return nil
+	cfg := ResponseModifierConfig{}
+
+	mod, err := GetResponseModifierWithConfig(apiKeyListGroups, 0, cfg)
+	require.NoError(t, err)
+	assert.Nil(t, mod, "should return nil when no GroupUnprefixer or GroupFilter is configured")
+}
+
+func TestListGroupsResponseModifier_V1_WithThrottleTime(t *testing.T) {
+	cfg := ResponseModifierConfig{
+		GroupUnprefixer: func(group string) string {
+			return strings.TrimPrefix(group, "tenant:")
+		},
+		GroupFilter: func(group string) bool {
+			return strings.HasPrefix(group, "tenant:")
+		},
+	}
+
+	mod, err := GetResponseModifierWithConfig(apiKeyListGroups, 1, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// ListGroups v1 response: throttle_time_ms, error_code, groups[]
+	var responseBytes []byte
+	// throttle_time_ms: 100
+	responseBytes = append(responseBytes, 0, 0, 0, 100)
+	// error_code: 0
+	responseBytes = append(responseBytes, 0, 0)
+	// groups array: 1 element
+	responseBytes = append(responseBytes, 0, 0, 0, 1)
+
+	group1 := "tenant:test-group"
+	responseBytes = append(responseBytes, 0, byte(len(group1)))
+	responseBytes = append(responseBytes, []byte(group1)...)
+	protocolType := "consumer"
+	responseBytes = append(responseBytes, 0, byte(len(protocolType)))
+	responseBytes = append(responseBytes, []byte(protocolType)...)
+
+	result, err := mod.Apply(responseBytes)
+	require.NoError(t, err)
+
+	// Verify throttle_time preserved
+	throttleTime := int(result[0])<<24 | int(result[1])<<16 | int(result[2])<<8 | int(result[3])
+	assert.Equal(t, 100, throttleTime)
+
+	// Verify group is unprefixed
+	offset := 4 + 2 + 4 // throttle + error + array len
+	group1Len := int(result[offset])<<8 | int(result[offset+1])
+	resultGroup1 := string(result[offset+2 : offset+2+group1Len])
+	assert.Equal(t, "test-group", resultGroup1)
+}
