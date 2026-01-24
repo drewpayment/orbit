@@ -632,3 +632,143 @@ func TestFindCoordinatorRequestModifier_V4_CoordinatorKeys_Transaction(t *testin
 	require.Len(t, keysArray, 1)
 	assert.Equal(t, "txn:my-txn-id", keysArray[0])
 }
+
+func TestOffsetCommitRequestModifier_PrefixesGroupIdAndTopics(t *testing.T) {
+	cfg := RequestModifierConfig{
+		GroupPrefixer: func(group string) string { return "tenant:" + group },
+		TopicPrefixer: func(topic string) string { return "tenant:" + topic },
+	}
+
+	mod, err := GetRequestModifier(apiKeyOffsetCommit, 0, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// OffsetCommit v0: correlation_id, client_id, group_id, topics[]
+	var requestBytes []byte
+	// correlation_id: 1
+	requestBytes = append(requestBytes, 0, 0, 0, 1)
+	// client_id: "test-client"
+	clientId := "test-client"
+	requestBytes = append(requestBytes, 0, byte(len(clientId)))
+	requestBytes = append(requestBytes, []byte(clientId)...)
+	// group_id: "my-group"
+	groupId := "my-group"
+	requestBytes = append(requestBytes, 0, byte(len(groupId)))
+	requestBytes = append(requestBytes, []byte(groupId)...)
+	// topics array: 1 element
+	requestBytes = append(requestBytes, 0, 0, 0, 1)
+	// topic name: "my-topic"
+	topicName := "my-topic"
+	requestBytes = append(requestBytes, 0, byte(len(topicName)))
+	requestBytes = append(requestBytes, []byte(topicName)...)
+	// partitions array: 1 element
+	requestBytes = append(requestBytes, 0, 0, 0, 1)
+	// partition_index: 0
+	requestBytes = append(requestBytes, 0, 0, 0, 0)
+	// committed_offset: 100
+	requestBytes = append(requestBytes, 0, 0, 0, 0, 0, 0, 0, 100)
+	// committed_metadata: empty string
+	requestBytes = append(requestBytes, 0, 0)
+
+	result, err := mod.Apply(requestBytes)
+	require.NoError(t, err)
+
+	// Verify group_id is prefixed
+	offset := 4 + 2 + len(clientId)
+	groupIdLen := int(result[offset])<<8 | int(result[offset+1])
+	resultGroupId := string(result[offset+2 : offset+2+groupIdLen])
+	assert.Equal(t, "tenant:my-group", resultGroupId)
+
+	// Verify topic is prefixed
+	// Skip to after group_id and array length
+	offset = offset + 2 + groupIdLen + 4
+	topicLen := int(result[offset])<<8 | int(result[offset+1])
+	resultTopic := string(result[offset+2 : offset+2+topicLen])
+	assert.Equal(t, "tenant:my-topic", resultTopic)
+}
+
+func TestOffsetCommitRequestModifier_RequiresBothPrefixers(t *testing.T) {
+	// With only GroupPrefixer, should still work (just prefix group)
+	cfg := RequestModifierConfig{
+		GroupPrefixer: func(group string) string { return "tenant:" + group },
+	}
+
+	mod, err := GetRequestModifier(apiKeyOffsetCommit, 0, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod, "should return modifier with GroupPrefixer only")
+
+	// With only TopicPrefixer, should still work (just prefix topics)
+	cfg2 := RequestModifierConfig{
+		TopicPrefixer: func(topic string) string { return "tenant:" + topic },
+	}
+
+	mod2, err := GetRequestModifier(apiKeyOffsetCommit, 0, cfg2)
+	require.NoError(t, err)
+	require.NotNil(t, mod2, "should return modifier with TopicPrefixer only")
+}
+
+func TestOffsetCommitRequestModifier_V2_WithRetentionTime(t *testing.T) {
+	cfg := RequestModifierConfig{
+		GroupPrefixer: func(group string) string { return "tenant:" + group },
+		TopicPrefixer: func(topic string) string { return "tenant:" + topic },
+	}
+
+	mod, err := GetRequestModifier(apiKeyOffsetCommit, 2, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// OffsetCommit v2: adds generation_id, member_id, retention_time_ms
+	var requestBytes []byte
+	// correlation_id: 1
+	requestBytes = append(requestBytes, 0, 0, 0, 1)
+	// client_id: "test-client"
+	clientId := "test-client"
+	requestBytes = append(requestBytes, 0, byte(len(clientId)))
+	requestBytes = append(requestBytes, []byte(clientId)...)
+	// group_id: "my-group"
+	groupId := "my-group"
+	requestBytes = append(requestBytes, 0, byte(len(groupId)))
+	requestBytes = append(requestBytes, []byte(groupId)...)
+	// generation_id: 1
+	requestBytes = append(requestBytes, 0, 0, 0, 1)
+	// member_id: "member-1"
+	memberId := "member-1"
+	requestBytes = append(requestBytes, 0, byte(len(memberId)))
+	requestBytes = append(requestBytes, []byte(memberId)...)
+	// retention_time_ms: -1 (use broker default)
+	requestBytes = append(requestBytes, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff)
+	// topics array: 1 element
+	requestBytes = append(requestBytes, 0, 0, 0, 1)
+	// topic name: "orders"
+	topicName := "orders"
+	requestBytes = append(requestBytes, 0, byte(len(topicName)))
+	requestBytes = append(requestBytes, []byte(topicName)...)
+	// partitions array: 1 element
+	requestBytes = append(requestBytes, 0, 0, 0, 1)
+	// partition_index: 0
+	requestBytes = append(requestBytes, 0, 0, 0, 0)
+	// committed_offset: 50
+	requestBytes = append(requestBytes, 0, 0, 0, 0, 0, 0, 0, 50)
+	// committed_metadata: null (-1)
+	requestBytes = append(requestBytes, 0xff, 0xff)
+
+	result, err := mod.Apply(requestBytes)
+	require.NoError(t, err)
+
+	// Decode to verify
+	schema, err := getOffsetCommitRequestSchema(2)
+	require.NoError(t, err)
+	decoded, err := DecodeSchema(result, schema)
+	require.NoError(t, err)
+
+	// Verify group_id is prefixed
+	resultGroupId := decoded.Get("group_id").(string)
+	assert.Equal(t, "tenant:my-group", resultGroupId)
+
+	// Verify topic is prefixed
+	topics := decoded.Get("topics").([]interface{})
+	require.Len(t, topics, 1)
+	topicStruct := topics[0].(*Struct)
+	resultTopic := topicStruct.Get("name").(string)
+	assert.Equal(t, "tenant:orders", resultTopic)
+}

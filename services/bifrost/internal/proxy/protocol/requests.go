@@ -150,8 +150,15 @@ func newOffsetCommitRequestModifier(apiVersion int16, cfg RequestModifierConfig)
 	if cfg.GroupPrefixer == nil && cfg.TopicPrefixer == nil {
 		return nil, nil
 	}
-	// TODO: Implement offset commit request rewriting
-	return nil, nil
+	schema, err := getOffsetCommitRequestSchema(apiVersion)
+	if err != nil {
+		return nil, err
+	}
+	return &offsetCommitRequestModifier{
+		schema:        schema,
+		groupPrefixer: cfg.GroupPrefixer,
+		topicPrefixer: cfg.TopicPrefixer,
+	}, nil
 }
 
 func newOffsetFetchRequestModifier(apiVersion int16, cfg RequestModifierConfig) (RequestModifier, error) {
@@ -507,6 +514,220 @@ func getSyncGroupRequestSchema(apiVersion int16) (Schema, error) {
 		return nil, fmt.Errorf("unsupported SyncGroup request version %d", apiVersion)
 	}
 	return syncGroupRequestSchemas[apiVersion], nil
+}
+
+// offsetCommitRequestModifier prefixes group_id and topics in OffsetCommit requests
+type offsetCommitRequestModifier struct {
+	schema        Schema
+	groupPrefixer GroupPrefixer
+	topicPrefixer TopicPrefixer
+}
+
+func (m *offsetCommitRequestModifier) Apply(requestBytes []byte) ([]byte, error) {
+	decoded, err := DecodeSchema(requestBytes, m.schema)
+	if err != nil {
+		return nil, fmt.Errorf("decode offset commit request: %w", err)
+	}
+
+	if err := modifyOffsetCommitRequest(decoded, m.groupPrefixer, m.topicPrefixer); err != nil {
+		return nil, fmt.Errorf("modify offset commit request: %w", err)
+	}
+
+	return EncodeSchema(decoded, m.schema)
+}
+
+func modifyOffsetCommitRequest(decoded *Struct, groupPrefixer GroupPrefixer, topicPrefixer TopicPrefixer) error {
+	// Prefix group_id
+	if groupPrefixer != nil {
+		groupId := decoded.Get("group_id")
+		if groupId != nil {
+			if gid, ok := groupId.(string); ok && gid != "" {
+				if err := decoded.Replace("group_id", groupPrefixer(gid)); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	// Prefix topics
+	if topicPrefixer != nil {
+		topics := decoded.Get("topics")
+		if topics != nil {
+			topicsArray, ok := topics.([]interface{})
+			if ok {
+				for _, topicElement := range topicsArray {
+					topic, ok := topicElement.(*Struct)
+					if !ok {
+						continue
+					}
+					nameField := topic.Get("name")
+					if nameField == nil {
+						continue
+					}
+					var topicName string
+					switch n := nameField.(type) {
+					case string:
+						topicName = n
+					case *string:
+						if n != nil {
+							topicName = *n
+						}
+					}
+					if topicName != "" {
+						if err := topic.Replace("name", topicPrefixer(topicName)); err != nil {
+							return err
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+var offsetCommitRequestSchemas []Schema
+
+func init() {
+	offsetCommitRequestSchemas = createOffsetCommitRequestSchemas()
+}
+
+func createOffsetCommitRequestSchemas() []Schema {
+	// Partition for v0: partition_index, committed_offset, committed_metadata
+	partitionV0 := NewSchema("offset_commit_partition_v0",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "committed_offset", Ty: TypeInt64},
+		&Mfield{Name: "committed_metadata", Ty: TypeNullableStr},
+	)
+
+	topicV0 := NewSchema("offset_commit_topic_v0",
+		&Mfield{Name: "name", Ty: TypeStr},
+		&Array{Name: "partitions", Ty: partitionV0},
+	)
+
+	// v0: correlation_id, client_id, group_id, topics[]
+	offsetCommitV0 := NewSchema("offset_commit_request_v0",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "group_id", Ty: TypeStr},
+		&Array{Name: "topics", Ty: topicV0},
+	)
+
+	// v1 adds generation_id, member_id, and commit_timestamp in partition
+	partitionV1 := NewSchema("offset_commit_partition_v1",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "committed_offset", Ty: TypeInt64},
+		&Mfield{Name: "commit_timestamp", Ty: TypeInt64},
+		&Mfield{Name: "committed_metadata", Ty: TypeNullableStr},
+	)
+
+	topicV1 := NewSchema("offset_commit_topic_v1",
+		&Mfield{Name: "name", Ty: TypeStr},
+		&Array{Name: "partitions", Ty: partitionV1},
+	)
+
+	offsetCommitV1 := NewSchema("offset_commit_request_v1",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "group_id", Ty: TypeStr},
+		&Mfield{Name: "generation_id", Ty: TypeInt32},
+		&Mfield{Name: "member_id", Ty: TypeStr},
+		&Array{Name: "topics", Ty: topicV1},
+	)
+
+	// v2 adds retention_time_ms, removes commit_timestamp from partition
+	offsetCommitV2 := NewSchema("offset_commit_request_v2",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "group_id", Ty: TypeStr},
+		&Mfield{Name: "generation_id", Ty: TypeInt32},
+		&Mfield{Name: "member_id", Ty: TypeStr},
+		&Mfield{Name: "retention_time_ms", Ty: TypeInt64},
+		&Array{Name: "topics", Ty: topicV0},
+	)
+
+	// v5 drops retention_time_ms, adds committed_leader_epoch in partition
+	partitionV5 := NewSchema("offset_commit_partition_v5",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "committed_offset", Ty: TypeInt64},
+		&Mfield{Name: "committed_leader_epoch", Ty: TypeInt32},
+		&Mfield{Name: "committed_metadata", Ty: TypeNullableStr},
+	)
+
+	topicV5 := NewSchema("offset_commit_topic_v5",
+		&Mfield{Name: "name", Ty: TypeStr},
+		&Array{Name: "partitions", Ty: partitionV5},
+	)
+
+	offsetCommitV5 := NewSchema("offset_commit_request_v5",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "group_id", Ty: TypeStr},
+		&Mfield{Name: "generation_id", Ty: TypeInt32},
+		&Mfield{Name: "member_id", Ty: TypeStr},
+		&Array{Name: "topics", Ty: topicV5},
+	)
+
+	// v7 adds group_instance_id
+	offsetCommitV7 := NewSchema("offset_commit_request_v7",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "group_id", Ty: TypeStr},
+		&Mfield{Name: "generation_id", Ty: TypeInt32},
+		&Mfield{Name: "member_id", Ty: TypeStr},
+		&Mfield{Name: "group_instance_id", Ty: TypeNullableStr},
+		&Array{Name: "topics", Ty: topicV5},
+	)
+
+	// v8+ flexible
+	partitionV8 := NewSchema("offset_commit_partition_v8",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "committed_offset", Ty: TypeInt64},
+		&Mfield{Name: "committed_leader_epoch", Ty: TypeInt32},
+		&Mfield{Name: "committed_metadata", Ty: TypeCompactNullableStr},
+		&SchemaTaggedFields{Name: "partition_tagged_fields"},
+	)
+
+	topicV8 := NewSchema("offset_commit_topic_v8",
+		&Mfield{Name: "name", Ty: TypeCompactStr},
+		&CompactArray{Name: "partitions", Ty: partitionV8},
+		&SchemaTaggedFields{Name: "topic_tagged_fields"},
+	)
+
+	offsetCommitV8 := NewSchema("offset_commit_request_v8",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&SchemaTaggedFields{Name: "header_tagged_fields"},
+		&Mfield{Name: "group_id", Ty: TypeCompactStr},
+		&Mfield{Name: "generation_id", Ty: TypeInt32},
+		&Mfield{Name: "member_id", Ty: TypeCompactStr},
+		&Mfield{Name: "group_instance_id", Ty: TypeCompactNullableStr},
+		&CompactArray{Name: "topics", Ty: topicV8},
+		&SchemaTaggedFields{Name: "request_tagged_fields"},
+	)
+
+	// v9 adds generation_id_or_member_epoch semantics but same schema
+	offsetCommitV9 := offsetCommitV8
+
+	return []Schema{
+		offsetCommitV0, // v0
+		offsetCommitV1, // v1
+		offsetCommitV2, // v2
+		offsetCommitV2, // v3
+		offsetCommitV2, // v4
+		offsetCommitV5, // v5
+		offsetCommitV5, // v6
+		offsetCommitV7, // v7
+		offsetCommitV8, // v8
+		offsetCommitV9, // v9
+	}
+}
+
+func getOffsetCommitRequestSchema(apiVersion int16) (Schema, error) {
+	if apiVersion < 0 || int(apiVersion) >= len(offsetCommitRequestSchemas) {
+		return nil, fmt.Errorf("unsupported OffsetCommit request version %d", apiVersion)
+	}
+	return offsetCommitRequestSchemas[apiVersion], nil
 }
 
 // heartbeatRequestModifier prefixes group_id in Heartbeat requests
