@@ -534,7 +534,13 @@ export async function createCredential(data: {
 
     const id = `cred-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
-    // Hash the password before sending (using simple hash for demo - production should use bcrypt)
+    // Hash the password using SHA-256 to match Bifrost's credential.go implementation.
+    // Note: SHA-256 is used here because:
+    // 1. Bifrost's SASL handler expects SHA-256 hashed passwords (see services/bifrost/internal/auth/credential.go)
+    // 2. These are machine-generated 24-character random passwords, not user-chosen weak passwords
+    // 3. The password is only shown once and must be saved securely by the user
+    // For user-facing passwords, bcrypt/argon2 would be preferred, but changing this requires
+    // coordinating with Bifrost's Go service implementation.
     const encoder = new TextEncoder()
     const passwordData = encoder.encode(data.password)
     const hashBuffer = await crypto.subtle.digest('SHA-256', passwordData)

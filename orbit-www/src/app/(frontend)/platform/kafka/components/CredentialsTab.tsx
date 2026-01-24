@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Plus, RefreshCw, Key, User } from 'lucide-react'
+import { Plus, RefreshCw, Key, User, Copy, Check } from 'lucide-react'
 import type { CredentialConfig, VirtualClusterConfig } from '@/app/actions/bifrost-admin'
 import { CredentialForm } from './CredentialForm'
 
@@ -39,6 +39,7 @@ export function CredentialsTab({
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [newCredential, setNewCredential] = useState<{ username: string; password: string } | null>(null)
+  const [copiedField, setCopiedField] = useState<'username' | 'password' | null>(null)
 
   const handleRefresh = async () => {
     setIsRefreshing(true)
@@ -76,6 +77,12 @@ export function CredentialsTab({
     return vc ? `${vc.workspaceSlug} / ${vc.environment}` : vcId
   }
 
+  const handleCopy = async (field: 'username' | 'password', value: string) => {
+    await navigator.clipboard.writeText(value)
+    setCopiedField(field)
+    setTimeout(() => setCopiedField(null), 2000)
+  }
+
   // Show newly created credential
   if (newCredential) {
     return (
@@ -87,16 +94,45 @@ export function CredentialsTab({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="p-4 bg-muted rounded-lg space-y-2">
+          <div className="p-4 bg-muted rounded-lg space-y-3">
             <div>
-              <p className="text-xs text-muted-foreground">Username</p>
-              <p className="font-mono">{newCredential.username}</p>
+              <p className="text-xs text-muted-foreground mb-1">Username</p>
+              <div className="flex items-center gap-2">
+                <p className="font-mono flex-1">{newCredential.username}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleCopy('username', newCredential.username)}
+                >
+                  {copiedField === 'username' ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Password</p>
-              <p className="font-mono break-all">{newCredential.password}</p>
+              <p className="text-xs text-muted-foreground mb-1">Password</p>
+              <div className="flex items-center gap-2">
+                <p className="font-mono break-all flex-1">{newCredential.password}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleCopy('password', newCredential.password)}
+                >
+                  {copiedField === 'password' ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
+          <p className="text-sm text-amber-600 dark:text-amber-500">
+            This password will not be shown again. Copy and save it securely now.
+          </p>
           <Button onClick={() => setNewCredential(null)}>Done</Button>
         </CardContent>
       </Card>
