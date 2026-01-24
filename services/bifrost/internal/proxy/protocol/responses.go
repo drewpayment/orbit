@@ -703,6 +703,11 @@ func GetResponseModifierWithConfig(apiKey int16, apiVersion int16, cfg ResponseM
 			return nil, nil
 		}
 		return newResponseModifier(apiKey, apiVersion, cfg, fetchResponseSchemaVersions, modifyFetchResponse)
+	case apiKeyOffsetCommit:
+		if cfg.TopicUnprefixer == nil {
+			return nil, nil
+		}
+		return newResponseModifier(apiKey, apiVersion, cfg, offsetCommitResponseSchemaVersions, modifyOffsetCommitResponse)
 	default:
 		return nil, nil
 	}
@@ -1297,6 +1302,104 @@ func modifyFetchResponse(decodedStruct *Struct, cfg ResponseModifierConfig) erro
 			unprefixedName := cfg.TopicUnprefixer(name)
 			if unprefixedName != name {
 				if err := topic.Replace("topic", unprefixedName); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// OffsetCommit response schemas
+var offsetCommitResponseSchemaVersions = createOffsetCommitResponseSchemaVersions()
+
+func createOffsetCommitResponseSchemaVersions() []Schema {
+	// Partition response for v0-v7
+	partitionV0 := NewSchema("offset_commit_partition_response_v0",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+	)
+
+	// Topic response for v0-v7
+	topicV0 := NewSchema("offset_commit_topic_response_v0",
+		&Mfield{Name: "name", Ty: TypeStr},
+		&Array{Name: "partitions", Ty: partitionV0},
+	)
+
+	// v0-v2: just topics array
+	offsetCommitV0 := NewSchema("offset_commit_response_v0",
+		&Array{Name: "topics", Ty: topicV0},
+	)
+
+	// v3-v7: adds throttle_time_ms
+	offsetCommitV3 := NewSchema("offset_commit_response_v3",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&Array{Name: "topics", Ty: topicV0},
+	)
+
+	// v8+ uses compact arrays (flexible version)
+	partitionV8 := NewSchema("offset_commit_partition_response_v8",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&SchemaTaggedFields{Name: "partition_tagged_fields"},
+	)
+
+	topicV8 := NewSchema("offset_commit_topic_response_v8",
+		&Mfield{Name: "name", Ty: TypeCompactStr},
+		&CompactArray{Name: "partitions", Ty: partitionV8},
+		&SchemaTaggedFields{Name: "topic_tagged_fields"},
+	)
+
+	offsetCommitV8 := NewSchema("offset_commit_response_v8",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&CompactArray{Name: "topics", Ty: topicV8},
+		&SchemaTaggedFields{Name: "response_tagged_fields"},
+	)
+
+	return []Schema{
+		offsetCommitV0, // v0
+		offsetCommitV0, // v1
+		offsetCommitV0, // v2
+		offsetCommitV3, // v3
+		offsetCommitV3, // v4
+		offsetCommitV3, // v5
+		offsetCommitV3, // v6
+		offsetCommitV3, // v7
+		offsetCommitV8, // v8
+		offsetCommitV8, // v9
+	}
+}
+
+// modifyOffsetCommitResponse unprefixes topic names in OffsetCommit responses.
+func modifyOffsetCommitResponse(decodedStruct *Struct, cfg ResponseModifierConfig) error {
+	if cfg.TopicUnprefixer == nil {
+		return nil
+	}
+
+	topics := decodedStruct.Get("topics")
+	if topics == nil {
+		return nil
+	}
+
+	topicsArray, ok := topics.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	for _, topicElement := range topicsArray {
+		topic, ok := topicElement.(*Struct)
+		if !ok {
+			continue
+		}
+		nameField := topic.Get("name")
+		if nameField == nil {
+			continue
+		}
+		if name, ok := nameField.(string); ok && name != "" {
+			unprefixedName := cfg.TopicUnprefixer(name)
+			if unprefixedName != name {
+				if err := topic.Replace("name", unprefixedName); err != nil {
 					return err
 				}
 			}

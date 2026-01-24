@@ -12,6 +12,7 @@ import (
 	"github.com/drewpayment/orbit/services/bifrost/internal/kafkaconfig"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -3219,4 +3220,230 @@ func (t *decodeCheck) Dump() {
 	for _, v := range t.attrValues {
 		fmt.Printf("\"%s\",\n", v)
 	}
+}
+
+func TestOffsetCommitResponseModifier_UnprefixesTopics(t *testing.T) {
+	cfg := ResponseModifierConfig{
+		TopicUnprefixer: func(topic string) string {
+			return strings.TrimPrefix(topic, "tenant:")
+		},
+	}
+
+	mod, err := GetResponseModifierWithConfig(apiKeyOffsetCommit, 0, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// OffsetCommit v0 response: topics[] with name and partitions[]
+	var responseBytes []byte
+	// topics array: 1 element
+	responseBytes = append(responseBytes, 0, 0, 0, 1)
+	// topic name: "tenant:my-topic"
+	topicName := "tenant:my-topic"
+	responseBytes = append(responseBytes, 0, byte(len(topicName)))
+	responseBytes = append(responseBytes, []byte(topicName)...)
+	// partitions array: 1 element
+	responseBytes = append(responseBytes, 0, 0, 0, 1)
+	// partition_index: 0
+	responseBytes = append(responseBytes, 0, 0, 0, 0)
+	// error_code: 0
+	responseBytes = append(responseBytes, 0, 0)
+
+	result, err := mod.Apply(responseBytes)
+	require.NoError(t, err)
+
+	// Verify topic is unprefixed
+	// Skip array length (4)
+	offset := 4
+	topicLen := int(result[offset])<<8 | int(result[offset+1])
+	resultTopic := string(result[offset+2 : offset+2+topicLen])
+	assert.Equal(t, "my-topic", resultTopic)
+}
+
+func TestOffsetCommitResponseModifier_V3_WithThrottleTime(t *testing.T) {
+	cfg := ResponseModifierConfig{
+		TopicUnprefixer: func(topic string) string {
+			return strings.TrimPrefix(topic, "tenant:")
+		},
+	}
+
+	mod, err := GetResponseModifierWithConfig(apiKeyOffsetCommit, 3, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// OffsetCommit v3 response: throttle_time_ms, topics[]
+	var responseBytes []byte
+	// throttle_time_ms: 100
+	responseBytes = append(responseBytes, 0, 0, 0, 100)
+	// topics array: 1 element
+	responseBytes = append(responseBytes, 0, 0, 0, 1)
+	// topic name: "tenant:orders"
+	topicName := "tenant:orders"
+	responseBytes = append(responseBytes, 0, byte(len(topicName)))
+	responseBytes = append(responseBytes, []byte(topicName)...)
+	// partitions array: 1 element
+	responseBytes = append(responseBytes, 0, 0, 0, 1)
+	// partition_index: 0
+	responseBytes = append(responseBytes, 0, 0, 0, 0)
+	// error_code: 0
+	responseBytes = append(responseBytes, 0, 0)
+
+	result, err := mod.Apply(responseBytes)
+	require.NoError(t, err)
+
+	// Decode to verify
+	schema := offsetCommitResponseSchemaVersions[3]
+	decoded, err := DecodeSchema(result, schema)
+	require.NoError(t, err)
+
+	// Verify throttle time preserved
+	assert.Equal(t, int32(100), decoded.Get("throttle_time_ms"))
+
+	// Verify topic is unprefixed
+	topics := decoded.Get("topics").([]interface{})
+	require.Len(t, topics, 1)
+	topicStruct := topics[0].(*Struct)
+	assert.Equal(t, "orders", topicStruct.Get("name"))
+}
+
+func TestOffsetCommitResponseModifier_V8_Flexible(t *testing.T) {
+	cfg := ResponseModifierConfig{
+		TopicUnprefixer: func(topic string) string {
+			return strings.TrimPrefix(topic, "tenant:")
+		},
+	}
+
+	mod, err := GetResponseModifierWithConfig(apiKeyOffsetCommit, 8, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// Build v8 response manually using schema
+	// v8: throttle_time_ms, compact_topics[], tagged_fields
+	partitionSchema := NewSchema("partition",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&SchemaTaggedFields{Name: "partition_tagged_fields"},
+	)
+
+	topicSchema := NewSchema("topic",
+		&Mfield{Name: "name", Ty: TypeCompactStr},
+		&CompactArray{Name: "partitions", Ty: partitionSchema},
+		&SchemaTaggedFields{Name: "topic_tagged_fields"},
+	)
+
+	partition := &Struct{
+		Schema: partitionSchema,
+		Values: []interface{}{
+			int32(0),        // partition_index
+			int16(0),        // error_code (no error)
+			[]rawTaggedField{}, // tagged fields
+		},
+	}
+
+	topic := &Struct{
+		Schema: topicSchema,
+		Values: []interface{}{
+			"tenant:events",    // name (prefixed)
+			[]interface{}{partition}, // partitions
+			[]rawTaggedField{}, // tagged fields
+		},
+	}
+
+	responseSchema := offsetCommitResponseSchemaVersions[8]
+	original := &Struct{
+		Schema: responseSchema,
+		Values: []interface{}{
+			int32(50),            // throttle_time_ms
+			[]interface{}{topic}, // topics
+			[]rawTaggedField{},   // response_tagged_fields
+		},
+	}
+
+	responseBytes, err := EncodeSchema(original, responseSchema)
+	require.NoError(t, err)
+
+	result, err := mod.Apply(responseBytes)
+	require.NoError(t, err)
+
+	// Decode and verify
+	decoded, err := DecodeSchema(result, responseSchema)
+	require.NoError(t, err)
+
+	// Verify throttle time preserved
+	assert.Equal(t, int32(50), decoded.Get("throttle_time_ms"))
+
+	// Verify topic is unprefixed
+	topics := decoded.Get("topics").([]interface{})
+	require.Len(t, topics, 1)
+	topicStruct := topics[0].(*Struct)
+	assert.Equal(t, "events", topicStruct.Get("name"))
+}
+
+func TestOffsetCommitResponseModifier_ReturnsNilWithoutUnprefixer(t *testing.T) {
+	// Without TopicUnprefixer, should return nil
+	cfg := ResponseModifierConfig{}
+
+	mod, err := GetResponseModifierWithConfig(apiKeyOffsetCommit, 0, cfg)
+	require.NoError(t, err)
+	assert.Nil(t, mod, "should return nil when no TopicUnprefixer is configured")
+}
+
+func TestOffsetCommitResponseModifier_MultipleTopics(t *testing.T) {
+	cfg := ResponseModifierConfig{
+		TopicUnprefixer: func(topic string) string {
+			return strings.TrimPrefix(topic, "tenant:")
+		},
+	}
+
+	mod, err := GetResponseModifierWithConfig(apiKeyOffsetCommit, 0, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// Build response with multiple topics
+	partitionSchema := NewSchema("partition",
+		&Mfield{Name: "partition_index", Ty: TypeInt32},
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+	)
+
+	topicSchema := NewSchema("topic",
+		&Mfield{Name: "name", Ty: TypeStr},
+		&Array{Name: "partitions", Ty: partitionSchema},
+	)
+
+	partition := &Struct{
+		Schema: partitionSchema,
+		Values: []interface{}{int32(0), int16(0)},
+	}
+
+	topic1 := &Struct{
+		Schema: topicSchema,
+		Values: []interface{}{"tenant:topic-1", []interface{}{partition}},
+	}
+
+	topic2 := &Struct{
+		Schema: topicSchema,
+		Values: []interface{}{"tenant:topic-2", []interface{}{partition}},
+	}
+
+	responseSchema := offsetCommitResponseSchemaVersions[0]
+	original := &Struct{
+		Schema: responseSchema,
+		Values: []interface{}{
+			[]interface{}{topic1, topic2},
+		},
+	}
+
+	responseBytes, err := EncodeSchema(original, responseSchema)
+	require.NoError(t, err)
+
+	result, err := mod.Apply(responseBytes)
+	require.NoError(t, err)
+
+	// Decode and verify
+	decoded, err := DecodeSchema(result, responseSchema)
+	require.NoError(t, err)
+
+	topics := decoded.Get("topics").([]interface{})
+	require.Len(t, topics, 2)
+	assert.Equal(t, "topic-1", topics[0].(*Struct).Get("name"))
+	assert.Equal(t, "topic-2", topics[1].(*Struct).Get("name"))
 }
