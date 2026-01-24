@@ -204,8 +204,14 @@ func newSyncGroupRequestModifier(apiVersion int16, cfg RequestModifierConfig) (R
 	if cfg.GroupPrefixer == nil {
 		return nil, nil
 	}
-	// TODO: Implement sync group request rewriting
-	return nil, nil
+	schema, err := getSyncGroupRequestSchema(apiVersion)
+	if err != nil {
+		return nil, err
+	}
+	return &syncGroupRequestModifier{
+		schema:        schema,
+		groupPrefixer: cfg.GroupPrefixer,
+	}, nil
 }
 
 func newDescribeGroupsRequestModifier(apiVersion int16, cfg RequestModifierConfig) (RequestModifier, error) {
@@ -367,6 +373,120 @@ func getJoinGroupRequestSchema(apiVersion int16) (Schema, error) {
 		return nil, fmt.Errorf("unsupported JoinGroup request version %d", apiVersion)
 	}
 	return joinGroupRequestSchemas[apiVersion], nil
+}
+
+// syncGroupRequestModifier prefixes group_id in SyncGroup requests
+type syncGroupRequestModifier struct {
+	schema        Schema
+	groupPrefixer GroupPrefixer
+}
+
+func (m *syncGroupRequestModifier) Apply(requestBytes []byte) ([]byte, error) {
+	decoded, err := DecodeSchema(requestBytes, m.schema)
+	if err != nil {
+		return nil, fmt.Errorf("decode sync group request: %w", err)
+	}
+
+	if err := modifySyncGroupRequest(decoded, m.groupPrefixer); err != nil {
+		return nil, fmt.Errorf("modify sync group request: %w", err)
+	}
+
+	return EncodeSchema(decoded, m.schema)
+}
+
+func modifySyncGroupRequest(decoded *Struct, prefixer GroupPrefixer) error {
+	groupId := decoded.Get("group_id")
+	if groupId == nil {
+		return nil
+	}
+	if gid, ok := groupId.(string); ok && gid != "" {
+		return decoded.Replace("group_id", prefixer(gid))
+	}
+	return nil
+}
+
+var syncGroupRequestSchemas []Schema
+
+func init() {
+	syncGroupRequestSchemas = createSyncGroupRequestSchemas()
+}
+
+func createSyncGroupRequestSchemas() []Schema {
+	assignmentV0 := NewSchema("sync_group_assignment_v0",
+		&Mfield{Name: "member_id", Ty: TypeStr},
+		&Mfield{Name: "assignment", Ty: TypeBytes},
+	)
+
+	// v0-v2: non-flexible
+	syncGroupV0 := NewSchema("sync_group_request_v0",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "group_id", Ty: TypeStr},
+		&Mfield{Name: "generation_id", Ty: TypeInt32},
+		&Mfield{Name: "member_id", Ty: TypeStr},
+		&Array{Name: "assignments", Ty: assignmentV0},
+	)
+
+	// v3 adds group_instance_id
+	syncGroupV3 := NewSchema("sync_group_request_v3",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "group_id", Ty: TypeStr},
+		&Mfield{Name: "generation_id", Ty: TypeInt32},
+		&Mfield{Name: "member_id", Ty: TypeStr},
+		&Mfield{Name: "group_instance_id", Ty: TypeNullableStr},
+		&Array{Name: "assignments", Ty: assignmentV0},
+	)
+
+	// v4+ flexible
+	assignmentV4 := NewSchema("sync_group_assignment_v4",
+		&Mfield{Name: "member_id", Ty: TypeCompactStr},
+		&Mfield{Name: "assignment", Ty: TypeCompactBytes},
+		&SchemaTaggedFields{Name: "assignment_tagged_fields"},
+	)
+
+	syncGroupV4 := NewSchema("sync_group_request_v4",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&SchemaTaggedFields{Name: "header_tagged_fields"},
+		&Mfield{Name: "group_id", Ty: TypeCompactStr},
+		&Mfield{Name: "generation_id", Ty: TypeInt32},
+		&Mfield{Name: "member_id", Ty: TypeCompactStr},
+		&Mfield{Name: "group_instance_id", Ty: TypeCompactNullableStr},
+		&CompactArray{Name: "assignments", Ty: assignmentV4},
+		&SchemaTaggedFields{Name: "request_tagged_fields"},
+	)
+
+	// v5 adds protocol_type and protocol_name
+	syncGroupV5 := NewSchema("sync_group_request_v5",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&SchemaTaggedFields{Name: "header_tagged_fields"},
+		&Mfield{Name: "group_id", Ty: TypeCompactStr},
+		&Mfield{Name: "generation_id", Ty: TypeInt32},
+		&Mfield{Name: "member_id", Ty: TypeCompactStr},
+		&Mfield{Name: "group_instance_id", Ty: TypeCompactNullableStr},
+		&Mfield{Name: "protocol_type", Ty: TypeCompactNullableStr},
+		&Mfield{Name: "protocol_name", Ty: TypeCompactNullableStr},
+		&CompactArray{Name: "assignments", Ty: assignmentV4},
+		&SchemaTaggedFields{Name: "request_tagged_fields"},
+	)
+
+	return []Schema{
+		syncGroupV0, // v0
+		syncGroupV0, // v1
+		syncGroupV0, // v2
+		syncGroupV3, // v3
+		syncGroupV4, // v4
+		syncGroupV5, // v5
+	}
+}
+
+func getSyncGroupRequestSchema(apiVersion int16) (Schema, error) {
+	if apiVersion < 0 || int(apiVersion) >= len(syncGroupRequestSchemas) {
+		return nil, fmt.Errorf("unsupported SyncGroup request version %d", apiVersion)
+	}
+	return syncGroupRequestSchemas[apiVersion], nil
 }
 
 // metadataRequestModifier rewrites topic names in Metadata requests
