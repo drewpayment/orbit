@@ -1,4 +1,12 @@
 import { getProviders, listClusters, listMappings } from '@/app/actions/kafka-admin'
+import {
+  listVirtualClusters,
+  listCredentials,
+  getGatewayStatus,
+  type VirtualClusterConfig,
+  type CredentialConfig,
+  type GatewayStatus,
+} from '@/app/actions/bifrost-admin'
 import { KafkaAdminClient } from './components/KafkaAdminClient'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -16,6 +24,32 @@ export default async function KafkaAdminPage() {
     listClusters(),
     listMappings(),
   ])
+
+  // Fetch gateway data separately (non-critical - may fail if Bifrost is not running)
+  let virtualClusters: VirtualClusterConfig[] = []
+  let credentials: CredentialConfig[] = []
+  let gatewayStatus: GatewayStatus | null = null
+  let gatewayConnectionError: string | undefined
+
+  try {
+    const [vcResult, credResult, statusResult] = await Promise.all([
+      listVirtualClusters(),
+      listCredentials(),
+      getGatewayStatus(),
+    ])
+
+    if (vcResult.success && vcResult.data) {
+      virtualClusters = vcResult.data
+    }
+    if (credResult.success && credResult.data) {
+      credentials = credResult.data
+    }
+    if (statusResult.success && statusResult.data) {
+      gatewayStatus = statusResult.data
+    }
+  } catch {
+    gatewayConnectionError = 'Unable to connect to Bifrost gateway'
+  }
 
   // Collect any errors from data fetching
   const errors: string[] = []
@@ -61,6 +95,10 @@ export default async function KafkaAdminPage() {
             initialProviders={providersResult.data || []}
             initialClusters={clustersResult.data || []}
             initialMappings={mappingsResult.data || []}
+            initialVirtualClusters={virtualClusters}
+            initialCredentials={credentials}
+            initialGatewayStatus={gatewayStatus}
+            gatewayConnectionError={gatewayConnectionError}
           />
         </div>
       </SidebarInset>

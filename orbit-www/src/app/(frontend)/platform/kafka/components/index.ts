@@ -8,3 +8,11 @@ export { ProviderForm } from './ProviderForm'
 export type { ProviderFormData } from './ProviderForm'
 export { ClusterDetail } from './ClusterDetail'
 export { MappingForm } from './MappingForm'
+
+// Bifrost Gateway UI Components
+export { GatewayTab } from './GatewayTab'
+export { VirtualClustersTab } from './VirtualClustersTab'
+export { VirtualClusterForm } from './VirtualClusterForm'
+export { CredentialsTab } from './CredentialsTab'
+export { CredentialForm } from './CredentialForm'
+export { GatewayStatusTab } from './GatewayStatusTab'
