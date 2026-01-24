@@ -722,6 +722,8 @@ func GetResponseModifierWithConfig(apiKey int16, apiVersion int16, cfg ResponseM
 			return nil, nil
 		}
 		return newOffsetFetchResponseModifier(apiVersion, cfg)
+	case apiKeyDescribeGroups:
+		return newDescribeGroupsResponseModifier(apiVersion, cfg)
 	default:
 		return nil, nil
 	}
@@ -1652,5 +1654,187 @@ func newOffsetFetchResponseModifier(apiVersion int16, cfg ResponseModifierConfig
 		schema:     schema,
 		apiVersion: apiVersion,
 		cfg:        cfg,
+	}, nil
+}
+
+// DescribeGroups response schemas
+var describeGroupsResponseSchemas = createDescribeGroupsResponseSchemas()
+
+func createDescribeGroupsResponseSchemas() []Schema {
+	// Member for v0-v3 (member_assignment is opaque bytes - we don't decode it per YAGNI)
+	memberV0 := NewSchema("describe_groups_member_v0",
+		&Mfield{Name: "member_id", Ty: TypeStr},
+		&Mfield{Name: "client_id", Ty: TypeStr},
+		&Mfield{Name: "client_host", Ty: TypeStr},
+		&Mfield{Name: "member_metadata", Ty: TypeBytes},
+		&Mfield{Name: "member_assignment", Ty: TypeBytes},
+	)
+
+	groupV0 := NewSchema("describe_groups_group_v0",
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "group_id", Ty: TypeStr},
+		&Mfield{Name: "group_state", Ty: TypeStr},
+		&Mfield{Name: "protocol_type", Ty: TypeStr},
+		&Mfield{Name: "protocol_data", Ty: TypeStr},
+		&Array{Name: "members", Ty: memberV0},
+	)
+
+	// v0
+	describeGroupsV0 := NewSchema("describe_groups_response_v0",
+		&Array{Name: "groups", Ty: groupV0},
+	)
+
+	// v1+ adds throttle_time_ms
+	describeGroupsV1 := NewSchema("describe_groups_response_v1",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&Array{Name: "groups", Ty: groupV0},
+	)
+
+	// v3 adds authorized_operations to group
+	groupV3 := NewSchema("describe_groups_group_v3",
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "group_id", Ty: TypeStr},
+		&Mfield{Name: "group_state", Ty: TypeStr},
+		&Mfield{Name: "protocol_type", Ty: TypeStr},
+		&Mfield{Name: "protocol_data", Ty: TypeStr},
+		&Array{Name: "members", Ty: memberV0},
+		&Mfield{Name: "authorized_operations", Ty: TypeInt32},
+	)
+
+	describeGroupsV3 := NewSchema("describe_groups_response_v3",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&Array{Name: "groups", Ty: groupV3},
+	)
+
+	// v4 adds group_instance_id to member
+	memberV4 := NewSchema("describe_groups_member_v4",
+		&Mfield{Name: "member_id", Ty: TypeStr},
+		&Mfield{Name: "group_instance_id", Ty: TypeNullableStr},
+		&Mfield{Name: "client_id", Ty: TypeStr},
+		&Mfield{Name: "client_host", Ty: TypeStr},
+		&Mfield{Name: "member_metadata", Ty: TypeBytes},
+		&Mfield{Name: "member_assignment", Ty: TypeBytes},
+	)
+
+	groupV4 := NewSchema("describe_groups_group_v4",
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "group_id", Ty: TypeStr},
+		&Mfield{Name: "group_state", Ty: TypeStr},
+		&Mfield{Name: "protocol_type", Ty: TypeStr},
+		&Mfield{Name: "protocol_data", Ty: TypeStr},
+		&Array{Name: "members", Ty: memberV4},
+		&Mfield{Name: "authorized_operations", Ty: TypeInt32},
+	)
+
+	describeGroupsV4 := NewSchema("describe_groups_response_v4",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&Array{Name: "groups", Ty: groupV4},
+	)
+
+	// v5+ flexible
+	memberV5 := NewSchema("describe_groups_member_v5",
+		&Mfield{Name: "member_id", Ty: TypeCompactStr},
+		&Mfield{Name: "group_instance_id", Ty: TypeCompactNullableStr},
+		&Mfield{Name: "client_id", Ty: TypeCompactStr},
+		&Mfield{Name: "client_host", Ty: TypeCompactStr},
+		&Mfield{Name: "member_metadata", Ty: TypeCompactBytes},
+		&Mfield{Name: "member_assignment", Ty: TypeCompactBytes},
+		&SchemaTaggedFields{Name: "member_tagged_fields"},
+	)
+
+	groupV5 := NewSchema("describe_groups_group_v5",
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "group_id", Ty: TypeCompactStr},
+		&Mfield{Name: "group_state", Ty: TypeCompactStr},
+		&Mfield{Name: "protocol_type", Ty: TypeCompactStr},
+		&Mfield{Name: "protocol_data", Ty: TypeCompactStr},
+		&CompactArray{Name: "members", Ty: memberV5},
+		&Mfield{Name: "authorized_operations", Ty: TypeInt32},
+		&SchemaTaggedFields{Name: "group_tagged_fields"},
+	)
+
+	describeGroupsV5 := NewSchema("describe_groups_response_v5",
+		&Mfield{Name: "throttle_time_ms", Ty: TypeInt32},
+		&CompactArray{Name: "groups", Ty: groupV5},
+		&SchemaTaggedFields{Name: "response_tagged_fields"},
+	)
+
+	return []Schema{
+		describeGroupsV0, // v0
+		describeGroupsV1, // v1
+		describeGroupsV1, // v2
+		describeGroupsV3, // v3
+		describeGroupsV4, // v4
+		describeGroupsV5, // v5
+	}
+}
+
+// describeGroupsResponseModifier unprefixes group_ids in DescribeGroups responses
+type describeGroupsResponseModifier struct {
+	schema          Schema
+	groupUnprefixer GroupUnprefixer
+}
+
+func (m *describeGroupsResponseModifier) Apply(responseBytes []byte) ([]byte, error) {
+	decoded, err := DecodeSchema(responseBytes, m.schema)
+	if err != nil {
+		return nil, fmt.Errorf("decode describe groups response: %w", err)
+	}
+
+	if err := modifyDescribeGroupsResponse(decoded, m.groupUnprefixer); err != nil {
+		return nil, fmt.Errorf("modify describe groups response: %w", err)
+	}
+
+	return EncodeSchema(decoded, m.schema)
+}
+
+func modifyDescribeGroupsResponse(decoded *Struct, groupUnprefixer GroupUnprefixer) error {
+	if groupUnprefixer == nil {
+		return nil
+	}
+
+	groups := decoded.Get("groups")
+	if groups == nil {
+		return nil
+	}
+
+	groupsArray, ok := groups.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	for _, groupElement := range groupsArray {
+		group, ok := groupElement.(*Struct)
+		if !ok {
+			continue
+		}
+		groupId := group.Get("group_id")
+		if groupId == nil {
+			continue
+		}
+		if gid, ok := groupId.(string); ok && gid != "" {
+			unprefixedId := groupUnprefixer(gid)
+			if unprefixedId != gid {
+				if err := group.Replace("group_id", unprefixedId); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func newDescribeGroupsResponseModifier(apiVersion int16, cfg ResponseModifierConfig) (ResponseModifier, error) {
+	if cfg.GroupUnprefixer == nil {
+		return nil, nil
+	}
+	if apiVersion < 0 || int(apiVersion) >= len(describeGroupsResponseSchemas) {
+		return nil, fmt.Errorf("unsupported DescribeGroups response version %d", apiVersion)
+	}
+	schema := describeGroupsResponseSchemas[apiVersion]
+	return &describeGroupsResponseModifier{
+		schema:          schema,
+		groupUnprefixer: cfg.GroupUnprefixer,
 	}, nil
 }

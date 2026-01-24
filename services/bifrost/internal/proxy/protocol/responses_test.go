@@ -3735,3 +3735,288 @@ func TestOffsetFetchResponseModifier_MultipleTopics(t *testing.T) {
 	assert.Equal(t, "topic-1", topics[0].(*Struct).Get("name"))
 	assert.Equal(t, "topic-2", topics[1].(*Struct).Get("name"))
 }
+
+// DescribeGroups Response Modifier Tests
+
+func TestDescribeGroupsResponseModifier_UnprefixesGroupIds(t *testing.T) {
+	cfg := ResponseModifierConfig{
+		GroupUnprefixer: func(group string) string {
+			return strings.TrimPrefix(group, "tenant:")
+		},
+	}
+
+	mod, err := GetResponseModifierWithConfig(apiKeyDescribeGroups, 0, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// DescribeGroups v0 response: groups[] with error_code, group_id, group_state, protocol_type, protocol, members[]
+	var responseBytes []byte
+	// groups array: 1 element
+	responseBytes = append(responseBytes, 0, 0, 0, 1)
+	// error_code: 0
+	responseBytes = append(responseBytes, 0, 0)
+	// group_id: "tenant:my-group"
+	groupId := "tenant:my-group"
+	responseBytes = append(responseBytes, 0, byte(len(groupId)))
+	responseBytes = append(responseBytes, []byte(groupId)...)
+	// group_state: "Stable"
+	state := "Stable"
+	responseBytes = append(responseBytes, 0, byte(len(state)))
+	responseBytes = append(responseBytes, []byte(state)...)
+	// protocol_type: "consumer"
+	protocolType := "consumer"
+	responseBytes = append(responseBytes, 0, byte(len(protocolType)))
+	responseBytes = append(responseBytes, []byte(protocolType)...)
+	// protocol: "range"
+	protocol := "range"
+	responseBytes = append(responseBytes, 0, byte(len(protocol)))
+	responseBytes = append(responseBytes, []byte(protocol)...)
+	// members array: empty
+	responseBytes = append(responseBytes, 0, 0, 0, 0)
+
+	result, err := mod.Apply(responseBytes)
+	require.NoError(t, err)
+
+	// Verify group_id is unprefixed by decoding the result
+	schema := describeGroupsResponseSchemas[0]
+	decoded, err := DecodeSchema(result, schema)
+	require.NoError(t, err)
+
+	groups := decoded.Get("groups").([]interface{})
+	require.Len(t, groups, 1)
+	groupStruct := groups[0].(*Struct)
+	assert.Equal(t, "my-group", groupStruct.Get("group_id"))
+}
+
+func TestDescribeGroupsResponseModifier_V1_WithThrottleTime(t *testing.T) {
+	cfg := ResponseModifierConfig{
+		GroupUnprefixer: func(group string) string {
+			return strings.TrimPrefix(group, "tenant:")
+		},
+	}
+
+	mod, err := GetResponseModifierWithConfig(apiKeyDescribeGroups, 1, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// Build v1 response using schema
+	memberSchema := NewSchema("member",
+		&Mfield{Name: "member_id", Ty: TypeStr},
+		&Mfield{Name: "client_id", Ty: TypeStr},
+		&Mfield{Name: "client_host", Ty: TypeStr},
+		&Mfield{Name: "member_metadata", Ty: TypeBytes},
+		&Mfield{Name: "member_assignment", Ty: TypeBytes},
+	)
+
+	groupSchema := NewSchema("group",
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "group_id", Ty: TypeStr},
+		&Mfield{Name: "group_state", Ty: TypeStr},
+		&Mfield{Name: "protocol_type", Ty: TypeStr},
+		&Mfield{Name: "protocol_data", Ty: TypeStr},
+		&Array{Name: "members", Ty: memberSchema},
+	)
+
+	group := &Struct{
+		Schema: groupSchema,
+		Values: []interface{}{
+			int16(0),           // error_code
+			"tenant:my-group",  // group_id (prefixed)
+			"Stable",           // group_state
+			"consumer",         // protocol_type
+			"range",            // protocol_data
+			[]interface{}{},    // members (empty)
+		},
+	}
+
+	responseSchema := describeGroupsResponseSchemas[1]
+	original := &Struct{
+		Schema: responseSchema,
+		Values: []interface{}{
+			int32(100),           // throttle_time_ms
+			[]interface{}{group}, // groups
+		},
+	}
+
+	responseBytes, err := EncodeSchema(original, responseSchema)
+	require.NoError(t, err)
+
+	result, err := mod.Apply(responseBytes)
+	require.NoError(t, err)
+
+	// Decode and verify
+	decoded, err := DecodeSchema(result, responseSchema)
+	require.NoError(t, err)
+
+	// Verify throttle time preserved
+	assert.Equal(t, int32(100), decoded.Get("throttle_time_ms"))
+
+	// Verify group_id is unprefixed
+	groups := decoded.Get("groups").([]interface{})
+	require.Len(t, groups, 1)
+	groupStruct := groups[0].(*Struct)
+	assert.Equal(t, "my-group", groupStruct.Get("group_id"))
+}
+
+func TestDescribeGroupsResponseModifier_V5_Flexible(t *testing.T) {
+	cfg := ResponseModifierConfig{
+		GroupUnprefixer: func(group string) string {
+			return strings.TrimPrefix(group, "tenant:")
+		},
+	}
+
+	mod, err := GetResponseModifierWithConfig(apiKeyDescribeGroups, 5, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// Build v5 response using schema (flexible version)
+	memberSchema := NewSchema("member",
+		&Mfield{Name: "member_id", Ty: TypeCompactStr},
+		&Mfield{Name: "group_instance_id", Ty: TypeCompactNullableStr},
+		&Mfield{Name: "client_id", Ty: TypeCompactStr},
+		&Mfield{Name: "client_host", Ty: TypeCompactStr},
+		&Mfield{Name: "member_metadata", Ty: TypeCompactBytes},
+		&Mfield{Name: "member_assignment", Ty: TypeCompactBytes},
+		&SchemaTaggedFields{Name: "member_tagged_fields"},
+	)
+
+	groupSchema := NewSchema("group",
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "group_id", Ty: TypeCompactStr},
+		&Mfield{Name: "group_state", Ty: TypeCompactStr},
+		&Mfield{Name: "protocol_type", Ty: TypeCompactStr},
+		&Mfield{Name: "protocol_data", Ty: TypeCompactStr},
+		&CompactArray{Name: "members", Ty: memberSchema},
+		&Mfield{Name: "authorized_operations", Ty: TypeInt32},
+		&SchemaTaggedFields{Name: "group_tagged_fields"},
+	)
+
+	group := &Struct{
+		Schema: groupSchema,
+		Values: []interface{}{
+			int16(0),              // error_code
+			"tenant:flex-group",   // group_id (prefixed)
+			"Stable",              // group_state
+			"consumer",            // protocol_type
+			"cooperative-sticky",  // protocol_data
+			[]interface{}{},       // members (empty)
+			int32(-2147483648),    // authorized_operations (unknown)
+			[]rawTaggedField{},    // tagged fields
+		},
+	}
+
+	responseSchema := describeGroupsResponseSchemas[5]
+	original := &Struct{
+		Schema: responseSchema,
+		Values: []interface{}{
+			int32(50),            // throttle_time_ms
+			[]interface{}{group}, // groups
+			[]rawTaggedField{},   // response_tagged_fields
+		},
+	}
+
+	responseBytes, err := EncodeSchema(original, responseSchema)
+	require.NoError(t, err)
+
+	result, err := mod.Apply(responseBytes)
+	require.NoError(t, err)
+
+	// Decode and verify
+	decoded, err := DecodeSchema(result, responseSchema)
+	require.NoError(t, err)
+
+	// Verify throttle time preserved
+	assert.Equal(t, int32(50), decoded.Get("throttle_time_ms"))
+
+	// Verify group_id is unprefixed
+	groups := decoded.Get("groups").([]interface{})
+	require.Len(t, groups, 1)
+	groupStruct := groups[0].(*Struct)
+	assert.Equal(t, "flex-group", groupStruct.Get("group_id"))
+}
+
+func TestDescribeGroupsResponseModifier_ReturnsNilWithoutUnprefixer(t *testing.T) {
+	// Without GroupUnprefixer, should return nil
+	cfg := ResponseModifierConfig{}
+
+	mod, err := GetResponseModifierWithConfig(apiKeyDescribeGroups, 0, cfg)
+	require.NoError(t, err)
+	assert.Nil(t, mod, "should return nil when no GroupUnprefixer is configured")
+}
+
+func TestDescribeGroupsResponseModifier_MultipleGroups(t *testing.T) {
+	cfg := ResponseModifierConfig{
+		GroupUnprefixer: func(group string) string {
+			return strings.TrimPrefix(group, "tenant:")
+		},
+	}
+
+	mod, err := GetResponseModifierWithConfig(apiKeyDescribeGroups, 0, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// Build response with multiple groups
+	memberSchema := NewSchema("member",
+		&Mfield{Name: "member_id", Ty: TypeStr},
+		&Mfield{Name: "client_id", Ty: TypeStr},
+		&Mfield{Name: "client_host", Ty: TypeStr},
+		&Mfield{Name: "member_metadata", Ty: TypeBytes},
+		&Mfield{Name: "member_assignment", Ty: TypeBytes},
+	)
+
+	groupSchema := NewSchema("group",
+		&Mfield{Name: "error_code", Ty: TypeInt16},
+		&Mfield{Name: "group_id", Ty: TypeStr},
+		&Mfield{Name: "group_state", Ty: TypeStr},
+		&Mfield{Name: "protocol_type", Ty: TypeStr},
+		&Mfield{Name: "protocol_data", Ty: TypeStr},
+		&Array{Name: "members", Ty: memberSchema},
+	)
+
+	group1 := &Struct{
+		Schema: groupSchema,
+		Values: []interface{}{
+			int16(0),          // error_code
+			"tenant:group-1",  // group_id
+			"Stable",          // group_state
+			"consumer",        // protocol_type
+			"range",           // protocol_data
+			[]interface{}{},   // members
+		},
+	}
+
+	group2 := &Struct{
+		Schema: groupSchema,
+		Values: []interface{}{
+			int16(0),          // error_code
+			"tenant:group-2",  // group_id
+			"Empty",           // group_state
+			"consumer",        // protocol_type
+			"roundrobin",      // protocol_data
+			[]interface{}{},   // members
+		},
+	}
+
+	responseSchema := describeGroupsResponseSchemas[0]
+	original := &Struct{
+		Schema: responseSchema,
+		Values: []interface{}{
+			[]interface{}{group1, group2}, // groups
+		},
+	}
+
+	responseBytes, err := EncodeSchema(original, responseSchema)
+	require.NoError(t, err)
+
+	result, err := mod.Apply(responseBytes)
+	require.NoError(t, err)
+
+	// Decode and verify
+	decoded, err := DecodeSchema(result, responseSchema)
+	require.NoError(t, err)
+
+	groups := decoded.Get("groups").([]interface{})
+	require.Len(t, groups, 2)
+	assert.Equal(t, "group-1", groups[0].(*Struct).Get("group_id"))
+	assert.Equal(t, "group-2", groups[1].(*Struct).Get("group_id"))
+}
