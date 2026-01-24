@@ -1,10 +1,13 @@
 'use server'
 
+import { getPayload } from 'payload'
+import config from '@payload-config'
 import { bifrostAdminClient } from '@/lib/grpc/bifrost-admin-client'
 import {
   ConsumerGroupState,
   OffsetResetType,
 } from '@/lib/proto/idp/gateway/v1/gateway_pb'
+import type { KafkaVirtualCluster, KafkaCluster, KafkaApplication } from '@/payload-types'
 
 // ============================================================================
 // Types
@@ -68,6 +71,61 @@ function mapResetType(
 }
 
 // ============================================================================
+// Bifrost Sync Helper
+// ============================================================================
+
+/**
+ * Ensures the virtual cluster config is synced to Bifrost.
+ * This is needed because Bifrost stores configs in memory and loses them on restart.
+ */
+async function ensureVirtualClusterSynced(virtualClusterId: string): Promise<void> {
+  const payload = await getPayload({ config })
+
+  // Get the virtual cluster from the database
+  const vc = await payload.findByID({
+    collection: 'kafka-virtual-clusters',
+    id: virtualClusterId,
+    depth: 1, // Populate relationships
+    overrideAccess: true,
+  }) as KafkaVirtualCluster
+
+  if (!vc) {
+    throw new Error('Virtual cluster not found in database')
+  }
+
+  // Get application info
+  const app = typeof vc.application === 'object' ? vc.application as KafkaApplication : undefined
+  const physicalCluster = typeof vc.physicalCluster === 'object' ? vc.physicalCluster as KafkaCluster : undefined
+
+  // Extract bootstrap servers from connection config
+  let bootstrapServers = 'redpanda:9092' // Default for local dev
+  if (physicalCluster?.connectionConfig && typeof physicalCluster.connectionConfig === 'object') {
+    const connConfig = physicalCluster.connectionConfig as Record<string, unknown>
+    if (typeof connConfig.bootstrapServers === 'string') {
+      bootstrapServers = connConfig.bootstrapServers
+    }
+  }
+
+  // Build the config and push to Bifrost
+  await bifrostAdminClient.upsertVirtualCluster({
+    config: {
+      id: vc.id,
+      applicationId: typeof vc.application === 'string' ? vc.application : app?.id || '',
+      applicationSlug: app?.slug || '',
+      workspaceSlug: '', // Not needed for consumer groups
+      environment: vc.environment || '',
+      topicPrefix: vc.topicPrefix || '',
+      groupPrefix: vc.groupPrefix || '',
+      transactionIdPrefix: vc.topicPrefix || '',
+      advertisedHost: vc.advertisedHost || '',
+      advertisedPort: vc.advertisedPort || 9092,
+      physicalBootstrapServers: bootstrapServers,
+      readOnly: vc.status === 'read_only',
+    },
+  })
+}
+
+// ============================================================================
 // Server Actions
 // ============================================================================
 
@@ -80,6 +138,9 @@ export async function listConsumerGroups(virtualClusterId: string): Promise<{
   error?: string
 }> {
   try {
+    // Ensure the virtual cluster is synced to Bifrost (in case Bifrost restarted)
+    await ensureVirtualClusterSynced(virtualClusterId)
+
     const response = await bifrostAdminClient.listConsumerGroups({
       virtualClusterId,
     })

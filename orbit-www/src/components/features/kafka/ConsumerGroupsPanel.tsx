@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -241,7 +241,7 @@ export function ConsumerGroupsPanel({ virtualClusterId, canManage = false }: Con
               </TableHeader>
               <TableBody>
                 {groups.map((group) => (
-                  <>
+                  <React.Fragment key={group.groupId}>
                     <TableRow
                       key={group.groupId}
                       className="cursor-pointer hover:bg-muted/50"
@@ -317,7 +317,7 @@ export function ConsumerGroupsPanel({ virtualClusterId, canManage = false }: Con
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </React.Fragment>
                 ))}
               </TableBody>
             </Table>
