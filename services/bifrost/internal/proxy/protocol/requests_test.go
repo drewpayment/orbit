@@ -397,3 +397,238 @@ func TestLeaveGroupRequestModifier_PrefixesGroupId(t *testing.T) {
 	resultGroupId := string(result[offset+2 : offset+2+groupIdLen])
 	assert.Equal(t, "tenant:my-group", resultGroupId)
 }
+
+func TestFindCoordinatorRequestModifier_PrefixesGroupKey(t *testing.T) {
+	cfg := RequestModifierConfig{
+		GroupPrefixer: func(group string) string { return "tenant:" + group },
+	}
+
+	mod, err := GetRequestModifier(apiKeyFindCoordinator, 0, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// FindCoordinator v0: correlation_id, client_id, key
+	// Note: v0 doesn't have key_type, assumes group coordinator
+	var requestBytes []byte
+	// correlation_id: 1
+	requestBytes = append(requestBytes, 0, 0, 0, 1)
+	// client_id: "test-client"
+	clientId := "test-client"
+	requestBytes = append(requestBytes, 0, byte(len(clientId)))
+	requestBytes = append(requestBytes, []byte(clientId)...)
+	// key: "my-group"
+	key := "my-group"
+	requestBytes = append(requestBytes, 0, byte(len(key)))
+	requestBytes = append(requestBytes, []byte(key)...)
+
+	result, err := mod.Apply(requestBytes)
+	require.NoError(t, err)
+
+	// Skip correlation_id (4) + client_id length (2) + client_id content
+	offset := 4 + 2 + len(clientId)
+	keyLen := int(result[offset])<<8 | int(result[offset+1])
+	resultKey := string(result[offset+2 : offset+2+keyLen])
+	assert.Equal(t, "tenant:my-group", resultKey)
+}
+
+func TestFindCoordinatorRequestModifier_V1_GroupKeyType(t *testing.T) {
+	cfg := RequestModifierConfig{
+		GroupPrefixer: func(group string) string { return "tenant:" + group },
+		TxnIDPrefixer: func(txnID string) string { return "txn:" + txnID },
+	}
+
+	mod, err := GetRequestModifier(apiKeyFindCoordinator, 1, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// FindCoordinator v1: correlation_id, client_id, key, key_type
+	var requestBytes []byte
+	// correlation_id: 1
+	requestBytes = append(requestBytes, 0, 0, 0, 1)
+	// client_id: "test-client"
+	clientId := "test-client"
+	requestBytes = append(requestBytes, 0, byte(len(clientId)))
+	requestBytes = append(requestBytes, []byte(clientId)...)
+	// key: "my-group"
+	key := "my-group"
+	requestBytes = append(requestBytes, 0, byte(len(key)))
+	requestBytes = append(requestBytes, []byte(key)...)
+	// key_type: 0 (group)
+	requestBytes = append(requestBytes, 0)
+
+	result, err := mod.Apply(requestBytes)
+	require.NoError(t, err)
+
+	// Skip correlation_id (4) + client_id length (2) + client_id content
+	offset := 4 + 2 + len(clientId)
+	keyLen := int(result[offset])<<8 | int(result[offset+1])
+	resultKey := string(result[offset+2 : offset+2+keyLen])
+	assert.Equal(t, "tenant:my-group", resultKey)
+}
+
+func TestFindCoordinatorRequestModifier_V1_TxnKeyType(t *testing.T) {
+	cfg := RequestModifierConfig{
+		GroupPrefixer: func(group string) string { return "tenant:" + group },
+		TxnIDPrefixer: func(txnID string) string { return "txn:" + txnID },
+	}
+
+	mod, err := GetRequestModifier(apiKeyFindCoordinator, 1, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// FindCoordinator v1: correlation_id, client_id, key, key_type
+	var requestBytes []byte
+	// correlation_id: 1
+	requestBytes = append(requestBytes, 0, 0, 0, 1)
+	// client_id: "test-client"
+	clientId := "test-client"
+	requestBytes = append(requestBytes, 0, byte(len(clientId)))
+	requestBytes = append(requestBytes, []byte(clientId)...)
+	// key: "my-txn"
+	key := "my-txn"
+	requestBytes = append(requestBytes, 0, byte(len(key)))
+	requestBytes = append(requestBytes, []byte(key)...)
+	// key_type: 1 (transaction)
+	requestBytes = append(requestBytes, 1)
+
+	result, err := mod.Apply(requestBytes)
+	require.NoError(t, err)
+
+	// Skip correlation_id (4) + client_id length (2) + client_id content
+	offset := 4 + 2 + len(clientId)
+	keyLen := int(result[offset])<<8 | int(result[offset+1])
+	resultKey := string(result[offset+2 : offset+2+keyLen])
+	assert.Equal(t, "txn:my-txn", resultKey)
+}
+
+func TestFindCoordinatorRequestModifier_SkipsTransactionKeyWithoutTxnPrefixer(t *testing.T) {
+	cfg := RequestModifierConfig{
+		GroupPrefixer: func(group string) string { return "tenant:" + group },
+		// No TxnIDPrefixer - transaction keys should remain unchanged
+	}
+
+	mod, err := GetRequestModifier(apiKeyFindCoordinator, 1, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// FindCoordinator v1 with key_type=1 (transaction)
+	var requestBytes []byte
+	// correlation_id: 1
+	requestBytes = append(requestBytes, 0, 0, 0, 1)
+	// client_id: "test-client"
+	clientId := "test-client"
+	requestBytes = append(requestBytes, 0, byte(len(clientId)))
+	requestBytes = append(requestBytes, []byte(clientId)...)
+	// key: "my-txn"
+	key := "my-txn"
+	requestBytes = append(requestBytes, 0, byte(len(key)))
+	requestBytes = append(requestBytes, []byte(key)...)
+	// key_type: 1 (transaction)
+	requestBytes = append(requestBytes, 1)
+
+	result, err := mod.Apply(requestBytes)
+	require.NoError(t, err)
+
+	// Key should NOT be prefixed since key_type=1 and no TxnIDPrefixer
+	offset := 4 + 2 + len(clientId)
+	keyLen := int(result[offset])<<8 | int(result[offset+1])
+	resultKey := string(result[offset+2 : offset+2+keyLen])
+	assert.Equal(t, "my-txn", resultKey) // unchanged
+}
+
+func TestFindCoordinatorRequestModifier_V4_CoordinatorKeys_Group(t *testing.T) {
+	cfg := RequestModifierConfig{
+		GroupPrefixer: func(group string) string { return "tenant:" + group },
+	}
+
+	mod, err := GetRequestModifier(apiKeyFindCoordinator, 4, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// FindCoordinator v4: correlation_id, client_id, header_tagged_fields, key_type, coordinator_keys[], request_tagged_fields
+	var requestBytes []byte
+	// correlation_id: 1
+	requestBytes = append(requestBytes, 0, 0, 0, 1)
+	// client_id: "test-client" (nullable string, length 11)
+	clientId := "test-client"
+	requestBytes = append(requestBytes, 0, byte(len(clientId)))
+	requestBytes = append(requestBytes, []byte(clientId)...)
+	// header_tagged_fields: empty (varint 0)
+	requestBytes = append(requestBytes, 0)
+	// key_type: 0 (group)
+	requestBytes = append(requestBytes, 0)
+	// coordinator_keys: compact array with 2 elements
+	// compact array length = actual_length + 1 = 3
+	requestBytes = append(requestBytes, 3)
+	// First key: "group1" (compact string: length+1 = 7, then bytes)
+	requestBytes = append(requestBytes, 7)
+	requestBytes = append(requestBytes, []byte("group1")...)
+	// Second key: "group2"
+	requestBytes = append(requestBytes, 7)
+	requestBytes = append(requestBytes, []byte("group2")...)
+	// request_tagged_fields: empty (varint 0)
+	requestBytes = append(requestBytes, 0)
+
+	result, err := mod.Apply(requestBytes)
+	require.NoError(t, err)
+
+	// Decode to verify keys were prefixed
+	schema, err := getFindCoordinatorRequestSchema(4)
+	require.NoError(t, err)
+	decoded, err := DecodeSchema(result, schema)
+	require.NoError(t, err)
+
+	keys := decoded.Get("coordinator_keys")
+	require.NotNil(t, keys)
+	keysArray, ok := keys.([]interface{})
+	require.True(t, ok)
+	require.Len(t, keysArray, 2)
+	assert.Equal(t, "tenant:group1", keysArray[0])
+	assert.Equal(t, "tenant:group2", keysArray[1])
+}
+
+func TestFindCoordinatorRequestModifier_V4_CoordinatorKeys_Transaction(t *testing.T) {
+	cfg := RequestModifierConfig{
+		TxnIDPrefixer: func(txn string) string { return "txn:" + txn },
+	}
+
+	mod, err := GetRequestModifier(apiKeyFindCoordinator, 4, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// FindCoordinator v4 with key_type=1 (transaction)
+	var requestBytes []byte
+	// correlation_id: 1
+	requestBytes = append(requestBytes, 0, 0, 0, 1)
+	// client_id: "test-client"
+	clientId := "test-client"
+	requestBytes = append(requestBytes, 0, byte(len(clientId)))
+	requestBytes = append(requestBytes, []byte(clientId)...)
+	// header_tagged_fields: empty
+	requestBytes = append(requestBytes, 0)
+	// key_type: 1 (transaction)
+	requestBytes = append(requestBytes, 1)
+	// coordinator_keys: compact array with 1 element
+	requestBytes = append(requestBytes, 2) // length+1
+	// key: "my-txn-id"
+	requestBytes = append(requestBytes, 10) // length+1
+	requestBytes = append(requestBytes, []byte("my-txn-id")...)
+	// request_tagged_fields: empty
+	requestBytes = append(requestBytes, 0)
+
+	result, err := mod.Apply(requestBytes)
+	require.NoError(t, err)
+
+	// Decode to verify key was prefixed
+	schema, err := getFindCoordinatorRequestSchema(4)
+	require.NoError(t, err)
+	decoded, err := DecodeSchema(result, schema)
+	require.NoError(t, err)
+
+	keys := decoded.Get("coordinator_keys")
+	require.NotNil(t, keys)
+	keysArray, ok := keys.([]interface{})
+	require.True(t, ok)
+	require.Len(t, keysArray, 1)
+	assert.Equal(t, "txn:my-txn-id", keysArray[0])
+}

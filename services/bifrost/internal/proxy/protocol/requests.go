@@ -166,8 +166,16 @@ func newFindCoordinatorRequestModifier(apiVersion int16, cfg RequestModifierConf
 	if cfg.GroupPrefixer == nil && cfg.TxnIDPrefixer == nil {
 		return nil, nil
 	}
-	// TODO: Implement find coordinator request rewriting
-	return nil, nil
+	schema, err := getFindCoordinatorRequestSchema(apiVersion)
+	if err != nil {
+		return nil, err
+	}
+	return &findCoordinatorRequestModifier{
+		schema:        schema,
+		groupPrefixer: cfg.GroupPrefixer,
+		txnIDPrefixer: cfg.TxnIDPrefixer,
+		apiVersion:    apiVersion,
+	}, nil
 }
 
 func newJoinGroupRequestModifier(apiVersion int16, cfg RequestModifierConfig) (RequestModifier, error) {
@@ -690,6 +698,187 @@ func getLeaveGroupRequestSchema(apiVersion int16) (Schema, error) {
 		return nil, fmt.Errorf("unsupported LeaveGroup request version %d", apiVersion)
 	}
 	return leaveGroupRequestSchemas[apiVersion], nil
+}
+
+// findCoordinatorRequestModifier prefixes key in FindCoordinator requests
+type findCoordinatorRequestModifier struct {
+	schema        Schema
+	groupPrefixer GroupPrefixer
+	txnIDPrefixer TxnIDPrefixer
+	apiVersion    int16
+}
+
+func (m *findCoordinatorRequestModifier) Apply(requestBytes []byte) ([]byte, error) {
+	decoded, err := DecodeSchema(requestBytes, m.schema)
+	if err != nil {
+		return nil, fmt.Errorf("decode find coordinator request: %w", err)
+	}
+
+	if err := modifyFindCoordinatorRequest(decoded, m.apiVersion, m.groupPrefixer, m.txnIDPrefixer); err != nil {
+		return nil, fmt.Errorf("modify find coordinator request: %w", err)
+	}
+
+	return EncodeSchema(decoded, m.schema)
+}
+
+func modifyFindCoordinatorRequest(decoded *Struct, apiVersion int16, groupPrefixer GroupPrefixer, txnIDPrefixer TxnIDPrefixer) error {
+	// v4+ uses coordinator_keys array instead of single key
+	if apiVersion >= 4 {
+		return modifyFindCoordinatorRequestV4(decoded, groupPrefixer, txnIDPrefixer)
+	}
+
+	key := decoded.Get("key")
+	if key == nil {
+		return nil
+	}
+	keyStr, ok := key.(string)
+	if !ok || keyStr == "" {
+		return nil
+	}
+
+	// v0 doesn't have key_type, always use group prefixer
+	if apiVersion == 0 {
+		if groupPrefixer != nil {
+			return decoded.Replace("key", groupPrefixer(keyStr))
+		}
+		return nil
+	}
+
+	// v1+ has key_type field
+	keyTypeField := decoded.Get("key_type")
+	if keyTypeField == nil {
+		// Default to group coordinator
+		if groupPrefixer != nil {
+			return decoded.Replace("key", groupPrefixer(keyStr))
+		}
+		return nil
+	}
+
+	keyType, ok := keyTypeField.(int8)
+	if !ok {
+		// Try int32 in case it was decoded differently
+		if kt, ok := keyTypeField.(int32); ok {
+			keyType = int8(kt)
+		}
+	}
+
+	switch keyType {
+	case 0: // GROUP coordinator
+		if groupPrefixer != nil {
+			return decoded.Replace("key", groupPrefixer(keyStr))
+		}
+	case 1: // TRANSACTION coordinator
+		if txnIDPrefixer != nil {
+			return decoded.Replace("key", txnIDPrefixer(keyStr))
+		}
+	}
+
+	return nil
+}
+
+// modifyFindCoordinatorRequestV4 handles v4+ FindCoordinator requests that use coordinator_keys array
+func modifyFindCoordinatorRequestV4(decoded *Struct, groupPrefixer GroupPrefixer, txnIDPrefixer TxnIDPrefixer) error {
+	// Get key_type to determine which prefixer to use
+	keyType := int8(0) // default to group
+	if kt := decoded.Get("key_type"); kt != nil {
+		if ktVal, ok := kt.(int8); ok {
+			keyType = ktVal
+		}
+	}
+
+	// Select appropriate prefixer based on key_type
+	var prefixer func(string) string
+	if keyType == 0 && groupPrefixer != nil {
+		prefixer = groupPrefixer
+	} else if keyType == 1 && txnIDPrefixer != nil {
+		prefixer = txnIDPrefixer
+	}
+
+	if prefixer == nil {
+		return nil // No applicable prefixer
+	}
+
+	// Get coordinator_keys array
+	keys := decoded.Get("coordinator_keys")
+	if keys == nil {
+		return nil
+	}
+
+	keysArray, ok := keys.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	// Prefix each key in the array
+	newKeys := make([]interface{}, len(keysArray))
+	for i, k := range keysArray {
+		if keyStr, ok := k.(string); ok && keyStr != "" {
+			newKeys[i] = prefixer(keyStr)
+		} else {
+			newKeys[i] = k
+		}
+	}
+
+	return decoded.Replace("coordinator_keys", newKeys)
+}
+
+var findCoordinatorRequestSchemas []Schema
+
+func init() {
+	findCoordinatorRequestSchemas = createFindCoordinatorRequestSchemas()
+}
+
+func createFindCoordinatorRequestSchemas() []Schema {
+	// v0: no key_type
+	findCoordinatorV0 := NewSchema("find_coordinator_request_v0",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "key", Ty: TypeStr},
+	)
+
+	// v1-v2: adds key_type
+	findCoordinatorV1 := NewSchema("find_coordinator_request_v1",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "key", Ty: TypeStr},
+		&Mfield{Name: "key_type", Ty: TypeInt8},
+	)
+
+	// v3+ flexible
+	findCoordinatorV3 := NewSchema("find_coordinator_request_v3",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&SchemaTaggedFields{Name: "header_tagged_fields"},
+		&Mfield{Name: "key", Ty: TypeCompactStr},
+		&Mfield{Name: "key_type", Ty: TypeInt8},
+		&SchemaTaggedFields{Name: "request_tagged_fields"},
+	)
+
+	// v4+ adds coordinator_keys array for batch lookup
+	findCoordinatorV4 := NewSchema("find_coordinator_request_v4",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&SchemaTaggedFields{Name: "header_tagged_fields"},
+		&Mfield{Name: "key_type", Ty: TypeInt8},
+		&CompactArray{Name: "coordinator_keys", Ty: TypeCompactStr},
+		&SchemaTaggedFields{Name: "request_tagged_fields"},
+	)
+
+	return []Schema{
+		findCoordinatorV0, // v0
+		findCoordinatorV1, // v1
+		findCoordinatorV1, // v2
+		findCoordinatorV3, // v3
+		findCoordinatorV4, // v4
+		findCoordinatorV4, // v5
+	}
+}
+
+func getFindCoordinatorRequestSchema(apiVersion int16) (Schema, error) {
+	if apiVersion < 0 || int(apiVersion) >= len(findCoordinatorRequestSchemas) {
+		return nil, fmt.Errorf("unsupported FindCoordinator request version %d", apiVersion)
+	}
+	return findCoordinatorRequestSchemas[apiVersion], nil
 }
 
 // metadataRequestModifier rewrites topic names in Metadata requests
