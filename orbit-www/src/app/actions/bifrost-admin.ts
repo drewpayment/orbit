@@ -483,3 +483,122 @@ export async function setVirtualClusterReadOnly(
     return { success: false, error: errorMessage }
   }
 }
+
+// ============================================================================
+// Credential Server Actions
+// ============================================================================
+
+/**
+ * Lists credentials, optionally filtered by virtual cluster.
+ */
+export async function listCredentials(virtualClusterId?: string): Promise<{
+  success: boolean
+  data?: CredentialConfig[]
+  error?: string
+}> {
+  try {
+    await requireAdmin()
+
+    const response = await bifrostClient.listCredentials({
+      virtualClusterId: virtualClusterId || '',
+    })
+
+    const credentials = response.credentials.map(mapProtoToCredential)
+
+    return { success: true, data: credentials }
+  } catch (error) {
+    console.error('Failed to list credentials:', error)
+    const errorMessage =
+      error instanceof Error ? error.message : 'Failed to list credentials'
+    return { success: false, error: errorMessage }
+  }
+}
+
+/**
+ * Creates a new credential in Bifrost.
+ * Returns the plaintext password (only shown once).
+ */
+export async function createCredential(data: {
+  virtualClusterId: string
+  username: string
+  password: string
+  template: PermissionTemplateType
+  customPermissions?: CustomPermission[]
+}): Promise<{
+  success: boolean
+  data?: { id: string; username: string; password: string }
+  error?: string
+}> {
+  try {
+    await requireAdmin()
+
+    const id = `cred-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+
+    // Hash the password before sending (using simple hash for demo - production should use bcrypt)
+    const encoder = new TextEncoder()
+    const passwordData = encoder.encode(data.password)
+    const hashBuffer = await crypto.subtle.digest('SHA-256', passwordData)
+    const hashArray = Array.from(new Uint8Array(hashBuffer))
+    const passwordHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+
+    const response = await bifrostClient.upsertCredential({
+      config: {
+        id,
+        virtualClusterId: data.virtualClusterId,
+        username: data.username,
+        passwordHash,
+        template: mapPermissionTemplateToProto(data.template),
+        customPermissions: (data.customPermissions || []).map(p => ({
+          resourceType: p.resourceType,
+          resourcePattern: p.resourcePattern,
+          operations: p.operations,
+        })),
+      },
+    })
+
+    if (!response.success) {
+      return { success: false, error: 'Failed to create credential' }
+    }
+
+    return {
+      success: true,
+      data: {
+        id,
+        username: data.username,
+        password: data.password, // Return plaintext for user to save
+      },
+    }
+  } catch (error) {
+    console.error('Failed to create credential:', error)
+    const errorMessage =
+      error instanceof Error ? error.message : 'Failed to create credential'
+    return { success: false, error: errorMessage }
+  }
+}
+
+/**
+ * Revokes (deletes) a credential from Bifrost.
+ */
+export async function revokeCredential(id: string): Promise<{
+  success: boolean
+  error?: string
+}> {
+  try {
+    await requireAdmin()
+
+    const response = await bifrostClient.revokeCredential({
+      credentialId: id,
+    })
+
+    if (!response.success) {
+      return { success: false, error: 'Failed to revoke credential' }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to revoke credential:', error)
+    const errorMessage =
+      error instanceof Error ? error.message : 'Failed to revoke credential'
+    return { success: false, error: errorMessage }
+  }
+}

@@ -363,4 +363,21 @@ describe('bifrost-admin module', () => {
       expect(typeof setVirtualClusterReadOnly).toBe('function')
     })
   })
+
+  describe('credential server actions', () => {
+    it('should export listCredentials function', async () => {
+      const { listCredentials } = await import('../bifrost-admin')
+      expect(typeof listCredentials).toBe('function')
+    })
+
+    it('should export createCredential function', async () => {
+      const { createCredential } = await import('../bifrost-admin')
+      expect(typeof createCredential).toBe('function')
+    })
+
+    it('should export revokeCredential function', async () => {
+      const { revokeCredential } = await import('../bifrost-admin')
+      expect(typeof revokeCredential).toBe('function')
+    })
+  })
 })
