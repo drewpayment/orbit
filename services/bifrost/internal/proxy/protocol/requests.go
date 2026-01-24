@@ -253,8 +253,14 @@ func newDescribeGroupsRequestModifier(apiVersion int16, cfg RequestModifierConfi
 	if cfg.GroupPrefixer == nil {
 		return nil, nil
 	}
-	// TODO: Implement describe groups request rewriting
-	return nil, nil
+	schema, err := getDescribeGroupsRequestSchema(apiVersion)
+	if err != nil {
+		return nil, err
+	}
+	return &describeGroupsRequestModifier{
+		schema:        schema,
+		groupPrefixer: cfg.GroupPrefixer,
+	}, nil
 }
 
 func newCreateTopicsRequestModifier(apiVersion int16, cfg RequestModifierConfig) (RequestModifier, error) {
@@ -522,6 +528,101 @@ func getSyncGroupRequestSchema(apiVersion int16) (Schema, error) {
 		return nil, fmt.Errorf("unsupported SyncGroup request version %d", apiVersion)
 	}
 	return syncGroupRequestSchemas[apiVersion], nil
+}
+
+// describeGroupsRequestModifier prefixes group_ids in DescribeGroups requests
+type describeGroupsRequestModifier struct {
+	schema        Schema
+	groupPrefixer GroupPrefixer
+}
+
+func (m *describeGroupsRequestModifier) Apply(requestBytes []byte) ([]byte, error) {
+	decoded, err := DecodeSchema(requestBytes, m.schema)
+	if err != nil {
+		return nil, fmt.Errorf("decode describe groups request: %w", err)
+	}
+
+	if err := modifyDescribeGroupsRequest(decoded, m.groupPrefixer); err != nil {
+		return nil, fmt.Errorf("modify describe groups request: %w", err)
+	}
+
+	return EncodeSchema(decoded, m.schema)
+}
+
+func modifyDescribeGroupsRequest(decoded *Struct, prefixer GroupPrefixer) error {
+	if prefixer == nil {
+		return nil
+	}
+
+	groups := decoded.Get("groups")
+	if groups == nil {
+		return nil
+	}
+
+	groupsArray, ok := groups.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	newGroups := make([]interface{}, len(groupsArray))
+	for i, g := range groupsArray {
+		if groupStr, ok := g.(string); ok && groupStr != "" {
+			newGroups[i] = prefixer(groupStr)
+		} else {
+			newGroups[i] = g
+		}
+	}
+
+	return decoded.Replace("groups", newGroups)
+}
+
+var describeGroupsRequestSchemas []Schema
+
+func init() {
+	describeGroupsRequestSchemas = createDescribeGroupsRequestSchemas()
+}
+
+func createDescribeGroupsRequestSchemas() []Schema {
+	// v0-v2: array of group strings
+	describeGroupsV0 := NewSchema("describe_groups_request_v0",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Array{Name: "groups", Ty: TypeStr},
+	)
+
+	// v3 adds include_authorized_operations
+	describeGroupsV3 := NewSchema("describe_groups_request_v3",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Array{Name: "groups", Ty: TypeStr},
+		&Mfield{Name: "include_authorized_operations", Ty: TypeBool},
+	)
+
+	// v5+ flexible
+	describeGroupsV5 := NewSchema("describe_groups_request_v5",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&SchemaTaggedFields{Name: "header_tagged_fields"},
+		&CompactArray{Name: "groups", Ty: TypeCompactStr},
+		&Mfield{Name: "include_authorized_operations", Ty: TypeBool},
+		&SchemaTaggedFields{Name: "request_tagged_fields"},
+	)
+
+	return []Schema{
+		describeGroupsV0, // v0
+		describeGroupsV0, // v1
+		describeGroupsV0, // v2
+		describeGroupsV3, // v3
+		describeGroupsV3, // v4
+		describeGroupsV5, // v5
+	}
+}
+
+func getDescribeGroupsRequestSchema(apiVersion int16) (Schema, error) {
+	if apiVersion < 0 || int(apiVersion) >= len(describeGroupsRequestSchemas) {
+		return nil, fmt.Errorf("unsupported DescribeGroups request version %d", apiVersion)
+	}
+	return describeGroupsRequestSchemas[apiVersion], nil
 }
 
 // offsetCommitRequestModifier prefixes group_id and topics in OffsetCommit requests

@@ -877,3 +877,84 @@ func TestOffsetFetchRequestModifier_RequiresBothPrefixers(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, mod2, "should return modifier with TopicPrefixer only")
 }
+
+func TestDescribeGroupsRequestModifier_PrefixesGroupIds(t *testing.T) {
+	cfg := RequestModifierConfig{
+		GroupPrefixer: func(group string) string { return "tenant:" + group },
+	}
+
+	mod, err := GetRequestModifier(apiKeyDescribeGroups, 0, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, mod)
+
+	// DescribeGroups v0: correlation_id, client_id, groups[]
+	var requestBytes []byte
+	// correlation_id: 1
+	requestBytes = append(requestBytes, 0, 0, 0, 1)
+	// client_id: "test-client"
+	clientId := "test-client"
+	requestBytes = append(requestBytes, 0, byte(len(clientId)))
+	requestBytes = append(requestBytes, []byte(clientId)...)
+	// groups array: 2 elements
+	requestBytes = append(requestBytes, 0, 0, 0, 2)
+	// group 1: "group-a"
+	group1 := "group-a"
+	requestBytes = append(requestBytes, 0, byte(len(group1)))
+	requestBytes = append(requestBytes, []byte(group1)...)
+	// group 2: "group-b"
+	group2 := "group-b"
+	requestBytes = append(requestBytes, 0, byte(len(group2)))
+	requestBytes = append(requestBytes, []byte(group2)...)
+
+	result, err := mod.Apply(requestBytes)
+	require.NoError(t, err)
+
+	// Verify groups are prefixed
+	offset := 4 + 2 + len(clientId) + 4 // skip header and array length
+
+	// Group 1
+	group1Len := int(result[offset])<<8 | int(result[offset+1])
+	resultGroup1 := string(result[offset+2 : offset+2+group1Len])
+	assert.Equal(t, "tenant:group-a", resultGroup1)
+
+	// Group 2
+	offset = offset + 2 + group1Len
+	group2Len := int(result[offset])<<8 | int(result[offset+1])
+	resultGroup2 := string(result[offset+2 : offset+2+group2Len])
+	assert.Equal(t, "tenant:group-b", resultGroup2)
+}
+
+func TestDescribeGroupsRequestModifier_ReturnsNilWithoutPrefixer(t *testing.T) {
+	cfg := RequestModifierConfig{} // No prefixers
+
+	mod, err := GetRequestModifier(apiKeyDescribeGroups, 0, cfg)
+	require.NoError(t, err)
+	assert.Nil(t, mod)
+}
+
+func TestDescribeGroupsRequestModifier_AllVersions(t *testing.T) {
+	cfg := RequestModifierConfig{
+		GroupPrefixer: func(group string) string { return "tenant:" + group },
+	}
+
+	// DescribeGroups supports v0-v5
+	for version := int16(0); version <= 5; version++ {
+		mod, err := GetRequestModifier(apiKeyDescribeGroups, version, cfg)
+		require.NoError(t, err, "version %d", version)
+		assert.NotNil(t, mod, "version %d should return modifier", version)
+	}
+}
+
+func TestDescribeGroupsRequestModifier_InvalidVersion(t *testing.T) {
+	cfg := RequestModifierConfig{
+		GroupPrefixer: func(group string) string { return "tenant:" + group },
+	}
+
+	// Version 6 and beyond should error
+	_, err := GetRequestModifier(apiKeyDescribeGroups, 6, cfg)
+	assert.Error(t, err)
+
+	// Negative version should error
+	_, err = GetRequestModifier(apiKeyDescribeGroups, -1, cfg)
+	assert.Error(t, err)
+}
