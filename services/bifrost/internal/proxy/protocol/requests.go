@@ -165,8 +165,16 @@ func newOffsetFetchRequestModifier(apiVersion int16, cfg RequestModifierConfig) 
 	if cfg.GroupPrefixer == nil && cfg.TopicPrefixer == nil {
 		return nil, nil
 	}
-	// TODO: Implement offset fetch request rewriting
-	return nil, nil
+	schema, err := getOffsetFetchRequestSchema(apiVersion)
+	if err != nil {
+		return nil, err
+	}
+	return &offsetFetchRequestModifier{
+		schema:        schema,
+		apiVersion:    apiVersion,
+		groupPrefixer: cfg.GroupPrefixer,
+		topicPrefixer: cfg.TopicPrefixer,
+	}, nil
 }
 
 func newFindCoordinatorRequestModifier(apiVersion int16, cfg RequestModifierConfig) (RequestModifier, error) {
@@ -728,6 +736,208 @@ func getOffsetCommitRequestSchema(apiVersion int16) (Schema, error) {
 		return nil, fmt.Errorf("unsupported OffsetCommit request version %d", apiVersion)
 	}
 	return offsetCommitRequestSchemas[apiVersion], nil
+}
+
+// offsetFetchRequestModifier prefixes group_id and topics in OffsetFetch requests
+type offsetFetchRequestModifier struct {
+	schema        Schema
+	apiVersion    int16
+	groupPrefixer GroupPrefixer
+	topicPrefixer TopicPrefixer
+}
+
+func (m *offsetFetchRequestModifier) Apply(requestBytes []byte) ([]byte, error) {
+	decoded, err := DecodeSchema(requestBytes, m.schema)
+	if err != nil {
+		return nil, fmt.Errorf("decode offset fetch request: %w", err)
+	}
+
+	if err := modifyOffsetFetchRequest(decoded, m.groupPrefixer, m.topicPrefixer, m.apiVersion); err != nil {
+		return nil, fmt.Errorf("modify offset fetch request: %w", err)
+	}
+
+	return EncodeSchema(decoded, m.schema)
+}
+
+func modifyOffsetFetchRequest(decoded *Struct, groupPrefixer GroupPrefixer, topicPrefixer TopicPrefixer, apiVersion int16) error {
+	// v8+ uses groups array instead of single group_id
+	if apiVersion >= 8 {
+		return modifyOffsetFetchRequestV8(decoded, groupPrefixer, topicPrefixer)
+	}
+
+	// Prefix group_id
+	if groupPrefixer != nil {
+		groupId := decoded.Get("group_id")
+		if groupId != nil {
+			if gid, ok := groupId.(string); ok && gid != "" {
+				if err := decoded.Replace("group_id", groupPrefixer(gid)); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	// Prefix topics (if present - can be null for "all topics" in v2+)
+	if topicPrefixer != nil {
+		prefixOffsetFetchTopics(decoded, topicPrefixer)
+	}
+
+	return nil
+}
+
+// modifyOffsetFetchRequestV8 handles v8+ OffsetFetch requests that use groups array
+func modifyOffsetFetchRequestV8(decoded *Struct, groupPrefixer GroupPrefixer, topicPrefixer TopicPrefixer) error {
+	groups := decoded.Get("groups")
+	if groups == nil {
+		return nil
+	}
+
+	groupsArray, ok := groups.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	for _, groupElement := range groupsArray {
+		group, ok := groupElement.(*Struct)
+		if !ok {
+			continue
+		}
+
+		// Prefix group_id
+		if groupPrefixer != nil {
+			groupId := group.Get("group_id")
+			if groupId != nil {
+				if gid, ok := groupId.(string); ok && gid != "" {
+					if err := group.Replace("group_id", groupPrefixer(gid)); err != nil {
+						return err
+					}
+				}
+			}
+		}
+
+		// Prefix topics within this group
+		if topicPrefixer != nil {
+			prefixOffsetFetchTopics(group, topicPrefixer)
+		}
+	}
+
+	return nil
+}
+
+func prefixOffsetFetchTopics(s *Struct, topicPrefixer TopicPrefixer) error {
+	topics := s.Get("topics")
+	if topics == nil {
+		return nil
+	}
+
+	topicsArray, ok := topics.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	for _, topicElement := range topicsArray {
+		topic, ok := topicElement.(*Struct)
+		if !ok {
+			continue
+		}
+		nameField := topic.Get("name")
+		if nameField == nil {
+			continue
+		}
+		var topicName string
+		switch n := nameField.(type) {
+		case string:
+			topicName = n
+		case *string:
+			if n != nil {
+				topicName = *n
+			}
+		}
+		if topicName != "" {
+			if err := topic.Replace("name", topicPrefixer(topicName)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+var offsetFetchRequestSchemas []Schema
+
+func init() {
+	offsetFetchRequestSchemas = createOffsetFetchRequestSchemas()
+}
+
+func createOffsetFetchRequestSchemas() []Schema {
+	// Topic for v0-v7: name, partition_indexes[]
+	topicV0 := NewSchema("offset_fetch_topic_v0",
+		&Mfield{Name: "name", Ty: TypeStr},
+		&Array{Name: "partition_indexes", Ty: TypeInt32},
+	)
+
+	// v0-v1: group_id + topics array
+	offsetFetchV0 := NewSchema("offset_fetch_request_v0",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "group_id", Ty: TypeStr},
+		&Array{Name: "topics", Ty: topicV0},
+	)
+
+	// v2+: topics can be null (meaning all topics) - same schema, logic handles null
+
+	// v7 adds require_stable
+	offsetFetchV7 := NewSchema("offset_fetch_request_v7",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "group_id", Ty: TypeStr},
+		&Array{Name: "topics", Ty: topicV0},
+		&Mfield{Name: "require_stable", Ty: TypeBool},
+	)
+
+	// v8+ flexible - uses groups array for batch lookup
+	topicV8 := NewSchema("offset_fetch_topic_v8",
+		&Mfield{Name: "name", Ty: TypeCompactStr},
+		&CompactArray{Name: "partition_indexes", Ty: TypeInt32},
+		&SchemaTaggedFields{Name: "topic_tagged_fields"},
+	)
+
+	groupV8 := NewSchema("offset_fetch_group_v8",
+		&Mfield{Name: "group_id", Ty: TypeCompactStr},
+		&CompactArray{Name: "topics", Ty: topicV8},
+		&SchemaTaggedFields{Name: "group_tagged_fields"},
+	)
+
+	offsetFetchV8 := NewSchema("offset_fetch_request_v8",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&SchemaTaggedFields{Name: "header_tagged_fields"},
+		&CompactArray{Name: "groups", Ty: groupV8},
+		&Mfield{Name: "require_stable", Ty: TypeBool},
+		&SchemaTaggedFields{Name: "request_tagged_fields"},
+	)
+
+	// v9 is same as v8
+	offsetFetchV9 := offsetFetchV8
+
+	return []Schema{
+		offsetFetchV0, // v0
+		offsetFetchV0, // v1
+		offsetFetchV0, // v2 (topics can be null but use same schema)
+		offsetFetchV0, // v3
+		offsetFetchV0, // v4
+		offsetFetchV0, // v5
+		offsetFetchV0, // v6
+		offsetFetchV7, // v7
+		offsetFetchV8, // v8
+		offsetFetchV9, // v9
+	}
+}
+
+func getOffsetFetchRequestSchema(apiVersion int16) (Schema, error) {
+	if apiVersion < 0 || int(apiVersion) >= len(offsetFetchRequestSchemas) {
+		return nil, fmt.Errorf("unsupported OffsetFetch request version %d", apiVersion)
+	}
+	return offsetFetchRequestSchemas[apiVersion], nil
 }
 
 // heartbeatRequestModifier prefixes group_id in Heartbeat requests
