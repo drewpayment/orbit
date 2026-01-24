@@ -34,7 +34,7 @@ export function CredentialsTab({
   credentials,
   virtualClusters,
   onRefresh,
-  onCredentialsChange,
+  onCredentialsChange: _onCredentialsChange,
 }: CredentialsTabProps) {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [showForm, setShowForm] = useState(false)

@@ -17,7 +17,7 @@ interface VirtualClustersTabProps {
 export function VirtualClustersTab({
   virtualClusters,
   onRefresh,
-  onVirtualClustersChange,
+  onVirtualClustersChange: _onVirtualClustersChange,
 }: VirtualClustersTabProps) {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [showForm, setShowForm] = useState(false)
