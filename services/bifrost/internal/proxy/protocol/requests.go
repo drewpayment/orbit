@@ -188,8 +188,14 @@ func newHeartbeatRequestModifier(apiVersion int16, cfg RequestModifierConfig) (R
 	if cfg.GroupPrefixer == nil {
 		return nil, nil
 	}
-	// TODO: Implement heartbeat request rewriting
-	return nil, nil
+	schema, err := getHeartbeatRequestSchema(apiVersion)
+	if err != nil {
+		return nil, err
+	}
+	return &heartbeatRequestModifier{
+		schema:        schema,
+		groupPrefixer: cfg.GroupPrefixer,
+	}, nil
 }
 
 func newLeaveGroupRequestModifier(apiVersion int16, cfg RequestModifierConfig) (RequestModifier, error) {
@@ -487,6 +493,89 @@ func getSyncGroupRequestSchema(apiVersion int16) (Schema, error) {
 		return nil, fmt.Errorf("unsupported SyncGroup request version %d", apiVersion)
 	}
 	return syncGroupRequestSchemas[apiVersion], nil
+}
+
+// heartbeatRequestModifier prefixes group_id in Heartbeat requests
+type heartbeatRequestModifier struct {
+	schema        Schema
+	groupPrefixer GroupPrefixer
+}
+
+func (m *heartbeatRequestModifier) Apply(requestBytes []byte) ([]byte, error) {
+	decoded, err := DecodeSchema(requestBytes, m.schema)
+	if err != nil {
+		return nil, fmt.Errorf("decode heartbeat request: %w", err)
+	}
+
+	if err := modifyHeartbeatRequest(decoded, m.groupPrefixer); err != nil {
+		return nil, fmt.Errorf("modify heartbeat request: %w", err)
+	}
+
+	return EncodeSchema(decoded, m.schema)
+}
+
+func modifyHeartbeatRequest(decoded *Struct, prefixer GroupPrefixer) error {
+	groupId := decoded.Get("group_id")
+	if groupId == nil {
+		return nil
+	}
+	if gid, ok := groupId.(string); ok && gid != "" {
+		return decoded.Replace("group_id", prefixer(gid))
+	}
+	return nil
+}
+
+var heartbeatRequestSchemas []Schema
+
+func init() {
+	heartbeatRequestSchemas = createHeartbeatRequestSchemas()
+}
+
+func createHeartbeatRequestSchemas() []Schema {
+	heartbeatV0 := NewSchema("heartbeat_request_v0",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "group_id", Ty: TypeStr},
+		&Mfield{Name: "generation_id", Ty: TypeInt32},
+		&Mfield{Name: "member_id", Ty: TypeStr},
+	)
+
+	// v3 adds group_instance_id
+	heartbeatV3 := NewSchema("heartbeat_request_v3",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&Mfield{Name: "group_id", Ty: TypeStr},
+		&Mfield{Name: "generation_id", Ty: TypeInt32},
+		&Mfield{Name: "member_id", Ty: TypeStr},
+		&Mfield{Name: "group_instance_id", Ty: TypeNullableStr},
+	)
+
+	// v4+ flexible
+	heartbeatV4 := NewSchema("heartbeat_request_v4",
+		&Mfield{Name: "correlation_id", Ty: TypeInt32},
+		&Mfield{Name: "client_id", Ty: TypeNullableStr},
+		&SchemaTaggedFields{Name: "header_tagged_fields"},
+		&Mfield{Name: "group_id", Ty: TypeCompactStr},
+		&Mfield{Name: "generation_id", Ty: TypeInt32},
+		&Mfield{Name: "member_id", Ty: TypeCompactStr},
+		&Mfield{Name: "group_instance_id", Ty: TypeCompactNullableStr},
+		&SchemaTaggedFields{Name: "request_tagged_fields"},
+	)
+
+	return []Schema{
+		heartbeatV0, // v0
+		heartbeatV0, // v1
+		heartbeatV0, // v2
+		heartbeatV3, // v3
+		heartbeatV4, // v4
+	}
+}
+
+func getHeartbeatRequestSchema(apiVersion int16) (Schema, error) {
+	if apiVersion < 0 || int(apiVersion) >= len(heartbeatRequestSchemas) {
+		return nil, fmt.Errorf("unsupported Heartbeat request version %d", apiVersion)
+	}
+	return heartbeatRequestSchemas[apiVersion], nil
 }
 
 // metadataRequestModifier rewrites topic names in Metadata requests
