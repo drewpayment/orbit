@@ -113,7 +113,14 @@ export function VirtualClusterForm({
                 onChange={(e) => setFormData({ ...formData, workspaceSlug: e.target.value })}
                 placeholder="my-workspace"
                 required
+                disabled={isEditing}
+                className={isEditing ? 'bg-muted cursor-not-allowed' : ''}
               />
+              {isEditing && (
+                <p className="text-xs text-muted-foreground">
+                  Workspace cannot be changed. Delete and recreate the cluster to move it to a different workspace.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
