@@ -31,11 +31,42 @@ export function VirtualClusterForm({
     transactionIdPrefix: cluster?.transactionIdPrefix || '',
     advertisedHost: cluster?.advertisedHost || '',
     advertisedPort: cluster?.advertisedPort || 9092,
-    physicalBootstrapServers: cluster?.physicalBootstrapServers || '',
+    physicalBootstrapServers: cluster?.physicalBootstrapServers || 'redpanda:9092',
   })
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Auto-generate prefixes and host based on workspace + environment
+  const generateDefaults = (workspace: string, env: string) => {
+    if (!workspace) return
+
+    const prefix = `${workspace}-${env}-`
+    const host = `${workspace}-${env}.dev.kafka.orbit.io`
+
+    setFormData((prev) => ({
+      ...prev,
+      topicPrefix: prefix,
+      groupPrefix: prefix,
+      transactionIdPrefix: prefix,
+      advertisedHost: host,
+    }))
+  }
+
+  // Update defaults when workspace or environment changes (only for new clusters)
+  const handleWorkspaceChange = (value: string) => {
+    setFormData({ ...formData, workspaceSlug: value })
+    if (!isEditing) {
+      generateDefaults(value, formData.environment)
+    }
+  }
+
+  const handleEnvironmentChange = (value: string) => {
+    setFormData({ ...formData, environment: value })
+    if (!isEditing) {
+      generateDefaults(formData.workspaceSlug, value)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -80,7 +111,7 @@ export function VirtualClusterForm({
             <CardDescription>
               {isEditing
                 ? 'Update virtual cluster configuration'
-                : 'Configure a new virtual cluster for tenant isolation'}
+                : 'Select a workspace and environment to create a virtual cluster'}
             </CardDescription>
           </div>
         </div>
@@ -93,24 +124,23 @@ export function VirtualClusterForm({
             </div>
           )}
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="id">ID (optional)</Label>
-              <Input
-                id="id"
-                value={formData.id}
-                onChange={(e) => setFormData({ ...formData, id: e.target.value })}
-                placeholder="Auto-generated if empty"
-                disabled={isEditing}
-              />
+          {!isEditing && (
+            <div className="p-4 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <p className="text-sm text-blue-900 dark:text-blue-100">
+                <strong>Note:</strong> All configuration will be automatically generated based on your workspace and environment selection.
+                IDs, prefixes, and hostnames follow Orbit&apos;s naming conventions.
+              </p>
             </div>
+          )}
+
+          <div className="grid gap-4 md:grid-cols-2">
 
             <div className="space-y-2">
               <Label htmlFor="workspaceSlug">Workspace Slug *</Label>
               <Input
                 id="workspaceSlug"
                 value={formData.workspaceSlug}
-                onChange={(e) => setFormData({ ...formData, workspaceSlug: e.target.value })}
+                onChange={(e) => handleWorkspaceChange(e.target.value)}
                 placeholder="my-workspace"
                 required
                 disabled={isEditing}
@@ -127,9 +157,10 @@ export function VirtualClusterForm({
               <Label htmlFor="environment">Environment *</Label>
               <Select
                 value={formData.environment}
-                onValueChange={(value) => setFormData({ ...formData, environment: value })}
+                onValueChange={handleEnvironmentChange}
+                disabled={isEditing}
               >
-                <SelectTrigger>
+                <SelectTrigger className={isEditing ? 'bg-muted cursor-not-allowed' : ''}>
                   <SelectValue placeholder="Select environment" />
                 </SelectTrigger>
                 <SelectContent>
@@ -138,6 +169,11 @@ export function VirtualClusterForm({
                   <SelectItem value="prod">Production</SelectItem>
                 </SelectContent>
               </Select>
+              {isEditing && (
+                <p className="text-xs text-muted-foreground">
+                  Environment cannot be changed after creation.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -146,51 +182,62 @@ export function VirtualClusterForm({
                 id="physicalBootstrapServers"
                 value={formData.physicalBootstrapServers}
                 onChange={(e) => setFormData({ ...formData, physicalBootstrapServers: e.target.value })}
-                placeholder="broker1:9092,broker2:9092"
+                placeholder="redpanda:9092"
                 required
               />
+              <p className="text-xs text-muted-foreground">
+                Physical Kafka/Redpanda cluster bootstrap servers
+              </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="topicPrefix">Topic Prefix *</Label>
+              <Label htmlFor="topicPrefix">Topic Prefix (auto-generated)</Label>
               <Input
                 id="topicPrefix"
                 value={formData.topicPrefix}
                 onChange={(e) => setFormData({ ...formData, topicPrefix: e.target.value })}
-                placeholder="workspace.app."
+                placeholder="Automatically generated from workspace + environment"
                 required
+                readOnly={!isEditing}
+                className={!isEditing ? 'bg-muted' : ''}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="groupPrefix">Group Prefix *</Label>
+              <Label htmlFor="groupPrefix">Group Prefix (auto-generated)</Label>
               <Input
                 id="groupPrefix"
                 value={formData.groupPrefix}
                 onChange={(e) => setFormData({ ...formData, groupPrefix: e.target.value })}
-                placeholder="workspace.app."
+                placeholder="Automatically generated from workspace + environment"
                 required
+                readOnly={!isEditing}
+                className={!isEditing ? 'bg-muted' : ''}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="transactionIdPrefix">Transaction ID Prefix</Label>
+              <Label htmlFor="transactionIdPrefix">Transaction ID Prefix (auto-generated)</Label>
               <Input
                 id="transactionIdPrefix"
                 value={formData.transactionIdPrefix}
                 onChange={(e) => setFormData({ ...formData, transactionIdPrefix: e.target.value })}
-                placeholder="workspace.app."
+                placeholder="Automatically generated from workspace + environment"
+                readOnly={!isEditing}
+                className={!isEditing ? 'bg-muted' : ''}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="advertisedHost">Advertised Host *</Label>
+              <Label htmlFor="advertisedHost">Advertised Host (auto-generated)</Label>
               <Input
                 id="advertisedHost"
                 value={formData.advertisedHost}
                 onChange={(e) => setFormData({ ...formData, advertisedHost: e.target.value })}
-                placeholder="bifrost.example.com"
+                placeholder="Automatically generated from workspace + environment"
                 required
+                readOnly={!isEditing}
+                className={!isEditing ? 'bg-muted' : ''}
               />
             </div>
 
@@ -203,6 +250,8 @@ export function VirtualClusterForm({
                 onChange={(e) => setFormData({ ...formData, advertisedPort: parseInt(e.target.value) || 9092 })}
                 placeholder="9092"
                 required
+                readOnly={!isEditing}
+                className={!isEditing ? 'bg-muted' : ''}
               />
             </div>
           </div>
