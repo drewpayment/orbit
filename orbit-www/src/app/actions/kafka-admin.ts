@@ -584,6 +584,41 @@ export async function listClusters(): Promise<{
 }
 
 /**
+ * Lists all workspaces from Payload CMS.
+ * Used for workspace selection dropdowns in admin interfaces.
+ */
+export async function getWorkspaces(): Promise<{
+  success: boolean
+  data?: Array<{ id: string; name: string; slug: string }>
+  error?: string
+}> {
+  try {
+    await requireAdmin()
+
+    const payload = await getPayload({ config })
+
+    const result = await payload.find({
+      collection: 'workspaces',
+      limit: 1000,
+      sort: 'name',
+    })
+
+    const workspaces = result.docs.map((doc) => ({
+      id: doc.id,
+      name: doc.name,
+      slug: doc.slug,
+    }))
+
+    return { success: true, data: workspaces }
+  } catch (error) {
+    console.error('Failed to get workspaces:', error)
+    const errorMessage =
+      error instanceof Error ? error.message : 'Failed to get workspaces'
+    return { success: false, error: errorMessage }
+  }
+}
+
+/**
  * Gets a single Kafka cluster by ID from Payload CMS.
  */
 export async function getCluster(clusterId: string): Promise<{

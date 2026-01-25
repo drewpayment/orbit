@@ -1,18 +1,34 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Check, ChevronsUpDown } from 'lucide-react'
 import type { VirtualClusterConfig } from '@/app/actions/bifrost-admin'
+import { cn } from '@/lib/utils'
 
 interface VirtualClusterFormProps {
   cluster: VirtualClusterConfig | null
   onCancel: () => void
   onSuccess: () => void
+}
+
+interface Workspace {
+  id: string
+  name: string
+  slug: string
 }
 
 export function VirtualClusterForm({
@@ -21,6 +37,10 @@ export function VirtualClusterForm({
   onSuccess,
 }: VirtualClusterFormProps) {
   const isEditing = !!cluster
+
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const [workspacesLoading, setWorkspacesLoading] = useState(false)
+  const [workspaceOpen, setWorkspaceOpen] = useState(false)
 
   const [formData, setFormData] = useState({
     id: cluster?.id || '',
@@ -36,6 +56,32 @@ export function VirtualClusterForm({
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Fetch workspaces on mount
+  useEffect(() => {
+    const fetchWorkspaces = async () => {
+      setWorkspacesLoading(true)
+      try {
+        const { getWorkspaces } = await import('@/app/actions/kafka-admin')
+        const result = await getWorkspaces()
+
+        if (result.success && result.data) {
+          setWorkspaces(result.data)
+        } else {
+          setError(result.error || 'Failed to load workspaces')
+        }
+      } catch (err) {
+        console.error('Failed to fetch workspaces:', err)
+        setError('Failed to load workspaces')
+      } finally {
+        setWorkspacesLoading(false)
+      }
+    }
+
+    if (!isEditing) {
+      fetchWorkspaces()
+    }
+  }, [isEditing])
 
   // Auto-generate prefixes and host based on workspace + environment
   const generateDefaults = (workspace: string, env: string) => {
@@ -136,20 +182,74 @@ export function VirtualClusterForm({
           <div className="grid gap-4 md:grid-cols-2">
 
             <div className="space-y-2">
-              <Label htmlFor="workspaceSlug">Workspace Slug *</Label>
-              <Input
-                id="workspaceSlug"
-                value={formData.workspaceSlug}
-                onChange={(e) => handleWorkspaceChange(e.target.value)}
-                placeholder="my-workspace"
-                required
-                disabled={isEditing}
-                className={isEditing ? 'bg-muted cursor-not-allowed' : ''}
-              />
-              {isEditing && (
-                <p className="text-xs text-muted-foreground">
-                  Workspace cannot be changed. Delete and recreate the cluster to move it to a different workspace.
-                </p>
+              <Label htmlFor="workspaceSlug">Workspace *</Label>
+              {isEditing ? (
+                <>
+                  <Input
+                    id="workspaceSlug"
+                    value={formData.workspaceSlug}
+                    disabled
+                    className="bg-muted cursor-not-allowed"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Workspace cannot be changed. Delete and recreate the cluster to move it to a different workspace.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Popover open={workspaceOpen} onOpenChange={setWorkspaceOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={workspaceOpen}
+                        className="w-full justify-between"
+                        disabled={workspacesLoading}
+                      >
+                        {formData.workspaceSlug
+                          ? workspaces.find((ws) => ws.slug === formData.workspaceSlug)?.name || formData.workspaceSlug
+                          : workspacesLoading
+                            ? 'Loading workspaces...'
+                            : 'Select workspace...'}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search workspace..." />
+                        <CommandList>
+                          <CommandEmpty>No workspace found.</CommandEmpty>
+                          <CommandGroup>
+                            {workspaces.map((workspace) => (
+                              <CommandItem
+                                key={workspace.id}
+                                value={workspace.slug}
+                                onSelect={(value) => {
+                                  handleWorkspaceChange(value)
+                                  setWorkspaceOpen(false)
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    'mr-2 h-4 w-4',
+                                    formData.workspaceSlug === workspace.slug ? 'opacity-100' : 'opacity-0'
+                                  )}
+                                />
+                                <div className="flex flex-col">
+                                  <span>{workspace.name}</span>
+                                  <span className="text-xs text-muted-foreground">{workspace.slug}</span>
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  <p className="text-xs text-muted-foreground">
+                    Select the workspace that will own this virtual cluster
+                  </p>
+                </>
               )}
             </div>
 
