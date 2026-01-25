@@ -163,7 +163,7 @@ export interface FullConfig {
 /**
  * Maps a proto VirtualClusterConfig to our interface.
  */
-export function mapProtoToVirtualCluster(proto: ProtoVirtualClusterConfig): VirtualClusterConfig {
+function mapProtoToVirtualCluster(proto: ProtoVirtualClusterConfig): VirtualClusterConfig {
   return {
     id: proto.id,
     applicationId: proto.applicationId,
@@ -183,7 +183,7 @@ export function mapProtoToVirtualCluster(proto: ProtoVirtualClusterConfig): Virt
 /**
  * Maps a proto PermissionTemplate enum to our string type.
  */
-export function mapPermissionTemplate(proto: PermissionTemplate): PermissionTemplateType {
+function mapPermissionTemplate(proto: PermissionTemplate): PermissionTemplateType {
   switch (proto) {
     case PermissionTemplate.PRODUCER:
       return 'producer'
@@ -202,7 +202,7 @@ export function mapPermissionTemplate(proto: PermissionTemplate): PermissionTemp
 /**
  * Maps our string type to a proto PermissionTemplate enum.
  */
-export function mapPermissionTemplateToProto(template: PermissionTemplateType): PermissionTemplate {
+function mapPermissionTemplateToProto(template: PermissionTemplateType): PermissionTemplate {
   switch (template) {
     case 'producer':
       return PermissionTemplate.PRODUCER
@@ -229,7 +229,7 @@ function mapProtoCustomPermission(proto: ProtoCustomPermission): CustomPermissio
 /**
  * Maps a proto CredentialConfig to our interface.
  */
-export function mapProtoToCredential(proto: ProtoCredentialConfig): CredentialConfig {
+function mapProtoToCredential(proto: ProtoCredentialConfig): CredentialConfig {
   return {
     id: proto.id,
     virtualClusterId: proto.virtualClusterId,
@@ -243,7 +243,7 @@ export function mapProtoToCredential(proto: ProtoCredentialConfig): CredentialCo
 /**
  * Maps a proto PolicyConfig to our interface.
  */
-export function mapProtoToPolicy(proto: ProtoPolicy): PolicyConfig {
+function mapProtoToPolicy(proto: ProtoPolicy): PolicyConfig {
   return {
     id: proto.id,
     environment: proto.environment,
