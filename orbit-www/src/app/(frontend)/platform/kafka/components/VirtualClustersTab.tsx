@@ -1,10 +1,19 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Plus, RefreshCw, Server, Lock, LockOpen } from 'lucide-react'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Plus, RefreshCw, Server, Lock, LockOpen, Filter, Check, X } from 'lucide-react'
 import type { VirtualClusterConfig } from '@/app/actions/bifrost-admin'
 import { VirtualClusterForm } from './VirtualClusterForm'
 
@@ -22,6 +31,8 @@ export function VirtualClustersTab({
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editingCluster, setEditingCluster] = useState<VirtualClusterConfig | null>(null)
+  const [selectedWorkspaces, setSelectedWorkspaces] = useState<string[]>([])
+  const [workspaceFilterOpen, setWorkspaceFilterOpen] = useState(false)
 
   const handleRefresh = async () => {
     setIsRefreshing(true)
@@ -70,6 +81,30 @@ export function VirtualClustersTab({
     handleFormClose()
   }
 
+  // Get unique workspaces for filter
+  const availableWorkspaces = useMemo(() => {
+    const workspaces = new Set(virtualClusters.map((c) => c.workspaceSlug))
+    return Array.from(workspaces).sort()
+  }, [virtualClusters])
+
+  // Filter clusters by selected workspaces
+  const filteredClusters = useMemo(() => {
+    if (selectedWorkspaces.length === 0) {
+      return virtualClusters
+    }
+    return virtualClusters.filter((c) => selectedWorkspaces.includes(c.workspaceSlug))
+  }, [virtualClusters, selectedWorkspaces])
+
+  const toggleWorkspace = (workspace: string) => {
+    setSelectedWorkspaces((prev) =>
+      prev.includes(workspace) ? prev.filter((w) => w !== workspace) : [...prev, workspace]
+    )
+  }
+
+  const clearFilters = () => {
+    setSelectedWorkspaces([])
+  }
+
   // Empty state
   if (virtualClusters.length === 0 && !showForm) {
     return (
@@ -102,14 +137,68 @@ export function VirtualClustersTab({
 
   return (
     <div className="space-y-6">
-      {/* Header with actions */}
+      {/* Header with filters and actions */}
       <div className="flex items-center justify-between">
-        <div>
+        <div className="flex items-center gap-3">
           <p className="text-sm text-muted-foreground">
-            {virtualClusters.length} virtual cluster{virtualClusters.length !== 1 ? 's' : ''} configured
+            {filteredClusters.length} of {virtualClusters.length} virtual cluster
+            {virtualClusters.length !== 1 ? 's' : ''}
           </p>
+          {selectedWorkspaces.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="h-7 px-2">
+              <X className="h-3 w-3 mr-1" />
+              Clear filters
+            </Button>
+          )}
         </div>
         <div className="flex items-center gap-2">
+          {/* Workspace filter */}
+          <Popover open={workspaceFilterOpen} onOpenChange={setWorkspaceFilterOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Filter className="h-4 w-4" />
+                Workspace
+                {selectedWorkspaces.length > 0 && (
+                  <Badge variant="secondary" className="ml-1 rounded-full px-1.5">
+                    {selectedWorkspaces.length}
+                  </Badge>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[200px] p-0" align="end">
+              <Command>
+                <CommandInput placeholder="Search workspace..." />
+                <CommandList>
+                  <CommandEmpty>No workspace found.</CommandEmpty>
+                  <CommandGroup>
+                    {availableWorkspaces.map((workspace) => (
+                      <CommandItem
+                        key={workspace}
+                        onSelect={() => toggleWorkspace(workspace)}
+                        className="cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2 flex-1">
+                          <div
+                            className={`flex h-4 w-4 items-center justify-center rounded-sm border ${
+                              selectedWorkspaces.includes(workspace)
+                                ? 'bg-primary border-primary'
+                                : 'border-input'
+                            }`}
+                          >
+                            {selectedWorkspaces.includes(workspace) && (
+                              <Check className="h-3 w-3 text-primary-foreground" />
+                            )}
+                          </div>
+                          <span>{workspace}</span>
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+
           <Button
             variant="outline"
             size="sm"
@@ -128,7 +217,7 @@ export function VirtualClustersTab({
 
       {/* Virtual clusters grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {virtualClusters.map((cluster) => (
+        {filteredClusters.map((cluster) => (
           <Card
             key={cluster.id}
             className="cursor-pointer transition-colors hover:bg-accent/50"
@@ -138,12 +227,24 @@ export function VirtualClustersTab({
             }}
           >
             <CardHeader className="pb-3">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-2">
-                  <Server className="h-5 w-5 text-muted-foreground" />
-                  <CardTitle className="text-base">{cluster.id}</CardTitle>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Server className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <CardTitle className="text-base truncate">
+                      {cluster.workspaceSlug} / {cluster.environment}
+                    </CardTitle>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="text-xs">
+                      {cluster.workspaceSlug}
+                    </Badge>
+                    <Badge variant="outline" className="text-xs">
+                      {cluster.environment}
+                    </Badge>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex-shrink-0">
                   {cluster.readOnly ? (
                     <Badge variant="secondary" className="flex items-center gap-1">
                       <Lock className="h-3 w-3" />
@@ -157,8 +258,8 @@ export function VirtualClustersTab({
                   )}
                 </div>
               </div>
-              <CardDescription className="text-xs">
-                {cluster.workspaceSlug} / {cluster.environment}
+              <CardDescription className="text-xs font-mono truncate mt-2">
+                {cluster.id}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
