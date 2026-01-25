@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type {
   KafkaProviderConfig,
@@ -45,10 +46,16 @@ export function KafkaAdminClient({
   initialGatewayStatus = null,
   gatewayConnectionError,
 }: KafkaAdminClientProps) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
   // Default to providers tab if no clusters exist
   const defaultTab = initialClusters.length === 0 ? 'providers' : 'clusters'
 
-  const [activeTab, setActiveTab] = useState(defaultTab)
+  // Get initial tab from URL or use default
+  const initialTab = searchParams.get('tab') || defaultTab
+
+  const [activeTab, setActiveTab] = useState(initialTab)
   const [providers, setProviders] = useState(initialProviders)
   const [clusters, setClusters] = useState(initialClusters)
   const [mappings, setMappings] = useState(initialMappings)
@@ -60,6 +67,14 @@ export function KafkaAdminClient({
   // Provider form dialog state
   const [providerFormOpen, setProviderFormOpen] = useState(false)
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null)
+
+  // Update URL when tab changes
+  const handleTabChange = useCallback((newTab: string) => {
+    setActiveTab(newTab)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('tab', newTab)
+    router.push(`?${params.toString()}`, { scroll: false })
+  }, [router, searchParams])
 
   // Navigation functions
   const showProviderDetail = useCallback((providerId: string) => {
@@ -494,7 +509,7 @@ export function KafkaAdminClient({
         </div>
       )}
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList>
           <TabsTrigger value="clusters">
             Clusters

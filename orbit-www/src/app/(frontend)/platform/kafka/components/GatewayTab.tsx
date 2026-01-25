@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AlertCircle } from 'lucide-react'
@@ -22,11 +23,25 @@ export function GatewayTab({
   initialStatus,
   connectionError,
 }: GatewayTabProps) {
-  const [activeSubTab, setActiveSubTab] = useState('virtual-clusters')
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // Get initial sub-tab from URL or default to virtual-clusters
+  const initialSubTab = searchParams.get('subtab') || 'virtual-clusters'
+
+  const [activeSubTab, setActiveSubTab] = useState(initialSubTab)
   const [virtualClusters, setVirtualClusters] = useState(initialVirtualClusters)
   const [credentials, setCredentials] = useState(initialCredentials)
   const [status, setStatus] = useState(initialStatus)
   const [error, setError] = useState<string | null>(connectionError || null)
+
+  // Update URL when sub-tab changes
+  const handleSubTabChange = useCallback((newSubTab: string) => {
+    setActiveSubTab(newSubTab)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('subtab', newSubTab)
+    router.push(`?${params.toString()}`, { scroll: false })
+  }, [router, searchParams])
 
   // Refresh functions
   const refreshVirtualClusters = async () => {
@@ -92,7 +107,7 @@ export function GatewayTab({
         </Alert>
       )}
 
-      <Tabs value={activeSubTab} onValueChange={setActiveSubTab}>
+      <Tabs value={activeSubTab} onValueChange={handleSubTabChange}>
         <TabsList>
           <TabsTrigger value="virtual-clusters">
             Virtual Clusters
