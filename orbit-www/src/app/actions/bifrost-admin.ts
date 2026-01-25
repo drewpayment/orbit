@@ -355,6 +355,66 @@ export async function listVirtualClusters(): Promise<{
 }
 
 /**
+ * Lists virtual clusters enriched with workspace information from Orbit's database.
+ * This provides the workspace relationship data that Bifrost doesn't store.
+ */
+export async function listVirtualClustersWithWorkspaces(): Promise<{
+  success: boolean
+  data?: VirtualClusterConfig[]
+  error?: string
+}> {
+  try {
+    await requireAdmin()
+
+    // Get virtual clusters from Bifrost
+    const bifrostResult = await listVirtualClusters()
+    if (!bifrostResult.success || !bifrostResult.data) {
+      return bifrostResult
+    }
+
+    // Get virtual clusters from Payload (has workspace relationships)
+    const payload = await getPayload({ config })
+    const payloadClusters = await payload.find({
+      collection: 'kafka-virtual-clusters',
+      limit: 1000,
+      depth: 2, // Populate workspace relationship
+    })
+
+    // Create a map of bifrost ID -> workspace slug
+    const workspaceMap = new Map<string, string>()
+    for (const doc of payloadClusters.docs) {
+      // Match by advertised host since that's the unique identifier
+      if (doc.advertisedHost && doc.workspace) {
+        const workspace = typeof doc.workspace === 'string'
+          ? doc.workspace
+          : doc.workspace.slug
+
+        // Find matching Bifrost cluster by advertisedHost
+        const bifrostCluster = bifrostResult.data.find(
+          (c) => c.advertisedHost === doc.advertisedHost
+        )
+        if (bifrostCluster) {
+          workspaceMap.set(bifrostCluster.id, workspace)
+        }
+      }
+    }
+
+    // Enrich Bifrost data with workspace slugs
+    const enrichedClusters = bifrostResult.data.map((cluster) => ({
+      ...cluster,
+      workspaceSlug: workspaceMap.get(cluster.id) || cluster.workspaceSlug,
+    }))
+
+    return { success: true, data: enrichedClusters }
+  } catch (error) {
+    console.error('Failed to list virtual clusters with workspaces:', error)
+    const errorMessage =
+      error instanceof Error ? error.message : 'Failed to list virtual clusters'
+    return { success: false, error: errorMessage }
+  }
+}
+
+/**
  * Creates or updates a virtual cluster in Bifrost.
  */
 export async function createVirtualCluster(data: {

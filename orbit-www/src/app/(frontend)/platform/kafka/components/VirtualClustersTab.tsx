@@ -81,14 +81,13 @@ export function VirtualClustersTab({
     handleFormClose()
   }
 
-  // Helper to get display workspace (fallback to applicationSlug if workspaceSlug is empty)
-  const getWorkspaceDisplay = (cluster: VirtualClusterConfig) => {
-    return cluster.workspaceSlug || cluster.applicationSlug || 'unknown'
-  }
-
   // Get unique workspaces for filter
   const availableWorkspaces = useMemo(() => {
-    const workspaces = new Set(virtualClusters.map(getWorkspaceDisplay))
+    const workspaces = new Set(
+      virtualClusters
+        .map((c) => c.workspaceSlug)
+        .filter((ws): ws is string => !!ws) // Filter out empty strings
+    )
     return Array.from(workspaces).sort()
   }, [virtualClusters])
 
@@ -97,7 +96,7 @@ export function VirtualClustersTab({
     if (selectedWorkspaces.length === 0) {
       return virtualClusters
     }
-    return virtualClusters.filter((c) => selectedWorkspaces.includes(getWorkspaceDisplay(c)))
+    return virtualClusters.filter((c) => c.workspaceSlug && selectedWorkspaces.includes(c.workspaceSlug))
   }, [virtualClusters, selectedWorkspaces])
 
   const toggleWorkspace = (workspace: string) => {
@@ -237,12 +236,12 @@ export function VirtualClustersTab({
                   <div className="flex items-center gap-2 mb-2">
                     <Server className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                     <CardTitle className="text-base truncate">
-                      {getWorkspaceDisplay(cluster)} / {cluster.environment}
+                      {cluster.workspaceSlug} / {cluster.environment}
                     </CardTitle>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="secondary" className="text-xs">
-                      {getWorkspaceDisplay(cluster)}
+                      {cluster.workspaceSlug}
                     </Badge>
                     <Badge variant="outline" className="text-xs">
                       {cluster.environment}

@@ -1,6 +1,6 @@
 import { getProviders, listClusters, listMappings } from '@/app/actions/kafka-admin'
 import {
-  listVirtualClusters,
+  listVirtualClustersWithWorkspaces,
   listCredentials,
   getGatewayStatus,
   type VirtualClusterConfig,
@@ -33,7 +33,7 @@ export default async function KafkaAdminPage() {
 
   try {
     const [vcResult, credResult, statusResult] = await Promise.all([
-      listVirtualClusters(),
+      listVirtualClustersWithWorkspaces(),
       listCredentials(),
       getGatewayStatus(),
     ])
