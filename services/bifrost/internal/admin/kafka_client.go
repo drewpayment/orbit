@@ -147,11 +147,26 @@ func (k *KafkaAdminClient) CommitOffsets(ctx context.Context, groupID string, of
 }
 
 // GetSubscribedTopics extracts the list of topics a group is consuming from.
+// This only returns topics with active partition assignments.
 func GetSubscribedTopics(group kadm.DescribedGroup) []string {
 	// Use AssignedPartitions to get topics from the group's partition assignments
 	assigned := group.AssignedPartitions()
 	topics := make([]string, 0, len(assigned))
 	for topic := range assigned {
+		topics = append(topics, topic)
+	}
+	return topics
+}
+
+// GetTopicsFromOffsets extracts the list of topics from committed offset responses.
+// This is useful for Empty groups that have no active members but still have committed offsets.
+func GetTopicsFromOffsets(offsets kadm.OffsetResponses) []string {
+	topicSet := make(map[string]struct{})
+	for topic := range offsets {
+		topicSet[topic] = struct{}{}
+	}
+	topics := make([]string, 0, len(topicSet))
+	for topic := range topicSet {
 		topics = append(topics, topic)
 	}
 	return topics

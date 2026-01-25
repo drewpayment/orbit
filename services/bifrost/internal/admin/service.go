@@ -231,8 +231,20 @@ func (s *Service) ListConsumerGroups(ctx context.Context, req *gatewayv1.ListCon
 		// Unprefix the group ID
 		virtualGroupID := strings.TrimPrefix(group.Group, vc.GroupPrefix)
 
-		// Get subscribed topics and unprefix them
+		// Get subscribed topics from active assignments
 		physicalTopics := GetSubscribedTopics(group)
+
+		// If group is empty (no active members), get topics from committed offsets instead
+		if len(physicalTopics) == 0 {
+			offsets, err := kafkaClient.FetchGroupOffsets(ctx, group.Group)
+			if err != nil {
+				logrus.WithError(err).WithField("group", group.Group).Warn("Failed to fetch offsets for empty group")
+			} else {
+				physicalTopics = GetTopicsFromOffsets(offsets)
+			}
+		}
+
+		// Unprefix the topics
 		virtualTopics := make([]string, 0, len(physicalTopics))
 		for _, topic := range physicalTopics {
 			if vc.TopicPrefix != "" && strings.HasPrefix(topic, vc.TopicPrefix) {

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -21,7 +22,7 @@ import {
   Copy,
   Check,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import { TopicsPanel } from '@/components/features/kafka/TopicsPanel'
 import { ServiceAccountsPanel } from '@/components/features/kafka/ServiceAccountsPanel'
@@ -105,6 +106,9 @@ const envConfig: Record<string, { label: string; className: string }> = {
   },
 }
 
+const VALID_TABS = ['topics', 'schemas', 'consumer-groups', 'service-accounts', 'settings'] as const
+type TabValue = typeof VALID_TABS[number]
+
 export function ClusterDetailClient({
   workspaceSlug,
   cluster,
@@ -115,6 +119,19 @@ export function ClusterDetailClient({
   userId,
 }: ClusterDetailClientProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null)
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+
+  // Get tab from URL or default to 'topics'
+  const tabParam = searchParams.get('tab')
+  const currentTab: TabValue = VALID_TABS.includes(tabParam as TabValue) ? (tabParam as TabValue) : 'topics'
+
+  const handleTabChange = useCallback((value: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('tab', value)
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  }, [searchParams, router, pathname])
 
   const StatusIcon = statusConfig[cluster.status].icon
   const statusCfg = statusConfig[cluster.status]
@@ -176,7 +193,7 @@ export function ClusterDetailClient({
 
       {/* Main content - only show when active or read_only */}
       {(cluster.status === 'active' || cluster.status === 'read_only') && (
-        <Tabs defaultValue="topics" className="space-y-4">
+        <Tabs value={currentTab} onValueChange={handleTabChange} className="space-y-4">
           <TabsList>
             <TabsTrigger value="topics">
               <Database className="h-4 w-4 mr-2" />

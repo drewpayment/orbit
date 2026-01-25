@@ -9,7 +9,7 @@ Orbit is a multi-tenant SaaS Internal Developer Portal (IDP) that provides centr
 - **Frontend**: Payload 3.0 CMS with Next.js 15 (TypeScript, React 19)
 - **Backend Services**: Go 1.21+ microservices communicating via gRPC
 - **Workflow Engine**: Temporal for durable, long-running operations
-- **Data Layer**: PostgreSQL (production), SQLite (dev), Redis (caching), MeiliSearch (search), MinIO/S3 (storage)
+- **Data Layer**: MongoDB (Payload CMS), PostgreSQL (Temporal), Redis (caching), MeiliSearch (search), MinIO/S3 (storage)
 
 ## Development Commands
 
@@ -186,16 +186,16 @@ The Temporal server runs on port 7233, with the UI on port 8080.
 ### Frontend (orbit-www)
 
 - Built on **Payload 3.0** with Next.js 15 (App Router)
-- Uses SQLite for local development, PostgreSQL for production
+- Uses MongoDB for data storage (via Payload's MongoDB adapter)
 - Payload collections define the CMS data model
 - Uses generated TypeScript clients to call backend gRPC services
 - Testing: Vitest for unit/integration tests, Playwright for E2E
 
 ### Database & Migrations
 
-- **Frontend database**: Managed by Payload CMS (migrations handled automatically)
+- **Payload CMS database**: MongoDB (runs on port 27017 via Docker)
+- **Temporal database**: PostgreSQL (port 5432)
 - **Go services**: Each service manages its own database schema (migrations TBD based on future implementation)
-- Development uses local PostgreSQL via Docker (ports: 5432 for Temporal, 5433 for application)
 
 ### Testing Strategy
 
@@ -381,8 +381,8 @@ Historical planning artifacts from pre-superpowers workflow. See `specs/README.m
   - 3000: Frontend (Next.js)
   - 5050: Orbit Container Registry
   - 5432: Temporal PostgreSQL
-  - 5433: Application PostgreSQL
   - 6379: Redis
+  - 27017: MongoDB (Payload CMS)
   - 7233: Temporal gRPC
   - 8080: Temporal UI
   - 8083: Redpanda Console
