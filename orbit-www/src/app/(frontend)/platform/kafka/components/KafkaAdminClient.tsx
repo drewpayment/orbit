@@ -7,6 +7,11 @@ import type {
   KafkaClusterConfig,
   KafkaEnvironmentMappingConfig,
 } from '@/app/actions/kafka-admin'
+import type {
+  VirtualClusterConfig,
+  CredentialConfig,
+  GatewayStatus,
+} from '@/app/actions/bifrost-admin'
 
 // Import tab components
 import { ProvidersTab } from './ProvidersTab'
@@ -16,11 +21,16 @@ import { ProviderDetail } from './ProviderDetail'
 import { ProviderForm, type ProviderFormData } from './ProviderForm'
 import { ClusterDetail } from './ClusterDetail'
 import { MappingForm } from './MappingForm'
+import { GatewayTab } from './GatewayTab'
 
 interface KafkaAdminClientProps {
   initialProviders: KafkaProviderConfig[]
   initialClusters: KafkaClusterConfig[]
   initialMappings: KafkaEnvironmentMappingConfig[]
+  initialVirtualClusters?: VirtualClusterConfig[]
+  initialCredentials?: CredentialConfig[]
+  initialGatewayStatus?: GatewayStatus | null
+  gatewayConnectionError?: string
 }
 
 type PanelContent = 'list' | 'provider-detail' | 'cluster-detail' | 'cluster-form' | 'mapping-form'
@@ -30,6 +40,10 @@ export function KafkaAdminClient({
   initialProviders,
   initialClusters,
   initialMappings,
+  initialVirtualClusters = [],
+  initialCredentials = [],
+  initialGatewayStatus = null,
+  gatewayConnectionError,
 }: KafkaAdminClientProps) {
   // Default to providers tab if no clusters exist
   const defaultTab = initialClusters.length === 0 ? 'providers' : 'clusters'
@@ -506,6 +520,14 @@ export function KafkaAdminClient({
               </span>
             )}
           </TabsTrigger>
+          <TabsTrigger value="gateway">
+            Gateway
+            {initialVirtualClusters.length > 0 && (
+              <span className="ml-2 text-xs bg-muted px-2 py-0.5 rounded-full">
+                {initialVirtualClusters.length}
+              </span>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="clusters" className="mt-6">
@@ -533,6 +555,15 @@ export function KafkaAdminClient({
             onSelectProvider={showProviderDetail}
             onAddProvider={handleAddProvider}
             onRefresh={refreshProviders}
+          />
+        </TabsContent>
+
+        <TabsContent value="gateway" className="mt-6">
+          <GatewayTab
+            initialVirtualClusters={initialVirtualClusters}
+            initialCredentials={initialCredentials}
+            initialStatus={initialGatewayStatus}
+            connectionError={gatewayConnectionError}
           />
         </TabsContent>
       </Tabs>
