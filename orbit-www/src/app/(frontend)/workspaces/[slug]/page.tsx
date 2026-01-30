@@ -15,6 +15,7 @@ import { headers } from 'next/headers'
 import { RegistryQuotaWarning } from '@/components/features/workspace/RegistryQuotaWarning'
 import {
   WorkspaceApplicationsCard,
+  WorkspaceAPIsCard,
   WorkspaceRegistriesCard,
   WorkspaceRecentDocsCard,
   WorkspaceQuickLinksCard,
@@ -65,6 +66,7 @@ export default async function WorkspacePage({ params }: PageProps) {
     membershipStatus,
     spacesResult,
     appsResult,
+    apisResult,
     registryImagesResult,
     virtualClusterCountResult,
     topicCountResult,
@@ -97,6 +99,14 @@ export default async function WorkspacePage({ params }: PageProps) {
       sort: '-latestBuild.builtAt',
       limit: 10,
       depth: 1,
+    }),
+    // Fetch API schemas
+    payload.find({
+      collection: 'api-schemas',
+      where: { workspace: { equals: workspace.id } },
+      sort: '-updatedAt',
+      limit: 10,
+      depth: 0,
     }),
     // Fetch registry images (overrideAccess needed since server component has no user session)
     payload.find({
@@ -257,9 +267,10 @@ export default async function WorkspacePage({ params }: PageProps) {
 
             {/* 3-Column Dashboard Layout */}
             <div className="grid gap-6 lg:grid-cols-[1fr_1fr_280px]">
-              {/* Left Column - Applications */}
+              {/* Left Column - Applications + APIs */}
               <div className="space-y-6">
                 <WorkspaceApplicationsCard apps={appsResult.docs} />
+                <WorkspaceAPIsCard apis={apisResult.docs} workspaceSlug={workspace.slug} />
               </div>
 
               {/* Middle Column - Kafka Overview + Registries + Recent Docs */}

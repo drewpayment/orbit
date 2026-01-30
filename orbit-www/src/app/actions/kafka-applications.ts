@@ -239,7 +239,8 @@ export async function listApplications(
     // Group virtual clusters by application
     const vcByApp = new Map<string, typeof virtualClusters.docs>()
     for (const vc of virtualClusters.docs) {
-      const appId = typeof vc.application === 'string' ? vc.application : vc.application.id
+      const appId = typeof vc.application === 'string' ? vc.application : vc.application?.id
+      if (!appId) continue
       if (!vcByApp.has(appId)) {
         vcByApp.set(appId, [])
       }

@@ -58,6 +58,9 @@ import {
   KafkaOffsetCheckpoints,
 } from './collections/kafka'
 
+// API Catalog collections
+import { APISchemas, APISchemaVersions } from './collections/api-catalog'
+
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
@@ -115,6 +118,9 @@ export default buildConfig({
     KafkaLineageEdge,
     KafkaLineageSnapshot,
     KafkaOffsetCheckpoints,
+    // API Catalog collections
+    APISchemas,
+    APISchemaVersions,
   ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',

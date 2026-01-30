@@ -36,7 +36,7 @@ export function WorkspaceApplicationsCard({
   apps,
 }: WorkspaceApplicationsCardProps) {
   return (
-    <Card className="h-full">
+    <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <Link href="/apps" className="flex items-center gap-2 hover:text-foreground/80 transition-colors">

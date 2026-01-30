@@ -1,6 +1,7 @@
 export { WorkspaceQuickLinksCard } from './WorkspaceQuickLinksCard'
 export { WorkspaceMembersCardSimple } from './WorkspaceMembersCardSimple'
 export { WorkspaceApplicationsCard } from './WorkspaceApplicationsCard'
+export { WorkspaceAPIsCard } from './WorkspaceAPIsCard'
 export { WorkspaceRegistriesCard } from './WorkspaceRegistriesCard'
 export { WorkspaceRecentDocsCard } from './WorkspaceRecentDocsCard'
 export { WorkspaceKnowledgeSection } from './WorkspaceKnowledgeSection'

@@ -93,9 +93,10 @@
     "sharp": "0.34.2",
     "shiki": "^3.15.0",
     "sonner": "^2.0.7",
+    "swagger-ui-react": "^5.31.0",
     "tailwind-merge": "^3.3.1",
     "tippy.js": "^6.3.7",
-    "yaml": "^2.8.1",
+    "yaml": "^2.8.2",
     "zod": "^4.1.11"
   },
   "devDependencies": {
@@ -110,6 +111,7 @@
     "@types/node": "^22.5.4",
     "@types/react": "19.1.8",
     "@types/react-dom": "19.1.6",
+    "@types/swagger-ui-react": "^5.18.0",
     "@vitejs/plugin-react": "4.5.2",
     "autoprefixer": "^10.4.21",
     "eslint": "^9.16.0",

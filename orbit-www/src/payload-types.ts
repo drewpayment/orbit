@@ -112,6 +112,8 @@ export interface Config {
     'kafka-lineage-edges': KafkaLineageEdge;
     'kafka-lineage-snapshots': KafkaLineageSnapshot;
     'kafka-offset-checkpoints': KafkaOffsetCheckpoint;
+    'api-schemas': ApiSchema;
+    'api-schema-versions': ApiSchemaVersion;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -163,6 +165,8 @@ export interface Config {
     'kafka-lineage-edges': KafkaLineageEdgesSelect<false> | KafkaLineageEdgesSelect<true>;
     'kafka-lineage-snapshots': KafkaLineageSnapshotsSelect<false> | KafkaLineageSnapshotsSelect<true>;
     'kafka-offset-checkpoints': KafkaOffsetCheckpointsSelect<false> | KafkaOffsetCheckpointsSelect<true>;
+    'api-schemas': ApiSchemasSelect<false> | ApiSchemasSelect<true>;
+    'api-schema-versions': ApiSchemaVersionsSelect<false> | ApiSchemaVersionsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -2770,6 +2774,151 @@ export interface KafkaOffsetCheckpoint {
   createdAt: string;
 }
 /**
+ * OpenAPI schemas registered in the API catalog
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "api-schemas".
+ */
+export interface ApiSchema {
+  id: string;
+  /**
+   * Display name for the API
+   */
+  name: string;
+  /**
+   * URL-friendly identifier (auto-generated from name)
+   */
+  slug: string;
+  /**
+   * Brief description of what this API does
+   */
+  description?: string | null;
+  /**
+   * Owning workspace
+   */
+  workspace: string | Workspace;
+  /**
+   * Who can view this API in the catalog
+   */
+  visibility: 'private' | 'workspace' | 'public';
+  /**
+   * Schema format (OpenAPI supported)
+   */
+  schemaType: 'openapi';
+  /**
+   * Current version string (from OpenAPI info.version)
+   */
+  currentVersion?: string | null;
+  /**
+   * OpenAPI specification content
+   */
+  rawContent: string;
+  status: 'draft' | 'published' | 'deprecated';
+  /**
+   * Tags for discovery and filtering
+   */
+  tags?:
+    | {
+        tag: string;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * API maintainer name
+   */
+  contactName?: string | null;
+  /**
+   * API maintainer email
+   */
+  contactEmail?: string | null;
+  /**
+   * Base URLs from the OpenAPI spec
+   */
+  serverUrls?:
+    | {
+        url: string;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * Linked application/repository (optional)
+   */
+  repository?: (string | null) | App;
+  /**
+   * Path to OpenAPI spec in repository (e.g., docs/openapi.yaml)
+   */
+  repositoryPath?: string | null;
+  /**
+   * User who created this API schema
+   */
+  createdBy: string | User;
+  /**
+   * User who last edited this API schema
+   */
+  lastEditedBy?: (string | null) | User;
+  /**
+   * Title from OpenAPI info.title
+   */
+  specTitle?: string | null;
+  /**
+   * Description from OpenAPI info.description
+   */
+  specDescription?: string | null;
+  /**
+   * Number of endpoints in the spec
+   */
+  endpointCount?: number | null;
+  /**
+   * Latest version number (for ordering)
+   */
+  latestVersionNumber?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Version history for API schemas
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "api-schema-versions".
+ */
+export interface ApiSchemaVersion {
+  id: string;
+  /**
+   * Parent API schema
+   */
+  schema: string | ApiSchema;
+  /**
+   * Workspace (denormalized for access control)
+   */
+  workspace: string | Workspace;
+  /**
+   * Version string (from OpenAPI info.version or auto-generated)
+   */
+  version: string;
+  /**
+   * Monotonic version number for ordering
+   */
+  versionNumber: number;
+  /**
+   * OpenAPI specification content at this version
+   */
+  rawContent: string;
+  /**
+   * SHA-256 hash for change detection
+   */
+  contentHash?: string | null;
+  /**
+   * Optional notes describing changes in this version
+   */
+  releaseNotes?: string | null;
+  /**
+   * User who created this version
+   */
+  createdBy: string | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
@@ -2955,6 +3104,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'kafka-offset-checkpoints';
         value: string | KafkaOffsetCheckpoint;
+      } | null)
+    | ({
+        relationTo: 'api-schemas';
+        value: string | ApiSchema;
+      } | null)
+    | ({
+        relationTo: 'api-schema-versions';
+        value: string | ApiSchemaVersion;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -4083,6 +4240,61 @@ export interface KafkaOffsetCheckpointsSelect<T extends boolean = true> {
   virtualCluster?: T;
   checkpointedAt?: T;
   offsets?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "api-schemas_select".
+ */
+export interface ApiSchemasSelect<T extends boolean = true> {
+  name?: T;
+  slug?: T;
+  description?: T;
+  workspace?: T;
+  visibility?: T;
+  schemaType?: T;
+  currentVersion?: T;
+  rawContent?: T;
+  status?: T;
+  tags?:
+    | T
+    | {
+        tag?: T;
+        id?: T;
+      };
+  contactName?: T;
+  contactEmail?: T;
+  serverUrls?:
+    | T
+    | {
+        url?: T;
+        id?: T;
+      };
+  repository?: T;
+  repositoryPath?: T;
+  createdBy?: T;
+  lastEditedBy?: T;
+  specTitle?: T;
+  specDescription?: T;
+  endpointCount?: T;
+  latestVersionNumber?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "api-schema-versions_select".
+ */
+export interface ApiSchemaVersionsSelect<T extends boolean = true> {
+  schema?: T;
+  workspace?: T;
+  version?: T;
+  versionNumber?: T;
+  rawContent?: T;
+  contentHash?: T;
+  releaseNotes?: T;
+  createdBy?: T;
   updatedAt?: T;
   createdAt?: T;
 }

@@ -1,5 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { BookOpen, LayoutTemplate, Box, ChevronRight } from 'lucide-react'
+import { BookOpen, LayoutTemplate, Box, FileCode, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
 
 interface WorkspaceQuickLinksCardProps {
@@ -8,6 +8,11 @@ interface WorkspaceQuickLinksCardProps {
 
 export function WorkspaceQuickLinksCard({ workspaceSlug }: WorkspaceQuickLinksCardProps) {
   const links = [
+    {
+      label: 'API Specifications',
+      href: `/workspaces/${encodeURIComponent(workspaceSlug)}/apis`,
+      icon: FileCode,
+    },
     {
       label: 'All Knowledge Spaces',
       href: `/workspaces/${encodeURIComponent(workspaceSlug)}/knowledge`,

@@ -5,6 +5,7 @@ import {
   BookOpen,
   Building2,
   Command,
+  FileCode,
   LayoutDashboard,
   LayoutTemplate,
   Layers,
@@ -57,6 +58,12 @@ const navMainData = [
       title: "Applications",
       url: "/apps",
       icon: Layers,
+      items: [],
+    },
+    {
+      title: "API Catalog",
+      url: "/catalog/apis",
+      icon: FileCode,
       items: [],
     },
     {
