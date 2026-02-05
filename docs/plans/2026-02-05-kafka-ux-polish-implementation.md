@@ -24,6 +24,7 @@
 | Our tests | 4/4 pass (kafka-applications) | No |
 | Overall tests | 23 pre-existing failures, 35 pass | No new failures |
 
+
 ---
 
 ## Task 1: Server Action - List Applications With Provisioning Issues
