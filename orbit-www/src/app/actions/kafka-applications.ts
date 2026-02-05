@@ -179,6 +179,25 @@ export interface ListApplicationsResult {
   error?: string
 }
 
+export interface ApplicationWithProvisioningIssue {
+  id: string
+  name: string
+  slug: string
+  workspaceId: string
+  workspaceSlug?: string
+  provisioningStatus: 'pending' | 'in_progress' | 'partial' | 'failed'
+  provisioningError?: string
+  provisioningDetails?: ProvisioningDetails
+  provisioningWorkflowId?: string
+  updatedAt: string
+}
+
+export interface ListProvisioningIssuesResult {
+  success: boolean
+  applications?: ApplicationWithProvisioningIssue[]
+  error?: string
+}
+
 export async function listApplications(
   input: ListApplicationsInput
 ): Promise<ListApplicationsResult> {
@@ -269,6 +288,81 @@ export async function listApplications(
   } catch (error) {
     console.error('Error listing applications:', error)
     return { success: false, error: 'Failed to list applications' }
+  }
+}
+
+/**
+ * Lists applications with provisioning issues (pending, in_progress, partial, or failed).
+ * Used by workspace and admin views to show applications that need attention.
+ */
+export async function listApplicationsWithProvisioningIssues(
+  workspaceId?: string
+): Promise<ListProvisioningIssuesResult> {
+  try {
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    })
+
+    if (!session?.user) {
+      return { success: false, error: 'Not authenticated' }
+    }
+
+    const payload = await getPayload({ config })
+
+    // Fetch applications with provisioning issues
+    // Build where conditions based on whether workspace filter is provided
+    const apps = workspaceId
+      ? await payload.find({
+          collection: 'kafka-applications',
+          where: {
+            and: [
+              { workspace: { equals: workspaceId } },
+              { status: { not_equals: 'deleted' } },
+              { provisioningStatus: { in: ['pending', 'in_progress', 'partial', 'failed'] } },
+            ],
+          },
+          depth: 1,
+          sort: '-updatedAt',
+          limit: 100,
+          overrideAccess: true,
+        })
+      : await payload.find({
+          collection: 'kafka-applications',
+          where: {
+            and: [
+              { status: { not_equals: 'deleted' } },
+              { provisioningStatus: { in: ['pending', 'in_progress', 'partial', 'failed'] } },
+            ],
+          },
+          depth: 1,
+          sort: '-updatedAt',
+          limit: 100,
+          overrideAccess: true,
+        })
+
+    const applications: ApplicationWithProvisioningIssue[] = apps.docs.map((app) => {
+      const workspace = typeof app.workspace === 'string' ? app.workspace : app.workspace
+      const workspaceIdValue = typeof workspace === 'string' ? workspace : workspace?.id
+      const workspaceSlugValue = typeof workspace === 'object' ? workspace?.slug : undefined
+
+      return {
+        id: app.id,
+        name: app.name,
+        slug: app.slug,
+        workspaceId: workspaceIdValue || '',
+        workspaceSlug: workspaceSlugValue,
+        provisioningStatus: (app.provisioningStatus || 'pending') as ApplicationWithProvisioningIssue['provisioningStatus'],
+        provisioningError: app.provisioningError || undefined,
+        provisioningDetails: app.provisioningDetails as ProvisioningDetails | undefined,
+        provisioningWorkflowId: app.provisioningWorkflowId || undefined,
+        updatedAt: app.updatedAt,
+      }
+    })
+
+    return { success: true, applications }
+  } catch (error) {
+    console.error('Error listing applications with provisioning issues:', error)
+    return { success: false, error: 'Failed to list applications with provisioning issues' }
   }
 }
 
