@@ -11,8 +11,8 @@ import {
   Layers,
   LifeBuoy,
   MessageSquare,
+  RadioTower,
   Settings2,
-  Server,
 } from "lucide-react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
@@ -21,7 +21,6 @@ import { usePlatformAdmin } from "@/hooks/usePlatformAdmin"
 
 import { NavMain } from "@/components/nav-main"
 import { NavPlatform, type NavPlatformItem } from "@/components/nav-platform"
-import { NavProjects } from "@/components/nav-projects"
 import { NavSecondary } from "@/components/nav-secondary"
 import { NavUser } from "@/components/nav-user"
 import {
@@ -123,7 +122,7 @@ const navPlatformData: NavPlatformItem[] = [
   {
     title: "Kafka",
     url: "/platform/kafka",
-    icon: Server,
+    icon: RadioTower,
     items: [
       {
         title: "Pending Approvals",
@@ -189,7 +188,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link href="/">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-full bg-sidebar-primary text-sidebar-primary-foreground">
                   <Command className="size-4" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
@@ -204,7 +203,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent>
         <NavMain items={navMainWithWorkspace} />
         <NavPlatform items={navPlatformData} isVisible={isPlatformAdmin} />
-        <NavProjects projects={[]} />
         <NavSecondary items={navSecondaryData} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>
