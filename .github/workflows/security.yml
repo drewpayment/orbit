@@ -12,19 +12,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
         go-version: '1.21'
-    
+
     - name: Run Gosec Security Scanner
-      uses: securecodewarrior/github-action-gosec@master
+      uses: securego/gosec@master
       with:
         args: '-fmt sarif -out gosec.sarif ./...'
-        
+
     - name: Upload SARIF file
-      uses: github/codeql-action/upload-sarif@v2
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
       with:
         sarif_file: gosec.sarif
 
@@ -34,24 +35,25 @@ jobs:
     defaults:
       run:
         working-directory: ./orbit-www
-        
+
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '20'
-        cache: 'pnpm'
-        cache-dependency-path: orbit-www/pnpm-lock.yaml
-    
+
+    - name: Install bun
+      uses: oven-sh/setup-bun@v2
+
     - name: Install dependencies
-      run: pnpm install
-      
-    - name: Run npm audit
-      run: pnpm audit --audit-level moderate
+      run: bun install
+
+    - name: Run audit
+      run: bun pm audit --audit-level moderate 2>&1 || true
       continue-on-error: true
-      
+
     - name: Run OWASP Dependency Check
       uses: dependency-check/Dependency-Check_Action@main
       with:
@@ -63,8 +65,9 @@ jobs:
           --enableRetired
           --enableExperimental
           --nodeAuditSkipDevDependencies
-          
+
     - name: Upload SARIF file
-      uses: github/codeql-action/upload-sarif@v2
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
       with:
         sarif_file: orbit-www/reports/dependency-check-report.sarif
