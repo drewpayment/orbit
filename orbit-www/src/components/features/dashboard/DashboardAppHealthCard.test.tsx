@@ -11,21 +11,21 @@ describe('DashboardAppHealthCard', () => {
       name: 'payment-service',
       status: 'healthy',
       workspace: { id: 'ws1', name: 'Engineering', slug: 'engineering' },
-      latestBuild: { version: 'v2.4.1' },
+      latestBuild: { imageTag: 'v2.4.1' },
     },
     {
       id: '2',
       name: 'user-auth-api',
       status: 'degraded',
       workspace: { id: 'ws2', name: 'Digital', slug: 'digital' },
-      latestBuild: { version: 'v1.8.0' },
+      latestBuild: { imageTag: 'v1.8.0' },
     },
     {
       id: '3',
       name: 'order-processor',
       status: 'healthy',
       workspace: { id: 'ws1', name: 'Engineering', slug: 'engineering' },
-      latestBuild: { version: 'v3.1.2' },
+      latestBuild: { imageTag: 'v3.1.2' },
     },
   ] as any[]
 
@@ -46,6 +46,12 @@ describe('DashboardAppHealthCard', () => {
     const healthyBadges = screen.getAllByText('healthy')
     expect(healthyBadges).toHaveLength(2)
     expect(screen.getByText('degraded')).toBeInTheDocument()
+  })
+
+  it('should render workspace name and version in metadata', () => {
+    render(<DashboardAppHealthCard apps={mockApps} />)
+    expect(screen.getAllByText(/Engineering/).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText(/v2\.4\.1/)).toBeInTheDocument()
   })
 
   it('should render empty state when no apps', () => {
