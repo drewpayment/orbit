@@ -9,6 +9,7 @@ import type { VirtualClusterConfig, CredentialConfig, GatewayStatus } from '@/ap
 import { VirtualClustersTab } from './VirtualClustersTab'
 import { CredentialsTab } from './CredentialsTab'
 import { GatewayStatusTab } from './GatewayStatusTab'
+import { ProvisioningTab } from './ProvisioningTab'
 
 interface GatewayTabProps {
   initialVirtualClusters: VirtualClusterConfig[]
@@ -128,6 +129,9 @@ export function GatewayTab({
           <TabsTrigger value="status">
             Status
           </TabsTrigger>
+          <TabsTrigger value="provisioning">
+            Provisioning
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="virtual-clusters" className="mt-6">
@@ -152,6 +156,10 @@ export function GatewayTab({
             status={status}
             onRefresh={refreshStatus}
           />
+        </TabsContent>
+
+        <TabsContent value="provisioning" className="mt-6">
+          <ProvisioningTab />
         </TabsContent>
       </Tabs>
     </div>

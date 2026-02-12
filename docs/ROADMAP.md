@@ -91,14 +91,17 @@ Orbit is an Internal Developer Portal (IDP) that gives platform teams self-servi
 
 **Effort:** 1 week per generator
 
-#### 2.4 Kafka UX Polish
-- [ ] Wire "Retry Provisioning" button to existing `retryVirtualClusterProvisioning()` 
-- [ ] Add error details modal for failed resources
+#### 2.4 Kafka UX Polish 🔄 IN PROGRESS
+- [x] Wire "Retry Provisioning" button to existing `retryVirtualClusterProvisioning()`
+- [x] Add error details modal for failed resources
+- [x] Add ProvisioningStatusBadge, ProvisioningAlert, ProvisioningTab components
+- [x] Integrate into workspace virtual clusters view and admin gateway view
 - [ ] Workflow history link to Temporal UI
+- [ ] Create PR and manual testing
 
-**Current state:** `retryVirtualClusterProvisioning()` server action exists, needs UI integration.
+**Current state:** All components implemented on branch `clawdbot/kafka-ux-polish-2.4`. Needs PR creation and manual testing. See `docs/plans/2026-02-05-kafka-ux-polish-implementation.md` for full status.
 
-**Effort:** 2-3 days
+**Effort:** ~1 hour remaining (PR + manual testing)
 
 ---
 
