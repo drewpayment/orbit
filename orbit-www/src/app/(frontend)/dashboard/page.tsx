@@ -54,13 +54,13 @@ export default async function DashboardPage() {
           limit: 10,
           depth: 1,
         }),
-        // Kafka topic count
+        // Kafka topic count (overrideAccess: server component has no user session for Kafka ACLs)
         payload.count({
           collection: 'kafka-topics',
           where: workspaceFilter,
           overrideAccess: true,
         }),
-        // Virtual cluster count
+        // Virtual cluster count (overrideAccess: server component has no user session for Kafka ACLs)
         payload.count({
           collection: 'kafka-virtual-clusters',
           where: workspaceFilter,
@@ -76,7 +76,7 @@ export default async function DashboardPage() {
           collection: 'api-schemas',
           where: { ...workspaceFilter, status: { equals: 'published' } },
         }),
-        // Recent Kafka topics (for activity)
+        // Recent Kafka topics (for activity; overrideAccess: server component has no user session for Kafka ACLs)
         payload.find({
           collection: 'kafka-topics',
           where: workspaceFilter,
