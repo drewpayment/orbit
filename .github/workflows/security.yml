@@ -16,7 +16,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.21'
+        go-version: '1.24'
         cache: true
 
     - name: Install govulncheck
@@ -26,7 +26,7 @@ jobs:
       run: |
         set +e
         failed=0
-        for mod in $(find . -name 'go.mod' -not -path './proto/*' -not -path './.worktrees/*'); do
+        for mod in $(find ./services ./temporal-workflows -name 'go.mod'); do
           dir=$(dirname "$mod")
           echo "=== Checking $dir ==="
           (cd "$dir" && govulncheck ./...) || failed=1
