@@ -17,21 +17,21 @@ jobs:
       uses: actions/setup-go@v5
       with:
         go-version: '1.21'
+        cache: true
 
-    - name: Install gosec
-      run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+    - name: Install govulncheck
+      run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
-    - name: Run Gosec across all Go modules
+    - name: Run govulncheck across all Go modules
       run: |
         set +e
-        for mod in $(find . -name 'go.mod' -not -path './proto/*'); do
+        failed=0
+        for mod in $(find . -name 'go.mod' -not -path './proto/*' -not -path './.worktrees/*'); do
           dir=$(dirname "$mod")
-          echo "=== Scanning $dir ==="
-          cd "$dir"
-          gosec ./... 2>&1 || true
-          cd "$GITHUB_WORKSPACE"
+          echo "=== Checking $dir ==="
+          (cd "$dir" && govulncheck ./...) || failed=1
         done
-        echo "Gosec scan complete"
+        exit $failed
 
   security-frontend:
     name: Frontend Security Scan
