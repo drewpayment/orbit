@@ -91,14 +91,15 @@ Orbit is an Internal Developer Portal (IDP) that gives platform teams self-servi
 
 **Effort:** 1 week per generator
 
-#### 2.4 Kafka UX Polish
-- [ ] Wire "Retry Provisioning" button to existing `retryVirtualClusterProvisioning()` 
-- [ ] Add error details modal for failed resources
-- [ ] Workflow history link to Temporal UI
+#### 2.4 Kafka UX Polish ✅ COMPLETE
+- [x] Wire "Retry Provisioning" button to existing `retryVirtualClusterProvisioning()`
+- [x] Add error details modal for failed resources
+- [x] Add ProvisioningStatusBadge, ProvisioningAlert, ProvisioningTab components
+- [x] Integrate into workspace virtual clusters view and admin gateway view
+- [x] Create PR and manual testing
+- [ ] Workflow history link to Temporal UI (deferred — nice-to-have)
 
-**Current state:** `retryVirtualClusterProvisioning()` server action exists, needs UI integration.
-
-**Effort:** 2-3 days
+**PR:** https://github.com/drewpayment/orbit/pull/25
 
 ---
 
