@@ -667,7 +667,10 @@ export async function resolveManifestConflict(
       collection: 'apps',
       id: appId,
       data: {
-        ...fields,
+        name: fields.name,
+        description: fields.description,
+        ...(fields.healthConfig && { healthConfig: fields.healthConfig }),
+        ...(fields.buildConfig && { buildConfig: fields.buildConfig }),
         lastSyncAt: new Date().toISOString(),
         lastSyncDirection: 'inbound',
         conflictDetected: false,
