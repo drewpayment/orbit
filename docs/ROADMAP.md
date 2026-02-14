@@ -22,7 +22,7 @@ Orbit is an Internal Developer Portal (IDP) that gives platform teams self-servi
 | Temporal Workflows | 🟢 85% | Comprehensive workflow/activity coverage for Kafka operations |
 | Knowledge Management | 🟢 85% | Spaces, hierarchical pages, tree sidebar with drag-drop, breadcrumbs, Lexical editor, MeiliSearch |
 | Secret Management | 🟢 100% | AES-256-GCM encryption at rest for all sensitive fields |
-| Repository & Templates | 🟡 55% | GitHub App integration, template instantiation — GitOps sync missing |
+| Repository & Templates | 🟢 75% | GitHub App integration, template instantiation, `.orbit.yaml` GitOps manifest sync |
 | Application Lifecycle | 🟡 50% | Lineage graph exists, deployment generators schema only |
 | API Catalog | 🔴 15% | Service scaffold exists, minimal UI |
 | Build Service | 🔴 10% | Dockerfile exists, Railpack integration incomplete |
@@ -59,16 +59,14 @@ Orbit is an Internal Developer Portal (IDP) that gives platform teams self-servi
 **Timeline:** 4-6 weeks
 **Goal:** Complete the core IDP value proposition
 
-#### 2.1 GitOps Manifest Sync (`.orbit.yaml`)
-- [ ] Define manifest schema and validation
-- [ ] Implement `orbit-primary` mode: UI changes auto-commit to repo
-- [ ] Implement `manifest-primary` mode: GitHub webhook detects manifest changes
-- [ ] Conflict resolution when DB and manifest diverge
-- [ ] UI to toggle sync mode per application
+#### 2.1 GitOps Manifest Sync (`.orbit.yaml`) ✅ COMPLETE
+- [x] Define manifest schema and validation (`lib/app-manifest.ts` — parser, serializer, mapper)
+- [x] Bidirectional sync: UI changes auto-commit to repo (`afterChange` hook), repo pushes update Orbit (webhook handler)
+- [x] Conflict resolution when DB and manifest diverge (detect + resolve UI)
+- [x] Export to Repository action, Sync Status Badge, Conflict Banner UI
+- [x] Webhook registration/cleanup lifecycle
 
-**Current state:** `lastManifestSha` field exists in Apps.ts, no sync logic implemented.
-
-**Effort:** 1-2 weeks
+**PR:** https://github.com/drewpayment/orbit/pull/27
 
 #### 2.2 API Catalog Integration
 - [ ] Build OpenAPI/AsyncAPI import UI
@@ -234,5 +232,6 @@ Orbit is an Internal Developer Portal (IDP) that gives platform teams self-servi
 
 | Date | Change |
 |------|--------|
+| 2026-02-14 | Marked 2.1 GitOps Manifest Sync complete (PR #27); updated Repository & Templates maturity to 75% |
 | 2026-01-29 | Audit against codebase: marked 1.1, 1.3, 3.1 complete; updated current state notes |
 | 2026-01-29 | Initial roadmap created from codebase analysis |

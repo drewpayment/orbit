@@ -24,9 +24,27 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }))
 
+vi.mock('@/lib/app-manifest', () => ({
+  serializeAppManifest: vi.fn(() => 'apiVersion: orbit.dev/v1\nkind: Application\n'),
+}))
+
+vi.mock('@/lib/github-manifest', () => ({
+  parseGitHubUrl: vi.fn((url: string) => {
+    const match = url.match(/github\.com\/([^/]+)\/([^/.]+)/)
+    if (!match) return null
+    return { owner: match[1], repo: match[2] }
+  }),
+  generateWebhookSecret: vi.fn(() => 'mock-webhook-secret'),
+}))
+
+vi.mock('@/lib/github/octokit', () => ({
+  getInstallationOctokit: vi.fn(),
+}))
+
 import { getPayload } from 'payload'
 import { auth } from '@/lib/auth'
-import { importRepository, updateAppSettings, deleteApp } from '../apps'
+import { getInstallationOctokit } from '@/lib/github/octokit'
+import { importRepository, updateAppSettings, deleteApp, exportAppManifest, resolveManifestConflict, disableManifestSync } from '../apps'
 
 describe('importRepository', () => {
   beforeEach(() => {
@@ -267,5 +285,59 @@ describe('deleteApp', () => {
       collection: 'apps',
       id: 'app-1',
     })
+  })
+})
+
+describe('exportAppManifest', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('should throw Not authenticated when no session', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+
+    await expect(exportAppManifest('app-1')).rejects.toThrow('Not authenticated')
+  })
+
+  it('should throw when app has no repository URL or installationId', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue({
+      user: { id: 'user-1' },
+      session: {},
+    } as any)
+
+    const mockPayload = {
+      findByID: vi.fn().mockResolvedValue({
+        id: 'app-1',
+        name: 'my-app',
+        repository: {},
+      }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    await expect(exportAppManifest('app-1')).rejects.toThrow(
+      'App must have a linked repository with a GitHub installation to export a manifest',
+    )
+  })
+})
+
+describe('resolveManifestConflict', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('throws if user is not authenticated', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValueOnce(null)
+    await expect(resolveManifestConflict('app-id', 'keep-orbit')).rejects.toThrow('Not authenticated')
+  })
+})
+
+describe('disableManifestSync', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('throws if user is not authenticated', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValueOnce(null)
+    await expect(disableManifestSync('app-id')).rejects.toThrow('Not authenticated')
   })
 })
