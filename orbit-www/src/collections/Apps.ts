@@ -246,20 +246,80 @@ export const Apps: CollectionConfig = {
       ],
     },
     {
-      name: 'syncMode',
-      type: 'select',
-      defaultValue: 'orbit-primary',
-      options: [
-        { label: 'Orbit Primary', value: 'orbit-primary' },
-        { label: 'Manifest Primary', value: 'manifest-primary' },
-      ],
+      name: 'syncEnabled',
+      type: 'checkbox',
+      defaultValue: false,
+      admin: {
+        description: 'When enabled, app config syncs bidirectionally with .orbit.yaml in the linked repository',
+      },
     },
     {
       name: 'manifestSha',
       type: 'text',
       admin: {
         readOnly: true,
-        description: 'SHA of last synced .orbit.yaml',
+        description: 'SHA of last synced .orbit.yaml commit',
+      },
+    },
+    {
+      name: 'manifestPath',
+      type: 'text',
+      defaultValue: '.orbit.yaml',
+      admin: {
+        description: 'Path to the manifest file within the repository',
+      },
+    },
+    {
+      name: 'lastSyncAt',
+      type: 'date',
+      admin: {
+        readOnly: true,
+        description: 'Timestamp of last successful sync',
+      },
+    },
+    {
+      name: 'lastSyncDirection',
+      type: 'select',
+      options: [
+        { label: 'Inbound (repo → Orbit)', value: 'inbound' },
+        { label: 'Outbound (Orbit → repo)', value: 'outbound' },
+      ],
+      admin: {
+        readOnly: true,
+      },
+    },
+    {
+      name: 'conflictDetected',
+      type: 'checkbox',
+      defaultValue: false,
+      admin: {
+        readOnly: true,
+        description: 'Set when both sides changed since last sync',
+      },
+    },
+    {
+      name: 'conflictManifestContent',
+      type: 'textarea',
+      admin: {
+        hidden: true,
+        description: 'Stores incoming manifest YAML during a conflict',
+      },
+    },
+    {
+      name: 'webhookId',
+      type: 'text',
+      admin: {
+        readOnly: true,
+        hidden: true,
+        description: 'GitHub webhook ID for cleanup',
+      },
+    },
+    {
+      name: 'webhookSecret',
+      type: 'text',
+      admin: {
+        hidden: true,
+        description: 'Per-app webhook secret (encrypted)',
       },
     },
     {

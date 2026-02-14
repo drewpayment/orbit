@@ -65,7 +65,7 @@ export async function createAppFromTemplate(input: CreateAppFromTemplateInput) {
           instantiatedAt: new Date().toISOString(),
         },
         status: 'unknown',
-        syncMode: 'orbit-primary',
+        syncEnabled: false,
       },
     })
 
@@ -138,7 +138,7 @@ export async function importRepository(input: ImportRepositoryInput) {
           type: 'imported',
         },
         status: 'unknown',
-        syncMode: 'orbit-primary',
+        syncEnabled: false,
       },
     })
 
@@ -262,7 +262,7 @@ export async function createManualApp(input: CreateManualAppInput) {
           type: 'manual',
         },
         status: 'unknown',
-        syncMode: 'orbit-primary',
+        syncEnabled: false,
         healthConfig: {
           url: input.healthConfig?.url,
           interval: input.healthConfig?.interval || 60,
