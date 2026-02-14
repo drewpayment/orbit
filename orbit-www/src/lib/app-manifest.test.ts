@@ -102,7 +102,7 @@ describe('serializeAppManifest', () => {
         url: '/health',
         interval: 60,
         timeout: 5,
-        method: 'GET',
+        method: 'GET' as const,
         expectedStatus: 200,
       },
       buildConfig: {
@@ -139,7 +139,7 @@ describe('mapManifestToAppFields', () => {
       apiVersion: 'orbit.dev/v1',
       kind: 'Application',
       metadata: { name: 'test', description: 'desc' },
-      health: { endpoint: '/health', interval: 30, timeout: 10, method: 'POST', expectedStatus: 201 },
+      health: { endpoint: '/health', interval: 30, timeout: 10, method: 'POST' as const, expectedStatus: 201 },
       build: { language: 'go', languageVersion: '1.21', framework: 'fiber', buildCommand: 'go build', startCommand: './app', dockerfilePath: 'Dockerfile.prod' },
     }
     const fields = mapManifestToAppFields(manifest)
@@ -157,7 +157,7 @@ describe('mapAppFieldsToManifest', () => {
     const fields = {
       name: 'test',
       description: 'desc',
-      healthConfig: { url: '/health', interval: 30, timeout: 10, method: 'POST', expectedStatus: 201 },
+      healthConfig: { url: '/health', interval: 30, timeout: 10, method: 'POST' as const, expectedStatus: 201 },
       buildConfig: { language: 'go', languageVersion: '1.21', framework: 'fiber', buildCommand: 'go build', startCommand: './app', dockerfilePath: 'Dockerfile.prod' },
     }
     const manifest = mapAppFieldsToManifest(fields)

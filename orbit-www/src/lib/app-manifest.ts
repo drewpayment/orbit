@@ -31,6 +31,9 @@ export interface ManifestValidationError {
   message: string
 }
 
+/** Valid HTTP methods for health checks (matches Payload App type) */
+type HealthCheckMethod = 'GET' | 'HEAD' | 'POST' | null
+
 /** Payload App DB fields relevant to manifest sync */
 export interface AppSyncFields {
   name: string
@@ -39,7 +42,7 @@ export interface AppSyncFields {
     url?: string | null
     interval?: number | null
     timeout?: number | null
-    method?: string | null
+    method?: HealthCheckMethod
     expectedStatus?: number | null
   } | null
   buildConfig?: {
@@ -149,11 +152,15 @@ export function mapManifestToAppFields(manifest: AppManifest): Partial<AppSyncFi
   }
 
   if (manifest.health) {
+    const method = manifest.health.method?.toUpperCase()
+    const validMethod: HealthCheckMethod =
+      method === 'GET' || method === 'HEAD' || method === 'POST' ? method : null
+
     fields.healthConfig = {
       url: manifest.health.endpoint,
       interval: manifest.health.interval,
       timeout: manifest.health.timeout,
-      method: manifest.health.method,
+      method: validMethod,
       expectedStatus: manifest.health.expectedStatus,
     }
   }
