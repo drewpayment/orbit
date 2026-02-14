@@ -6,6 +6,9 @@ import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { builtInGenerators } from '@/lib/seeds/deployment-generators'
+import { serializeAppManifest } from '@/lib/app-manifest'
+import { generateWebhookSecret, parseGitHubUrl } from '@/lib/github-manifest'
+import { getInstallationOctokit } from '@/lib/github/octokit'
 
 interface CreateAppFromTemplateInput {
   name: string
@@ -491,4 +494,100 @@ export async function deleteApp(
     const errorMessage = error instanceof Error ? error.message : 'Failed to delete app'
     return { success: false, error: errorMessage }
   }
+}
+
+export async function exportAppManifest(appId: string): Promise<void> {
+  'use server'
+
+  const reqHeaders = await headers()
+  const session = await auth.api.getSession({ headers: reqHeaders })
+  if (!session) throw new Error('Not authenticated')
+
+  const payload = await getPayload({ config })
+  const app = await payload.findByID({ collection: 'apps', id: appId, depth: 0 })
+
+  const repoUrl = app.repository?.url
+  const installationId = app.repository?.installationId
+  if (!repoUrl || !installationId) {
+    throw new Error('App must have a linked repository with a GitHub installation to export a manifest')
+  }
+
+  const parsed = parseGitHubUrl(repoUrl)
+  if (!parsed) throw new Error('Invalid repository URL')
+
+  const yamlContent = serializeAppManifest({
+    name: app.name,
+    description: app.description,
+    healthConfig: app.healthConfig,
+    buildConfig: app.buildConfig,
+  })
+
+  const octokit = await getInstallationOctokit(Number(installationId))
+  const manifestPath = app.manifestPath || '.orbit.yaml'
+  const branch = app.repository?.branch || 'main'
+
+  // Check if file already exists (need SHA for update)
+  let existingSha: string | undefined
+  try {
+    const { data } = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+      owner: parsed.owner,
+      repo: parsed.repo,
+      path: manifestPath,
+      ref: branch,
+    })
+    if ('sha' in data) {
+      existingSha = data.sha
+    }
+  } catch {
+    // File doesn't exist yet
+  }
+
+  // Commit the manifest
+  const { data: commitData } = await octokit.request('PUT /repos/{owner}/{repo}/contents/{path}', {
+    owner: parsed.owner,
+    repo: parsed.repo,
+    path: manifestPath,
+    message: 'chore: export .orbit.yaml from Orbit',
+    content: Buffer.from(yamlContent).toString('base64'),
+    branch,
+    ...(existingSha && { sha: existingSha }),
+  })
+
+  const commitSha = commitData.commit.sha
+
+  // Register webhook
+  const webhookSecret = generateWebhookSecret()
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const webhookUrl = `${appUrl}/api/webhooks/github/app-sync`
+
+  const { data: hook } = await octokit.request('POST /repos/{owner}/{repo}/hooks', {
+    owner: parsed.owner,
+    repo: parsed.repo,
+    name: 'web',
+    active: true,
+    events: ['push'],
+    config: {
+      url: webhookUrl,
+      content_type: 'json',
+      secret: webhookSecret,
+      insecure_ssl: '0',
+    },
+  })
+
+  // Update app with sync state
+  await payload.update({
+    collection: 'apps',
+    id: appId,
+    data: {
+      syncEnabled: true,
+      manifestSha: commitSha,
+      manifestPath,
+      lastSyncAt: new Date().toISOString(),
+      lastSyncDirection: 'outbound',
+      webhookId: String(hook.id),
+      webhookSecret,
+    },
+  })
+
+  revalidatePath(`/apps/${appId}`)
 }
