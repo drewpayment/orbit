@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getPayload } from 'payload'
 import config from '@payload-config'
@@ -9,6 +9,7 @@ import { WorkspaceAPIsClient } from './workspace-apis-client'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
+import { getCurrentUser } from '@/lib/auth/session'
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -16,6 +17,12 @@ interface PageProps {
 
 export default async function WorkspaceAPIsPage({ params }: PageProps) {
   const { slug } = await params
+  const user = await getCurrentUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
   const payload = await getPayload({ config })
 
   // Get workspace by slug
