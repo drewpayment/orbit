@@ -1,4 +1,4 @@
-import { SchemaType } from './grpc/api-catalog-client';
+import { SchemaType } from '@/lib/proto/api_catalog_pb';
 
 export interface ValidationResult {
   valid: boolean;
