@@ -435,6 +435,7 @@ export function EditAPIClient({ api, workspaceSlug: _workspaceSlug, userId }: Ed
               onClick={() => {
                 setReleaseNotesDialog(false)
                 setPendingFormData(null)
+                setReleaseNotes('')
               }}
             >
               Cancel
