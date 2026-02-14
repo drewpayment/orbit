@@ -37,6 +37,7 @@ import { Loader2, Save, X, AlertCircle, Eye } from 'lucide-react'
 import { validateOpenAPI, type ValidationResult } from '@/lib/schema-validators'
 import { updateAPISchema } from '../actions'
 import { toast } from 'sonner'
+import type { APISchema } from '@/types/api-catalog'
 
 const Editor = dynamic(() => import('@monaco-editor/react'), {
   ssr: false,
@@ -46,9 +47,6 @@ const Editor = dynamic(() => import('@monaco-editor/react'), {
     </div>
   ),
 })
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type APISchema = any
 
 interface EditAPIClientProps {
   api: APISchema
@@ -82,7 +80,7 @@ export function EditAPIClient({ api, workspaceSlug: _workspaceSlug, userId }: Ed
       description: api.description || '',
       visibility: api.visibility,
       status: api.status,
-      rawContent: api.rawContent,
+      rawContent: api.rawContent ?? '',
       tags: api.tags?.map((t: { tag: string }) => t.tag) || [],
       contactName: api.contactName || '',
       contactEmail: api.contactEmail || '',
