@@ -54,12 +54,113 @@ export const Apps: CollectionConfig = {
 
         return doc
       },
+      // Outbound manifest sync: Orbit → repo
+      async ({ doc, previousDoc, context }) => {
+        // Skip if this change came from a webhook or conflict resolution
+        if (context?._syncSource) return doc
+
+        if (!doc.syncEnabled) return doc
+
+        // Check if synced fields actually changed
+        const syncedFieldsChanged =
+          previousDoc?.name !== doc.name ||
+          previousDoc?.description !== doc.description ||
+          JSON.stringify(previousDoc?.healthConfig) !== JSON.stringify(doc.healthConfig) ||
+          JSON.stringify(previousDoc?.buildConfig) !== JSON.stringify(doc.buildConfig)
+
+        if (!syncedFieldsChanged) return doc
+
+        // Fire and forget — sync failure shouldn't block the save
+        ;(async () => {
+          try {
+            const { serializeAppManifest } = await import('../lib/app-manifest')
+            const { parseGitHubUrl } = await import('../lib/github-manifest')
+            const { getInstallationOctokit } = await import('../lib/github/octokit')
+
+            const repoUrl = doc.repository?.url
+            const installationId = doc.repository?.installationId
+            if (!repoUrl || !installationId) return
+
+            const parsed = parseGitHubUrl(repoUrl)
+            if (!parsed) return
+
+            const yamlContent = serializeAppManifest({
+              name: doc.name,
+              description: doc.description,
+              healthConfig: doc.healthConfig,
+              buildConfig: doc.buildConfig,
+            })
+
+            const octokit = await getInstallationOctokit(Number(installationId))
+            const manifestPath = doc.manifestPath || '.orbit.yaml'
+            const branch = doc.repository?.branch || 'main'
+
+            // Get current file SHA
+            let existingSha: string | undefined
+            try {
+              const { data } = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+                owner: parsed.owner, repo: parsed.repo, path: manifestPath, ref: branch,
+              })
+              if ('sha' in data) existingSha = data.sha
+            } catch { /* file might not exist */ }
+
+            const { data: commitData } = await octokit.request('PUT /repos/{owner}/{repo}/contents/{path}', {
+              owner: parsed.owner, repo: parsed.repo, path: manifestPath,
+              message: 'chore: sync .orbit.yaml from Orbit',
+              content: Buffer.from(yamlContent).toString('base64'),
+              branch,
+              ...(existingSha && { sha: existingSha }),
+            })
+
+            // Update manifestSha — use _syncSource to prevent loop
+            const { getPayload } = await import('payload')
+            const payloadConfig = (await import('@payload-config')).default
+            const payloadInstance = await getPayload({ config: payloadConfig })
+            await payloadInstance.update({
+              collection: 'apps',
+              id: doc.id,
+              data: {
+                manifestSha: commitData.commit.sha,
+                lastSyncAt: new Date().toISOString(),
+                lastSyncDirection: 'outbound',
+              },
+              context: { _syncSource: 'outbound-hook' },
+            })
+          } catch (error) {
+            console.error('Outbound manifest sync failed:', error)
+          }
+        })()
+
+        return doc
+      },
     ],
     afterDelete: [
       async ({ doc }) => {
         // Fire and forget - don't block the delete
         healthClient.deleteSchedule({ appId: doc.id })
           .catch(err => console.error('Failed to delete health schedule:', err))
+
+        // Clean up GitHub webhook if sync was enabled
+        if (doc.webhookId && doc.repository?.url && doc.repository?.installationId) {
+          ;(async () => {
+            try {
+              const { parseGitHubUrl } = await import('../lib/github-manifest')
+              const { getInstallationOctokit } = await import('../lib/github/octokit')
+
+              const parsed = parseGitHubUrl(doc.repository!.url!)
+              if (parsed) {
+                const octokit = await getInstallationOctokit(Number(doc.repository!.installationId))
+                await octokit.request('DELETE /repos/{owner}/{repo}/hooks/{hook_id}', {
+                  owner: parsed.owner,
+                  repo: parsed.repo,
+                  hook_id: Number(doc.webhookId),
+                })
+              }
+            } catch (error) {
+              console.error('Failed to delete webhook on app deletion:', error)
+            }
+          })()
+        }
       },
     ],
   },
