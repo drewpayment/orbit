@@ -1,4 +1,6 @@
 import { notFound } from 'next/navigation'
+import { getPayload } from 'payload'
+import config from '@payload-config'
 import { getAPIById, getAPIVersions } from '../actions'
 import { APIDetailClient } from './api-detail-client'
 import { getCurrentUser } from '@/lib/auth/session'
@@ -23,14 +25,34 @@ export default async function APIDetailPage({ params }: PageProps) {
     notFound()
   }
 
-  // Check if user can edit (creator or workspace member)
+  // Check if user can edit (creator or workspace member with sufficient role)
   let canEdit = false
   if (user) {
     const createdById = typeof api.createdBy === 'object'
       ? api.createdBy.id
       : api.createdBy
     canEdit = createdById === user.id
-    // TODO: Also check workspace membership for owner/admin/member
+
+    if (!canEdit) {
+      const workspaceId = typeof api.workspace === 'string'
+        ? api.workspace
+        : api.workspace?.id
+      if (workspaceId) {
+        const payload = await getPayload({ config })
+        const memberships = await payload.find({
+          collection: 'workspace-members',
+          where: {
+            user: { equals: user.id },
+            workspace: { equals: workspaceId },
+            status: { equals: 'active' },
+            role: { in: ['owner', 'admin', 'member'] },
+          },
+          limit: 1,
+          overrideAccess: true,
+        })
+        canEdit = memberships.docs.length > 0
+      }
+    }
   }
 
   return (
