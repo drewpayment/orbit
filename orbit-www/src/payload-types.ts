@@ -989,11 +989,39 @@ export interface App {
     template?: (string | null) | Template;
     instantiatedAt?: string | null;
   };
-  syncMode?: ('orbit-primary' | 'manifest-primary') | null;
   /**
-   * SHA of last synced .orbit.yaml
+   * When enabled, app config syncs bidirectionally with .orbit.yaml in the linked repository
+   */
+  syncEnabled?: boolean | null;
+  /**
+   * SHA of last synced .orbit.yaml commit
    */
   manifestSha?: string | null;
+  /**
+   * Path to the manifest file within the repository
+   */
+  manifestPath?: string | null;
+  /**
+   * Timestamp of last successful sync
+   */
+  lastSyncAt?: string | null;
+  lastSyncDirection?: ('inbound' | 'outbound') | null;
+  /**
+   * Set when both sides changed since last sync
+   */
+  conflictDetected?: boolean | null;
+  /**
+   * Stores incoming manifest YAML during a conflict
+   */
+  conflictManifestContent?: string | null;
+  /**
+   * GitHub webhook ID for cleanup
+   */
+  webhookId?: string | null;
+  /**
+   * Per-app webhook secret (encrypted)
+   */
+  webhookSecret?: string | null;
   /**
    * Configure health monitoring for this application
    */
@@ -3563,8 +3591,15 @@ export interface AppsSelect<T extends boolean = true> {
         template?: T;
         instantiatedAt?: T;
       };
-  syncMode?: T;
+  syncEnabled?: T;
   manifestSha?: T;
+  manifestPath?: T;
+  lastSyncAt?: T;
+  lastSyncDirection?: T;
+  conflictDetected?: T;
+  conflictManifestContent?: T;
+  webhookId?: T;
+  webhookSecret?: T;
   healthConfig?:
     | T
     | {
