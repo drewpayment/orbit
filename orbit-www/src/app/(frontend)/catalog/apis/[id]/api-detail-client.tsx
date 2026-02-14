@@ -331,12 +331,17 @@ export function APIDetailClient({ api, versions, canEdit, userId }: APIDetailCli
             onRestoreVersion={
               canEdit && userId
                 ? async (versionId) => {
-                    const { restoreVersion } = await import(
-                      '@/app/(frontend)/workspaces/[slug]/apis/actions'
-                    )
-                    await restoreVersion(api.id, versionId, userId)
-                    toast.success('Version restored')
-                    router.refresh()
+                    try {
+                      const { restoreVersion } = await import(
+                        '@/app/(frontend)/workspaces/[slug]/apis/actions'
+                      )
+                      await restoreVersion(api.id, versionId, userId)
+                      toast.success('Version restored')
+                      router.refresh()
+                    } catch (error) {
+                      console.error('Failed to restore version:', error)
+                      toast.error('Failed to restore version')
+                    }
                   }
                 : undefined
             }
