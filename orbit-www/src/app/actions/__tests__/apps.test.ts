@@ -44,7 +44,7 @@ vi.mock('@/lib/github/octokit', () => ({
 import { getPayload } from 'payload'
 import { auth } from '@/lib/auth'
 import { getInstallationOctokit } from '@/lib/github/octokit'
-import { importRepository, updateAppSettings, deleteApp, exportAppManifest } from '../apps'
+import { importRepository, updateAppSettings, deleteApp, exportAppManifest, resolveManifestConflict, disableManifestSync } from '../apps'
 
 describe('importRepository', () => {
   beforeEach(() => {
@@ -317,5 +317,27 @@ describe('exportAppManifest', () => {
     await expect(exportAppManifest('app-1')).rejects.toThrow(
       'App must have a linked repository with a GitHub installation to export a manifest',
     )
+  })
+})
+
+describe('resolveManifestConflict', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('throws if user is not authenticated', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValueOnce(null)
+    await expect(resolveManifestConflict('app-id', 'keep-orbit')).rejects.toThrow('Not authenticated')
+  })
+})
+
+describe('disableManifestSync', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('throws if user is not authenticated', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValueOnce(null)
+    await expect(disableManifestSync('app-id')).rejects.toThrow('Not authenticated')
   })
 })
