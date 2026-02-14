@@ -230,20 +230,20 @@ export function APIDetailClient({ api, versions, canEdit, userId }: APIDetailCli
               <CardTitle>About</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {(api.description || api.specDescription) && (
-                <div>
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                    {api.description || api.specDescription}
-                  </p>
-                </div>
-              )}
+              <div>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                  {api.description || api.specDescription || (
+                    <span className="italic">No description provided</span>
+                  )}
+                </p>
+              </div>
 
-              {api.tags && api.tags.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
-                    <Tag className="h-4 w-4" />
-                    Tags
-                  </h4>
+              <div>
+                <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
+                  <Tag className="h-4 w-4" />
+                  Tags
+                </h4>
+                {api.tags && api.tags.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {api.tags.map((t: { tag: string }) => (
                       <Badge key={t.tag} variant="secondary">
@@ -251,8 +251,10 @@ export function APIDetailClient({ api, versions, canEdit, userId }: APIDetailCli
                       </Badge>
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">No tags</p>
+                )}
+              </div>
 
               <Separator />
 
@@ -282,7 +284,7 @@ export function APIDetailClient({ api, versions, canEdit, userId }: APIDetailCli
                   </div>
                 )}
 
-                {api.serverUrls && api.serverUrls.length > 0 && (
+                {api.serverUrls && api.serverUrls.length > 0 ? (
                   <div>
                     <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
                       <Server className="h-4 w-4" />
@@ -295,6 +297,14 @@ export function APIDetailClient({ api, versions, canEdit, userId }: APIDetailCli
                         </code>
                       ))}
                     </div>
+                  </div>
+                ) : (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
+                      <Server className="h-4 w-4" />
+                      Servers
+                    </h4>
+                    <p className="text-sm text-muted-foreground italic">No server URLs configured</p>
                   </div>
                 )}
               </div>
