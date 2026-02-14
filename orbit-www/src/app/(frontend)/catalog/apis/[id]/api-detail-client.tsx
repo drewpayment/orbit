@@ -41,6 +41,7 @@ import { VersionHistory } from '@/components/features/api-catalog/VersionHistory
 import { deleteAPISchema } from '@/app/(frontend)/workspaces/[slug]/apis/actions'
 import { toast } from 'sonner'
 import { formatDistanceToNow, format } from 'date-fns'
+import type { APISchema, APISchemaVersion } from '@/types/api-catalog'
 
 // Dynamically import Monaco Editor for raw schema view
 const Editor = dynamic(() => import('@monaco-editor/react'), {
@@ -52,14 +53,9 @@ const Editor = dynamic(() => import('@monaco-editor/react'), {
   ),
 })
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type APISchema = any
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Version = any
-
 interface APIDetailClientProps {
   api: APISchema
-  versions: Version[]
+  versions: APISchemaVersion[]
   canEdit: boolean
   userId?: string
 }
@@ -104,7 +100,7 @@ export function APIDetailClient({ api, versions, canEdit, userId }: APIDetailCli
     setSelectedVersionContent(content)
   }
 
-  const displayContent = selectedVersionContent || api.rawContent
+  const displayContent = selectedVersionContent || api.rawContent || ''
 
   return (
     <div className="space-y-6">
@@ -327,7 +323,7 @@ export function APIDetailClient({ api, versions, canEdit, userId }: APIDetailCli
         {/* Versions Tab */}
         <TabsContent value="versions">
           <VersionHistory
-            versions={versions}
+            versions={versions as React.ComponentProps<typeof VersionHistory>['versions']}
             currentVersionNumber={
               versions.find((v) => v.rawContent === api.rawContent)?.versionNumber
             }
