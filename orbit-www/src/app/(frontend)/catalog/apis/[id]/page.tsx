@@ -3,6 +3,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { getAPIById, getAPIVersions } from '../actions'
 import { APIDetailClient } from './api-detail-client'
+import type { APISchema, APISchemaVersion } from '@/types/api-catalog'
 import { getCurrentUser } from '@/lib/auth/session'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
@@ -62,8 +63,8 @@ export default async function APIDetailPage({ params }: PageProps) {
         <SiteHeader />
         <div className="flex-1 space-y-4 p-8 pt-6">
           <APIDetailClient
-            api={api}
-            versions={versions}
+            api={api as unknown as APISchema}
+            versions={versions as unknown as APISchemaVersion[]}
             canEdit={canEdit}
             userId={user?.id}
           />

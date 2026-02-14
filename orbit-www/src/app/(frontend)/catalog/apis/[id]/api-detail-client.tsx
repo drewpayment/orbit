@@ -314,7 +314,7 @@ export function APIDetailClient({ api, versions, canEdit, userId }: APIDetailCli
             <CardContent>
               <SwaggerUIViewer
                 spec={displayContent}
-                version={selectedVersionContent ? 'Historical Version' : api.currentVersion}
+                version={selectedVersionContent ? 'Historical Version' : api.currentVersion ?? undefined}
               />
             </CardContent>
           </Card>
