@@ -34,6 +34,9 @@ import { DeploymentRow } from './DeploymentRow'
 import { startDeployment, deleteDeployment } from '@/app/actions/deployments'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
+import { SyncStatusBadge } from './SyncStatusBadge'
+import { ManifestConflictBanner } from './ManifestConflictBanner'
+import { ExportManifestButton } from './ExportManifestButton'
 
 interface AppDetailProps {
   app: App
@@ -121,18 +124,32 @@ export function AppDetail({ app, deployments }: AppDetailProps) {
               <StatusIcon className={`h-5 w-5 ${statusConfig[status].color}`} />
               <span className="text-sm text-muted-foreground">{statusConfig[status].label}</span>
             </div>
+              <SyncStatusBadge
+                syncEnabled={!!app.syncEnabled}
+                conflictDetected={!!app.conflictDetected}
+                lastSyncAt={app.lastSyncAt}
+              />
           </div>
           {app.description && (
             <p className="text-muted-foreground mt-1">{app.description}</p>
           )}
         </div>
         <div className="flex gap-2">
+            <ExportManifestButton
+              appId={app.id}
+              syncEnabled={!!app.syncEnabled}
+              hasRepository={!!app.repository?.url && !!app.repository?.installationId}
+              manifestPath={app.manifestPath || '.orbit.yaml'}
+            />
           <Button variant="outline" size="sm" onClick={() => setShowSettings(true)}>
             <Settings className="mr-2 h-4 w-4" />
             Settings
           </Button>
         </div>
       </div>
+
+      {/* Manifest Conflict Banner */}
+      <ManifestConflictBanner conflictDetected={!!app.conflictDetected} appId={app.id} />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

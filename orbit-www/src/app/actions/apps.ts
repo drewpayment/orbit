@@ -6,6 +6,9 @@ import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { builtInGenerators } from '@/lib/seeds/deployment-generators'
+import { serializeAppManifest } from '@/lib/app-manifest'
+import { generateWebhookSecret, parseGitHubUrl } from '@/lib/github-manifest'
+import { getInstallationOctokit } from '@/lib/github/octokit'
 
 interface CreateAppFromTemplateInput {
   name: string
@@ -65,7 +68,7 @@ export async function createAppFromTemplate(input: CreateAppFromTemplateInput) {
           instantiatedAt: new Date().toISOString(),
         },
         status: 'unknown',
-        syncMode: 'orbit-primary',
+        syncEnabled: false,
       },
     })
 
@@ -138,7 +141,7 @@ export async function importRepository(input: ImportRepositoryInput) {
           type: 'imported',
         },
         status: 'unknown',
-        syncMode: 'orbit-primary',
+        syncEnabled: false,
       },
     })
 
@@ -262,7 +265,7 @@ export async function createManualApp(input: CreateManualAppInput) {
           type: 'manual',
         },
         status: 'unknown',
-        syncMode: 'orbit-primary',
+        syncEnabled: false,
         healthConfig: {
           url: input.healthConfig?.url,
           interval: input.healthConfig?.interval || 60,
@@ -491,4 +494,235 @@ export async function deleteApp(
     const errorMessage = error instanceof Error ? error.message : 'Failed to delete app'
     return { success: false, error: errorMessage }
   }
+}
+
+export async function exportAppManifest(appId: string): Promise<void> {
+  'use server'
+
+  const reqHeaders = await headers()
+  const session = await auth.api.getSession({ headers: reqHeaders })
+  if (!session) throw new Error('Not authenticated')
+
+  const payload = await getPayload({ config })
+  const app = await payload.findByID({ collection: 'apps', id: appId, depth: 0 })
+
+  const repoUrl = app.repository?.url
+  const installationId = app.repository?.installationId
+  if (!repoUrl || !installationId) {
+    throw new Error('App must have a linked repository with a GitHub installation to export a manifest')
+  }
+
+  const parsed = parseGitHubUrl(repoUrl)
+  if (!parsed) throw new Error('Invalid repository URL')
+
+  const yamlContent = serializeAppManifest({
+    name: app.name,
+    description: app.description,
+    healthConfig: app.healthConfig,
+    buildConfig: app.buildConfig,
+  })
+
+  const octokit = await getInstallationOctokit(Number(installationId))
+  const manifestPath = app.manifestPath || '.orbit.yaml'
+  const branch = app.repository?.branch || 'main'
+
+  // Check if file already exists (need SHA for update)
+  let existingSha: string | undefined
+  try {
+    const { data } = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+      owner: parsed.owner,
+      repo: parsed.repo,
+      path: manifestPath,
+      ref: branch,
+    })
+    if ('sha' in data) {
+      existingSha = data.sha
+    }
+  } catch {
+    // File doesn't exist yet
+  }
+
+  // Commit the manifest
+  const { data: commitData } = await octokit.request('PUT /repos/{owner}/{repo}/contents/{path}', {
+    owner: parsed.owner,
+    repo: parsed.repo,
+    path: manifestPath,
+    message: 'chore: export .orbit.yaml from Orbit',
+    content: Buffer.from(yamlContent).toString('base64'),
+    branch,
+    ...(existingSha && { sha: existingSha }),
+  })
+
+  const commitSha = commitData.commit.sha
+
+  // Register webhook
+  const webhookSecret = generateWebhookSecret()
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const webhookUrl = `${appUrl}/api/webhooks/github/app-sync`
+
+  const { data: hook } = await octokit.request('POST /repos/{owner}/{repo}/hooks', {
+    owner: parsed.owner,
+    repo: parsed.repo,
+    name: 'web',
+    active: true,
+    events: ['push'],
+    config: {
+      url: webhookUrl,
+      content_type: 'json',
+      secret: webhookSecret,
+      insecure_ssl: '0',
+    },
+  })
+
+  // Update app with sync state
+  await payload.update({
+    collection: 'apps',
+    id: appId,
+    data: {
+      syncEnabled: true,
+      manifestSha: commitSha,
+      manifestPath,
+      lastSyncAt: new Date().toISOString(),
+      lastSyncDirection: 'outbound',
+      webhookId: String(hook.id),
+      webhookSecret,
+    },
+  })
+
+  revalidatePath(`/apps/${appId}`)
+}
+
+export async function resolveManifestConflict(
+  appId: string,
+  resolution: 'keep-orbit' | 'keep-repo',
+): Promise<void> {
+  'use server'
+
+  const reqHeaders = await headers()
+  const session = await auth.api.getSession({ headers: reqHeaders })
+  if (!session) throw new Error('Not authenticated')
+
+  const payload = await getPayload({ config })
+  const app = await payload.findByID({ collection: 'apps', id: appId, depth: 0 })
+
+  if (!app.conflictDetected) {
+    throw new Error('No conflict to resolve')
+  }
+
+  if (resolution === 'keep-orbit') {
+    const repoUrl = app.repository?.url
+    const installationId = app.repository?.installationId
+    if (!repoUrl || !installationId) throw new Error('Missing repository config')
+
+    const parsed = parseGitHubUrl(repoUrl)
+    if (!parsed) throw new Error('Invalid repository URL')
+
+    const yamlContent = serializeAppManifest({
+      name: app.name,
+      description: app.description,
+      healthConfig: app.healthConfig,
+      buildConfig: app.buildConfig,
+    })
+
+    const octokit = await getInstallationOctokit(Number(installationId))
+    const manifestPath = app.manifestPath || '.orbit.yaml'
+    const branch = app.repository?.branch || 'main'
+
+    let existingSha: string | undefined
+    try {
+      const { data } = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+        owner: parsed.owner, repo: parsed.repo, path: manifestPath, ref: branch,
+      })
+      if ('sha' in data) existingSha = data.sha
+    } catch { /* file might not exist */ }
+
+    const { data: commitData } = await octokit.request('PUT /repos/{owner}/{repo}/contents/{path}', {
+      owner: parsed.owner, repo: parsed.repo, path: manifestPath,
+      message: 'chore: resolve manifest conflict — keep Orbit version',
+      content: Buffer.from(yamlContent).toString('base64'),
+      branch,
+      ...(existingSha && { sha: existingSha }),
+    })
+
+    await payload.update({
+      collection: 'apps',
+      id: appId,
+      data: {
+        manifestSha: commitData.commit.sha,
+        lastSyncAt: new Date().toISOString(),
+        lastSyncDirection: 'outbound',
+        conflictDetected: false,
+        conflictManifestContent: '',
+      },
+    })
+  } else {
+    const { parseAppManifest, mapManifestToAppFields } = await import('@/lib/app-manifest')
+    const { manifest, errors } = parseAppManifest(app.conflictManifestContent || '')
+    if (!manifest || errors.length > 0) {
+      throw new Error('Failed to parse conflict manifest content')
+    }
+
+    const fields = mapManifestToAppFields(manifest)
+    await payload.update({
+      collection: 'apps',
+      id: appId,
+      data: {
+        name: fields.name,
+        description: fields.description,
+        ...(fields.healthConfig && { healthConfig: fields.healthConfig }),
+        ...(fields.buildConfig && { buildConfig: fields.buildConfig }),
+        lastSyncAt: new Date().toISOString(),
+        lastSyncDirection: 'inbound',
+        conflictDetected: false,
+        conflictManifestContent: '',
+      },
+      context: { _syncSource: 'conflict-resolution' },
+    })
+  }
+
+  revalidatePath(`/apps/${appId}`)
+}
+
+export async function disableManifestSync(appId: string): Promise<void> {
+  'use server'
+
+  const reqHeaders = await headers()
+  const session = await auth.api.getSession({ headers: reqHeaders })
+  if (!session) throw new Error('Not authenticated')
+
+  const payload = await getPayload({ config })
+  const app = await payload.findByID({ collection: 'apps', id: appId, depth: 0 })
+
+  if (app.webhookId && app.repository?.url && app.repository?.installationId) {
+    try {
+      const parsed = parseGitHubUrl(app.repository.url)
+      if (parsed) {
+        const octokit = await getInstallationOctokit(Number(app.repository.installationId))
+        await octokit.request('DELETE /repos/{owner}/{repo}/hooks/{hook_id}', {
+          owner: parsed.owner,
+          repo: parsed.repo,
+          hook_id: Number(app.webhookId),
+        })
+      }
+    } catch (error) {
+      console.error('Failed to delete webhook:', error)
+    }
+  }
+
+  await payload.update({
+    collection: 'apps',
+    id: appId,
+    data: {
+      syncEnabled: false,
+      manifestSha: null,
+      lastSyncAt: null,
+      lastSyncDirection: null,
+      conflictDetected: false,
+      conflictManifestContent: null,
+      webhookId: null,
+      webhookSecret: null,
+    },
+  })
+
+  revalidatePath(`/apps/${appId}`)
 }
