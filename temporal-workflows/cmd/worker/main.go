@@ -383,6 +383,28 @@ func main() {
 	w.RegisterActivity(decommissioningActivities.ExecuteImmediateCleanup)
 	log.Printf("Decommissioning activities registered with MinIO endpoint: %s", minioEndpoint)
 
+	// =======================================================================
+	// API Spec Sync Activities
+	// =======================================================================
+
+	// Register spec sync workflow
+	w.RegisterWorkflow(workflows.RepositorySpecSyncWorkflow)
+
+	// Create and register spec sync activities
+	// TODO: Implement GitHubContentClient and PayloadAPICatalogClient
+	var specSyncGitHubClient activities.GitHubContentClient = nil
+	var specSyncCatalogClient activities.PayloadAPICatalogClient = nil
+	specSyncActivities := activities.NewSpecSyncActivities(
+		specSyncGitHubClient,
+		specSyncCatalogClient,
+		logger,
+	)
+	w.RegisterActivity(specSyncActivities.ListRepoSpecFiles)
+	w.RegisterActivity(specSyncActivities.FetchSpecContent)
+	w.RegisterActivity(specSyncActivities.UpsertAPISchemaToCatalog)
+	w.RegisterActivity(specSyncActivities.RemoveOrphanedSpecs)
+	log.Println("API spec sync activities registered")
+
 	log.Println("Starting Temporal worker...")
 	log.Printf("Temporal address: %s", temporalAddress)
 	log.Printf("Temporal namespace: %s", temporalNamespace)
