@@ -36,7 +36,7 @@ import {
   History,
   Loader2,
 } from 'lucide-react'
-import { SwaggerUIViewer } from '@/components/features/api-catalog/SwaggerUIViewer'
+import { APISpecViewer } from '@/components/features/api-catalog/SwaggerUIViewer'
 import { VersionHistory } from '@/components/features/api-catalog/VersionHistory'
 import { deleteAPISchema } from '@/app/(frontend)/workspaces/[slug]/apis/actions'
 import { toast } from 'sonner'
@@ -325,11 +325,11 @@ export function APIDetailClient({ api, versions, canEdit, userId }: APIDetailCli
             <CardHeader>
               <CardTitle>API Documentation</CardTitle>
               <CardDescription>
-                Interactive documentation generated from the OpenAPI specification
+                Interactive documentation generated from the API specification
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <SwaggerUIViewer
+              <APISpecViewer
                 spec={displayContent}
                 version={selectedVersionContent ? 'Historical Version' : api.currentVersion ?? undefined}
               />
