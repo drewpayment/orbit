@@ -34,6 +34,7 @@ import {
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { CreateVirtualClusterDialog } from './CreateVirtualClusterDialog'
+import { ProvisioningAlert } from './ProvisioningAlert'
 import { listVirtualClusters, type VirtualClusterData } from '@/app/actions/kafka-virtual-clusters'
 
 export type { VirtualClusterData }
@@ -136,6 +137,8 @@ export function VirtualClustersList({ workspaceId, workspaceSlug }: VirtualClust
 
   return (
     <>
+      <ProvisioningAlert workspaceId={workspaceId} />
+
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">Virtual Clusters</h1>
