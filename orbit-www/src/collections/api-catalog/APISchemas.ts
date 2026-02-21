@@ -230,6 +230,14 @@ export const APISchemas: CollectionConfig = {
       },
     },
     {
+      name: 'deprecationMessage',
+      type: 'text',
+      admin: {
+        description: 'Reason for deprecation (shown to consumers)',
+        condition: (data) => data?.status === 'deprecated',
+      },
+    },
+    {
       name: 'tags',
       type: 'array',
       admin: {

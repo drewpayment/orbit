@@ -11,6 +11,7 @@ export interface APISchema {
   currentVersion?: string | null
   rawContent?: string | null
   status: 'draft' | 'published' | 'deprecated'
+  deprecationMessage?: string | null
   tags?: Array<{ id?: string | null; tag: string }> | null
   contactName?: string | null
   contactEmail?: string | null
