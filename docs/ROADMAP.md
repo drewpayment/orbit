@@ -73,9 +73,9 @@ Orbit is an Internal Developer Portal (IDP) that gives platform teams self-servi
 - [ ] Auto-discover specs from registered repositories
 - [ ] API version management and deprecation workflows
 - [ ] API documentation rendering (Swagger UI / Redoc embed)
-- [ ] Usage analytics integration
+- [ ] Usage analytics integration (deferred — view/download counters, consumer tracking)
 
-**Current state:** `services/api-catalog/` scaffold exists, `SchemaEditor.tsx` component exists, no CRUD UI.
+**Current state:** CRUD UI, Swagger viewer, versioning, search/filters all implemented. Remaining: Scalar swap, auto-discovery via Temporal, AsyncAPI support, deprecation workflow.
 
 **Effort:** 1-2 weeks
 
