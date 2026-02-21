@@ -193,9 +193,10 @@ export const APISchemas: CollectionConfig = {
       defaultValue: 'openapi',
       options: [
         { label: 'OpenAPI', value: 'openapi' },
+        { label: 'AsyncAPI', value: 'asyncapi' },
       ],
       admin: {
-        description: 'Schema format (OpenAPI supported)',
+        description: 'Schema format (OpenAPI and AsyncAPI supported)',
       },
     },
     {
@@ -365,12 +366,19 @@ export const APISchemas: CollectionConfig = {
           data.lastEditedBy = req.user.id
         }
 
-        // Parse OpenAPI spec to extract metadata
+        // Parse spec to extract metadata
         if (data.rawContent) {
           try {
             // Dynamic import yaml to avoid SSR issues
             const yaml = await import('yaml')
             const spec = yaml.parse(data.rawContent)
+
+            // Auto-detect schema type from content
+            if (spec?.asyncapi) {
+              data.schemaType = 'asyncapi'
+            } else if (spec?.openapi || spec?.swagger) {
+              data.schemaType = 'openapi'
+            }
 
             if (spec?.info) {
               data.specTitle = spec.info.title || null
@@ -387,18 +395,25 @@ export const APISchemas: CollectionConfig = {
               data.serverUrls = spec.servers.map((s: { url: string }) => ({ url: s.url }))
             }
 
-            // Count endpoints
-            if (spec?.paths) {
-              let count = 0
-              for (const path of Object.values(spec.paths)) {
-                if (path && typeof path === 'object') {
-                  const methods = ['get', 'post', 'put', 'patch', 'delete', 'options', 'head']
-                  for (const method of methods) {
-                    if (method in path) count++
+            if (data.schemaType === 'asyncapi') {
+              // Count channels for AsyncAPI specs
+              if (spec?.channels) {
+                data.endpointCount = Object.keys(spec.channels).length
+              }
+            } else {
+              // Count endpoints for OpenAPI specs
+              if (spec?.paths) {
+                let count = 0
+                for (const path of Object.values(spec.paths)) {
+                  if (path && typeof path === 'object') {
+                    const methods = ['get', 'post', 'put', 'patch', 'delete', 'options', 'head']
+                    for (const method of methods) {
+                      if (method in path) count++
+                    }
                   }
                 }
+                data.endpointCount = count
               }
-              data.endpointCount = count
             }
           } catch {
             // Invalid YAML - will be caught by validation

@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Loader2, AlertCircle, Upload, FileText } from 'lucide-react'
-import { validateOpenAPI, type ValidationResult } from '@/lib/schema-validators'
+import { validateOpenAPI, validateAsyncAPI, type ValidationResult } from '@/lib/schema-validators'
 import type { APIFormData } from './BasicInfoStep'
 
 // Dynamically import Monaco Editor
@@ -28,6 +28,42 @@ interface SchemaContentStepProps {
   validation: ValidationResult
   onValidationChange: (result: ValidationResult) => void
 }
+
+const ASYNCAPI_TEMPLATE = `asyncapi: 2.6.0
+info:
+  title: My Event API
+  version: 1.0.0
+  description: Describe your event-driven API here
+  contact:
+    name: API Team
+    email: api@example.com
+
+servers:
+  production:
+    url: broker.example.com:9092
+    protocol: kafka
+    description: Production Kafka broker
+
+channels:
+  user/signedup:
+    description: User signed up events
+    subscribe:
+      operationId: onUserSignedUp
+      message:
+        contentType: application/json
+        payload:
+          type: object
+          properties:
+            userId:
+              type: string
+              description: Unique user identifier
+            email:
+              type: string
+              format: email
+            signedUpAt:
+              type: string
+              format: date-time
+`
 
 const OPENAPI_TEMPLATE = `openapi: 3.0.0
 info:
@@ -67,10 +103,12 @@ export function SchemaContentStep({ form, validation, onValidationChange }: Sche
   // Validate content when it changes
   React.useEffect(() => {
     if (content) {
-      const result = validateOpenAPI(content)
+      // Auto-detect spec type from content
+      const isAsyncAPI = content.includes('asyncapi:') || (content.trim().startsWith('{') && content.includes('"asyncapi"'))
+      const result = isAsyncAPI ? validateAsyncAPI(content) : validateOpenAPI(content)
       onValidationChange(result)
     } else {
-      onValidationChange({ valid: false, errors: [{ message: 'Please provide an OpenAPI specification' }] })
+      onValidationChange({ valid: false, errors: [{ message: 'Please provide an API specification' }] })
     }
   }, [content, onValidationChange])
 
@@ -78,8 +116,12 @@ export function SchemaContentStep({ form, validation, onValidationChange }: Sche
     form.setValue('rawContent', value || '')
   }
 
-  const handleUseTemplate = () => {
+  const handleUseOpenAPITemplate = () => {
     form.setValue('rawContent', OPENAPI_TEMPLATE)
+  }
+
+  const handleUseAsyncAPITemplate = () => {
+    form.setValue('rawContent', ASYNCAPI_TEMPLATE)
   }
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -105,9 +147,9 @@ export function SchemaContentStep({ form, validation, onValidationChange }: Sche
   return (
     <Card>
       <CardHeader>
-        <CardTitle>OpenAPI Specification</CardTitle>
+        <CardTitle>API Specification</CardTitle>
         <CardDescription>
-          Paste your OpenAPI specification or upload a file. YAML and JSON formats are supported.
+          Paste your OpenAPI or AsyncAPI specification or upload a file. YAML and JSON formats are supported.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -117,10 +159,19 @@ export function SchemaContentStep({ form, validation, onValidationChange }: Sche
             type="button"
             variant="outline"
             size="sm"
-            onClick={handleUseTemplate}
+            onClick={handleUseOpenAPITemplate}
           >
             <FileText className="mr-2 h-4 w-4" />
-            Use Template
+            OpenAPI Template
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleUseAsyncAPITemplate}
+          >
+            <FileText className="mr-2 h-4 w-4" />
+            AsyncAPI Template
           </Button>
           <Button
             type="button"
@@ -144,7 +195,7 @@ export function SchemaContentStep({ form, validation, onValidationChange }: Sche
         <div
           className="border rounded-md overflow-hidden"
           role="region"
-          aria-label="OpenAPI specification editor"
+          aria-label="API specification editor"
         >
           <Editor
             height="400px"
@@ -185,7 +236,7 @@ export function SchemaContentStep({ form, validation, onValidationChange }: Sche
         {validation.valid && content && (
           <Alert className="border-green-500 bg-green-50 dark:bg-green-950">
             <AlertDescription className="text-green-700 dark:text-green-300">
-              OpenAPI specification is valid
+              API specification is valid
             </AlertDescription>
           </Alert>
         )}
