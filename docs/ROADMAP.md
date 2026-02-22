@@ -1,6 +1,6 @@
 # Orbit Product Roadmap
 
-**Last Updated:** 2026-01-29
+**Last Updated:** 2026-02-21
 **Status:** Active
 
 ---
@@ -24,7 +24,7 @@ Orbit is an Internal Developer Portal (IDP) that gives platform teams self-servi
 | Secret Management | 🟢 100% | AES-256-GCM encryption at rest for all sensitive fields |
 | Repository & Templates | 🟢 75% | GitHub App integration, template instantiation, `.orbit.yaml` GitOps manifest sync |
 | Application Lifecycle | 🟡 50% | Lineage graph exists, deployment generators schema only |
-| API Catalog | 🔴 15% | Service scaffold exists, minimal UI |
+| API Catalog | 🟢 80% | Scalar viewer, AsyncAPI support, deprecation workflow, spec auto-discovery via Temporal |
 | Build Service | 🔴 10% | Dockerfile exists, Railpack integration incomplete |
 
 ---
@@ -68,16 +68,17 @@ Orbit is an Internal Developer Portal (IDP) that gives platform teams self-servi
 
 **PR:** https://github.com/drewpayment/orbit/pull/27
 
-#### 2.2 API Catalog Integration
-- [ ] Build OpenAPI/AsyncAPI import UI
-- [ ] Auto-discover specs from registered repositories
-- [ ] API version management and deprecation workflows
-- [ ] API documentation rendering (Swagger UI / Redoc embed)
+#### 2.2 API Catalog Integration ✅ COMPLETE
+- [x] Replace Swagger UI with Scalar (`@scalar/api-reference-react`) for API doc rendering
+- [x] AsyncAPI schema type support with validation, auto-detection, and wizard template
+- [x] Deprecation workflow with server action, banner, and confirmation dialog
+- [x] `RepositorySpecSyncWorkflow` (Temporal) for auto-discovering specs from repositories
+- [x] Spec sync activities: `ListRepoSpecFiles`, `FetchSpecContent`, `UpsertAPISchemaToCatalog`, `RemoveOrphanedSpecs`
+- [x] GitHub webhook handler (`/api/webhooks/github/spec-sync`) to signal/start workflow on push
+- [x] Type cleanup — replaced `any` aliases with proper imports
 - [ ] Usage analytics integration (deferred — view/download counters, consumer tracking)
 
-**Current state:** CRUD UI, Swagger viewer, versioning, search/filters all implemented. Remaining: Scalar swap, auto-discovery via Temporal, AsyncAPI support, deprecation workflow.
-
-**Effort:** 1-2 weeks
+**PR:** https://github.com/drewpayment/orbit/pull/28
 
 #### 2.3 Deployment Generators
 - [ ] Docker Compose generator (implementation)
@@ -232,6 +233,7 @@ Orbit is an Internal Developer Portal (IDP) that gives platform teams self-servi
 
 | Date | Change |
 |------|--------|
+| 2026-02-21 | Marked 2.2 API Catalog Integration complete (PR #28); updated API Catalog maturity to 80% |
 | 2026-02-14 | Marked 2.1 GitOps Manifest Sync complete (PR #27); updated Repository & Templates maturity to 75% |
 | 2026-01-29 | Audit against codebase: marked 1.1, 1.3, 3.1 complete; updated current state notes |
 | 2026-01-29 | Initial roadmap created from codebase analysis |
