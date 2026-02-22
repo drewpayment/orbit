@@ -386,6 +386,26 @@ export async function getRepoBranches(appId: string) {
       overrideAccess: true,
     })
 
+    // Authorization: verify the caller is an active member of the app's workspace
+    const repoWorkspaceId = typeof app.workspace === 'string'
+      ? app.workspace
+      : (app.workspace as { id: string } | null)?.id
+    if (repoWorkspaceId) {
+      const members = await payload.find({
+        collection: 'workspace-members',
+        where: {
+          and: [
+            { workspace: { equals: repoWorkspaceId } },
+            { user: { equals: session.user.id } },
+            { status: { equals: 'active' } },
+          ],
+        },
+      })
+      if (members.docs.length === 0) {
+        return { success: false, error: 'Not a member of this workspace', branches: [] as string[] }
+      }
+    }
+
     if (!app?.repository?.installationId || !app.repository.owner || !app.repository.name) {
       return { success: true, branches: ['main'], defaultBranch: 'main' }
     }
@@ -463,6 +483,10 @@ export async function commitGeneratedFiles(input: {
       return { success: false, error: 'No generated files to commit' }
     }
 
+    if (!input.message?.trim()) {
+      return { success: false, error: 'Commit message is required' }
+    }
+
     const appId = typeof deployment.app === 'string' ? deployment.app : (deployment.app as { id: string }).id
     const app = await payload.findByID({
       collection: 'apps',
@@ -497,7 +521,7 @@ export async function commitGeneratedFiles(input: {
     }
 
     const { createInstallationToken } = await import('@/lib/github/octokit')
-    const { token } = await createInstallationToken(Number(app.repository.installationId))
+    const { token } = await createInstallationToken(Number(app.repository.installationId), { requireContentsWrite: true })
 
     const owner = app.repository.owner as string
     const repo = app.repository.name as string
@@ -510,7 +534,7 @@ export async function commitGeneratedFiles(input: {
     }
 
     // 1. Get the ref for the source branch
-    const refResponse = await fetch(`${apiBase}/git/ref/heads/${input.branch}`, {
+    const refResponse = await fetch(`${apiBase}/git/ref/heads/${encodeURIComponent(input.branch)}`, {
       headers: githubHeaders,
     })
     if (!refResponse.ok) {
@@ -525,7 +549,7 @@ export async function commitGeneratedFiles(input: {
         method: 'POST',
         headers: githubHeaders,
         body: JSON.stringify({
-          ref: `refs/heads/${input.newBranch}`,
+          ref: `refs/heads/${encodeURIComponent(input.newBranch)}`,
           sha: baseSha,
         }),
       })
@@ -540,7 +564,8 @@ export async function commitGeneratedFiles(input: {
       headers: githubHeaders,
     })
     if (!commitResponse.ok) {
-      return { success: false, error: `Failed to get base commit: ${commitResponse.statusText}` }
+      const errBody = await commitResponse.json().catch(() => ({})) as { message?: string }
+      return { success: false, error: `Failed to get base commit: ${errBody.message || commitResponse.status}` }
     }
     const commitRawData = await commitResponse.json() as { tree: { sha: string } }
     const baseTreeSha = commitRawData.tree.sha
@@ -557,7 +582,8 @@ export async function commitGeneratedFiles(input: {
         }),
       })
       if (!blobResponse.ok) {
-        return { success: false, error: `Failed to create blob for "${file.path}": ${blobResponse.statusText}` }
+        const errBody = await blobResponse.json().catch(() => ({})) as { message?: string }
+        return { success: false, error: `Failed to create blob for "${file.path}": ${errBody.message || blobResponse.status}` }
       }
       const blobData = await blobResponse.json() as { sha: string }
       tree.push({
@@ -578,7 +604,8 @@ export async function commitGeneratedFiles(input: {
       }),
     })
     if (!treeResponse.ok) {
-      return { success: false, error: `Failed to create tree: ${treeResponse.statusText}` }
+      const errBody = await treeResponse.json().catch(() => ({})) as { message?: string }
+      return { success: false, error: `Failed to create tree: ${errBody.message || treeResponse.status}` }
     }
     const treeData = await treeResponse.json() as { sha: string }
 
@@ -593,12 +620,13 @@ export async function commitGeneratedFiles(input: {
       }),
     })
     if (!newCommitResponse.ok) {
-      return { success: false, error: `Failed to create commit: ${newCommitResponse.statusText}` }
+      const errBody = await newCommitResponse.json().catch(() => ({})) as { message?: string }
+      return { success: false, error: `Failed to create commit: ${errBody.message || newCommitResponse.status}` }
     }
     const newCommitData = await newCommitResponse.json() as { sha: string }
 
     // 7. Update the branch ref
-    const updateRefResponse = await fetch(`${apiBase}/git/refs/heads/${targetBranch}`, {
+    const updateRefResponse = await fetch(`${apiBase}/git/refs/heads/${encodeURIComponent(targetBranch)}`, {
       method: 'PATCH',
       headers: githubHeaders,
       body: JSON.stringify({ sha: newCommitData.sha }),

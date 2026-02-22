@@ -38,10 +38,11 @@ export async function getInstallationOctokit(installationId: number) {
  * @param installationId - The GitHub App installation ID
  * @param options - Optional settings for token creation
  * @param options.includePackages - If true, requests packages:write permission for GHCR access
+ * @param options.requireContentsWrite - If true, requests contents:write permission for committing to repos
  */
 export async function createInstallationToken(
   installationId: number,
-  options?: { includePackages?: boolean }
+  options?: { includePackages?: boolean; requireContentsWrite?: boolean }
 ) {
   // Build the request payload
   const requestOptions: {
@@ -59,10 +60,15 @@ export async function createInstallationToken(
       contents: 'read' as const, // Needed for cloning repos
       metadata: 'read' as const, // Basic repo info
     }
+  } else if (options?.requireContentsWrite) {
+    requestOptions.permissions = {
+      contents: 'write' as const,
+      metadata: 'read' as const,
+    }
   }
 
   // Use the App-level octokit to create installation access tokens
-  console.log('[GitHub] Creating installation token with options:', {
+  console.log('[GitHub] Creating installation token', {
     installation_id: requestOptions.installation_id,
     permissions: requestOptions.permissions,
   })
@@ -72,9 +78,7 @@ export async function createInstallationToken(
     requestOptions,
   )
 
-  console.log('[GitHub] Token response:', {
-    tokenLength: data.token?.length,
-    tokenPrefix: data.token?.substring(0, 10) + '...',
+  console.log('[GitHub] Token created', {
     expiresAt: data.expires_at,
     permissions: data.permissions,
   })
