@@ -556,10 +556,10 @@ export async function commitGeneratedFiles(input: {
           encoding: 'utf-8',
         }),
       })
-      const blobData = await blobResponse.json() as { sha: string; message?: string }
       if (!blobResponse.ok) {
-        return { success: false, error: `Failed to create blob for "${file.path}": ${blobData.message || blobResponse.statusText}` }
+        return { success: false, error: `Failed to create blob for "${file.path}": ${blobResponse.statusText}` }
       }
+      const blobData = await blobResponse.json() as { sha: string }
       tree.push({
         path: file.path,
         mode: '100644',
@@ -577,10 +577,10 @@ export async function commitGeneratedFiles(input: {
         tree,
       }),
     })
-    const treeData = await treeResponse.json() as { sha: string; message?: string }
     if (!treeResponse.ok) {
-      return { success: false, error: `Failed to create tree: ${treeData.message || treeResponse.statusText}` }
+      return { success: false, error: `Failed to create tree: ${treeResponse.statusText}` }
     }
+    const treeData = await treeResponse.json() as { sha: string }
 
     // 6. Create commit
     const newCommitResponse = await fetch(`${apiBase}/git/commits`, {
@@ -592,10 +592,10 @@ export async function commitGeneratedFiles(input: {
         parents: [baseSha],
       }),
     })
-    const newCommitData = await newCommitResponse.json() as { sha: string; message?: string }
     if (!newCommitResponse.ok) {
-      return { success: false, error: `Failed to create commit: ${newCommitData.message || newCommitResponse.statusText}` }
+      return { success: false, error: `Failed to create commit: ${newCommitResponse.statusText}` }
     }
+    const newCommitData = await newCommitResponse.json() as { sha: string }
 
     // 7. Update the branch ref
     const updateRefResponse = await fetch(`${apiBase}/git/refs/heads/${targetBranch}`, {
