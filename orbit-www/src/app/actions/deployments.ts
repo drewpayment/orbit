@@ -11,6 +11,7 @@ interface CreateDeploymentInput {
   appId: string
   name: string
   generator: 'docker-compose' | 'helm' | 'custom'
+  generatorSlug?: string
   config: Record<string, unknown>
   target: {
     type: string
@@ -67,6 +68,7 @@ export async function createDeployment(input: CreateDeploymentInput) {
         name: input.name,
         app: input.appId,
         generator: input.generator,
+        generatorSlug: input.generatorSlug,
         config: input.config,
         target: {
           type: input.target.type,
@@ -159,6 +161,14 @@ export async function startDeployment(deploymentId: string) {
     // docker-compose and helm use generate mode to let user review files before commit
     const mode = (deployment.generator === 'docker-compose' || deployment.generator === 'helm') ? 'generate' : 'execute'
 
+    // Determine the generator slug: prefer stored value, fall back to type-based mapping
+    const generatorSlug = deployment.generatorSlug as string | undefined
+      ?? (deployment.generator === 'docker-compose'
+        ? 'docker-compose-basic'
+        : deployment.generator === 'helm'
+          ? 'helm-basic'
+          : deployment.generator as string)
+
     // Start the Temporal workflow via gRPC
     const response = await startDeploymentWorkflow({
       deploymentId,
@@ -166,11 +176,7 @@ export async function startDeployment(deploymentId: string) {
       workspaceId,
       userId: session.user.id,
       generatorType: deployment.generator,
-      generatorSlug: deployment.generator === 'docker-compose'
-        ? 'docker-compose-basic'
-        : deployment.generator === 'helm'
-          ? 'helm-basic'
-          : deployment.generator,
+      generatorSlug,
       config: deploymentConfig,
       target: deploymentTarget,
       mode,

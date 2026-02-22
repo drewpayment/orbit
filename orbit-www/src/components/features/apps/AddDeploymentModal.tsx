@@ -37,13 +37,20 @@ import { createDeployment, getDeploymentGenerators } from '@/app/actions/deploym
 const baseSchema = z.object({
   name: z.string().min(1, 'Name is required').max(50),
   generator: z.enum(['docker-compose', 'helm', 'custom']),
+  generatorSlug: z.string().optional(),
   // Docker Compose fields
   serviceName: z.string().optional(),
-  port: z.number().min(1).max(65535).optional(),
+  port: z.union([
+    z.literal('').transform(() => undefined),
+    z.number().min(1).max(65535),
+  ]).optional(),
   // Helm fields
   releaseName: z.string().optional(),
   namespace: z.string().optional(),
-  replicas: z.number().min(1).max(100).optional(),
+  replicas: z.union([
+    z.literal('').transform(() => undefined),
+    z.number().min(1).max(100),
+  ]).optional(),
 })
 
 const formSchema = baseSchema.superRefine((data, ctx) => {
@@ -90,6 +97,7 @@ export function AddDeploymentModal({
     defaultValues: {
       name: 'production',
       generator: 'docker-compose',
+      generatorSlug: 'docker-compose-basic',
       serviceName: appName.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
       port: 3000,
       releaseName: appName.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
@@ -120,20 +128,26 @@ export function AddDeploymentModal({
     }
   }, [open])
 
+  useEffect(() => {
+    if (!open) {
+      form.reset()
+    }
+  }, [open, form])
+
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true)
     try {
       let submitConfig: Record<string, unknown>
       if (data.generator === 'helm') {
         submitConfig = {
-          releaseName: data.releaseName,
+          releaseName: data.releaseName?.trim(),
           namespace: data.namespace || 'default',
           replicas: data.replicas || 1,
           port: data.port || 3000,
         }
       } else {
         submitConfig = {
-          serviceName: data.serviceName,
+          serviceName: data.serviceName?.trim(),
           port: data.port || 3000,
         }
       }
@@ -142,6 +156,7 @@ export function AddDeploymentModal({
         appId,
         name: data.name,
         generator: data.generator,
+        generatorSlug: data.generatorSlug,
         config: submitConfig,
         target: {
           type: 'repository', // Generate files for repository commit
@@ -197,7 +212,16 @@ export function AddDeploymentModal({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Deployment Method</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select
+                    onValueChange={(value) => {
+                      field.onChange(value)
+                      const selected = generators.find((g) => g.type === value)
+                      if (selected) {
+                        form.setValue('generatorSlug', selected.slug)
+                      }
+                    }}
+                    defaultValue={field.value}
+                  >
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder={loadingGenerators ? "Loading..." : "Select method"} />
@@ -358,7 +382,10 @@ export function AddDeploymentModal({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => onOpenChange(false)}
+                onClick={() => {
+                  form.reset()
+                  onOpenChange(false)
+                }}
               >
                 Cancel
               </Button>

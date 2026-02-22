@@ -147,10 +147,16 @@ export const Deployments: CollectionConfig = {
       required: true,
       options: [
         { label: 'Docker Compose', value: 'docker-compose' },
-        { label: 'Terraform', value: 'terraform' },
         { label: 'Helm', value: 'helm' },
         { label: 'Custom', value: 'custom' },
       ],
+    },
+    {
+      name: 'generatorSlug',
+      type: 'text',
+      admin: {
+        description: 'Specific generator slug used (e.g., docker-compose-basic, helm-basic)',
+      },
     },
     {
       name: 'config',

@@ -1184,7 +1184,11 @@ export interface Deployment {
    */
   name: string;
   app: string | App;
-  generator: 'docker-compose' | 'terraform' | 'helm' | 'custom';
+  generator: 'docker-compose' | 'helm' | 'custom';
+  /**
+   * Specific generator slug used (e.g., docker-compose-basic, helm-basic)
+   */
+  generatorSlug?: string | null;
   /**
    * Generator-specific configuration
    */
@@ -3645,6 +3649,7 @@ export interface DeploymentsSelect<T extends boolean = true> {
   name?: T;
   app?: T;
   generator?: T;
+  generatorSlug?: T;
   config?: T;
   target?:
     | T
