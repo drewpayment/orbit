@@ -366,10 +366,7 @@ func (a *DeploymentActivities) collectGeneratedFiles(workDir string) (*ExecuteGe
 	})
 
 	if err != nil {
-		return &ExecuteGeneratorResult{
-			Success: false,
-			Error:   fmt.Sprintf("failed to collect generated files: %v", err),
-		}, nil
+		return nil, fmt.Errorf("failed to collect generated files: %w", err)
 	}
 
 	return &ExecuteGeneratorResult{
@@ -411,13 +408,7 @@ func (a *DeploymentActivities) executeDockerCompose(ctx context.Context, input E
 		}, nil
 	}
 
-	// Generate mode: return the files without executing
-	if input.Mode == "generate" {
-		a.logger.Info("Docker Compose generate mode - returning files for commit")
-		return a.collectGeneratedFiles(input.WorkDir)
-	}
-
-	// Execute mode: run docker compose (existing behavior)
+	// Execute mode: run docker compose (generate mode is handled in ExecuteGenerator before reaching here)
 	a.logger.Info("Docker Compose execute mode - running docker compose up")
 
 	// Extract port from docker-compose file
