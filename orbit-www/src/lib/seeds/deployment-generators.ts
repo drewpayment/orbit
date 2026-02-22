@@ -129,13 +129,15 @@ spec:
         - name: {{"{{"}} .Chart.Name {{"}}"}}
           image: "{{"{{"}} .Values.image.repository {{"}}"}}:{{"{{"}} .Values.image.tag {{"}}"}}"
           ports:
-            - containerPort: {{"{{"}} .Values.service.port {{"}}"}}{{if .EnvVars}}
+            - containerPort: {{"{{"}} .Values.service.port {{"}}"}}
+{{- if .EnvVars}}
           env:{{range .EnvVars}}
             - name: {{.Key}}
               valueFrom:
                 secretKeyRef:
                   name: {{"{{"}} include "chart.fullname" . {{"}}"}}-secrets
-                  key: {{.Key}}{{end}}{{end}}
+                  key: {{.Key}}{{end}}
+{{- end}}
           resources:
             {{"{{"}}- toYaml .Values.resources | nindent 12 {{"}}"}}
 `,
@@ -166,7 +168,7 @@ spec:
 {{"{{"}}- if .Values.fullnameOverride {{"}}"}}
 {{"{{"}}- .Values.fullnameOverride | trunc 63 | trimSuffix "-" {{"}}"}}
 {{"{{"}}- else {{"}}"}}
-{{"{{"}}- .Chart.Name | trunc 63 | trimSuffix "-" {{"}}"}}
+{{"{{"}}- printf "%s-%s" .Release.Name .Chart.Name | trunc 63 | trimSuffix "-" {{"}}"}}
 {{"{{"}}- end {{"}}"}}
 {{"{{"}}- end {{"}}"}}
 `,
