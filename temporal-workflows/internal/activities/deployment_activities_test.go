@@ -3,11 +3,12 @@ package activities
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"log/slog"
 )
 
 func TestValidateDeploymentConfig_DockerCompose_Valid(t *testing.T) {
@@ -115,7 +116,7 @@ func TestExecuteGenerator_UnsupportedType(t *testing.T) {
 	result, err := activities.ExecuteGenerator(context.Background(), input)
 	require.Error(t, err)
 	require.Nil(t, result)
-	require.Contains(t, err.Error(), "unsupported generator type")
+	require.Contains(t, err.Error(), "not supported for generator type")
 }
 
 func TestUpdateDeploymentStatus_WithoutClient(t *testing.T) {
@@ -131,4 +132,58 @@ func TestUpdateDeploymentStatus_WithoutClient(t *testing.T) {
 	// Should not error when client is nil
 	err := activities.UpdateDeploymentStatus(context.Background(), input)
 	require.NoError(t, err)
+}
+
+func TestExecuteGenerator_Helm_GenerateMode(t *testing.T) {
+	workDir := t.TempDir()
+
+	// Write some rendered Helm files
+	require.NoError(t, os.MkdirAll(filepath.Join(workDir, "templates"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "Chart.yaml"), []byte("apiVersion: v2\nname: test\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "values.yaml"), []byte("replicaCount: 1\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "templates/deployment.yaml"), []byte("kind: Deployment\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "templates/service.yaml"), []byte("kind: Service\n"), 0644))
+
+	activities := NewDeploymentActivities("/tmp/test", nil, slog.Default())
+	input := ExecuteGeneratorInput{
+		DeploymentID:  "test-123",
+		GeneratorType: "helm",
+		WorkDir:       workDir,
+		Mode:          "generate",
+	}
+
+	result, err := activities.ExecuteGenerator(context.Background(), input)
+	require.NoError(t, err)
+	require.True(t, result.Success)
+	require.GreaterOrEqual(t, len(result.GeneratedFiles), 4)
+
+	// Verify file paths are relative
+	for _, f := range result.GeneratedFiles {
+		require.NotContains(t, f.Path, workDir, "paths should be relative")
+	}
+}
+
+func TestValidateDeploymentConfig_Helm_Valid(t *testing.T) {
+	activities := NewDeploymentActivities("/tmp/test", nil, slog.Default())
+	config := map[string]interface{}{"releaseName": "my-release"}
+	configBytes, _ := json.Marshal(config)
+
+	err := activities.ValidateDeploymentConfig(context.Background(), ValidateDeploymentConfigInput{
+		GeneratorType: "helm",
+		Config:        configBytes,
+	})
+	require.NoError(t, err)
+}
+
+func TestValidateDeploymentConfig_Helm_MissingRequired(t *testing.T) {
+	activities := NewDeploymentActivities("/tmp/test", nil, slog.Default())
+	config := map[string]interface{}{"namespace": "prod"}
+	configBytes, _ := json.Marshal(config)
+
+	err := activities.ValidateDeploymentConfig(context.Background(), ValidateDeploymentConfigInput{
+		GeneratorType: "helm",
+		Config:        configBytes,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "releaseName")
 }

@@ -3,7 +3,6 @@ package activities
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -234,7 +233,23 @@ func (a *DeploymentActivities) validateTerraformConfig(config map[string]interfa
 }
 
 func (a *DeploymentActivities) validateHelmConfig(config map[string]interface{}) error {
-	// Placeholder for helm validation
+	required := []string{"releaseName"}
+	var missing []string
+
+	for _, field := range required {
+		val, ok := config[field]
+		if !ok {
+			missing = append(missing, field)
+			continue
+		}
+		if strVal, isString := val.(string); isString && strings.TrimSpace(strVal) == "" {
+			missing = append(missing, field)
+		}
+	}
+
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required fields: %s", strings.Join(missing, ", "))
+	}
 	return nil
 }
 
@@ -321,22 +336,68 @@ func (a *DeploymentActivities) prepareDefaultDockerCompose(workDir string, confi
 	return workDir, nil
 }
 
+// collectGeneratedFiles walks the work directory and returns all files with relative paths
+func (a *DeploymentActivities) collectGeneratedFiles(workDir string) (*ExecuteGeneratorResult, error) {
+	var files []GeneratedFile
+
+	err := filepath.Walk(workDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+
+		relPath, err := filepath.Rel(workDir, path)
+		if err != nil {
+			return err
+		}
+
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("failed to read %s: %w", relPath, err)
+		}
+
+		files = append(files, GeneratedFile{
+			Path:    relPath,
+			Content: string(content),
+		})
+		return nil
+	})
+
+	if err != nil {
+		return &ExecuteGeneratorResult{
+			Success: false,
+			Error:   fmt.Sprintf("failed to collect generated files: %v", err),
+		}, nil
+	}
+
+	return &ExecuteGeneratorResult{
+		Success:        true,
+		GeneratedFiles: files,
+		Outputs:        map[string]string{"mode": "generate", "fileCount": fmt.Sprintf("%d", len(files))},
+	}, nil
+}
+
 // ExecuteGenerator runs the deployment generator
 func (a *DeploymentActivities) ExecuteGenerator(ctx context.Context, input ExecuteGeneratorInput) (*ExecuteGeneratorResult, error) {
 	a.logger.Info("Executing generator",
 		"deploymentID", input.DeploymentID,
 		"generatorType", input.GeneratorType,
+		"mode", input.Mode,
 		"workDir", input.WorkDir)
 
+	// Generate mode: read all rendered files from work dir and return them
+	if input.Mode == "generate" {
+		return a.collectGeneratedFiles(input.WorkDir)
+	}
+
+	// Execute mode: only docker-compose supports this
 	switch input.GeneratorType {
 	case "docker-compose":
 		return a.executeDockerCompose(ctx, input)
-	case "terraform":
-		return nil, errors.New("terraform generator not implemented")
-	case "helm":
-		return nil, errors.New("helm generator not implemented")
 	default:
-		return nil, fmt.Errorf("unsupported generator type: %s", input.GeneratorType)
+		return nil, fmt.Errorf("execute mode not supported for generator type: %s", input.GeneratorType)
 	}
 }
 
@@ -353,19 +414,7 @@ func (a *DeploymentActivities) executeDockerCompose(ctx context.Context, input E
 	// Generate mode: return the files without executing
 	if input.Mode == "generate" {
 		a.logger.Info("Docker Compose generate mode - returning files for commit")
-		return &ExecuteGeneratorResult{
-			Success: true,
-			GeneratedFiles: []GeneratedFile{
-				{
-					Path:    "docker-compose.yml",
-					Content: string(composeData),
-				},
-			},
-			Outputs: map[string]string{
-				"mode": "generate",
-				"file": "docker-compose.yml",
-			},
-		}, nil
+		return a.collectGeneratedFiles(input.WorkDir)
 	}
 
 	// Execute mode: run docker compose (existing behavior)
