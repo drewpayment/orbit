@@ -243,6 +243,23 @@ export async function getAPISchema(id: string) {
   return schema
 }
 
+export async function deprecateAPISchema(
+  id: string,
+  message?: string,
+): Promise<void> {
+  const payload = await getPayload({ config })
+
+  await payload.update({
+    collection: 'api-schemas',
+    id,
+    data: {
+      status: 'deprecated',
+      deprecationMessage: message || null,
+    } as Record<string, unknown>,
+    overrideAccess: true,
+  })
+}
+
 export async function getAPISchemaVersions(schemaId: string) {
   const payload = await getPayload({ config })
 

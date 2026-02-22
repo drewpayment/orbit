@@ -43,9 +43,7 @@ import {
 import { formatDistanceToNow } from 'date-fns'
 import { deleteAPISchema } from './actions'
 import { toast } from 'sonner'
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type APISchema = any
+import type { APISchema } from '@/types/api-catalog'
 
 interface WorkspaceAPIsClientProps {
   apis: APISchema[]

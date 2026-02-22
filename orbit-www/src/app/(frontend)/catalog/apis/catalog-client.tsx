@@ -14,11 +14,13 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { APICard } from '@/components/features/api-catalog/APICard'
 import { Search, X, FileCode } from 'lucide-react'
+import type { APISchema } from '@/types/api-catalog'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type APISchema = any
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Workspace = any
+interface Workspace {
+  id: string
+  name: string
+  slug: string
+}
 
 interface APICatalogClientProps {
   initialApis: APISchema[]
@@ -223,15 +225,15 @@ export function APICatalogClient({
                 key={api.id}
                 id={api.id}
                 name={api.name}
-                description={api.description}
-                version={api.currentVersion}
+                description={api.description ?? undefined}
+                version={api.currentVersion ?? undefined}
                 status={api.status}
                 visibility={api.visibility}
                 workspaceName={
-                  typeof api.workspace === 'object' ? api.workspace.name : undefined
+                  typeof api.workspace === 'object' ? api.workspace.name ?? undefined : undefined
                 }
-                endpointCount={api.endpointCount}
-                tags={api.tags}
+                endpointCount={api.endpointCount ?? undefined}
+                tags={api.tags?.map(t => ({ tag: t.tag })) ?? undefined}
                 updatedAt={api.updatedAt}
               />
             ))}

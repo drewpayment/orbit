@@ -21,6 +21,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import {
+  AlertCircle,
   ArrowLeft,
   Edit,
   Trash2,
@@ -36,9 +37,9 @@ import {
   History,
   Loader2,
 } from 'lucide-react'
-import { SwaggerUIViewer } from '@/components/features/api-catalog/SwaggerUIViewer'
+import { APISpecViewer } from '@/components/features/api-catalog/SwaggerUIViewer'
 import { VersionHistory } from '@/components/features/api-catalog/VersionHistory'
-import { deleteAPISchema } from '@/app/(frontend)/workspaces/[slug]/apis/actions'
+import { deleteAPISchema, deprecateAPISchema } from '@/app/(frontend)/workspaces/[slug]/apis/actions'
 import { toast } from 'sonner'
 import { formatDistanceToNow, format } from 'date-fns'
 import type { APISchema, APISchemaVersion } from '@/types/api-catalog'
@@ -161,6 +162,37 @@ export function APIDetailClient({ api, versions, canEdit, userId }: APIDetailCli
                 Edit
               </Link>
             </Button>
+            {status !== 'deprecated' && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline">Deprecate</Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Deprecate this API?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This marks the API as deprecated. It will still be visible but consumers will be warned.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={async () => {
+                        try {
+                          await deprecateAPISchema(api.id)
+                          toast.success('API marked as deprecated')
+                          router.refresh()
+                        } catch {
+                          toast.error('Failed to deprecate API')
+                        }
+                      }}
+                    >
+                      Deprecate
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" disabled={isDeleting}>
@@ -208,6 +240,21 @@ export function APIDetailClient({ api, versions, canEdit, userId }: APIDetailCli
           >
             View Current
           </Button>
+        </div>
+      )}
+
+      {/* Deprecation banner */}
+      {status === 'deprecated' && (
+        <div className="mb-4 p-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg">
+          <div className="flex items-center gap-2 text-red-800 dark:text-red-200">
+            <AlertCircle className="h-5 w-5" />
+            <span className="font-semibold">This API has been deprecated</span>
+          </div>
+          {api.deprecationMessage && (
+            <p className="mt-2 text-sm text-red-700 dark:text-red-300 ml-7">
+              {api.deprecationMessage}
+            </p>
+          )}
         </div>
       )}
 
@@ -325,11 +372,11 @@ export function APIDetailClient({ api, versions, canEdit, userId }: APIDetailCli
             <CardHeader>
               <CardTitle>API Documentation</CardTitle>
               <CardDescription>
-                Interactive documentation generated from the OpenAPI specification
+                Interactive documentation generated from the API specification
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <SwaggerUIViewer
+              <APISpecViewer
                 spec={displayContent}
                 version={selectedVersionContent ? 'Historical Version' : api.currentVersion ?? undefined}
               />

@@ -7,10 +7,11 @@ export interface APISchema {
   description?: string | null
   workspace: string | { id: string; slug: string; name?: string }
   visibility: 'private' | 'workspace' | 'public'
-  schemaType: 'openapi'
+  schemaType: 'openapi' | 'asyncapi'
   currentVersion?: string | null
   rawContent?: string | null
   status: 'draft' | 'published' | 'deprecated'
+  deprecationMessage?: string | null
   tags?: Array<{ id?: string | null; tag: string }> | null
   contactName?: string | null
   contactEmail?: string | null

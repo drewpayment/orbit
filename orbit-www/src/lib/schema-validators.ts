@@ -135,6 +135,53 @@ export function validateOpenAPI(content: string): ValidationResult {
 }
 
 /**
+ * Validates AsyncAPI schema syntax (basic JSON/YAML validation)
+ */
+export function validateAsyncAPI(content: string): ValidationResult {
+  const errors: ValidationError[] = []
+  if (!content.trim()) {
+    return { valid: false, errors: [{ message: 'Content is empty' }] }
+  }
+  let parsed: Record<string, unknown> | null = null
+  try {
+    parsed = JSON.parse(content)
+  } catch {
+    const lines = content.split('\n')
+    const hasAsyncapi = lines.some((l) => l.trim().startsWith('asyncapi:'))
+    const hasInfo = lines.some((l) => l.trim().startsWith('info:'))
+    const hasChannels = lines.some((l) => l.trim().startsWith('channels:'))
+    if (!hasAsyncapi) errors.push({ message: 'Missing "asyncapi" field. Expected an AsyncAPI specification.' })
+    if (!hasInfo) errors.push({ message: 'Missing "info" section.' })
+    if (!hasChannels) errors.push({ message: 'Missing "channels" section.' })
+    return { valid: errors.length === 0, errors }
+  }
+  if (parsed) {
+    if (!parsed.asyncapi) errors.push({ message: 'Missing "asyncapi" field. Expected an AsyncAPI specification.' })
+    if (!parsed.info) errors.push({ message: 'Missing "info" section.' })
+    if (!parsed.channels) errors.push({ message: 'Missing "channels" section.' })
+  }
+  return { valid: errors.length === 0, errors }
+}
+
+/**
+ * Validates schema content based on a string schema type identifier
+ */
+export function validateSchemaByType(content: string, schemaType: string): ValidationResult {
+  switch (schemaType) {
+    case 'openapi':
+      return validateOpenAPI(content)
+    case 'asyncapi':
+      return validateAsyncAPI(content)
+    case 'graphql':
+      return validateGraphQL(content)
+    case 'protobuf':
+      return validateProtobuf(content)
+    default:
+      return { valid: true, errors: [] }
+  }
+}
+
+/**
  * Validates GraphQL schema syntax
  */
 export function validateGraphQL(content: string): ValidationResult {
