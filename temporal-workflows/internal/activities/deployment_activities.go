@@ -14,6 +14,70 @@ import (
 	"text/template"
 )
 
+// EnvVarRef represents an environment variable reference (name only, no value)
+type EnvVarRef struct {
+	Key string
+}
+
+// GeneratorContext is the template rendering context passed to Go text/template
+type GeneratorContext struct {
+	ServiceName    string
+	ImageRepo      string
+	ImageTag       string
+	Port           int
+	HealthCheckURL string
+	Replicas       int
+	Namespace      string
+	EnvVars        []EnvVarRef
+}
+
+// buildGeneratorContext creates a GeneratorContext from user config and env var refs
+func buildGeneratorContext(config map[string]interface{}, envVars []EnvVarRef) GeneratorContext {
+	ctx := GeneratorContext{
+		ServiceName: "app",
+		ImageTag:    "latest",
+		Port:        3000,
+		Replicas:    1,
+		Namespace:   "default",
+	}
+
+	if sn, ok := config["serviceName"].(string); ok && sn != "" {
+		ctx.ServiceName = sn
+	}
+	if rn, ok := config["releaseName"].(string); ok && rn != "" {
+		ctx.ServiceName = rn
+	}
+	if p, ok := config["port"].(float64); ok {
+		ctx.Port = int(p)
+	}
+	if it, ok := config["imageTag"].(string); ok && it != "" {
+		ctx.ImageTag = it
+	}
+	if ir, ok := config["imageRepository"].(string); ok && ir != "" {
+		ctx.ImageRepo = ir
+	}
+	if r, ok := config["replicas"].(float64); ok {
+		ctx.Replicas = int(r)
+	}
+	if ns, ok := config["namespace"].(string); ok && ns != "" {
+		ctx.Namespace = ns
+	}
+	if hc, ok := config["healthCheckUrl"].(string); ok && hc != "" {
+		ctx.HealthCheckURL = hc
+	}
+
+	// Default image repo if not provided
+	if ctx.ImageRepo == "" {
+		ctx.ImageRepo = fmt.Sprintf("ghcr.io/org/%s", ctx.ServiceName)
+	}
+
+	if len(envVars) > 0 {
+		ctx.EnvVars = envVars
+	}
+
+	return ctx
+}
+
 // PayloadDeploymentClient defines interface for Payload CMS operations
 type PayloadDeploymentClient interface {
 	GetGeneratorBySlug(ctx context.Context, slug string) (*GeneratorData, error)
@@ -221,7 +285,8 @@ func (a *DeploymentActivities) PrepareGeneratorContext(ctx context.Context, inpu
 			return "", fmt.Errorf("failed to create file %s: %w", tf.Path, err)
 		}
 
-		if err := tmpl.Execute(f, config); err != nil {
+		genCtx := buildGeneratorContext(config, nil) // TODO: fetch env vars from Payload in PrepareGeneratorContext
+		if err := tmpl.Execute(f, genCtx); err != nil {
 			f.Close()
 			_ = os.RemoveAll(workDir)
 			return "", fmt.Errorf("failed to render template %s: %w", tf.Path, err)
@@ -239,38 +304,15 @@ func (a *DeploymentActivities) prepareDefaultDockerCompose(workDir string, confi
 		return "", fmt.Errorf("failed to parse config: %w", err)
 	}
 
-	serviceName := "app"
-	if sn, ok := config["serviceName"].(string); ok {
-		serviceName = sn
-	}
+	genCtx := buildGeneratorContext(config, nil)
 
-	port := 3000
-	if p, ok := config["port"].(float64); ok {
-		port = int(p)
-	}
-
-	imageTag := "latest"
-	if it, ok := config["imageTag"].(string); ok && it != "" {
-		imageTag = it
-	}
-
-	// Use service name as image name for ghcr.io pattern
-	// TODO: In future, derive from app's linked repository
-	imageRepo := fmt.Sprintf("ghcr.io/your-org/%s", serviceName)
-	if ir, ok := config["imageRepository"].(string); ok && ir != "" {
-		imageRepo = ir
-	}
-
-	composeContent := fmt.Sprintf(`version: '3.8'
-
-services:
+	composeContent := fmt.Sprintf(`services:
   %s:
     image: %s:%s
     ports:
       - "%d:%d"
     restart: unless-stopped
-    # TODO: Add environment variables, volumes, etc. as needed
-`, serviceName, imageRepo, imageTag, port, port)
+`, genCtx.ServiceName, genCtx.ImageRepo, genCtx.ImageTag, genCtx.Port, genCtx.Port)
 
 	composePath := filepath.Join(workDir, "docker-compose.yml")
 	if err := os.WriteFile(composePath, []byte(composeContent), 0644); err != nil {
