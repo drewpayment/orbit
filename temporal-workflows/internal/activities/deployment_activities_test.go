@@ -12,7 +12,7 @@ import (
 )
 
 func TestValidateDeploymentConfig_DockerCompose_Valid(t *testing.T) {
-	activities := NewDeploymentActivities("/tmp/test", nil, slog.Default())
+	activities := NewDeploymentActivities("/tmp/test", nil, nil, slog.Default())
 
 	config := map[string]interface{}{
 		"serviceName": "my-app",
@@ -30,7 +30,7 @@ func TestValidateDeploymentConfig_DockerCompose_Valid(t *testing.T) {
 }
 
 func TestValidateDeploymentConfig_DockerCompose_MissingRequired(t *testing.T) {
-	activities := NewDeploymentActivities("/tmp/test", nil, slog.Default())
+	activities := NewDeploymentActivities("/tmp/test", nil, nil, slog.Default())
 
 	config := map[string]interface{}{
 		"port": 3000,
@@ -49,7 +49,7 @@ func TestValidateDeploymentConfig_DockerCompose_MissingRequired(t *testing.T) {
 }
 
 func TestValidateDeploymentConfig_DockerCompose_EmptyStrings(t *testing.T) {
-	activities := NewDeploymentActivities("/tmp/test", nil, slog.Default())
+	activities := NewDeploymentActivities("/tmp/test", nil, nil, slog.Default())
 
 	config := map[string]interface{}{
 		"serviceName": "   ", // whitespace only
@@ -68,7 +68,7 @@ func TestValidateDeploymentConfig_DockerCompose_EmptyStrings(t *testing.T) {
 }
 
 func TestPrepareGeneratorContext_WithoutPayloadClient(t *testing.T) {
-	activities := NewDeploymentActivities("/tmp/test", nil, slog.Default())
+	activities := NewDeploymentActivities("/tmp/test", nil, nil, slog.Default())
 
 	config := map[string]interface{}{
 		"serviceName":     "test-service",
@@ -102,7 +102,7 @@ func TestPrepareGeneratorContext_WithoutPayloadClient(t *testing.T) {
 }
 
 func TestExecuteGenerator_UnsupportedType(t *testing.T) {
-	activities := NewDeploymentActivities("/tmp/test", nil, slog.Default())
+	activities := NewDeploymentActivities("/tmp/test", nil, nil, slog.Default())
 
 	input := ExecuteGeneratorInput{
 		DeploymentID:  "test-deployment-123",
@@ -120,7 +120,7 @@ func TestExecuteGenerator_UnsupportedType(t *testing.T) {
 }
 
 func TestUpdateDeploymentStatus_WithoutClient(t *testing.T) {
-	activities := NewDeploymentActivities("/tmp/test", nil, slog.Default())
+	activities := NewDeploymentActivities("/tmp/test", nil, nil, slog.Default())
 
 	input := UpdateDeploymentStatusInput{
 		DeploymentID:  "test-deployment-123",
@@ -144,7 +144,7 @@ func TestExecuteGenerator_Helm_GenerateMode(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(workDir, "templates/deployment.yaml"), []byte("kind: Deployment\n"), 0644))
 	require.NoError(t, os.WriteFile(filepath.Join(workDir, "templates/service.yaml"), []byte("kind: Service\n"), 0644))
 
-	activities := NewDeploymentActivities("/tmp/test", nil, slog.Default())
+	activities := NewDeploymentActivities("/tmp/test", nil, nil, slog.Default())
 	input := ExecuteGeneratorInput{
 		DeploymentID:  "test-123",
 		GeneratorType: "helm",
@@ -164,7 +164,7 @@ func TestExecuteGenerator_Helm_GenerateMode(t *testing.T) {
 }
 
 func TestValidateDeploymentConfig_Helm_Valid(t *testing.T) {
-	activities := NewDeploymentActivities("/tmp/test", nil, slog.Default())
+	activities := NewDeploymentActivities("/tmp/test", nil, nil, slog.Default())
 	config := map[string]interface{}{"releaseName": "my-release"}
 	configBytes, _ := json.Marshal(config)
 
@@ -176,7 +176,7 @@ func TestValidateDeploymentConfig_Helm_Valid(t *testing.T) {
 }
 
 func TestValidateDeploymentConfig_Helm_MissingRequired(t *testing.T) {
-	activities := NewDeploymentActivities("/tmp/test", nil, slog.Default())
+	activities := NewDeploymentActivities("/tmp/test", nil, nil, slog.Default())
 	config := map[string]interface{}{"namespace": "prod"}
 	configBytes, _ := json.Marshal(config)
 
@@ -186,4 +186,95 @@ func TestValidateDeploymentConfig_Helm_MissingRequired(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "releaseName")
+}
+
+// mockPayloadDeploymentClient satisfies PayloadDeploymentClient for testing CommitToRepo
+type mockPayloadDeploymentClient struct {
+	repoInfo *AppRepositoryInfo
+	repoErr  error
+	envKeys  []string
+	envErr   error
+}
+
+func (m *mockPayloadDeploymentClient) GetGeneratorBySlug(_ context.Context, _ string) (*GeneratorData, error) {
+	return nil, nil
+}
+func (m *mockPayloadDeploymentClient) UpdateDeploymentStatus(_ context.Context, _, _, _, _ string, _ []GeneratedFile) error {
+	return nil
+}
+func (m *mockPayloadDeploymentClient) GetAppRepository(_ context.Context, _ string) (*AppRepositoryInfo, error) {
+	return m.repoInfo, m.repoErr
+}
+func (m *mockPayloadDeploymentClient) GetAppEnvVarKeys(_ context.Context, _ string) ([]string, error) {
+	return m.envKeys, m.envErr
+}
+
+// mockGitHubCommitter satisfies GitHubCommitter for testing CommitToRepo
+type mockGitHubCommitter struct {
+	sha string
+	err error
+}
+
+func (m *mockGitHubCommitter) CommitFiles(_ context.Context, _, _, _, _ string, _ []GeneratedFile) (string, error) {
+	return m.sha, m.err
+}
+
+func TestCommitToRepo_NilPayloadClient(t *testing.T) {
+	act := NewDeploymentActivities("/tmp/test", nil, nil, slog.Default())
+	result, err := act.CommitToRepo(context.Background(), CommitToRepoInput{
+		DeploymentID: "dep-1",
+		AppID:        "app-1",
+		Files:        []GeneratedFile{{Path: "f.txt", Content: "x"}},
+	})
+	require.NoError(t, err)
+	require.True(t, result.Success)
+	require.Equal(t, "placeholder-sha", result.CommitSHA)
+}
+
+func TestCommitToRepo_NilGitHubCommitter(t *testing.T) {
+	client := &mockPayloadDeploymentClient{}
+	act := NewDeploymentActivities("/tmp/test", client, nil, slog.Default())
+	result, err := act.CommitToRepo(context.Background(), CommitToRepoInput{
+		DeploymentID: "dep-1",
+		AppID:        "app-1",
+	})
+	require.NoError(t, err)
+	require.True(t, result.Success)
+	require.Equal(t, "placeholder-sha", result.CommitSHA)
+}
+
+func TestCommitToRepo_NoLinkedRepository(t *testing.T) {
+	client := &mockPayloadDeploymentClient{
+		repoInfo: &AppRepositoryInfo{Owner: "", Name: ""},
+	}
+	committer := &mockGitHubCommitter{sha: "abc123"}
+	act := NewDeploymentActivities("/tmp/test", client, committer, slog.Default())
+	result, err := act.CommitToRepo(context.Background(), CommitToRepoInput{
+		DeploymentID: "dep-1",
+		AppID:        "app-1",
+	})
+	require.NoError(t, err)
+	require.False(t, result.Success)
+	require.Contains(t, result.Error, "no linked repository")
+}
+
+func TestCommitToRepo_Success(t *testing.T) {
+	client := &mockPayloadDeploymentClient{
+		repoInfo: &AppRepositoryInfo{
+			Owner:         "myorg",
+			Name:          "myrepo",
+			DefaultBranch: "main",
+		},
+	}
+	committer := &mockGitHubCommitter{sha: "abc123"}
+	act := NewDeploymentActivities("/tmp/test", client, committer, slog.Default())
+	result, err := act.CommitToRepo(context.Background(), CommitToRepoInput{
+		DeploymentID:  "dep-1",
+		AppID:         "app-1",
+		Files:         []GeneratedFile{{Path: "docker-compose.yml", Content: "services: {}"}},
+		CommitMessage: "chore: add compose",
+	})
+	require.NoError(t, err)
+	require.True(t, result.Success)
+	require.Equal(t, "abc123", result.CommitSHA)
 }

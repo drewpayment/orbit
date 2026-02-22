@@ -202,6 +202,7 @@ func main() {
 	deploymentActivities := activities.NewDeploymentActivities(
 		deploymentWorkDir,
 		deploymentPayloadClient,
+		nil, // GitHubCommitter: not yet wired (placeholder path used)
 		logger,
 	)
 	w.RegisterActivity(deploymentActivities.ValidateDeploymentConfig)

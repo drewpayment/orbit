@@ -120,19 +120,15 @@ type DeploymentActivities struct {
 	logger        *slog.Logger
 }
 
-// SetGitHubCommitter sets the GitHub committer (called after construction when deps are available)
-func (a *DeploymentActivities) SetGitHubCommitter(committer GitHubCommitter) {
-	a.githubCommit = committer
-}
-
 // NewDeploymentActivities creates a new instance
-func NewDeploymentActivities(workDir string, payloadClient PayloadDeploymentClient, logger *slog.Logger) *DeploymentActivities {
+func NewDeploymentActivities(workDir string, payloadClient PayloadDeploymentClient, githubCommit GitHubCommitter, logger *slog.Logger) *DeploymentActivities {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &DeploymentActivities{
 		workDir:       workDir,
 		payloadClient: payloadClient,
+		githubCommit:  githubCommit,
 		logger:        logger,
 	}
 }
@@ -305,6 +301,21 @@ func (a *DeploymentActivities) PrepareGeneratorContext(ctx context.Context, inpu
 		return "", fmt.Errorf("failed to parse config: %w", err)
 	}
 
+	// Fetch env var keys once for all template files
+	var envVars []EnvVarRef
+	if a.payloadClient != nil {
+		keys, err := a.payloadClient.GetAppEnvVarKeys(ctx, input.AppID)
+		if err != nil {
+			a.logger.Warn("Failed to fetch env var keys, continuing without them", "error", err)
+		} else {
+			for _, k := range keys {
+				envVars = append(envVars, EnvVarRef{Key: k})
+			}
+		}
+	}
+
+	genCtx := buildGeneratorContext(config, envVars)
+
 	// Render template files
 	for _, tf := range generator.TemplateFiles {
 		tmpl, err := template.New(tf.Path).Parse(tf.Content)
@@ -319,21 +330,6 @@ func (a *DeploymentActivities) PrepareGeneratorContext(ctx context.Context, inpu
 			_ = os.RemoveAll(workDir)
 			return "", fmt.Errorf("failed to create file %s: %w", tf.Path, err)
 		}
-
-		// Fetch env var keys for the app
-		var envVars []EnvVarRef
-		if a.payloadClient != nil {
-			keys, err := a.payloadClient.GetAppEnvVarKeys(ctx, input.AppID)
-			if err != nil {
-				a.logger.Warn("Failed to fetch env var keys, continuing without them", "error", err)
-			} else {
-				for _, k := range keys {
-					envVars = append(envVars, EnvVarRef{Key: k})
-				}
-			}
-		}
-
-		genCtx := buildGeneratorContext(config, envVars)
 		if err := tmpl.Execute(f, genCtx); err != nil {
 			f.Close()
 			_ = os.RemoveAll(workDir)
@@ -543,10 +539,7 @@ func (a *DeploymentActivities) CommitToRepo(ctx context.Context, input CommitToR
 	// Get app repository info
 	repoInfo, err := a.payloadClient.GetAppRepository(ctx, input.AppID)
 	if err != nil {
-		return &CommitToRepoResult{
-			Success: false,
-			Error:   fmt.Sprintf("failed to get app repository: %v", err),
-		}, nil
+		return nil, fmt.Errorf("failed to get app repository: %w", err)
 	}
 
 	if repoInfo.Owner == "" || repoInfo.Name == "" {
@@ -568,10 +561,7 @@ func (a *DeploymentActivities) CommitToRepo(ctx context.Context, input CommitToR
 
 	sha, err := a.githubCommit.CommitFiles(ctx, repoInfo.Owner, repoInfo.Name, branch, commitMsg, input.Files)
 	if err != nil {
-		return &CommitToRepoResult{
-			Success: false,
-			Error:   fmt.Sprintf("failed to commit to GitHub: %v", err),
-		}, nil
+		return nil, fmt.Errorf("failed to commit to GitHub: %w", err)
 	}
 
 	a.logger.Info("Committed files to repository",
