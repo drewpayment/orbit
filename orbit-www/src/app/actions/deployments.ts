@@ -471,6 +471,26 @@ export async function commitGeneratedFiles(input: {
       overrideAccess: true,
     })
 
+    // Authorization: verify the caller is an active member of the app's workspace
+    const workspaceId = typeof app.workspace === 'string'
+      ? app.workspace
+      : (app.workspace as { id: string } | null)?.id
+    if (workspaceId) {
+      const members = await payload.find({
+        collection: 'workspace-members',
+        where: {
+          and: [
+            { workspace: { equals: workspaceId } },
+            { user: { equals: session.user.id } },
+            { status: { equals: 'active' } },
+          ],
+        },
+      })
+      if (members.docs.length === 0) {
+        return { success: false, error: 'Not a member of this workspace' }
+      }
+    }
+
     if (!app?.repository?.installationId || !app.repository.owner || !app.repository.name) {
       return { success: false, error: 'App has no linked repository' }
     }
@@ -518,8 +538,11 @@ export async function commitGeneratedFiles(input: {
     const commitResponse = await fetch(`${apiBase}/git/commits/${baseSha}`, {
       headers: githubHeaders,
     })
-    const commitData = await commitResponse.json() as { tree: { sha: string } }
-    const baseTreeSha = commitData.tree.sha
+    const commitRawData = await commitResponse.json() as { tree: { sha: string }; message?: string }
+    if (!commitResponse.ok) {
+      return { success: false, error: `Failed to get base commit: ${commitRawData.message || commitResponse.statusText}` }
+    }
+    const baseTreeSha = commitRawData.tree.sha
 
     // 4. Create blobs for each file
     const tree: Array<{ path: string; mode: string; type: string; sha: string }> = []
@@ -532,7 +555,10 @@ export async function commitGeneratedFiles(input: {
           encoding: 'utf-8',
         }),
       })
-      const blobData = await blobResponse.json() as { sha: string }
+      const blobData = await blobResponse.json() as { sha: string; message?: string }
+      if (!blobResponse.ok) {
+        return { success: false, error: `Failed to create blob for "${file.path}": ${blobData.message || blobResponse.statusText}` }
+      }
       tree.push({
         path: file.path,
         mode: '100644',
@@ -550,7 +576,10 @@ export async function commitGeneratedFiles(input: {
         tree,
       }),
     })
-    const treeData = await treeResponse.json() as { sha: string }
+    const treeData = await treeResponse.json() as { sha: string; message?: string }
+    if (!treeResponse.ok) {
+      return { success: false, error: `Failed to create tree: ${treeData.message || treeResponse.statusText}` }
+    }
 
     // 6. Create commit
     const newCommitResponse = await fetch(`${apiBase}/git/commits`, {
@@ -562,14 +591,21 @@ export async function commitGeneratedFiles(input: {
         parents: [baseSha],
       }),
     })
-    const newCommitData = await newCommitResponse.json() as { sha: string }
+    const newCommitData = await newCommitResponse.json() as { sha: string; message?: string }
+    if (!newCommitResponse.ok) {
+      return { success: false, error: `Failed to create commit: ${newCommitData.message || newCommitResponse.statusText}` }
+    }
 
     // 7. Update the branch ref
-    await fetch(`${apiBase}/git/refs/heads/${targetBranch}`, {
+    const updateRefResponse = await fetch(`${apiBase}/git/refs/heads/${targetBranch}`, {
       method: 'PATCH',
       headers: githubHeaders,
       body: JSON.stringify({ sha: newCommitData.sha }),
     })
+    if (!updateRefResponse.ok) {
+      const errData = await updateRefResponse.json() as { message?: string }
+      return { success: false, error: `Failed to update branch ref: ${errData.message || updateRefResponse.statusText}` }
+    }
 
     // 8. Update deployment status in Payload
     await payload.update({
