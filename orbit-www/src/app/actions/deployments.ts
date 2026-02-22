@@ -373,15 +373,64 @@ export async function getGeneratedFiles(deploymentId: string) {
 export async function getRepoBranches(appId: string) {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session?.user) {
-    return { success: false, error: 'Unauthorized', branches: [] }
+    return { success: false, error: 'Unauthorized', branches: [] as string[] }
   }
 
-  // For now, return default branches
-  // TODO: Implement actual GitHub API call to fetch branches
-  return {
-    success: true,
-    branches: ['main', 'develop'],
-    defaultBranch: 'main',
+  const payload = await getPayload({ config })
+
+  try {
+    const app = await payload.findByID({
+      collection: 'apps',
+      id: appId,
+      depth: 0,
+      overrideAccess: true,
+    })
+
+    if (!app?.repository?.installationId || !app.repository.owner || !app.repository.name) {
+      return { success: true, branches: ['main'], defaultBranch: 'main' }
+    }
+
+    const { createInstallationToken } = await import('@/lib/github/octokit')
+    const { token } = await createInstallationToken(Number(app.repository.installationId))
+
+    const response = await fetch(
+      `https://api.github.com/repos/${app.repository.owner}/${app.repository.name}/branches?per_page=100`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+        },
+      }
+    )
+
+    if (!response.ok) {
+      console.error('GitHub branches API error:', response.status)
+      return { success: true, branches: ['main'], defaultBranch: 'main' }
+    }
+
+    const data = await response.json() as Array<{ name: string }>
+    const branches = data.map(b => b.name)
+
+    const repoResponse = await fetch(
+      `https://api.github.com/repos/${app.repository.owner}/${app.repository.name}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+        },
+      }
+    )
+
+    let defaultBranch = 'main'
+    if (repoResponse.ok) {
+      const repoData = await repoResponse.json() as { default_branch: string }
+      defaultBranch = repoData.default_branch
+    }
+
+    return { success: true, branches, defaultBranch }
+  } catch (error) {
+    console.error('Failed to fetch branches:', error)
+    return { success: true, branches: ['main'], defaultBranch: 'main' }
   }
 }
 
@@ -409,15 +458,120 @@ export async function commitGeneratedFiles(input: {
       return { success: false, error: 'Deployment not found' }
     }
 
-    // TODO: Implement actual commit via gRPC to repository service
-    // For now, simulate success
-    console.log('Would commit files:', {
-      deploymentId: input.deploymentId,
-      branch: input.newBranch || input.branch,
-      message: input.message,
+    const files = (deployment.generatedFiles as Array<{ path: string; content: string }>) || []
+    if (files.length === 0) {
+      return { success: false, error: 'No generated files to commit' }
+    }
+
+    const appId = typeof deployment.app === 'string' ? deployment.app : (deployment.app as { id: string }).id
+    const app = await payload.findByID({
+      collection: 'apps',
+      id: appId,
+      depth: 0,
+      overrideAccess: true,
     })
 
-    // Update deployment status
+    if (!app?.repository?.installationId || !app.repository.owner || !app.repository.name) {
+      return { success: false, error: 'App has no linked repository' }
+    }
+
+    const { createInstallationToken } = await import('@/lib/github/octokit')
+    const { token } = await createInstallationToken(Number(app.repository.installationId))
+
+    const owner = app.repository.owner as string
+    const repo = app.repository.name as string
+    const targetBranch = input.newBranch || input.branch
+    const apiBase = `https://api.github.com/repos/${owner}/${repo}`
+    const githubHeaders = {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+    }
+
+    // 1. Get the ref for the source branch
+    const refResponse = await fetch(`${apiBase}/git/ref/heads/${input.branch}`, {
+      headers: githubHeaders,
+    })
+    if (!refResponse.ok) {
+      return { success: false, error: `Branch "${input.branch}" not found` }
+    }
+    const refData = await refResponse.json() as { object: { sha: string } }
+    const baseSha = refData.object.sha
+
+    // 2. If creating a new branch, create the ref
+    if (input.newBranch) {
+      const createRefResponse = await fetch(`${apiBase}/git/refs`, {
+        method: 'POST',
+        headers: githubHeaders,
+        body: JSON.stringify({
+          ref: `refs/heads/${input.newBranch}`,
+          sha: baseSha,
+        }),
+      })
+      if (!createRefResponse.ok) {
+        const err = await createRefResponse.json() as { message?: string }
+        return { success: false, error: `Failed to create branch: ${err.message || 'unknown'}` }
+      }
+    }
+
+    // 3. Get the base tree SHA
+    const commitResponse = await fetch(`${apiBase}/git/commits/${baseSha}`, {
+      headers: githubHeaders,
+    })
+    const commitData = await commitResponse.json() as { tree: { sha: string } }
+    const baseTreeSha = commitData.tree.sha
+
+    // 4. Create blobs for each file
+    const tree: Array<{ path: string; mode: string; type: string; sha: string }> = []
+    for (const file of files) {
+      const blobResponse = await fetch(`${apiBase}/git/blobs`, {
+        method: 'POST',
+        headers: githubHeaders,
+        body: JSON.stringify({
+          content: file.content,
+          encoding: 'utf-8',
+        }),
+      })
+      const blobData = await blobResponse.json() as { sha: string }
+      tree.push({
+        path: file.path,
+        mode: '100644',
+        type: 'blob',
+        sha: blobData.sha,
+      })
+    }
+
+    // 5. Create tree
+    const treeResponse = await fetch(`${apiBase}/git/trees`, {
+      method: 'POST',
+      headers: githubHeaders,
+      body: JSON.stringify({
+        base_tree: baseTreeSha,
+        tree,
+      }),
+    })
+    const treeData = await treeResponse.json() as { sha: string }
+
+    // 6. Create commit
+    const newCommitResponse = await fetch(`${apiBase}/git/commits`, {
+      method: 'POST',
+      headers: githubHeaders,
+      body: JSON.stringify({
+        message: input.message,
+        tree: treeData.sha,
+        parents: [baseSha],
+      }),
+    })
+    const newCommitData = await newCommitResponse.json() as { sha: string }
+
+    // 7. Update the branch ref
+    await fetch(`${apiBase}/git/refs/heads/${targetBranch}`, {
+      method: 'PATCH',
+      headers: githubHeaders,
+      body: JSON.stringify({ sha: newCommitData.sha }),
+    })
+
+    // 8. Update deployment status in Payload
     await payload.update({
       collection: 'deployments',
       id: input.deploymentId,
@@ -427,10 +581,10 @@ export async function commitGeneratedFiles(input: {
       },
     })
 
-    return { success: true, commitSha: 'placeholder-sha' }
+    return { success: true, sha: newCommitData.sha }
   } catch (error) {
-    console.error('Failed to commit files:', error)
-    return { success: false, error: 'Failed to commit files' }
+    console.error('Failed to commit generated files:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
   }
 }
 
