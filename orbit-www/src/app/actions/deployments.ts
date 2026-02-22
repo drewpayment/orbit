@@ -390,20 +390,21 @@ export async function getRepoBranches(appId: string) {
     const repoWorkspaceId = typeof app.workspace === 'string'
       ? app.workspace
       : (app.workspace as { id: string } | null)?.id
-    if (repoWorkspaceId) {
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: repoWorkspaceId } },
-            { user: { equals: session.user.id } },
-            { status: { equals: 'active' } },
-          ],
-        },
-      })
-      if (members.docs.length === 0) {
-        return { success: false, error: 'Not a member of this workspace', branches: [] as string[] }
-      }
+    if (!repoWorkspaceId) {
+      return { success: false, error: 'App has no associated workspace', branches: [] as string[] }
+    }
+    const repoMembers = await payload.find({
+      collection: 'workspace-members',
+      where: {
+        and: [
+          { workspace: { equals: repoWorkspaceId } },
+          { user: { equals: session.user.id } },
+          { status: { equals: 'active' } },
+        ],
+      },
+    })
+    if (repoMembers.docs.length === 0) {
+      return { success: false, error: 'Not a member of this workspace', branches: [] as string[] }
     }
 
     if (!app?.repository?.installationId || !app.repository.owner || !app.repository.name) {
@@ -632,8 +633,8 @@ export async function commitGeneratedFiles(input: {
       body: JSON.stringify({ sha: newCommitData.sha }),
     })
     if (!updateRefResponse.ok) {
-      const errData = await updateRefResponse.json() as { message?: string }
-      return { success: false, error: `Failed to update branch ref: ${errData.message || updateRefResponse.statusText}` }
+      const errData = await updateRefResponse.json().catch(() => ({})) as { message?: string }
+      return { success: false, error: `Failed to update branch ref: ${errData.message || updateRefResponse.status}` }
     }
 
     // 8. Update deployment status in Payload
