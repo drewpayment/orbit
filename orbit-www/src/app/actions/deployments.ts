@@ -10,7 +10,7 @@ import type { JsonObject } from '@bufbuild/protobuf'
 interface CreateDeploymentInput {
   appId: string
   name: string
-  generator: 'docker-compose' | 'terraform' | 'helm' | 'custom'
+  generator: 'docker-compose' | 'helm' | 'custom'
   config: Record<string, unknown>
   target: {
     type: string
@@ -156,8 +156,8 @@ export async function startDeployment(deploymentId: string) {
     }
 
     // Determine mode based on generator type
-    // docker-compose uses generate mode to let user review files before commit
-    const mode = deployment.generator === 'docker-compose' ? 'generate' : 'execute'
+    // docker-compose and helm use generate mode to let user review files before commit
+    const mode = (deployment.generator === 'docker-compose' || deployment.generator === 'helm') ? 'generate' : 'execute'
 
     // Start the Temporal workflow via gRPC
     const response = await startDeploymentWorkflow({
@@ -166,7 +166,11 @@ export async function startDeployment(deploymentId: string) {
       workspaceId,
       userId: session.user.id,
       generatorType: deployment.generator,
-      generatorSlug: deployment.generator, // Using generator type as slug for now
+      generatorSlug: deployment.generator === 'docker-compose'
+        ? 'docker-compose-basic'
+        : deployment.generator === 'helm'
+          ? 'helm-basic'
+          : deployment.generator,
       config: deploymentConfig,
       target: deploymentTarget,
       mode,
@@ -711,8 +715,8 @@ export async function syncDeploymentStatusFromWorkflow(
           collection: 'deployments',
           id: deploymentId,
         })
-        // If generator is docker-compose, it's generate mode -> status should be 'generated'
-        if (deployment?.generator === 'docker-compose') {
+        // If generator is docker-compose or helm, it's generate mode -> status should be 'generated'
+        if (deployment?.generator === 'docker-compose' || deployment?.generator === 'helm') {
           newStatus = 'generated'
         } else {
           newStatus = 'deployed'
