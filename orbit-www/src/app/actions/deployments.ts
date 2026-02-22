@@ -475,20 +475,21 @@ export async function commitGeneratedFiles(input: {
     const workspaceId = typeof app.workspace === 'string'
       ? app.workspace
       : (app.workspace as { id: string } | null)?.id
-    if (workspaceId) {
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: session.user.id } },
-            { status: { equals: 'active' } },
-          ],
-        },
-      })
-      if (members.docs.length === 0) {
-        return { success: false, error: 'Not a member of this workspace' }
-      }
+    if (!workspaceId) {
+      return { success: false, error: 'App has no associated workspace' }
+    }
+    const members = await payload.find({
+      collection: 'workspace-members',
+      where: {
+        and: [
+          { workspace: { equals: workspaceId } },
+          { user: { equals: session.user.id } },
+          { status: { equals: 'active' } },
+        ],
+      },
+    })
+    if (members.docs.length === 0) {
+      return { success: false, error: 'Not a member of this workspace' }
     }
 
     if (!app?.repository?.installationId || !app.repository.owner || !app.repository.name) {
@@ -538,10 +539,10 @@ export async function commitGeneratedFiles(input: {
     const commitResponse = await fetch(`${apiBase}/git/commits/${baseSha}`, {
       headers: githubHeaders,
     })
-    const commitRawData = await commitResponse.json() as { tree: { sha: string }; message?: string }
     if (!commitResponse.ok) {
-      return { success: false, error: `Failed to get base commit: ${commitRawData.message || commitResponse.statusText}` }
+      return { success: false, error: `Failed to get base commit: ${commitResponse.statusText}` }
     }
+    const commitRawData = await commitResponse.json() as { tree: { sha: string } }
     const baseTreeSha = commitRawData.tree.sha
 
     // 4. Create blobs for each file
