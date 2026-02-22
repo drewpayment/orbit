@@ -80,6 +80,21 @@ func buildGeneratorContext(config map[string]interface{}, envVars []EnvVarRef) G
 type PayloadDeploymentClient interface {
 	GetGeneratorBySlug(ctx context.Context, slug string) (*GeneratorData, error)
 	UpdateDeploymentStatus(ctx context.Context, deploymentID, status, url, errorMsg string, generatedFiles []GeneratedFile) error
+	GetAppRepository(ctx context.Context, appID string) (*AppRepositoryInfo, error)
+	GetAppEnvVarKeys(ctx context.Context, appID string) ([]string, error)
+}
+
+// AppRepositoryInfo contains repository details needed for git commits
+type AppRepositoryInfo struct {
+	Owner          string `json:"owner"`
+	Name           string `json:"name"`
+	InstallationID string `json:"installationId"`
+	DefaultBranch  string `json:"defaultBranch"`
+}
+
+// GitHubCommitter abstracts GitHub git operations for committing files
+type GitHubCommitter interface {
+	CommitFiles(ctx context.Context, owner, repo, branch, commitMessage string, files []GeneratedFile) (string, error)
 }
 
 // GeneratorData represents a deployment generator from Payload
@@ -101,7 +116,13 @@ type GeneratorTemplateFile struct {
 type DeploymentActivities struct {
 	workDir       string
 	payloadClient PayloadDeploymentClient
+	githubCommit  GitHubCommitter
 	logger        *slog.Logger
+}
+
+// SetGitHubCommitter sets the GitHub committer (called after construction when deps are available)
+func (a *DeploymentActivities) SetGitHubCommitter(committer GitHubCommitter) {
+	a.githubCommit = committer
 }
 
 // NewDeploymentActivities creates a new instance
@@ -299,7 +320,20 @@ func (a *DeploymentActivities) PrepareGeneratorContext(ctx context.Context, inpu
 			return "", fmt.Errorf("failed to create file %s: %w", tf.Path, err)
 		}
 
-		genCtx := buildGeneratorContext(config, nil) // TODO: fetch env vars from Payload in PrepareGeneratorContext
+		// Fetch env var keys for the app
+		var envVars []EnvVarRef
+		if a.payloadClient != nil {
+			keys, err := a.payloadClient.GetAppEnvVarKeys(ctx, input.AppID)
+			if err != nil {
+				a.logger.Warn("Failed to fetch env var keys, continuing without them", "error", err)
+			} else {
+				for _, k := range keys {
+					envVars = append(envVars, EnvVarRef{Key: k})
+				}
+			}
+		}
+
+		genCtx := buildGeneratorContext(config, envVars)
 		if err := tmpl.Execute(f, genCtx); err != nil {
 			f.Close()
 			_ = os.RemoveAll(workDir)
@@ -496,10 +530,57 @@ func (a *DeploymentActivities) CommitToRepo(ctx context.Context, input CommitToR
 		"appID", input.AppID,
 		"fileCount", len(input.Files))
 
-	// For now, return success - will implement GitHub commit in next task
-	// This is a placeholder that allows the workflow to complete
+	if a.payloadClient == nil {
+		a.logger.Warn("No Payload client, returning placeholder")
+		return &CommitToRepoResult{Success: true, CommitSHA: "placeholder-sha"}, nil
+	}
+
+	if a.githubCommit == nil {
+		a.logger.Warn("No GitHub committer configured, returning placeholder")
+		return &CommitToRepoResult{Success: true, CommitSHA: "placeholder-sha"}, nil
+	}
+
+	// Get app repository info
+	repoInfo, err := a.payloadClient.GetAppRepository(ctx, input.AppID)
+	if err != nil {
+		return &CommitToRepoResult{
+			Success: false,
+			Error:   fmt.Sprintf("failed to get app repository: %v", err),
+		}, nil
+	}
+
+	if repoInfo.Owner == "" || repoInfo.Name == "" {
+		return &CommitToRepoResult{
+			Success: false,
+			Error:   "app has no linked repository",
+		}, nil
+	}
+
+	branch := repoInfo.DefaultBranch
+	if branch == "" {
+		branch = "main"
+	}
+
+	commitMsg := input.CommitMessage
+	if commitMsg == "" {
+		commitMsg = "chore: add deployment configuration"
+	}
+
+	sha, err := a.githubCommit.CommitFiles(ctx, repoInfo.Owner, repoInfo.Name, branch, commitMsg, input.Files)
+	if err != nil {
+		return &CommitToRepoResult{
+			Success: false,
+			Error:   fmt.Sprintf("failed to commit to GitHub: %v", err),
+		}, nil
+	}
+
+	a.logger.Info("Committed files to repository",
+		"owner", repoInfo.Owner,
+		"repo", repoInfo.Name,
+		"sha", sha)
+
 	return &CommitToRepoResult{
 		Success:   true,
-		CommitSHA: "placeholder-sha",
+		CommitSHA: sha,
 	}, nil
 }
