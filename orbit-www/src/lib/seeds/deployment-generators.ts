@@ -30,7 +30,7 @@ export const builtInGenerators = [
       - "{{.Port}}:{{.Port}}"
     restart: unless-stopped{{if .EnvVars}}
     environment:{{range .EnvVars}}
-      {{.Key}}: ""  # Set this value from your environment{{end}}{{end}}{{if .HealthCheckURL}}
+      {{.Key}}: \${{{.Key}}}{{end}}{{end}}{{if .HealthCheckURL}}
     healthcheck:
       test: ["CMD", "curl", "-f", "{{.HealthCheckURL}}"]
       interval: 30s
