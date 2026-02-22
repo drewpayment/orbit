@@ -71,16 +71,29 @@ func TestBuildGeneratorContext(t *testing.T) {
 				EnvVars:        nil,
 			},
 		},
+		{
+			name: "serviceName wins over releaseName when both present",
+			config: map[string]interface{}{
+				"serviceName": "my-service",
+				"releaseName": "my-release",
+			},
+			expected: GeneratorContext{
+				ServiceName:    "my-service",
+				ImageRepo:      "ghcr.io/org/my-service",
+				ImageTag:       "latest",
+				Port:           3000,
+				HealthCheckURL: "",
+				Replicas:       1,
+				Namespace:      "default",
+				EnvVars:        nil,
+			},
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			result := buildGeneratorContext(tc.config, tc.envVars)
-			require.Equal(t, tc.expected.ServiceName, result.ServiceName)
-			require.Equal(t, tc.expected.Port, result.Port)
-			require.Equal(t, tc.expected.Replicas, result.Replicas)
-			require.Equal(t, tc.expected.Namespace, result.Namespace)
-			require.Equal(t, tc.expected.EnvVars, result.EnvVars)
+			require.Equal(t, tc.expected, result)
 		})
 	}
 }

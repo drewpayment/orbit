@@ -43,8 +43,7 @@ func buildGeneratorContext(config map[string]interface{}, envVars []EnvVarRef) G
 
 	if sn, ok := config["serviceName"].(string); ok && sn != "" {
 		ctx.ServiceName = sn
-	}
-	if rn, ok := config["releaseName"].(string); ok && rn != "" {
+	} else if rn, ok := config["releaseName"].(string); ok && rn != "" {
 		ctx.ServiceName = rn
 	}
 	if p, ok := config["port"].(float64); ok {
