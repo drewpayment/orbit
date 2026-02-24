@@ -12,6 +12,7 @@ import { WorkspaceClient } from './workspace-client'
 import { checkMembershipStatus } from './actions'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
+import { getBetterAuthUsers } from '@/lib/data/cached-queries'
 import { RegistryQuotaWarning } from '@/components/features/workspace/RegistryQuotaWarning'
 import {
   WorkspaceApplicationsCard,
@@ -81,7 +82,7 @@ export default async function WorkspacePage({ params }: PageProps) {
       },
       limit: 100,
     }),
-    // Check membership status for current user
+    // Check membership status for current user (using BA user ID directly)
     session?.user
       ? checkMembershipStatus(workspace.id, session.user.id)
       : Promise.resolve(undefined),
@@ -142,16 +143,23 @@ export default async function WorkspacePage({ params }: PageProps) {
 
   const members = membersResult.docs
 
-  // Extract members for simplified display
+  // Batch-fetch Better Auth user details for member display
+  const memberBaUserIds = members
+    .map((m) => (typeof m.user === 'string' ? m.user : ''))
+    .filter(Boolean)
+  const baUsers = await getBetterAuthUsers(memberBaUserIds)
+  const baUserMap = new Map(baUsers.map((u) => [u.id, u]))
+
   const memberUsers = members
     .map((m) => {
-      const user = typeof m.user === 'object' ? m.user : null
-      if (!user) return null
+      const baUserId = typeof m.user === 'string' ? m.user : ''
+      const baUser = baUserMap.get(baUserId)
+      if (!baUser) return null
       return {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        avatar: user.avatar && typeof user.avatar === 'object' ? user.avatar : null,
+        id: baUser.id,
+        name: baUser.name,
+        email: baUser.email,
+        avatar: baUser.image ? { url: baUser.image } : null,
       }
     })
     .filter((u): u is NonNullable<typeof u> => u !== null)

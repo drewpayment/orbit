@@ -123,7 +123,7 @@ describe('POST /api/setup', () => {
     )
   })
 
-  it('creates workspace member as owner', async () => {
+  it('creates workspace member as owner with Better Auth user ID', async () => {
     mockPayloadCreate
       .mockResolvedValueOnce({ id: 'payload-user-1' }) // users
       .mockResolvedValueOnce({ id: 'tenant-1' }) // tenants
@@ -136,7 +136,7 @@ describe('POST /api/setup', () => {
         collection: 'workspace-members',
         data: expect.objectContaining({
           workspace: 'workspace-1',
-          user: 'payload-user-1',
+          user: 'ba-user-1',
           role: 'owner',
           status: 'active',
         }),

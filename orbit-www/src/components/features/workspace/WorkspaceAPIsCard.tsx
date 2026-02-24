@@ -47,7 +47,7 @@ export function WorkspaceAPIsCard({
             <FileCode className="h-5 w-5" />
             <CardTitle className="text-base">API Specifications</CardTitle>
           </Link>
-          <Button size="sm" className="bg-blue-500 hover:bg-blue-600" asChild>
+          <Button size="sm" className="bg-orange-500 hover:bg-orange-600" asChild>
             <Link href={`/workspaces/${workspaceSlug}/apis/new`}>
               <Plus className="h-4 w-4 mr-1" />
               New API

@@ -3,6 +3,7 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
+import { getBetterAuthUserByEmail, getBetterAuthUsers } from '@/lib/data/cached-queries'
 
 export async function getWorkspaceMembers(workspaceId: string) {
   try {
@@ -20,19 +21,28 @@ export async function getWorkspaceMembers(workspaceId: string) {
       },
       limit: 100,
       sort: '-createdAt',
+      overrideAccess: true,
     })
+
+    // Batch-fetch Better Auth user details for all members
+    const userIds = membersResult.docs
+      .map((m) => (typeof m.user === 'string' ? m.user : ''))
+      .filter(Boolean)
+    const baUsers = await getBetterAuthUsers(userIds)
+    const userMap = new Map(baUsers.map((u) => [u.id, u]))
 
     return {
       success: true,
       members: membersResult.docs.map((member) => {
-        const user = typeof member.user === 'object' ? member.user : null
+        const baUserId = typeof member.user === 'string' ? member.user : ''
+        const baUser = userMap.get(baUserId)
         return {
           id: member.id,
           workspaceId: typeof member.workspace === 'string' ? member.workspace : member.workspace.id,
-          userId: user?.id || '',
-          userEmail: user?.email || '',
-          userName: user?.name || user?.email || '',
-          userAvatar: user?.avatar && typeof user.avatar === 'object' && 'url' in user.avatar ? user.avatar.url : undefined,
+          userId: baUserId,
+          userEmail: baUser?.email || '',
+          userName: baUser?.name || baUser?.email || '',
+          userAvatar: baUser?.image || undefined,
           role: member.role,
           status: member.status,
           joinedAt: member.approvedAt || member.createdAt,
@@ -57,25 +67,17 @@ export async function inviteWorkspaceMember(
   try {
     const payload = await getPayload({ config })
 
-    // Find user by email
-    const usersResult = await payload.find({
-      collection: 'users',
-      where: {
-        email: {
-          equals: email,
-        },
-      },
-      limit: 1,
-    })
+    // Find user by email in Better Auth user collection
+    const baUser = await getBetterAuthUserByEmail(email)
 
-    if (usersResult.docs.length === 0) {
+    if (!baUser) {
       return {
         success: false,
         error: 'User not found with that email address',
       }
     }
 
-    const user = usersResult.docs[0]
+    const user = baUser
 
     // Check if user is already a member
     const existingMember = await payload.find({

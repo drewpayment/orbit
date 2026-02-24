@@ -65,6 +65,10 @@ export async function POST(request: Request) {
     }
     const authData = await authResponse.json()
     authUserId = authData?.user?.id
+    if (!authUserId) {
+      console.error('[setup] Better Auth signup did not return a user ID')
+      return NextResponse.json({ error: 'Setup failed. Please try again.' }, { status: 500 })
+    }
   } catch (error) {
     console.error('[setup] Better Auth signup failed:', error)
     return NextResponse.json({ error: 'Setup failed. Please try again.' }, { status: 500 })
@@ -101,7 +105,7 @@ export async function POST(request: Request) {
       collection: 'workspace-members',
       data: {
         workspace: workspace.id,
-        user: payloadUser.id,
+        user: authUserId!,
         role: 'owner',
         status: 'active',
         requestedAt: new Date().toISOString(),

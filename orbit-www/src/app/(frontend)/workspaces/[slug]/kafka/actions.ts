@@ -190,6 +190,8 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
     return { success: false, error: 'Not authenticated' }
   }
 
+  const userId = session.user.id
+
   const payload = await getPayload({ config })
 
   // Check workspace membership
@@ -198,7 +200,7 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
     where: {
       and: [
         { workspace: { equals: input.workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: userId } },
         { status: { equals: 'active' } },
       ],
     },
@@ -279,7 +281,7 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
       config: topicConfig,
       status: 'provisioning',
       approvalRequired: false, // Auto-approve for MVP
-      createdBy: session.user.id,
+      createdBy: userId,
     },
   })
 
@@ -374,6 +376,8 @@ export async function listTopics(input: ListTopicsInput): Promise<ListTopicsResu
     return { success: false, error: 'Not authenticated' }
   }
 
+  const userId = session.user.id
+
   const payload = await getPayload({ config })
 
   // Check workspace membership
@@ -382,7 +386,7 @@ export async function listTopics(input: ListTopicsInput): Promise<ListTopicsResu
     where: {
       and: [
         { workspace: { equals: input.workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: userId } },
         { status: { equals: 'active' } },
       ],
     },
@@ -459,6 +463,8 @@ export async function getTopic(topicId: string): Promise<GetTopicResult> {
     return { success: false, error: 'Not authenticated' }
   }
 
+  const userId = session.user.id
+
   try {
     const payload = await getPayload({ config })
 
@@ -480,7 +486,7 @@ export async function getTopic(topicId: string): Promise<GetTopicResult> {
       where: {
         and: [
           { workspace: { equals: workspaceId } },
-          { user: { equals: session.user.id } },
+          { user: { equals: userId } },
           { status: { equals: 'active' } },
         ],
       },
@@ -559,6 +565,8 @@ export async function deleteTopic(topicId: string): Promise<DeleteTopicResult> {
     return { success: false, error: 'Not authenticated' }
   }
 
+  const userId = session.user.id
+
   const payload = await getPayload({ config })
 
   try {
@@ -582,7 +590,7 @@ export async function deleteTopic(topicId: string): Promise<DeleteTopicResult> {
       where: {
         and: [
           { workspace: { equals: workspaceId } },
-          { user: { equals: session.user.id } },
+          { user: { equals: userId } },
           { role: { in: ['owner', 'admin'] } },
           { status: { equals: 'active' } },
         ],
@@ -678,6 +686,8 @@ export async function registerSchema(input: RegisterSchemaInput): Promise<Regist
   if (!session?.user) {
     return { success: false, error: 'Not authenticated' }
   }
+
+  const userId = session.user.id
 
   const payload = await getPayload({ config })
 
@@ -868,6 +878,8 @@ export async function requestTopicAccess(
     return { success: false, error: 'Not authenticated' }
   }
 
+  const userId = session.user.id
+
   const payload = await getPayload({ config })
 
   // Check workspace membership
@@ -876,7 +888,7 @@ export async function requestTopicAccess(
     where: {
       and: [
         { workspace: { equals: input.requestingWorkspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: userId } },
         { status: { equals: 'active' } },
       ],
     },
@@ -895,7 +907,7 @@ export async function requestTopicAccess(
     sharedWithWorkspaceId: input.requestingWorkspaceId,
     permission: input.permission,
     status: 'pending_request',
-    requestedBy: session.user.id,
+    requestedBy: userId,
     requestedAt: new Date().toISOString(),
     justification: input.justification,
   }
@@ -1017,6 +1029,8 @@ export async function discoverTopics(
     return { success: false, error: 'Not authenticated' }
   }
 
+  const userId = session.user.id
+
   const payload = await getPayload({ config })
 
   // Check workspace membership
@@ -1025,7 +1039,7 @@ export async function discoverTopics(
     where: {
       and: [
         { workspace: { equals: input.requestingWorkspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: userId } },
         { status: { equals: 'active' } },
       ],
     },
@@ -1162,6 +1176,8 @@ export async function createServiceAccount(
     return { success: false, error: 'Not authenticated' }
   }
 
+  const userId = session.user.id
+
   const payload = await getPayload({ config })
 
   // Check workspace membership with admin/owner role
@@ -1170,7 +1186,7 @@ export async function createServiceAccount(
     where: {
       and: [
         { workspace: { equals: input.workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: userId } },
         { role: { in: ['owner', 'admin'] } },
         { status: { equals: 'active' } },
       ],
@@ -1209,6 +1225,8 @@ export async function listServiceAccounts(
     return { success: false, error: 'Not authenticated' }
   }
 
+  const userId = session.user.id
+
   const payload = await getPayload({ config })
 
   // Check workspace membership
@@ -1217,7 +1235,7 @@ export async function listServiceAccounts(
     where: {
       and: [
         { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: userId } },
         { status: { equals: 'active' } },
       ],
     },

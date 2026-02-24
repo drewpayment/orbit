@@ -3,6 +3,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { headers } from 'next/headers'
 import { auth } from '@/lib/auth'
+import { getMongoClient } from '@/lib/mongodb'
 
 /**
  * Cached data fetchers using React.cache() for request-level deduplication.
@@ -120,39 +121,78 @@ export const getWorkspaceMembership = cache(async (
   return result.docs[0] ?? null
 })
 
+export interface BetterAuthUser {
+  id: string
+  name: string
+  email: string
+  image?: string | null
+}
+
 /**
- * Resolve a Better Auth user email to the corresponding Payload user ID.
- * Needed because Better Auth and Payload have separate user stores with different IDs.
+ * Look up a single Better Auth user by ID from the BA `user` collection.
  */
-export const getPayloadUserByEmail = cache(async (email: string) => {
-  const payload = await getPayloadClient()
-  const result = await payload.find({
-    collection: 'users',
-    where: { email: { equals: email } },
-    limit: 1,
-    overrideAccess: true,
-  })
-  return result.docs[0] ?? null
+export const getBetterAuthUser = cache(async (userId: string): Promise<BetterAuthUser | null> => {
+  const client = await getMongoClient()
+  const doc = await client.db().collection('user').findOne({ id: userId })
+  if (!doc) return null
+  return {
+    id: doc.id as string,
+    name: (doc.name as string) || '',
+    email: (doc.email as string) || '',
+    image: (doc.image as string) || null,
+  }
+})
+
+/**
+ * Batch lookup Better Auth users by IDs from the BA `user` collection.
+ */
+export const getBetterAuthUsers = cache(async (userIds: string[]): Promise<BetterAuthUser[]> => {
+  if (userIds.length === 0) return []
+  const client = await getMongoClient()
+  const docs = await client
+    .db()
+    .collection('user')
+    .find({ id: { $in: userIds } })
+    .toArray()
+  return docs.map((doc) => ({
+    id: doc.id as string,
+    name: (doc.name as string) || '',
+    email: (doc.email as string) || '',
+    image: (doc.image as string) || null,
+  }))
+})
+
+/**
+ * Look up a Better Auth user by email.
+ */
+export const getBetterAuthUserByEmail = cache(async (email: string): Promise<BetterAuthUser | null> => {
+  const client = await getMongoClient()
+  const doc = await client.db().collection('user').findOne({ email })
+  if (!doc) return null
+  return {
+    id: doc.id as string,
+    name: (doc.name as string) || '',
+    email: (doc.email as string) || '',
+    image: (doc.image as string) || null,
+  }
 })
 
 /**
  * Get all workspace memberships for a user (cached per request).
- * Accepts a Better Auth user email and resolves it to a Payload user
- * before querying, since workspace-members.user references Payload users.
+ * Accepts a Better Auth user ID directly since workspace-members.user
+ * now stores Better Auth user IDs.
  */
-export const getUserWorkspaceMemberships = cache(async (userEmail: string) => {
-  const payloadUser = await getPayloadUserByEmail(userEmail)
-  if (!payloadUser) return []
-
+export const getUserWorkspaceMemberships = cache(async (userId: string) => {
   const payload = await getPayloadClient()
   const result = await payload.find({
     collection: 'workspace-members',
     where: {
-      user: { equals: payloadUser.id },
+      user: { equals: userId },
       status: { equals: 'active' },
     },
     depth: 1,
     limit: 100,
+    overrideAccess: true,
   })
   return result.docs
 })

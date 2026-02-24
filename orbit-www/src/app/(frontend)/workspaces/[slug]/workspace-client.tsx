@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from '@/lib/auth-client'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { requestJoinWorkspace } from './actions'
 import { toast } from 'sonner'
 
@@ -29,7 +28,7 @@ export function WorkspaceClient({ workspaceId, membershipStatus: initialStatus }
     setActionLoading(true)
     try {
       const result = await requestJoinWorkspace(workspaceId, session.user.id)
-      
+
       if (result.success) {
         setMembershipStatus({
           isMember: false,
@@ -49,9 +48,6 @@ export function WorkspaceClient({ workspaceId, membershipStatus: initialStatus }
 
   return (
     <div>
-      {membershipStatus?.isMember && (
-        <Badge variant="secondary">{membershipStatus.role}</Badge>
-      )}
       {!membershipStatus?.isMember && !membershipStatus?.isPending && session && (
         <Button onClick={handleJoinRequest} disabled={actionLoading}>
           {actionLoading ? 'Sending...' : 'Request to Join'}

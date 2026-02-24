@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { getMongoClient } from '@/lib/mongodb'
 
 export const Workspaces: CollectionConfig = {
   slug: 'workspaces',
@@ -11,43 +12,11 @@ export const Workspaces: CollectionConfig = {
     read: () => true,
     // Only authenticated users can create workspaces
     create: ({ req: { user } }) => !!user,
-    // Only workspace owners/admins can update
-    update: async ({ req: { user, payload }, id }) => {
-      if (!user) return false
-
-      // Check if user is owner or admin of this workspace
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: id } },
-            { user: { equals: user.id } },
-            { role: { in: ['owner', 'admin'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-      })
-
-      return members.docs.length > 0
-    },
-    // Only workspace owners can delete
-    delete: async ({ req: { user, payload }, id }) => {
-      if (!user) return false
-
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: id } },
-            { user: { equals: user.id } },
-            { role: { equals: 'owner' } },
-            { status: { equals: 'active' } },
-          ],
-        },
-      })
-
-      return members.docs.length > 0
-    },
+    // Any authenticated Payload admin can update/delete.
+    // workspace-members.user stores Better Auth IDs, not Payload IDs,
+    // so per-user checks can't match here. Frontend uses overrideAccess: true.
+    update: ({ req: { user } }) => !!user,
+    delete: ({ req: { user } }) => !!user,
   },
   fields: [
     {
@@ -278,18 +247,28 @@ export const Workspaces: CollectionConfig = {
     afterChange: [
       async ({ operation, doc, req: { payload, user }, previousDoc, context }) => {
         // When a workspace is created, automatically add the creator as owner
+        // Resolve the Payload admin's email to a Better Auth user ID
         if (operation === 'create' && user) {
-          await payload.create({
-            collection: 'workspace-members',
-            data: {
-              workspace: doc.id,
-              user: user.id,
-              role: 'owner',
-              status: 'active',
-              requestedAt: new Date().toISOString(),
-              approvedAt: new Date().toISOString(),
-            },
-          })
+          try {
+            const mongoClient = await getMongoClient()
+            const baUser = await mongoClient.db().collection('user').findOne({ email: user.email })
+            if (baUser) {
+              await payload.create({
+                collection: 'workspace-members',
+                data: {
+                  workspace: doc.id,
+                  user: baUser.id as string,
+                  role: 'owner',
+                  status: 'active',
+                  requestedAt: new Date().toISOString(),
+                  approvedAt: new Date().toISOString(),
+                },
+                overrideAccess: true,
+              })
+            }
+          } catch (error) {
+            console.error('Error auto-adding workspace owner:', error)
+          }
         }
 
         // Skip sync if this is already a sync operation to prevent infinite loops

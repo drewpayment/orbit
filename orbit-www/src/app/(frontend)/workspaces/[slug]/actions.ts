@@ -26,6 +26,7 @@ export async function requestJoinWorkspace(workspaceId: string, userId: string) 
         ],
       },
       limit: 1,
+      overrideAccess: true,
     })
 
     if (existing.docs.length > 0) {
@@ -48,6 +49,7 @@ export async function requestJoinWorkspace(workspaceId: string, userId: string) 
         status: 'pending',
         requestedAt: new Date().toISOString(),
       },
+      overrideAccess: true,
     })
 
     revalidatePath(`/workspaces/[slug]`, 'page')
@@ -80,6 +82,7 @@ export async function checkMembershipStatus(workspaceId: string, userId: string)
         ],
       },
       limit: 1,
+      overrideAccess: true,
     })
 
     if (result.docs.length === 0) {

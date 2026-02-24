@@ -10,6 +10,7 @@
 import type { CollectionAfterChangeHook, Payload } from 'payload'
 import { sendNotification, createNotification } from '@/lib/notifications'
 import { SYSTEM_DEFAULT_QUOTA } from '@/lib/kafka/quotas'
+import { getMongoClient } from '@/lib/mongodb'
 
 interface RequestDoc {
   id: string
@@ -30,25 +31,23 @@ interface RequestDoc {
 }
 
 /**
- * Get user info (id, name, email) from a relationship field
+ * Get user info (id, name, email) from a Better Auth user ID or object.
+ * workspace-members.user and requestedBy now store Better Auth user IDs.
  */
 async function getUserInfo(
-  payload: Payload,
+  _payload: Payload,
   user: string | { id: string; name?: string; email?: string } | undefined
 ): Promise<{ id: string; name: string; email: string } | null> {
   if (!user) return null
 
   if (typeof user === 'string') {
-    const userDoc = await payload.findByID({
-      collection: 'users',
-      id: user,
-      overrideAccess: true,
-    })
-    return userDoc
+    const client = await getMongoClient()
+    const doc = await client.db().collection('user').findOne({ id: user })
+    return doc
       ? {
-          id: userDoc.id,
-          name: userDoc.name || 'Unknown',
-          email: userDoc.email || '',
+          id: doc.id as string,
+          name: (doc.name as string) || 'Unknown',
+          email: (doc.email as string) || '',
         }
       : null
   }
@@ -86,7 +85,8 @@ async function getWorkspaceInfo(
 }
 
 /**
- * Get workspace admins for notifications
+ * Get workspace admins for notifications.
+ * workspace-members.user stores Better Auth user IDs, so we batch-fetch from BA.
  */
 async function getWorkspaceAdmins(
   payload: Payload,
@@ -101,24 +101,31 @@ async function getWorkspaceAdmins(
         { status: { equals: 'active' } },
       ],
     },
-    depth: 1,
+    depth: 0,
     limit: 100,
     overrideAccess: true,
   })
 
-  const admins: { id: string; name: string; email: string }[] = []
-  for (const member of members.docs) {
-    const user = member.user as { id: string; name?: string; email?: string } | string
-    if (typeof user === 'object' && user.email) {
-      admins.push({
-        id: user.id,
-        name: user.name || 'Unknown',
-        email: user.email,
-      })
-    }
-  }
+  const userIds = members.docs
+    .map((m) => (typeof m.user === 'string' ? m.user : ''))
+    .filter(Boolean)
 
-  return admins
+  if (userIds.length === 0) return []
+
+  const client = await getMongoClient()
+  const docs = await client
+    .db()
+    .collection('user')
+    .find({ id: { $in: userIds } })
+    .toArray()
+
+  return docs
+    .filter((d) => d.email)
+    .map((d) => ({
+      id: d.id as string,
+      name: (d.name as string) || 'Unknown',
+      email: d.email as string,
+    }))
 }
 
 /**

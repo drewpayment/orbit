@@ -24,7 +24,7 @@ export default async function DashboardPage() {
 
   // Phase 2: Get user's workspace memberships
   const memberships = session?.user
-    ? await getUserWorkspaceMemberships(session.user.email)
+    ? await getUserWorkspaceMemberships(session.user.id)
     : []
 
   const workspaceIds = memberships

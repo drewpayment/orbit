@@ -16,7 +16,6 @@ export async function getCurrentWorkspaceId(): Promise<string | null> {
 
   const payload = await getPayload({ config })
 
-  // Get user's first active workspace membership
   const membership = await payload.find({
     collection: 'workspace-members',
     where: {
@@ -26,6 +25,7 @@ export async function getCurrentWorkspaceId(): Promise<string | null> {
       ],
     },
     limit: 1,
+    overrideAccess: true,
   })
 
   if (membership.docs.length === 0) {
@@ -47,7 +47,6 @@ export async function getAllWorkspaceIds(): Promise<string[]> {
 
   const payload = await getPayload({ config })
 
-  // Get all active workspace memberships for user
   const memberships = await payload.find({
     collection: 'workspace-members',
     where: {
@@ -57,6 +56,7 @@ export async function getAllWorkspaceIds(): Promise<string[]> {
       ],
     },
     limit: 100,
+    overrideAccess: true,
   })
 
   return memberships.docs.map(m => {

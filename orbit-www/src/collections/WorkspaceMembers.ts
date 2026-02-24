@@ -7,97 +7,14 @@ export const WorkspaceMembers: CollectionConfig = {
     defaultColumns: ['workspace', 'user', 'role', 'status'],
   },
   access: {
-    // Users can read memberships of workspaces they belong to
-    read: async ({ req: { user, payload }, id }) => {
-      if (!user) return false
-
-      // If querying a specific membership
-      if (id) {
-        const membership = await payload.findByID({
-          collection: 'workspace-members',
-          id,
-          overrideAccess: true, // Bypass access control to prevent infinite loop
-        })
-
-        // Can read if it's your own membership or you're an admin of the workspace
-        if (membership.user === user.id) return true
-
-        const adminMembership = await payload.find({
-          collection: 'workspace-members',
-          where: {
-            and: [
-              { workspace: { equals: membership.workspace } },
-              { user: { equals: user.id } },
-              { role: { in: ['owner', 'admin'] } },
-              { status: { equals: 'active' } },
-            ],
-          },
-          overrideAccess: true, // Bypass access control to prevent infinite loop
-        })
-
-        return adminMembership.docs.length > 0
-      }
-
-      // Allow listing (will be filtered by where clauses in queries)
-      return true
-    },
-    // Only the user themselves can create membership requests
+    // These access hooks only fire in the Payload admin panel.
+    // All frontend queries use overrideAccess: true.
+    // Since workspace-members.user now stores Better Auth IDs (not Payload IDs),
+    // we simplify to: any authenticated Payload admin can manage.
+    read: ({ req: { user } }) => !!user,
     create: ({ req: { user } }) => !!user,
-    // Only workspace admins/owners can update (for approvals)
-    update: async ({ req: { user, payload }, id }) => {
-      if (!user) return false
-      if (!id) return false
-
-      const membership = await payload.findByID({
-        collection: 'workspace-members',
-        id,
-        overrideAccess: true, // Bypass access control to prevent infinite loop
-      })
-
-      const adminMembership = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: membership.workspace } },
-            { user: { equals: user.id } },
-            { role: { in: ['owner', 'admin'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true, // Bypass access control to prevent infinite loop
-      })
-
-      return adminMembership.docs.length > 0
-    },
-    // Only workspace owners can delete memberships
-    delete: async ({ req: { user, payload }, id }) => {
-      if (!user) return false
-      if (!id) return false
-
-      const membership = await payload.findByID({
-        collection: 'workspace-members',
-        id,
-        overrideAccess: true, // Bypass access control to prevent infinite loop
-      })
-
-      // Allow users to delete their own membership (leave workspace)
-      if (membership.user === user.id) return true
-
-      const ownerMembership = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: membership.workspace } },
-            { user: { equals: user.id } },
-            { role: { equals: 'owner' } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true, // Bypass access control to prevent infinite loop
-      })
-
-      return ownerMembership.docs.length > 0
-    },
+    update: ({ req: { user } }) => !!user,
+    delete: ({ req: { user } }) => !!user,
   },
   fields: [
     {
@@ -109,10 +26,12 @@ export const WorkspaceMembers: CollectionConfig = {
     },
     {
       name: 'user',
-      type: 'relationship',
-      relationTo: 'users',
+      type: 'text',
       required: true,
-      hasMany: false,
+      index: true,
+      admin: {
+        description: 'Better Auth user ID',
+      },
     },
     {
       name: 'role',
@@ -176,11 +95,9 @@ export const WorkspaceMembers: CollectionConfig = {
     },
     {
       name: 'approvedBy',
-      type: 'relationship',
-      relationTo: 'users',
-      hasMany: false,
+      type: 'text',
       admin: {
-        description: 'User who approved this membership request',
+        description: 'Better Auth user ID of the user who approved this membership request',
       },
     },
   ],

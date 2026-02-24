@@ -356,15 +356,18 @@ export interface Workspace {
 export interface WorkspaceMember {
   id: string;
   workspace: string | Workspace;
-  user: string | User;
+  /**
+   * Better Auth user ID
+   */
+  user: string;
   role: 'owner' | 'admin' | 'member';
   status: 'active' | 'pending' | 'rejected';
   requestedAt: string;
   approvedAt?: string | null;
   /**
-   * User who approved this membership request
+   * Better Auth user ID of the user who approved this membership request
    */
-  approvedBy?: (string | null) | User;
+  approvedBy?: string | null;
   updatedAt: string;
   createdAt: string;
 }
