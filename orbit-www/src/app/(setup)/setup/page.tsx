@@ -71,7 +71,7 @@ export default function SetupPage() {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} aria-label="Setup form" className="space-y-6">
         {error && (
           <div
             role="alert"

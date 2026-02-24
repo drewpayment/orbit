@@ -51,7 +51,8 @@ export async function POST(request: Request) {
   }
 
   // Step 1: Create user in Better Auth
-  let authResult: Awaited<ReturnType<typeof auth.api.signUpEmail>>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let authResult: any
   try {
     authResult = await auth.api.signUpEmail({
       body: { name, email, password },
@@ -95,6 +96,7 @@ export async function POST(request: Request) {
         user: payloadUser.id,
         role: 'owner',
         status: 'active',
+        requestedAt: new Date().toISOString(),
       },
       overrideAccess: true,
     })
