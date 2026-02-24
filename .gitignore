@@ -8,3 +8,4 @@ temporal-workflows/worker
 temporal-workflows/*.test
 services/*/bin/
 services/*/server
+node_modules

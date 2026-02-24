@@ -2834,9 +2834,9 @@ export interface ApiSchema {
    */
   visibility: 'private' | 'workspace' | 'public';
   /**
-   * Schema format (OpenAPI supported)
+   * Schema format (OpenAPI and AsyncAPI supported)
    */
-  schemaType: 'openapi';
+  schemaType: 'openapi' | 'asyncapi';
   /**
    * Current version string (from OpenAPI info.version)
    */
@@ -2846,6 +2846,10 @@ export interface ApiSchema {
    */
   rawContent: string;
   status: 'draft' | 'published' | 'deprecated';
+  /**
+   * Reason for deprecation (shown to consumers)
+   */
+  deprecationMessage?: string | null;
   /**
    * Tags for discovery and filtering
    */
@@ -4297,6 +4301,7 @@ export interface ApiSchemasSelect<T extends boolean = true> {
   currentVersion?: T;
   rawContent?: T;
   status?: T;
+  deprecationMessage?: T;
   tags?:
     | T
     | {

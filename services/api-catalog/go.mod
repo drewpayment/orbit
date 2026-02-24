@@ -4,6 +4,7 @@ go 1.21
 
 require (
 	github.com/drewpayment/orbit/proto v0.0.0-00010101000000-000000000000
+	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.8.4
 	go.temporal.io/sdk v1.25.1
 	google.golang.org/grpc v1.65.0
@@ -17,7 +18,6 @@ require (
 	github.com/gogo/status v1.1.1 // indirect
 	github.com/golang/mock v1.6.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0 // indirect
 	github.com/pborman/uuid v1.2.1 // indirect
