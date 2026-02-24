@@ -1,29 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { hasUsers } from '@/lib/setup'
-
-export const runtime = 'nodejs'
 
 const SETUP_PATHS = ['/setup', '/api/setup']
+const INTERNAL_PATHS = ['/api/setup/check', '/api/auth']
 
 function isSetupAllowlisted(pathname: string): boolean {
   return SETUP_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))
 }
 
+function isInternalPath(pathname: string): boolean {
+  return INTERNAL_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))
+}
+
+async function checkSetupComplete(request: NextRequest): Promise<boolean> {
+  try {
+    const checkUrl = new URL('/api/setup/check', request.url)
+    const response = await fetch(checkUrl, { method: 'GET' })
+    const data = await response.json()
+    return data.setupComplete === true
+  } catch {
+    // If the check fails, assume setup is complete to avoid redirect loops
+    return true
+  }
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  const isSetupPath = isSetupAllowlisted(pathname)
-  const isAuthApi = pathname.startsWith('/api/auth')
+  // Always allow internal paths through without checking
+  if (isInternalPath(pathname)) {
+    return NextResponse.next()
+  }
 
-  const usersExist = await hasUsers()
+  const setupComplete = await checkSetupComplete(request)
 
-  if (!usersExist) {
-    if (isSetupPath || isAuthApi) {
+  if (!setupComplete) {
+    // Setup not done: allow /setup through, redirect everything else
+    if (isSetupAllowlisted(pathname)) {
       return NextResponse.next()
     }
     return NextResponse.redirect(new URL('/setup', request.url))
   }
 
+  // Setup done: redirect /setup to /login
   if (pathname === '/setup') {
     return NextResponse.redirect(new URL('/login', request.url))
   }
