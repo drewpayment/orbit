@@ -53,10 +53,13 @@ describe('POST /api/setup', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockHasUsers.mockResolvedValue(false)
-    mockSignUpEmail.mockResolvedValue({
-      user: { id: 'ba-user-1', email: 'admin@example.com', name: 'Admin User' },
-      headers: new Headers({ 'set-cookie': 'session=abc123' }),
-    })
+    // asResponse: true — mock returns a Response-like object
+    mockSignUpEmail.mockResolvedValue(
+      new Response(JSON.stringify({ user: { id: 'ba-user-1', email: 'admin@example.com', name: 'Admin User' } }), {
+        status: 200,
+        headers: { 'set-cookie': 'session=abc123', 'content-type': 'application/json' },
+      })
+    )
     mockPayloadCreate.mockResolvedValue({ id: 'payload-1' })
     mockPayloadFind.mockResolvedValue({ docs: [] })
   })
@@ -81,6 +84,7 @@ describe('POST /api/setup', () => {
     await POST(createRequest(validBody))
     expect(mockSignUpEmail).toHaveBeenCalledWith({
       body: { name: 'Admin User', email: 'admin@example.com', password: 'securepassword123' },
+      asResponse: true,
     })
   })
 

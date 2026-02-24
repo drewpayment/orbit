@@ -16,7 +16,7 @@
         "@octokit/app": "^16.1.2",
         "@octokit/rest": "^22.0.1",
         "@payloadcms/db-mongodb": "3.57.0",
-        "@payloadcms/email-resend": "^3.71.1",
+        "@payloadcms/email-resend": "3.57.0",
         "@payloadcms/next": "3.57.0",
         "@payloadcms/payload-cloud": "3.57.0",
         "@payloadcms/richtext-lexical": "3.57.0",
@@ -712,7 +712,7 @@
 
     "@payloadcms/email-nodemailer": ["@payloadcms/email-nodemailer@3.57.0", "", { "dependencies": { "nodemailer": "6.9.16" }, "peerDependencies": { "payload": "3.57.0" } }, "sha512-V/oPVQ67Ifv2Q58ljtYiPJmTqYDDrdnJRzxikVBZFD5H77JIaNqfzNATXksgYEfPOFjogvtfUBNnIrVNcKnxOg=="],
 
-    "@payloadcms/email-resend": ["@payloadcms/email-resend@3.71.1", "", { "peerDependencies": { "payload": "3.71.1" } }, "sha512-uyFdwaXbvz5hsaoayBgEivYKmy2u/BDxChricn4VuiIXWfKIdUgfGqSjgTB9jZ7CdFrPAC6qEwgrfT+n5m0Slw=="],
+    "@payloadcms/email-resend": ["@payloadcms/email-resend@3.57.0", "", { "peerDependencies": { "payload": "3.57.0" } }, "sha512-YqORc1l1JoBkFTIy4csp/t+tnGyCfUgiCyOIoKrfrE5m1Y1809sHut2IyusOji0DDUS16G5gUt5xI0j2waUYpQ=="],
 
     "@payloadcms/graphql": ["@payloadcms/graphql@3.57.0", "", { "dependencies": { "graphql-scalars": "1.22.2", "pluralize": "8.0.0", "ts-essentials": "10.0.3", "tsx": "4.19.2" }, "peerDependencies": { "graphql": "16.11.0", "payload": "3.57.0" }, "bin": { "payload-graphql": "bin.js" } }, "sha512-8X/sUvb0sUI0yyJPf/8qyV3dfpa14fes6aZvI97pW+fVJbGnKlmVtAqZIJ3XYpGiXxPTjaKqFQvic8EQqVP5Pg=="],
 

@@ -50,13 +50,21 @@ export async function POST(request: Request) {
     )
   }
 
-  // Step 1: Create user in Better Auth
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let authResult: any
+  // Step 1: Create user in Better Auth (asResponse: true returns full HTTP Response with cookies)
+  let authResponse: Response
+  let authUserId: string | undefined
   try {
-    authResult = await auth.api.signUpEmail({
+    authResponse = await auth.api.signUpEmail({
       body: { name, email, password },
+      asResponse: true,
     })
+    if (!authResponse.ok) {
+      const err = await authResponse.json().catch(() => ({}))
+      console.error('[setup] Better Auth signup rejected:', err)
+      return NextResponse.json({ error: 'Setup failed. Please try again.' }, { status: 500 })
+    }
+    const authData = await authResponse.json()
+    authUserId = authData?.user?.id
   } catch (error) {
     console.error('[setup] Better Auth signup failed:', error)
     return NextResponse.json({ error: 'Setup failed. Please try again.' }, { status: 500 })
@@ -105,14 +113,14 @@ export async function POST(request: Request) {
 
     const response = NextResponse.json({ success: true })
 
-    // Forward session cookies from Better Auth
-    const cookies = (authResult.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie?.()
-    if (cookies?.length) {
-      for (const cookie of cookies) {
+    // Forward session cookies from Better Auth signup response
+    const setCookies = (authResponse.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie?.()
+    if (setCookies?.length) {
+      for (const cookie of setCookies) {
         response.headers.append('set-cookie', cookie)
       }
     } else {
-      const setCookie = authResult.headers?.get('set-cookie')
+      const setCookie = authResponse.headers.get('set-cookie')
       if (setCookie) {
         response.headers.append('set-cookie', setCookie)
       }
@@ -123,7 +131,7 @@ export async function POST(request: Request) {
     console.error('[setup] Payload operations failed:', error)
 
     // Compensating rollback: delete Better Auth user so setup can be retried
-    if (authResult?.user?.id) {
+    if (authUserId) {
       try {
         const { MongoClient } = await import('mongodb')
         const rollbackClient = new MongoClient(process.env.DATABASE_URI || '', {
@@ -132,7 +140,7 @@ export async function POST(request: Request) {
         })
         try {
           await rollbackClient.connect()
-          await rollbackClient.db().collection('user').deleteOne({ id: authResult.user.id })
+          await rollbackClient.db().collection('user').deleteOne({ id: authUserId })
           console.error('[setup] Rolled back Better Auth user to allow retry')
         } finally {
           await rollbackClient.close()
