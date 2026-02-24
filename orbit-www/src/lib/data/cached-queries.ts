@@ -121,14 +121,34 @@ export const getWorkspaceMembership = cache(async (
 })
 
 /**
- * Get all workspace memberships for a user (cached per request)
+ * Resolve a Better Auth user email to the corresponding Payload user ID.
+ * Needed because Better Auth and Payload have separate user stores with different IDs.
  */
-export const getUserWorkspaceMemberships = cache(async (userId: string) => {
+export const getPayloadUserByEmail = cache(async (email: string) => {
+  const payload = await getPayloadClient()
+  const result = await payload.find({
+    collection: 'users',
+    where: { email: { equals: email } },
+    limit: 1,
+    overrideAccess: true,
+  })
+  return result.docs[0] ?? null
+})
+
+/**
+ * Get all workspace memberships for a user (cached per request).
+ * Accepts a Better Auth user email and resolves it to a Payload user
+ * before querying, since workspace-members.user references Payload users.
+ */
+export const getUserWorkspaceMemberships = cache(async (userEmail: string) => {
+  const payloadUser = await getPayloadUserByEmail(userEmail)
+  if (!payloadUser) return []
+
   const payload = await getPayloadClient()
   const result = await payload.find({
     collection: 'workspace-members',
     where: {
-      user: { equals: userId },
+      user: { equals: payloadUser.id },
       status: { equals: 'active' },
     },
     depth: 1,

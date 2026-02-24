@@ -32,15 +32,24 @@ export default async function WorkspacesPage() {
   }> = []
 
   if (session?.user) {
+    // Resolve Better Auth user to Payload user (different ID systems)
+    const payloadUserResult = await payload.find({
+      collection: 'users',
+      where: { email: { equals: session.user.email } },
+      limit: 1,
+      overrideAccess: true,
+    })
+    const payloadUserId = payloadUserResult.docs[0]?.id
+
     // Phase 2: Fetch workspaces where user is a member
-    const membershipsResult = await payload.find({
+    const membershipsResult = payloadUserId ? await payload.find({
       collection: 'workspace-members',
       where: {
-        user: { equals: session.user.id },
+        user: { equals: payloadUserId },
         status: { equals: 'active' },
       },
       limit: 100,
-    })
+    }) : { docs: [] }
 
     // Phase 3: Get full workspace details with member counts in parallel
     // Also parallelize workspace + members fetch within each iteration
