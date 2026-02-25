@@ -1,0 +1,54 @@
+# infrastructure/k8s/temporal-worker/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: temporal-worker
+  namespace: orbit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: temporal-worker
+  template:
+    metadata:
+      labels:
+        app: temporal-worker
+    spec:
+      serviceAccountName: orbit
+      containers:
+        - name: temporal-worker
+          image: ghcr.io/drewpayment/orbit/temporal-worker:latest
+          env:
+            - name: TEMPORAL_ADDRESS
+              value: temporal:7233
+            - name: TEMPORAL_NAMESPACE
+              value: default
+            - name: ORBIT_API_URL
+              value: http://orbit-www:3000
+            - name: ORBIT_INTERNAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: ORBIT_INTERNAL_API_KEY
+            - name: BIFROST_ADMIN_URL
+              value: bifrost:50060
+            - name: BUILD_SERVICE_ADDRESS
+              value: build-service:50054
+            - name: GIT_WORK_DIR
+              value: /tmp/orbit-repos
+            - name: TEMPLATE_WORK_DIR
+              value: /tmp/orbit-templates
+            - name: DEPLOYMENT_WORK_DIR
+              value: /tmp/orbit-deployments
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 50m
+            limits:
+              memory: 256Mi
+              cpu: 200m
+          livenessProbe:
+            exec:
+              command: ["ls", "/tmp"]
+            initialDelaySeconds: 10
+            periodSeconds: 30
