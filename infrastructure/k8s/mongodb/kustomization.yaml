@@ -1,0 +1,7 @@
+# infrastructure/k8s/mongodb/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - pvc.yaml
+  - service.yaml
+  - statefulset.yaml
