@@ -1,0 +1,112 @@
+# infrastructure/k8s/orbit-www/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orbit-www
+  namespace: orbit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orbit-www
+  template:
+    metadata:
+      labels:
+        app: orbit-www
+    spec:
+      serviceAccountName: orbit
+      containers:
+        - name: orbit-www
+          image: ghcr.io/drewpayment/orbit/orbit-www:latest
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: orbit-www-config
+          env:
+            - name: MONGO_USER
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: MONGO_ROOT_USERNAME
+            - name: MONGO_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: MONGO_ROOT_PASSWORD
+            - name: DATABASE_URI
+              value: "mongodb://$(MONGO_USER):$(MONGO_PASS)@mongodb:27017/orbit-www?authSource=admin"
+            - name: PAYLOAD_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: PAYLOAD_SECRET
+            - name: ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: ENCRYPTION_KEY
+            - name: BETTER_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: BETTER_AUTH_SECRET
+            - name: RESEND_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: RESEND_API_KEY
+            - name: RESEND_FROM_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: RESEND_FROM_EMAIL
+            - name: GITHUB_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: GITHUB_APP_ID
+            - name: GITHUB_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: GITHUB_CLIENT_ID
+            - name: GITHUB_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: GITHUB_CLIENT_SECRET
+            - name: GITHUB_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: GITHUB_WEBHOOK_SECRET
+            - name: ORBIT_INTERNAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: ORBIT_INTERNAL_API_KEY
+            - name: ORBIT_REGISTRY_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: ORBIT_REGISTRY_JWT_SECRET
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 100m
+            limits:
+              memory: 512Mi
+              cpu: 500m
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10

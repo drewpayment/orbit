@@ -1,0 +1,15 @@
+# infrastructure/k8s/orbit-www/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: orbit-www-config
+  namespace: orbit
+data:
+  NEXT_PUBLIC_APP_URL: "https://orbit.hoytlabs.app"
+  TEMPORAL_ADDRESS: "temporal:7233"
+  TEMPORAL_NAMESPACE: "default"
+  REPOSITORY_SERVICE_URL: "repository-service:50051"
+  NEXT_PUBLIC_REPOSITORY_URL: "http://repository-service:50051"
+  NEXT_PUBLIC_KAFKA_SERVICE_URL: "http://kafka-service:50055"
+  BIFROST_ADMIN_URL: "http://bifrost:50060"
+  ORBIT_REGISTRY_URL: "registry:5050"

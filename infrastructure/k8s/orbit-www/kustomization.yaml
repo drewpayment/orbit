@@ -1,0 +1,8 @@
+# infrastructure/k8s/orbit-www/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - configmap.yaml
+  - service.yaml
+  - deployment.yaml
+  - http-route.yaml

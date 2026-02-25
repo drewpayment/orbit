@@ -1,0 +1,12 @@
+# infrastructure/k8s/orbit-www/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: orbit-www
+  namespace: orbit
+spec:
+  selector:
+    app: orbit-www
+  ports:
+    - port: 3000
+      targetPort: 3000
