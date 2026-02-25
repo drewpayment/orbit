@@ -1,0 +1,6 @@
+# infrastructure/k8s/build-service/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - service.yaml
+  - deployment.yaml

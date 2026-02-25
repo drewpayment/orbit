@@ -1,0 +1,19 @@
+# infrastructure/k8s/bifrost/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: bifrost
+  namespace: orbit
+spec:
+  selector:
+    app: bifrost
+  ports:
+    - name: kafka
+      port: 9092
+      targetPort: 9092
+    - name: admin
+      port: 50060
+      targetPort: 50060
+    - name: metrics
+      port: 8080
+      targetPort: 8080

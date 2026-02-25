@@ -1,0 +1,13 @@
+# infrastructure/k8s/build-service/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: build-service
+  namespace: orbit
+spec:
+  selector:
+    app: build-service
+  ports:
+    - name: grpc
+      port: 50054
+      targetPort: 50054

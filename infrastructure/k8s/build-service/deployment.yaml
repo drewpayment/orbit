@@ -1,0 +1,63 @@
+# infrastructure/k8s/build-service/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: build-service
+  namespace: orbit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: build-service
+  template:
+    metadata:
+      labels:
+        app: build-service
+    spec:
+      serviceAccountName: orbit
+      containers:
+        - name: build-service
+          image: ghcr.io/drewpayment/orbit/build-service:latest
+          ports:
+            - name: grpc
+              containerPort: 50054
+          env:
+            - name: BUILD_SERVICE_PORT
+              value: "50054"
+            - name: BUILD_WORK_DIR
+              value: /tmp/orbit-builds
+            - name: BUILDKIT_HOST
+              value: tcp://buildkit:1234
+            - name: ORBIT_REGISTRY_URL
+              value: http://registry:5050
+            - name: ORBIT_REGISTRY_USERNAME
+              value: orbit-service
+            - name: ORBIT_REGISTRY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: ORBIT_REGISTRY_PASSWORD
+            - name: ORBIT_API_URL
+              value: http://orbit-www:3000
+            - name: ORBIT_INTERNAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: ORBIT_INTERNAL_API_KEY
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 100m
+            limits:
+              memory: 512Mi
+              cpu: 500m
+          livenessProbe:
+            grpc:
+              port: 50054
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            grpc:
+              port: 50054
+            initialDelaySeconds: 5
+            periodSeconds: 10

@@ -1,0 +1,13 @@
+# infrastructure/k8s/kafka-service/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-service
+  namespace: orbit
+spec:
+  selector:
+    app: kafka-service
+  ports:
+    - name: grpc
+      port: 50055
+      targetPort: 50055
