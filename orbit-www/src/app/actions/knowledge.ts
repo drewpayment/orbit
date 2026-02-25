@@ -4,6 +4,50 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
 
+export async function createKnowledgeSpace(data: {
+  name: string
+  description?: string
+  icon?: string
+  visibility: 'private' | 'internal' | 'public'
+  workspaceSlug: string
+}) {
+  const payload = await getPayload({ config })
+
+  // Look up workspace by slug
+  const workspacesResult = await payload.find({
+    collection: 'workspaces',
+    where: { slug: { equals: data.workspaceSlug } },
+    limit: 1,
+  })
+
+  if (workspacesResult.docs.length === 0) {
+    throw new Error('Workspace not found')
+  }
+
+  const workspace = workspacesResult.docs[0]
+
+  const slug = data.name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+
+  const space = await payload.create({
+    collection: 'knowledge-spaces',
+    data: {
+      workspace: workspace.id,
+      name: data.name,
+      slug,
+      description: data.description || undefined,
+      icon: data.icon || undefined,
+      visibility: data.visibility,
+    },
+  })
+
+  revalidatePath(`/workspaces/${data.workspaceSlug}/knowledge`)
+
+  return space
+}
+
 export async function createKnowledgePage(data: {
   title: string
   slug: string

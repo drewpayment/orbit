@@ -1,11 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import Link from 'next/link'
-import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
-import { AppSidebar } from '@/components/app-sidebar'
-import { SiteHeader } from '@/components/site-header'
 import { SpaceNavigator } from '@/components/features/knowledge/SpaceNavigator'
-import { ArrowLeft } from 'lucide-react'
 import {
   getWorkspaceBySlug,
   getKnowledgeSpaceBySlug,
@@ -23,17 +18,13 @@ interface PageProps {
 export default async function KnowledgeSpacePage({ params }: PageProps) {
   const { slug, spaceSlug } = await params
 
-  // Use cached fetchers for request-level deduplication
-  // These will reuse results from layout.tsx if already fetched
   const workspace = await getWorkspaceBySlug(slug)
   if (!workspace) {
     notFound()
   }
 
-  // Fetch user and space in parallel
   const payload = await getPayloadClient()
   const [usersResult, space] = await Promise.all([
-    // Fetch a user for temporary auth (TODO: Replace with actual auth session)
     payload.find({
       collection: 'users',
       limit: 1,
@@ -47,7 +38,6 @@ export default async function KnowledgeSpacePage({ params }: PageProps) {
     notFound()
   }
 
-  // Use cached fetcher for pages (will reuse from layout if already fetched)
   const pages = await getKnowledgePagesBySpace(space.id)
 
   // If pages exist, redirect to the first page
@@ -56,65 +46,30 @@ export default async function KnowledgeSpacePage({ params }: PageProps) {
     redirect(`/workspaces/${workspace.slug}/knowledge/${space.slug}/${firstPage.slug}`)
   }
 
-  // Otherwise, show empty state (when no pages exist)
+  // Empty state — layout already provides sidebar, header, and tree sidebar
   return (
-    <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset>
-        <SiteHeader />
-        <div className="flex flex-1 flex-col gap-4 p-8">
-          <div className="container mx-auto">
-            {/* Header */}
-            <div className="mb-8">
-              <Link
-                href={`/workspaces/${workspace.slug}/knowledge`}
-                className="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 mb-4"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back to Knowledge Base
-              </Link>
-              <div className="flex items-start gap-4">
-                {space.icon && <span className="text-5xl">{space.icon}</span>}
-                <div className="flex-1">
-                  <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
-                    {space.name}
-                  </h1>
-                  {space.description && (
-                    <p className="text-lg text-gray-600 dark:text-gray-400">
-                      {space.description}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Empty State */}
-            <Card>
-              <CardHeader>
-                <CardTitle>No Pages Yet</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="prose dark:prose-invert max-w-none">
-                  <p className="text-gray-600 dark:text-gray-400">
-                    This knowledge space doesn&apos;t have any pages yet. Create your first page to get
-                    started.
-                  </p>
-                  {tempUserId && (
-                    <div className="mt-6">
-                      <SpaceNavigator
-                        knowledgeSpace={space}
-                        pages={pages}
-                        workspaceSlug={workspace.slug}
-                        userId={tempUserId}
-                      />
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
+    <div className="flex-1 overflow-y-auto">
+      <div className="mx-auto max-w-2xl px-12 py-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>No Pages Yet</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              This knowledge space doesn&apos;t have any pages yet. Create your first page to get
+              started.
+            </p>
+            {tempUserId && (
+              <SpaceNavigator
+                knowledgeSpace={space}
+                pages={pages}
+                workspaceSlug={workspace.slug}
+                userId={tempUserId}
+              />
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   )
 }

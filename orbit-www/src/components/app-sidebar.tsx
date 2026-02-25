@@ -14,7 +14,6 @@ import {
   RadioTower,
   Settings2,
 } from "lucide-react"
-import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { useSession } from "@/lib/auth-client"
 import { usePlatformAdmin } from "@/hooks/usePlatformAdmin"
@@ -67,9 +66,9 @@ const navMainData = [
     },
     {
       title: "Documentation",
-      url: "#", // Will be updated dynamically based on workspace
+      url: "/knowledge",
       icon: BookOpen,
-      items: [], // No sub-items
+      items: [],
     },
     {
       title: "Settings",
@@ -133,28 +132,8 @@ const navPlatformData: NavPlatformItem[] = [
 ]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const pathname = usePathname()
   const { data: session } = useSession()
   const { isPlatformAdmin } = usePlatformAdmin()
-
-  // Extract workspace slug from pathname if we're in a workspace route
-  const workspaceSlug = React.useMemo(() => {
-    const match = pathname?.match(/\/workspaces\/([^\/]+)/)
-    return match ? match[1] : 'engineering' // Default to 'engineering'
-  }, [pathname])
-
-  // Update Documentation link based on current workspace
-  const navMainWithWorkspace = React.useMemo(() => {
-    return navMainData.map(item => {
-      if (item.title === 'Documentation') {
-        return {
-          ...item,
-          url: `/workspaces/${workspaceSlug}/knowledge`,
-        }
-      }
-      return item
-    })
-  }, [workspaceSlug])
 
   // Prepare user data from session
   const user = React.useMemo(() => {
@@ -201,7 +180,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={navMainWithWorkspace} />
+        <NavMain items={navMainData} />
         <NavPlatform items={navPlatformData} isVisible={isPlatformAdmin} />
         <NavSecondary items={navSecondaryData} className="mt-auto" />
       </SidebarContent>
