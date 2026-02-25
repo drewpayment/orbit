@@ -89,12 +89,13 @@ jobs:
         run: |
           echo "changed=${{ needs.changes.outputs[matrix.service] }}" >> "$GITHUB_OUTPUT"
 
-      - name: Short SHA
-        id: short-sha
-        run: echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-
       - uses: actions/checkout@v4
         if: steps.check.outputs.changed == 'true'
+
+      - name: Short SHA
+        if: steps.check.outputs.changed == 'true'
+        id: short-sha
+        run: echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         if: steps.check.outputs.changed == 'true'
