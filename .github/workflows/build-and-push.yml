@@ -1,0 +1,118 @@
+name: Build and Push Images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'orbit-www/**'
+      - 'services/**'
+      - 'temporal-workflows/**'
+      - 'proto/**'
+      - '.github/workflows/build-and-push.yml'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/orbit
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      orbit-www: ${{ steps.filter.outputs.orbit-www }}
+      repository-service: ${{ steps.filter.outputs.repository-service }}
+      build-service: ${{ steps.filter.outputs.build-service }}
+      bifrost: ${{ steps.filter.outputs.bifrost }}
+      kafka-service: ${{ steps.filter.outputs.kafka-service }}
+      plugins-service: ${{ steps.filter.outputs.plugins-service }}
+      temporal-worker: ${{ steps.filter.outputs.temporal-worker }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            orbit-www:
+              - 'orbit-www/**'
+            repository-service:
+              - 'services/repository/**'
+              - 'proto/**'
+            build-service:
+              - 'services/build-service/**'
+              - 'proto/**'
+            bifrost:
+              - 'services/bifrost/**'
+              - 'proto/**'
+            kafka-service:
+              - 'services/kafka/**'
+              - 'proto/**'
+            plugins-service:
+              - 'services/plugins/**'
+              - 'proto/**'
+            temporal-worker:
+              - 'temporal-workflows/**'
+              - 'proto/**'
+
+  build:
+    needs: changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: orbit-www
+            dockerfile: orbit-www/Dockerfile
+            context: orbit-www
+          - service: repository-service
+            dockerfile: services/repository/Dockerfile
+            context: .
+          - service: build-service
+            dockerfile: services/build-service/Dockerfile
+            context: .
+          - service: bifrost
+            dockerfile: services/bifrost/Dockerfile
+            context: .
+          - service: kafka-service
+            dockerfile: services/kafka/Dockerfile
+            context: .
+          - service: plugins-service
+            dockerfile: services/plugins/Dockerfile
+            context: .
+          - service: temporal-worker
+            dockerfile: temporal-workflows/Dockerfile
+            context: .
+    steps:
+      - name: Check if service changed
+        id: check
+        run: |
+          echo "changed=${{ needs.changes.outputs[matrix.service] }}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.changed == 'true'
+
+      - name: Set up Docker Buildx
+        if: steps.check.outputs.changed == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: steps.check.outputs.changed == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        if: steps.check.outputs.changed == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:latest
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:sha-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
