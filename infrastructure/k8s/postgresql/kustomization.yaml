@@ -1,0 +1,8 @@
+# infrastructure/k8s/postgresql/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - pvc.yaml
+  - init-configmap.yaml
+  - service.yaml
+  - statefulset.yaml

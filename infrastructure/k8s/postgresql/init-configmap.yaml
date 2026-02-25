@@ -1,0 +1,14 @@
+# infrastructure/k8s/postgresql/init-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgresql-init
+  namespace: orbit
+data:
+  init-databases.sh: |
+    #!/bin/bash
+    set -e
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
+      CREATE DATABASE temporal;
+      CREATE DATABASE orbit;
+    EOSQL
