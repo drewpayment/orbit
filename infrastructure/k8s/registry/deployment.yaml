@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: registry
+  namespace: orbit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: registry
+  template:
+    metadata:
+      labels:
+        app: registry
+    spec:
+      serviceAccountName: orbit
+      containers:
+        - name: registry
+          image: registry:2
+          ports:
+            - containerPort: 5000
+          env:
+            - name: REGISTRY_STORAGE
+              value: s3
+            - name: REGISTRY_STORAGE_S3_ACCESSKEY
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: MINIO_ROOT_USER
+            - name: REGISTRY_STORAGE_S3_SECRETKEY
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: MINIO_ROOT_PASSWORD
+            - name: REGISTRY_STORAGE_S3_REGION
+              value: us-east-1
+            - name: REGISTRY_STORAGE_S3_REGIONENDPOINT
+              value: http://minio:9000
+            - name: REGISTRY_STORAGE_S3_BUCKET
+              value: orbit-registry
+            - name: REGISTRY_STORAGE_S3_SECURE
+              value: "false"
+            - name: REGISTRY_HTTP_ADDR
+              value: 0.0.0.0:5000
+            - name: REGISTRY_HEALTH_STORAGEDRIVER_ENABLED
+              value: "true"
+          resources:
+            requests:
+              memory: 64Mi
+              cpu: 50m
+            limits:
+              memory: 256Mi
+              cpu: 200m
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 10

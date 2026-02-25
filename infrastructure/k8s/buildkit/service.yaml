@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildkit
+  namespace: orbit
+spec:
+  selector:
+    app: buildkit
+  ports:
+    - port: 1234
+      targetPort: 1234
