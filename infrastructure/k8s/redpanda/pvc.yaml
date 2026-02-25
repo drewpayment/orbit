@@ -1,0 +1,27 @@
+# infrastructure/k8s/redpanda/pvc.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: orbit-redpanda-pv
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: orbit-nfs
+  nfs:
+    server: 192.168.86.44
+    path: /mnt/tank/appdata/orbit/redpanda
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redpanda-data
+  namespace: orbit
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: orbit-nfs
+  resources:
+    requests:
+      storage: 10Gi
+  volumeName: orbit-redpanda-pv
