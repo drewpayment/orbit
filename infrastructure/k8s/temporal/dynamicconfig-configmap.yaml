@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: temporal-dynamicconfig
+  namespace: orbit
+data:
+  development-sql.yaml: |
+    history.maxAutoResetPoints:
+      - value: 20
+        constraints: {}
+    matching.numTaskqueueWritePartitions:
+      - value: 1
+        constraints: {}
+    matching.numTaskqueueReadPartitions:
+      - value: 1
+        constraints: {}
+    frontend.keepAliveMinTime:
+      - value: "10s"
+        constraints: {}
+    worker.taskProcessorCount:
+      - value: 10
+        constraints: {}
+    system.enableActivityLocalDispatch:
+      - value: true
+        constraints: {}
+    system.enableArchival:
+      - value: false
+        constraints: {}
