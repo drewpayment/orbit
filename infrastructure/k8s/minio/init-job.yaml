@@ -1,0 +1,37 @@
+# infrastructure/k8s/minio/init-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-init-buckets
+  namespace: orbit
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          image: minio/mc:latest
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: MINIO_ROOT_USER
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: MINIO_ROOT_PASSWORD
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until mc alias set orbit http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do
+                echo "Waiting for MinIO..."
+                sleep 5
+              done
+              mc mb orbit/orbit-registry --ignore-existing
+              echo "Bucket created successfully"

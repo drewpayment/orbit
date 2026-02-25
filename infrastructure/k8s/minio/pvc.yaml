@@ -1,0 +1,27 @@
+# infrastructure/k8s/minio/pvc.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: orbit-minio-pv
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: orbit-nfs
+  nfs:
+    server: 192.168.86.44
+    path: /mnt/tank/appdata/orbit/minio
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-data
+  namespace: orbit
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: orbit-nfs
+  resources:
+    requests:
+      storage: 20Gi
+  volumeName: orbit-minio-pv
