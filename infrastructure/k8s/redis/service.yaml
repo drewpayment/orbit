@@ -1,0 +1,12 @@
+# infrastructure/k8s/redis/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: orbit
+spec:
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+      targetPort: 6379

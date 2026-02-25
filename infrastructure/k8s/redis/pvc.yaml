@@ -1,0 +1,27 @@
+# infrastructure/k8s/redis/pvc.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: orbit-redis-pv
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: orbit-nfs
+  nfs:
+    server: 192.168.86.44
+    path: /mnt/tank/appdata/orbit/redis
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data
+  namespace: orbit
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: orbit-nfs
+  resources:
+    requests:
+      storage: 5Gi
+  volumeName: orbit-redis-pv
