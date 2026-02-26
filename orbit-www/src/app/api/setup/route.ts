@@ -5,6 +5,7 @@ import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import { auth } from '@/lib/auth'
 import { hasUsers, resetSetupCache } from '@/lib/setup'
+import { seedPermissionsAndRoles, assignSuperAdmin } from '@/lib/seed-roles'
 
 function slugify(name: string): string {
   return name
@@ -114,6 +115,10 @@ export async function POST(request: Request) {
       },
       overrideAccess: true,
     })
+
+    // Seed base permissions and roles, then assign super-admin to first user
+    const { superAdminRoleId } = await seedPermissionsAndRoles(payload)
+    await assignSuperAdmin(payload, payloadUser.id, superAdminRoleId)
 
     resetSetupCache()
 

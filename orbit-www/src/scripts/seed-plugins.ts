@@ -6,6 +6,7 @@
  * Usage: tsx src/scripts/seed-plugins.ts
  */
 
+import 'dotenv/config'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { pluginsSeedData } from '../seed/plugins-seed'

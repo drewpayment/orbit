@@ -5,7 +5,7 @@ import config from '@payload-config'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
 import { canCreateApplication, getWorkspaceQuotaInfo, type QuotaInfo } from '@/lib/kafka/quotas'
-import { getTemporalClient } from '@/lib/temporal/client'
+import { startVirtualClusterProvisionWorkflow } from '@/lib/temporal/client'
 
 export interface CreateApplicationInput {
   name: string
@@ -113,7 +113,7 @@ export async function createApplication(
     })
 
     // Trigger Temporal workflow to provision virtual clusters
-    const workflowId = await triggerVirtualClusterProvisionWorkflow({
+    const workflowId = await startVirtualClusterProvisionWorkflow({
       applicationId: application.id,
       applicationSlug: input.slug,
       workspaceId: input.workspaceId,
@@ -480,7 +480,7 @@ export async function retryVirtualClusterProvisioning(
     const workspaceId = typeof application.workspace === 'string' ? application.workspace : workspace.id
 
     // Trigger the provisioning workflow
-    const workflowId = await triggerVirtualClusterProvisionWorkflow({
+    const workflowId = await startVirtualClusterProvisionWorkflow({
       applicationId: application.id,
       applicationSlug: application.slug,
       workspaceId,
@@ -510,57 +510,5 @@ export async function retryVirtualClusterProvisioning(
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
     }
-  }
-}
-
-/**
- * Input type for VirtualClusterProvisionWorkflow (must match Go struct)
- */
-type VirtualClusterProvisionWorkflowInput = {
-  ApplicationID: string
-  ApplicationSlug: string
-  WorkspaceID: string
-  WorkspaceSlug: string
-}
-
-/**
- * Triggers the VirtualClusterProvisionWorkflow to create dev, stage, and prod virtual clusters
- * for a newly created Kafka application.
- */
-async function triggerVirtualClusterProvisionWorkflow(input: {
-  applicationId: string
-  applicationSlug: string
-  workspaceId: string
-  workspaceSlug: string
-}): Promise<string | null> {
-  const workflowId = `virtual-cluster-provision-${input.applicationId}`
-
-  // Transform input to match Go struct field names (PascalCase)
-  const workflowInput: VirtualClusterProvisionWorkflowInput = {
-    ApplicationID: input.applicationId,
-    ApplicationSlug: input.applicationSlug,
-    WorkspaceID: input.workspaceId,
-    WorkspaceSlug: input.workspaceSlug,
-  }
-
-  try {
-    const client = await getTemporalClient()
-
-    const handle = await client.workflow.start('VirtualClusterProvisionWorkflow', {
-      taskQueue: 'orbit-workflows',
-      workflowId,
-      args: [workflowInput],
-    })
-
-    console.log(
-      `[Kafka] Started VirtualClusterProvisionWorkflow: ${handle.workflowId} for app ${input.applicationSlug}`
-    )
-
-    return handle.workflowId
-  } catch (error) {
-    console.error('[Kafka] Failed to start VirtualClusterProvisionWorkflow:', error)
-    // Don't throw - the application record is already created
-    // The workflow can be retried manually if needed
-    return null
   }
 }

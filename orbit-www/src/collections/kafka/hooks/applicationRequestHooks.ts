@@ -11,6 +11,7 @@ import type { CollectionAfterChangeHook, Payload } from 'payload'
 import { sendNotification, createNotification } from '@/lib/notifications'
 import { SYSTEM_DEFAULT_QUOTA } from '@/lib/kafka/quotas'
 import { getMongoClient } from '@/lib/mongodb'
+import { startVirtualClusterProvisionWorkflow } from '@/lib/temporal/client'
 
 interface RequestDoc {
   id: string
@@ -268,7 +269,8 @@ async function notifyRequesterRejected(
 }
 
 /**
- * Create the Kafka application from an approved request
+ * Create the Kafka application from an approved request,
+ * then trigger the Temporal workflow to provision virtual clusters.
  */
 async function createApplicationFromRequest(
   payload: Payload,
@@ -278,7 +280,7 @@ async function createApplicationFromRequest(
   const requestedById =
     typeof doc.requestedBy === 'string' ? doc.requestedBy : doc.requestedBy.id
 
-  await payload.create({
+  const application = await payload.create({
     collection: 'kafka-applications',
     data: {
       name: doc.applicationName,
@@ -291,7 +293,30 @@ async function createApplicationFromRequest(
     overrideAccess: true,
   })
 
-  // TODO: Trigger Temporal workflow to provision virtual clusters
+  // Look up workspace slug for the workflow input
+  const workspace = await payload.findByID({
+    collection: 'workspaces',
+    id: workspaceId,
+    overrideAccess: true,
+  })
+
+  const workflowId = await startVirtualClusterProvisionWorkflow({
+    applicationId: application.id,
+    applicationSlug: doc.applicationSlug,
+    workspaceId,
+    workspaceSlug: workspace.slug,
+  })
+
+  if (workflowId) {
+    await payload.update({
+      collection: 'kafka-applications',
+      id: application.id,
+      data: {
+        provisioningWorkflowId: workflowId,
+      },
+      overrideAccess: true,
+    })
+  }
 }
 
 /**

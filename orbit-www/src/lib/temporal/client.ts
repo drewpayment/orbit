@@ -52,3 +52,55 @@ export async function cancelGitHubTokenRefreshWorkflow(workflowId: string): Prom
   const handle = client.workflow.getHandle(workflowId)
   await handle.cancel()
 }
+
+/**
+ * Input type for VirtualClusterProvisionWorkflow (must match Go struct)
+ */
+interface VirtualClusterProvisionWorkflowInput {
+  ApplicationID: string
+  ApplicationSlug: string
+  WorkspaceID: string
+  WorkspaceSlug: string
+}
+
+/**
+ * Triggers the VirtualClusterProvisionWorkflow to create dev, stage, and prod virtual clusters
+ * for a newly created Kafka application.
+ *
+ * Returns the workflow ID on success, or null if the workflow failed to start.
+ * Does not throw — the caller should handle a null return gracefully.
+ */
+export async function startVirtualClusterProvisionWorkflow(input: {
+  applicationId: string
+  applicationSlug: string
+  workspaceId: string
+  workspaceSlug: string
+}): Promise<string | null> {
+  const workflowId = `virtual-cluster-provision-${input.applicationId}`
+
+  const workflowInput: VirtualClusterProvisionWorkflowInput = {
+    ApplicationID: input.applicationId,
+    ApplicationSlug: input.applicationSlug,
+    WorkspaceID: input.workspaceId,
+    WorkspaceSlug: input.workspaceSlug,
+  }
+
+  try {
+    const client = await getTemporalClient()
+
+    const handle = await client.workflow.start('VirtualClusterProvisionWorkflow', {
+      taskQueue: 'orbit-workflows',
+      workflowId,
+      args: [workflowInput],
+    })
+
+    console.log(
+      `[Kafka] Started VirtualClusterProvisionWorkflow: ${handle.workflowId} for app ${input.applicationSlug}`
+    )
+
+    return handle.workflowId
+  } catch (error) {
+    console.error('[Kafka] Failed to start VirtualClusterProvisionWorkflow:', error)
+    return null
+  }
+}
