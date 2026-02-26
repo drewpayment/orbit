@@ -128,7 +128,7 @@ export default buildConfig({
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },
   db: mongooseAdapter({
-    url: process.env.DATABASE_URI || '',
+    url: process.env.DOCKER_BUILD ? false : (process.env.DATABASE_URI || ''),
   }),
   sharp,
   plugins: [

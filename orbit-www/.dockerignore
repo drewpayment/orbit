@@ -16,8 +16,9 @@ coverage/
 .nyc_output/
 
 # Environment
-.env.local
-.env.*.local
+.env
+.env.*
+!.env.example
 
 # Development files
 .git/

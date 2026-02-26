@@ -40,17 +40,11 @@ const baseSchema = z.object({
   generatorSlug: z.string().optional(),
   // Docker Compose fields
   serviceName: z.string().optional(),
-  port: z.union([
-    z.literal('').transform(() => undefined),
-    z.number().min(1).max(65535),
-  ]).optional(),
+  port: z.number().min(1).max(65535).optional(),
   // Helm fields
   releaseName: z.string().optional(),
   namespace: z.string().optional(),
-  replicas: z.union([
-    z.literal('').transform(() => undefined),
-    z.number().min(1).max(100),
-  ]).optional(),
+  replicas: z.number().min(1).max(100).optional(),
 })
 
 const formSchema = baseSchema.superRefine((data, ctx) => {

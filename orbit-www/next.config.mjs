@@ -2,7 +2,8 @@ import { withPayload } from '@payloadcms/next/withPayload'
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Your Next.js config here
+  output: 'standalone',
+  typescript: { ignoreBuildErrors: !!process.env.DOCKER_BUILD },
   webpack: (webpackConfig) => {
     webpackConfig.resolve.extensionAlias = {
       '.cjs': ['.cts', '.cjs'],
