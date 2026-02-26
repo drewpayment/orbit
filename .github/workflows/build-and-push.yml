@@ -9,6 +9,12 @@ on:
       - 'temporal-workflows/**'
       - 'proto/**'
       - '.github/workflows/build-and-push.yml'
+  workflow_dispatch:
+    inputs:
+      build_all:
+        description: 'Build all services (ignore path filter)'
+        type: boolean
+        default: true
 
 env:
   REGISTRY: ghcr.io
@@ -87,7 +93,11 @@ jobs:
       - name: Check if service changed
         id: check
         run: |
-          echo "changed=${{ needs.changes.outputs[matrix.service] }}" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event.inputs.build_all }}" = "true" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=${{ needs.changes.outputs[matrix.service] }}" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: actions/checkout@v4
         if: steps.check.outputs.changed == 'true'
