@@ -13,14 +13,14 @@ function isInternalPath(pathname: string): boolean {
 
 async function checkSetupComplete(request: NextRequest): Promise<boolean> {
   try {
-    // Use nextUrl to build an internal URL that doesn't route through the external gateway
-    const checkUrl = request.nextUrl.clone()
-    checkUrl.pathname = '/api/setup/check'
-    checkUrl.search = ''
+    const checkUrl = new URL('/api/setup/check', request.url)
+    console.log('[middleware] Fetching setup check:', checkUrl.toString())
     const response = await fetch(checkUrl, { method: 'GET' })
     const data = await response.json()
+    console.log('[middleware] Setup check result:', data)
     return data.setupComplete === true
-  } catch {
+  } catch (error) {
+    console.error('[middleware] Setup check failed:', error)
     // If the check fails, assume setup is complete to avoid redirect loops
     return true
   }
