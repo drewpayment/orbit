@@ -13,7 +13,10 @@ function isInternalPath(pathname: string): boolean {
 
 async function checkSetupComplete(request: NextRequest): Promise<boolean> {
   try {
-    const checkUrl = new URL('/api/setup/check', request.url)
+    // Use nextUrl to build an internal URL that doesn't route through the external gateway
+    const checkUrl = request.nextUrl.clone()
+    checkUrl.pathname = '/api/setup/check'
+    checkUrl.search = ''
     const response = await fetch(checkUrl, { method: 'GET' })
     const data = await response.json()
     return data.setupComplete === true

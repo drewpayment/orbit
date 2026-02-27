@@ -5,6 +5,7 @@ import { BreadcrumbProvider } from '@/components/breadcrumb-provider'
 import { AuthGuard } from '@/components/auth-guard'
 import { GitHubHealthProviderWrapper } from '@/components/providers/GitHubHealthProviderWrapper'
 import { Toaster } from '@/components/ui/sonner'
+import { RuntimeEnvScript } from '@/components/runtime-env-script'
 import '../globals.css'
 
 const crimsonPro = Crimson_Pro({
@@ -24,6 +25,9 @@ const sourceSerif = Source_Serif_4({
 export default function FrontendLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <RuntimeEnvScript />
+      </head>
       <body className={`${crimsonPro.variable} ${sourceSerif.variable}`}>
         <ThemeProvider
           attribute="class"

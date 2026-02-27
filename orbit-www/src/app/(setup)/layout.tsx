@@ -1,4 +1,5 @@
 import { ThemeProvider } from '@/components/theme-provider'
+import { RuntimeEnvScript } from '@/components/runtime-env-script'
 import '@/app/globals.css'
 
 export const metadata = {
@@ -13,6 +14,9 @@ export default function SetupLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <RuntimeEnvScript />
+      </head>
       <body>
         <ThemeProvider
           attribute="class"
