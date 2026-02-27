@@ -11,17 +11,18 @@ function isInternalPath(pathname: string): boolean {
   return INTERNAL_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))
 }
 
-async function checkSetupComplete(request: NextRequest): Promise<boolean> {
+async function checkSetupComplete(): Promise<boolean> {
   try {
-    const checkUrl = new URL('/api/setup/check', request.url)
-    console.log('[middleware] Fetching setup check:', checkUrl.toString())
+    // Always use HTTP for the internal self-fetch — the server doesn't run TLS.
+    // Requests from Cloudflare arrive as HTTPS, but request.url would produce
+    // https://0.0.0.0:3000 which fails since the server is plain HTTP.
+    const port = process.env.PORT || '3000'
+    const checkUrl = `http://0.0.0.0:${port}/api/setup/check`
     const response = await fetch(checkUrl, { method: 'GET' })
     const data = await response.json()
-    console.log('[middleware] Setup check result:', data)
     return data.setupComplete === true
   } catch (error) {
     console.error('[middleware] Setup check failed:', error)
-    // If the check fails, assume setup is complete to avoid redirect loops
     return true
   }
 }
@@ -34,7 +35,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  const setupComplete = await checkSetupComplete(request)
+  const setupComplete = await checkSetupComplete()
 
   if (!setupComplete) {
     // Setup not done: allow /setup through, redirect everything else
