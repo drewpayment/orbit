@@ -1,5 +1,7 @@
 import { betterAuth } from "better-auth"
 import { APIError } from "better-auth/api"
+import { jwt } from "better-auth/plugins"
+import { oauthProvider } from "@better-auth/oauth-provider"
 import { mongodbAdapter } from "better-auth/adapters/mongodb"
 import { MongoClient, ObjectId } from "mongodb"
 import { getEnv } from "./env"
@@ -109,6 +111,25 @@ export const auth = betterAuth({
   trustedOrigins: [
     appUrl,
     "http://localhost:3000",
+  ],
+  disabledPaths: ["/token"],
+  plugins: [
+    jwt(),
+    oauthProvider({
+      loginPage: "/sign-in",
+      consentPage: "/sign-in",
+      accessTokenExpiresIn: 60 * 60, // 1 hour
+      idTokenExpiresIn: 60 * 60 * 10, // 10 hours
+      refreshTokenExpiresIn: 60 * 60 * 24 * 30, // 30 days
+      scopes: ["openid", "profile", "email"],
+      allowDynamicClientRegistration: true,
+      customIdTokenClaims: ({ user }) => ({
+        role: (user as Record<string, unknown>).role || "user",
+      }),
+      customUserInfoClaims: ({ user }) => ({
+        role: (user as Record<string, unknown>).role || "user",
+      }),
+    }),
   ],
 })
 
