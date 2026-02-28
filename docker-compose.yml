@@ -10,7 +10,7 @@ services:
     ports:
       - 5432:5432
     volumes:
-      - temporal-postgresql:/var/lib/postgresql/data
+      - ./.data/temporal-postgresql:/var/lib/postgresql/data
 
   temporal-elasticsearch:
     container_name: temporal-elasticsearch
@@ -436,7 +436,6 @@ networks:
     driver: bridge
 
 volumes:
-  temporal-postgresql:
   temporal-elasticsearch:
   orbit-www_data:
     external: true

@@ -3,6 +3,9 @@
 .DS_Store
 .worktrees/
 
+# Local Docker data volumes
+.data/
+
 # Go binaries
 temporal-workflows/worker
 temporal-workflows/*.test
