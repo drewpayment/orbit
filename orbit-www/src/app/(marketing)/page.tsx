@@ -1,3 +1,4 @@
+import Image from 'next/image'
 import Link from 'next/link'
 import {
   Orbit,
@@ -113,11 +114,16 @@ export default function LandingPage() {
             </a>
           </div>
 
-          {/* Screenshot Placeholder */}
-          <div className="stagger-item mt-4 flex h-[400px] w-full max-w-[1100px] items-center justify-center rounded-xl border border-white/5 bg-[#141417] shadow-[0_20px_60px_-4px_rgba(255,92,0,0.08)] md:h-[620px]">
-            <span className="text-base font-medium text-[#4A4A4E]">
-              Product Screenshot
-            </span>
+          {/* Product Screenshot */}
+          <div className="stagger-item mt-4 w-full max-w-[1100px] overflow-hidden rounded-xl border border-white/5 shadow-[0_20px_60px_-4px_rgba(255,92,0,0.08)]">
+            <Image
+              src="/images/dashboard-screenshot.png"
+              alt="Orbit dashboard showing workspaces, Kafka topics, API schemas, and application health monitoring"
+              width={1400}
+              height={838}
+              className="w-full h-auto"
+              priority
+            />
           </div>
         </div>
       </section>
