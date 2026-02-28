@@ -12,6 +12,7 @@ import {
   MessageSquare,
   RadioTower,
   Shield,
+  Workflow,
 } from "lucide-react"
 import Link from "next/link"
 import { useSession } from "@/lib/auth-client"
@@ -93,6 +94,11 @@ const navPlatformData: NavPlatformItem[] = [
         url: "/platform/kafka/pending-approvals",
       },
     ],
+  },
+  {
+    title: "Workflows",
+    url: "/platform/workflows",
+    icon: Workflow,
   },
 ]
 
