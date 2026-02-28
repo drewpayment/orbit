@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Plus, RefreshCw, Server, Database, Globe, Link2 } from 'lucide-react'
+import { Plus, RefreshCw, Server, Database, Globe, Link2, ExternalLink } from 'lucide-react'
 import type { KafkaClusterConfig, KafkaProviderConfig } from '@/app/actions/kafka-admin'
 
 interface ClustersTabProps {
@@ -153,12 +153,28 @@ export function ClustersTab({
                     <Database className="h-5 w-5 text-muted-foreground" />
                     <CardTitle className="text-base">{cluster.name}</CardTitle>
                   </div>
-                  <Badge
-                    variant={statusBadge.variant}
-                    className={statusBadge.className}
-                  >
-                    {statusBadge.label}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    {cluster.consoleUrl && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          window.open(cluster.consoleUrl, '_blank', 'noopener,noreferrer')
+                        }}
+                        title="Open cluster console"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <Badge
+                      variant={statusBadge.variant}
+                      className={statusBadge.className}
+                    >
+                      {statusBadge.label}
+                    </Badge>
+                  </div>
                 </div>
                 <CardDescription className="text-xs">
                   {providerName}
