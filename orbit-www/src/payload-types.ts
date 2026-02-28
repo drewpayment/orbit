@@ -213,6 +213,16 @@ export interface User {
   id: string;
   name?: string | null;
   avatar?: (string | null) | Media;
+  /**
+   * Change to "Approved" to allow this user to log in.
+   */
+  status?: ('pending' | 'approved' | 'rejected') | null;
+  /**
+   * If checked, user can log in immediately after approval without verifying their email.
+   */
+  skipEmailVerification?: boolean | null;
+  registrationApprovedAt?: string | null;
+  registrationApprovedBy?: (string | null) | User;
   updatedAt: string;
   createdAt: string;
   email: string;
@@ -3233,6 +3243,10 @@ export interface PayloadMigration {
 export interface UsersSelect<T extends boolean = true> {
   name?: T;
   avatar?: T;
+  status?: T;
+  skipEmailVerification?: T;
+  registrationApprovedAt?: T;
+  registrationApprovedBy?: T;
   updatedAt?: T;
   createdAt?: T;
   email?: T;

@@ -1,21 +1,19 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { signUp } from '@/lib/auth-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 export default function SignupPage() {
-  const router = useRouter()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -34,16 +32,18 @@ export default function SignupPage() {
     setLoading(true)
 
     try {
-      const result = await signUp.email({
-        email,
-        password,
-        name,
+      const res = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password }),
       })
 
-      if (result.error) {
-        setError(result.error.message || 'Failed to create account')
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error || 'Failed to create account')
       } else {
-        router.push('/dashboard')
+        setSubmitted(true)
       }
     } catch (err) {
       setError('An unexpected error occurred')
@@ -51,6 +51,32 @@ export default function SignupPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  if (submitted) {
+    return (
+      <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-md text-center">
+        <div className="mb-4">
+          <div className="mx-auto w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+            <svg className="w-6 h-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+          </div>
+        </div>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+          Registration Submitted
+        </h2>
+        <p className="text-gray-600 dark:text-gray-400 mb-6">
+          An admin will review your request. You&apos;ll receive an email when your account is approved.
+        </p>
+        <Link
+          href="/login"
+          className="text-sm font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400"
+        >
+          Back to login
+        </Link>
+      </div>
+    )
   }
 
   return (
