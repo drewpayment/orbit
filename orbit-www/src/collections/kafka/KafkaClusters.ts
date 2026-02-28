@@ -81,6 +81,13 @@ export const KafkaClusters: CollectionConfig = {
         description: 'Optional cluster description',
       },
     },
+    {
+      name: 'consoleUrl',
+      type: 'text',
+      admin: {
+        description: 'URL to the cluster management console (e.g., Redpanda Console)',
+      },
+    },
   ],
   timestamps: true,
 }
