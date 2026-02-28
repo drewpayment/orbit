@@ -123,6 +123,7 @@ function validateClusterInput(data: {
   bootstrapServers: string
   environment?: string
   schemaRegistryUrl?: string
+  consoleUrl?: string
   credentials?: Record<string, string>
 }): ValidationError[] {
   const errors: ValidationError[] = []
@@ -157,6 +158,13 @@ function validateClusterInput(data: {
     errors.push({
       field: 'schemaRegistryUrl',
       message: 'Schema registry URL must be a valid HTTP or HTTPS URL',
+    })
+  }
+
+  if (data.consoleUrl && !isValidUrl(data.consoleUrl)) {
+    errors.push({
+      field: 'consoleUrl',
+      message: 'Console URL must be a valid HTTP or HTTPS URL',
     })
   }
 
@@ -235,6 +243,7 @@ export interface KafkaClusterConfig {
   environment: string
   status: 'pending' | 'valid' | 'invalid' | 'unknown'
   schemaRegistryUrl?: string
+  consoleUrl?: string
   credentials: Record<string, string>
   config: Record<string, string>
 }
@@ -524,6 +533,7 @@ interface PayloadKafkaCluster {
   credentials?: Record<string, string>
   validationStatus: 'pending' | 'valid' | 'invalid'
   lastValidatedAt?: string
+  consoleUrl?: string
   description?: string
   createdAt?: string
   updatedAt?: string
@@ -545,6 +555,7 @@ function mapPayloadClusterToConfig(cluster: PayloadKafkaCluster): KafkaClusterCo
     environment: cluster.connectionConfig?.['environment'] || 'development',
     status: cluster.validationStatus || 'unknown',
     schemaRegistryUrl: cluster.connectionConfig?.['schema.registry.url'],
+    consoleUrl: cluster.consoleUrl,
     credentials: {}, // Don't expose credentials
     config: cluster.connectionConfig || {},
   }
@@ -660,6 +671,7 @@ export async function createCluster(data: {
   bootstrapServers: string
   environment?: string
   schemaRegistryUrl?: string
+  consoleUrl?: string
   credentials?: Record<string, string>
   config?: Record<string, string>
 }): Promise<{
@@ -706,6 +718,7 @@ export async function createCluster(data: {
         name: data.name,
         provider: providerPayloadId,
         connectionConfig,
+        consoleUrl: data.consoleUrl || undefined,
         credentials: data.credentials || {},
         validationStatus: 'pending',
       },
@@ -765,6 +778,7 @@ export async function updateCluster(
     bootstrapServers?: string
     environment?: string
     schemaRegistryUrl?: string
+    consoleUrl?: string
   }
 ): Promise<{
   success: boolean
@@ -842,6 +856,10 @@ export async function updateCluster(
       if (data.bootstrapServers !== undefined) {
         updateData.validationStatus = 'pending'
       }
+    }
+
+    if (data.consoleUrl !== undefined) {
+      updateData.consoleUrl = data.consoleUrl || undefined
     }
 
     // Perform the update
