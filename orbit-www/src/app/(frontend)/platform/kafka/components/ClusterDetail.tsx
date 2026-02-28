@@ -103,6 +103,7 @@ export function ClusterDetail({
   const [schemaRegistryUrl, setSchemaRegistryUrl] = useState(
     cluster?.schemaRegistryUrl || ''
   )
+  const [consoleUrl, setConsoleUrl] = useState(cluster?.consoleUrl || '')
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isValidating, setIsValidating] = useState(false)
@@ -121,6 +122,7 @@ export function ClusterDetail({
         bootstrapServers,
         environment,
         schemaRegistryUrl: schemaRegistryUrl || undefined,
+        consoleUrl: consoleUrl || undefined,
       })
     } finally {
       setIsSaving(false)
@@ -282,6 +284,20 @@ export function ClusterDetail({
               onChange={(e) => setSchemaRegistryUrl(e.target.value)}
               placeholder="http://localhost:8081"
             />
+          </div>
+
+          {/* Console URL */}
+          <div className="space-y-2">
+            <Label htmlFor="consoleUrl">Console URL (Optional)</Label>
+            <Input
+              id="consoleUrl"
+              value={consoleUrl}
+              onChange={(e) => setConsoleUrl(e.target.value)}
+              placeholder="http://localhost:8083"
+            />
+            <p className="text-xs text-muted-foreground">
+              URL to the cluster management console (e.g., Redpanda Console)
+            </p>
           </div>
 
           {/* Validation result */}
