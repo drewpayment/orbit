@@ -99,7 +99,7 @@ export const auth = betterAuth({
               message: "Your registration was not approved. Contact an administrator.",
             })
           }
-          if (status === "approved" && !user.emailVerified) {
+          if (status === "approved" && !user.emailVerified && user.role !== "super_admin") {
             throw new APIError("FORBIDDEN", {
               message: "Please verify your email before logging in. Check your inbox.",
             })
