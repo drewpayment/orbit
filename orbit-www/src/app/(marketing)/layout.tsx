@@ -19,6 +19,8 @@ const inter = Inter({
   display: 'swap',
 })
 
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
   title: 'Orbit — Internal Developer Portal',
   description:
