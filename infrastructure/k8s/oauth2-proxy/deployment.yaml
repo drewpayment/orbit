@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy
+  namespace: orbit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oauth2-proxy
+  template:
+    metadata:
+      labels:
+        app: oauth2-proxy
+    spec:
+      serviceAccountName: orbit
+      containers:
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.14.3
+          ports:
+            - containerPort: 4180
+              name: http
+              protocol: TCP
+          args:
+            - --provider=oidc
+            - --oidc-issuer-url=https://orbit.hoytlabs.app
+            - --redirect-url=https://temporal.orbit.hoytlabs.app/oauth2/callback
+            - --upstream=http://temporal-ui:8080
+            - --http-address=0.0.0.0:4180
+            - --reverse-proxy=true
+            - --skip-provider-button=true
+            - --email-domain=*
+            - --cookie-domain=.hoytlabs.app
+            - --cookie-secure=true
+            - --cookie-samesite=lax
+            - --cookie-expire=24h
+            - --cookie-refresh=1h
+            - --oidc-groups-claim=role
+            - --allowed-group=super_admin
+            - --allowed-group=admin
+            - --pass-authorization-header=true
+            - --set-xauthrequest=true
+            - --scope=openid profile email
+          env:
+            - name: OAUTH2_PROXY_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: OAUTH2_PROXY_CLIENT_ID
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: OAUTH2_PROXY_CLIENT_SECRET
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: OAUTH2_PROXY_COOKIE_SECRET
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
