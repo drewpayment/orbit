@@ -2,8 +2,6 @@ import { ThemeProvider } from '@/components/theme-provider'
 import { RuntimeEnvScript } from '@/components/runtime-env-script'
 import '@/app/globals.css'
 
-export const dynamic = 'force-dynamic'
-
 export const metadata = {
   title: 'Setup - Orbit',
   description: 'Set up your Orbit instance',

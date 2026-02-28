@@ -22,8 +22,6 @@ const sourceSerif = Source_Serif_4({
   display: 'swap',
 })
 
-export const dynamic = 'force-dynamic'
-
 export default function FrontendLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
