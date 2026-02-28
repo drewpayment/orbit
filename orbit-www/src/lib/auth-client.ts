@@ -1,4 +1,5 @@
 import { createAuthClient } from "better-auth/react"
+import { oauthProviderClient } from "@better-auth/oauth-provider/client"
 import { getEnv } from "@/lib/env"
 
 let _client: ReturnType<typeof createAuthClient> | null = null
@@ -7,6 +8,7 @@ function getAuthClient() {
   if (!_client) {
     _client = createAuthClient({
       baseURL: getEnv('NEXT_PUBLIC_APP_URL') || "http://localhost:3000",
+      plugins: [oauthProviderClient()],
     })
   }
   return _client
