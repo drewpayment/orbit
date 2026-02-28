@@ -7,20 +7,21 @@ import {
   BookOpen,
   FileText,
   GitBranch,
+  Menu,
 } from 'lucide-react'
 
 export default function LandingPage() {
   return (
     <div className="min-h-screen">
       {/* Header */}
-      <header className="sticky top-0 z-50 flex items-center justify-between px-10 py-4 backdrop-blur-md bg-[#0A0A0B]/80 border-b border-white/5">
+      <header className="sticky top-0 z-50 flex flex-wrap items-center justify-between px-10 py-4 backdrop-blur-md bg-[#0A0A0B]/80 border-b border-white/5">
         <div className="flex items-center gap-2">
           <Orbit className="h-7 w-7 text-[var(--color-primary)]" />
           <span className="text-xl font-bold tracking-[4px] text-white">
             ORBIT
           </span>
         </div>
-        <nav className="hidden md:flex items-center gap-8">
+        <nav aria-label="Main navigation" className="hidden md:flex items-center gap-8">
           <a
             href="#features"
             className="text-sm font-medium text-[#ADADB0] hover:text-white transition-colors"
@@ -48,14 +49,27 @@ export default function LandingPage() {
             Log In
           </Link>
           <Link
-            href="/login"
+            href="/signup"
             className="rounded-lg bg-[var(--color-primary)] px-[18px] py-2 text-[13px] font-semibold text-white hover:opacity-90 transition-opacity"
           >
             Get Started
           </Link>
         </div>
+        {/* Mobile navigation */}
+        <details className="md:hidden w-full">
+          <summary className="flex items-center gap-2 cursor-pointer py-2 text-sm font-medium text-[#ADADB0]">
+            <Menu className="h-4 w-4" />
+            Menu
+          </summary>
+          <nav aria-label="Mobile navigation" className="flex flex-col gap-3 pb-2 pt-1">
+            <a href="#features" className="text-sm font-medium text-[#ADADB0] hover:text-white transition-colors">Features</a>
+            <a href="#how-it-works" className="text-sm font-medium text-[#ADADB0] hover:text-white transition-colors">How It Works</a>
+            <a href="#get-started" className="text-sm font-medium text-[#ADADB0] hover:text-white transition-colors">Get Started</a>
+          </nav>
+        </details>
       </header>
 
+      <main>
       {/* Hero */}
       <section className="relative flex flex-col items-center px-8 pt-20 pb-16 md:px-[120px] md:pt-20 md:pb-[60px] gap-8">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_#1A1520_0%,_#0A0A0B_70%)]" />
@@ -85,7 +99,7 @@ export default function LandingPage() {
           {/* CTAs */}
           <div className="stagger-item flex items-center gap-4">
             <Link
-              href="/login"
+              href="/signup"
               className="flex items-center gap-2 rounded-[10px] bg-[var(--color-primary)] px-7 py-3.5 text-[15px] font-semibold text-white hover:opacity-90 transition-opacity"
             >
               Get Started
@@ -125,6 +139,7 @@ export default function LandingPage() {
 
       {/* Final CTA */}
       <FinalCTASection />
+      </main>
 
       {/* Footer */}
       <FooterSection />
@@ -311,7 +326,7 @@ function FinalCTASection() {
         </p>
         <div className="flex items-center gap-4">
           <Link
-            href="/login"
+            href="/signup"
             className="flex items-center gap-2 rounded-[10px] bg-[var(--color-primary)] px-8 py-4 text-base font-semibold text-white hover:opacity-90 transition-opacity"
           >
             Get Started
