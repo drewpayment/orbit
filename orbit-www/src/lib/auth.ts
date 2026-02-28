@@ -1,8 +1,11 @@
 import { betterAuth } from "better-auth"
 import { mongodbAdapter } from "better-auth/adapters/mongodb"
 import { MongoClient } from "mongodb"
+import { getEnv } from "./env"
 
 const client = new MongoClient(process.env.DATABASE_URI || "")
+
+const appUrl = getEnv('NEXT_PUBLIC_APP_URL') || "http://localhost:3000"
 
 export const auth = betterAuth({
   database: mongodbAdapter(client.db()),
@@ -30,9 +33,9 @@ export const auth = betterAuth({
       },
     },
   },
-  baseURL: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+  baseURL: appUrl,
   trustedOrigins: [
-    process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+    appUrl,
     "http://localhost:3000",
   ],
 })
