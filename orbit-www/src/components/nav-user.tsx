@@ -4,6 +4,7 @@ import {
   BadgeCheck,
   Bell,
   LogOut,
+  Shield,
   Sparkles,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -33,6 +34,7 @@ import { CaretSortIcon, ComponentPlaceholderIcon } from "@radix-ui/react-icons"
 
 export function NavUser({
   user,
+  isAdmin,
 }: {
   user: {
     name: string
@@ -40,6 +42,7 @@ export function NavUser({
     avatar: string
     initials?: string
   }
+  isAdmin?: boolean
 }) {
   const { isMobile } = useSidebar()
   const router = useRouter()
@@ -117,6 +120,17 @@ export function NavUser({
                 Notifications
               </DropdownMenuItem>
             </DropdownMenuGroup>
+            {isAdmin && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem onClick={() => router.push('/admin')}>
+                    <Shield />
+                    Admin Panel
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout}>
               <LogOut />

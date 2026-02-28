@@ -1,12 +1,16 @@
 import type { CollectionConfig } from 'payload'
 import { userApprovalAfterChangeHook } from './hooks/userApprovalHook'
+import { betterAuthStrategy } from '@/lib/payload-better-auth-strategy'
 
 export const Users: CollectionConfig = {
   slug: 'users',
   admin: {
     useAsTitle: 'email',
   },
-  auth: true,
+  auth: {
+    disableLocalStrategy: { enableFields: true },
+    strategies: [betterAuthStrategy],
+  },
   hooks: {
     afterChange: [
       async (args) => {
@@ -40,6 +44,21 @@ export const Users: CollectionConfig = {
       admin: {
         position: 'sidebar',
         description: 'Change to "Approved" to allow this user to log in.',
+      },
+    },
+    {
+      name: 'role',
+      type: 'select',
+      label: 'User Role',
+      defaultValue: 'user',
+      options: [
+        { label: 'Super Admin', value: 'super_admin' },
+        { label: 'Admin', value: 'admin' },
+        { label: 'User', value: 'user' },
+      ],
+      admin: {
+        position: 'sidebar',
+        description: 'Super Admin and Admin can access the Payload admin panel.',
       },
     },
     {

@@ -11,6 +11,7 @@ import {
   Layers,
   MessageSquare,
   RadioTower,
+  Shield,
 } from "lucide-react"
 import Link from "next/link"
 import { useSession } from "@/lib/auth-client"
@@ -147,9 +148,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavMain items={navMainData} />
         <NavPlatform items={navPlatformData} isVisible={isPlatformAdmin} />
         <NavSecondary items={navSecondaryData} className="mt-auto" />
+        {isPlatformAdmin && (
+          <NavSecondary items={[{ title: "Admin Panel", url: "/admin", icon: Shield }]} />
+        )}
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={user} />
+        <NavUser user={user} isAdmin={isPlatformAdmin} />
       </SidebarFooter>
     </Sidebar>
   )

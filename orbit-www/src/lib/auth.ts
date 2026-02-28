@@ -65,6 +65,12 @@ export const auth = betterAuth({
         defaultValue: "pending",
         input: false,
       },
+      role: {
+        type: "string",
+        required: false,
+        defaultValue: "user",
+        input: false,
+      },
     },
   },
   databaseHooks: {

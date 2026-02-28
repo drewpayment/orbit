@@ -218,6 +218,10 @@ export interface User {
    */
   status?: ('pending' | 'approved' | 'rejected') | null;
   /**
+   * Super Admin and Admin can access the Payload admin panel.
+   */
+  role?: ('super_admin' | 'admin' | 'user') | null;
+  /**
    * If checked, user can log in immediately after approval without verifying their email.
    */
   skipEmailVerification?: boolean | null;
@@ -3244,6 +3248,7 @@ export interface UsersSelect<T extends boolean = true> {
   name?: T;
   avatar?: T;
   status?: T;
+  role?: T;
   skipEmailVerification?: T;
   registrationApprovedAt?: T;
   registrationApprovedBy?: T;
