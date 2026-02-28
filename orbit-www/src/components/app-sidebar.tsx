@@ -9,10 +9,8 @@ import {
   LayoutDashboard,
   LayoutTemplate,
   Layers,
-  LifeBuoy,
   MessageSquare,
   RadioTower,
-  Settings2,
 } from "lucide-react"
 import Link from "next/link"
 import { useSession } from "@/lib/auth-client"
@@ -70,45 +68,11 @@ const navMainData = [
       icon: BookOpen,
       items: [],
     },
-    {
-      title: "Settings",
-      url: "#",
-      icon: Settings2,
-      items: [
-        {
-          title: "General",
-          url: "#",
-        },
-        {
-          title: "Team",
-          url: "#",
-        },
-        {
-          title: "Billing",
-          url: "#",
-        },
-        {
-          title: "Limits",
-          url: "#",
-        },
-        {
-          title: "GitHub",
-          url: "/settings/github",
-        },
-        {
-          title: "Templates",
-          url: "/settings/templates",
-        },
-      ],
-    },
 ]
 
 const navSecondaryData = [
-  {
-    title: "Support",
-    url: "/support",
-    icon: LifeBuoy,
-  },
+  // Support page hidden behind feature flag — re-enable when complete
+  // { title: "Support", url: "/support", icon: LifeBuoy },
   {
     title: "Feedback",
     url: "/feedback",

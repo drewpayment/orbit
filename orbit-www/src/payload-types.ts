@@ -89,6 +89,7 @@ export interface Config {
     'registry-configs': RegistryConfig;
     'environment-variables': EnvironmentVariable;
     'registry-images': RegistryImage;
+    feedback: Feedback;
     'kafka-providers': KafkaProvider;
     'kafka-clusters': KafkaCluster;
     'kafka-environment-mappings': KafkaEnvironmentMapping;
@@ -142,6 +143,7 @@ export interface Config {
     'registry-configs': RegistryConfigsSelect<false> | RegistryConfigsSelect<true>;
     'environment-variables': EnvironmentVariablesSelect<false> | EnvironmentVariablesSelect<true>;
     'registry-images': RegistryImagesSelect<false> | RegistryImagesSelect<true>;
+    feedback: FeedbackSelect<false> | FeedbackSelect<true>;
     'kafka-providers': KafkaProvidersSelect<false> | KafkaProvidersSelect<true>;
     'kafka-clusters': KafkaClustersSelect<false> | KafkaClustersSelect<true>;
     'kafka-environment-mappings': KafkaEnvironmentMappingsSelect<false> | KafkaEnvironmentMappingsSelect<true>;
@@ -1376,6 +1378,32 @@ export interface RegistryImage {
    * When the image was pushed to registry
    */
   pushedAt: string;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * User feedback submissions
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "feedback".
+ */
+export interface Feedback {
+  id: string;
+  category: 'general' | 'bug' | 'feature' | 'question';
+  rating?: number | null;
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  /**
+   * Steps to reproduce (for bug reports)
+   */
+  steps?: string | null;
+  /**
+   * Mark as reviewed
+   */
+  read?: boolean | null;
+  submittedBy?: (string | null) | User;
   updatedAt: string;
   createdAt: string;
 }
@@ -3053,6 +3081,10 @@ export interface PayloadLockedDocument {
         value: string | RegistryImage;
       } | null)
     | ({
+        relationTo: 'feedback';
+        value: string | Feedback;
+      } | null)
+    | ({
         relationTo: 'kafka-providers';
         value: string | KafkaProvider;
       } | null)
@@ -3761,6 +3793,23 @@ export interface RegistryImagesSelect<T extends boolean = true> {
   digest?: T;
   sizeBytes?: T;
   pushedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "feedback_select".
+ */
+export interface FeedbackSelect<T extends boolean = true> {
+  category?: T;
+  rating?: T;
+  name?: T;
+  email?: T;
+  subject?: T;
+  message?: T;
+  steps?: T;
+  read?: T;
+  submittedBy?: T;
   updatedAt?: T;
   createdAt?: T;
 }

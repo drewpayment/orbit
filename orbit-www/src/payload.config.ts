@@ -30,6 +30,7 @@ import { HealthChecks } from './collections/HealthChecks'
 import { RegistryConfigs } from './collections/RegistryConfigs'
 import { EnvironmentVariables } from './collections/EnvironmentVariables'
 import { RegistryImages } from './collections/RegistryImages'
+import { Feedback } from './collections/Feedback'
 
 // Kafka collections
 import {
@@ -94,6 +95,7 @@ export default buildConfig({
     RegistryConfigs,
     EnvironmentVariables,
     RegistryImages,
+    Feedback,
     // Kafka collections
     KafkaProviders,
     KafkaClusters,
