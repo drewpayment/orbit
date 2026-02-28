@@ -18,6 +18,7 @@ resources:
 
   # Infrastructure
   - temporal
+  - oauth2-proxy
   - registry
   - buildkit
 
