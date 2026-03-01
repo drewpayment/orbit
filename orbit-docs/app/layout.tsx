@@ -1,5 +1,5 @@
 import './global.css';
-import { RootProvider } from 'fumadocs-ui/provider/next';
+import { RootProvider } from 'fumadocs-ui/provider';
 import type { ReactNode } from 'react';
 import type { Metadata } from 'next';
 
@@ -13,9 +13,15 @@ export const metadata: Metadata = {
 
 export default function Layout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body>
-        <RootProvider>{children}</RootProvider>
+    <html lang="en" className="dark" suppressHydrationWarning>
+      <body className="bg-fd-background text-fd-foreground">
+        <RootProvider
+          theme={{
+            defaultTheme: 'dark',
+          }}
+        >
+          {children}
+        </RootProvider>
       </body>
     </html>
   );
