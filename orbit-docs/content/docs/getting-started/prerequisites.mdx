@@ -1,0 +1,47 @@
+---
+title: Prerequisites
+description: What you need before setting up Orbit.
+---
+
+# Prerequisites
+
+Before running Orbit, ensure you have the following installed:
+
+## Required
+
+| Tool | Version | Purpose |
+|------|---------|---------|
+| [Docker](https://docs.docker.com/get-docker/) | 24+ | Container runtime for all services |
+| [Docker Compose](https://docs.docker.com/compose/) | v2+ | Multi-container orchestration |
+| [Node.js](https://nodejs.org/) | 18.20.2+ or 20.9.0+ | Frontend build tooling |
+| [Bun](https://bun.sh/) | Latest | Frontend package manager & runtime |
+| [Go](https://go.dev/) | 1.21+ | Backend service development |
+
+## Optional
+
+| Tool | Purpose |
+|------|---------|
+| [Make](https://www.gnu.org/software/make/) | Convenience commands (Makefile) |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | Kubernetes deployment |
+| [ArgoCD CLI](https://argo-cd.readthedocs.io/) | GitOps deployment management |
+
+## GitHub App (Optional)
+
+For repository integration features (template instantiation, `.orbit.yaml` sync, spec auto-discovery), you'll need a GitHub App. See [Configuration](/docs/getting-started/configuration) for setup details.
+
+## Hardware Recommendations
+
+### Development (Docker Compose)
+
+- **CPU**: 4+ cores
+- **RAM**: 8 GB minimum, 16 GB recommended
+- **Disk**: 20 GB free space
+
+Orbit runs MongoDB, PostgreSQL, Redis, Temporal, MeiliSearch, Redpanda, and MinIO alongside the frontend — all in Docker containers.
+
+### Production (Kubernetes)
+
+- **Nodes**: 3+ nodes recommended for HA
+- **CPU**: 8+ cores total across the cluster
+- **RAM**: 32 GB+ total
+- **Storage**: Persistent volumes for MongoDB, PostgreSQL, Redis, Redpanda, and MinIO (see [Storage Recommendations](/docs/self-hosting/storage))

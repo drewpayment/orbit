@@ -1,0 +1,40 @@
+---
+title: API Catalog
+description: Register, discover, and manage API schemas across your organization.
+---
+
+# API Catalog
+
+The API Catalog provides a central registry for all your organization's APIs — enabling discovery, documentation, and governance across teams.
+
+## Supported Schema Types
+
+- **OpenAPI** (v3.x) — REST APIs
+- **AsyncAPI** — Event-driven APIs (Kafka, WebSocket, MQTT)
+
+## Features
+
+### Schema Registration
+Register API schemas manually or let Orbit auto-discover them from your repositories. Schemas are versioned and tracked over time.
+
+### Discovery & Search
+Developers can browse and search the full API catalog to find existing APIs before building new ones — reducing duplication and promoting reuse.
+
+### Auto-Discovery
+When a GitHub App is configured, Orbit can scan repositories for:
+- `openapi.yaml` / `openapi.json` files
+- `asyncapi.yaml` / `asyncapi.json` files
+- Protobuf `.proto` files
+
+Discovered schemas are automatically registered and linked to their source application.
+
+### Schema Viewer
+View rendered API documentation directly in Orbit with:
+- Endpoint listings with request/response schemas
+- Authentication requirements
+- Example payloads
+
+### Governance
+- Track which teams own which APIs
+- Monitor API health and usage
+- Enforce schema compatibility rules

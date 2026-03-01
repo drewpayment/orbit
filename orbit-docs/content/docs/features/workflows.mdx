@@ -1,0 +1,68 @@
+---
+title: Workflow Orchestration
+description: Durable execution via Temporal for long-running operations.
+---
+
+# Workflow Orchestration
+
+Orbit uses [Temporal](https://temporal.io) for all long-running operations, providing durability, visibility, and automatic retries.
+
+## Why Temporal?
+
+Many IDP operations are inherently long-running and multi-step:
+
+- **Repository scaffolding** — Clone template, substitute variables, push to GitHub, set up CI
+- **Kafka provisioning** — Create virtual cluster, configure ACLs, register schemas
+- **Application lifecycle** — Build, test, deploy, health check
+
+These operations need to survive process restarts, handle partial failures gracefully, and provide real-time progress visibility. Temporal gives us all of this.
+
+## Architecture
+
+```
+orbit-www (Frontend)
+    │
+    ├── Starts workflows via Temporal client
+    ├── Queries workflow status for progress bars
+    └── Receives workflow results via signals
+    │
+temporal-worker (Go service)
+    │
+    ├── Executes workflow logic
+    ├── Calls activities (GitHub API, Kafka admin, etc.)
+    └── Reports progress via heartbeats
+    │
+Temporal Server
+    │
+    ├── Schedules and dispatches tasks
+    ├── Persists workflow state (PostgreSQL)
+    └── Handles retries and timeouts
+```
+
+## Current Workflows
+
+| Workflow | Description | Trigger |
+|----------|-------------|---------|
+| `CloneRepositoryWorkflow` | Clones a template and creates a new repo | Template instantiation |
+| `CreateVirtualClusterWorkflow` | Provisions a Kafka virtual cluster | Virtual cluster request |
+| `SyncOrbitManifestWorkflow` | Syncs `.orbit.yaml` changes to/from GitHub | Manifest update |
+
+## Progress Tracking
+
+Workflows report progress that the UI displays as progress bars:
+
+1. Frontend starts a workflow and receives a `workflowId`
+2. The UI polls the Temporal query endpoint for progress updates
+3. Each activity reports its step (e.g., "Cloning repository...", "Setting up CI...")
+4. On completion, the UI shows the result
+
+## Extending Workflows
+
+To add a new workflow:
+
+1. Define the workflow in `temporal-workflows/internal/workflows/`
+2. Implement activities in `temporal-workflows/internal/activities/`
+3. Register both in the worker's `cmd/worker/main.go`
+4. Add a Temporal client call in `orbit-www` to trigger the workflow
+
+See the [Contributing Guide](/docs/contributing) for development setup.

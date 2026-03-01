@@ -1,0 +1,66 @@
+---
+title: Applications
+description: End-to-end application lifecycle management with lineage tracking and health monitoring.
+---
+
+# Applications
+
+Orbit tracks every deployed service as an **Application** — providing a unified catalog with health monitoring, dependency mapping, and full lineage back to its origin template.
+
+![Applications](/screenshots/applications.png)
+
+## Application Catalog
+
+The application catalog is your single source of truth for everything running in production:
+
+- **Service Registry** — Every application with its repository, owner, and status
+- **Health Monitoring** — At-a-glance health indicators across all services
+- **Search & Filter** — Find applications by name, team, status, or technology
+
+## Creating Applications
+
+Applications can be created in two ways:
+
+### From a Template
+The recommended path. Navigate to **Templates**, pick a blueprint, and Orbit scaffolds a complete service with CI/CD, K8s manifests, and docs. The new application automatically appears in the catalog with a lineage link to its template.
+
+### Import Existing Repository
+Already have a service? Import it from GitHub and Orbit will:
+- Index the repository metadata
+- Detect the `.orbit.yaml` manifest (if present)
+- Add it to the workspace catalog
+
+## `.orbit.yaml` Manifest
+
+The `.orbit.yaml` file is a declarative manifest that lives in your service repo:
+
+```yaml
+apiVersion: orbit/v1
+kind: Component
+metadata:
+  name: my-service
+  description: User authentication service
+  owner: platform-team
+spec:
+  type: service
+  lifecycle: production
+  system: auth
+  dependsOn:
+    - component:user-db
+    - resource:redis-cache
+  providesApis:
+    - auth-api
+  consumesApis:
+    - notification-api
+```
+
+Orbit syncs this manifest bidirectionally — changes in the UI update the file, and changes in the file update Orbit.
+
+## Lineage Tracking
+
+For applications created from templates, Orbit maintains a lineage graph showing:
+
+- Which template was used
+- When the application was instantiated
+- Drift detection between the template and the service
+- Related applications from the same template

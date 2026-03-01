@@ -1,0 +1,83 @@
+---
+title: Project Structure
+description: How the Orbit monorepo is organized.
+---
+
+# Project Structure
+
+Orbit is organized as a monorepo with distinct services and shared protocol buffer definitions.
+
+```
+orbit/
+├── orbit-www/              # Payload CMS + Next.js frontend
+│   ├── src/
+│   │   ├── app/            # Next.js App Router pages
+│   │   ├── collections/    # Payload CMS collections (data model)
+│   │   ├── components/     # React components
+│   │   └── lib/            # Shared utilities & generated proto clients
+│   └── payload.config.ts   # Payload CMS configuration
+│
+├── orbit-docs/             # Fumadocs documentation site (this site!)
+│   ├── content/docs/       # MDX documentation pages
+│   └── app/                # Next.js App Router for docs
+│
+├── services/               # Go microservices
+│   ├── repository/         # Repository management
+│   ├── api-catalog/        # API schema catalog
+│   ├── knowledge/          # Knowledge management
+│   ├── bifrost/            # Kafka multi-tenant gateway
+│   └── plugins/            # Plugin service
+│
+├── temporal-workflows/     # Temporal worker & workflow definitions
+│   ├── cmd/worker/         # Worker entry point
+│   └── internal/           # Workflow & activity implementations
+│
+├── proto/                  # Protocol Buffer definitions
+│   ├── *.proto             # Service definitions (gRPC)
+│   └── gen/go/             # Generated Go code
+│
+├── infrastructure/         # Deployment configs
+│   └── k8s/               # Kubernetes manifests (Kustomize)
+│
+└── docs/                   # Internal docs, plans, roadmap
+    ├── ROADMAP.md
+    └── plans/              # Implementation plans
+```
+
+## Go Service Layout
+
+Each Go service follows a consistent clean architecture pattern:
+
+```
+services/repository/
+├── cmd/server/        # Main entry point
+├── internal/
+│   ├── domain/        # Business logic and entities (no external deps)
+│   ├── service/       # Service layer (coordinates between layers)
+│   ├── grpc/          # gRPC server implementation
+│   ├── temporal/      # Temporal workflows and activities
+│   └── api/           # HTTP API handlers (if needed)
+├── pkg/               # Exported packages
+└── tests/             # Integration & E2E tests
+```
+
+## Frontend (orbit-www)
+
+Built on **Payload CMS 3.0** with Next.js 15:
+
+- **Collections** define the CMS data model (Users, Workspaces, Applications, etc.)
+- **App Router** pages under `src/app/` handle the frontend UI
+- **Generated TypeScript clients** in `src/lib/proto/` call backend gRPC services
+- Uses React 19 with server components and server actions
+
+## Protocol Buffers
+
+gRPC service definitions live in `proto/`. When you modify a `.proto` file:
+
+```bash
+# Generates Go code → proto/gen/go/
+# Generates TypeScript code → orbit-www/src/lib/proto/
+make proto-gen
+```
+
+No global installation of `buf` required — it's installed as a dev dependency in `orbit-www/package.json`.

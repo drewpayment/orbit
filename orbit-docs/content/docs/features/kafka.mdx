@@ -1,0 +1,69 @@
+---
+title: Kafka Self-Service
+description: Multi-tenant Kafka access with virtual clusters, topic management, and schema governance.
+---
+
+# Kafka Self-Service (Project Bifrost)
+
+Orbit provides self-service Kafka access through **Project Bifrost** — a multi-tenant gateway that gives teams autonomous topic creation, schema management, and consumer group tracking while platform admins maintain governance.
+
+## How It Works
+
+Bifrost acts as a proxy layer between applications and your Kafka cluster(s):
+
+1. **Platform admins** register Kafka clusters and configure environment mappings
+2. **Teams** request virtual clusters for their applications within a workspace
+3. **Bifrost** handles multi-tenant routing, authentication, and policy enforcement
+4. **Teams** self-service create topics, manage schemas, and monitor consumer groups
+
+## Key Capabilities
+
+### Virtual Clusters
+Each application/environment gets its own virtual cluster with isolated topics and consumer groups. Virtual clusters are provisioned automatically via Temporal workflows.
+
+### Topic Management
+- Create, configure, and delete topics within your virtual cluster
+- Set partition counts, replication factors, and retention policies
+- View topic metadata and configuration
+
+### Schema Registry
+- Register and manage Avro, Protobuf, and JSON schemas
+- Schema compatibility enforcement (backward, forward, full)
+- Auto-discovery of schemas from repository code
+
+### Consumer Groups
+- Monitor consumer group lag and offsets
+- Track active consumers across environments
+
+### Governance
+- Approval workflows for virtual cluster provisioning
+- Quota enforcement per workspace/team
+- Chargeback rate configuration for cost attribution
+
+## Kafka Provider Setup
+
+Orbit supports any Kafka-compatible broker. To configure:
+
+1. **Create a Kafka Provider** (Admin Panel → Kafka Providers):
+   - Name your provider (e.g., `redpanda`, `confluent`)
+   - Set the adapter type (`apache` for standard Kafka protocol)
+   - Define required configuration fields
+
+2. **Register a Cluster** (Admin Panel → Kafka Clusters):
+   - Associate with a provider
+   - Provide connection config (`bootstrap.servers`, credentials)
+
+3. **Map Environments** (Admin Panel → Kafka Environment Mappings):
+   - Map environments (development, staging, production) to clusters
+   - Set priorities for failover
+
+## Bifrost Gateway
+
+The Bifrost gateway is a Go service that handles:
+
+- **Proxy routing** — Routes Kafka protocol traffic to the correct cluster
+- **Authentication** — Validates workspace membership and permissions
+- **Metrics** — Exposes Prometheus metrics for monitoring
+- **Admin gRPC** — Management API for provisioning operations
+
+Bifrost runs as a separate container alongside your Kafka infrastructure.

@@ -1,0 +1,56 @@
+---
+title: Repository Templates
+description: Create services from org-approved templates with automated CI/CD and K8s manifests.
+---
+
+# Repository Templates
+
+Orbit's template system lets platform teams publish approved service blueprints that developers can instantiate with a few clicks. Every new service starts with the right structure, CI/CD, observability, and documentation.
+
+![Templates Catalog](/screenshots/templates.png)
+
+## How Templates Work
+
+1. **Platform teams** import template repositories into Orbit
+2. Orbit indexes the template, extracting language, category, and complexity metadata
+3. **Developers** browse the Template Catalog and select a template
+4. Orbit uses a **Temporal workflow** to:
+   - Clone the template repository
+   - Apply variable substitutions (service name, team, namespace)
+   - Initialize the new repo in the team's GitHub org
+   - Set up branch protection, CI/CD, and integrations
+5. The new service is tracked as an **Application** with lineage back to the template
+
+## Template Metadata
+
+Templates are indexed with these attributes:
+
+- **Language** — Go, TypeScript, Python, Java, Rust, etc.
+- **Category** — API Service, Worker, Frontend, Library, etc.
+- **Complexity** — Starter, Standard, Advanced
+- **Description** — What the template provides
+
+## Importing Templates
+
+Navigate to **Templates → Import Template** and provide:
+
+- **GitHub Repository URL** — The source template repo
+- **Branch** — Branch to use as the template source
+
+Orbit clones the repository and extracts metadata. Templates can include variable placeholders (e.g., `{{SERVICE_NAME}}`) that are replaced during instantiation.
+
+## Variable Substitution
+
+When instantiating a template, Orbit replaces placeholders in:
+
+- File contents
+- File and directory names
+- CI/CD configuration
+
+Common variables include:
+
+| Variable | Description |
+|----------|-------------|
+| `{{SERVICE_NAME}}` | Name of the new service |
+| `{{WORKSPACE_NAME}}` | Name of the workspace |
+| `{{TEAM_NAME}}` | Name of the team/group |

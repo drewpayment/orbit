@@ -1,0 +1,76 @@
+---
+title: Overview
+description: Orbit is an open-source Internal Developer Portal (IDP) for platform teams.
+---
+
+import { Cards, Card } from 'fumadocs-ui/components/card';
+
+# Orbit
+
+**Orbit** is an open-source Internal Developer Portal (IDP) that gives platform teams self-service infrastructure while maintaining governance. It's the single pane of glass for services, APIs, Kafka topics, and documentation across your organization.
+
+![Orbit Dashboard](/screenshots/dashboard.png)
+
+## The Problem
+
+Platform teams face a common challenge: developers need fast, autonomous access to infrastructure — repositories, deployments, Kafka topics, documentation — but without guardrails this leads to sprawl, inconsistency, and lost context.
+
+Orbit bridges this gap by providing:
+
+- **Self-service with guardrails** — Teams provision resources autonomously within policy boundaries
+- **Lineage tracking** — Every deployed application traces back to its origin template
+- **Unified catalog** — Single pane of glass for services, APIs, topics, and docs
+- **GitOps-ready** — Designed for `.orbit.yaml` manifest sync between UI and repositories
+
+## Key Features
+
+<Cards>
+  <Card title="Repository & Templates" href="/docs/features/templates">
+    Create services from org-approved templates with automated CI/CD, K8s manifests, and docs pre-configured.
+  </Card>
+  <Card title="Application Lifecycle" href="/docs/features/applications">
+    End-to-end tracking from template instantiation through deployment with lineage graphs and health monitoring.
+  </Card>
+  <Card title="Kafka Self-Service" href="/docs/features/kafka">
+    Self-service Kafka access with virtual clusters, topic management, schema registry, and multi-tenant governance.
+  </Card>
+  <Card title="Knowledge Management" href="/docs/features/knowledge">
+    Collaborative documentation with hierarchical spaces, real-time editing, and full-text search.
+  </Card>
+  <Card title="API Catalog" href="/docs/features/api-catalog">
+    Register, discover, and manage API schemas (OpenAPI & AsyncAPI) with auto-discovery from repositories.
+  </Card>
+  <Card title="Workflow Orchestration" href="/docs/features/workflows">
+    Durable execution via Temporal for long-running operations with progress tracking and automatic retries.
+  </Card>
+</Cards>
+
+## Architecture at a Glance
+
+Orbit uses a polyglot architecture:
+
+| Layer | Technology |
+|-------|------------|
+| Frontend | Payload CMS 3.0, Next.js 15, TypeScript, React 19 |
+| Backend | Go 1.21+ microservices, gRPC (Protocol Buffers) |
+| Workflows | Temporal for durable execution |
+| Database | MongoDB (Payload CMS), PostgreSQL (Temporal) |
+| Caching | Redis |
+| Search | MeiliSearch |
+| Storage | MinIO / S3-compatible |
+| Messaging | Redpanda (Kafka-compatible) |
+
+## License
+
+Orbit is licensed under the [Elastic License 2.0](https://github.com/drewpayment/orbit/blob/main/LICENSE).
+
+## Next Steps
+
+<Cards>
+  <Card title="Quick Start" href="/docs/getting-started/quickstart">
+    Get Orbit running locally in under 5 minutes.
+  </Card>
+  <Card title="Self-Hosting Guide" href="/docs/self-hosting/kubernetes">
+    Deploy Orbit to your own Kubernetes cluster.
+  </Card>
+</Cards>
