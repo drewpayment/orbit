@@ -1,11 +1,9 @@
 "use client"
 
 import {
-  BadgeCheck,
   Bell,
   LogOut,
   Shield,
-  Sparkles,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { signOut } from "@/lib/auth-client"
@@ -30,7 +28,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { CaretSortIcon, ComponentPlaceholderIcon } from "@radix-ui/react-icons"
+import { CaretSortIcon } from "@radix-ui/react-icons"
 
 export function NavUser({
   user,
@@ -100,21 +98,6 @@ export function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem onClick={() => router.push('/upgrade')}>
-                <Sparkles />
-                Upgrade to Pro
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem onClick={() => router.push('/account')}>
-                <BadgeCheck />
-                Account
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => router.push('/billing')}>
-                <ComponentPlaceholderIcon />
-                Billing
-              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => router.push('/notifications')}>
                 <Bell />
                 Notifications

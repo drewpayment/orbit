@@ -1,207 +1,182 @@
-'use client'
-
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
-import { Label } from '@/components/ui/label'
-import { Separator } from '@/components/ui/separator'
-import { Bell, Mail, MessageSquare, AlertCircle } from 'lucide-react'
-import { useState } from 'react'
+import { getPayloadClient, getSession, getUserWorkspaceMemberships } from '@/lib/data/cached-queries'
+import type { Activity } from '@/components/features/dashboard'
+import { Activity as ActivityIcon } from 'lucide-react'
+import { formatDistanceToNow } from 'date-fns'
 
-export default function NotificationsPage() {
-  const [emailNotifications, setEmailNotifications] = useState(true)
-  const [pushNotifications, setPushNotifications] = useState(false)
-  const [workspaceUpdates, setWorkspaceUpdates] = useState(true)
-  const [securityAlerts, setSecurityAlerts] = useState(true)
+const typeLabels: Record<Activity['type'], string> = {
+  app: 'App',
+  topic: 'Kafka',
+  schema: 'API',
+  doc: 'Docs',
+}
+
+const typeColors: Record<Activity['type'], string> = {
+  app: 'bg-green-500',
+  topic: 'bg-blue-500',
+  schema: 'bg-purple-500',
+  doc: 'bg-green-500',
+}
+
+export default async function NotificationsPage() {
+  const [payload, session] = await Promise.all([
+    getPayloadClient(),
+    getSession(),
+  ])
+
+  const memberships = session?.user
+    ? await getUserWorkspaceMemberships(session.user.id)
+    : []
+
+  const workspaceIds = memberships
+    .map((m) => (typeof m.workspace === 'object' ? m.workspace?.id : m.workspace))
+    .filter((id): id is string => !!id)
+
+  const hasWorkspaces = workspaceIds.length > 0
+  const workspaceFilter = { workspace: { in: workspaceIds } }
+
+  const [appsResult, recentTopics, recentSchemas, knowledgeSpacesResult] = hasWorkspaces
+    ? await Promise.all([
+        payload.find({
+          collection: 'apps',
+          where: workspaceFilter,
+          sort: '-updatedAt',
+          limit: 20,
+          depth: 1,
+        }),
+        payload.find({
+          collection: 'kafka-topics',
+          where: workspaceFilter,
+          sort: '-createdAt',
+          limit: 20,
+          depth: 1,
+          overrideAccess: true,
+        }),
+        payload.find({
+          collection: 'api-schemas',
+          where: workspaceFilter,
+          sort: '-updatedAt',
+          limit: 20,
+          depth: 1,
+        }),
+        payload.find({
+          collection: 'knowledge-spaces',
+          where: workspaceFilter,
+          limit: 100,
+        }),
+      ])
+    : [
+        { docs: [] },
+        { docs: [] },
+        { docs: [] },
+        { docs: [] },
+      ]
+
+  const spaceIds = Array.isArray(knowledgeSpacesResult)
+    ? []
+    : 'docs' in knowledgeSpacesResult
+      ? knowledgeSpacesResult.docs.map((s) => s.id)
+      : []
+
+  const recentDocs = spaceIds.length > 0
+    ? await payload.find({
+        collection: 'knowledge-pages',
+        where: { knowledgeSpace: { in: spaceIds } },
+        sort: '-updatedAt',
+        limit: 20,
+        depth: 1,
+      })
+    : { docs: [] }
+
+  // Build activity feed
+  const activities: Activity[] = []
+
+  const apps = 'docs' in appsResult ? appsResult.docs : []
+  for (const app of apps) {
+    activities.push({
+      type: 'app',
+      title: app.status === 'healthy' ? 'App deployed' : 'App status changed',
+      description: `${app.name} in ${typeof app.workspace === 'object' ? app.workspace?.name : 'workspace'}`,
+      timestamp: app.updatedAt,
+    })
+  }
+
+  const topics = 'docs' in recentTopics ? recentTopics.docs : []
+  for (const topic of topics) {
+    activities.push({
+      type: 'topic',
+      title: 'Topic created',
+      description: topic.name,
+      timestamp: topic.createdAt,
+    })
+  }
+
+  const schemas = 'docs' in recentSchemas ? recentSchemas.docs : []
+  for (const schema of schemas) {
+    activities.push({
+      type: 'schema',
+      title: schema.status === 'published' ? 'API published' : 'Schema registered',
+      description: schema.name,
+      timestamp: schema.updatedAt,
+    })
+  }
+
+  const docs = 'docs' in recentDocs ? recentDocs.docs : []
+  for (const doc of docs) {
+    activities.push({
+      type: 'doc',
+      title: 'Doc updated',
+      description: doc.title,
+      timestamp: doc.updatedAt,
+    })
+  }
+
+  activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
 
   return (
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
         <SiteHeader />
-        <div className="flex flex-1 flex-col gap-4 p-8">
-          <div className="mb-8">
-            <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
-              Notification Preferences
-            </h1>
-            <p className="text-lg text-gray-600 dark:text-gray-400">
-              Manage how you receive updates and alerts
+        <div className="flex flex-1 flex-col gap-6 p-8">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Notifications</h1>
+            <p className="text-sm text-muted-foreground">
+              Recent activity across your workspaces
             </p>
           </div>
 
-          <div className="grid gap-6 max-w-4xl">
-            {/* Notification Channels */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Notification Channels</CardTitle>
-                <CardDescription>
-                  Choose how you want to receive notifications
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Mail className="h-5 w-5 text-gray-500" />
-                    <div>
-                      <Label htmlFor="email-notifications" className="text-base font-medium cursor-pointer">
-                        Email Notifications
-                      </Label>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Receive updates via email
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    id="email-notifications"
-                    onClick={() => setEmailNotifications(!emailNotifications)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      emailNotifications ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        emailNotifications ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                <Separator />
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Bell className="h-5 w-5 text-gray-500" />
-                    <div>
-                      <Label htmlFor="push-notifications" className="text-base font-medium cursor-pointer">
-                        Push Notifications
-                      </Label>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Receive browser push notifications
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    id="push-notifications"
-                    onClick={() => setPushNotifications(!pushNotifications)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      pushNotifications ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        pushNotifications ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Notification Types */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Notification Types</CardTitle>
-                <CardDescription>
-                  Select which types of notifications you want to receive
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <MessageSquare className="h-5 w-5 text-gray-500" />
-                    <div>
-                      <Label htmlFor="workspace-updates" className="text-base font-medium cursor-pointer">
-                        Workspace Updates
-                      </Label>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        New content, members, and changes
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    id="workspace-updates"
-                    onClick={() => setWorkspaceUpdates(!workspaceUpdates)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      workspaceUpdates ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        workspaceUpdates ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                <Separator />
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <AlertCircle className="h-5 w-5 text-gray-500" />
-                    <div>
-                      <Label htmlFor="security-alerts" className="text-base font-medium cursor-pointer">
-                        Security Alerts
-                      </Label>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Important security updates
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    id="security-alerts"
-                    onClick={() => setSecurityAlerts(!securityAlerts)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      securityAlerts ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        securityAlerts ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Email Digest */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Email Digest</CardTitle>
-                <CardDescription>
-                  Receive a summary of your notifications
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Digest Frequency</Label>
-                  <select className="w-full p-2 border rounded-md dark:bg-gray-800">
-                    <option>Never</option>
-                    <option>Daily</option>
-                    <option>Weekly</option>
-                    <option>Monthly</option>
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Preferred Time</Label>
-                  <select className="w-full p-2 border rounded-md dark:bg-gray-800">
-                    <option>9:00 AM</option>
-                    <option>12:00 PM</option>
-                    <option>6:00 PM</option>
-                  </select>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Save Button */}
-            <div className="flex gap-4">
-              <Button>Save Preferences</Button>
-              <Button variant="outline">Reset to Defaults</Button>
+          {activities.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <ActivityIcon className="h-10 w-10 text-muted-foreground mb-3" />
+              <p className="text-sm text-muted-foreground">No recent activity</p>
             </div>
-          </div>
+          ) : (
+            <div className="max-w-3xl space-y-1">
+              {activities.map((activity, index) => (
+                <div
+                  key={`${activity.type}-${activity.timestamp}-${index}`}
+                  className="flex items-start gap-4 rounded-lg p-3 transition-colors hover:bg-muted/50"
+                >
+                  <span className={`mt-2 h-2 w-2 rounded-full ${typeColors[activity.type]} shrink-0`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-2">
+                      <p className="text-sm font-medium">{activity.title}</p>
+                      <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider">
+                        {typeLabels[activity.type]}
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground truncate">{activity.description}</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
+                    {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </SidebarInset>
     </SidebarProvider>

@@ -162,14 +162,14 @@ services:
 
   # Documentation Site (optional)
   # Serves the public-facing Orbit docs built with Fumadocs.
-  # Set NEXT_PUBLIC_DOCS_URL=http://localhost:3001 in orbit-www/.env to enable docs links in the UI.
+  # Set NEXT_PUBLIC_DOCS_URL=http://localhost:3002 in orbit-www/.env to enable docs links in the UI.
   orbit-docs:
     container_name: orbit-docs
     build:
       context: ./orbit-docs
       dockerfile: Dockerfile
     ports:
-      - "3001:3001"
+      - "3002:3002"
     restart: unless-stopped
     profiles:
       - docs

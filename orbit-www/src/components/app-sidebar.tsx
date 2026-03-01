@@ -65,7 +65,7 @@ const navMainData = [
       items: [],
     },
     {
-      title: "Documentation",
+      title: "Knowledge",
       url: "/knowledge",
       icon: BookOpen,
       items: [],
@@ -83,7 +83,7 @@ const navSecondaryData: { title: string; url: string; icon: typeof MessageSquare
   // Documentation link — only shown when NEXT_PUBLIC_DOCS_URL is configured
   ...(process.env.NEXT_PUBLIC_DOCS_URL
     ? [{
-        title: "Documentation",
+        title: "Docs",
         url: process.env.NEXT_PUBLIC_DOCS_URL,
         icon: BookOpen,
       }]

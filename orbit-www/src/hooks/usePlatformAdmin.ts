@@ -1,7 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { checkPlatformAdmin } from '@/app/actions/platform'
+import { useSession } from '@/lib/auth-client'
 
 interface UsePlatformAdminReturn {
   isPlatformAdmin: boolean
@@ -10,34 +9,14 @@ interface UsePlatformAdminReturn {
 
 /**
  * Hook to check if the current user has platform admin privileges.
- * Platform admins have access to platform-level settings like Kafka clusters,
- * providers, and environment mappings.
+ * Derives admin status directly from the session to avoid an extra
+ * server round-trip and the layout flash it causes.
  */
 export function usePlatformAdmin(): UsePlatformAdminReturn {
-  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
+  const { data: session, isPending } = useSession()
 
-  useEffect(() => {
-    let mounted = true
+  const role = (session?.user as Record<string, unknown> | undefined)?.role as string | undefined
+  const isPlatformAdmin = role === 'super_admin' || role === 'admin'
 
-    checkPlatformAdmin()
-      .then((result) => {
-        if (mounted) {
-          setIsPlatformAdmin(result.isAdmin)
-          setIsLoading(false)
-        }
-      })
-      .catch(() => {
-        if (mounted) {
-          setIsPlatformAdmin(false)
-          setIsLoading(false)
-        }
-      })
-
-    return () => {
-      mounted = false
-    }
-  }, [])
-
-  return { isPlatformAdmin, isLoading }
+  return { isPlatformAdmin, isLoading: isPending }
 }
