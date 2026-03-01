@@ -5,12 +5,15 @@ import {
   BookOpen,
   Building2,
   Command,
+  Container,
   FileCode,
+  GitBranch,
   LayoutDashboard,
   LayoutTemplate,
   Layers,
   MessageSquare,
   RadioTower,
+  Settings,
   Shield,
   Workflow,
 } from "lucide-react"
@@ -70,6 +73,19 @@ const navMainData = [
       icon: BookOpen,
       items: [],
     },
+]
+
+const navSettingsData = [
+  {
+    title: "Settings",
+    url: "/settings/github",
+    icon: Settings,
+    items: [
+      { title: "GitHub", url: "/settings/github", icon: GitBranch },
+      { title: "Registries", url: "/settings/registries", icon: Container },
+      { title: "Templates", url: "/settings/templates", icon: LayoutTemplate },
+    ],
+  },
 ]
 
 const navSecondaryData: { title: string; url: string; icon: typeof MessageSquare }[] = [
@@ -160,6 +176,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={navMainData} />
+        <NavMain items={navSettingsData} label="Settings" />
         <NavPlatform items={navPlatformData} isVisible={isPlatformAdmin} />
         <NavSecondary items={navSecondaryData} className="mt-auto" />
         {isPlatformAdmin && (
