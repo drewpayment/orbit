@@ -1531,6 +1531,10 @@ export interface KafkaCluster {
    * Optional cluster description
    */
   description?: string | null;
+  /**
+   * URL to the cluster management console (e.g., Redpanda Console)
+   */
+  consoleUrl?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -3866,6 +3870,7 @@ export interface KafkaClustersSelect<T extends boolean = true> {
   validationStatus?: T;
   lastValidatedAt?: T;
   description?: T;
+  consoleUrl?: T;
   updatedAt?: T;
   createdAt?: T;
 }
