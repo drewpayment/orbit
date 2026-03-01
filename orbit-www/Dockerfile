@@ -39,7 +39,7 @@ ENV DOCKER_BUILD=1 \
     GITHUB_APP_PRIVATE_KEY_BASE64=LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb3dJQkFBS0NBUUVBMHM= \
     GITHUB_APP_WEBHOOK_SECRET=placeholder-webhook-secret \
     ORBIT_REGISTRY_JWT_SECRET=placeholder-jwt-secret \
-    NEXT_PUBLIC_DOCS_URL=https://orbit-docs.hoytlabs.app
+    NEXT_PUBLIC_DOCS_URL=https://orbit-docs.hoytlabs.app/docs
 
 RUN mkdir -p public && bun run build
 
