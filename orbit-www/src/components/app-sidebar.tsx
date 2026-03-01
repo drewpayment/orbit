@@ -80,6 +80,11 @@ const navSecondaryData = [
     url: "/feedback",
     icon: MessageSquare,
   },
+  {
+    title: "Documentation",
+    url: "/docs",
+    icon: BookOpen,
+  },
 ]
 
 // Platform admin navigation - only visible to platform admins

@@ -44,6 +44,12 @@ export default function LandingPage() {
         </nav>
         <div className="flex items-center gap-3">
           <Link
+            href="/docs"
+            className="text-sm font-medium text-[#ADADB0] hover:text-white transition-colors"
+          >
+            Docs
+          </Link>
+          <Link
             href="/login"
             className="text-sm font-medium text-white hover:text-[#ADADB0] transition-colors"
           >
@@ -66,6 +72,7 @@ export default function LandingPage() {
             <a href="#features" className="text-sm font-medium text-[#ADADB0] hover:text-white transition-colors">Features</a>
             <a href="#how-it-works" className="text-sm font-medium text-[#ADADB0] hover:text-white transition-colors">How It Works</a>
             <a href="#get-started" className="text-sm font-medium text-[#ADADB0] hover:text-white transition-colors">Get Started</a>
+            <Link href="/docs" className="text-sm font-medium text-[#ADADB0] hover:text-white transition-colors">Docs</Link>
           </nav>
         </details>
       </header>
