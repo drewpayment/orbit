@@ -24,6 +24,8 @@ resources:
 
   # Custom services
   - orbit-www
+  # Optional: public documentation site (uncomment to deploy)
+  # - orbit-docs
   - repository-service
   - kafka-service
   - plugins-service

@@ -35,6 +35,25 @@ infrastructure/k8s/
     └── prod/              # Production overrides
 ```
 
+### Optional: Documentation Site
+
+To include the docs site, uncomment `orbit-docs` in `infrastructure/k8s/kustomization.yaml`:
+
+```yaml
+  # Optional: public documentation site (uncomment to deploy)
+  - orbit-docs
+```
+
+Then set `NEXT_PUBLIC_DOCS_URL` in the orbit-www ConfigMap to enable docs links in the UI:
+
+```yaml
+# infrastructure/k8s/orbit-www/configmap.yaml
+data:
+  NEXT_PUBLIC_DOCS_URL: "https://docs.orbit.example.com"
+```
+
+The docs service gets its own HTTPRoute at `docs.orbit.example.com` — update the hostname in `infrastructure/k8s/orbit-docs/http-route.yaml` to match your domain.
+
 ## Deploying with Kustomize
 
 ```bash
