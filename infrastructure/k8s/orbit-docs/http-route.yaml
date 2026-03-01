@@ -5,13 +5,13 @@ metadata:
   name: orbit-docs
   namespace: orbit
   annotations:
-    external-dns.alpha.kubernetes.io/hostname: docs.orbit.hoytlabs.app
+    external-dns.alpha.kubernetes.io/hostname: orbit-docs.hoytlabs.app
 spec:
   parentRefs:
     - name: gateway-external
       namespace: gateway
   hostnames:
-    - docs.orbit.hoytlabs.app
+    - orbit-docs.hoytlabs.app
   rules:
     - matches:
         - path:
