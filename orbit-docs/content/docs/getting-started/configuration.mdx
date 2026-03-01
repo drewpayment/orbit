@@ -18,6 +18,14 @@ Orbit is configured through environment variables. The primary configuration liv
 | `ORBIT_INTERNAL_API_KEY` | Yes | Shared key for inter-service authentication (must match temporal-worker) |
 | `BETTER_AUTH_SECRET` | Yes (prod) | Secret for Better Auth sessions |
 
+## Documentation Site
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `NEXT_PUBLIC_DOCS_URL` | No | URL of your orbit-docs instance. When set, shows "Docs" links in the header and sidebar. Leave unset to hide. |
+
+See [Docker Compose — Documentation Site](/docs/self-hosting/docker-compose#documentation-site-optional) for setup details.
+
 ## GitHub App Integration
 
 For repository management, template instantiation, and `.orbit.yaml` sync:
