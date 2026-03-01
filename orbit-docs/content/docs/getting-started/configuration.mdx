@@ -1,0 +1,94 @@
+---
+title: Configuration
+description: Environment variables and configuration reference for Orbit.
+---
+
+# Configuration
+
+Orbit is configured through environment variables. The primary configuration lives in `orbit-www/.env`.
+
+## Core Settings
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URI` | Yes | MongoDB connection string |
+| `PAYLOAD_SECRET` | Yes | Secret for Payload CMS (random 32+ chars) |
+| `NEXT_PUBLIC_APP_URL` | Yes | Public URL of your Orbit instance |
+| `ENCRYPTION_KEY` | Yes (prod) | AES-256 encryption key (32 bytes, base64-encoded) for secret management |
+| `ORBIT_INTERNAL_API_KEY` | Yes | Shared key for inter-service authentication (must match temporal-worker) |
+| `BETTER_AUTH_SECRET` | Yes (prod) | Secret for Better Auth sessions |
+
+## Documentation Site
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `NEXT_PUBLIC_DOCS_URL` | No | URL of your orbit-docs instance. When set, shows "Docs" links in the header and sidebar. Leave unset to hide. |
+
+See [Docker Compose — Documentation Site](/docs/self-hosting/docker-compose#documentation-site-optional) for setup details.
+
+## GitHub App Integration
+
+For repository management, template instantiation, and `.orbit.yaml` sync:
+
+| Variable | Description |
+|----------|-------------|
+| `GITHUB_APP_ID` | Your GitHub App's ID |
+| `GITHUB_APP_CLIENT_ID` | OAuth client ID |
+| `GITHUB_APP_CLIENT_SECRET` | OAuth client secret |
+| `GITHUB_APP_WEBHOOK_SECRET` | Webhook signature secret |
+| `GITHUB_APP_PRIVATE_KEY_BASE64` | Base64-encoded private key |
+| `NEXT_PUBLIC_GITHUB_APP_NAME` | GitHub App slug (e.g., `orbit-idp`) |
+
+### Creating a GitHub App
+
+1. Go to **GitHub Settings → Developer Settings → GitHub Apps → New GitHub App**
+2. Set the homepage URL to your Orbit instance
+3. Set the callback URL to `{ORBIT_URL}/api/github/installation/callback`
+4. Set the webhook URL to `{ORBIT_URL}/api/webhooks/github`
+5. Enable these permissions:
+   - **Repository**: Contents (Read & Write), Metadata (Read), Webhooks (Read & Write)
+   - **Organization**: Members (Read)
+6. Generate a private key and base64-encode it
+
+## Email (Optional)
+
+For email notifications (signup verification, password resets):
+
+| Variable | Description |
+|----------|-------------|
+| `RESEND_API_KEY` | [Resend](https://resend.com) API key |
+| `RESEND_FROM_EMAIL` | Sender email address |
+
+## Infrastructure Ports
+
+Default ports used by Docker Compose:
+
+| Port | Service |
+|------|---------|
+| 3000 | orbit-www (Frontend) |
+| 5432 | PostgreSQL (Temporal) |
+| 6379 | Redis |
+| 7233 | Temporal gRPC |
+| 8080 | Temporal UI |
+| 8083 | Redpanda Console |
+| 9000 | MinIO API |
+| 9001 | MinIO Console |
+| 19092 | Kafka/Redpanda API |
+| 27017 | MongoDB |
+
+## Kafka Setup
+
+After starting the dev environment, register your local Redpanda cluster:
+
+1. Go to **Admin Panel → Kafka Providers** and create a provider:
+   - Name: `redpanda`
+   - Adapter Type: `apache`
+2. Go to **Kafka Clusters** and create a cluster:
+   - Provider: select your Redpanda provider
+   - Connection Config: `{"bootstrap.servers": "localhost:19092"}`
+3. Go to **Kafka Environment Mappings** and create a mapping:
+   - Environment: `development`
+   - Cluster: select your cluster
+   - Is Default: `true`
+
+See the [Kafka Self-Service](/docs/features/kafka) docs for more details.

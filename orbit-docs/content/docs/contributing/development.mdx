@@ -1,0 +1,110 @@
+---
+title: Development Setup
+description: Set up your local development environment for contributing to Orbit.
+---
+
+# Development Setup
+
+This guide walks through setting up Orbit for local development.
+
+## Prerequisites
+
+- **Node.js** 18.20.2+ or 20.9.0+
+- **Bun** (latest)
+- **Go** 1.21+
+- **Docker** & **Docker Compose** v2+
+- **Make**
+
+## Getting Started
+
+```bash
+# Clone the repository
+git clone git@github.com:drewpayment/orbit.git
+cd orbit
+
+# Start infrastructure services
+make dev-local
+
+# In another terminal — start the frontend
+cd orbit-www
+bun install
+bun run dev
+```
+
+The frontend runs at `http://localhost:3000` with hot module reloading.
+
+## Working on Go Services
+
+Each Go service has its own `go.mod`. To work on a service:
+
+```bash
+cd services/repository
+go run cmd/server/main.go
+```
+
+Or use the Makefile targets:
+
+```bash
+make run-repository-service
+make run-api-catalog-service
+make run-knowledge-service
+```
+
+## Working on Protocol Buffers
+
+When modifying `.proto` files in `proto/`:
+
+```bash
+# Regenerate both Go and TypeScript code
+make proto-gen
+```
+
+Generated Go code lands in `proto/gen/go/`, TypeScript clients in `orbit-www/src/lib/proto/`.
+
+## Working on Temporal Workflows
+
+```bash
+cd temporal-workflows
+go run cmd/worker/main.go
+```
+
+The worker connects to the Temporal server started by `make dev-local` and begins processing workflow tasks.
+
+## Running Tests
+
+```bash
+# All tests
+make test
+
+# Frontend only
+cd orbit-www && bun test
+
+# Go services
+cd services/repository && go test ./...
+
+# Temporal workflows
+cd temporal-workflows && go test ./...
+```
+
+## Linting
+
+```bash
+make lint
+```
+
+This runs ESLint on the frontend and `golangci-lint` on Go code.
+
+## Database Seeds
+
+The frontend uses Payload CMS migrations. On first run, Payload auto-creates collections in MongoDB. For Temporal, the `temporalio/auto-setup` Docker image handles schema creation automatically.
+
+## Common Issues
+
+### Port conflicts
+If port 3000 is in use, either stop the conflicting process or set `PORT=3001` for the frontend.
+
+### MongoDB connection errors
+Ensure Docker containers are running: `docker ps | grep mongo`
+
+### Temporal connection timeout
+The Temporal server takes 15-30 seconds to initialize. Wait for it to be healthy before starting the worker.

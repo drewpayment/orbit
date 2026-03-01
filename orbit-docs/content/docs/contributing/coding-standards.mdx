@@ -1,0 +1,55 @@
+---
+title: Coding Standards
+description: Code style, conventions, and PR guidelines for Orbit.
+---
+
+# Coding Standards
+
+## General Principles
+
+- **Clean architecture** — Business logic is framework-agnostic and testable in isolation
+- **Type safety** — TypeScript on the frontend, strongly-typed Go on the backend, protobuf for cross-service contracts
+- **Convention over configuration** — Follow existing patterns in the codebase
+
+## TypeScript / Frontend
+
+- **React 19** with server components by default
+- **Server actions** for mutations when possible
+- Use **Payload CMS hooks** for business logic tied to collections
+- Follow Next.js App Router conventions for routing
+- Component files: PascalCase (`MyComponent.tsx`)
+- Utility files: camelCase (`formatDate.ts`)
+
+## Go / Backend
+
+- Follow standard Go project layout
+- Use **interfaces** for dependency injection and testability
+- **Error wrapping** with `fmt.Errorf("context: %w", err)`
+- Service methods return `(result, error)` — never panic in library code
+- Use **contexts** for cancellation and deadlines
+
+## Protocol Buffers
+
+- Service definitions in `proto/` directory
+- Follow the [Buf style guide](https://buf.build/docs/best-practices/style-guide)
+- Always run `make proto-gen` after changing `.proto` files
+- Generated code is committed to the repo (no CI-time generation)
+
+## Git Workflow
+
+1. **Branch from `main`** with a descriptive name
+2. **Small, focused PRs** — one feature or fix per PR
+3. **Write tests** for new functionality
+4. **Run `make lint` and `make test`** before pushing
+5. **PR descriptions** should explain _what_ and _why_, not just _how_
+
+## Commit Messages
+
+Follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+feat: add virtual cluster provisioning workflow
+fix: correct schema validation for AsyncAPI specs
+docs: update self-hosting guide for Cloudflare Tunnel
+chore: bump Go dependencies
+```

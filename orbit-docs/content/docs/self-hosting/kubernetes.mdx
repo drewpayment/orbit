@@ -1,0 +1,165 @@
+---
+title: Kubernetes
+description: Deploy Orbit to a production Kubernetes cluster.
+---
+
+# Kubernetes Deployment
+
+Orbit ships with Kustomize-based Kubernetes manifests for production deployment. The manifests are located in `infrastructure/k8s/`.
+
+## Prerequisites
+
+- Kubernetes 1.27+
+- kubectl configured for your cluster
+- Persistent volume provisioner (for stateful services)
+- Ingress controller (nginx, Traefik, etc.) or Cloudflare Tunnel
+
+## Deployment Overview
+
+Orbit's K8s deployment is organized as Kustomize overlays:
+
+```
+infrastructure/k8s/
+├── base/                  # Base manifests for all services
+│   ├── orbit-www/         # Frontend deployment
+│   ├── temporal/          # Temporal server
+│   ├── temporal-worker/   # Workflow worker
+│   ├── mongodb/           # MongoDB StatefulSet
+│   ├── postgres/          # PostgreSQL StatefulSet
+│   ├── redis/             # Redis deployment
+│   ├── meilisearch/       # Search engine
+│   ├── minio/             # Object storage
+│   └── redpanda/          # Kafka broker
+└── overlays/
+    ├── dev/               # Development overrides
+    └── prod/              # Production overrides
+```
+
+### Optional: Documentation Site
+
+To include the docs site, uncomment `orbit-docs` in `infrastructure/k8s/kustomization.yaml`:
+
+```yaml
+  # Optional: public documentation site (uncomment to deploy)
+  - orbit-docs
+```
+
+Then set `NEXT_PUBLIC_DOCS_URL` in the orbit-www ConfigMap to enable docs links in the UI:
+
+```yaml
+# infrastructure/k8s/orbit-www/configmap.yaml
+data:
+  NEXT_PUBLIC_DOCS_URL: "https://docs.orbit.example.com"
+```
+
+The docs service gets its own HTTPRoute at `docs.orbit.example.com` — update the hostname in `infrastructure/k8s/orbit-docs/http-route.yaml` to match your domain.
+
+## Deploying with Kustomize
+
+```bash
+# Review what will be applied
+kubectl kustomize infrastructure/k8s/overlays/prod
+
+# Apply to your cluster
+kubectl apply -k infrastructure/k8s/overlays/prod
+```
+
+## GitOps with ArgoCD
+
+For automated deployments, point ArgoCD at your Orbit repo:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: orbit
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/your-org/orbit.git
+    targetRevision: main
+    path: infrastructure/k8s/overlays/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: orbit
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+```
+
+## Secrets Management
+
+Orbit supports multiple secret backends:
+
+- **Kubernetes Secrets** — Default, suitable for simple setups
+- **Doppler** — Recommended for production (central secret management)
+- **External Secrets Operator** — For AWS Secrets Manager, Vault, etc.
+
+Environment variables reference secrets via standard K8s `envFrom` or individual `valueFrom` references.
+
+## Ingress / DNS
+
+### Option A: Ingress Controller
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: orbit
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  tls:
+    - hosts: [orbit.example.com]
+      secretName: orbit-tls
+  rules:
+    - host: orbit.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: orbit-www
+                port:
+                  number: 3000
+```
+
+### Option B: Cloudflare Tunnel
+
+If you're behind NAT or don't want to expose ports, use `cloudflared`:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:latest
+          args: ["tunnel", "--no-autoupdate", "run"]
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflared
+                  key: token
+```
+
+## Health Checks
+
+Orbit services expose health endpoints:
+
+| Service | Endpoint | Port |
+|---------|----------|------|
+| orbit-www | `/api/health` | 3000 |
+| temporal | `temporal:7233` (gRPC) | 7233 |
+| temporal-worker | Temporal heartbeats | — |
+
+Configure liveness and readiness probes accordingly.

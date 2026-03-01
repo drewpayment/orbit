@@ -1,0 +1,114 @@
+---
+title: Quick Start
+description: Get Orbit running locally in under 5 minutes.
+---
+
+# Quick Start
+
+Get Orbit running on your local machine with Docker Compose.
+
+## Clone the Repository
+
+```bash
+git clone git@github.com:drewpayment/orbit.git
+cd orbit
+```
+
+## Option A: Hybrid Setup (Recommended)
+
+Run infrastructure in Docker, frontend locally for faster hot-reload:
+
+```bash
+# Start infrastructure (MongoDB, PostgreSQL, Redis, Temporal, Redpanda, etc.)
+make dev-local
+
+# In another terminal, start the frontend
+cd orbit-www && bun run dev
+```
+
+This is the recommended approach for development — you get instant hot module reloading on the frontend while all infrastructure runs in containers.
+
+## Option B: Full Docker
+
+Run everything in containers with a single command:
+
+```bash
+make dev
+```
+
+## Access the Services
+
+Once everything is running, you can access:
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| **Orbit Frontend** | [http://localhost:3000](http://localhost:3000) | Main application |
+| **Temporal UI** | [http://localhost:8080](http://localhost:8080) | Workflow monitoring |
+| **Redpanda Console** | [http://localhost:8083](http://localhost:8083) | Kafka topic management |
+| **MinIO Console** | [http://localhost:9001](http://localhost:9001) | Object storage |
+
+## Create Your First Account
+
+1. Navigate to [http://localhost:3000](http://localhost:3000)
+2. Click **Get Started** to create an account
+3. You'll land on the dashboard where you can:
+   - Create your first **Workspace**
+   - Browse **Templates** to scaffold new services
+   - Set up **Kafka** topics and virtual clusters
+   - Start writing **Documentation**
+
+## Environment Configuration
+
+Copy the example environment file:
+
+```bash
+cp orbit-www/.env.example orbit-www/.env
+```
+
+Key variables to configure:
+
+```bash
+# Required
+DATABASE_URI=mongodb://127.0.0.1:27017/orbit-www
+PAYLOAD_SECRET=your-random-secret-here
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# For Temporal worker communication
+ORBIT_INTERNAL_API_KEY=orbit-internal-dev-key
+
+# Optional: GitHub App (for repository features)
+GITHUB_APP_ID=...
+GITHUB_APP_CLIENT_ID=...
+GITHUB_APP_CLIENT_SECRET=...
+GITHUB_APP_WEBHOOK_SECRET=...
+GITHUB_APP_PRIVATE_KEY_BASE64=...
+
+# Optional: Encryption (for secret management)
+ENCRYPTION_KEY=...
+```
+
+## Common Commands
+
+```bash
+make help          # View all available commands
+make test          # Run all tests (Go + Frontend)
+make lint          # Lint all code
+make proto-gen     # Regenerate gRPC code from protobuf definitions
+make docker-logs   # View service logs
+```
+
+## Stopping
+
+```bash
+# Stop all services
+docker-compose down
+
+# Stop and remove all data (clean slate)
+docker-compose down -v
+```
+
+## Next Steps
+
+- Read the [Architecture](/docs/architecture) overview to understand how Orbit works
+- Explore [Features](/docs/features/kafka) to see what Orbit can do
+- Check out the [Self-Hosting Guide](/docs/self-hosting/kubernetes) to deploy to production

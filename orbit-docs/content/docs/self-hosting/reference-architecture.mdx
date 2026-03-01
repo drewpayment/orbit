@@ -1,0 +1,86 @@
+---
+title: Reference Architecture
+description: A real-world example of running Orbit on a homelab Kubernetes cluster.
+---
+
+# Reference Architecture
+
+This section documents a real-world Orbit deployment running on a homelab Kubernetes cluster. Use it as a reference for planning your own infrastructure.
+
+## Hardware
+
+| Node | Role | CPU | RAM | Storage |
+|------|------|-----|-----|---------|
+| Mac Mini M2 | Control plane + Worker | Apple M2 (8 cores) | 16 GB | 512 GB SSD |
+| Synology NAS | NFS storage | — | — | 4 TB RAID |
+
+This is a single-node cluster running all workloads. A production deployment would use 3+ nodes for high availability.
+
+## Software Stack
+
+| Component | Choice | Why |
+|-----------|--------|-----|
+| **OS** | Talos Linux | Immutable, API-driven, minimal attack surface |
+| **Kubernetes** | Talos-managed K8s | Integrated with Talos OS |
+| **GitOps** | ArgoCD | Automated deployments from Git |
+| **DNS/Proxy** | Cloudflare Tunnel | No port forwarding needed; auto-TLS |
+| **Secrets** | Doppler | Centralized secret management |
+| **Storage** | NFS (Synology) | Simple, reliable for homelab |
+| **Monitoring** | Prometheus + Grafana | Standard K8s observability |
+
+## Network Architecture
+
+```
+Internet
+    │
+    ▼
+Cloudflare (DNS + CDN + Tunnel)
+    │
+    ▼
+cloudflared pod ──── K8s Service ──── orbit-www pod
+                                          │
+                     ┌────────────────────┼────────────────────┐
+                     │                    │                    │
+                  MongoDB            PostgreSQL             Redis
+                     │                    │
+                  MinIO              Temporal
+                     │                    │
+                MeiliSearch        temporal-worker
+                                          │
+                                      Redpanda
+```
+
+## Key Design Decisions
+
+### Cloudflare Tunnel Instead of Ingress
+No need to expose any ports or manage TLS certificates. The `cloudflared` pod creates an outbound tunnel to Cloudflare, which handles TLS termination and routes traffic to the K8s service.
+
+### NFS for All Persistent Volumes
+For a homelab, NFS simplifies storage management significantly. All PVCs mount from the Synology NAS over a gigabit LAN. Performance is adequate for a single-node deployment.
+
+### Doppler for Secrets
+Rather than managing Kubernetes secrets manually or running Vault, Doppler provides a hosted secret management solution. The Doppler Kubernetes Operator syncs secrets directly into K8s.
+
+### ArgoCD for GitOps
+All infrastructure changes go through Git. ArgoCD watches the `infrastructure/k8s/` directory and auto-syncs changes to the cluster.
+
+## Deployment Steps (Summary)
+
+1. **Provision the cluster** — Boot Talos Linux, configure `talosctl`, bootstrap K8s
+2. **Install ArgoCD** — `kubectl apply -k` the ArgoCD manifests
+3. **Configure Doppler** — Create a Doppler project, install the operator, sync secrets
+4. **Deploy Orbit** — Point ArgoCD at `infrastructure/k8s/overlays/prod`
+5. **Set up Cloudflare Tunnel** — Create a tunnel, deploy `cloudflared`, configure DNS records
+6. **Verify** — Access `orbit.yourdomain.com` and create an admin account
+
+## Cost
+
+| Item | Monthly Cost |
+|------|-------------|
+| Mac Mini M2 (electricity) | ~$5 |
+| Cloudflare (free tier) | $0 |
+| Doppler (free tier) | $0 |
+| Domain name | ~$1 |
+| **Total** | **~$6/month** |
+
+Running a full IDP for $6/month is one of the benefits of self-hosting.

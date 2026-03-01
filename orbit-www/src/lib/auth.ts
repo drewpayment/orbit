@@ -124,6 +124,7 @@ export const auth = betterAuth({
       refreshTokenExpiresIn: 60 * 60 * 24 * 30, // 30 days
       scopes: ["openid", "profile", "email"],
       allowDynamicClientRegistration: true,
+      silenceWarnings: { oauthAuthServerConfig: true },
       customIdTokenClaims: ({ user }) => ({
         role: (user as Record<string, unknown>).role || "user",
       }),

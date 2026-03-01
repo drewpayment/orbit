@@ -1,0 +1,49 @@
+---
+title: Knowledge Management
+description: Collaborative documentation with hierarchical spaces, real-time editing, and search.
+---
+
+# Knowledge Management
+
+Orbit's knowledge management system provides collaborative documentation that lives alongside your services, APIs, and infrastructure.
+
+![Knowledge Base](/screenshots/knowledge.png)
+
+## How It Works
+
+Documentation is organized into **Knowledge Bases**, each containing **Pages** organized in a hierarchical structure:
+
+- **Knowledge Bases** are scoped to workspaces
+- **Pages** support rich-text editing with Markdown and embedded media
+- **Full-text search** via MeiliSearch for instant document discovery
+
+## Creating a Knowledge Base
+
+1. Navigate to **Documentation** from the sidebar
+2. Click **Create Knowledge Base**
+3. Choose a name and visibility (public or private to workspace)
+
+## Page Editor
+
+The built-in editor supports:
+
+- Rich text formatting (headings, bold, italic, lists, tables)
+- Code blocks with syntax highlighting
+- Image and file attachments (stored in MinIO/S3)
+- Internal links to other pages, applications, or APIs
+- Version history with rollback
+
+## Visibility Controls
+
+- **Public** — Accessible to all authenticated users
+- **Workspace-only** — Restricted to workspace members
+- **Draft** — Only visible to the author until published
+
+## Search
+
+MeiliSearch powers the documentation search engine:
+
+- **Instant results** as you type
+- **Typo tolerance** for fuzzy matching
+- **Faceted search** by workspace, knowledge base, and tags
+- Results include highlighted snippets showing matching content

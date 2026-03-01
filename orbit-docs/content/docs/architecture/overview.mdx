@@ -1,0 +1,91 @@
+---
+title: Architecture Overview
+description: How Orbit's services, data stores, and workflows fit together.
+---
+
+# Architecture Overview
+
+Orbit uses a polyglot, microservices-based architecture designed for flexibility and independent scaling.
+
+## High-Level Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Orbit Platform                          │
+├─────────────────────────────────────────────────────────────────┤
+│  Frontend                                                       │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  Payload CMS 3.0 + Next.js 15 (TypeScript, React 19)    │   │
+│  │  • Admin UI & Public Pages                               │   │
+│  │  • Content Management                                    │   │
+│  │  • Temporal Workflow Management                          │   │
+│  └─────────────────────────────────────────────────────────┘   │
+├─────────────────────────────────────────────────────────────────┤
+│  Backend Services (Go 1.21+)                                    │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐            │
+│  │  Repository  │ │  API Catalog │ │  Knowledge   │            │
+│  │   Service    │ │   Service    │ │   Service    │            │
+│  └──────────────┘ └──────────────┘ └──────────────┘            │
+│  ┌──────────────┐ ┌──────────────────────────────┐             │
+│  │   Temporal   │ │      Bifrost Gateway         │             │
+│  │   Workers    │ │   (Kafka Multi-Tenant)       │             │
+│  └──────────────┘ └──────────────────────────────┘             │
+├─────────────────────────────────────────────────────────────────┤
+│  Data Layer                                                     │
+│  ┌────────┐ ┌───────┐ ┌────────────┐ ┌─────────┐ ┌──────────┐ │
+│  │MongoDB │ │ Redis │ │ MeiliSearch│ │ MinIO/S3│ │ Redpanda │ │
+│  └────────┘ └───────┘ └────────────┘ └─────────┘ └──────────┘ │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Service Communication
+
+### Frontend ↔ Backend
+
+The frontend uses generated **TypeScript clients** (Connect-ES) to communicate with Go gRPC services. Protocol Buffer definitions in `proto/` are compiled to both Go and TypeScript code, ensuring type safety across the stack.
+
+```bash
+# Regenerate clients after changing .proto files
+make proto-gen
+```
+
+### Service ↔ Service
+
+Go microservices communicate via **gRPC** using the same generated code. Each service is independently deployable and follows clean architecture patterns.
+
+### Workflow Orchestration
+
+Long-running operations (repository cloning, Kafka provisioning, code generation) are executed as **Temporal workflows**. This provides:
+
+- **Durability** — Workflows survive process restarts
+- **Visibility** — Progress tracking via Temporal UI
+- **Retries** — Automatic retry with configurable backoff
+- **Idempotency** — Activities are designed to be safely retried
+
+## Data Layer
+
+| Store | Purpose | Used By |
+|-------|---------|---------|
+| **MongoDB** | Primary application data (collections, users, workspaces) | Payload CMS (orbit-www) |
+| **PostgreSQL** | Workflow state and visibility | Temporal |
+| **Redis** | Caching, pub/sub, session data | orbit-www, Go services |
+| **MeiliSearch** | Full-text search for knowledge base | Knowledge service |
+| **MinIO/S3** | File storage (documents, artifacts) | orbit-www |
+| **Redpanda** | Kafka-compatible event streaming | Bifrost, applications |
+
+## Authentication & Security
+
+- **Better Auth** handles user authentication with session-based security
+- **AES-256-GCM** encryption at rest for all sensitive fields (API keys, tokens, credentials)
+- **Workspace-level isolation** with row-level security
+- **OAuth 2.0** integration with GitHub, Google, and Azure AD
+- **Inter-service auth** via shared API keys for internal communication
+
+## Multi-Tenancy
+
+Orbit is multi-tenant at the workspace level:
+
+- Each **workspace** has its own resources, members, and permissions
+- **Roles**: Owner, Admin, Member with configurable permissions
+- **Resource isolation**: Kafka topics, repositories, docs are scoped to workspaces
+- **Platform admin** role for cross-workspace governance

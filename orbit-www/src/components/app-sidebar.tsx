@@ -65,14 +65,14 @@ const navMainData = [
       items: [],
     },
     {
-      title: "Documentation",
+      title: "Knowledge",
       url: "/knowledge",
       icon: BookOpen,
       items: [],
     },
 ]
 
-const navSecondaryData = [
+const navSecondaryData: { title: string; url: string; icon: typeof MessageSquare }[] = [
   // Support page hidden behind feature flag — re-enable when complete
   // { title: "Support", url: "/support", icon: LifeBuoy },
   {
@@ -80,6 +80,14 @@ const navSecondaryData = [
     url: "/feedback",
     icon: MessageSquare,
   },
+  // Documentation link — only shown when NEXT_PUBLIC_DOCS_URL is configured
+  ...(process.env.NEXT_PUBLIC_DOCS_URL
+    ? [{
+        title: "Docs",
+        url: process.env.NEXT_PUBLIC_DOCS_URL,
+        icon: BookOpen,
+      }]
+    : []),
 ]
 
 // Platform admin navigation - only visible to platform admins

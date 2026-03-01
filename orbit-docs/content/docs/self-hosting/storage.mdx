@@ -1,0 +1,57 @@
+---
+title: Storage
+description: Storage recommendations for Orbit's stateful services.
+---
+
+# Storage Recommendations
+
+Orbit has several stateful services that need persistent storage. Here's how to plan capacity and choose the right storage backend.
+
+## Storage Requirements by Service
+
+| Service | Storage Type | Recommended Size | Notes |
+|---------|-------------|-----------------|-------|
+| MongoDB | Block (SSD) | 10–50 GB | Grows with applications, workspaces, and CMS content |
+| PostgreSQL | Block (SSD) | 5–20 GB | Temporal workflow history and visibility |
+| Redis | Memory + optional AOF | 1–4 GB | Caching; data is mostly ephemeral |
+| MeiliSearch | Block (SSD) | 2–10 GB | Full-text search indices; scales with docs |
+| MinIO | Block or NFS | 10–100 GB+ | File storage; depends on document uploads |
+| Redpanda | Block (SSD) | 20–100 GB+ | Kafka data retention; depends on topic volume |
+
+## Storage Classes
+
+### Cloud Providers
+
+Most cloud Kubernetes providers offer suitable storage classes out of the box:
+
+| Provider | Recommended Class | Notes |
+|----------|------------------|-------|
+| AWS EKS | `gp3` | Good balance of cost and performance |
+| GCP GKE | `standard-rwo` | Regional SSD persistent disks |
+| Azure AKS | `managed-premium` | Premium SSD for databases |
+| DigitalOcean | `do-block-storage` | SSD block storage |
+
+### Bare Metal / Homelab
+
+For on-premises or homelab clusters:
+
+- **Longhorn** — Distributed block storage (recommended for multi-node)
+- **OpenEBS** — Container-attached storage
+- **NFS** — Simple and works for non-performance-critical workloads (MinIO, MeiliSearch)
+- **Local path provisioner** — Single-node only, no HA
+
+## Backup Strategy
+
+| Service | Backup Method | Frequency |
+|---------|--------------|-----------|
+| MongoDB | `mongodump` or cloud snapshots | Daily |
+| PostgreSQL | `pg_dump` or WAL archiving | Daily |
+| MinIO | `mc mirror` to backup location | Daily |
+| Redpanda | Topic retention handles most cases | As needed |
+
+## Tips
+
+- **SSDs are strongly recommended** for MongoDB, PostgreSQL, and Redpanda
+- **NFS is fine** for MinIO and MeiliSearch if you don't need peak throughput
+- **Separate storage classes** for databases (fast SSD) vs. object storage (capacity-optimized)
+- **Monitor disk usage** — set alerts at 80% capacity

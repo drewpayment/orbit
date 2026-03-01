@@ -1,0 +1,118 @@
+---
+title: Docker Compose
+description: Run Orbit locally or in small-scale deployments with Docker Compose.
+---
+
+# Docker Compose Deployment
+
+Docker Compose is the simplest way to get Orbit running. It's ideal for:
+
+- Local development
+- Evaluation and demos
+- Small team deployments (< 50 users)
+
+## Quick Start
+
+```bash
+git clone git@github.com:drewpayment/orbit.git
+cd orbit
+
+# Copy environment config
+cp orbit-www/.env.example orbit-www/.env
+# Edit orbit-www/.env with your settings (see Configuration)
+
+# Start everything
+make dev
+```
+
+## What Gets Started
+
+The Docker Compose setup launches:
+
+| Service | Image | Purpose |
+|---------|-------|---------|
+| `orbit-www` | Built from source | Frontend + CMS |
+| `mongodb` | `mongo:7` | Application database |
+| `postgres` | `postgres:15` | Temporal persistence |
+| `redis` | `redis:7` | Caching & sessions |
+| `temporal` | `temporalio/auto-setup` | Workflow engine |
+| `temporal-ui` | `temporalio/ui` | Workflow monitoring |
+| `temporal-worker` | Built from source | Workflow execution |
+| `meilisearch` | `getmeili/meilisearch` | Full-text search |
+| `minio` | `minio/minio` | Object storage |
+| `redpanda` | `redpandadata/redpanda` | Kafka-compatible broker |
+| `redpanda-console` | `redpandadata/console` | Kafka topic UI |
+
+## Documentation Site (Optional)
+
+Orbit ships with a separate documentation site (`orbit-docs`) built with Fumadocs. It's completely optional — if you don't need hosted docs, simply skip this section.
+
+### Enabling the Docs Service
+
+The docs service uses a Docker Compose **profile**, so it doesn't start by default:
+
+```bash
+# Start everything including the docs site
+docker compose --profile docs up -d
+
+# Or start just the docs service alongside the rest
+docker compose --profile docs up -d orbit-docs
+```
+
+### Connecting Docs to the UI
+
+To show "Docs" links in the Orbit marketing page header and the app sidebar, set the `NEXT_PUBLIC_DOCS_URL` environment variable in `orbit-www/.env`:
+
+```bash
+# Point to wherever your docs site is hosted
+NEXT_PUBLIC_DOCS_URL=http://localhost:3001
+```
+
+When this variable is **set**, Orbit shows:
+- A **"Docs"** link in the marketing page header (left of "Log In")
+- A **"Documentation"** link in the app sidebar (bottom, next to Feedback)
+
+When this variable is **unset or empty**, both links are hidden — no dead links in your UI.
+
+### Reverse Proxy Setup
+
+If you want docs served under the same domain (e.g., `orbit.example.com/docs`), configure your reverse proxy to route `/docs` traffic to the docs service. With Caddy:
+
+```
+orbit.example.com {
+    handle /docs* {
+        reverse_proxy localhost:3001
+    }
+    handle {
+        reverse_proxy localhost:3000
+    }
+}
+```
+
+Then set `NEXT_PUBLIC_DOCS_URL=/docs` (relative path works too).
+
+Alternatively, host docs on a subdomain (`docs.orbit.example.com`) and set `NEXT_PUBLIC_DOCS_URL=https://docs.orbit.example.com`.
+
+## Production Considerations
+
+Docker Compose works for small deployments, but for production you should:
+
+- Use **external managed databases** (MongoDB Atlas, Amazon RDS) instead of containerized DBs
+- Set up **backup and restore** procedures
+- Configure **TLS termination** via a reverse proxy (nginx, Caddy, Traefik)
+- Set up **monitoring** (Prometheus + Grafana or similar)
+- Consider [Kubernetes](/docs/self-hosting/kubernetes) for larger deployments
+
+## Reverse Proxy Example
+
+Here's a minimal Caddy config to put Orbit behind TLS:
+
+```
+orbit.example.com {
+    reverse_proxy localhost:3000
+}
+
+temporal.example.com {
+    reverse_proxy localhost:8080
+}
+```

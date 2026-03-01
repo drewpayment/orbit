@@ -1,0 +1,33 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+:root {
+  /* Match Orbit's orange primary */
+  --fd-primary: oklch(0.705 0.213 47.604);
+  --fd-primary-foreground: oklch(0.98 0.016 73.684);
+
+  /* Orbit light background */
+  --fd-background: oklch(1 0 0);
+  --fd-muted: oklch(0.967 0.001 286.375);
+  --fd-muted-foreground: oklch(0.556 0.016 286.067);
+  --fd-card: oklch(1 0 0);
+  --fd-border: oklch(0.924 0.003 264.542);
+}
+
+.dark {
+  /* Match Orbit's dark background */
+  --fd-background: oklch(0.249 0.006 285.917);
+  --fd-card: oklch(0.274 0.006 286.033);
+  --fd-muted: oklch(0.274 0.006 286.033);
+  --fd-muted-foreground: oklch(0.705 0.015 286.067);
+  --fd-border: oklch(0.342 0.006 285.885);
+  --fd-primary: oklch(0.646 0.222 41.116);
+  --fd-primary-foreground: oklch(0.98 0.016 73.684);
+  --fd-foreground: oklch(0.985 0 0);
+  --fd-accent: oklch(0.274 0.006 286.033);
+  --fd-accent-foreground: oklch(0.985 0 0);
+
+  /* Sidebar to match Orbit sidebar feel */
+  --fd-sidebar-background: oklch(0.205 0.006 285.917);
+}

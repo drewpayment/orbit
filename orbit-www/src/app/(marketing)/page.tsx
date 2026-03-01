@@ -11,6 +11,8 @@ import {
   Menu,
 } from 'lucide-react'
 
+const docsUrl = process.env.NEXT_PUBLIC_DOCS_URL
+
 export default function LandingPage() {
   return (
     <div className="min-h-screen">
@@ -43,6 +45,14 @@ export default function LandingPage() {
           </a>
         </nav>
         <div className="flex items-center gap-3">
+          {docsUrl && (
+            <a
+              href={docsUrl}
+              className="text-sm font-medium text-[#ADADB0] hover:text-white transition-colors"
+            >
+              Docs
+            </a>
+          )}
           <Link
             href="/login"
             className="text-sm font-medium text-white hover:text-[#ADADB0] transition-colors"
@@ -66,6 +76,7 @@ export default function LandingPage() {
             <a href="#features" className="text-sm font-medium text-[#ADADB0] hover:text-white transition-colors">Features</a>
             <a href="#how-it-works" className="text-sm font-medium text-[#ADADB0] hover:text-white transition-colors">How It Works</a>
             <a href="#get-started" className="text-sm font-medium text-[#ADADB0] hover:text-white transition-colors">Get Started</a>
+            {docsUrl && <a href={docsUrl} className="text-sm font-medium text-[#ADADB0] hover:text-white transition-colors">Docs</a>}
           </nav>
         </details>
       </header>

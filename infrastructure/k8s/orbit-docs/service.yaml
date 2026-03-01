@@ -1,0 +1,12 @@
+# infrastructure/k8s/orbit-docs/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: orbit-docs
+  namespace: orbit
+spec:
+  selector:
+    app: orbit-docs
+  ports:
+    - port: 3001
+      targetPort: 3001
