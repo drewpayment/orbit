@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'orbit-www/**'
+      - 'orbit-docs/**'
       - 'services/**'
       - 'temporal-workflows/**'
       - 'proto/**'
@@ -25,6 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       orbit-www: ${{ steps.filter.outputs.orbit-www }}
+      orbit-docs: ${{ steps.filter.outputs.orbit-docs }}
       repository-service: ${{ steps.filter.outputs.repository-service }}
       build-service: ${{ steps.filter.outputs.build-service }}
       bifrost: ${{ steps.filter.outputs.bifrost }}
@@ -39,6 +41,8 @@ jobs:
           filters: |
             orbit-www:
               - 'orbit-www/**'
+            orbit-docs:
+              - 'orbit-docs/**'
             repository-service:
               - 'services/repository/**'
               - 'proto/**'
@@ -71,6 +75,9 @@ jobs:
           - service: orbit-www
             dockerfile: orbit-www/Dockerfile
             context: orbit-www
+          - service: orbit-docs
+            dockerfile: orbit-docs/Dockerfile
+            context: orbit-docs
           - service: repository-service
             dockerfile: services/repository/Dockerfile
             context: .
