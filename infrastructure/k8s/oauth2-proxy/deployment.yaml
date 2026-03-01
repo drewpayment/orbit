@@ -41,6 +41,7 @@ spec:
             - --pass-authorization-header=true
             - --set-xauthrequest=true
             - --scope=openid profile email
+            - --code-challenge-method=S256
           env:
             - name: OAUTH2_PROXY_CLIENT_ID
               valueFrom:
