@@ -4,13 +4,13 @@ metadata:
   name: temporal-ui
   namespace: orbit
   annotations:
-    external-dns.alpha.kubernetes.io/hostname: temporal.orbit.hoytlabs.app
+    external-dns.alpha.kubernetes.io/hostname: orbit-temporal.hoytlabs.app
 spec:
   parentRefs:
     - name: gateway-external
       namespace: gateway
   hostnames:
-    - temporal.orbit.hoytlabs.app
+    - orbit-temporal.hoytlabs.app
   rules:
     - matches:
         - path:

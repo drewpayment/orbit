@@ -12,6 +12,6 @@ data:
   KAFKA_SERVICE_URL: "kafka-service:50055"
   BIFROST_ADMIN_URL: "http://bifrost:50060"
   ORBIT_REGISTRY_URL: "registry:5050"
-  NEXT_PUBLIC_TEMPORAL_UI_URL: "https://temporal.orbit.hoytlabs.app"
+  NEXT_PUBLIC_TEMPORAL_UI_URL: "https://orbit-temporal.hoytlabs.app"
   # Optional: set to your docs site URL to show Docs links in the UI
   # NEXT_PUBLIC_DOCS_URL: "https://orbit-docs.hoytlabs.app"

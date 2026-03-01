@@ -24,7 +24,7 @@ spec:
           args:
             - --provider=oidc
             - --oidc-issuer-url=https://orbit.hoytlabs.app/api/auth
-            - --redirect-url=https://temporal.orbit.hoytlabs.app/oauth2/callback
+            - --redirect-url=https://orbit-temporal.hoytlabs.app/oauth2/callback
             - --upstream=http://temporal-ui:8080
             - --http-address=0.0.0.0:4180
             - --reverse-proxy=true

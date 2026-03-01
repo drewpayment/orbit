@@ -40,7 +40,8 @@ ENV DOCKER_BUILD=1 \
     GITHUB_APP_WEBHOOK_SECRET=placeholder-webhook-secret \
     ORBIT_REGISTRY_JWT_SECRET=placeholder-jwt-secret \
     NEXT_PUBLIC_DOCS_URL=https://orbit-docs.hoytlabs.app/docs \
-    NEXT_PUBLIC_GITHUB_APP_NAME=orbit-idp
+    NEXT_PUBLIC_GITHUB_APP_NAME=orbit-idp \
+    NEXT_PUBLIC_TEMPORAL_UI_URL=https://orbit-temporal.hoytlabs.app
 
 RUN mkdir -p public && bun run build
 

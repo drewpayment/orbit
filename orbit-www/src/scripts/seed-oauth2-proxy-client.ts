@@ -9,13 +9,13 @@
 // Environment variables:
 //   DATABASE_URI          - MongoDB connection string (required)
 //   NEXT_PUBLIC_APP_URL   - Orbit app URL (default: http://localhost:3000)
-//   TEMPORAL_UI_ORIGIN    - Temporal UI public URL (default: https://temporal.orbit.hoytlabs.app)
+//   TEMPORAL_UI_ORIGIN    - Temporal UI public URL (default: https://orbit-temporal.hoytlabs.app)
 
 import 'dotenv/config'
 import { auth } from '@/lib/auth'
 
 const temporalUiOrigin =
-  process.env.TEMPORAL_UI_ORIGIN || 'https://temporal.orbit.hoytlabs.app'
+  process.env.TEMPORAL_UI_ORIGIN || 'https://orbit-temporal.hoytlabs.app'
 
 async function main() {
   console.log('Registering oauth2-proxy OIDC client...')
