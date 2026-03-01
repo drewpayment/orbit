@@ -384,12 +384,14 @@ function FooterSection() {
           >
             Terms
           </a>
-          <a
-            href="#"
-            className="text-[13px] text-[#4A4A4E] hover:text-[#8B8B90] transition-colors"
-          >
-            Documentation
-          </a>
+          {docsUrl && (
+            <a
+              href={docsUrl}
+              className="text-[13px] text-[#4A4A4E] hover:text-[#8B8B90] transition-colors"
+            >
+              Documentation
+            </a>
+          )}
         </div>
       </div>
       <div className="h-px w-full bg-[#1F1F23]" />
