@@ -6,14 +6,15 @@ export async function getTemporalClient(): Promise<Client> {
   if (!temporalClient) {
     const connection = await Connection.connect({
       address: process.env.TEMPORAL_ADDRESS || 'localhost:7233',
+      connectTimeout: 5000,
     });
-    
+
     temporalClient = new Client({
       connection,
       namespace: process.env.TEMPORAL_NAMESPACE || 'default',
     });
   }
-  
+
   return temporalClient;
 }
 
@@ -28,20 +29,26 @@ export async function closeTemporalClient(): Promise<void> {
  * Start GitHub token refresh workflow
  */
 export async function startGitHubTokenRefreshWorkflow(installationId: string): Promise<string> {
-  const client = await getTemporalClient()
+  try {
+    const client = await getTemporalClient()
 
-  const workflowId = `github-token-refresh:${installationId}`
+    const workflowId = `github-token-refresh:${installationId}`
 
-  const handle = await client.workflow.start('GitHubTokenRefreshWorkflow', {
-    taskQueue: 'orbit-workflows',
-    args: [{
-      InstallationID: installationId,
-    }],
-    workflowId,
-    // Run indefinitely until cancelled
-  })
+    const handle = await client.workflow.start('GitHubTokenRefreshWorkflow', {
+      taskQueue: 'orbit-workflows',
+      args: [{
+        InstallationID: installationId,
+      }],
+      workflowId,
+      // Run indefinitely until cancelled
+    })
 
-  return handle.workflowId
+    return handle.workflowId
+  } catch (error) {
+    // Reset cached client so next attempt gets a fresh connection
+    temporalClient = null
+    throw error
+  }
 }
 
 /**
