@@ -566,7 +566,7 @@ function BuildErrorDisplay({ error, workflowId }: { error: string | null; workfl
         </button>
         {workflowId && (
           <a
-            href={`http://localhost:8080/namespaces/default/workflows/${workflowId}`}
+            href={`${process.env.NEXT_PUBLIC_TEMPORAL_UI_URL || 'http://localhost:8080'}/namespaces/default/workflows/${workflowId}`}
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 underline"
