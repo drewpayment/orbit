@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"time"
 
 	"github.com/drewpayment/orbit/services/kafka/internal/adapters"
@@ -91,17 +92,18 @@ func (c *Client) newKgoClient() (*kgo.Client, error) {
 	return kgo.NewClient(opts...)
 }
 
-// createDialer returns a custom dialer that intelligently handles broker address resolution.
-// It rewrites internal/unresolvable addresses (e.g., K8s DNS names) to use the bootstrap
-// server address, while allowing properly configured external addresses to work unchanged.
+// createDialer returns a custom dialer that handles broker address resolution.
+// When running outside K8s (local dev), it rewrites internal K8s DNS names to use
+// the bootstrap server address. When running inside K8s, addresses are used as-is
+// since all cluster-internal DNS names are directly reachable.
 func (c *Client) createDialer() func(ctx context.Context, network, host string) (net.Conn, error) {
-	// Build a map of bootstrap servers for multi-broker support
-	bootstrapAddrs := make(map[int]string) // broker index -> address
-	for i, addr := range c.config.BootstrapServers {
-		bootstrapAddrs[i] = addr
+	// Detect if we're running inside Kubernetes by checking for the service account
+	inK8s := false
+	if _, err := os.Stat("/var/run/secrets/kubernetes.io/serviceaccount"); err == nil {
+		inK8s = true
 	}
 
-	// Get the first bootstrap server as fallback
+	// Get the first bootstrap server as fallback for local dev
 	var fallbackHost string
 	var fallbackPort int
 	if len(c.config.BootstrapServers) > 0 {
@@ -111,9 +113,9 @@ func (c *Client) createDialer() func(ctx context.Context, network, host string) 
 	return func(ctx context.Context, network, host string) (net.Conn, error) {
 		originalHost := host
 
-		// Check if the address looks like an internal K8s/Docker address
-		if isInternalAddress(host) && fallbackHost != "" {
-			// Rewrite to use bootstrap server
+		// Only rewrite internal addresses when running outside K8s (local dev).
+		// Inside K8s, all .svc.cluster.local addresses are directly reachable.
+		if !inK8s && isInternalAddress(host) && fallbackHost != "" {
 			host = fmt.Sprintf("%s:%d", fallbackHost, fallbackPort)
 		}
 
@@ -121,8 +123,6 @@ func (c *Client) createDialer() func(ctx context.Context, network, host string) 
 		conn, err := d.DialContext(ctx, network, host)
 		if err != nil && host == originalHost && fallbackHost != "" {
 			// If connection failed and we didn't rewrite, try the fallback
-			// This handles cases where the address is technically resolvable
-			// but not reachable from this network
 			fallbackAddr := fmt.Sprintf("%s:%d", fallbackHost, fallbackPort)
 			if fallbackAddr != host {
 				return d.DialContext(ctx, network, fallbackAddr)
