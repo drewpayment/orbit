@@ -111,6 +111,7 @@ export function ClusterDetail({
     valid: boolean
     error?: string
   } | null>(null)
+  const [currentStatus, setCurrentStatus] = useState<KafkaClusterConfig['status'] | undefined>(cluster?.status)
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -147,13 +148,14 @@ export function ClusterDetail({
     try {
       const result = await onValidate(cluster.id)
       setValidationResult(result)
+      setCurrentStatus(result.valid ? 'valid' : 'invalid')
     } finally {
       setIsValidating(false)
     }
   }
 
   const enabledProviders = providers.filter((p) => p.enabled)
-  const statusBadge = cluster?.status ? getStatusBadge(cluster.status) : null
+  const statusBadge = currentStatus ? getStatusBadge(currentStatus) : null
 
   return (
     <div className="space-y-6">

@@ -308,13 +308,14 @@ export function KafkaAdminClient({
       const { validateCluster } = await import('@/app/actions/kafka-admin')
       const result = await validateCluster(clusterId)
       if (result.success) {
+        await refreshClusters()
         return { valid: result.valid ?? false, error: result.error }
       }
       return { valid: false, error: result.error || 'Validation failed' }
     } catch (err) {
       return { valid: false, error: err instanceof Error ? err.message : 'Validation failed' }
     }
-  }, [])
+  }, [refreshClusters])
 
   const handleSaveMapping = useCallback(async (data: {
     environment: string
