@@ -13,5 +13,8 @@ data:
   BIFROST_ADMIN_URL: "http://bifrost:50060"
   ORBIT_REGISTRY_URL: "http://registry:5050"
   NEXT_PUBLIC_TEMPORAL_UI_URL: "https://orbit-temporal.hoytlabs.app"
+  # Bifrost Kafka gateway config
+  BIFROST_ROUTING_MODE: "sni"
+  BIFROST_TLS_ENABLED: "true"
   # Optional: set to your docs site URL to show Docs links in the UI
   # NEXT_PUBLIC_DOCS_URL: "https://orbit-docs.hoytlabs.app"

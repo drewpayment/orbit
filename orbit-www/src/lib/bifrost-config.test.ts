@@ -49,10 +49,11 @@ describe('getBifrostConfig', () => {
     const { getBifrostConfig } = await import('./bifrost-config')
     const config = await getBifrostConfig()
 
-    expect(config.advertisedHost).toBe('localhost:9092')
+    expect(config.advertisedHost).toBe('traefik.orbit.orb.local:9092')
     expect(config.defaultAuthMethod).toBe('SASL/SCRAM-SHA-256')
     expect(config.connectionMode).toBe('bifrost')
-    expect(config.tlsEnabled).toBe(true)
+    expect(config.routingMode).toBe('sasl')
+    expect(config.tlsEnabled).toBe(false)
   })
 
   it('uses default values for missing fields in database config', async () => {
@@ -75,7 +76,8 @@ describe('getBifrostConfig', () => {
     // Should use defaults for missing fields
     expect(config.defaultAuthMethod).toBe('SASL/SCRAM-SHA-256')
     expect(config.connectionMode).toBe('bifrost')
-    expect(config.tlsEnabled).toBe(true)
+    expect(config.routingMode).toBe('sasl')
+    expect(config.tlsEnabled).toBe(false)
   })
 
   it('handles tlsEnabled being explicitly false', async () => {

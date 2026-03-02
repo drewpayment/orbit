@@ -15,19 +15,18 @@ export type BifrostConfigData = {
   tlsEnabled: boolean
 }
 
-// Default Bifrost gateway endpoint - can be overridden via BIFROST_ADVERTISED_HOST env var
-// For Orbstack local dev: traefik.orbit.orb.local:9092
-// For production: Set via bifrost-config collection or env var
-const getDefaultAdvertisedHost = () => {
-  return process.env.BIFROST_ADVERTISED_HOST || 'traefik.orbit.orb.local:9092'
-}
-
+// Defaults can be overridden via env vars or the bifrost-config Payload collection.
+// Env vars (useful for K8s configmaps):
+//   BIFROST_ADVERTISED_HOST  - gateway endpoint (default: traefik.orbit.orb.local:9092)
+//   BIFROST_ROUTING_MODE     - sasl | sni | both (default: sasl)
+//   BIFROST_TLS_ENABLED      - true | false (default: false)
+//   BIFROST_CONNECTION_MODE  - bifrost | direct (default: bifrost)
 const DEFAULT_CONFIG: BifrostConfigData = {
-  advertisedHost: getDefaultAdvertisedHost(),
+  advertisedHost: process.env.BIFROST_ADVERTISED_HOST || 'traefik.orbit.orb.local:9092',
   defaultAuthMethod: 'SASL/SCRAM-SHA-256',
-  connectionMode: 'bifrost',
-  routingMode: 'sasl', // Default to SASL-based routing for local dev
-  tlsEnabled: false, // Local dev uses SASL_PLAINTEXT
+  connectionMode: (process.env.BIFROST_CONNECTION_MODE as BifrostConfigData['connectionMode']) || 'bifrost',
+  routingMode: (process.env.BIFROST_ROUTING_MODE as BifrostConfigData['routingMode']) || 'sasl',
+  tlsEnabled: process.env.BIFROST_TLS_ENABLED === 'true',
 }
 
 export async function getBifrostConfig(): Promise<BifrostConfigData> {
