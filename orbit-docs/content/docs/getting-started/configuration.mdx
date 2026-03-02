@@ -28,7 +28,7 @@ See [Docker Compose — Documentation Site](/docs/self-hosting/docker-compose#do
 
 ## GitHub App Integration
 
-For repository management, template instantiation, and `.orbit.yaml` sync:
+For repository management, template instantiation, container builds, and `.orbit.yaml` sync:
 
 | Variable | Description |
 |----------|-------------|
@@ -37,18 +37,9 @@ For repository management, template instantiation, and `.orbit.yaml` sync:
 | `GITHUB_APP_CLIENT_SECRET` | OAuth client secret |
 | `GITHUB_APP_WEBHOOK_SECRET` | Webhook signature secret |
 | `GITHUB_APP_PRIVATE_KEY_BASE64` | Base64-encoded private key |
-| `NEXT_PUBLIC_GITHUB_APP_NAME` | GitHub App slug (e.g., `orbit-idp`) |
+| `NEXT_PUBLIC_GITHUB_APP_NAME` | GitHub App slug (e.g., `orbit-idp`) — **build-time variable** |
 
-### Creating a GitHub App
-
-1. Go to **GitHub Settings → Developer Settings → GitHub Apps → New GitHub App**
-2. Set the homepage URL to your Orbit instance
-3. Set the callback URL to `{ORBIT_URL}/api/github/installation/callback`
-4. Set the webhook URL to `{ORBIT_URL}/api/webhooks/github`
-5. Enable these permissions:
-   - **Repository**: Contents (Read & Write), Metadata (Read), Webhooks (Read & Write)
-   - **Organization**: Members (Read)
-6. Generate a private key and base64-encode it
+See the [GitHub App Setup](/docs/getting-started/github-app) guide for complete step-by-step instructions on creating and configuring the app.
 
 ## Email (Optional)
 

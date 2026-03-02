@@ -1,0 +1,224 @@
+---
+title: GitHub App Setup
+description: Step-by-step guide to creating and configuring a GitHub App for Orbit.
+---
+
+# GitHub App Setup
+
+Orbit uses a GitHub App to manage repository access, sync manifests, build container images, and manage templates. This guide walks through creating, configuring, and connecting a GitHub App to your Orbit instance.
+
+## Prerequisites
+
+Before starting, you need:
+
+- A running Orbit instance (see [Quick Start](/docs/getting-started/quickstart))
+- A GitHub account with permission to create GitHub Apps (org owner or personal account)
+- Access to your Orbit environment variables
+
+## Step 1: Create the GitHub App
+
+1. Go to **GitHub Settings → Developer Settings → GitHub Apps → [New GitHub App](https://github.com/settings/apps/new)**
+
+   > For an organization, go to **Organization Settings → Developer Settings → GitHub Apps → New GitHub App**
+
+2. Fill in the basic information:
+
+   | Field | Value |
+   |-------|-------|
+   | **GitHub App name** | Choose a unique name (e.g., `orbit-idp`). This becomes the app slug used in `NEXT_PUBLIC_GITHUB_APP_NAME`. |
+   | **Homepage URL** | Your Orbit instance URL (e.g., `https://orbit.example.com`) |
+
+3. Configure the **Callback URL**:
+
+   ```
+   https://orbit.example.com/api/github/installation/callback
+   ```
+
+   This is where GitHub redirects after a user installs the app.
+
+4. Uncheck **Active** under the Webhook section for now — you'll configure this after deployment.
+
+5. Set **Permissions**:
+
+   **Repository permissions:**
+
+   | Permission | Access | Purpose |
+   |-----------|--------|---------|
+   | Contents | Read & Write | Read repo files, sync manifests, commit changes |
+   | Metadata | Read-only | List repositories, fetch repo info |
+   | Packages | Read & Write | Push container images to GHCR |
+
+   **Organization permissions:**
+
+   | Permission | Access | Purpose |
+   |-----------|--------|---------|
+   | Members | Read-only | Verify organization membership |
+
+6. Under **Where can this GitHub App be installed?**, choose:
+   - **Only on this account** for private/internal use
+   - **Any account** if other GitHub orgs will install it
+
+7. Click **Create GitHub App**.
+
+## Step 2: Generate Credentials
+
+After creating the app, you need to collect several values:
+
+### App ID and Client Credentials
+
+From the app's settings page (`https://github.com/settings/apps/YOUR-APP-NAME`):
+
+1. Note the **App ID** (numeric, shown near the top)
+2. Note the **Client ID** (starts with `Iv...`)
+3. Click **Generate a new client secret** and save it immediately — it's only shown once
+
+### Private Key
+
+1. Scroll to **Private keys** and click **Generate a private key**
+2. A `.pem` file will download
+3. Base64-encode it for the environment variable:
+
+   ```bash
+   cat your-app-name.YYYY-MM-DD.private-key.pem | base64 | tr -d '\n'
+   ```
+
+4. Save the output as `GITHUB_APP_PRIVATE_KEY_BASE64`
+
+### Webhook Secret
+
+Generate a random secret for webhook signature verification:
+
+```bash
+openssl rand -hex 32
+```
+
+Save this as `GITHUB_APP_WEBHOOK_SECRET`.
+
+## Step 3: Configure Environment Variables
+
+Add all the GitHub App credentials to your Orbit environment:
+
+```bash
+# GitHub App core
+GITHUB_APP_ID=123456
+GITHUB_APP_CLIENT_ID=Iv1.abc123def456
+GITHUB_APP_CLIENT_SECRET=your_client_secret_here
+GITHUB_APP_PRIVATE_KEY_BASE64=LS0tLS1CRUdJTi...
+GITHUB_APP_WEBHOOK_SECRET=your_webhook_secret_here
+
+# Public (baked into frontend at build time)
+NEXT_PUBLIC_GITHUB_APP_NAME=orbit-idp
+```
+
+| Variable | Description |
+|----------|-------------|
+| `GITHUB_APP_ID` | Numeric App ID from the app settings page |
+| `GITHUB_APP_CLIENT_ID` | OAuth client ID (starts with `Iv...`) |
+| `GITHUB_APP_CLIENT_SECRET` | OAuth client secret |
+| `GITHUB_APP_PRIVATE_KEY_BASE64` | Base64-encoded private key PEM |
+| `GITHUB_APP_WEBHOOK_SECRET` | HMAC secret for verifying webhook payloads |
+| `NEXT_PUBLIC_GITHUB_APP_NAME` | The app's URL slug (e.g., `orbit-idp`). Used to construct the installation URL. |
+
+> **Important**: `NEXT_PUBLIC_GITHUB_APP_NAME` is a build-time variable. If deploying with Docker, it must be set in the Dockerfile `ENV` block during the build stage, not just at runtime.
+
+### For Kubernetes Deployments
+
+If using Kubernetes with external secrets (e.g., Doppler):
+
+1. Add all `GITHUB_APP_*` values to your secrets provider
+2. Map them in your `ExternalSecret` manifest:
+
+   ```yaml
+   - secretKey: GITHUB_APP_ID
+     remoteRef: { key: ORBIT_GITHUB_APP_ID }
+   - secretKey: GITHUB_APP_CLIENT_ID
+     remoteRef: { key: ORBIT_GITHUB_APP_CLIENT_ID }
+   - secretKey: GITHUB_APP_CLIENT_SECRET
+     remoteRef: { key: ORBIT_GITHUB_APP_CLIENT_SECRET }
+   - secretKey: GITHUB_APP_WEBHOOK_SECRET
+     remoteRef: { key: ORBIT_GITHUB_APP_WEBHOOK_SECRET }
+   - secretKey: GITHUB_APP_PRIVATE_KEY_BASE64
+     remoteRef: { key: ORBIT_GITHUB_APP_PRIVATE_KEY_BASE64 }
+   ```
+
+3. Reference them in the orbit-www deployment:
+
+   ```yaml
+   env:
+     - name: GITHUB_APP_ID
+       valueFrom:
+         secretKeyRef:
+           name: orbit-secrets
+           key: GITHUB_APP_ID
+     # ... repeat for each variable
+   ```
+
+## Step 4: Configure Webhooks
+
+After deployment, go back to your GitHub App settings and configure the webhook:
+
+1. Check **Active** under the Webhook section
+2. Set **Webhook URL** to:
+
+   ```
+   https://orbit.example.com/api/github/webhooks
+   ```
+
+3. Set **Webhook secret** to the same value as `GITHUB_APP_WEBHOOK_SECRET`
+
+4. Under **Subscribe to events**, enable:
+   - **Installation** — app install/uninstall/suspend lifecycle events
+
+> **Note**: The per-repository webhooks for manifest sync, template sync, and API spec sync are configured automatically by Orbit when you connect repositories and templates.
+
+## Step 5: Install the App
+
+Once everything is configured:
+
+1. Log in to your Orbit instance
+2. Navigate to **Settings → GitHub** in the sidebar
+3. Click **Install GitHub App**
+4. GitHub will prompt you to select an organization and choose repository access (all repos or selected repos)
+5. After installation, you'll be redirected back to Orbit to configure workspace access
+
+### What Happens During Installation
+
+When you install the app, Orbit:
+
+1. Receives the installation callback with an `installation_id`
+2. Fetches installation details from the GitHub API
+3. Creates an installation access token and encrypts it for storage
+4. Saves the installation record to MongoDB
+5. Starts a **Temporal workflow** (`GitHubTokenRefreshWorkflow`) that automatically refreshes the token before it expires
+6. Redirects you to the workspace configuration page
+
+## Troubleshooting
+
+### "404 Not Found" when clicking Install
+
+- Verify `NEXT_PUBLIC_GITHUB_APP_NAME` matches your app's URL slug exactly
+- The slug is the lowercase, hyphenated version of your app name (visible in the app's URL: `github.com/apps/YOUR-SLUG`)
+- Remember this is a build-time variable — you need to rebuild the Docker image after changing it
+
+### "fetch failed" or connection errors on callback
+
+- Ensure Temporal is running and healthy (the callback starts a workflow)
+- Check that `TEMPORAL_ADDRESS` is correctly set in the configmap
+- Verify the Temporal database schema is initialized
+
+### Installation token refresh failures
+
+- Check that the Temporal worker is running
+- Verify `ORBIT_INTERNAL_API_KEY` matches between orbit-www and the Temporal worker
+- Check Temporal UI for failed `GitHubTokenRefreshWorkflow` executions
+
+### Webhook signature verification failures
+
+- Ensure `GITHUB_APP_WEBHOOK_SECRET` in your environment matches the secret configured in GitHub App settings
+- Force-sync your external secrets if using a secrets provider
+
+### Cannot list repositories after installation
+
+- Verify the installation has the correct repository permissions (Contents: Read, Metadata: Read)
+- Check that the installation is set to `active` status in Orbit's database
+- Try re-installing the app if permissions were changed after initial install
