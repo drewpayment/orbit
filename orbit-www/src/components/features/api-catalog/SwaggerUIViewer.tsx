@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import { Loader2, AlertCircle } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { parse as parseYaml } from 'yaml'
+import '@scalar/api-reference-react/style.css'
 
 const ApiReferenceReact = dynamic(
   () => import('@scalar/api-reference-react').then((mod) => mod.ApiReferenceReact),
