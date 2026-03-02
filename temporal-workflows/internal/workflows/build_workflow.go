@@ -199,11 +199,11 @@ func BuildWorkflow(ctx workflow.Context, input BuildWorkflowInput) (*BuildWorkfl
 		}, err
 	}
 
-	// Activity options - builds can take a while
+	// Activity options - builds can take a while (cold cache builds may exceed 30 min)
 	activityOptions := workflow.ActivityOptions{
-		StartToCloseTimeout: 30 * time.Minute,
+		StartToCloseTimeout: 60 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts: 2,
+			MaximumAttempts: 3,
 		},
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
