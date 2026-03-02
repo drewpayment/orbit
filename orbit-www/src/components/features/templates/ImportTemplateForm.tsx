@@ -17,6 +17,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Loader2, AlertCircle, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { importTemplate, checkManifestExists, CheckManifestResult } from '@/app/actions/templates'
 import { ManifestBuilderForm } from './ManifestBuilderForm'
+import { RepositoryCombobox } from './RepositoryCombobox'
+import type { Repository } from '@/app/actions/github'
 
 interface Workspace {
   id: string
@@ -29,8 +31,8 @@ interface ImportTemplateFormProps {
 
 export function ImportTemplateForm({ workspaces }: ImportTemplateFormProps) {
   const router = useRouter()
-  const [repoUrl, setRepoUrl] = useState('')
   const [workspaceId, setWorkspaceId] = useState(workspaces[0]?.id || '')
+  const [selectedRepo, setSelectedRepo] = useState<Repository | null>(null)
   const [manifestPath, setManifestPath] = useState('orbit-template.yaml')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -38,6 +40,8 @@ export function ImportTemplateForm({ workspaces }: ImportTemplateFormProps) {
   const [success, setSuccess] = useState(false)
   const [step, setStep] = useState<'input' | 'wizard' | 'import'>('input')
   const [repoInfo, setRepoInfo] = useState<CheckManifestResult['repoInfo'] | null>(null)
+
+  const repoUrl = selectedRepo ? `https://github.com/${selectedRepo.fullName}` : ''
 
   const handleImport = async () => {
     setError(null)
@@ -57,7 +61,6 @@ export function ImportTemplateForm({ workspaces }: ImportTemplateFormProps) {
         if (result.warnings) {
           setWarnings(result.warnings)
         }
-        // Redirect after short delay to show success
         setTimeout(() => {
           router.push('/templates')
         }, 1500)
@@ -79,7 +82,6 @@ export function ImportTemplateForm({ workspaces }: ImportTemplateFormProps) {
     setIsSubmitting(true)
 
     try {
-      // First check if manifest exists
       const result = await checkManifestExists(repoUrl, workspaceId, manifestPath || undefined)
 
       if (result.error) {
@@ -91,10 +93,8 @@ export function ImportTemplateForm({ workspaces }: ImportTemplateFormProps) {
       setRepoInfo(result.repoInfo || null)
 
       if (result.exists) {
-        // Manifest exists, proceed to import
         await handleImport()
       } else {
-        // Show wizard
         setStep('wizard')
         setIsSubmitting(false)
       }
@@ -105,7 +105,6 @@ export function ImportTemplateForm({ workspaces }: ImportTemplateFormProps) {
   }
 
   const handleManifestCreated = () => {
-    // Reset to input step and auto-trigger import
     setStep('input')
     handleImport()
   }
@@ -115,7 +114,11 @@ export function ImportTemplateForm({ workspaces }: ImportTemplateFormProps) {
     setRepoInfo(null)
   }
 
-  // Render wizard if no manifest exists
+  const handleWorkspaceChange = (newWorkspaceId: string) => {
+    setWorkspaceId(newWorkspaceId)
+    setSelectedRepo(null)
+  }
+
   if (step === 'wizard' && repoInfo) {
     return (
       <ManifestBuilderForm
@@ -139,7 +142,6 @@ export function ImportTemplateForm({ workspaces }: ImportTemplateFormProps) {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Error Alert */}
           {error && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
@@ -148,7 +150,6 @@ export function ImportTemplateForm({ workspaces }: ImportTemplateFormProps) {
             </Alert>
           )}
 
-          {/* Warnings Alert */}
           {warnings.length > 0 && (
             <Alert>
               <AlertTriangle className="h-4 w-4" />
@@ -163,7 +164,6 @@ export function ImportTemplateForm({ workspaces }: ImportTemplateFormProps) {
             </Alert>
           )}
 
-          {/* Success Alert */}
           {success && (
             <Alert className="border-green-500 bg-green-50 dark:bg-green-950">
               <CheckCircle2 className="h-4 w-4 text-green-600" />
@@ -174,33 +174,14 @@ export function ImportTemplateForm({ workspaces }: ImportTemplateFormProps) {
             </Alert>
           )}
 
-          {/* Repository URL */}
-          <div className="space-y-2">
-            <Label htmlFor="repoUrl">
-              GitHub Repository URL <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              id="repoUrl"
-              type="url"
-              placeholder="https://github.com/owner/repo"
-              value={repoUrl}
-              onChange={(e) => setRepoUrl(e.target.value)}
-              required
-              disabled={isSubmitting || success}
-            />
-            <p className="text-xs text-muted-foreground">
-              The repository must be accessible via your workspace&apos;s GitHub App installation.
-            </p>
-          </div>
-
-          {/* Workspace Selection */}
+          {/* Workspace Selection (moved to top) */}
           <div className="space-y-2">
             <Label htmlFor="workspace">
               Workspace <span className="text-red-500">*</span>
             </Label>
             <Select
               value={workspaceId}
-              onValueChange={setWorkspaceId}
+              onValueChange={handleWorkspaceChange}
               disabled={isSubmitting || success}
             >
               <SelectTrigger id="workspace">
@@ -214,6 +195,19 @@ export function ImportTemplateForm({ workspaces }: ImportTemplateFormProps) {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Repository Selector */}
+          <div className="space-y-2">
+            <Label>
+              GitHub Repository <span className="text-red-500">*</span>
+            </Label>
+            <RepositoryCombobox
+              workspaceId={workspaceId}
+              value={selectedRepo?.fullName || ''}
+              onSelect={setSelectedRepo}
+              disabled={isSubmitting || success}
+            />
           </div>
 
           {/* Manifest Path */}
@@ -241,7 +235,7 @@ export function ImportTemplateForm({ workspaces }: ImportTemplateFormProps) {
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting || success || !repoUrl || !workspaceId}>
+            <Button type="submit" disabled={isSubmitting || success || !selectedRepo || !workspaceId}>
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
