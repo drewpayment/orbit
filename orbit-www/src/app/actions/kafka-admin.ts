@@ -852,8 +852,8 @@ export async function updateCluster(
 
       updateData.connectionConfig = newConfig
 
-      // Reset validation status when connection config changes
-      if (data.bootstrapServers !== undefined) {
+      // Reset validation status only when bootstrap servers actually change
+      if (data.bootstrapServers !== undefined && data.bootstrapServers !== existingConfig['bootstrap.servers']) {
         updateData.validationStatus = 'pending'
       }
     }
