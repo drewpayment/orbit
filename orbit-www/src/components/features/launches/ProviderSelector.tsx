@@ -1,0 +1,68 @@
+'use client'
+
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
+
+export type Provider = 'aws' | 'gcp' | 'azure' | 'digitalocean'
+
+interface ProviderInfo {
+  id: Provider
+  name: string
+  icon: string
+  description: string
+}
+
+const PROVIDERS: ProviderInfo[] = [
+  { id: 'aws', name: 'AWS', icon: '☁️', description: 'Amazon Web Services' },
+  { id: 'gcp', name: 'GCP', icon: '🌐', description: 'Google Cloud Platform' },
+  { id: 'azure', name: 'Azure', icon: '🔷', description: 'Microsoft Azure' },
+  { id: 'digitalocean', name: 'DigitalOcean', icon: '🌊', description: 'DigitalOcean' },
+]
+
+interface ProviderSelectorProps {
+  templateCounts: Record<string, number>
+  onSelect: (provider: Provider) => void
+}
+
+export function ProviderSelector({ templateCounts, onSelect }: ProviderSelectorProps) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold">Select Cloud Provider</h2>
+        <p className="text-muted-foreground mt-1">
+          Choose the cloud provider for your infrastructure deployment
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {PROVIDERS.map((provider) => {
+          const count = templateCounts[provider.id] || 0
+          return (
+            <Card
+              key={provider.id}
+              className={cn(
+                'cursor-pointer transition-all hover:border-primary/50 hover:shadow-md',
+                count === 0 && 'opacity-50 cursor-not-allowed',
+              )}
+              onClick={() => count > 0 && onSelect(provider.id)}
+            >
+              <CardContent className="flex flex-col items-center text-center pt-6 pb-4 gap-3">
+                <span className="text-4xl" role="img" aria-label={provider.name}>
+                  {provider.icon}
+                </span>
+                <div>
+                  <h3 className="font-semibold text-lg">{provider.name}</h3>
+                  <p className="text-sm text-muted-foreground">{provider.description}</p>
+                </div>
+                <Badge variant={count > 0 ? 'default' : 'secondary'}>
+                  {count} template{count !== 1 ? 's' : ''}
+                </Badge>
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
