@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package idp.launch.v1;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/drewpayment/orbit/proto/gen/go/idp/launch/v1;launchv1";
+
+service LaunchService {
+  rpc StartLaunch(StartLaunchRequest) returns (StartLaunchResponse);
+  rpc GetLaunchProgress(GetLaunchProgressRequest) returns (GetLaunchProgressResponse);
+  rpc ApproveLaunch(ApproveLaunchRequest) returns (ApproveLaunchResponse);
+  rpc DeorbitLaunch(DeorbitLaunchRequest) returns (DeorbitLaunchResponse);
+  rpc AbortLaunch(AbortLaunchRequest) returns (AbortLaunchResponse);
+}
+
+message StartLaunchRequest {
+  string launch_id = 1;
+  string template_slug = 2;
+  string cloud_account_id = 3;
+  string provider = 4;
+  string region = 5;
+  google.protobuf.Struct parameters = 6;
+  bool approval_required = 7;
+}
+
+message StartLaunchResponse {
+  bool success = 1;
+  string workflow_id = 2;
+  string error = 3;
+}
+
+message GetLaunchProgressRequest {
+  string workflow_id = 1;
+}
+
+message GetLaunchProgressResponse {
+  string status = 1;
+  int32 current_step = 2;
+  int32 total_steps = 3;
+  string message = 4;
+  float percentage = 5;
+  repeated string logs = 6;
+}
+
+message ApproveLaunchRequest {
+  string workflow_id = 1;
+  bool approved = 2;
+  string approved_by = 3;
+  string notes = 4;
+}
+
+message ApproveLaunchResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message DeorbitLaunchRequest {
+  string workflow_id = 1;
+  string requested_by = 2;
+  string reason = 3;
+}
+
+message DeorbitLaunchResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message AbortLaunchRequest {
+  string workflow_id = 1;
+  string requested_by = 2;
+}
+
+message AbortLaunchResponse {
+  bool success = 1;
+  string error = 2;
+}

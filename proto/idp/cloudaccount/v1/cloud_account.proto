@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package idp.cloudaccount.v1;
+
+option go_package = "github.com/drewpayment/orbit/proto/gen/go/idp/cloudaccount/v1;cloudaccountv1";
+
+service CloudAccountService {
+  rpc ValidateCredentials(ValidateCredentialsRequest) returns (ValidateCredentialsResponse);
+}
+
+message ValidateCredentialsRequest {
+  string cloud_account_id = 1;
+  string provider = 2;
+}
+
+message ValidateCredentialsResponse {
+  bool valid = 1;
+  string error = 2;
+  string account_identifier = 3;
+}
