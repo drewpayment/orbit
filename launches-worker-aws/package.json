@@ -1,0 +1,24 @@
+{
+  "name": "@orbit/launches-worker-aws",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "start": "ts-node src/worker.ts",
+    "dev": "ts-node-dev --respawn src/worker.ts"
+  },
+  "dependencies": {
+    "@temporalio/activity": "^1.11.0",
+    "@temporalio/client": "^1.11.0",
+    "@temporalio/worker": "^1.11.0",
+    "@pulumi/pulumi": "^3",
+    "@pulumi/aws": "^6",
+    "@aws-sdk/client-sts": "^3"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "ts-node": "^10",
+    "ts-node-dev": "^2",
+    "@types/node": "^20"
+  }
+}
