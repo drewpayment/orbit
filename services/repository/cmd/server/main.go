@@ -17,6 +17,7 @@ import (
 	"github.com/drewpayment/orbit/proto/gen/go/idp/build/v1/buildv1connect"
 	"github.com/drewpayment/orbit/proto/gen/go/idp/deployment/v1/deploymentv1connect"
 	"github.com/drewpayment/orbit/proto/gen/go/idp/health/v1/healthv1connect"
+	"github.com/drewpayment/orbit/proto/gen/go/idp/launch/v1/launchv1connect"
 	templatev1 "github.com/drewpayment/orbit/proto/gen/go/idp/template/v1"
 	"github.com/drewpayment/orbit/proto/gen/go/idp/template/v1/templatev1connect"
 	grpcserver "github.com/drewpayment/orbit/services/repository/internal/grpc"
@@ -247,6 +248,78 @@ func (tc *TemporalClient) QueryBuildWorkflow(ctx context.Context, workflowID, qu
 	return &progress, nil
 }
 
+// StartLaunchWorkflow starts a launch workflow
+func (tc *TemporalClient) StartLaunchWorkflow(ctx context.Context, input *grpcserver.StartLaunchInput) (string, error) {
+	workflowID := fmt.Sprintf("launch-%s-%d", input.LaunchID, time.Now().Unix())
+
+	workflowInput := types.LaunchWorkflowInput{
+		LaunchID:         input.LaunchID,
+		TemplateSlug:     input.TemplateSlug,
+		CloudAccountID:   input.CloudAccountID,
+		Provider:         input.Provider,
+		Region:           input.Region,
+		Parameters:       input.Parameters,
+		ApprovalRequired: input.ApprovalRequired,
+	}
+
+	we, err := tc.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: "orbit-workflows",
+	}, "LaunchWorkflow", workflowInput)
+
+	if err != nil {
+		return "", fmt.Errorf("failed to start launch workflow: %w", err)
+	}
+
+	return we.GetID(), nil
+}
+
+// QueryLaunchProgress queries a launch workflow for progress
+func (tc *TemporalClient) QueryLaunchProgress(ctx context.Context, workflowID string) (*grpcserver.LaunchProgressResult, error) {
+	resp, err := tc.client.QueryWorkflow(ctx, workflowID, "", "GetLaunchProgress")
+	if err != nil {
+		return nil, fmt.Errorf("failed to query launch workflow: %w", err)
+	}
+
+	var progress types.LaunchProgress
+	if err := resp.Get(&progress); err != nil {
+		return nil, fmt.Errorf("failed to decode launch progress: %w", err)
+	}
+
+	return &grpcserver.LaunchProgressResult{
+		Status:      progress.Status,
+		CurrentStep: progress.CurrentStep,
+		TotalSteps:  progress.TotalSteps,
+		Message:     progress.Message,
+		Percentage:  progress.Percentage,
+		Logs:        progress.Logs,
+	}, nil
+}
+
+// SignalLaunchApproval sends an approval signal to a launch workflow
+func (tc *TemporalClient) SignalLaunchApproval(ctx context.Context, workflowID string, approved bool, approvedBy, notes string) error {
+	return tc.client.SignalWorkflow(ctx, workflowID, "", "ApprovalSignal", types.ApprovalSignalInput{
+		Approved:   approved,
+		ApprovedBy: approvedBy,
+		Notes:      notes,
+	})
+}
+
+// SignalLaunchDeorbit sends a deorbit signal to a launch workflow
+func (tc *TemporalClient) SignalLaunchDeorbit(ctx context.Context, workflowID string, requestedBy, reason string) error {
+	return tc.client.SignalWorkflow(ctx, workflowID, "", "DeorbitSignal", types.DeorbitSignalInput{
+		RequestedBy: requestedBy,
+		Reason:      reason,
+	})
+}
+
+// SignalLaunchAbort sends an abort signal to a launch workflow
+func (tc *TemporalClient) SignalLaunchAbort(ctx context.Context, workflowID string, requestedBy string) error {
+	return tc.client.SignalWorkflow(ctx, workflowID, "", "AbortSignal", types.AbortSignalInput{
+		RequestedBy: requestedBy,
+	})
+}
+
 // StubPayloadClient is a placeholder for Payload CMS operations
 // TODO: Implement real Payload client
 type StubPayloadClient struct{}
@@ -328,6 +401,17 @@ func main() {
 		log.Println("BuildService registered (Connect)")
 	} else {
 		log.Println("BuildService not registered (Temporal client unavailable)")
+	}
+
+	// Register LaunchService (Connect handler)
+	if temporalClient != nil {
+		var launchTemporal grpcserver.LaunchClientInterface = temporalClient
+		launchServer := grpcserver.NewLaunchServer(launchTemporal)
+		launchPath, launchHandler := launchv1connect.NewLaunchServiceHandler(launchServer)
+		mux.Handle(launchPath, launchHandler)
+		log.Println("LaunchService registered (Connect)")
+	} else {
+		log.Println("LaunchService not registered (Temporal client unavailable)")
 	}
 
 	// Start HTTP health server on separate port
