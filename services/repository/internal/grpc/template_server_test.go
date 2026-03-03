@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	templatev1 "github.com/drewpayment/orbit/proto/gen/go/idp/template/v1"
@@ -57,85 +58,71 @@ func TestStartInstantiation_Success(t *testing.T) {
 
 	server := NewTemplateServer(mockTemporal, nil)
 
-	req := &templatev1.StartInstantiationRequest{
+	resp, err := server.StartInstantiation(context.Background(), connect.NewRequest(&templatev1.StartInstantiationRequest{
 		TemplateId:     "template-1",
 		WorkspaceId:    "workspace-1",
 		TargetOrg:      "my-org",
 		RepositoryName: "new-service",
 		IsPrivate:      true,
 		UserId:         "user-1",
-	}
-
-	resp, err := server.StartInstantiation(context.Background(), req)
+	}))
 
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Equal(t, "workflow-123", resp.WorkflowId)
+	assert.Equal(t, "workflow-123", resp.Msg.WorkflowId)
 	mockTemporal.AssertExpectations(t)
 }
 
 func TestStartInstantiation_MissingTemplateID(t *testing.T) {
 	server := NewTemplateServer(nil, nil)
 
-	req := &templatev1.StartInstantiationRequest{
+	_, err := server.StartInstantiation(context.Background(), connect.NewRequest(&templatev1.StartInstantiationRequest{
 		WorkspaceId:    "workspace-1",
 		TargetOrg:      "my-org",
 		RepositoryName: "new-service",
-	}
-
-	resp, err := server.StartInstantiation(context.Background(), req)
+	}))
 
 	assert.Error(t, err)
-	assert.Nil(t, resp)
-	assert.Contains(t, err.Error(), "template_id")
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 }
 
 func TestStartInstantiation_MissingWorkspaceID(t *testing.T) {
 	server := NewTemplateServer(nil, nil)
 
-	req := &templatev1.StartInstantiationRequest{
+	_, err := server.StartInstantiation(context.Background(), connect.NewRequest(&templatev1.StartInstantiationRequest{
 		TemplateId:     "template-1",
 		TargetOrg:      "my-org",
 		RepositoryName: "new-service",
-	}
-
-	resp, err := server.StartInstantiation(context.Background(), req)
+	}))
 
 	assert.Error(t, err)
-	assert.Nil(t, resp)
-	assert.Contains(t, err.Error(), "workspace_id")
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 }
 
 func TestStartInstantiation_MissingTargetOrg(t *testing.T) {
 	server := NewTemplateServer(nil, nil)
 
-	req := &templatev1.StartInstantiationRequest{
+	_, err := server.StartInstantiation(context.Background(), connect.NewRequest(&templatev1.StartInstantiationRequest{
 		TemplateId:     "template-1",
 		WorkspaceId:    "workspace-1",
 		RepositoryName: "new-service",
-	}
-
-	resp, err := server.StartInstantiation(context.Background(), req)
+	}))
 
 	assert.Error(t, err)
-	assert.Nil(t, resp)
-	assert.Contains(t, err.Error(), "target_org")
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 }
 
 func TestStartInstantiation_MissingRepositoryName(t *testing.T) {
 	server := NewTemplateServer(nil, nil)
 
-	req := &templatev1.StartInstantiationRequest{
+	_, err := server.StartInstantiation(context.Background(), connect.NewRequest(&templatev1.StartInstantiationRequest{
 		TemplateId:  "template-1",
 		WorkspaceId: "workspace-1",
 		TargetOrg:   "my-org",
-	}
-
-	resp, err := server.StartInstantiation(context.Background(), req)
+	}))
 
 	assert.Error(t, err)
-	assert.Nil(t, resp)
-	assert.Contains(t, err.Error(), "repository_name")
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 }
 
 func TestGetInstantiationProgress_Success(t *testing.T) {
@@ -149,30 +136,25 @@ func TestGetInstantiationProgress_Success(t *testing.T) {
 
 	server := NewTemplateServer(mockTemporal, nil)
 
-	req := &templatev1.GetProgressRequest{
+	resp, err := server.GetInstantiationProgress(context.Background(), connect.NewRequest(&templatev1.GetProgressRequest{
 		WorkflowId: "workflow-123",
-	}
-
-	resp, err := server.GetInstantiationProgress(context.Background(), req)
+	}))
 
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Equal(t, "workflow-123", resp.WorkflowId)
-	assert.Equal(t, "creating_repository", resp.CurrentStep)
-	assert.Equal(t, int32(50), resp.ProgressPercent)
+	assert.Equal(t, "workflow-123", resp.Msg.WorkflowId)
+	assert.Equal(t, "creating_repository", resp.Msg.CurrentStep)
+	assert.Equal(t, int32(50), resp.Msg.ProgressPercent)
 	mockTemporal.AssertExpectations(t)
 }
 
 func TestGetInstantiationProgress_MissingWorkflowID(t *testing.T) {
 	server := NewTemplateServer(nil, nil)
 
-	req := &templatev1.GetProgressRequest{}
-
-	resp, err := server.GetInstantiationProgress(context.Background(), req)
+	_, err := server.GetInstantiationProgress(context.Background(), connect.NewRequest(&templatev1.GetProgressRequest{}))
 
 	assert.Error(t, err)
-	assert.Nil(t, resp)
-	assert.Contains(t, err.Error(), "workflow_id")
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 }
 
 func TestCancelInstantiation_Success(t *testing.T) {
@@ -182,28 +164,23 @@ func TestCancelInstantiation_Success(t *testing.T) {
 
 	server := NewTemplateServer(mockTemporal, nil)
 
-	req := &templatev1.CancelRequest{
+	resp, err := server.CancelInstantiation(context.Background(), connect.NewRequest(&templatev1.CancelRequest{
 		WorkflowId: "workflow-123",
-	}
-
-	resp, err := server.CancelInstantiation(context.Background(), req)
+	}))
 
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.True(t, resp.Success)
+	assert.True(t, resp.Msg.Success)
 	mockTemporal.AssertExpectations(t)
 }
 
 func TestCancelInstantiation_MissingWorkflowID(t *testing.T) {
 	server := NewTemplateServer(nil, nil)
 
-	req := &templatev1.CancelRequest{}
-
-	resp, err := server.CancelInstantiation(context.Background(), req)
+	_, err := server.CancelInstantiation(context.Background(), connect.NewRequest(&templatev1.CancelRequest{}))
 
 	assert.Error(t, err)
-	assert.Nil(t, resp)
-	assert.Contains(t, err.Error(), "workflow_id")
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 }
 
 func TestListAvailableOrgs_Success(t *testing.T) {
@@ -216,29 +193,24 @@ func TestListAvailableOrgs_Success(t *testing.T) {
 
 	server := NewTemplateServer(nil, mockPayload)
 
-	req := &templatev1.ListAvailableOrgsRequest{
+	resp, err := server.ListAvailableOrgs(context.Background(), connect.NewRequest(&templatev1.ListAvailableOrgsRequest{
 		WorkspaceId: "workspace-1",
-	}
-
-	resp, err := server.ListAvailableOrgs(context.Background(), req)
+	}))
 
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Len(t, resp.Orgs, 2)
-	assert.Equal(t, "org-1", resp.Orgs[0].Name)
-	assert.Equal(t, "https://example.com/avatar1.png", resp.Orgs[0].AvatarUrl)
-	assert.Equal(t, "inst-1", resp.Orgs[0].InstallationId)
+	assert.Len(t, resp.Msg.Orgs, 2)
+	assert.Equal(t, "org-1", resp.Msg.Orgs[0].Name)
+	assert.Equal(t, "https://example.com/avatar1.png", resp.Msg.Orgs[0].AvatarUrl)
+	assert.Equal(t, "inst-1", resp.Msg.Orgs[0].InstallationId)
 	mockPayload.AssertExpectations(t)
 }
 
 func TestListAvailableOrgs_MissingWorkspaceID(t *testing.T) {
 	server := NewTemplateServer(nil, nil)
 
-	req := &templatev1.ListAvailableOrgsRequest{}
-
-	resp, err := server.ListAvailableOrgs(context.Background(), req)
+	_, err := server.ListAvailableOrgs(context.Background(), connect.NewRequest(&templatev1.ListAvailableOrgsRequest{}))
 
 	assert.Error(t, err)
-	assert.Nil(t, resp)
-	assert.Contains(t, err.Error(), "workspace_id")
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 }
