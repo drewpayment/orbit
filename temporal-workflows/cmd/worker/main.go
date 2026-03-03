@@ -385,6 +385,22 @@ func main() {
 	log.Printf("Decommissioning activities registered with MinIO endpoint: %s", minioEndpoint)
 
 	// =======================================================================
+	// Launch Workflow & Activities
+	// =======================================================================
+
+	// Register launch workflow
+	w.RegisterWorkflow(workflows.LaunchWorkflow)
+
+	// Create and register launch activities
+	// TODO: Create PayloadLaunchClient when implementing full integration
+	var launchPayloadClient activities.PayloadLaunchClient = nil
+	launchActivities := activities.NewLaunchActivities(launchPayloadClient, logger)
+	w.RegisterActivity(launchActivities.ValidateLaunchInputs)
+	w.RegisterActivity(launchActivities.UpdateLaunchStatus)
+	w.RegisterActivity(launchActivities.StoreLaunchOutputs)
+	log.Println("Launch workflow and activities registered")
+
+	// =======================================================================
 	// API Spec Sync Activities
 	// =======================================================================
 
