@@ -31,6 +31,7 @@ import { RegistryConfigs } from './collections/RegistryConfigs'
 import { EnvironmentVariables } from './collections/EnvironmentVariables'
 import { RegistryImages } from './collections/RegistryImages'
 import { Feedback } from './collections/Feedback'
+import { CloudAccounts } from './collections/CloudAccounts'
 
 // Kafka collections
 import {
@@ -96,6 +97,7 @@ export default buildConfig({
     EnvironmentVariables,
     RegistryImages,
     Feedback,
+    CloudAccounts,
     // Kafka collections
     KafkaProviders,
     KafkaClusters,
