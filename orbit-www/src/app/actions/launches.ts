@@ -373,3 +373,73 @@ export async function getCloudAccounts(workspaceId: string) {
     return { success: false, error: 'Failed to fetch cloud accounts', docs: [] }
   }
 }
+
+export async function getLaunches(workspaceId: string) {
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session?.user) {
+    return { success: false, error: 'Unauthorized', docs: [] }
+  }
+
+  const payload = await getPayload({ config })
+
+  try {
+    const launches = await payload.find({
+      collection: 'launches',
+      where: {
+        workspace: { equals: workspaceId },
+      },
+      depth: 2,
+      sort: '-updatedAt',
+      limit: 100,
+    })
+
+    return { success: true, docs: launches.docs }
+  } catch (error) {
+    console.error('Failed to fetch launches:', error)
+    return { success: false, error: 'Failed to fetch launches', docs: [] }
+  }
+}
+
+export async function getAllUserLaunches() {
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session?.user) {
+    return { success: false, error: 'Unauthorized', docs: [] }
+  }
+
+  const payload = await getPayload({ config })
+
+  try {
+    // Get user's workspace memberships
+    const memberships = await payload.find({
+      collection: 'workspace-members',
+      where: {
+        user: { equals: session.user.id },
+        status: { equals: 'active' },
+      },
+      limit: 1000,
+    })
+
+    const workspaceIds = memberships.docs.map(m =>
+      String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
+    )
+
+    if (workspaceIds.length === 0) {
+      return { success: true, docs: [] }
+    }
+
+    const launches = await payload.find({
+      collection: 'launches',
+      where: {
+        workspace: { in: workspaceIds },
+      },
+      depth: 2,
+      sort: '-updatedAt',
+      limit: 100,
+    })
+
+    return { success: true, docs: launches.docs }
+  } catch (error) {
+    console.error('Failed to fetch launches:', error)
+    return { success: false, error: 'Failed to fetch launches', docs: [] }
+  }
+}
