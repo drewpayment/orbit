@@ -4,6 +4,7 @@ import * as React from "react"
 import {
   BookOpen,
   Building2,
+  Cloud,
   Command,
   Container,
   FileCode,
@@ -13,6 +14,7 @@ import {
   Layers,
   MessageSquare,
   RadioTower,
+  Rocket,
   Settings,
   Shield,
   Workflow,
@@ -62,6 +64,12 @@ const navMainData = [
       items: [],
     },
     {
+      title: "Launches",
+      url: "/launches",
+      icon: Rocket,
+      items: [],
+    },
+    {
       title: "API Catalog",
       url: "/catalog/apis",
       icon: FileCode,
@@ -84,6 +92,7 @@ const navSettingsData = [
       { title: "GitHub", url: "/settings/github", icon: GitBranch },
       { title: "Registries", url: "/settings/registries", icon: Container },
       { title: "Templates", url: "/settings/templates", icon: LayoutTemplate },
+      { title: "Cloud Accounts", url: "/settings/cloud-accounts", icon: Cloud },
     ],
   },
 ]
