@@ -97,6 +97,25 @@ services:
       - temporal-worker-data:/tmp
     restart: unless-stopped
 
+  launches-worker-aws:
+    container_name: orbit-launches-worker-aws
+    build:
+      context: ./launches-worker-aws
+      dockerfile: Dockerfile
+    depends_on:
+      temporal-server:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      - TEMPORAL_ADDRESS=temporal-server:7233
+      - TEMPORAL_NAMESPACE=default
+      - TASK_QUEUE=launches_aws
+      - PULUMI_BACKEND_URL=s3://pulumi-state?endpoint=minio:9000&s3ForcePathStyle=true
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    restart: unless-stopped
+
   buildkit:
     container_name: orbit-buildkit
     image: moby/buildkit:latest
