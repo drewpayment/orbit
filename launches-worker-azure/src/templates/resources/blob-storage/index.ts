@@ -24,7 +24,7 @@ if (enableVersioning) {
   new azure.storage.BlobServiceProperties("orbit-versioning", {
     accountName: storageAccount.name,
     resourceGroupName,
-    blobServiceName: "default",
+    blobServicesName: "default",
     isVersioningEnabled: true,
   });
 }
