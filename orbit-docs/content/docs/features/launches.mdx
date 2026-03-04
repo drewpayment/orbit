@@ -1,0 +1,209 @@
+---
+title: Launches
+description: Provision and manage cloud infrastructure using templates powered by Pulumi and Temporal.
+---
+
+# Launches
+
+Launches are Orbit's infrastructure provisioning primitive. They let developers deploy cloud resources — VPCs, databases, storage buckets, container clusters — from pre-approved templates with a guided wizard. Each launch creates real infrastructure in your cloud accounts and tracks its full lifecycle.
+
+## Key Concepts
+
+| Concept | Description |
+|---------|-------------|
+| **Launch** | A single provisioned infrastructure stack (e.g., "Production VPC" or "Staging Database") |
+| **Launch Template** | A reusable blueprint defining what infrastructure to create (backed by Pulumi programs) |
+| **Cloud Account** | Provider credentials (AWS, GCP, Azure, DigitalOcean) that Launches use to provision resources |
+| **Pulumi Stack** | The underlying IaC stack that manages the infrastructure state |
+
+## How Launches Work
+
+1. **Developer** navigates to **Launches → New Launch** and follows the wizard
+2. **Step 1 — Provider**: Select a cloud provider (AWS, GCP, Azure, DigitalOcean)
+3. **Step 2 — Template**: Choose a bundle or individual resource template
+4. **Step 3 — Configure**: Name the launch, select a cloud account, set region and template parameters
+5. **Step 4 — Review**: Confirm the configuration and submit
+6. Orbit creates the Launch record and starts a **Temporal workflow** that:
+   - Validates cloud account credentials
+   - Provisions infrastructure via Pulumi
+   - Stores outputs (endpoints, ARNs, connection strings)
+   - Updates the launch status in real time
+7. If the cloud account requires **approval**, the workflow pauses and notifies approvers before provisioning
+
+## Launch Lifecycle
+
+Launches follow this state machine:
+
+```
+pending → launching → active
+                   ↘ failed
+active → deorbiting → deorbited
+launching → aborted (user-initiated)
+pending → awaiting_approval → launching (after approval)
+                            → aborted (if rejected)
+```
+
+| Status | Meaning |
+|--------|---------|
+| `pending` | Launch created, workflow not yet started |
+| `awaiting_approval` | Waiting for an approver to approve or reject |
+| `launching` | Pulumi provisioning in progress |
+| `active` | Infrastructure is live and healthy |
+| `failed` | Provisioning encountered an error |
+| `deorbiting` | Pulumi destroy in progress |
+| `deorbited` | All resources have been torn down |
+| `aborted` | Launch was cancelled before completion |
+
+## Templates
+
+Launch Templates define what infrastructure gets created. There are two types:
+
+### Bundles
+
+Bundles provision multiple related resources together. For example, the **Web App Backend** bundle creates a VPC, EC2 instances, RDS database, ALB, Auto Scaling group, IAM roles, and CloudWatch alarms — everything needed for a production web backend.
+
+### Individual Resources
+
+Individual resource templates create a single cloud resource, like an S3 bucket, RDS database, or VPC. Use these for targeted provisioning.
+
+### Template Parameters
+
+Templates can define a parameter schema that the wizard renders as a form. Parameters let developers customize the deployment — instance sizes, bucket names, database engines, etc.
+
+## Creating Launch Templates
+
+Launch Templates are managed through the Payload admin panel.
+
+### Via Admin Panel
+
+1. Navigate to **http://localhost:3000/admin/collections/launch-templates**
+2. Click **Create New**
+3. Fill in the template fields:
+
+| Field | Description |
+|-------|-------------|
+| `name` | Display name (e.g., "Web App Backend") |
+| `slug` | URL-safe identifier (e.g., `web-app-backend`) |
+| `description` | What the template provisions |
+| `type` | `bundle` or `resource` |
+| `provider` | Cloud provider (`aws`, `gcp`, `azure`, `digitalocean`) |
+| `category` | Resource category (`compute`, `storage`, `database`, `networking`, `container`, `serverless`) |
+| `parameterSchema` | JSON schema defining configurable parameters |
+| `estimatedDuration` | How long provisioning typically takes (e.g., "~5 min") |
+| `pulumiProgram` | Slug matching the Pulumi program in the worker (e.g., `s3-bucket`) |
+
+### Via Seed Script
+
+For development, run the seed script to create sample AWS templates:
+
+```bash
+cd orbit-www
+bun run tsx src/scripts/seed-launch-templates.ts
+```
+
+This creates 6 templates: 2 bundles (Web App Backend, Static Site) and 4 individual resources (S3 Bucket, RDS PostgreSQL, ECS Fargate Cluster, VPC).
+
+### Pulumi Programs
+
+Each template references a Pulumi program that lives in the provider-specific worker. For AWS, these are in `launches-worker-aws/src/templates/`:
+
+```
+launches-worker-aws/src/templates/
+  resources/
+    s3-bucket/
+      index.ts        # Pulumi program
+      Pulumi.yaml      # Stack config
+    rds-postgresql/
+      ...
+  bundles/
+    web-app-backend/
+      ...
+```
+
+To add a new template:
+
+1. Create the Pulumi program in the appropriate worker
+2. Create a Launch Template record (admin panel or seed script) with `pulumiProgram` matching the directory name
+3. The template will appear in the wizard for its provider
+
+## Creating a Launch
+
+### Prerequisites
+
+Before creating a launch, you need:
+
+- **At least one Cloud Account** configured (see [Cloud Accounts](/docs/features/cloud-accounts))
+- **At least one Launch Template** for the provider
+- **Workspace membership** — launches are scoped to workspaces
+
+### Step-by-Step
+
+1. Click **Launches** in the sidebar
+2. Click **New Launch** (top right) or navigate to `/launches/new`
+3. **Select Provider** — pick the cloud provider (only providers with available templates are selectable)
+4. **Select Template** — browse bundles and individual resources, use search and category filters
+5. **Configure** — fill in:
+   - **Launch Name** — a descriptive name (e.g., "prod-api-database")
+   - **Cloud Account** — select from connected accounts for this provider
+   - **Region** — AWS region, GCP zone, etc.
+   - **Template Parameters** — any template-specific settings
+6. **Review & Launch** — confirm the summary and click **Launch** (or **Submit for Approval** if the cloud account requires it)
+
+The launch detail page shows real-time progress, and once active, displays Pulumi outputs (endpoints, resource IDs, connection strings).
+
+## Managing Launches
+
+### Viewing Launches
+
+The **Launches** page shows all launches across your workspaces with:
+
+- Status filter tabs (All, Active, Launching, Failed, etc.)
+- Search by name or region
+- Provider, template, region, and last activity columns
+
+### Launch Detail
+
+Click any launch to see:
+
+- **Overview** tab — Pulumi outputs (left) and configuration details (right)
+- **Progress** tab — real-time workflow progress during provisioning
+- **Resources** tab — provisioned resource inventory (coming soon)
+- **History** tab — audit trail of lifecycle events
+
+### Deorbiting (Destroying Infrastructure)
+
+To tear down a launch's infrastructure:
+
+1. Open the launch detail page
+2. Click the **Deorbit** button (only visible for `active` launches)
+3. Confirm the deorbit in the dialog
+4. Orbit runs `pulumi destroy` to remove all resources
+5. The launch status moves to `deorbiting` → `deorbited`
+
+### Aborting
+
+In-progress launches (`launching` or `awaiting_approval`) can be aborted:
+
+1. Open the launch detail page
+2. Click **Abort**
+3. The workflow is cancelled and the status moves to `aborted`
+
+## Architecture
+
+```
+Developer (orbit-www)
+    │
+    ├── Creates Launch record (Payload/MongoDB)
+    ├── Starts LaunchWorkflow via Temporal
+    └── Polls for progress via workflow queries
+    │
+Temporal Worker (Go)
+    │
+    ├── ValidateCredentials activity
+    ├── ProvisionInfrastructure activity ──→ launches-worker-aws (TypeScript)
+    ├── StoreOutputs activity                    │
+    └── DestroyInfrastructure activity           ├── Runs Pulumi programs
+                                                 └── Returns outputs/errors
+```
+
+The launch system uses an **Entity Workflow Pattern** — each launch gets a long-lived Temporal workflow that stays open while the infrastructure is active, enabling operations like deorbit without starting a new workflow.

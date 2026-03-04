@@ -1,0 +1,65 @@
+---
+title: Cloud Accounts
+description: Configure cloud provider credentials for infrastructure provisioning via Launches.
+---
+
+# Cloud Accounts
+
+Cloud Accounts store the credentials Orbit uses to provision infrastructure through [Launches](/docs/features/launches). Each account connects to a single cloud provider and can be assigned to one or more workspaces.
+
+## Supported Providers
+
+| Provider | Credential Type |
+|----------|----------------|
+| **AWS** | Access Key ID + Secret Access Key |
+| **GCP** | Service Account JSON |
+| **Azure** | Tenant ID + Client ID + Client Secret |
+| **DigitalOcean** | API Token |
+
+## Adding a Cloud Account
+
+1. Navigate to **Settings → Cloud Accounts** (or `/settings/cloud-accounts`)
+2. Click **Add Cloud Account**
+3. Fill in:
+   - **Provider** — select the cloud provider
+   - **Name** — a descriptive name (e.g., "Production AWS")
+   - **Credentials** — provider-specific credentials (see table above)
+   - **Default Region** — default region for launches using this account (e.g., `us-east-1`)
+   - **Workspaces** — assign to one or more workspaces (only members of those workspaces can use this account)
+4. Optionally enable **Require Approval** and select approvers
+5. Click **Create Account**
+
+## Connection Testing
+
+After creating an account, click **Test** to validate the credentials. Orbit makes a lightweight API call to the provider to confirm the credentials work. The status badge updates to:
+
+- **Connected** — credentials are valid
+- **Disconnected** — credentials haven't been tested yet
+- **Error** — credentials are invalid or expired
+
+## Approval Workflow
+
+Cloud accounts can require approval before any launch provisions infrastructure:
+
+1. Enable **Require Approval** when creating or editing the account
+2. Select one or more **Approvers** from the user list
+3. When a developer creates a launch using this account, the workflow pauses at `awaiting_approval`
+4. Approvers are notified and can **Approve** or **Reject** from the launch detail page
+5. On approval, provisioning continues. On rejection, the launch is aborted.
+
+This is useful for production accounts where you want a human gate before infrastructure changes.
+
+## Workspace Scoping
+
+Cloud accounts are scoped to workspaces:
+
+- An account assigned to "Engineering" and "Platform" workspaces is only visible to members of those workspaces
+- When creating a launch, only accounts matching the selected provider **and** the user's workspace are shown
+- A single account can be shared across multiple workspaces
+
+## Security
+
+- Credentials are stored encrypted in MongoDB via Payload CMS
+- Secret values (Secret Access Key, Client Secret, API Token, Service Account JSON) are never returned to the frontend after creation
+- When editing an account, credential fields show placeholder text — leave them blank to keep existing values
+- Credentials are only sent to the Temporal worker during provisioning activities
