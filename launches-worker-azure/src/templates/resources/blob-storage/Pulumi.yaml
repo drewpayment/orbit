@@ -1,0 +1,3 @@
+name: orbit-blob-storage
+runtime: nodejs
+description: Provisions an Azure Storage Account with a Blob Container
