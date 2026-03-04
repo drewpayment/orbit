@@ -90,6 +90,9 @@ export interface Config {
     'environment-variables': EnvironmentVariable;
     'registry-images': RegistryImage;
     feedback: Feedback;
+    'cloud-accounts': CloudAccount;
+    'launch-templates': LaunchTemplate;
+    launches: Launch;
     'kafka-providers': KafkaProvider;
     'kafka-clusters': KafkaCluster;
     'kafka-environment-mappings': KafkaEnvironmentMapping;
@@ -144,6 +147,9 @@ export interface Config {
     'environment-variables': EnvironmentVariablesSelect<false> | EnvironmentVariablesSelect<true>;
     'registry-images': RegistryImagesSelect<false> | RegistryImagesSelect<true>;
     feedback: FeedbackSelect<false> | FeedbackSelect<true>;
+    'cloud-accounts': CloudAccountsSelect<false> | CloudAccountsSelect<true>;
+    'launch-templates': LaunchTemplatesSelect<false> | LaunchTemplatesSelect<true>;
+    launches: LaunchesSelect<false> | LaunchesSelect<true>;
     'kafka-providers': KafkaProvidersSelect<false> | KafkaProvidersSelect<true>;
     'kafka-clusters': KafkaClustersSelect<false> | KafkaClustersSelect<true>;
     'kafka-environment-mappings': KafkaEnvironmentMappingsSelect<false> | KafkaEnvironmentMappingsSelect<true>;
@@ -1418,6 +1424,149 @@ export interface Feedback {
    */
   read?: boolean | null;
   submittedBy?: (string | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "cloud-accounts".
+ */
+export interface CloudAccount {
+  id: string;
+  name: string;
+  provider: 'aws' | 'gcp' | 'azure' | 'digitalocean';
+  /**
+   * Provider-specific credentials (admin only)
+   */
+  credentials?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Default region for this cloud account
+   */
+  region?: string | null;
+  workspaces: (string | Workspace)[];
+  status?: ('connected' | 'disconnected' | 'error') | null;
+  lastValidatedAt?: string | null;
+  approvalRequired?: boolean | null;
+  approvers?: (string | User)[] | null;
+  createdBy?: (string | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "launch-templates".
+ */
+export interface LaunchTemplate {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  type: 'bundle' | 'resource';
+  provider: 'aws' | 'gcp' | 'azure' | 'digitalocean';
+  /**
+   * Array of equivalent template slugs on other providers
+   */
+  crossProviderSlugs?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  category: 'compute' | 'storage' | 'database' | 'networking' | 'container' | 'serverless';
+  /**
+   * JSON Schema for user parameters
+   */
+  parameterSchema:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Path to Pulumi program within provider worker
+   */
+  pulumiProjectPath: string;
+  /**
+   * e.g. "~5 min"
+   */
+  estimatedDuration?: string | null;
+  builtIn?: boolean | null;
+  /**
+   * Icon identifier for UI
+   */
+  icon?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "launches".
+ */
+export interface Launch {
+  id: string;
+  name: string;
+  workspace: string | Workspace;
+  /**
+   * Link this launch to an app
+   */
+  app?: (string | null) | App;
+  cloudAccount: string | CloudAccount;
+  template?: (string | null) | LaunchTemplate;
+  provider: 'aws' | 'gcp' | 'azure' | 'digitalocean';
+  region: string;
+  status?:
+    | ('pending' | 'awaiting_approval' | 'launching' | 'active' | 'failed' | 'deorbiting' | 'deorbited' | 'aborted')
+    | null;
+  /**
+   * User-provided template parameters
+   */
+  parameters?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  pulumiStackName?: string | null;
+  /**
+   * Outputs from Pulumi stack
+   */
+  pulumiOutputs?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  workflowId?: string | null;
+  approvalConfig?: {
+    required?: boolean | null;
+    approvers?: (string | User)[] | null;
+    timeoutHours?: number | null;
+  };
+  approvedBy?: (string | null) | User;
+  launchError?: string | null;
+  lastLaunchedAt?: string | null;
+  lastDeorbitedAt?: string | null;
+  launchedBy?: (string | null) | User;
   updatedAt: string;
   createdAt: string;
 }
@@ -3103,6 +3252,18 @@ export interface PayloadLockedDocument {
         value: string | Feedback;
       } | null)
     | ({
+        relationTo: 'cloud-accounts';
+        value: string | CloudAccount;
+      } | null)
+    | ({
+        relationTo: 'launch-templates';
+        value: string | LaunchTemplate;
+      } | null)
+    | ({
+        relationTo: 'launches';
+        value: string | Launch;
+      } | null)
+    | ({
         relationTo: 'kafka-providers';
         value: string | KafkaProvider;
       } | null)
@@ -3833,6 +3994,76 @@ export interface FeedbackSelect<T extends boolean = true> {
   steps?: T;
   read?: T;
   submittedBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "cloud-accounts_select".
+ */
+export interface CloudAccountsSelect<T extends boolean = true> {
+  name?: T;
+  provider?: T;
+  credentials?: T;
+  region?: T;
+  workspaces?: T;
+  status?: T;
+  lastValidatedAt?: T;
+  approvalRequired?: T;
+  approvers?: T;
+  createdBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "launch-templates_select".
+ */
+export interface LaunchTemplatesSelect<T extends boolean = true> {
+  name?: T;
+  slug?: T;
+  description?: T;
+  type?: T;
+  provider?: T;
+  crossProviderSlugs?: T;
+  category?: T;
+  parameterSchema?: T;
+  pulumiProjectPath?: T;
+  estimatedDuration?: T;
+  builtIn?: T;
+  icon?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "launches_select".
+ */
+export interface LaunchesSelect<T extends boolean = true> {
+  name?: T;
+  workspace?: T;
+  app?: T;
+  cloudAccount?: T;
+  template?: T;
+  provider?: T;
+  region?: T;
+  status?: T;
+  parameters?: T;
+  pulumiStackName?: T;
+  pulumiOutputs?: T;
+  workflowId?: T;
+  approvalConfig?:
+    | T
+    | {
+        required?: T;
+        approvers?: T;
+        timeoutHours?: T;
+      };
+  approvedBy?: T;
+  launchError?: T;
+  lastLaunchedAt?: T;
+  lastDeorbitedAt?: T;
+  launchedBy?: T;
   updatedAt?: T;
   createdAt?: T;
 }
