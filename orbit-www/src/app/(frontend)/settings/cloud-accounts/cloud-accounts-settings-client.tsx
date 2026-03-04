@@ -3,8 +3,15 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -36,6 +43,7 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { ProviderIcon } from '@/components/features/launches/ProviderIcon'
 import {
   getAllCloudAccounts,
   createCloudAccount,
@@ -46,20 +54,6 @@ import {
   type WorkspaceOption,
   type UserOption,
 } from '@/app/actions/cloud-accounts'
-
-// ---------------------------------------------------------------------------
-// Provider metadata
-// ---------------------------------------------------------------------------
-
-const PROVIDER_META: Record<
-  string,
-  { label: string; icon: string; color: string }
-> = {
-  aws: { label: 'AWS', icon: 'AWS', color: 'bg-orange-100 text-orange-700' },
-  gcp: { label: 'GCP', icon: 'GCP', color: 'bg-blue-100 text-blue-700' },
-  azure: { label: 'Azure', icon: 'AZ', color: 'bg-sky-100 text-sky-700' },
-  digitalocean: { label: 'DigitalOcean', icon: 'DO', color: 'bg-indigo-100 text-indigo-700' },
-}
 
 const STATUS_BADGE: Record<string, { variant: 'default' | 'secondary' | 'destructive'; className?: string }> = {
   connected: { variant: 'default', className: 'bg-green-600' },
@@ -353,18 +347,35 @@ export function CloudAccountsSettingsClient() {
         </Alert>
       )}
 
-      {/* Account list */}
-      <div className="space-y-3">
-        {accounts.map((account) => (
-          <AccountCard
-            key={account.id}
-            account={account}
-            onEdit={() => openEditDialog(account)}
-            onDelete={() => handleDelete(account)}
-            onTestConnection={() => handleTestConnection(account)}
-          />
-        ))}
-      </div>
+      {/* Account table */}
+      {accounts.length > 0 && (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Provider</TableHead>
+                <TableHead>Region</TableHead>
+                <TableHead>Workspaces</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Approval</TableHead>
+                <TableHead className="w-[140px]"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {accounts.map((account) => (
+                <AccountTableRow
+                  key={account.id}
+                  account={account}
+                  onEdit={() => openEditDialog(account)}
+                  onDelete={() => handleDelete(account)}
+                  onTestConnection={() => handleTestConnection(account)}
+                />
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
       {/* Create / Edit dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -596,10 +607,10 @@ export function CloudAccountsSettingsClient() {
 }
 
 // ---------------------------------------------------------------------------
-// Account card
+// Account table row
 // ---------------------------------------------------------------------------
 
-function AccountCard({
+function AccountTableRow({
   account,
   onEdit,
   onDelete,
@@ -611,21 +622,11 @@ function AccountCard({
   onTestConnection: () => void
 }) {
   const [testing, setTesting] = useState(false)
-  const meta = PROVIDER_META[account.provider] || {
-    label: account.provider,
-    icon: '?',
-    color: 'bg-gray-100 text-gray-700',
-  }
   const statusBadge = STATUS_BADGE[account.status] || STATUS_BADGE.disconnected
 
-  const workspaceCount =
-    Array.isArray(account.workspaces) ? account.workspaces.length : 0
-
-  const workspaceNames = Array.isArray(account.workspaces)
-    ? account.workspaces
-        .map((w) => (typeof w === 'string' ? w : w.name))
-        .join(', ')
-    : ''
+  const workspaceList = Array.isArray(account.workspaces)
+    ? account.workspaces.map((w) => (typeof w === 'string' ? w : w.name))
+    : []
 
   async function handleTest() {
     setTesting(true)
@@ -637,78 +638,67 @@ function AccountCard({
   }
 
   return (
-    <Card>
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            {/* Provider icon */}
-            <div
-              className={`h-12 w-12 rounded-lg flex items-center justify-center font-bold text-sm ${meta.color}`}
-            >
-              {meta.icon}
-            </div>
-
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-semibold text-lg">{account.name}</h3>
-                <Badge variant="outline">{meta.label}</Badge>
-                <Badge
-                  variant={statusBadge.variant}
-                  className={statusBadge.className || ''}
-                >
-                  {account.status === 'connected' && (
-                    <CheckCircle className="h-3 w-3 mr-1" />
-                  )}
-                  {account.status === 'error' && (
-                    <XCircle className="h-3 w-3 mr-1" />
-                  )}
-                  {account.status.charAt(0).toUpperCase() + account.status.slice(1)}
+    <TableRow>
+      <TableCell className="font-medium">{account.name}</TableCell>
+      <TableCell>
+        <ProviderIcon provider={account.provider} showLabel />
+      </TableCell>
+      <TableCell className="font-mono text-sm">{account.region || '-'}</TableCell>
+      <TableCell>
+        <div className="flex flex-wrap gap-1">
+          {workspaceList.length > 0
+            ? workspaceList.map((name) => (
+                <Badge key={name} variant="secondary" className="text-xs">
+                  {name}
                 </Badge>
-                {account.approvalRequired && (
-                  <Badge variant="secondary" className="flex items-center gap-1">
-                    <ShieldCheck className="h-3 w-3" />
-                    Approval Required
-                  </Badge>
-                )}
-              </div>
-
-              <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
-                <span>
-                  {workspaceCount} workspace{workspaceCount !== 1 ? 's' : ''}
-                  {workspaceNames && `: ${workspaceNames}`}
-                </span>
-                {account.region && <span>Region: {account.region}</span>}
-                {account.lastValidatedAt && (
-                  <span>
-                    Last validated:{' '}
-                    {new Date(account.lastValidatedAt).toLocaleDateString()}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleTest}
-              disabled={testing}
-            >
-              <Plug className="h-4 w-4 mr-1" />
-              {testing ? 'Testing...' : 'Test'}
-            </Button>
-            <Button variant="outline" size="sm" onClick={onEdit}>
-              <Pencil className="h-4 w-4 mr-1" />
-              Edit
-            </Button>
-            <Button variant="ghost" size="sm" onClick={onDelete}>
-              <Trash2 className="h-4 w-4 text-destructive" />
-            </Button>
-          </div>
+              ))
+            : <span className="text-muted-foreground text-sm">-</span>}
         </div>
-      </CardContent>
-    </Card>
+      </TableCell>
+      <TableCell>
+        <Badge
+          variant={statusBadge.variant}
+          className={statusBadge.className || ''}
+        >
+          {account.status === 'connected' && (
+            <CheckCircle className="h-3 w-3 mr-1" />
+          )}
+          {account.status === 'error' && (
+            <XCircle className="h-3 w-3 mr-1" />
+          )}
+          {account.status.charAt(0).toUpperCase() + account.status.slice(1)}
+        </Badge>
+      </TableCell>
+      <TableCell>
+        {account.approvalRequired ? (
+          <Badge variant="secondary" className="flex items-center gap-1 w-fit">
+            <ShieldCheck className="h-3 w-3" />
+            Required
+          </Badge>
+        ) : (
+          <span className="text-muted-foreground text-sm">-</span>
+        )}
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleTest}
+            disabled={testing}
+            className="h-8"
+          >
+            <Plug className="h-3.5 w-3.5 mr-1" />
+            {testing ? '...' : 'Test'}
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onEdit}>
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onDelete}>
+            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
   )
 }

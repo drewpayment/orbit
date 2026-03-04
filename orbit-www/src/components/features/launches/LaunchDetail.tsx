@@ -8,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
-  ArrowLeft,
   Circle,
   Cloud,
   Loader2,
@@ -18,6 +17,14 @@ import {
   Shield,
   AlertTriangle,
 } from 'lucide-react'
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb'
 import { LaunchStatusBadge, type LaunchStatus } from './LaunchStatusBadge'
 import { LaunchProgress } from './LaunchProgress'
 import { DeorbitConfirmation } from './DeorbitConfirmation'
@@ -174,13 +181,18 @@ export function LaunchDetail({ launch, currentUserId }: LaunchDetailProps) {
 
   return (
     <div className="space-y-6">
-      {/* Back Navigation */}
-      <Button variant="ghost" size="sm" asChild>
-        <Link href="/launches">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Launches
-        </Link>
-      </Button>
+      {/* Breadcrumb Navigation */}
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink href="/launches">Launches</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{launch.name}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
 
       {/* Header */}
       <div className="flex items-start justify-between">
@@ -195,6 +207,9 @@ export function LaunchDetail({ launch, currentUserId }: LaunchDetailProps) {
               {providerLabels[launch.provider] ?? launch.provider}
             </span>
             <span className="font-mono">{launch.region}</span>
+            {template && (
+              <span>{template.name || template.slug}</span>
+            )}
             {app && (
               <Link href={`/apps/${app.id}`} className="hover:underline">
                 App: {app.name || app.id}
@@ -279,129 +294,140 @@ export function LaunchDetail({ launch, currentUserId }: LaunchDetailProps) {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="progress">Progress</TabsTrigger>
+          <TabsTrigger value="resources">Resources</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6">
-          {/* Cloud Account & Template */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Configuration</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-                <div>
-                  <dt className="text-sm font-medium text-muted-foreground">Provider</dt>
-                  <dd className="mt-1">{providerLabels[launch.provider] ?? launch.provider}</dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-muted-foreground">Region</dt>
-                  <dd className="mt-1 font-mono">{launch.region}</dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-muted-foreground">Template</dt>
-                  <dd className="mt-1">{template?.name || template?.slug || '-'}</dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-muted-foreground">Cloud Account</dt>
-                  <dd className="mt-1">{cloudAccount?.name || '-'}</dd>
-                </div>
-                {launch.pulumiStackName && (
-                  <div>
-                    <dt className="text-sm font-medium text-muted-foreground">Pulumi Stack</dt>
-                    <dd className="mt-1 font-mono">{launch.pulumiStackName}</dd>
-                  </div>
-                )}
-                {app && (
-                  <div>
-                    <dt className="text-sm font-medium text-muted-foreground">Linked App</dt>
-                    <dd className="mt-1">
-                      <Link href={`/apps/${app.id}`} className="text-primary hover:underline">
-                        {app.name || app.id}
-                      </Link>
-                    </dd>
-                  </div>
-                )}
-              </dl>
-            </CardContent>
-          </Card>
-
-          {/* Parameters */}
-          {launch.parameters && Object.keys(launch.parameters).length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Parameters</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-                  {Object.entries(launch.parameters).map(([key, value]) => (
-                    <div key={key}>
-                      <dt className="text-sm font-medium text-muted-foreground">{key}</dt>
-                      <dd className="mt-1 font-mono text-sm">{String(value)}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Pulumi Outputs */}
-          {launch.pulumiOutputs && Object.keys(launch.pulumiOutputs).length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Outputs</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-                  {Object.entries(launch.pulumiOutputs).map(([key, value]) => (
-                    <div key={key}>
-                      <dt className="text-sm font-medium text-muted-foreground">{key}</dt>
-                      <dd className="mt-1 font-mono text-sm break-all">{String(value)}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Approval Info */}
-          {launch.approvalConfig?.required && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="h-5 w-5" />
-                  Approval
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-                  <div>
-                    <dt className="text-sm font-medium text-muted-foreground">Required</dt>
-                    <dd className="mt-1">Yes</dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm font-medium text-muted-foreground">Timeout</dt>
-                    <dd className="mt-1">{launch.approvalConfig.timeoutHours || 24} hours</dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm font-medium text-muted-foreground">Approvers</dt>
-                    <dd className="mt-1">
-                      {launch.approvalConfig.approvers?.map((a) =>
-                        getUserDisplay(a as any)
-                      ).join(', ') || '-'}
-                    </dd>
-                  </div>
-                  {launch.approvedBy && (
-                    <div>
-                      <dt className="text-sm font-medium text-muted-foreground">Approved By</dt>
-                      <dd className="mt-1">{getUserDisplay(launch.approvedBy)}</dd>
-                    </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Left column — Outputs & Parameters (2/3 width) */}
+            <div className="lg:col-span-2 space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Outputs</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {launch.pulumiOutputs && Object.keys(launch.pulumiOutputs).length > 0 ? (
+                    <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                      {Object.entries(launch.pulumiOutputs).map(([key, value]) => (
+                        <div key={key}>
+                          <dt className="text-sm font-medium text-muted-foreground">{key}</dt>
+                          <dd className="mt-1 font-mono text-sm break-all">{String(value)}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No outputs available yet.</p>
                   )}
-                </dl>
-              </CardContent>
-            </Card>
-          )}
+                </CardContent>
+              </Card>
+
+              {launch.parameters && Object.keys(launch.parameters).length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Parameters</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                      {Object.entries(launch.parameters).map(([key, value]) => (
+                        <div key={key}>
+                          <dt className="text-sm font-medium text-muted-foreground">{key}</dt>
+                          <dd className="mt-1 font-mono text-sm">{String(value)}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
+            {/* Right column — Details card (1/3 width) */}
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Details</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <dl className="space-y-4">
+                    <div>
+                      <dt className="text-sm font-medium text-muted-foreground">Provider</dt>
+                      <dd className="mt-1">{providerLabels[launch.provider] ?? launch.provider}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-sm font-medium text-muted-foreground">Region</dt>
+                      <dd className="mt-1 font-mono">{launch.region}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-sm font-medium text-muted-foreground">Template</dt>
+                      <dd className="mt-1">{template?.name || template?.slug || '-'}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-sm font-medium text-muted-foreground">Cloud Account</dt>
+                      <dd className="mt-1">{cloudAccount?.name || '-'}</dd>
+                    </div>
+                    {launch.pulumiStackName && (
+                      <div>
+                        <dt className="text-sm font-medium text-muted-foreground">Pulumi Stack</dt>
+                        <dd className="mt-1 font-mono">{launch.pulumiStackName}</dd>
+                      </div>
+                    )}
+                    {app && (
+                      <div>
+                        <dt className="text-sm font-medium text-muted-foreground">Linked App</dt>
+                        <dd className="mt-1">
+                          <Link href={`/apps/${app.id}`} className="text-primary hover:underline">
+                            {app.name || app.id}
+                          </Link>
+                        </dd>
+                      </div>
+                    )}
+                    <div>
+                      <dt className="text-sm font-medium text-muted-foreground">Launched By</dt>
+                      <dd className="mt-1">{getUserDisplay(launch.launchedBy)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-sm font-medium text-muted-foreground">Created</dt>
+                      <dd className="mt-1">{formatDate(launch.createdAt)}</dd>
+                    </div>
+                  </dl>
+                </CardContent>
+              </Card>
+
+              {launch.approvalConfig?.required && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Shield className="h-5 w-5" />
+                      Approval
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <dl className="space-y-4">
+                      <div>
+                        <dt className="text-sm font-medium text-muted-foreground">Timeout</dt>
+                        <dd className="mt-1">{launch.approvalConfig.timeoutHours || 24} hours</dd>
+                      </div>
+                      <div>
+                        <dt className="text-sm font-medium text-muted-foreground">Approvers</dt>
+                        <dd className="mt-1">
+                          {launch.approvalConfig.approvers?.map((a) =>
+                            getUserDisplay(a as any)
+                          ).join(', ') || '-'}
+                        </dd>
+                      </div>
+                      {launch.approvedBy && (
+                        <div>
+                          <dt className="text-sm font-medium text-muted-foreground">Approved By</dt>
+                          <dd className="mt-1">{getUserDisplay(launch.approvedBy)}</dd>
+                        </div>
+                      )}
+                    </dl>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </div>
         </TabsContent>
 
         {/* Progress Tab */}
@@ -419,6 +445,20 @@ export function LaunchDetail({ launch, currentUserId }: LaunchDetailProps) {
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        {/* Resources Tab */}
+        <TabsContent value="resources">
+          <Card>
+            <CardHeader>
+              <CardTitle>Provisioned Resources</CardTitle>
+            </CardHeader>
+            <CardContent className="py-16 text-center text-muted-foreground">
+              {status === 'active'
+                ? 'Resource inventory will be available in a future update.'
+                : 'Resources will appear here once the launch is active.'}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* History Tab */}

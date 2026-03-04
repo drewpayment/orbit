@@ -5,13 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { ProviderIcon } from './ProviderIcon'
 import {
   Table,
   TableBody,
@@ -53,12 +47,15 @@ interface LaunchesTableProps {
 
 type StatusFilter = 'all' | 'active' | 'launching' | 'awaiting_approval' | 'failed' | 'pending' | 'deorbited' | 'deorbiting' | 'aborted'
 
-const providerLabels: Record<string, string> = {
-  aws: 'AWS',
-  gcp: 'GCP',
-  azure: 'Azure',
-  digitalocean: 'DigitalOcean',
-}
+const statusOptions: { value: StatusFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'active', label: 'Active' },
+  { value: 'launching', label: 'Launching' },
+  { value: 'awaiting_approval', label: 'Awaiting Approval' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'failed', label: 'Failed' },
+  { value: 'deorbited', label: 'Deorbited' },
+]
 
 function getTemplateName(template: LaunchDoc['template']): string {
   if (!template) return '-'
@@ -152,22 +149,19 @@ export function LaunchesTable({ launches }: LaunchesTableProps) {
             className="pl-9"
           />
         </div>
-        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="launching">Launching</SelectItem>
-            <SelectItem value="awaiting_approval">Awaiting Approval</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="failed">Failed</SelectItem>
-            <SelectItem value="deorbiting">Deorbiting</SelectItem>
-            <SelectItem value="deorbited">Deorbited</SelectItem>
-            <SelectItem value="aborted">Aborted</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-1">
+          {statusOptions.map((opt) => (
+            <Button
+              key={opt.value}
+              variant={statusFilter === opt.value ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => setStatusFilter(opt.value)}
+              className="h-8 text-xs"
+            >
+              {opt.label}
+            </Button>
+          ))}
+        </div>
       </div>
 
       {/* Table */}
@@ -206,15 +200,22 @@ export function LaunchesTable({ launches }: LaunchesTableProps) {
             <TableBody>
               {filteredLaunches.map((launch) => (
                 <TableRow key={launch.id}>
-                  <TableCell className="font-medium">
-                    <Link
-                      href={`/launches/${launch.id}`}
-                      className="hover:underline"
-                    >
-                      {launch.name}
-                    </Link>
+                  <TableCell>
+                    <div>
+                      <Link
+                        href={`/launches/${launch.id}`}
+                        className="font-medium hover:underline"
+                      >
+                        {launch.name}
+                      </Link>
+                      <div className="text-xs text-muted-foreground">
+                        {getTemplateName(launch.template) !== '-'
+                          ? getTemplateName(launch.template)
+                          : 'Standalone infrastructure'}
+                      </div>
+                    </div>
                   </TableCell>
-                  <TableCell>{providerLabels[launch.provider] ?? launch.provider}</TableCell>
+                  <TableCell><ProviderIcon provider={launch.provider} showLabel /></TableCell>
                   <TableCell>{getTemplateName(launch.template)}</TableCell>
                   <TableCell className="font-mono text-sm">{launch.region}</TableCell>
                   <TableCell>

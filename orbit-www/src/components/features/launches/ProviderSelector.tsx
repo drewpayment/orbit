@@ -3,21 +3,21 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { ProviderIcon } from './ProviderIcon'
 
 export type Provider = 'aws' | 'gcp' | 'azure' | 'digitalocean'
 
 interface ProviderInfo {
   id: Provider
   name: string
-  icon: string
   description: string
 }
 
 const PROVIDERS: ProviderInfo[] = [
-  { id: 'aws', name: 'AWS', icon: '☁️', description: 'Amazon Web Services' },
-  { id: 'gcp', name: 'GCP', icon: '🌐', description: 'Google Cloud Platform' },
-  { id: 'azure', name: 'Azure', icon: '🔷', description: 'Microsoft Azure' },
-  { id: 'digitalocean', name: 'DigitalOcean', icon: '🌊', description: 'DigitalOcean' },
+  { id: 'aws', name: 'AWS', description: 'Amazon Web Services' },
+  { id: 'gcp', name: 'GCP', description: 'Google Cloud Platform' },
+  { id: 'azure', name: 'Azure', description: 'Microsoft Azure' },
+  { id: 'digitalocean', name: 'DigitalOcean', description: 'DigitalOcean' },
 ]
 
 interface ProviderSelectorProps {
@@ -48,9 +48,7 @@ export function ProviderSelector({ templateCounts, onSelect }: ProviderSelectorP
               onClick={() => count > 0 && onSelect(provider.id)}
             >
               <CardContent className="flex flex-col items-center text-center pt-6 pb-4 gap-3">
-                <span className="text-4xl" role="img" aria-label={provider.name}>
-                  {provider.icon}
-                </span>
+                <ProviderIcon provider={provider.id} size={40} />
                 <div>
                   <h3 className="font-semibold text-lg">{provider.name}</h3>
                   <p className="text-sm text-muted-foreground">{provider.description}</p>
