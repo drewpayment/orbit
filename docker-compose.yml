@@ -136,6 +136,29 @@ services:
       - GOOGLE_CREDENTIALS=${GOOGLE_CREDENTIALS:-}
     restart: unless-stopped
 
+  launches-worker-azure:
+    container_name: orbit-launches-worker-azure
+    build:
+      context: ./launches-worker-azure
+      dockerfile: Dockerfile
+    depends_on:
+      temporal-server:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      - TEMPORAL_ADDRESS=temporal-server:7233
+      - TEMPORAL_NAMESPACE=default
+      - TASK_QUEUE=launches_azure
+      - PULUMI_BACKEND_URL=s3://pulumi-state?endpoint=minio:9000&s3ForcePathStyle=true
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
+      - AZURE_SUBSCRIPTION_ID=${AZURE_SUBSCRIPTION_ID:-}
+    restart: unless-stopped
+
   buildkit:
     container_name: orbit-buildkit
     image: moby/buildkit:latest
