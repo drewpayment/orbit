@@ -1,0 +1,3 @@
+name: orbit-vpc-network
+runtime: nodejs
+description: Provisions a GCP VPC network with subnet, router, NAT, and firewall rules
