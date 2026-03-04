@@ -151,7 +151,7 @@ export const launchTemplatesSeedData = [
     type: 'resource' as const,
     provider: 'gcp' as const,
     category: 'storage' as const,
-    pulumiProgram: 'resources/gcs-bucket',
+    pulumiProjectPath: 'resources/gcs-bucket',
     estimatedDuration: '~2 min',
     parameterSchema: {
       type: 'object',
@@ -171,7 +171,7 @@ export const launchTemplatesSeedData = [
     type: 'resource' as const,
     provider: 'gcp' as const,
     category: 'database' as const,
-    pulumiProgram: 'resources/cloud-sql-postgresql',
+    pulumiProjectPath: 'resources/cloud-sql-postgresql',
     estimatedDuration: '~10 min',
     parameterSchema: {
       type: 'object',
@@ -191,7 +191,7 @@ export const launchTemplatesSeedData = [
     type: 'resource' as const,
     provider: 'gcp' as const,
     category: 'container' as const,
-    pulumiProgram: 'resources/cloud-run-service',
+    pulumiProjectPath: 'resources/cloud-run-service',
     estimatedDuration: '~3 min',
     parameterSchema: {
       type: 'object',
@@ -214,7 +214,7 @@ export const launchTemplatesSeedData = [
     type: 'resource' as const,
     provider: 'gcp' as const,
     category: 'networking' as const,
-    pulumiProgram: 'resources/vpc-network',
+    pulumiProjectPath: 'resources/vpc-network',
     estimatedDuration: '~3 min',
     parameterSchema: {
       type: 'object',
@@ -233,7 +233,7 @@ export const launchTemplatesSeedData = [
     type: 'bundle' as const,
     provider: 'gcp' as const,
     category: 'compute' as const,
-    pulumiProgram: 'bundles/web-app-backend',
+    pulumiProjectPath: 'bundles/web-app-backend',
     estimatedDuration: '~15 min',
     parameterSchema: {
       type: 'object',
@@ -252,7 +252,7 @@ export const launchTemplatesSeedData = [
     type: 'bundle' as const,
     provider: 'gcp' as const,
     category: 'storage' as const,
-    pulumiProgram: 'bundles/static-site',
+    pulumiProjectPath: 'bundles/static-site',
     estimatedDuration: '~8 min',
     parameterSchema: {
       type: 'object',
