@@ -1,0 +1,27 @@
+{
+  "name": "@orbit/launches-worker-gcp",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "start": "ts-node src/worker.ts",
+    "dev": "ts-node-dev --respawn src/worker.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@temporalio/activity": "^1.11.0",
+    "@temporalio/client": "^1.11.0",
+    "@temporalio/worker": "^1.11.0",
+    "@pulumi/pulumi": "^3",
+    "@pulumi/gcp": "^8",
+    "google-auth-library": "^9"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "ts-node": "^10",
+    "ts-node-dev": "^2",
+    "@types/node": "^20",
+    "vitest": "^2"
+  }
+}
