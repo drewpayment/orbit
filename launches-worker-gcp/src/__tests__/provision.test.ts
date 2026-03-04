@@ -119,10 +119,10 @@ describe("provisionInfra", () => {
     await provisionInfra(input);
 
     const userConfigCalls = mockSetConfig.mock.calls.filter(
-      ([key]: [string]) =>
-        key !== "gcp:project" && key !== "gcp:region"
+      (call: unknown[]) =>
+        call[0] !== "gcp:project" && call[0] !== "gcp:region"
     );
-    const userKeys = userConfigCalls.map(([key]: [string]) => key);
+    const userKeys = userConfigCalls.map((call: unknown[]) => call[0]);
     expect(userKeys).not.toContain("project");
     expect(userKeys).not.toContain("region");
   });
