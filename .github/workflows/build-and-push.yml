@@ -8,6 +8,9 @@ on:
       - 'orbit-docs/**'
       - 'services/**'
       - 'temporal-workflows/**'
+      - 'launches-worker-aws/**'
+      - 'launches-worker-gcp/**'
+      - 'launches-worker-azure/**'
       - 'proto/**'
       - '.github/workflows/build-and-push.yml'
   workflow_dispatch:
@@ -33,6 +36,9 @@ jobs:
       kafka-service: ${{ steps.filter.outputs.kafka-service }}
       plugins-service: ${{ steps.filter.outputs.plugins-service }}
       temporal-worker: ${{ steps.filter.outputs.temporal-worker }}
+      launches-worker-aws: ${{ steps.filter.outputs.launches-worker-aws }}
+      launches-worker-gcp: ${{ steps.filter.outputs.launches-worker-gcp }}
+      launches-worker-azure: ${{ steps.filter.outputs.launches-worker-azure }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -61,6 +67,12 @@ jobs:
             temporal-worker:
               - 'temporal-workflows/**'
               - 'proto/**'
+            launches-worker-aws:
+              - 'launches-worker-aws/**'
+            launches-worker-gcp:
+              - 'launches-worker-gcp/**'
+            launches-worker-azure:
+              - 'launches-worker-azure/**'
 
   build:
     needs: changes
@@ -96,6 +108,15 @@ jobs:
           - service: temporal-worker
             dockerfile: temporal-workflows/Dockerfile
             context: .
+          - service: launches-worker-aws
+            dockerfile: launches-worker-aws/Dockerfile
+            context: launches-worker-aws
+          - service: launches-worker-gcp
+            dockerfile: launches-worker-gcp/Dockerfile
+            context: launches-worker-gcp
+          - service: launches-worker-azure
+            dockerfile: launches-worker-azure/Dockerfile
+            context: launches-worker-azure
     steps:
       - name: Check if service changed
         id: check
