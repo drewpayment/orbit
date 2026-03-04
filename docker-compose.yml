@@ -116,6 +116,26 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
     restart: unless-stopped
 
+  launches-worker-gcp:
+    container_name: orbit-launches-worker-gcp
+    build:
+      context: ./launches-worker-gcp
+      dockerfile: Dockerfile
+    depends_on:
+      temporal-server:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      - TEMPORAL_ADDRESS=temporal-server:7233
+      - TEMPORAL_NAMESPACE=default
+      - TASK_QUEUE=launches_gcp
+      - PULUMI_BACKEND_URL=s3://pulumi-state?endpoint=minio:9000&s3ForcePathStyle=true
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - GOOGLE_CREDENTIALS=${GOOGLE_CREDENTIALS:-}
+    restart: unless-stopped
+
   buildkit:
     container_name: orbit-buildkit
     image: moby/buildkit:latest
