@@ -38,22 +38,18 @@ new gcp.compute.Firewall("orbit-allow-iap-ssh", {
   sourceRanges: ["35.235.240.0/20"], // Google IAP range
 });
 
-let natIpAddress: pulumi.Output<string> | undefined;
-
 if (enableNat) {
   const router = new gcp.compute.Router("orbit-router", {
     name: `${networkName}-router`,
     network: network.id,
   });
 
-  const nat = new gcp.compute.RouterNat("orbit-nat", {
+  new gcp.compute.RouterNat("orbit-nat", {
     name: `${networkName}-nat`,
     router: router.name,
     natIpAllocateOption: "AUTO_ONLY",
     sourceSubnetworkIpRangesToNat: "ALL_SUBNETWORKS_ALL_IP_RANGES",
   });
-
-  natIpAddress = nat.name;
 }
 
 export const networkId = network.id;

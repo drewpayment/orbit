@@ -39,6 +39,11 @@ export async function provisionInfra(
     // GCP requires both project and region (unlike AWS which only needs region)
     const gcpProject =
       (input.parameters.project as string) || process.env.GCP_PROJECT || "";
+    if (!gcpProject) {
+      throw new Error(
+        "GCP project is required: set parameters.project or GCP_PROJECT env var"
+      );
+    }
     await stack.setConfig("gcp:project", { value: gcpProject });
     await stack.setConfig("gcp:region", { value: input.region });
 
