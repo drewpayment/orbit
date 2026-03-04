@@ -1,0 +1,3 @@
+name: orbit-container-app
+runtime: nodejs
+description: Provisions an Azure Container App with a Managed Environment
