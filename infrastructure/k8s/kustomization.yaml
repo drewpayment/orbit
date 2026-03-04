@@ -32,3 +32,6 @@ resources:
   - bifrost
   - build-service
   - temporal-worker
+  - launches-worker-aws
+  - launches-worker-gcp
+  - launches-worker-azure

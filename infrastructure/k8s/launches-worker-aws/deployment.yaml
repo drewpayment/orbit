@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: launches-worker-aws
+  namespace: orbit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: launches-worker-aws
+  template:
+    metadata:
+      labels:
+        app: launches-worker-aws
+    spec:
+      serviceAccountName: orbit
+      containers:
+        - name: launches-worker-aws
+          image: ghcr.io/drewpayment/orbit/launches-worker-aws:latest
+          env:
+            - name: TEMPORAL_ADDRESS
+              value: temporal:7233
+            - name: TEMPORAL_NAMESPACE
+              value: default
+            - name: TASK_QUEUE
+              value: launches_aws
+            - name: PULUMI_BACKEND_URL
+              value: s3://pulumi-state?endpoint=minio:9000&s3ForcePathStyle=true
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: AWS_SECRET_ACCESS_KEY
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 100m
+            limits:
+              memory: 512Mi
+              cpu: 500m
+          livenessProbe:
+            exec:
+              command: ["ls", "/tmp"]
+            initialDelaySeconds: 10
+            periodSeconds: 30
