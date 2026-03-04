@@ -101,7 +101,7 @@ cd orbit-www
 bun run tsx src/scripts/seed-launch-templates.ts
 ```
 
-This creates 12 templates: 6 for AWS and 6 for GCP. Each provider has 2 bundles (Web App Backend, Static Site) and 4 individual resources.
+This creates 18 templates: 6 each for AWS, GCP, and Azure. Each provider has 2 bundles (Web App Backend, Static Site) and 4 individual resources.
 
 ### Pulumi Programs
 
@@ -129,6 +129,17 @@ launches-worker-gcp/src/templates/
     cloud-sql-postgresql/
     cloud-run-service/
     vpc-network/
+```
+
+For Azure, these are in `launches-worker-azure/src/templates/`:
+
+```
+launches-worker-azure/src/templates/
+  resources/
+    blob-storage/
+    postgresql-flexible/
+    container-app/
+    vnet/
 ```
 
 To add a new template:
