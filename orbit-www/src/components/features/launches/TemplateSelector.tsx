@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Search, ArrowLeft, Clock, Info } from 'lucide-react'
+import { Search, Clock, Info } from 'lucide-react'
 import type { Provider } from './ProviderSelector'
 import type { TemplateDoc } from './LaunchWizard'
 
@@ -129,19 +129,12 @@ export function TemplateSelector({ templates, provider, onSelect, onBack }: Temp
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h2 className="text-xl font-semibold">
-            Select Template — {providerLabels[provider]}
-          </h2>
-          <p className="text-muted-foreground mt-1">
-            Choose an infrastructure template to deploy
-          </p>
-        </div>
+    <div className="w-full space-y-6">
+      <div className="text-center">
+        <h2 className="text-2xl font-bold">Choose a Template</h2>
+        <p className="text-muted-foreground mt-2">
+          {providerLabels[provider]} &middot; {providerTemplates.length} template{providerTemplates.length !== 1 ? 's' : ''} available
+        </p>
       </div>
 
       {/* Search and filter */}
@@ -189,6 +182,13 @@ export function TemplateSelector({ templates, provider, onSelect, onBack }: Temp
           {renderTemplateGrid(resources)}
         </TabsContent>
       </Tabs>
+
+      {/* Bottom nav */}
+      <div className="flex justify-end pt-4 border-t">
+        <Button variant="outline" onClick={onBack}>
+          Back
+        </Button>
+      </div>
     </div>
   )
 }

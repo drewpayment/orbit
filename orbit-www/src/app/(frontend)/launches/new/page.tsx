@@ -109,21 +109,17 @@ export default async function NewLaunchPage() {
       <AppSidebar />
       <SidebarInset>
         <SiteHeader />
-        <div className="flex-1 space-y-6 p-8 pt-6">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" asChild>
+        <div className="flex-1 flex flex-col">
+          <div className="flex items-center gap-3 h-14 px-6 border-b">
+            <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
               <Link href="/launches">
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
-            <div>
-              <h1 className="text-3xl font-bold">New Launch</h1>
-              <p className="text-muted-foreground">
-                Deploy infrastructure from a template
-              </p>
-            </div>
+            <h1 className="text-base font-semibold">New Launch</h1>
           </div>
 
+          <div className="flex-1 p-8">
           {workspaceId ? (
             <LaunchWizard
               templates={templates}
@@ -142,6 +138,7 @@ export default async function NewLaunchPage() {
               </CardContent>
             </Card>
           )}
+          </div>
         </div>
       </SidebarInset>
     </SidebarProvider>

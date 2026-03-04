@@ -27,11 +27,11 @@ interface ProviderSelectorProps {
 
 export function ProviderSelector({ templateCounts, onSelect }: ProviderSelectorProps) {
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold">Select Cloud Provider</h2>
-        <p className="text-muted-foreground mt-1">
-          Choose the cloud provider for your infrastructure deployment
+    <div className="space-y-8">
+      <div className="text-center">
+        <h2 className="text-2xl font-bold">Select a Cloud Provider</h2>
+        <p className="text-muted-foreground mt-2">
+          Choose where you want to provision your infrastructure
         </p>
       </div>
 

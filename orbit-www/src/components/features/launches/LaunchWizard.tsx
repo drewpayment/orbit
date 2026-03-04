@@ -180,7 +180,7 @@ export function LaunchWizard({ templates, cloudAccounts, workspaceId }: LaunchWi
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="flex flex-col items-center space-y-8">
       {/* Step indicator */}
       <div className="flex items-center gap-2">
         {stepLabels.map((label, i) => {
@@ -190,16 +190,16 @@ export function LaunchWizard({ templates, cloudAccounts, workspaceId }: LaunchWi
           return (
             <div key={label} className="flex items-center gap-2">
               {i > 0 && (
-                <div className={`h-px w-8 ${isCompleted || isActive ? 'bg-primary' : 'bg-border'}`} />
+                <div className={`h-px w-10 ${isCompleted ? 'bg-primary' : 'bg-border'}`} />
               )}
               <div className="flex items-center gap-2">
                 <div
-                  className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium ${
+                  className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${
                     isActive
                       ? 'bg-primary text-primary-foreground'
                       : isCompleted
                         ? 'bg-primary/20 text-primary'
-                        : 'bg-muted text-muted-foreground'
+                        : 'border border-border text-muted-foreground'
                   }`}
                 >
                   {isCompleted ? (
@@ -241,7 +241,7 @@ export function LaunchWizard({ templates, cloudAccounts, workspaceId }: LaunchWi
 
       {/* Step 3: Configure */}
       {step === 3 && selectedProvider && selectedTemplate && (
-        <div className="space-y-6">
+        <div className="w-full max-w-2xl space-y-6">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => setStep(2)}>
               <ArrowLeft className="h-4 w-4" />
@@ -348,7 +348,7 @@ export function LaunchWizard({ templates, cloudAccounts, workspaceId }: LaunchWi
 
       {/* Step 4: Review & Launch */}
       {step === 4 && selectedProvider && selectedTemplate && selectedCloudAccount && (
-        <div className="space-y-6">
+        <div className="w-full max-w-2xl space-y-6">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => setStep(3)}>
               <ArrowLeft className="h-4 w-4" />
