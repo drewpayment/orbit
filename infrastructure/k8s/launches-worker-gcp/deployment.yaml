@@ -30,12 +30,12 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: orbit-secrets
-                  key: AWS_ACCESS_KEY_ID
+                  key: MINIO_ROOT_USER
             - name: AWS_SECRET_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
                   name: orbit-secrets
-                  key: AWS_SECRET_ACCESS_KEY
+                  key: MINIO_ROOT_PASSWORD
             - name: GOOGLE_CREDENTIALS
               valueFrom:
                 secretKeyRef:
