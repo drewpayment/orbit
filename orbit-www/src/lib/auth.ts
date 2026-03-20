@@ -18,6 +18,21 @@ export const auth = betterAuth({
   },
   emailVerification: {
     sendVerificationEmail: async ({ user, url }) => {
+      if (process.env.NODE_ENV === "development") {
+        console.log(`\n${"=".repeat(60)}`)
+        console.log(`📧 EMAIL VERIFICATION (dev mode)`)
+        console.log(`   To: ${user.email}`)
+        console.log(`   URL: ${url}`)
+        console.log(`${"=".repeat(60)}\n`)
+      }
+
+      if (!process.env.RESEND_API_KEY) {
+        if (process.env.NODE_ENV === "development") {
+          console.log(`   (No RESEND_API_KEY — skipping email send in dev mode)`)
+        }
+        return
+      }
+
       const { Resend } = await import("resend")
       const resend = new Resend(process.env.RESEND_API_KEY)
       const fromEmail = process.env.RESEND_FROM_EMAIL || "noreply@hoytlabs.app"

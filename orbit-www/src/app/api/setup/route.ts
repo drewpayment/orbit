@@ -72,6 +72,22 @@ export async function POST(request: Request) {
       console.error('[setup] Better Auth signup did not return a user ID')
       return NextResponse.json({ error: 'Setup failed. Please try again.' }, { status: 500 })
     }
+
+    // First user should be auto-approved — update Better Auth user directly
+    const { MongoClient, ObjectId } = await import('mongodb')
+    const setupClient = new MongoClient(process.env.DATABASE_URI || '', {
+      serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 5000,
+    })
+    try {
+      await setupClient.connect()
+      await setupClient.db().collection('user').updateOne(
+        { _id: new ObjectId(authUserId) },
+        { $set: { status: 'approved', role: 'admin', emailVerified: true } }
+      )
+    } finally {
+      await setupClient.close()
+    }
   } catch (error) {
     console.error('[setup] Better Auth signup failed:', error)
     return NextResponse.json({ error: 'Setup failed. Please try again.' }, { status: 500 })
@@ -83,8 +99,9 @@ export async function POST(request: Request) {
 
     const payloadUser = await payload.create({
       collection: 'users',
-      data: { email, name, password },
+      data: { email, name, password, status: 'approved' },
       overrideAccess: true,
+      context: { skipApprovalHook: true },
     })
 
     await payload.create({

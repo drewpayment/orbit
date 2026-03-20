@@ -84,25 +84,38 @@ export const userApprovalAfterChangeHook: CollectionAfterChangeHook = async ({
 
         const verificationUrl = `${appUrl}/api/auth/verify-email?token=${token}&callbackURL=${encodeURIComponent(appUrl + '/login')}`
 
-        await resend.emails.send({
-          from: fromEmail,
-          to: doc.email,
-          subject: 'Verify your Orbit account',
-          html: `
-            <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #1a1a1a;">Verify your email address</h2>
-              <p>Your Orbit account has been approved! Click the link below to verify your email and start using Orbit.</p>
-              <p style="margin: 24px 0;">
-                <a href="${verificationUrl}" style="display: inline-block; background: #FF5C00; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 500;">
-                  Verify Email
-                </a>
-              </p>
-              <p style="color: #666; font-size: 14px;">This link expires in 24 hours. If you didn't create an Orbit account, you can ignore this email.</p>
-            </div>
-          `,
-        })
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`\n${'='.repeat(60)}`)
+          console.log(`📧 EMAIL VERIFICATION (dev mode)`)
+          console.log(`   To: ${doc.email}`)
+          console.log(`   URL: ${verificationUrl}`)
+          console.log(`${'='.repeat(60)}\n`)
+        }
 
-        console.log(`[userApprovalHook] Verification email sent to ${doc.email}`)
+        if (!process.env.RESEND_API_KEY) {
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`   (No RESEND_API_KEY — skipping email send in dev mode)`)
+          }
+        } else {
+          await resend.emails.send({
+            from: fromEmail,
+            to: doc.email,
+            subject: 'Verify your Orbit account',
+            html: `
+              <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #1a1a1a;">Verify your email address</h2>
+                <p>Your Orbit account has been approved! Click the link below to verify your email and start using Orbit.</p>
+                <p style="margin: 24px 0;">
+                  <a href="${verificationUrl}" style="display: inline-block; background: #FF5C00; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 500;">
+                    Verify Email
+                  </a>
+                </p>
+                <p style="color: #666; font-size: 14px;">This link expires in 24 hours. If you didn't create an Orbit account, you can ignore this email.</p>
+              </div>
+            `,
+          })
+          console.log(`[userApprovalHook] Verification email sent to ${doc.email}`)
+        }
       } catch (error) {
         console.error(`[userApprovalHook] Failed to send verification email to ${doc.email}:`, error)
       }
