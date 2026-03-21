@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
@@ -126,6 +127,12 @@ export default async function KnowledgePage({ params }: PageProps) {
                         Documentation and knowledge for {workspace.name}
                       </p>
                     </div>
+                    <Button asChild>
+                      <Link href={`/workspaces/${slug}/knowledge/new`}>
+                        <BookOpen className="h-4 w-4 mr-2" />
+                        New Space
+                      </Link>
+                    </Button>
                   </div>
                 </div>
 
@@ -139,6 +146,12 @@ export default async function KnowledgePage({ params }: PageProps) {
                         Knowledge spaces help organize documentation, guides, and other content for
                         your workspace.
                       </p>
+                      <Button className="mt-4" asChild>
+                        <Link href={`/workspaces/${slug}/knowledge/new`}>
+                          <BookOpen className="h-4 w-4 mr-2" />
+                          Create Knowledge Space
+                        </Link>
+                      </Button>
                     </CardContent>
                   </Card>
                 )}
