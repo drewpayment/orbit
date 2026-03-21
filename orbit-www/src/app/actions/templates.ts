@@ -392,6 +392,8 @@ export async function importTemplate(input: ImportTemplateInput): Promise<Import
       variables: manifest.variables || [],
       createdBy: payloadUser.betterAuthId,
     },
+    user: payloadUser,
+    overrideAccess: false,
   })
 
   revalidatePath('/templates')
@@ -672,6 +674,8 @@ export async function instantiateTemplate(
     data: {
       usageCount: (template.usageCount || 0) + 1,
     },
+    user: payloadUser,
+    overrideAccess: false,
   })
 
   return {
@@ -758,6 +762,8 @@ export async function updateTemplate(input: UpdateTemplateInput): Promise<Update
     collection: 'templates',
     id: input.templateId,
     data: updateData,
+    user: payloadUser,
+    overrideAccess: false,
   })
 
   // Revalidate paths
@@ -818,6 +824,8 @@ export async function deleteTemplate(templateId: string): Promise<UpdateTemplate
   await payload.delete({
     collection: 'templates',
     id: templateId,
+    user: payloadUser,
+    overrideAccess: false,
   })
 
   // Revalidate paths
@@ -878,6 +886,8 @@ export async function archiveTemplate(templateId: string): Promise<UpdateTemplat
       visibility: 'workspace',
       sharedWith: [],
     },
+    user: payloadUser,
+    overrideAccess: false,
   })
 
   // Revalidate paths
@@ -994,6 +1004,8 @@ export async function registerTemplateWebhook(templateId: string): Promise<{ suc
         webhookId: String(hook.id),
         webhookSecret,
       },
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     revalidatePath(`/templates/${template.slug}`)
@@ -1524,6 +1536,8 @@ export async function startInstantiation(input: StartInstantiationInput): Promis
     data: {
       usageCount: (template.usageCount || 0) + 1,
     },
+    user: payloadUser,
+    overrideAccess: false,
   })
 
   return {
@@ -1669,6 +1683,8 @@ export async function unregisterTemplateWebhook(templateId: string): Promise<{ s
         webhookId: null,
         webhookSecret: null,
       },
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     revalidatePath(`/templates/${template.slug}`)
@@ -1688,6 +1704,8 @@ export async function unregisterTemplateWebhook(templateId: string): Promise<{ s
           webhookId: null,
           webhookSecret: null,
         },
+        user: payloadUser,
+        overrideAccess: false,
       })
       return { success: true }
     }
