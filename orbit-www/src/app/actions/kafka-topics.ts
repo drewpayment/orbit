@@ -56,6 +56,7 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
       collection: 'kafka-virtual-clusters',
       id: input.virtualClusterId,
       depth: 2,
+      overrideAccess: true,
     })
 
     if (!virtualCluster) {
@@ -65,7 +66,7 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
 
     const application =
       typeof virtualCluster.application === 'string'
-        ? await payload.findByID({ collection: 'kafka-applications', id: virtualCluster.application })
+        ? await payload.findByID({ collection: 'kafka-applications', id: virtualCluster.application, overrideAccess: true })
         : virtualCluster.application
 
     if (!application) {
@@ -295,7 +296,6 @@ export async function deleteTopic(topicId: string): Promise<{ success: boolean; 
 
 export async function approveTopic(
   topicId: string,
-  userId: string
 ): Promise<{ success: boolean; error?: string }> {
   const payloadUser = await getPayloadUserFromSession()
   if (!payloadUser) {
@@ -338,7 +338,7 @@ export async function approveTopic(
       id: topicId,
       data: {
         status: 'provisioning',
-        approvedBy: userId,
+        approvedBy: payloadUser.betterAuthId || payloadUser.id,
         approvedAt: new Date().toISOString(),
       },
       overrideAccess: true,
@@ -351,6 +351,7 @@ export async function approveTopic(
             collection: 'kafka-virtual-clusters',
             id: topic.virtualCluster,
             depth: 1,
+            overrideAccess: true,
           })
         : topic.virtualCluster
 
@@ -363,6 +364,7 @@ export async function approveTopic(
         ? await payload.findByID({
             collection: 'kafka-clusters',
             id: virtualCluster.physicalCluster,
+            overrideAccess: true,
           })
         : virtualCluster?.physicalCluster
 
