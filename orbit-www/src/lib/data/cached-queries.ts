@@ -133,10 +133,15 @@ export interface BetterAuthUser {
  */
 export const getBetterAuthUser = cache(async (userId: string): Promise<BetterAuthUser | null> => {
   const client = await getMongoClient()
-  const doc = await client.db().collection('user').findOne({ id: userId })
+  // Better Auth may store the user ID as `id` or `_id` depending on the adapter
+  const { ObjectId } = await import('mongodb')
+  let doc = await client.db().collection('user').findOne({ id: userId })
+  if (!doc && ObjectId.isValid(userId)) {
+    doc = await client.db().collection('user').findOne({ _id: new ObjectId(userId) })
+  }
   if (!doc) return null
   return {
-    id: doc.id as string,
+    id: (doc.id as string) || doc._id.toString(),
     name: (doc.name as string) || '',
     email: (doc.email as string) || '',
     image: (doc.image as string) || null,
@@ -148,14 +153,22 @@ export const getBetterAuthUser = cache(async (userId: string): Promise<BetterAut
  */
 export const getBetterAuthUsers = cache(async (userIds: string[]): Promise<BetterAuthUser[]> => {
   if (userIds.length === 0) return []
+  const { ObjectId } = await import('mongodb')
   const client = await getMongoClient()
+  // Query by both `id` field and `_id` to handle either storage format
+  const objectIds = userIds.filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id))
   const docs = await client
     .db()
     .collection('user')
-    .find({ id: { $in: userIds } })
+    .find({
+      $or: [
+        { id: { $in: userIds } },
+        ...(objectIds.length > 0 ? [{ _id: { $in: objectIds } }] : []),
+      ],
+    })
     .toArray()
   return docs.map((doc) => ({
-    id: doc.id as string,
+    id: (doc.id as string) || doc._id.toString(),
     name: (doc.name as string) || '',
     email: (doc.email as string) || '',
     image: (doc.image as string) || null,
@@ -170,7 +183,7 @@ export const getBetterAuthUserByEmail = cache(async (email: string): Promise<Bet
   const doc = await client.db().collection('user').findOne({ email })
   if (!doc) return null
   return {
-    id: doc.id as string,
+    id: (doc.id as string) || doc._id.toString(),
     name: (doc.name as string) || '',
     email: (doc.email as string) || '',
     image: (doc.image as string) || null,

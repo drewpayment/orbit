@@ -2,8 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { headers } from 'next/headers'
-import { auth } from '@/lib/auth'
+import { getPayloadUserFromSession } from '@/lib/auth/session'
 import { startDeploymentWorkflow, getDeploymentProgress } from '@/lib/clients/deployment-client'
 import type { JsonObject } from '@bufbuild/protobuf'
 
@@ -22,8 +21,8 @@ interface CreateDeploymentInput {
 }
 
 export async function createDeployment(input: CreateDeploymentInput) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -34,6 +33,7 @@ export async function createDeployment(input: CreateDeploymentInput) {
     collection: 'apps',
     id: input.appId,
     depth: 1,
+    overrideAccess: true,
   })
 
   if (!app) {
@@ -50,10 +50,11 @@ export async function createDeployment(input: CreateDeploymentInput) {
     where: {
       and: [
         { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: payloadUser.betterAuthId } },
         { status: { equals: 'active' } },
       ],
     },
+    overrideAccess: true,
   })
 
   if (members.docs.length === 0) {
@@ -79,6 +80,8 @@ export async function createDeployment(input: CreateDeploymentInput) {
         status: 'pending',
         healthStatus: 'unknown',
       },
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     // TODO: Start Temporal workflow
@@ -94,8 +97,8 @@ export async function createDeployment(input: CreateDeploymentInput) {
 }
 
 export async function startDeployment(deploymentId: string) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -106,6 +109,7 @@ export async function startDeployment(deploymentId: string) {
     collection: 'deployments',
     id: deploymentId,
     depth: 2,
+    overrideAccess: true,
   })
 
   if (!deployment) {
@@ -121,6 +125,7 @@ export async function startDeployment(deploymentId: string) {
     collection: 'apps',
     id: appId,
     depth: 1,
+    overrideAccess: true,
   })
 
   if (!app) {
@@ -137,10 +142,11 @@ export async function startDeployment(deploymentId: string) {
     where: {
       and: [
         { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: payloadUser.betterAuthId } },
         { status: { equals: 'active' } },
       ],
     },
+    overrideAccess: true,
   })
 
   if (members.docs.length === 0) {
@@ -174,7 +180,7 @@ export async function startDeployment(deploymentId: string) {
       deploymentId,
       appId,
       workspaceId,
-      userId: session.user.id,
+      userId: payloadUser.betterAuthId,
       generatorType: deployment.generator,
       generatorSlug,
       config: deploymentConfig,
@@ -194,6 +200,8 @@ export async function startDeployment(deploymentId: string) {
         status: 'deploying',
         workflowId: response.workflowId,
       },
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     return { success: true, workflowId: response.workflowId }
@@ -210,6 +218,8 @@ export async function startDeployment(deploymentId: string) {
           status: 'failed',
           deploymentError: errorMessage,
         },
+        user: payloadUser,
+        overrideAccess: false,
       })
     } catch (updateError) {
       console.error('Failed to update deployment status:', updateError)
@@ -220,8 +230,8 @@ export async function startDeployment(deploymentId: string) {
 }
 
 export async function getDeploymentStatus(deploymentId: string) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return null
   }
 
@@ -232,6 +242,7 @@ export async function getDeploymentStatus(deploymentId: string) {
       collection: 'deployments',
       id: deploymentId,
       depth: 1,
+      overrideAccess: true,
     })
 
     if (!deployment) {
@@ -247,6 +258,7 @@ export async function getDeploymentStatus(deploymentId: string) {
       collection: 'apps',
       id: appId,
       depth: 1,
+      overrideAccess: true,
     })
 
     if (!app) {
@@ -263,10 +275,11 @@ export async function getDeploymentStatus(deploymentId: string) {
       where: {
         and: [
           { workspace: { equals: workspaceId } },
-          { user: { equals: session.user.id } },
+          { user: { equals: payloadUser.betterAuthId } },
           { status: { equals: 'active' } },
         ],
       },
+      overrideAccess: true,
     })
 
     if (members.docs.length === 0) {
@@ -290,8 +303,8 @@ export async function getDeploymentStatus(deploymentId: string) {
 }
 
 export async function getDeploymentWorkflowProgress(workflowId: string) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -318,8 +331,8 @@ export async function getDeploymentWorkflowProgress(workflowId: string) {
 }
 
 export async function getDeploymentGenerators() {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Unauthorized', generators: [] }
   }
 
@@ -334,6 +347,7 @@ export async function getDeploymentGenerators() {
         ],
       },
       limit: 100,
+      overrideAccess: true,
     })
 
     return {
@@ -354,8 +368,8 @@ export async function getDeploymentGenerators() {
 }
 
 export async function getGeneratedFiles(deploymentId: string) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Unauthorized', files: [] }
   }
 
@@ -366,6 +380,7 @@ export async function getGeneratedFiles(deploymentId: string) {
       collection: 'deployments',
       id: deploymentId,
       depth: 0,
+      overrideAccess: true,
     })
 
     if (!deployment) {
@@ -381,8 +396,8 @@ export async function getGeneratedFiles(deploymentId: string) {
 }
 
 export async function getRepoBranches(appId: string) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Unauthorized', branches: [] as string[] }
   }
 
@@ -408,7 +423,7 @@ export async function getRepoBranches(appId: string) {
       where: {
         and: [
           { workspace: { equals: repoWorkspaceId } },
-          { user: { equals: session.user.id } },
+          { user: { equals: payloadUser.betterAuthId } },
           { status: { equals: 'active' } },
         ],
       },
@@ -471,8 +486,8 @@ export async function commitGeneratedFiles(input: {
   newBranch?: string
   message: string
 }) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -483,6 +498,7 @@ export async function commitGeneratedFiles(input: {
       collection: 'deployments',
       id: input.deploymentId,
       depth: 1,
+      overrideAccess: true,
     })
 
     if (!deployment) {
@@ -518,10 +534,11 @@ export async function commitGeneratedFiles(input: {
       where: {
         and: [
           { workspace: { equals: workspaceId } },
-          { user: { equals: session.user.id } },
+          { user: { equals: payloadUser.betterAuthId } },
           { status: { equals: 'active' } },
         ],
       },
+      overrideAccess: true,
     })
     if (members.docs.length === 0) {
       return { success: false, error: 'Not a member of this workspace' }
@@ -655,6 +672,8 @@ export async function commitGeneratedFiles(input: {
         status: 'deployed',
         lastDeployedAt: new Date().toISOString(),
       },
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     return { success: true, sha: newCommitData.sha }
@@ -669,8 +688,8 @@ export async function commitGeneratedFiles(input: {
  * Used when user copies the generated files manually.
  */
 export async function skipCommitAndComplete(deploymentId: string) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -684,6 +703,8 @@ export async function skipCommitAndComplete(deploymentId: string) {
         status: 'deployed',
         lastDeployedAt: new Date().toISOString(),
       },
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     return { success: true }
@@ -704,8 +725,8 @@ export async function syncDeploymentStatusFromWorkflow(
   errorMessage?: string,
   generatedFiles?: Array<{ path: string; content: string }>
 ) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -720,6 +741,7 @@ export async function syncDeploymentStatusFromWorkflow(
         const deployment = await payload.findByID({
           collection: 'deployments',
           id: deploymentId,
+          overrideAccess: true,
         })
         // If generator is docker-compose or helm, it's generate mode -> status should be 'generated'
         if (deployment?.generator === 'docker-compose' || deployment?.generator === 'helm') {
@@ -745,6 +767,8 @@ export async function syncDeploymentStatusFromWorkflow(
         ...(newStatus === 'deployed' ? { lastDeployedAt: new Date().toISOString() } : {}),
         ...(newStatus === 'generated' && generatedFiles?.length ? { generatedFiles } : {}),
       },
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     return { success: true, newStatus }
@@ -755,8 +779,8 @@ export async function syncDeploymentStatusFromWorkflow(
 }
 
 export async function deleteDeployment(deploymentId: string) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -767,6 +791,7 @@ export async function deleteDeployment(deploymentId: string) {
       collection: 'deployments',
       id: deploymentId,
       depth: 2,
+      overrideAccess: true,
     })
 
     if (!deployment) {
@@ -782,6 +807,7 @@ export async function deleteDeployment(deploymentId: string) {
       collection: 'apps',
       id: appId,
       depth: 1,
+      overrideAccess: true,
     })
 
     if (!app) {
@@ -797,10 +823,11 @@ export async function deleteDeployment(deploymentId: string) {
       where: {
         and: [
           { workspace: { equals: workspaceId } },
-          { user: { equals: session.user.id } },
+          { user: { equals: payloadUser.betterAuthId } },
           { status: { equals: 'active' } },
         ],
       },
+      overrideAccess: true,
     })
 
     if (members.docs.length === 0) {
@@ -810,6 +837,8 @@ export async function deleteDeployment(deploymentId: string) {
     await payload.delete({
       collection: 'deployments',
       id: deploymentId,
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     return { success: true }

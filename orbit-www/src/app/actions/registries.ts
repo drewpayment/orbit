@@ -2,8 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getPayloadUserFromSession } from '@/lib/auth/session'
 import { decrypt } from '@/lib/encryption'
 
 export interface RegistryConfig {
@@ -37,9 +36,8 @@ export async function getRegistriesAndWorkspaces(): Promise<{
   workspaces: Workspace[]
   error?: string
 }> {
-  const session = await auth.api.getSession({ headers: await headers() })
-
-  if (!session?.user?.id) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { registries: [], workspaces: [], error: 'Unauthorized' }
   }
 
@@ -51,12 +49,13 @@ export async function getRegistriesAndWorkspaces(): Promise<{
       collection: 'workspace-members',
       where: {
         and: [
-          { user: { equals: session.user.id } },
+          { user: { equals: payloadUser.betterAuthId } },
           { status: { equals: 'active' } },
         ],
       },
       depth: 1,
       limit: 100,
+      overrideAccess: true,
     })
 
     const workspaceIds = memberships.docs.map((m) =>
@@ -79,6 +78,7 @@ export async function getRegistriesAndWorkspaces(): Promise<{
             id: { in: adminWorkspaceIds },
           },
           limit: 100,
+          overrideAccess: true,
         })
       : { docs: [] }
 
@@ -91,6 +91,7 @@ export async function getRegistriesAndWorkspaces(): Promise<{
           },
           depth: 1,
           limit: 100,
+          overrideAccess: true,
         })
       : { docs: [] }
 
@@ -122,9 +123,8 @@ export async function createRegistry(data: {
   acrUsername?: string
   acrToken?: string
 }): Promise<{ success: boolean; registry?: RegistryConfig; error?: string }> {
-  const session = await auth.api.getSession({ headers: await headers() })
-
-  if (!session?.user?.id) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -136,11 +136,12 @@ export async function createRegistry(data: {
     where: {
       and: [
         { workspace: { equals: data.workspace } },
-        { user: { equals: session.user.id } },
+        { user: { equals: payloadUser.betterAuthId } },
         { role: { in: ['owner', 'admin'] } },
         { status: { equals: 'active' } },
       ],
     },
+    overrideAccess: true,
   })
 
   if (membership.docs.length === 0) {
@@ -194,6 +195,8 @@ export async function createRegistry(data: {
     const registry = await payload.create({
       collection: 'registry-configs',
       data: registryData as any,
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     return { success: true, registry: registry as unknown as RegistryConfig }
@@ -218,9 +221,8 @@ export async function updateRegistry(
     acrToken?: string
   }
 ): Promise<{ success: boolean; registry?: RegistryConfig; error?: string }> {
-  const session = await auth.api.getSession({ headers: await headers() })
-
-  if (!session?.user?.id) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -230,6 +232,7 @@ export async function updateRegistry(
   const existingRegistry = await payload.findByID({
     collection: 'registry-configs',
     id,
+    overrideAccess: true,
   })
 
   if (!existingRegistry) {
@@ -246,11 +249,12 @@ export async function updateRegistry(
     where: {
       and: [
         { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: payloadUser.betterAuthId } },
         { role: { in: ['owner', 'admin'] } },
         { status: { equals: 'active' } },
       ],
     },
+    overrideAccess: true,
   })
 
   if (membership.docs.length === 0) {
@@ -296,6 +300,8 @@ export async function updateRegistry(
       collection: 'registry-configs',
       id,
       data: updateData as any,
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     return { success: true, registry: registry as unknown as RegistryConfig }
@@ -309,9 +315,8 @@ export async function updateRegistry(
  * Delete a registry config
  */
 export async function deleteRegistry(id: string): Promise<{ success: boolean; error?: string }> {
-  const session = await auth.api.getSession({ headers: await headers() })
-
-  if (!session?.user?.id) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -321,6 +326,7 @@ export async function deleteRegistry(id: string): Promise<{ success: boolean; er
   const existingRegistry = await payload.findByID({
     collection: 'registry-configs',
     id,
+    overrideAccess: true,
   })
 
   if (!existingRegistry) {
@@ -337,11 +343,12 @@ export async function deleteRegistry(id: string): Promise<{ success: boolean; er
     where: {
       and: [
         { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: payloadUser.betterAuthId } },
         { role: { equals: 'owner' } },
         { status: { equals: 'active' } },
       ],
     },
+    overrideAccess: true,
   })
 
   if (membership.docs.length === 0) {
@@ -352,6 +359,8 @@ export async function deleteRegistry(id: string): Promise<{ success: boolean; er
     await payload.delete({
       collection: 'registry-configs',
       id,
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     return { success: true }
@@ -368,9 +377,8 @@ export async function testGhcrConnection(configId: string): Promise<{
   success: boolean
   error?: string
 }> {
-  const session = await auth.api.getSession({ headers: await headers() })
-
-  if (!session?.user?.id) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -408,11 +416,12 @@ export async function testGhcrConnection(configId: string): Promise<{
     where: {
       and: [
         { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: payloadUser.betterAuthId } },
         { role: { in: ['owner', 'admin'] } },
         { status: { equals: 'active' } },
       ],
     },
+    overrideAccess: true,
   })
 
   if (membership.docs.length === 0) {
@@ -468,9 +477,8 @@ export async function setOrbitAsDefault(workspaceId: string): Promise<{
   success: boolean
   error?: string
 }> {
-  const session = await auth.api.getSession({ headers: await headers() })
-
-  if (!session?.user?.id) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -482,11 +490,12 @@ export async function setOrbitAsDefault(workspaceId: string): Promise<{
     where: {
       and: [
         { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: payloadUser.betterAuthId } },
         { role: { in: ['owner', 'admin'] } },
         { status: { equals: 'active' } },
       ],
     },
+    overrideAccess: true,
   })
 
   if (membership.docs.length === 0) {
@@ -524,6 +533,7 @@ export async function setOrbitAsDefault(workspaceId: string): Promise<{
           { type: { equals: 'orbit' } },
         ],
       },
+      overrideAccess: true,
     })
 
     if (existingOrbit.docs.length > 0) {
@@ -532,6 +542,8 @@ export async function setOrbitAsDefault(workspaceId: string): Promise<{
         collection: 'registry-configs',
         id: existingOrbit.docs[0].id,
         data: { isDefault: true },
+        user: payloadUser,
+        overrideAccess: false,
       })
     } else {
       // Create new Orbit registry as default
@@ -543,6 +555,8 @@ export async function setOrbitAsDefault(workspaceId: string): Promise<{
           workspace: workspaceId,
           isDefault: true,
         } as any,
+        user: payloadUser,
+        overrideAccess: false,
       })
     }
 
@@ -560,9 +574,8 @@ export async function testAcrConnection(configId: string): Promise<{
   success: boolean
   error?: string
 }> {
-  const session = await auth.api.getSession({ headers: await headers() })
-
-  if (!session?.user?.id) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -611,11 +624,12 @@ export async function testAcrConnection(configId: string): Promise<{
     where: {
       and: [
         { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: payloadUser.betterAuthId } },
         { role: { in: ['owner', 'admin'] } },
         { status: { equals: 'active' } },
       ],
     },
+    overrideAccess: true,
   })
 
   if (membership.docs.length === 0) {

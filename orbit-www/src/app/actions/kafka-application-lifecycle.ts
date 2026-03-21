@@ -2,8 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getPayloadUserFromSession } from '@/lib/auth/session'
 import { getTemporalClient } from '@/lib/temporal/client'
 import {
   calculateGracePeriodEnd,
@@ -201,11 +200,8 @@ export async function decommissionApplication(
   input: DecommissionApplicationInput
 ): Promise<DecommissionApplicationResult> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -214,7 +210,7 @@ export async function decommissionApplication(
     // Verify admin access
     const accessCheck = await verifyWorkspaceAdminAccess(
       payload,
-      session.user.id,
+      payloadUser.betterAuthId || payloadUser.id,
       input.applicationId
     )
 
@@ -283,7 +279,8 @@ export async function decommissionApplication(
         gracePeriodDaysOverride: input.gracePeriodDaysOverride,
         decommissionReason: input.reason,
       } as any,
-      overrideAccess: true,
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     // Set all virtual clusters to read_only
@@ -385,11 +382,8 @@ export async function cancelDecommissioning(
   applicationId: string
 ): Promise<CancelDecommissioningResult> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -398,7 +392,7 @@ export async function cancelDecommissioning(
     // Verify admin access
     const accessCheck = await verifyWorkspaceAdminAccess(
       payload,
-      session.user.id,
+      payloadUser.betterAuthId || payloadUser.id,
       applicationId
     )
 
@@ -470,7 +464,8 @@ export async function cancelDecommissioning(
         decommissionReason: null,
         cleanupWorkflowId: null,
       } as any,
-      overrideAccess: true,
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     // Cancel the scheduled cleanup workflow if one exists
@@ -508,11 +503,8 @@ export async function forceDeleteApplication(
   reason?: string
 ): Promise<ForceDeleteApplicationResult> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -521,7 +513,7 @@ export async function forceDeleteApplication(
     // Verify admin access
     const accessCheck = await verifyWorkspaceAdminAccess(
       payload,
-      session.user.id,
+      payloadUser.betterAuthId || payloadUser.id,
       applicationId
     )
 
@@ -629,12 +621,13 @@ export async function forceDeleteApplication(
       data: {
         status: 'deleted',
         deletedAt: new Date().toISOString(),
-        deletedBy: session.user.id,
+        deletedBy: payloadUser.betterAuthId || payloadUser.id,
         forceDeleted: true,
         decommissionReason: reason || app.decommissionReason,
         decommissionWorkflowId: workflowId,
       } as any,
-      overrideAccess: true,
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     return {
@@ -661,11 +654,8 @@ export async function getApplicationLifecycleStatus(
   applicationId: string
 ): Promise<ApplicationLifecycleStatusResult> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -691,7 +681,7 @@ export async function getApplicationLifecycleStatus(
       where: {
         and: [
           { workspace: { equals: workspaceId } },
-          { user: { equals: session.user.id } },
+          { user: { equals: payloadUser.betterAuthId || payloadUser.id } },
           { status: { equals: 'active' } },
         ],
       },

@@ -26,6 +26,7 @@ export default async function WorkspacesPage() {
           },
         },
         limit: 0, // Just get the count
+        overrideAccess: true, // Admin page needs full visibility
       })
 
       return {

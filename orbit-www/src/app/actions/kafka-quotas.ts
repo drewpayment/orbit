@@ -2,8 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getPayloadUserFromSession } from '@/lib/auth/session'
 import { getWorkspaceQuotaInfo as getQuotaInfo, type QuotaInfo } from '@/lib/kafka/quotas'
 
 export interface GetWorkspaceQuotaInfoInput {
@@ -23,11 +22,8 @@ export async function getWorkspaceQuotaInfo(
   input: GetWorkspaceQuotaInfoInput
 ): Promise<GetWorkspaceQuotaInfoResult> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -39,7 +35,7 @@ export async function getWorkspaceQuotaInfo(
       where: {
         and: [
           { workspace: { equals: input.workspaceId } },
-          { user: { equals: session.user.id } },
+          { user: { equals: payloadUser.betterAuthId } },
           { status: { equals: 'active' } },
         ],
       },
@@ -78,26 +74,17 @@ export async function setWorkspaceQuotaOverride(
   input: SetWorkspaceQuotaOverrideInput
 ): Promise<SetWorkspaceQuotaOverrideResult> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
-    const payload = await getPayload({ config })
-
-    // Check if user is platform admin (users collection = admins)
-    const user = await payload.findByID({
-      collection: 'users',
-      id: session.user.id,
-      overrideAccess: true,
-    })
-
-    if (!user) {
-      return { success: false, error: 'Only platform admins can set quota overrides' }
+    const role = (payloadUser as any).role
+    if (role !== 'super_admin' && role !== 'admin') {
+      return { success: false, error: 'Forbidden: platform admin access required' }
     }
+
+    const payload = await getPayload({ config })
 
     // Validate input
     if (input.newQuota < 1 || input.newQuota > 1000) {
@@ -126,9 +113,10 @@ export async function setWorkspaceQuotaOverride(
         data: {
           applicationQuota: input.newQuota,
           reason: input.reason,
-          setBy: session.user.id,
+          setBy: payloadUser.betterAuthId,
         },
-        overrideAccess: true,
+        user: payloadUser,
+        overrideAccess: false,
       })
     } else {
       // Create new override
@@ -138,9 +126,10 @@ export async function setWorkspaceQuotaOverride(
           workspace: input.workspaceId,
           applicationQuota: input.newQuota,
           reason: input.reason,
-          setBy: session.user.id,
+          setBy: payloadUser.betterAuthId,
         },
-        overrideAccess: true,
+        user: payloadUser,
+        overrideAccess: false,
       })
     }
 

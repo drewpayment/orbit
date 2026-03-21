@@ -3,7 +3,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
+import { getPayloadUserFromSession } from '@/lib/auth/session'
 import { headers } from 'next/headers'
 import { parseManifest } from '@/lib/template-manifest'
 import { parseGitHubUrl, fetchRepoInfo, fetchManifestContent, generateWebhookSecret, fileExists } from '@/lib/github-manifest'
@@ -60,11 +60,9 @@ export async function checkManifestExists(
   workspaceId: string,
   manifestPath?: string
 ): Promise<CheckManifestResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const payloadUser = await getPayloadUserFromSession()
 
-  if (!session?.user) {
+  if (!payloadUser) {
     return { exists: false, error: 'Not authenticated' }
   }
 
@@ -82,7 +80,7 @@ export async function checkManifestExists(
     where: {
       and: [
         { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: payloadUser.betterAuthId } },
         { status: { equals: 'active' } },
       ],
     },
@@ -148,11 +146,9 @@ export async function commitManifestToRepo(input: {
   manifestPath?: string
   commitMessage?: string
 }): Promise<{ success: boolean; error?: string }> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const payloadUser = await getPayloadUserFromSession()
 
-  if (!session?.user) {
+  if (!payloadUser) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -170,7 +166,7 @@ export async function commitManifestToRepo(input: {
     where: {
       and: [
         { workspace: { equals: input.workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: payloadUser.betterAuthId } },
         { status: { equals: 'active' } },
       ],
     },
@@ -263,11 +259,9 @@ export interface ImportTemplateResult {
  * Import a GitHub repository as a template
  */
 export async function importTemplate(input: ImportTemplateInput): Promise<ImportTemplateResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const payloadUser = await getPayloadUserFromSession()
 
-  if (!session?.user) {
+  if (!payloadUser) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -286,7 +280,7 @@ export async function importTemplate(input: ImportTemplateInput): Promise<Import
     where: {
       and: [
         { workspace: { equals: input.workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: payloadUser.betterAuthId } },
         { status: { equals: 'active' } },
       ],
     },
@@ -396,8 +390,10 @@ export async function importTemplate(input: ImportTemplateInput): Promise<Import
       lastSyncedAt: new Date().toISOString(),
       syncStatus: 'synced',
       variables: manifest.variables || [],
-      createdBy: session.user.id,
+      createdBy: payloadUser.betterAuthId,
     },
+    user: payloadUser,
+    overrideAccess: false,
   })
 
   revalidatePath('/templates')
@@ -589,11 +585,9 @@ async function syncTemplateManifestInternal(templateId: string): Promise<ImportT
  * Sync template manifest from GitHub (requires authentication)
  */
 export async function syncTemplateManifest(templateId: string): Promise<ImportTemplateResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const payloadUser = await getPayloadUserFromSession()
 
-  if (!session?.user) {
+  if (!payloadUser) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -624,11 +618,9 @@ export interface InstantiateTemplateResult {
 export async function instantiateTemplate(
   input: InstantiateTemplateInput
 ): Promise<InstantiateTemplateResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const payloadUser = await getPayloadUserFromSession()
 
-  if (!session?.user) {
+  if (!payloadUser) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -650,7 +642,7 @@ export async function instantiateTemplate(
     where: {
       and: [
         { workspace: { equals: input.workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: payloadUser.betterAuthId } },
         { status: { equals: 'active' } },
       ],
     },
@@ -682,6 +674,8 @@ export async function instantiateTemplate(
     data: {
       usageCount: (template.usageCount || 0) + 1,
     },
+    user: payloadUser,
+    overrideAccess: false,
   })
 
   return {
@@ -708,11 +702,9 @@ export interface UpdateTemplateResult {
  * Update template metadata
  */
 export async function updateTemplate(input: UpdateTemplateInput): Promise<UpdateTemplateResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const payloadUser = await getPayloadUserFromSession()
 
-  if (!session?.user) {
+  if (!payloadUser) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -738,7 +730,7 @@ export async function updateTemplate(input: UpdateTemplateInput): Promise<Update
     where: {
       and: [
         { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: payloadUser.betterAuthId } },
         { role: { in: ['owner', 'admin'] } },
         { status: { equals: 'active' } },
       ],
@@ -770,6 +762,8 @@ export async function updateTemplate(input: UpdateTemplateInput): Promise<Update
     collection: 'templates',
     id: input.templateId,
     data: updateData,
+    user: payloadUser,
+    overrideAccess: false,
   })
 
   // Revalidate paths
@@ -786,11 +780,9 @@ export async function updateTemplate(input: UpdateTemplateInput): Promise<Update
  * Delete a template (only by workspace owners)
  */
 export async function deleteTemplate(templateId: string): Promise<UpdateTemplateResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const payloadUser = await getPayloadUserFromSession()
 
-  if (!session?.user) {
+  if (!payloadUser) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -816,7 +808,7 @@ export async function deleteTemplate(templateId: string): Promise<UpdateTemplate
     where: {
       and: [
         { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: payloadUser.betterAuthId } },
         { role: { equals: 'owner' } },
         { status: { equals: 'active' } },
       ],
@@ -832,6 +824,8 @@ export async function deleteTemplate(templateId: string): Promise<UpdateTemplate
   await payload.delete({
     collection: 'templates',
     id: templateId,
+    user: payloadUser,
+    overrideAccess: false,
   })
 
   // Revalidate paths
@@ -844,11 +838,9 @@ export async function deleteTemplate(templateId: string): Promise<UpdateTemplate
  * Archive a template (soft delete by setting visibility to workspace and removing sharing)
  */
 export async function archiveTemplate(templateId: string): Promise<UpdateTemplateResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const payloadUser = await getPayloadUserFromSession()
 
-  if (!session?.user) {
+  if (!payloadUser) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -874,7 +866,7 @@ export async function archiveTemplate(templateId: string): Promise<UpdateTemplat
     where: {
       and: [
         { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: payloadUser.betterAuthId } },
         { role: { in: ['owner', 'admin'] } },
         { status: { equals: 'active' } },
       ],
@@ -894,6 +886,8 @@ export async function archiveTemplate(templateId: string): Promise<UpdateTemplat
       visibility: 'workspace',
       sharedWith: [],
     },
+    user: payloadUser,
+    overrideAccess: false,
   })
 
   // Revalidate paths
@@ -907,11 +901,9 @@ export async function archiveTemplate(templateId: string): Promise<UpdateTemplat
  * Register a GitHub webhook for a template
  */
 export async function registerTemplateWebhook(templateId: string): Promise<{ success: boolean; error?: string }> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const payloadUser = await getPayloadUserFromSession()
 
-  if (!session?.user) {
+  if (!payloadUser) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -937,7 +929,7 @@ export async function registerTemplateWebhook(templateId: string): Promise<{ suc
     where: {
       and: [
         { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: payloadUser.betterAuthId } },
         { role: { in: ['owner', 'admin'] } },
         { status: { equals: 'active' } },
       ],
@@ -1012,6 +1004,8 @@ export async function registerTemplateWebhook(templateId: string): Promise<{ suc
         webhookId: String(hook.id),
         webhookSecret,
       },
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     revalidatePath(`/templates/${template.slug}`)
@@ -1057,11 +1051,9 @@ export async function getAllTemplatesForAdmin(): Promise<{
   templates: AdminTemplate[]
   error?: string
 }> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const payloadUser = await getPayloadUserFromSession()
 
-  if (!session?.user) {
+  if (!payloadUser) {
     return { templates: [], error: 'Not authenticated' }
   }
 
@@ -1072,7 +1064,7 @@ export async function getAllTemplatesForAdmin(): Promise<{
     collection: 'workspace-members',
     where: {
       and: [
-        { user: { equals: session.user.id } },
+        { user: { equals: payloadUser.betterAuthId } },
         { role: { in: ['owner', 'admin'] } },
         { status: { equals: 'active' } },
       ],
@@ -1135,11 +1127,9 @@ export async function getAllTemplatesForAdmin(): Promise<{
  * Force sync a template manifest (admin only)
  */
 export async function forceSyncTemplate(templateId: string): Promise<ImportTemplateResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const payloadUser = await getPayloadUserFromSession()
 
-  if (!session?.user) {
+  if (!payloadUser) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -1165,7 +1155,7 @@ export async function forceSyncTemplate(templateId: string): Promise<ImportTempl
     where: {
       and: [
         { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: payloadUser.betterAuthId } },
         { role: { in: ['owner', 'admin'] } },
         { status: { equals: 'active' } },
       ],
@@ -1240,11 +1230,9 @@ export async function getAvailableOrgs(workspaceId: string): Promise<{
   orgs: GitHubOrg[]
   error?: string
 }> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const payloadUser = await getPayloadUserFromSession()
 
-  if (!session?.user) {
+  if (!payloadUser) {
     return { orgs: [], error: 'Not authenticated' }
   }
 
@@ -1256,7 +1244,7 @@ export async function getAvailableOrgs(workspaceId: string): Promise<{
     where: {
       and: [
         { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: payloadUser.betterAuthId } },
         { status: { equals: 'active' } },
       ],
     },
@@ -1290,11 +1278,8 @@ export async function getAvailableOrgs(workspaceId: string): Promise<{
 
 export async function getGitHubHealth(workspaceIds: string | string[]): Promise<GitHubHealthStatus> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { healthy: true, installations: [], availableOrgs: [] }
     }
 
@@ -1313,7 +1298,7 @@ export async function getGitHubHealth(workspaceIds: string | string[]): Promise<
       where: {
         and: [
           { workspace: { in: workspaceIdArray } },
-          { user: { equals: session.user.id } },
+          { user: { equals: payloadUser.betterAuthId } },
           { status: { equals: 'active' } },
         ],
       },
@@ -1399,11 +1384,9 @@ export interface TriggerTokenRefreshResult {
  * Calls the restart-workflow API for each invalid installation
  */
 export async function triggerTokenRefresh(installationIds: string[]): Promise<TriggerTokenRefreshResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const payloadUser = await getPayloadUserFromSession()
 
-  if (!session?.user) {
+  if (!payloadUser) {
     return { success: false, results: [] }
   }
 
@@ -1476,11 +1459,9 @@ export async function triggerTokenRefresh(installationIds: string[]): Promise<Tr
  * TODO: Replace mock implementation with actual gRPC call to template service
  */
 export async function startInstantiation(input: StartInstantiationInput): Promise<StartInstantiationResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const payloadUser = await getPayloadUserFromSession()
 
-  if (!session?.user) {
+  if (!payloadUser) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -1510,7 +1491,7 @@ export async function startInstantiation(input: StartInstantiationInput): Promis
     where: {
       and: [
         { workspace: { equals: input.workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: payloadUser.betterAuthId } },
         { status: { equals: 'active' } },
       ],
     },
@@ -1555,6 +1536,8 @@ export async function startInstantiation(input: StartInstantiationInput): Promis
     data: {
       usageCount: (template.usageCount || 0) + 1,
     },
+    user: payloadUser,
+    overrideAccess: false,
   })
 
   return {
@@ -1568,11 +1551,9 @@ export async function startInstantiation(input: StartInstantiationInput): Promis
  * TODO: Implement via HTTP REST to Go service - gRPC client breaks Next.js bundling
  */
 export async function getInstantiationProgress(workflowId: string): Promise<ProgressResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const payloadUser = await getPayloadUserFromSession()
 
-  if (!session?.user) {
+  if (!payloadUser) {
     return { error: 'Not authenticated' }
   }
 
@@ -1614,11 +1595,9 @@ export async function getInstantiationProgress(workflowId: string): Promise<Prog
 }
 
 export async function unregisterTemplateWebhook(templateId: string): Promise<{ success: boolean; error?: string }> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const payloadUser = await getPayloadUserFromSession()
 
-  if (!session?.user) {
+  if (!payloadUser) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -1644,7 +1623,7 @@ export async function unregisterTemplateWebhook(templateId: string): Promise<{ s
     where: {
       and: [
         { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: payloadUser.betterAuthId } },
         { role: { in: ['owner', 'admin'] } },
         { status: { equals: 'active' } },
       ],
@@ -1704,6 +1683,8 @@ export async function unregisterTemplateWebhook(templateId: string): Promise<{ s
         webhookId: null,
         webhookSecret: null,
       },
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     revalidatePath(`/templates/${template.slug}`)
@@ -1723,6 +1704,8 @@ export async function unregisterTemplateWebhook(templateId: string): Promise<{ s
           webhookId: null,
           webhookSecret: null,
         },
+        user: payloadUser,
+        overrideAccess: false,
       })
       return { success: true }
     }

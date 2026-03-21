@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { isSuperAdmin, isWorkspaceAdminOrOwner, getMemberWorkspaceIds } from '@/lib/access/workspace-access'
 
 export const WorkspaceMembers: CollectionConfig = {
   slug: 'workspace-members',
@@ -7,14 +8,60 @@ export const WorkspaceMembers: CollectionConfig = {
     defaultColumns: ['workspace', 'user', 'role', 'status'],
   },
   access: {
-    // These access hooks only fire in the Payload admin panel.
-    // All frontend queries use overrideAccess: true.
-    // Since workspace-members.user now stores Better Auth IDs (not Payload IDs),
-    // we simplify to: any authenticated Payload admin can manage.
-    read: ({ req: { user } }) => !!user,
-    create: ({ req: { user } }) => !!user,
-    update: ({ req: { user } }) => !!user,
-    delete: ({ req: { user } }) => !!user,
+    // Members can read memberships for their workspaces
+    read: async ({ req }) => {
+      if (!req.user) return false
+      if (isSuperAdmin(req.user)) return true
+      const betterAuthId = (req.user as any).betterAuthId
+      if (!betterAuthId) return false
+      const ids = await getMemberWorkspaceIds(req.payload, betterAuthId)
+      if (ids.length === 0) return false
+      return { workspace: { in: ids } }
+    },
+    // Only workspace owners/admins can invite members
+    create: async ({ req, data }) => {
+      if (!req.user) return false
+      if (isSuperAdmin(req.user)) return true
+      const workspaceId = data?.workspace
+      if (!workspaceId) return false
+      const betterAuthId = (req.user as any).betterAuthId
+      if (!betterAuthId) return false
+      return isWorkspaceAdminOrOwner(req.payload, betterAuthId, workspaceId as string)
+    },
+    // Only workspace owners/admins can change roles
+    update: async ({ req, id }) => {
+      if (!req.user) return false
+      if (isSuperAdmin(req.user)) return true
+      const betterAuthId = (req.user as any).betterAuthId
+      if (!betterAuthId) return false
+      if (!id) return false
+      const member = await req.payload.findByID({
+        collection: 'workspace-members',
+        id,
+        overrideAccess: true,
+        depth: 0,
+      })
+      const wsId = typeof member.workspace === 'string' ? member.workspace : member.workspace?.id
+      if (!wsId) return false
+      return isWorkspaceAdminOrOwner(req.payload, betterAuthId, wsId)
+    },
+    // Only workspace owners/admins can remove members
+    delete: async ({ req, id }) => {
+      if (!req.user) return false
+      if (isSuperAdmin(req.user)) return true
+      const betterAuthId = (req.user as any).betterAuthId
+      if (!betterAuthId) return false
+      if (!id) return false
+      const member = await req.payload.findByID({
+        collection: 'workspace-members',
+        id,
+        overrideAccess: true,
+        depth: 0,
+      })
+      const wsId = typeof member.workspace === 'string' ? member.workspace : member.workspace?.id
+      if (!wsId) return false
+      return isWorkspaceAdminOrOwner(req.payload, betterAuthId, wsId)
+    },
   },
   fields: [
     {

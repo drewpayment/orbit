@@ -99,6 +99,7 @@ export async function inviteWorkspaceMember(
         ],
       },
       limit: 1,
+      overrideAccess: true,
     })
 
     if (existingMember.docs.length > 0) {
@@ -119,6 +120,7 @@ export async function inviteWorkspaceMember(
         requestedAt: new Date().toISOString(),
         approvedAt: new Date().toISOString(),
       },
+      overrideAccess: true,
     })
 
     revalidatePath('/workspaces')

@@ -2,8 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getPayloadUserFromSession } from '@/lib/auth/session'
 import type { KafkaApplicationRequest, User, Workspace } from '@/payload-types'
 
 // Types for application requests
@@ -63,11 +62,8 @@ export async function submitApplicationRequest(
   input: SubmitApplicationRequestInput
 ): Promise<SubmitApplicationRequestResult> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -79,7 +75,7 @@ export async function submitApplicationRequest(
       where: {
         and: [
           { workspace: { equals: input.workspaceId } },
-          { user: { equals: session.user.id } },
+          { user: { equals: payloadUser.betterAuthId || payloadUser.id } },
           { status: { equals: 'active' } },
         ],
       },
@@ -135,10 +131,11 @@ export async function submitApplicationRequest(
         applicationName: input.applicationName,
         applicationSlug: input.applicationSlug,
         description: input.description || '',
-        requestedBy: session.user.id,
+        requestedBy: payloadUser.betterAuthId || payloadUser.id,
         status: 'pending_workspace',
       },
-      overrideAccess: true,
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     return { success: true, requestId: request.id }
@@ -157,11 +154,8 @@ export async function getMyRequests(workspaceId: string): Promise<{
   error?: string
 }> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -172,7 +166,7 @@ export async function getMyRequests(workspaceId: string): Promise<{
       where: {
         and: [
           { workspace: { equals: workspaceId } },
-          { requestedBy: { equals: session.user.id } },
+          { requestedBy: { equals: payloadUser.betterAuthId || payloadUser.id } },
         ],
       },
       sort: '-createdAt',
@@ -200,11 +194,8 @@ export async function getPendingWorkspaceApprovals(workspaceId: string): Promise
   error?: string
 }> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -216,7 +207,7 @@ export async function getPendingWorkspaceApprovals(workspaceId: string): Promise
       where: {
         and: [
           { workspace: { equals: workspaceId } },
-          { user: { equals: session.user.id } },
+          { user: { equals: payloadUser.betterAuthId || payloadUser.id } },
           { role: { in: ['owner', 'admin'] } },
           { status: { equals: 'active' } },
         ],
@@ -262,26 +253,17 @@ export async function getPendingPlatformApprovals(): Promise<{
   error?: string
 }> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
-    const payload = await getPayload({ config })
-
-    // Check if user is platform admin (exists in users collection)
-    const user = await payload.findByID({
-      collection: 'users',
-      id: session.user.id,
-      overrideAccess: true,
-    })
-
-    if (!user) {
-      return { success: false, error: 'Not a platform admin' }
+    const role = (payloadUser as any).role
+    if (role !== 'super_admin' && role !== 'admin') {
+      return { success: false, error: 'Forbidden: platform admin access required', requests: [] }
     }
+
+    const payload = await getPayload({ config })
 
     const requests = await payload.find({
       collection: 'kafka-application-requests',
@@ -312,11 +294,8 @@ export async function approveRequestAsWorkspaceAdmin(requestId: string): Promise
   error?: string
 }> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -347,7 +326,7 @@ export async function approveRequestAsWorkspaceAdmin(requestId: string): Promise
       where: {
         and: [
           { workspace: { equals: workspaceId } },
-          { user: { equals: session.user.id } },
+          { user: { equals: payloadUser.betterAuthId || payloadUser.id } },
           { role: { in: ['owner', 'admin'] } },
           { status: { equals: 'active' } },
         ],
@@ -366,7 +345,7 @@ export async function approveRequestAsWorkspaceAdmin(requestId: string): Promise
       id: requestId,
       data: {
         status: 'pending_platform',
-        workspaceApprovedBy: session.user.id,
+        workspaceApprovedBy: payloadUser.betterAuthId || payloadUser.id,
         workspaceApprovedAt: new Date().toISOString(),
       },
       overrideAccess: true,
@@ -390,11 +369,8 @@ export async function rejectRequestAsWorkspaceAdmin(
   error?: string
 }> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -425,7 +401,7 @@ export async function rejectRequestAsWorkspaceAdmin(
       where: {
         and: [
           { workspace: { equals: workspaceId } },
-          { user: { equals: session.user.id } },
+          { user: { equals: payloadUser.betterAuthId || payloadUser.id } },
           { role: { in: ['owner', 'admin'] } },
           { status: { equals: 'active' } },
         ],
@@ -444,7 +420,7 @@ export async function rejectRequestAsWorkspaceAdmin(
       id: requestId,
       data: {
         status: 'rejected',
-        rejectedBy: session.user.id,
+        rejectedBy: payloadUser.betterAuthId || payloadUser.id,
         rejectedAt: new Date().toISOString(),
         rejectionReason: reason || null,
       },
@@ -469,26 +445,17 @@ export async function approveRequestAsPlatformAdmin(
   error?: string
 }> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
-    const payload = await getPayload({ config })
-
-    // Check if user is platform admin
-    const user = await payload.findByID({
-      collection: 'users',
-      id: session.user.id,
-      overrideAccess: true,
-    })
-
-    if (!user) {
-      return { success: false, error: 'Not a platform admin' }
+    const role = (payloadUser as any).role
+    if (role !== 'super_admin' && role !== 'admin') {
+      return { success: false, error: 'Forbidden: platform admin access required' }
     }
+
+    const payload = await getPayload({ config })
 
     const request = await payload.findByID({
       collection: 'kafka-application-requests',
@@ -512,7 +479,7 @@ export async function approveRequestAsPlatformAdmin(
       id: requestId,
       data: {
         status: 'approved',
-        platformApprovedBy: session.user.id,
+        platformApprovedBy: payloadUser.betterAuthId || payloadUser.id,
         platformApprovedAt: new Date().toISOString(),
         platformAction,
       },
@@ -540,26 +507,17 @@ export async function rejectRequestAsPlatformAdmin(
   error?: string
 }> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
-    const payload = await getPayload({ config })
-
-    // Check if user is platform admin
-    const user = await payload.findByID({
-      collection: 'users',
-      id: session.user.id,
-      overrideAccess: true,
-    })
-
-    if (!user) {
-      return { success: false, error: 'Not a platform admin' }
+    const role = (payloadUser as any).role
+    if (role !== 'super_admin' && role !== 'admin') {
+      return { success: false, error: 'Forbidden: platform admin access required' }
     }
+
+    const payload = await getPayload({ config })
 
     const request = await payload.findByID({
       collection: 'kafka-application-requests',
@@ -581,7 +539,7 @@ export async function rejectRequestAsPlatformAdmin(
       id: requestId,
       data: {
         status: 'rejected',
-        rejectedBy: session.user.id,
+        rejectedBy: payloadUser.betterAuthId || payloadUser.id,
         rejectedAt: new Date().toISOString(),
         rejectionReason: reason || null,
       },
@@ -603,11 +561,8 @@ export async function getWorkspaceAdminStatus(workspaceId: string): Promise<{
   pendingCount: number
 }> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { isAdmin: false, pendingCount: 0 }
     }
 
@@ -619,7 +574,7 @@ export async function getWorkspaceAdminStatus(workspaceId: string): Promise<{
       where: {
         and: [
           { workspace: { equals: workspaceId } },
-          { user: { equals: session.user.id } },
+          { user: { equals: payloadUser.betterAuthId || payloadUser.id } },
           { role: { in: ['owner', 'admin'] } },
           { status: { equals: 'active' } },
         ],

@@ -1,5 +1,4 @@
 import Image from 'next/image'
-import Link from 'next/link'
 import {
   Orbit,
   Sparkles,
@@ -53,18 +52,18 @@ export default function LandingPage() {
               Docs
             </a>
           )}
-          <Link
+          <a
             href="/login"
             className="text-sm font-medium text-white hover:text-[#ADADB0] transition-colors"
           >
             Log In
-          </Link>
-          <Link
+          </a>
+          <a
             href="/signup"
             className="rounded-lg bg-[var(--color-primary)] px-[18px] py-2 text-[13px] font-semibold text-white hover:opacity-90 transition-opacity"
           >
             Get Started
-          </Link>
+          </a>
         </div>
         {/* Mobile navigation */}
         <details className="md:hidden w-full">
@@ -110,13 +109,13 @@ export default function LandingPage() {
 
           {/* CTAs */}
           <div className="stagger-item flex items-center gap-4">
-            <Link
+            <a
               href="/signup"
               className="flex items-center gap-2 rounded-[10px] bg-[var(--color-primary)] px-7 py-3.5 text-[15px] font-semibold text-white hover:opacity-90 transition-opacity"
             >
               Get Started
               <ArrowRight className="h-4 w-4" />
-            </Link>
+            </a>
             <a
               href="#how-it-works"
               className="rounded-[10px] border border-white/10 px-7 py-3.5 text-[15px] font-medium text-[#ADADB0] hover:border-white/20 hover:text-white transition-colors"
@@ -342,19 +341,19 @@ function FinalCTASection() {
           Start building your Internal Developer Portal today.
         </p>
         <div className="flex items-center gap-4">
-          <Link
+          <a
             href="/signup"
             className="flex items-center gap-2 rounded-[10px] bg-[var(--color-primary)] px-8 py-4 text-base font-semibold text-white hover:opacity-90 transition-opacity"
           >
             Get Started
             <ArrowRight className="h-[18px] w-[18px]" />
-          </Link>
-          <Link
+          </a>
+          <a
             href="/login"
             className="text-[15px] font-medium text-[#ADADB0] hover:text-white transition-colors"
           >
             or Log In →
-          </Link>
+          </a>
         </div>
       </div>
     </section>

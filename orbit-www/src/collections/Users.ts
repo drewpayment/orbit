@@ -7,6 +7,12 @@ export const Users: CollectionConfig = {
   admin: {
     useAsTitle: 'email',
   },
+  access: {
+    admin: ({ req }) => {
+      const role = (req.user as any)?.role
+      return role === 'super_admin' || role === 'admin'
+    },
+  },
   auth: {
     disableLocalStrategy: { enableFields: true },
     strategies: [betterAuthStrategy],
@@ -59,6 +65,17 @@ export const Users: CollectionConfig = {
       admin: {
         position: 'sidebar',
         description: 'Super Admin and Admin can access the Payload admin panel.',
+      },
+    },
+    {
+      name: 'betterAuthId',
+      type: 'text',
+      unique: true,
+      index: true,
+      admin: {
+        position: 'sidebar',
+        readOnly: true,
+        description: 'Better Auth user ID — auto-populated on first login',
       },
     },
     {

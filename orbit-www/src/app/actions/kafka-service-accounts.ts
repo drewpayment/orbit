@@ -2,8 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getPayloadUserFromSession } from '@/lib/auth/session'
 import { getTemporalClient } from '@/lib/temporal/client'
 import { WorkflowExecutionAlreadyStartedError } from '@temporalio/client'
 import type { KafkaServiceAccount } from '@/payload-types'
@@ -226,8 +225,8 @@ export async function createServiceAccount(
   input: CreateServiceAccountInput
 ): Promise<CreateServiceAccountResult> {
   try {
-    const session = await auth.api.getSession({ headers: await headers() })
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -291,7 +290,7 @@ export async function createServiceAccount(
       where: {
         and: [
           { workspace: { equals: workspace.id } },
-          { user: { equals: session.user.id } },
+          { user: { equals: payloadUser.betterAuthId } },
           { role: { in: ['owner', 'admin'] } },
           { status: { equals: 'active' } },
         ],
@@ -338,9 +337,10 @@ export async function createServiceAccount(
         permissionTemplate: input.permissionTemplate,
         customPermissions: input.customPermissions || [],
         status: 'active',
-        createdBy: session.user.id,
+        createdBy: payloadUser.betterAuthId,
       },
-      overrideAccess: true,
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     // Trigger workflow to sync credential to Bifrost
@@ -402,15 +402,15 @@ export async function rotateServiceAccountPassword(
   serviceAccountId: string
 ): Promise<RotateServiceAccountResult> {
   try {
-    const session = await auth.api.getSession({ headers: await headers() })
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
     const payload = await getPayload({ config })
 
     // Verify workspace admin access
-    const accessCheck = await verifyServiceAccountAccess(payload, session.user.id, serviceAccountId)
+    const accessCheck = await verifyServiceAccountAccess(payload, payloadUser.betterAuthId, serviceAccountId)
     if (!accessCheck.allowed) {
       return { success: false, error: accessCheck.error }
     }
@@ -519,15 +519,15 @@ export async function revokeServiceAccount(
   serviceAccountId: string
 ): Promise<RevokeServiceAccountResult> {
   try {
-    const session = await auth.api.getSession({ headers: await headers() })
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
     const payload = await getPayload({ config })
 
     // Verify workspace admin access
-    const accessCheck = await verifyServiceAccountAccess(payload, session.user.id, serviceAccountId)
+    const accessCheck = await verifyServiceAccountAccess(payload, payloadUser.betterAuthId, serviceAccountId)
     if (!accessCheck.allowed) {
       return { success: false, error: accessCheck.error }
     }
@@ -549,9 +549,10 @@ export async function revokeServiceAccount(
       data: {
         status: 'revoked',
         revokedAt: new Date().toISOString(),
-        revokedBy: session.user.id,
+        revokedBy: payloadUser.betterAuthId,
       },
-      overrideAccess: true,
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     // Trigger workflow to revoke credential from Bifrost
@@ -597,8 +598,8 @@ export async function listServiceAccounts(
   input: ListServiceAccountsInput
 ): Promise<ListServiceAccountsResult> {
   try {
-    const session = await auth.api.getSession({ headers: await headers() })
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -611,6 +612,8 @@ export async function listServiceAccounts(
       },
       sort: '-createdAt',
       limit: 100,
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     const serviceAccounts: ServiceAccountData[] = accounts.docs.map((acc) => ({

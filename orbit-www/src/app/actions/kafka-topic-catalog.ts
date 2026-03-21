@@ -2,8 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getPayloadUserFromSession } from '@/lib/auth/session'
 import { getTemporalClient } from '@/lib/temporal/client'
 
 // ============================================================================
@@ -229,16 +228,13 @@ async function sendShareRequestNotification(
 export async function searchTopicCatalog(
   input: SearchTopicCatalogInput
 ): Promise<SearchTopicCatalogResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
-
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Not authenticated' }
   }
 
   const payload = await getPayload({ config })
-  const userId = session.user.id
+  const userId = payloadUser.betterAuthId || payloadUser.id
 
   try {
     // Get user's workspace memberships
@@ -445,16 +441,13 @@ export async function searchTopicCatalog(
 export async function requestTopicAccess(
   input: RequestTopicAccessInput
 ): Promise<RequestTopicAccessResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
-
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Not authenticated' }
   }
 
   const payload = await getPayload({ config })
-  const userId = session.user.id
+  const userId = payloadUser.betterAuthId || payloadUser.id
 
   try {
     // Verify user is a member of the requesting workspace
@@ -547,7 +540,8 @@ export async function requestTopicAccess(
           // System auto-approval - no approvedBy user
         }),
       },
-      overrideAccess: true,
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     // Trigger appropriate follow-up actions
@@ -584,16 +578,13 @@ export async function requestTopicAccess(
 export async function getConnectionDetails(
   shareId: string
 ): Promise<GetConnectionDetailsResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
-
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Not authenticated' }
   }
 
   const payload = await getPayload({ config })
-  const userId = session.user.id
+  const userId = payloadUser.betterAuthId || payloadUser.id
 
   try {
     // Fetch the share with related data
@@ -752,16 +743,13 @@ export async function getConnectionDetails(
 export async function getOwnTopicConnectionDetails(
   topicId: string
 ): Promise<GetConnectionDetailsResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
-
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Not authenticated' }
   }
 
   const payload = await getPayload({ config })
-  const userId = session.user.id
+  const userId = payloadUser.betterAuthId || payloadUser.id
 
   try {
     // Fetch the topic with related data

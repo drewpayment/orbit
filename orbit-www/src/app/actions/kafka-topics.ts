@@ -3,8 +3,7 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getPayloadUserFromSession } from '@/lib/auth/session'
 import { getTemporalClient } from '@/lib/temporal/client'
 
 export type CreateTopicInput = {
@@ -43,11 +42,8 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
     partitions: input.partitions,
   })
 
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
-
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -60,6 +56,7 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
       collection: 'kafka-virtual-clusters',
       id: input.virtualClusterId,
       depth: 2,
+      overrideAccess: true,
     })
 
     if (!virtualCluster) {
@@ -69,7 +66,7 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
 
     const application =
       typeof virtualCluster.application === 'string'
-        ? await payload.findByID({ collection: 'kafka-applications', id: virtualCluster.application })
+        ? await payload.findByID({ collection: 'kafka-applications', id: virtualCluster.application, overrideAccess: true })
         : virtualCluster.application
 
     if (!application) {
@@ -130,7 +127,8 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
         createdVia: 'orbit-ui',
         fullTopicName: `${virtualCluster.topicPrefix}${input.name}`,
       },
-      overrideAccess: true,
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     // 4. If no approval needed, trigger provisioning workflow
@@ -200,6 +198,9 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
 }
 
 export async function listTopicsByVirtualCluster(virtualClusterId: string) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) { return [] }
+
   const payload = await getPayload({ config })
 
   const topics = await payload.find({
@@ -210,12 +211,17 @@ export async function listTopicsByVirtualCluster(virtualClusterId: string) {
     },
     sort: '-createdAt',
     limit: 100,
+    user: payloadUser,
+    overrideAccess: false,
   })
 
   return topics.docs
 }
 
 export async function listTopicsByApplication(applicationId: string) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) { return [] }
+
   const payload = await getPayload({ config })
 
   const topics = await payload.find({
@@ -227,17 +233,16 @@ export async function listTopicsByApplication(applicationId: string) {
     sort: '-createdAt',
     limit: 100,
     depth: 1,
+    user: payloadUser,
+    overrideAccess: false,
   })
 
   return topics.docs
 }
 
 export async function deleteTopic(topicId: string): Promise<{ success: boolean; error?: string }> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
-
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -248,6 +253,7 @@ export async function deleteTopic(topicId: string): Promise<{ success: boolean; 
       collection: 'kafka-topics',
       id: topicId,
       depth: 1,
+      overrideAccess: true,
     })
 
     if (!topic) {
@@ -290,13 +296,9 @@ export async function deleteTopic(topicId: string): Promise<{ success: boolean; 
 
 export async function approveTopic(
   topicId: string,
-  userId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
-
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -307,6 +309,7 @@ export async function approveTopic(
       collection: 'kafka-topics',
       id: topicId,
       depth: 1,
+      overrideAccess: true,
     })
 
     if (!topic) {
@@ -335,7 +338,7 @@ export async function approveTopic(
       id: topicId,
       data: {
         status: 'provisioning',
-        approvedBy: userId,
+        approvedBy: payloadUser.betterAuthId || payloadUser.id,
         approvedAt: new Date().toISOString(),
       },
       overrideAccess: true,
@@ -348,6 +351,7 @@ export async function approveTopic(
             collection: 'kafka-virtual-clusters',
             id: topic.virtualCluster,
             depth: 1,
+            overrideAccess: true,
           })
         : topic.virtualCluster
 
@@ -360,6 +364,7 @@ export async function approveTopic(
         ? await payload.findByID({
             collection: 'kafka-clusters',
             id: virtualCluster.physicalCluster,
+            overrideAccess: true,
           })
         : virtualCluster?.physicalCluster
 
