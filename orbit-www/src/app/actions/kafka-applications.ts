@@ -2,8 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getPayloadUserFromSession } from '@/lib/auth/session'
 import { canCreateApplication, getWorkspaceQuotaInfo, type QuotaInfo } from '@/lib/kafka/quotas'
 import { startVirtualClusterProvisionWorkflow } from '@/lib/temporal/client'
 
@@ -28,11 +27,8 @@ export async function createApplication(
   input: CreateApplicationInput
 ): Promise<CreateApplicationResult> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -44,7 +40,7 @@ export async function createApplication(
       where: {
         and: [
           { workspace: { equals: input.workspaceId } },
-          { user: { equals: session.user.id } },
+          { user: { equals: payloadUser.betterAuthId || payloadUser.id } },
           { status: { equals: 'active' } },
         ],
       },
@@ -107,7 +103,7 @@ export async function createApplication(
         workspace: input.workspaceId,
         status: 'active',
         provisioningStatus: 'pending',
-        createdBy: session.user.id,
+        createdBy: payloadUser.betterAuthId || payloadUser.id,
       },
       overrideAccess: true,
     })
@@ -202,11 +198,8 @@ export async function listApplications(
   input: ListApplicationsInput
 ): Promise<ListApplicationsResult> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -218,7 +211,7 @@ export async function listApplications(
       where: {
         and: [
           { workspace: { equals: input.workspaceId } },
-          { user: { equals: session.user.id } },
+          { user: { equals: payloadUser.betterAuthId || payloadUser.id } },
           { status: { equals: 'active' } },
         ],
       },
@@ -299,11 +292,8 @@ export async function listApplicationsWithProvisioningIssues(
   workspaceId?: string
 ): Promise<ListProvisioningIssuesResult> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -380,11 +370,8 @@ export async function getApplication(
   input: GetApplicationInput
 ): Promise<GetApplicationResult> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -393,6 +380,8 @@ export async function getApplication(
     const app = await payload.findByID({
       collection: 'kafka-applications',
       id: input.applicationId,
+      user: payloadUser,
+      overrideAccess: false,
       depth: 1,
     })
 
@@ -443,11 +432,8 @@ export async function retryVirtualClusterProvisioning(
   applicationId: string
 ): Promise<{ success: boolean; workflowId?: string; error?: string }> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -457,6 +443,8 @@ export async function retryVirtualClusterProvisioning(
     const application = await payload.findByID({
       collection: 'kafka-applications',
       id: applicationId,
+      user: payloadUser,
+      overrideAccess: false,
       depth: 1,
     })
 
