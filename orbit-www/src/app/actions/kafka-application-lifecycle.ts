@@ -279,7 +279,8 @@ export async function decommissionApplication(
         gracePeriodDaysOverride: input.gracePeriodDaysOverride,
         decommissionReason: input.reason,
       } as any,
-      overrideAccess: true,
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     // Set all virtual clusters to read_only
@@ -463,7 +464,8 @@ export async function cancelDecommissioning(
         decommissionReason: null,
         cleanupWorkflowId: null,
       } as any,
-      overrideAccess: true,
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     // Cancel the scheduled cleanup workflow if one exists
@@ -624,7 +626,8 @@ export async function forceDeleteApplication(
         decommissionReason: reason || app.decommissionReason,
         decommissionWorkflowId: workflowId,
       } as any,
-      overrideAccess: true,
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     return {
