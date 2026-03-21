@@ -3,7 +3,9 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
+import { headers } from 'next/headers'
 import { getBetterAuthUserByEmail, getBetterAuthUsers } from '@/lib/data/cached-queries'
+import { auth } from '@/lib/auth'
 
 export async function getWorkspaceMembers(workspaceId: string) {
   try {
@@ -184,6 +186,80 @@ export async function removeMember(memberId: string) {
     return {
       success: false,
       error: 'Failed to remove member',
+    }
+  }
+}
+
+export async function createWorkspace(data: {
+  name: string
+  slug: string
+  description?: string
+}) {
+  try {
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    })
+
+    if (!session?.user) {
+      return { success: false, error: 'Not authenticated' }
+    }
+
+    const payload = await getPayload({ config })
+
+    // Check for duplicate slug
+    const existing = await payload.find({
+      collection: 'workspaces',
+      where: { slug: { equals: data.slug } },
+      limit: 1,
+    })
+
+    if (existing.docs.length > 0) {
+      return {
+        success: false,
+        error: 'A workspace with this slug already exists',
+      }
+    }
+
+    const workspace = await payload.create({
+      collection: 'workspaces',
+      data: {
+        name: data.name,
+        slug: data.slug,
+        description: data.description || null,
+      },
+      overrideAccess: true,
+    })
+
+    // Add the creating user as workspace owner
+    await payload.create({
+      collection: 'workspace-members',
+      data: {
+        workspace: workspace.id,
+        user: session.user.id,
+        role: 'owner',
+        status: 'active',
+        requestedAt: new Date().toISOString(),
+        approvedAt: new Date().toISOString(),
+      },
+      overrideAccess: true,
+    })
+
+    revalidatePath('/workspaces')
+    revalidatePath('/admin/workspaces')
+
+    return {
+      success: true,
+      workspace: {
+        id: workspace.id,
+        name: workspace.name,
+        slug: workspace.slug,
+      },
+    }
+  } catch (error) {
+    console.error('Failed to create workspace:', error)
+    return {
+      success: false,
+      error: 'Failed to create workspace',
     }
   }
 }

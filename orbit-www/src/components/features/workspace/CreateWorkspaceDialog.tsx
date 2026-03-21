@@ -32,6 +32,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { toast } from 'sonner'
+import { createWorkspace } from '@/app/(frontend)/workspaces/actions'
+import { useRouter } from 'next/navigation'
 
 const workspaceSchema = z.object({
   name: z
@@ -59,6 +61,7 @@ interface CreateWorkspaceDialogProps {
 
 export function CreateWorkspaceDialog({ open, onOpenChange }: CreateWorkspaceDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const router = useRouter()
 
   const form = useForm<WorkspaceFormData>({
     resolver: zodResolver(workspaceSchema),
@@ -88,10 +91,18 @@ export function CreateWorkspaceDialog({ open, onOpenChange }: CreateWorkspaceDia
     try {
       setIsSubmitting(true)
 
-      // TODO: Replace with actual gRPC client call
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      const result = await createWorkspace({
+        name: data.name,
+        slug: data.slug,
+        description: data.description,
+      })
 
-      console.log('Creating workspace:', data)
+      if (!result.success) {
+        toast.error('Failed to create workspace', {
+          description: result.error || 'An unexpected error occurred',
+        })
+        return
+      }
 
       toast.success('Workspace created successfully', {
         description: `${data.name} is now ready to use`,
@@ -99,6 +110,7 @@ export function CreateWorkspaceDialog({ open, onOpenChange }: CreateWorkspaceDia
 
       form.reset()
       onOpenChange(false)
+      router.refresh()
     } catch (error) {
       toast.error('Failed to create workspace', {
         description: error instanceof Error ? error.message : 'An unexpected error occurred',

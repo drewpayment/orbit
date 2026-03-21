@@ -287,6 +287,20 @@ The Temporal server runs on port 7233, with the UI on port 8080.
 - **Rule**: Evidence before assertions, always
 - **See**: `skills/verification-before-completion/SKILL.md`
 
+#### agent-browser UI verification
+- **When**: After ANY code change that impacts the UI/UX of the application
+- **How**: Use Skill tool: `agent-browser`
+- **Purpose**:
+  - Verifies UI changes work correctly in a real browser
+  - Tests user flows end-to-end (navigation, form submission, data persistence)
+  - Catches visual regressions and broken interactions that unit tests miss
+- **Process**:
+  1. Navigate to the affected page(s)
+  2. Take screenshots to verify visual state
+  3. Interact with changed UI elements (click, fill forms, submit)
+  4. Verify the expected outcome (data persisted, page updated, etc.)
+- **Rule**: If your changes touch UI, you MUST verify with agent-browser before considering the work done
+
 ### Supporting Skills (Use When Applicable)
 
 - **dispatching-parallel-agents**: For 3+ independent failures/tasks
