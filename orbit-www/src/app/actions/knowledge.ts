@@ -3,6 +3,7 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
+import { getPayloadUserFromSession } from '@/lib/auth/session'
 
 export async function createKnowledgeSpace(data: {
   name: string
@@ -11,6 +12,11 @@ export async function createKnowledgeSpace(data: {
   visibility: 'private' | 'internal' | 'public'
   workspaceSlug: string
 }) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
+    throw new Error('Not authenticated')
+  }
+
   const payload = await getPayload({ config })
 
   // Look up workspace by slug
@@ -18,6 +24,7 @@ export async function createKnowledgeSpace(data: {
     collection: 'workspaces',
     where: { slug: { equals: data.workspaceSlug } },
     limit: 1,
+    overrideAccess: true,
   })
 
   if (workspacesResult.docs.length === 0) {
@@ -41,6 +48,8 @@ export async function createKnowledgeSpace(data: {
       icon: data.icon || undefined,
       visibility: data.visibility,
     },
+    user: payloadUser,
+    overrideAccess: false,
   })
 
   revalidatePath(`/workspaces/${data.workspaceSlug}/knowledge`)
@@ -57,6 +66,11 @@ export async function createKnowledgePage(data: {
   workspaceSlug: string
   spaceSlug: string
 }) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
+    throw new Error('Not authenticated')
+  }
+
   const payload = await getPayload({ config })
 
   // Create the page with empty block content
@@ -84,6 +98,8 @@ export async function createKnowledgePage(data: {
       sortOrder: 0,
       tags: [],
     },
+    user: payloadUser,
+    overrideAccess: false,
   })
 
   // Revalidate the space page to show the new page
@@ -98,6 +114,11 @@ export async function renamePage(
   workspaceSlug: string,
   spaceSlug: string
 ) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
+    throw new Error('Not authenticated')
+  }
+
   const payload = await getPayload({ config })
 
   await payload.update({
@@ -106,6 +127,8 @@ export async function renamePage(
     data: {
       title: newTitle,
     },
+    user: payloadUser,
+    overrideAccess: false,
   })
 
   revalidatePath(`/workspaces/${workspaceSlug}/knowledge/${spaceSlug}`)
@@ -117,6 +140,11 @@ export async function movePage(
   workspaceSlug: string,
   spaceSlug: string
 ) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
+    throw new Error('Not authenticated')
+  }
+
   const payload = await getPayload({ config })
 
   await payload.update({
@@ -125,6 +153,8 @@ export async function movePage(
     data: {
       parentPage: newParentId,
     },
+    user: payloadUser,
+    overrideAccess: false,
   })
 
   revalidatePath(`/workspaces/${workspaceSlug}/knowledge/${spaceSlug}`)
@@ -135,12 +165,18 @@ export async function duplicatePage(
   workspaceSlug: string,
   spaceSlug: string
 ) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
+    throw new Error('Not authenticated')
+  }
+
   const payload = await getPayload({ config })
 
   // Get original page
   const original = await payload.findByID({
     collection: 'knowledge-pages',
     id: pageId,
+    overrideAccess: true,
   })
 
   // Create duplicate with unique slug
@@ -158,6 +194,8 @@ export async function duplicatePage(
       sortOrder: (original.sortOrder ?? 0) + 1,
       version: 1,
     },
+    user: payloadUser,
+    overrideAccess: false,
   })
 
   revalidatePath(`/workspaces/${workspaceSlug}/knowledge/${spaceSlug}`)
@@ -169,11 +207,18 @@ export async function deletePage(
   workspaceSlug: string,
   spaceSlug: string
 ) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
+    throw new Error('Not authenticated')
+  }
+
   const payload = await getPayload({ config })
 
   await payload.delete({
     collection: 'knowledge-pages',
     id: pageId,
+    user: payloadUser,
+    overrideAccess: false,
   })
 
   revalidatePath(`/workspaces/${workspaceSlug}/knowledge/${spaceSlug}`)
@@ -187,17 +232,24 @@ export async function updatePageSortOrder(
 ) {
   'use server'
 
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
+    throw new Error('Not authenticated')
+  }
+
   const payload = await getPayload({ config })
 
   // Fetch both pages to get their parent
   const activePage = await payload.findByID({
     collection: 'knowledge-pages',
     id: activePageId,
+    overrideAccess: true,
   })
 
   const overPage = await payload.findByID({
     collection: 'knowledge-pages',
     id: overPageId,
+    overrideAccess: true,
   })
 
   // Get parent ID (handle both string and object formats)
@@ -219,6 +271,7 @@ export async function updatePageSortOrder(
     },
     sort: 'sortOrder',
     limit: 1000,
+    overrideAccess: true,
   })
 
   // Reorder: remove active page and insert at over page's position
@@ -240,6 +293,8 @@ export async function updatePageSortOrder(
         collection: 'knowledge-pages',
         id: page.id,
         data: { sortOrder: index },
+        user: payloadUser,
+        overrideAccess: false,
       })
     )
   )
