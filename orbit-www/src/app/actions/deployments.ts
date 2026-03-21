@@ -33,6 +33,7 @@ export async function createDeployment(input: CreateDeploymentInput) {
     collection: 'apps',
     id: input.appId,
     depth: 1,
+    overrideAccess: true,
   })
 
   if (!app) {
@@ -53,6 +54,7 @@ export async function createDeployment(input: CreateDeploymentInput) {
         { status: { equals: 'active' } },
       ],
     },
+    overrideAccess: true,
   })
 
   if (members.docs.length === 0) {
@@ -107,6 +109,7 @@ export async function startDeployment(deploymentId: string) {
     collection: 'deployments',
     id: deploymentId,
     depth: 2,
+    overrideAccess: true,
   })
 
   if (!deployment) {
@@ -122,6 +125,7 @@ export async function startDeployment(deploymentId: string) {
     collection: 'apps',
     id: appId,
     depth: 1,
+    overrideAccess: true,
   })
 
   if (!app) {
@@ -142,6 +146,7 @@ export async function startDeployment(deploymentId: string) {
         { status: { equals: 'active' } },
       ],
     },
+    overrideAccess: true,
   })
 
   if (members.docs.length === 0) {
@@ -237,6 +242,7 @@ export async function getDeploymentStatus(deploymentId: string) {
       collection: 'deployments',
       id: deploymentId,
       depth: 1,
+      overrideAccess: true,
     })
 
     if (!deployment) {
@@ -252,6 +258,7 @@ export async function getDeploymentStatus(deploymentId: string) {
       collection: 'apps',
       id: appId,
       depth: 1,
+      overrideAccess: true,
     })
 
     if (!app) {
@@ -272,6 +279,7 @@ export async function getDeploymentStatus(deploymentId: string) {
           { status: { equals: 'active' } },
         ],
       },
+      overrideAccess: true,
     })
 
     if (members.docs.length === 0) {
@@ -339,6 +347,7 @@ export async function getDeploymentGenerators() {
         ],
       },
       limit: 100,
+      overrideAccess: true,
     })
 
     return {
@@ -371,6 +380,7 @@ export async function getGeneratedFiles(deploymentId: string) {
       collection: 'deployments',
       id: deploymentId,
       depth: 0,
+      overrideAccess: true,
     })
 
     if (!deployment) {
@@ -488,6 +498,7 @@ export async function commitGeneratedFiles(input: {
       collection: 'deployments',
       id: input.deploymentId,
       depth: 1,
+      overrideAccess: true,
     })
 
     if (!deployment) {
@@ -527,6 +538,7 @@ export async function commitGeneratedFiles(input: {
           { status: { equals: 'active' } },
         ],
       },
+      overrideAccess: true,
     })
     if (members.docs.length === 0) {
       return { success: false, error: 'Not a member of this workspace' }
@@ -729,6 +741,7 @@ export async function syncDeploymentStatusFromWorkflow(
         const deployment = await payload.findByID({
           collection: 'deployments',
           id: deploymentId,
+          overrideAccess: true,
         })
         // If generator is docker-compose or helm, it's generate mode -> status should be 'generated'
         if (deployment?.generator === 'docker-compose' || deployment?.generator === 'helm') {
@@ -778,6 +791,7 @@ export async function deleteDeployment(deploymentId: string) {
       collection: 'deployments',
       id: deploymentId,
       depth: 2,
+      overrideAccess: true,
     })
 
     if (!deployment) {
@@ -793,6 +807,7 @@ export async function deleteDeployment(deploymentId: string) {
       collection: 'apps',
       id: appId,
       depth: 1,
+      overrideAccess: true,
     })
 
     if (!app) {
@@ -812,6 +827,7 @@ export async function deleteDeployment(deploymentId: string) {
           { status: { equals: 'active' } },
         ],
       },
+      overrideAccess: true,
     })
 
     if (members.docs.length === 0) {
