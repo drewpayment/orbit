@@ -1,11 +1,10 @@
 import type { AuthStrategy, AuthStrategyFunctionArgs, AuthStrategyResult } from 'payload'
 import { auth } from '@/lib/auth'
 
-const ADMIN_ROLES = ['super_admin', 'admin']
-
 /**
  * Custom Payload AuthStrategy that validates Better Auth sessions.
- * Only allows users with super_admin or admin roles to access the Payload admin panel.
+ * All authenticated users get req.user populated.
+ * Admin panel access is gated separately via Users.access.admin.
  */
 async function authenticate({ headers, payload }: AuthStrategyFunctionArgs): Promise<AuthStrategyResult> {
   try {
@@ -15,11 +14,7 @@ async function authenticate({ headers, payload }: AuthStrategyFunctionArgs): Pro
       return { user: null }
     }
 
-    const userRole = (session.user as any).role || 'user'
-    if (!ADMIN_ROLES.includes(userRole)) {
-      return { user: null }
-    }
-
+    const betterAuthId = session.user.id
     const result = await payload.find({
       collection: 'users',
       where: { email: { equals: session.user.email } },
@@ -27,10 +22,25 @@ async function authenticate({ headers, payload }: AuthStrategyFunctionArgs): Pro
       overrideAccess: true,
     })
 
-    const payloadUser = result.docs[0]
+    let payloadUser = result.docs[0]
     if (!payloadUser) {
-      console.warn(`[better-auth-strategy] No Payload user found for admin email: ${session.user.email}`)
+      console.warn(`[better-auth-strategy] No Payload user found for email: ${session.user.email}`)
       return { user: null }
+    }
+
+    // Lazy-populate betterAuthId on first authentication
+    if (!payloadUser.betterAuthId && betterAuthId) {
+      try {
+        payloadUser = await payload.update({
+          collection: 'users',
+          id: payloadUser.id,
+          data: { betterAuthId },
+          overrideAccess: true,
+          context: { skipApprovalHook: true },
+        })
+      } catch (error) {
+        console.error('[better-auth-strategy] Failed to populate betterAuthId:', error)
+      }
     }
 
     return {
