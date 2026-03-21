@@ -55,6 +55,7 @@ export async function getRegistriesAndWorkspaces(): Promise<{
       },
       depth: 1,
       limit: 100,
+      overrideAccess: true,
     })
 
     const workspaceIds = memberships.docs.map((m) =>
@@ -77,6 +78,7 @@ export async function getRegistriesAndWorkspaces(): Promise<{
             id: { in: adminWorkspaceIds },
           },
           limit: 100,
+          overrideAccess: true,
         })
       : { docs: [] }
 
@@ -89,6 +91,7 @@ export async function getRegistriesAndWorkspaces(): Promise<{
           },
           depth: 1,
           limit: 100,
+          overrideAccess: true,
         })
       : { docs: [] }
 
@@ -138,6 +141,7 @@ export async function createRegistry(data: {
         { status: { equals: 'active' } },
       ],
     },
+    overrideAccess: true,
   })
 
   if (membership.docs.length === 0) {
@@ -228,6 +232,7 @@ export async function updateRegistry(
   const existingRegistry = await payload.findByID({
     collection: 'registry-configs',
     id,
+    overrideAccess: true,
   })
 
   if (!existingRegistry) {
@@ -249,6 +254,7 @@ export async function updateRegistry(
         { status: { equals: 'active' } },
       ],
     },
+    overrideAccess: true,
   })
 
   if (membership.docs.length === 0) {
@@ -320,6 +326,7 @@ export async function deleteRegistry(id: string): Promise<{ success: boolean; er
   const existingRegistry = await payload.findByID({
     collection: 'registry-configs',
     id,
+    overrideAccess: true,
   })
 
   if (!existingRegistry) {
@@ -341,6 +348,7 @@ export async function deleteRegistry(id: string): Promise<{ success: boolean; er
         { status: { equals: 'active' } },
       ],
     },
+    overrideAccess: true,
   })
 
   if (membership.docs.length === 0) {
@@ -413,6 +421,7 @@ export async function testGhcrConnection(configId: string): Promise<{
         { status: { equals: 'active' } },
       ],
     },
+    overrideAccess: true,
   })
 
   if (membership.docs.length === 0) {
@@ -486,6 +495,7 @@ export async function setOrbitAsDefault(workspaceId: string): Promise<{
         { status: { equals: 'active' } },
       ],
     },
+    overrideAccess: true,
   })
 
   if (membership.docs.length === 0) {
@@ -523,6 +533,7 @@ export async function setOrbitAsDefault(workspaceId: string): Promise<{
           { type: { equals: 'orbit' } },
         ],
       },
+      overrideAccess: true,
     })
 
     if (existingOrbit.docs.length > 0) {
@@ -618,6 +629,7 @@ export async function testAcrConnection(configId: string): Promise<{
         { status: { equals: 'active' } },
       ],
     },
+    overrideAccess: true,
   })
 
   if (membership.docs.length === 0) {
