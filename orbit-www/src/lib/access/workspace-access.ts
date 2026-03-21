@@ -131,8 +131,14 @@ export async function getMemberWorkspaceIds(
 }
 
 /**
- * Check if the user is a platform super_admin.
+ * Check if the user is a platform admin (super_admin or admin).
+ * Platform admins can bypass workspace-scoped access checks.
  */
-export function isSuperAdmin(user: any): boolean {
-  return user?.role === 'super_admin'
+export function isPlatformAdmin(user: any): boolean {
+  return user?.role === 'super_admin' || user?.role === 'admin'
 }
+
+/**
+ * @deprecated Use isPlatformAdmin instead
+ */
+export const isSuperAdmin = isPlatformAdmin

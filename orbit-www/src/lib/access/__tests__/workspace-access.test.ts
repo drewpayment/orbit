@@ -14,6 +14,7 @@ const {
   getOwnerWorkspaceIds,
   getMemberWorkspaceIds,
   isSuperAdmin,
+  isPlatformAdmin,
 } = await import('../workspace-access')
 
 describe('workspace-access helpers', () => {
@@ -142,17 +143,29 @@ describe('workspace-access helpers', () => {
     })
   })
 
-  describe('isSuperAdmin', () => {
+  describe('isPlatformAdmin', () => {
     it('returns true for super_admin role', () => {
-      expect(isSuperAdmin({ role: 'super_admin' })).toBe(true)
+      expect(isPlatformAdmin({ role: 'super_admin' })).toBe(true)
     })
 
-    it('returns false for admin role', () => {
-      expect(isSuperAdmin({ role: 'admin' })).toBe(false)
+    it('returns true for admin role', () => {
+      expect(isPlatformAdmin({ role: 'admin' })).toBe(true)
+    })
+
+    it('returns false for user role', () => {
+      expect(isPlatformAdmin({ role: 'user' })).toBe(false)
     })
 
     it('returns false for null user', () => {
-      expect(isSuperAdmin(null)).toBe(false)
+      expect(isPlatformAdmin(null)).toBe(false)
+    })
+  })
+
+  describe('isSuperAdmin (deprecated alias)', () => {
+    it('works as alias for isPlatformAdmin', () => {
+      expect(isSuperAdmin({ role: 'super_admin' })).toBe(true)
+      expect(isSuperAdmin({ role: 'admin' })).toBe(true)
+      expect(isSuperAdmin({ role: 'user' })).toBe(false)
     })
   })
 })
