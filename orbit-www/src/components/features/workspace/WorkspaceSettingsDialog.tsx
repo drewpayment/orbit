@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
@@ -23,8 +23,18 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { toast } from 'sonner'
 import type { Workspace } from './WorkspaceManager'
 import { updateWorkspaceSettings, deleteWorkspace } from '@/app/(frontend)/workspaces/actions'
@@ -53,6 +63,7 @@ export function WorkspaceSettingsDialog({
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const form = useForm<SettingsFormData>({
     resolver: zodResolver(settingsSchema),
@@ -97,11 +108,11 @@ export function WorkspaceSettingsDialog({
     }
   }
 
-  const handleDelete = async () => {
-    if (!confirm(`Are you sure you want to delete "${workspace.name}"? This action cannot be undone.`)) {
-      return
-    }
+  const handleDelete = useCallback(() => {
+    setShowDeleteConfirm(true)
+  }, [])
 
+  const handleConfirmDelete = async () => {
     try {
       setIsDeleting(true)
       const result = await deleteWorkspace(workspace.id)
@@ -124,6 +135,7 @@ export function WorkspaceSettingsDialog({
       })
     } finally {
       setIsDeleting(false)
+      setShowDeleteConfirm(false)
     }
   }
 
@@ -208,6 +220,29 @@ export function WorkspaceSettingsDialog({
           </div>
         </div>
       </DialogContent>
+
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Workspace</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete &ldquo;{workspace.name}&rdquo;? This action cannot be
+              undone. All associated data will be permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+              className={buttonVariants({ variant: 'destructive' })}
+            >
+              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delete Workspace
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   )
 }
