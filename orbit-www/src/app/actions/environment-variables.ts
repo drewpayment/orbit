@@ -66,6 +66,7 @@ async function checkWorkspaceAdminAccess(
       ],
     },
     limit: 1,
+    overrideAccess: true,
   })
 
   return members.docs.length > 0
@@ -87,6 +88,7 @@ async function checkWorkspaceMemberAccess(
       ],
     },
     limit: 1,
+    overrideAccess: true,
   })
 
   return members.docs.length > 0
@@ -184,6 +186,7 @@ export async function updateEnvironmentVariable(
   const existing = await payload.findByID({
     collection: 'environment-variables',
     id,
+    overrideAccess: true,
   })
 
   if (!existing) {
@@ -243,6 +246,7 @@ export async function deleteEnvironmentVariable(
   const existing = await payload.findByID({
     collection: 'environment-variables',
     id,
+    overrideAccess: true,
   })
 
   if (!existing) {
@@ -362,6 +366,7 @@ export async function getWorkspaceEnvironmentVariables(
       },
       sort: 'name',
       limit: 1000,
+      overrideAccess: true,
     })
 
     return {
@@ -396,6 +401,7 @@ export async function getAppEnvironmentVariables(
   const app = await payload.findByID({
     collection: 'apps',
     id: appId,
+    overrideAccess: true,
   })
 
   if (!app) {
@@ -420,6 +426,7 @@ export async function getAppEnvironmentVariables(
       },
       sort: 'name',
       limit: 1000,
+      overrideAccess: true,
     })
 
     // Get workspace-level variables (for inheritance display)
@@ -433,6 +440,7 @@ export async function getAppEnvironmentVariables(
       },
       sort: 'name',
       limit: 1000,
+      overrideAccess: true,
     })
 
     return {
@@ -467,6 +475,7 @@ export async function resolveEnvironmentVariables(
     const app = await payload.findByID({
       collection: 'apps',
       id: appId,
+      overrideAccess: true,
     })
 
     if (!app) {
@@ -562,6 +571,7 @@ export async function revealEnvironmentVariableValue(
   const envVar = await payload.findByID({
     collection: 'environment-variables',
     id,
+    overrideAccess: true,
   })
 
   if (!envVar) {
@@ -606,6 +616,7 @@ export async function createAppOverride(
   const workspaceVar = await payload.findByID({
     collection: 'environment-variables',
     id: workspaceVariableId,
+    overrideAccess: true,
   })
 
   if (!workspaceVar) {
