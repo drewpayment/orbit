@@ -2,8 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getPayloadUserFromSession } from '@/lib/auth/session'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -42,15 +41,15 @@ export interface UserOption {
 // ---------------------------------------------------------------------------
 
 async function requireAdmin() {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user?.id) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { authorized: false as const, error: 'Unauthorized' }
   }
-  const role = (session.user as any).role
+  const role = (payloadUser as any).role
   if (role !== 'super_admin' && role !== 'admin') {
     return { authorized: false as const, error: 'Forbidden: admin access required' }
   }
-  return { authorized: true as const, userId: session.user.id }
+  return { authorized: true as const, userId: payloadUser.betterAuthId, payloadUser }
 }
 
 // ---------------------------------------------------------------------------
@@ -145,7 +144,8 @@ export async function createCloudAccount(data: {
         createdBy: check.userId,
         status: 'disconnected',
       } as any,
-      overrideAccess: true,
+      user: check.payloadUser,
+      overrideAccess: false,
     })
 
     return { success: true, id: doc.id }
@@ -191,7 +191,8 @@ export async function updateCloudAccount(
       collection: 'cloud-accounts',
       id,
       data: updateData as any,
-      overrideAccess: true,
+      user: check.payloadUser,
+      overrideAccess: false,
     })
 
     return { success: true }
@@ -218,7 +219,8 @@ export async function deleteCloudAccount(
     await payload.delete({
       collection: 'cloud-accounts',
       id,
-      overrideAccess: true,
+      user: check.payloadUser,
+      overrideAccess: false,
     })
 
     return { success: true }
