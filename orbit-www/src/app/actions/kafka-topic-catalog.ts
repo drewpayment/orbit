@@ -234,7 +234,7 @@ export async function searchTopicCatalog(
   }
 
   const payload = await getPayload({ config })
-  const userId = payloadUser.betterAuthId
+  const userId = payloadUser.betterAuthId || payloadUser.id
 
   try {
     // Get user's workspace memberships
@@ -447,7 +447,7 @@ export async function requestTopicAccess(
   }
 
   const payload = await getPayload({ config })
-  const userId = payloadUser.betterAuthId
+  const userId = payloadUser.betterAuthId || payloadUser.id
 
   try {
     // Verify user is a member of the requesting workspace
@@ -584,7 +584,7 @@ export async function getConnectionDetails(
   }
 
   const payload = await getPayload({ config })
-  const userId = payloadUser.betterAuthId
+  const userId = payloadUser.betterAuthId || payloadUser.id
 
   try {
     // Fetch the share with related data
@@ -749,7 +749,7 @@ export async function getOwnTopicConnectionDetails(
   }
 
   const payload = await getPayload({ config })
-  const userId = payloadUser.betterAuthId
+  const userId = payloadUser.betterAuthId || payloadUser.id
 
   try {
     // Fetch the topic with related data

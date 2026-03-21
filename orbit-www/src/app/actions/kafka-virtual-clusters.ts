@@ -85,7 +85,7 @@ export async function listVirtualClusters(
       where: {
         and: [
           { workspace: { equals: input.workspaceId } },
-          { user: { equals: payloadUser.betterAuthId } },
+          { user: { equals: payloadUser.betterAuthId || payloadUser.id } },
           { status: { equals: 'active' } },
         ],
       },
@@ -198,7 +198,7 @@ export async function createVirtualCluster(
       where: {
         and: [
           { workspace: { equals: input.workspaceId } },
-          { user: { equals: payloadUser.betterAuthId } },
+          { user: { equals: payloadUser.betterAuthId || payloadUser.id } },
           { status: { equals: 'active' } },
         ],
       },
