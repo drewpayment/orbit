@@ -33,6 +33,7 @@ export async function startBuild(input: StartBuildInput) {
     collection: 'apps',
     id: input.appId,
     depth: 2,
+    overrideAccess: true,
   })
 
   if (!app) {
@@ -53,6 +54,7 @@ export async function startBuild(input: StartBuildInput) {
         { status: { equals: 'active' } },
       ],
     },
+    overrideAccess: true,
   })
 
   if (members.docs.length === 0) {
@@ -94,7 +96,7 @@ export async function startBuild(input: StartBuildInput) {
   // If no registry found, check if Orbit registry is allowed as fallback
   if (!registryConfig) {
     const workspace = typeof app.workspace === 'string'
-      ? await payload.findByID({ collection: 'workspaces', id: app.workspace, depth: 0 })
+      ? await payload.findByID({ collection: 'workspaces', id: app.workspace, depth: 0, overrideAccess: true })
       : app.workspace
 
     // Type assertion needed because auto-generated types don't include allowOrbitRegistry yet
@@ -131,6 +133,7 @@ export async function startBuild(input: StartBuildInput) {
         status: { equals: 'active' },
       },
       limit: 1,
+      overrideAccess: true,
     })
 
     if (installation.docs.length === 0) {
@@ -173,7 +176,7 @@ export async function startBuild(input: StartBuildInput) {
     if (useOrbitRegistry || registryType === 'orbit') {
       // Using Orbit registry (as fallback or explicit selection)
       const workspace = typeof app.workspace === 'string'
-        ? await payload.findByID({ collection: 'workspaces', id: app.workspace, depth: 0 })
+        ? await payload.findByID({ collection: 'workspaces', id: app.workspace, depth: 0, overrideAccess: true })
         : app.workspace
       const workspaceSlug = workspace?.slug || 'default'
 
@@ -185,7 +188,7 @@ export async function startBuild(input: StartBuildInput) {
       if (!registryConfig?.ghcrPat) {
         // No PAT configured - check if Orbit registry fallback is allowed
         const workspace = typeof app.workspace === 'string'
-          ? await payload.findByID({ collection: 'workspaces', id: app.workspace, depth: 0 })
+          ? await payload.findByID({ collection: 'workspaces', id: app.workspace, depth: 0, overrideAccess: true })
           : app.workspace
         const allowOrbitRegistry = (workspace?.settings as any)?.allowOrbitRegistry !== false
 
@@ -316,6 +319,7 @@ export async function cancelBuild(appId: string) {
     collection: 'apps',
     id: appId,
     depth: 1,
+    overrideAccess: true,
   })
 
   if (!app) {
@@ -336,6 +340,7 @@ export async function cancelBuild(appId: string) {
         { status: { equals: 'active' } },
       ],
     },
+    overrideAccess: true,
   })
 
   if (members.docs.length === 0) {
@@ -404,6 +409,7 @@ export async function getBuildStatus(appId: string): Promise<BuildStatus | null>
     collection: 'apps',
     id: appId,
     depth: 1,
+    overrideAccess: true,
   })
 
   if (!app) {
@@ -441,6 +447,7 @@ export async function checkRegistryAvailable(appId: string): Promise<{
     collection: 'apps',
     id: appId,
     depth: 2,
+    overrideAccess: true,
   })
 
   if (!app) {
@@ -450,7 +457,7 @@ export async function checkRegistryAvailable(appId: string): Promise<{
   // Check for direct registry config on app
   if (app.registryConfig) {
     const registry = typeof app.registryConfig === 'string'
-      ? await payload.findByID({ collection: 'registry-configs', id: app.registryConfig })
+      ? await payload.findByID({ collection: 'registry-configs', id: app.registryConfig, overrideAccess: true })
       : app.registryConfig
 
     if (registry) {
@@ -475,6 +482,7 @@ export async function checkRegistryAvailable(appId: string): Promise<{
         ],
       },
       limit: 1,
+      overrideAccess: true,
     })
 
     if (defaults.docs.length > 0) {
@@ -494,6 +502,7 @@ export async function checkRegistryAvailable(appId: string): Promise<{
       collection: 'workspaces',
       id: workspaceId,
       depth: 0,
+      overrideAccess: true,
     })
 
     // Type assertion needed because auto-generated types don't include allowOrbitRegistry yet
@@ -524,6 +533,7 @@ export async function analyzeRepository(appId: string) {
     collection: 'apps',
     id: appId,
     depth: 1,
+    overrideAccess: true,
   })
 
   if (!app || !app.repository?.url) {
