@@ -2,8 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { headers } from 'next/headers'
-import { auth } from '@/lib/auth'
+import { getPayloadUserFromSession } from '@/lib/auth/session'
 import { decrypt } from '@/lib/encryption'
 import { getTemporalClient } from '@/lib/temporal/client'
 import { resolveEnvironmentVariables } from './environment-variables'
@@ -22,8 +21,8 @@ interface StartBuildInput {
 }
 
 export async function startBuild(input: StartBuildInput) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -50,7 +49,7 @@ export async function startBuild(input: StartBuildInput) {
     where: {
       and: [
         { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: payloadUser.betterAuthId } },
         { status: { equals: 'active' } },
       ],
     },
@@ -255,7 +254,7 @@ export async function startBuild(input: StartBuildInput) {
     const result = await startBuildWorkflow({
       appId: input.appId,
       workspaceId,
-      userId: session.user.id,
+      userId: payloadUser.betterAuthId,
       repoUrl,
       ref,
       registry: {
@@ -285,7 +284,7 @@ export async function startBuild(input: StartBuildInput) {
         latestBuild: {
           status: 'analyzing',
           builtAt: null,
-          builtBy: session.user.id,
+          builtBy: payloadUser.betterAuthId,
           imageUrl: null,
           imageDigest: null,
           imageTag: null,
@@ -293,6 +292,8 @@ export async function startBuild(input: StartBuildInput) {
           error: null,
         },
       },
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     return { success: true, workflowId: result.workflowId }
@@ -303,8 +304,8 @@ export async function startBuild(input: StartBuildInput) {
 }
 
 export async function cancelBuild(appId: string) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -331,7 +332,7 @@ export async function cancelBuild(appId: string) {
     where: {
       and: [
         { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
+        { user: { equals: payloadUser.betterAuthId } },
         { status: { equals: 'active' } },
       ],
     },
@@ -358,6 +359,8 @@ export async function cancelBuild(appId: string) {
           error: null,
         },
       },
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     // TODO: If there's an active Temporal workflow, cancel it
@@ -390,8 +393,8 @@ export interface BuildStatus {
 }
 
 export async function getBuildStatus(appId: string): Promise<BuildStatus | null> {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return null
   }
 
@@ -427,8 +430,8 @@ export async function checkRegistryAvailable(appId: string): Promise<{
   registryType?: 'ghcr' | 'acr' | 'orbit'
   isWorkspaceDefault?: boolean
 }> {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { available: false }
   }
 
@@ -510,8 +513,8 @@ export async function checkRegistryAvailable(appId: string): Promise<{
 }
 
 export async function analyzeRepository(appId: string) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -547,8 +550,8 @@ export async function selectPackageManager(
   packageManager: 'npm' | 'yarn' | 'pnpm' | 'bun'
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const session = await auth.api.getSession({ headers: await headers() })
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Unauthorized' }
     }
 
