@@ -387,6 +387,13 @@ Historical planning artifacts from pre-superpowers workflow. See `specs/README.m
 - Use workflow queries for progress tracking
 - Test workflows using Temporal's test framework
 
+## Git Workflow
+
+- **NEVER push directly to `main`**. All work must be done on a feature branch and submitted as a pull request.
+- Create a descriptively named feature branch (e.g., `fix/workspace-mock-data`, `feat/template-instantiation`) before committing.
+- Push the feature branch to the remote and open a PR targeting `main`.
+- If you are already on `main` with uncommitted changes, create a new branch first before committing.
+
 ## Important Notes
 
 - **Package management**: Frontend uses `pnpm`, Go uses `go mod`
