@@ -134,7 +134,8 @@ export async function submitApplicationRequest(
         requestedBy: payloadUser.betterAuthId || payloadUser.id,
         status: 'pending_workspace',
       },
-      overrideAccess: true,
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     return { success: true, requestId: request.id }
@@ -255,6 +256,11 @@ export async function getPendingPlatformApprovals(): Promise<{
     const payloadUser = await getPayloadUserFromSession()
     if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
+    }
+
+    const role = (payloadUser as any).role
+    if (role !== 'super_admin' && role !== 'admin') {
+      return { success: false, error: 'Forbidden: platform admin access required', requests: [] }
     }
 
     const payload = await getPayload({ config })
@@ -444,6 +450,11 @@ export async function approveRequestAsPlatformAdmin(
       return { success: false, error: 'Not authenticated' }
     }
 
+    const role = (payloadUser as any).role
+    if (role !== 'super_admin' && role !== 'admin') {
+      return { success: false, error: 'Forbidden: platform admin access required' }
+    }
+
     const payload = await getPayload({ config })
 
     const request = await payload.findByID({
@@ -499,6 +510,11 @@ export async function rejectRequestAsPlatformAdmin(
     const payloadUser = await getPayloadUserFromSession()
     if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
+    }
+
+    const role = (payloadUser as any).role
+    if (role !== 'super_admin' && role !== 'admin') {
+      return { success: false, error: 'Forbidden: platform admin access required' }
     }
 
     const payload = await getPayload({ config })
