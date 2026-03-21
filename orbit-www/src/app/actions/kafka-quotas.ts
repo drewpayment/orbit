@@ -79,6 +79,11 @@ export async function setWorkspaceQuotaOverride(
       return { success: false, error: 'Not authenticated' }
     }
 
+    const role = (payloadUser as any).role
+    if (role !== 'super_admin' && role !== 'admin') {
+      return { success: false, error: 'Forbidden: platform admin access required' }
+    }
+
     const payload = await getPayload({ config })
 
     // Validate input
