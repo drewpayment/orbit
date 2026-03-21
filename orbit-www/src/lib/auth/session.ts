@@ -42,8 +42,24 @@ export async function getPayloadUserFromSession() {
     overrideAccess: true,
   })
 
-  const payloadUser = result.docs[0]
+  let payloadUser = result.docs[0]
   if (!payloadUser) return null
+
+  // Lazy-populate betterAuthId if missing (mirrors strategy behavior)
+  const betterAuthId = session.user.id
+  if (!payloadUser.betterAuthId && betterAuthId) {
+    try {
+      payloadUser = await payload.update({
+        collection: 'users',
+        id: payloadUser.id,
+        data: { betterAuthId },
+        overrideAccess: true,
+        context: { skipApprovalHook: true },
+      })
+    } catch {
+      // Non-fatal — betterAuthId will be populated on next call
+    }
+  }
 
   return {
     ...payloadUser,
