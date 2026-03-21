@@ -1,5 +1,5 @@
 import type { CollectionConfig } from 'payload'
-import { getMongoClient } from '@/lib/mongodb'
+import { getAdminOrOwnerWorkspaceIds, getOwnerWorkspaceIds, isSuperAdmin } from '@/lib/access/workspace-access'
 
 export const Workspaces: CollectionConfig = {
   slug: 'workspaces',
@@ -8,15 +8,30 @@ export const Workspaces: CollectionConfig = {
     defaultColumns: ['name', 'slug', 'createdAt'],
   },
   access: {
-    // Everyone can read workspaces
+    // Public read — allows workspace discovery and join pages
     read: () => true,
-    // Only authenticated users can create workspaces
+    // Any authenticated user can create workspaces
     create: ({ req: { user } }) => !!user,
-    // Any authenticated Payload admin can update/delete.
-    // workspace-members.user stores Better Auth IDs, not Payload IDs,
-    // so per-user checks can't match here. Frontend uses overrideAccess: true.
-    update: ({ req: { user } }) => !!user,
-    delete: ({ req: { user } }) => !!user,
+    // Platform admins or workspace owners/admins
+    update: async ({ req }) => {
+      if (!req.user) return false
+      if (isSuperAdmin(req.user)) return true
+      const betterAuthId = (req.user as any).betterAuthId
+      if (!betterAuthId) return false
+      const ids = await getAdminOrOwnerWorkspaceIds(req.payload, betterAuthId)
+      if (ids.length === 0) return false
+      return { id: { in: ids } }
+    },
+    // Platform admins or workspace owners only (not admins — extra safety)
+    delete: async ({ req }) => {
+      if (!req.user) return false
+      if (isSuperAdmin(req.user)) return true
+      const betterAuthId = (req.user as any).betterAuthId
+      if (!betterAuthId) return false
+      const ids = await getOwnerWorkspaceIds(req.payload, betterAuthId)
+      if (ids.length === 0) return false
+      return { id: { in: ids } }
+    },
   },
   fields: [
     {
@@ -160,6 +175,7 @@ export const Workspaces: CollectionConfig = {
               const parent = await req.payload.findByID({
                 collection: 'workspaces',
                 id: currentParentId,
+                overrideAccess: true,
               })
 
               currentParentId =
@@ -197,6 +213,7 @@ export const Workspaces: CollectionConfig = {
               const child = await req.payload.findByID({
                 collection: 'workspaces',
                 id: childId,
+                overrideAccess: true,
               })
 
               // Check if the child has this workspace in its parent chain
@@ -220,6 +237,7 @@ export const Workspaces: CollectionConfig = {
                 const parent = await req.payload.findByID({
                   collection: 'workspaces',
                   id: currentParentId,
+                  overrideAccess: true,
                 })
 
                 currentParentId =
@@ -247,17 +265,15 @@ export const Workspaces: CollectionConfig = {
     afterChange: [
       async ({ operation, doc, req: { payload, user }, previousDoc, context }) => {
         // When a workspace is created, automatically add the creator as owner
-        // Resolve the Payload admin's email to a Better Auth user ID
         if (operation === 'create' && user) {
           try {
-            const mongoClient = await getMongoClient()
-            const baUser = await mongoClient.db().collection('user').findOne({ email: user.email })
-            if (baUser) {
+            const betterAuthId = (user as any).betterAuthId
+            if (betterAuthId) {
               await payload.create({
                 collection: 'workspace-members',
                 data: {
                   workspace: doc.id,
-                  user: baUser.id as string,
+                  user: betterAuthId,
                   role: 'owner',
                   status: 'active',
                   requestedAt: new Date().toISOString(),
@@ -301,6 +317,7 @@ export const Workspaces: CollectionConfig = {
                 collection: 'workspaces',
                 id: previousParent,
                 depth: 0,
+                overrideAccess: true,
               })
 
               const updatedChildren =
@@ -319,6 +336,7 @@ export const Workspaces: CollectionConfig = {
                 context: {
                   skipHierarchySync: true,
                 },
+                overrideAccess: true,
               })
             } catch (error) {
               console.error('Error removing from previous parent:', error)
@@ -332,6 +350,7 @@ export const Workspaces: CollectionConfig = {
                 collection: 'workspaces',
                 id: currentParent,
                 depth: 0,
+                overrideAccess: true,
               })
 
               const existingChildren =
@@ -350,6 +369,7 @@ export const Workspaces: CollectionConfig = {
                   context: {
                     skipHierarchySync: true,
                   },
+                  overrideAccess: true,
                 })
               }
             } catch (error) {
@@ -369,6 +389,7 @@ export const Workspaces: CollectionConfig = {
               collection: 'workspaces',
               id: childId,
               depth: 0,
+              overrideAccess: true,
             })
 
             // Only update if the child doesn't already have this workspace as parent
@@ -382,6 +403,7 @@ export const Workspaces: CollectionConfig = {
                 context: {
                   skipHierarchySync: true,
                 },
+                overrideAccess: true,
               })
             }
           } catch (error) {
@@ -396,6 +418,7 @@ export const Workspaces: CollectionConfig = {
               collection: 'workspaces',
               id: childId,
               depth: 0,
+              overrideAccess: true,
             })
 
             // Only update if this workspace is currently the parent
@@ -409,6 +432,7 @@ export const Workspaces: CollectionConfig = {
                 context: {
                   skipHierarchySync: true,
                 },
+                overrideAccess: true,
               })
             }
           } catch (error) {
