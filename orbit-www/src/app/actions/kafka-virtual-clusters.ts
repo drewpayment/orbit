@@ -2,8 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getPayloadUserFromSession } from '@/lib/auth/session'
 import type { KafkaVirtualCluster, KafkaApplication, Workspace } from '@/payload-types'
 import { getTemporalClient } from '@/lib/temporal/client'
 
@@ -73,11 +72,8 @@ export async function listVirtualClusters(
   input: ListVirtualClustersInput
 ): Promise<ListVirtualClustersResult> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -89,7 +85,7 @@ export async function listVirtualClusters(
       where: {
         and: [
           { workspace: { equals: input.workspaceId } },
-          { user: { equals: session.user.id } },
+          { user: { equals: payloadUser.betterAuthId } },
           { status: { equals: 'active' } },
         ],
       },
@@ -189,11 +185,8 @@ export async function createVirtualCluster(
   input: CreateVirtualClusterInput
 ): Promise<CreateVirtualClusterResult> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -205,7 +198,7 @@ export async function createVirtualCluster(
       where: {
         and: [
           { workspace: { equals: input.workspaceId } },
-          { user: { equals: session.user.id } },
+          { user: { equals: payloadUser.betterAuthId } },
           { status: { equals: 'active' } },
         ],
       },
@@ -339,7 +332,8 @@ export async function createVirtualCluster(
           status: 'active',
           provisioningStatus: 'completed',
         },
-        overrideAccess: true,
+        user: payloadUser,
+        overrideAccess: false,
       })
       applicationId = newApp.id
     } else {
@@ -361,7 +355,8 @@ export async function createVirtualCluster(
         // Start as provisioning, workflow will update to active after Bifrost sync
         status: 'provisioning',
       },
-      overrideAccess: true,
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     // Trigger workflow to sync virtual cluster to Bifrost
@@ -402,11 +397,8 @@ export async function getVirtualCluster(
   input: GetVirtualClusterInput
 ): Promise<GetVirtualClusterResult> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const payloadUser = await getPayloadUserFromSession()
+    if (!payloadUser) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -416,6 +408,8 @@ export async function getVirtualCluster(
       collection: 'kafka-virtual-clusters',
       id: input.clusterId,
       depth: 1,
+      user: payloadUser,
+      overrideAccess: false,
     })
 
     if (!cluster) {
