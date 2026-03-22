@@ -86,7 +86,7 @@ const navMainData = [
 const navSettingsData = [
   {
     title: "Settings",
-    url: "/settings/github",
+    url: "/settings",
     icon: Settings,
     items: [
       { title: "GitHub", url: "/settings/github", icon: GitBranch },

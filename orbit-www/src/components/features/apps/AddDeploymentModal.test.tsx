@@ -7,6 +7,8 @@ import { AddDeploymentModal } from './AddDeploymentModal'
 vi.mock('@/app/actions/deployments', () => ({
   createDeployment: vi.fn().mockResolvedValue({ success: true, deploymentId: 'dep-123' }),
   getDeploymentGenerators: vi.fn().mockResolvedValue({ success: false, generators: [] }),
+  getActiveLaunchesForWorkspace: vi.fn().mockResolvedValue({ success: true, launches: [] }),
+  startDeployToLaunch: vi.fn().mockResolvedValue({ success: true }),
 }))
 
 // Mock next/navigation
@@ -19,6 +21,7 @@ const defaultProps = {
   onOpenChange: vi.fn(),
   appId: 'app-123',
   appName: 'My Test App',
+  workspaceId: 'ws-123',
 }
 
 describe('AddDeploymentModal', () => {

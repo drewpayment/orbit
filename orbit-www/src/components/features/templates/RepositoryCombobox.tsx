@@ -111,7 +111,7 @@ export function RepositoryCombobox({
     return (
       <p className="text-sm text-muted-foreground">
         No GitHub App installed for this workspace.{' '}
-        <a href="/settings" className="text-primary underline">
+        <a href="/settings/github" className="text-primary underline">
           Configure GitHub integration
         </a>
       </p>

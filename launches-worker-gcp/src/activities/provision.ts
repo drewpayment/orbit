@@ -55,8 +55,6 @@ export async function provisionInfra(
       });
     }
 
-    await stack.refresh({ onOutput: logger.info });
-
     const outputLines: string[] = [];
     const upResult = await stack.up({
       onOutput: (line: string) => {

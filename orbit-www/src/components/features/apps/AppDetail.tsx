@@ -31,7 +31,7 @@ import { BuildSection } from './BuildSection'
 import { AppEnvironmentVariables } from './AppEnvironmentVariables'
 import { getHealthHistory } from '@/app/actions/apps'
 import { DeploymentRow } from './DeploymentRow'
-import { startDeployment, deleteDeployment } from '@/app/actions/deployments'
+import { startDeployment, startDeployToLaunch, deleteDeployment } from '@/app/actions/deployments'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import { SyncStatusBadge } from './SyncStatusBadge'
@@ -69,7 +69,13 @@ export function AppDetail({ app, deployments }: AppDetailProps) {
   const template = app.origin?.template as Template | undefined
 
   const handleDeploy = async (deploymentId: string) => {
-    const result = await startDeployment(deploymentId)
+    const deployment = deployments.find(d => d.id === deploymentId)
+    const isLaunchDeploy = !!(deployment as any)?.launch
+
+    const result = isLaunchDeploy
+      ? await startDeployToLaunch(deploymentId)
+      : await startDeployment(deploymentId)
+
     if (result.success) {
       toast.success('Deployment started')
       router.refresh()
@@ -342,6 +348,7 @@ export function AppDetail({ app, deployments }: AppDetailProps) {
         onOpenChange={setShowAddDeployment}
         appId={app.id}
         appName={app.name}
+        workspaceId={typeof app.workspace === 'string' ? app.workspace : app.workspace.id}
       />
 
       <AppSettingsSheet

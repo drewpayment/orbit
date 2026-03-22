@@ -47,3 +47,30 @@ export interface ValidateCredentialsResult {
   error?: string;
   accountIdentifier?: string;
 }
+
+export interface DeployToLaunchInput {
+  deploymentId: string;
+  launchId: string;
+  strategy: string;
+  cloudAccountId: string;
+  provider: string;
+  repoUrl: string;
+  branch: string;
+  buildCommand: string;
+  outputDirectory: string;
+  launchOutputs: Record<string, unknown>;
+  buildEnv: Record<string, string>;
+}
+
+export interface DeployToLaunchResult {
+  deployedUrl: string;
+  filesCount: number;
+  summary: string[];
+}
+
+export interface UpdateDeploymentStatusInput {
+  deploymentId: string;
+  status: string;
+  error?: string;
+  url?: string;
+}

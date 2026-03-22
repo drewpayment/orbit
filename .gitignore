@@ -12,3 +12,5 @@ temporal-workflows/*.test
 services/*/bin/
 services/*/server
 node_modules
+launches-worker-gcp/gcp-sa.json
+dogfood-*

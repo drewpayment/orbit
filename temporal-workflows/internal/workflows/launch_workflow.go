@@ -155,7 +155,10 @@ func LaunchWorkflow(ctx workflow.Context, input types.LaunchWorkflowInput) error
 	// ==========================================
 	// Step 2: Approval Gate (conditional)
 	// ==========================================
-	if input.ApprovalRequired {
+	if input.ApprovalRequired && input.AutoApproved {
+		logger.Info("Approval auto-granted — launcher is an approver", "launchedBy", input.LaunchedBy, "launchId", input.LaunchID)
+		progress.Logs = append(progress.Logs, fmt.Sprintf("Auto-approved by %s (launcher is an approver)", input.LaunchedBy))
+	} else if input.ApprovalRequired {
 		progress.CurrentStep = 2
 		progress.Status = "awaiting_approval"
 		progress.Message = "Waiting for approval"
@@ -173,18 +176,27 @@ func LaunchWorkflow(ctx workflow.Context, input types.LaunchWorkflowInput) error
 			return fmt.Errorf("failed to update status: %w", err)
 		}
 
-		// Wait for approval signal or timeout
+		// Wait for approval signal, abort signal, or timeout
 		approvalCh := workflow.GetSignalChannel(ctx, ApprovalSignal)
+		abortCh := workflow.GetSignalChannel(ctx, AbortSignal)
 		timerFuture := workflow.NewTimer(ctx, 24*time.Hour)
 
 		selector := workflow.NewSelector(ctx)
 		var approvalInput types.ApprovalSignalInput
 		approved := false
 		timedOut := false
+		aborted := false
 
 		selector.AddReceive(approvalCh, func(c workflow.ReceiveChannel, more bool) {
 			c.Receive(ctx, &approvalInput)
 			approved = approvalInput.Approved
+		})
+
+		selector.AddReceive(abortCh, func(c workflow.ReceiveChannel, more bool) {
+			var abortInput types.AbortSignalInput
+			c.Receive(ctx, &abortInput)
+			aborted = true
+			logger.Info("Abort signal received during approval gate", "requestedBy", abortInput.RequestedBy)
 		})
 
 		selector.AddFuture(timerFuture, func(f workflow.Future) {
@@ -193,9 +205,11 @@ func LaunchWorkflow(ctx workflow.Context, input types.LaunchWorkflowInput) error
 
 		selector.Select(ctx)
 
-		if timedOut || !approved {
+		if aborted || timedOut || !approved {
 			reason := "approval rejected"
-			if timedOut {
+			if aborted {
+				reason = "aborted by user"
+			} else if timedOut {
 				reason = "approval timed out after 24 hours"
 			}
 			progress.Status = "aborted"

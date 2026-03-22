@@ -156,12 +156,13 @@ export const launchTemplatesSeedData = [
     parameterSchema: {
       type: 'object',
       properties: {
+        project: { type: 'string', title: 'GCP Project ID', description: 'Google Cloud project ID (e.g., my-project-123)' },
         bucketName: { type: 'string', title: 'Bucket Name', description: 'Globally unique name for the GCS bucket' },
         location: { type: 'string', title: 'Location', default: 'US', description: 'Multi-region or region for bucket storage' },
         versioning: { type: 'boolean', title: 'Enable Versioning', default: false },
         publicAccess: { type: 'boolean', title: 'Allow Public Access', default: false },
       },
-      required: ['bucketName'],
+      required: ['project', 'bucketName'],
     },
   },
   {
@@ -257,11 +258,12 @@ export const launchTemplatesSeedData = [
     parameterSchema: {
       type: 'object',
       properties: {
+        project: { type: 'string', title: 'GCP Project ID', description: 'Google Cloud project ID (e.g., my-project-123)' },
         siteName: { type: 'string', title: 'Site Name', description: 'Name prefix for all resources' },
         domainName: { type: 'string', title: 'Domain Name', description: 'Custom domain (e.g., www.example.com)' },
-        enableCdn: { type: 'boolean', title: 'Enable Cloud CDN', default: true },
+        enableCdn: { type: 'boolean', title: 'Enable Cloud CDN', default: false },
       },
-      required: ['siteName'],
+      required: ['project', 'siteName'],
     },
   },
 

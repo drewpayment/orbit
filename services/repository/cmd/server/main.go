@@ -253,13 +253,17 @@ func (tc *TemporalClient) StartLaunchWorkflow(ctx context.Context, input *grpcse
 	workflowID := fmt.Sprintf("launch-%s-%d", input.LaunchID, time.Now().Unix())
 
 	workflowInput := types.LaunchWorkflowInput{
-		LaunchID:         input.LaunchID,
-		TemplateSlug:     input.TemplateSlug,
-		CloudAccountID:   input.CloudAccountID,
-		Provider:         input.Provider,
-		Region:           input.Region,
-		Parameters:       input.Parameters,
-		ApprovalRequired: input.ApprovalRequired,
+		LaunchID:          input.LaunchID,
+		TemplateSlug:      input.TemplateSlug,
+		CloudAccountID:    input.CloudAccountID,
+		Provider:          input.Provider,
+		Region:            input.Region,
+		Parameters:        input.Parameters,
+		ApprovalRequired:  input.ApprovalRequired,
+		PulumiProjectPath: input.PulumiProjectPath,
+		WorkspaceID:       input.WorkspaceID,
+		AutoApproved:      input.AutoApproved,
+		LaunchedBy:        input.LaunchedBy,
 	}
 
 	we, err := tc.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
@@ -318,6 +322,38 @@ func (tc *TemporalClient) SignalLaunchAbort(ctx context.Context, workflowID stri
 	return tc.client.SignalWorkflow(ctx, workflowID, "", "AbortSignal", types.AbortSignalInput{
 		RequestedBy: requestedBy,
 	})
+}
+
+// StartDeployToLaunchWorkflow starts a deploy-to-launch workflow on the provider task queue
+func (tc *TemporalClient) StartDeployToLaunchWorkflow(ctx context.Context, input *grpcserver.DeployToLaunchInput) (string, error) {
+	workflowID := fmt.Sprintf("deploy-to-launch-%s-%d", input.DeploymentID, time.Now().Unix())
+
+	taskQueue := fmt.Sprintf("launches_%s", input.Provider)
+
+	workflowInput := types.DeployToLaunchInput{
+		DeploymentID:    input.DeploymentID,
+		LaunchID:        input.LaunchID,
+		Strategy:        input.Strategy,
+		CloudAccountID:  input.CloudAccountID,
+		Provider:        input.Provider,
+		RepoURL:         input.RepoURL,
+		Branch:          input.Branch,
+		BuildCommand:    input.BuildCommand,
+		OutputDirectory: input.OutputDirectory,
+		LaunchOutputs:   input.LaunchOutputs,
+		BuildEnv:        input.BuildEnv,
+	}
+
+	we, err := tc.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: taskQueue,
+	}, "DeployToLaunchWorkflow", workflowInput)
+
+	if err != nil {
+		return "", fmt.Errorf("failed to start deploy-to-launch workflow: %w", err)
+	}
+
+	return we.GetID(), nil
 }
 
 // StubPayloadClient is a placeholder for Payload CMS operations

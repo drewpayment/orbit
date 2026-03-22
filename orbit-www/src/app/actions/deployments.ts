@@ -18,6 +18,8 @@ interface CreateDeploymentInput {
     cluster?: string
     hostUrl?: string
   }
+  launchId?: string
+  deployStrategy?: string
 }
 
 export async function createDeployment(input: CreateDeploymentInput) {
@@ -61,6 +63,38 @@ export async function createDeployment(input: CreateDeploymentInput) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 
+  // Resolve Launch if provided
+  let launchData: { launch: string; deployStrategy: string; launchOutputs: Record<string, unknown> } | null = null
+  if (input.launchId) {
+    const launch = await payload.findByID({
+      collection: 'launches',
+      id: input.launchId,
+      depth: 1,
+      overrideAccess: true,
+    })
+
+    if (!launch || launch.status !== 'active') {
+      return { success: false, error: 'Launch not found or not active' }
+    }
+
+    let strategy = input.deployStrategy
+    if (!strategy) {
+      const template = typeof launch.template === 'string'
+        ? await payload.findByID({ collection: 'launch-templates', id: launch.template, depth: 0, overrideAccess: true })
+        : launch.template
+      if (template) {
+        const category = (template as any).category
+        strategy = category === 'storage' ? 'gcs-static-site' : 'cloud-run'
+      }
+    }
+
+    launchData = {
+      launch: input.launchId,
+      deployStrategy: strategy || 'gcs-static-site',
+      launchOutputs: (launch.pulumiOutputs as Record<string, unknown>) || {},
+    }
+  }
+
   try {
     // Create deployment record
     const deployment = await payload.create({
@@ -68,17 +102,22 @@ export async function createDeployment(input: CreateDeploymentInput) {
       data: {
         name: input.name,
         app: input.appId,
-        generator: input.generator,
-        generatorSlug: input.generatorSlug,
+        generator: launchData ? undefined : input.generator,
+        generatorSlug: launchData ? undefined : input.generatorSlug,
         config: input.config,
         target: {
-          type: input.target.type,
+          type: launchData ? 'launch' : input.target.type,
           region: input.target.region || '',
           cluster: input.target.cluster || '',
-          url: '', // Will be set after deployment
+          url: '',
         },
         status: 'pending',
         healthStatus: 'unknown',
+        ...(launchData ? {
+          launch: launchData.launch,
+          deployStrategy: launchData.deployStrategy,
+          launchOutputs: launchData.launchOutputs,
+        } : {}),
       },
       user: payloadUser,
       overrideAccess: false,
@@ -845,5 +884,135 @@ export async function deleteDeployment(deploymentId: string) {
   } catch (error) {
     console.error('Failed to delete deployment:', error)
     return { success: false, error: 'Failed to delete deployment' }
+  }
+}
+
+export async function getActiveLaunchesForWorkspace(workspaceId: string) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) return { success: false as const, launches: [] }
+
+  const payload = await getPayload({ config })
+
+  const launches = await payload.find({
+    collection: 'launches',
+    where: {
+      and: [
+        { workspace: { equals: workspaceId } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    depth: 1,
+    overrideAccess: true,
+    limit: 50,
+  })
+
+  return {
+    success: true as const,
+    launches: launches.docs.map(l => ({
+      id: l.id,
+      name: l.name,
+      provider: l.provider,
+      region: l.region,
+      pulumiOutputs: l.pulumiOutputs as Record<string, unknown> | null,
+      templateCategory: typeof l.template === 'object' && l.template ? (l.template as any).category : null,
+      templateName: typeof l.template === 'object' && l.template ? (l.template as any).name : null,
+    })),
+  }
+}
+
+export async function startDeployToLaunch(deploymentId: string) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  const payload = await getPayload({ config })
+
+  const deployment = await payload.findByID({
+    collection: 'deployments',
+    id: deploymentId,
+    depth: 2,
+    overrideAccess: true,
+  })
+
+  if (!deployment) {
+    return { success: false, error: 'Deployment not found' }
+  }
+
+  if (!deployment.launch) {
+    return { success: false, error: 'Deployment is not linked to a Launch' }
+  }
+
+  const launch = typeof deployment.launch === 'string'
+    ? await payload.findByID({ collection: 'launches', id: deployment.launch, depth: 1, overrideAccess: true })
+    : deployment.launch
+
+  if (!launch || (launch as any).status !== 'active') {
+    return { success: false, error: 'Launch is not active' }
+  }
+
+  const app = typeof deployment.app === 'string'
+    ? await payload.findByID({ collection: 'apps', id: deployment.app, depth: 0, overrideAccess: true })
+    : deployment.app
+
+  if (!app) {
+    return { success: false, error: 'App not found' }
+  }
+
+  const cloudAccountId = typeof (launch as any).cloudAccount === 'string'
+    ? (launch as any).cloudAccount
+    : (launch as any).cloudAccount?.id
+
+  try {
+    const { deployToLaunch } = await import('@/lib/clients/launch-client')
+    const { resolveEnvironmentVariables } = await import('./environment-variables')
+
+    // Resolve app env vars for the build
+    const appId = typeof deployment.app === 'string' ? deployment.app : (deployment.app as any).id
+    const envResult = await resolveEnvironmentVariables(appId, 'build')
+    const buildEnv = envResult.success && envResult.variables ? envResult.variables : {}
+
+    const response = await deployToLaunch(
+      deploymentId,
+      typeof deployment.launch === 'string' ? deployment.launch : (deployment.launch as any).id,
+      (deployment as any).deployStrategy || 'gcs-static-site',
+      cloudAccountId,
+      (launch as any).provider,
+      (app as any).repository?.url || '',
+      (app as any).repository?.branch || 'main',
+      (deployment.config as any)?.buildCommand || 'npm run build',
+      (deployment.config as any)?.outputDirectory || 'out',
+      ((deployment as any).launchOutputs || (launch as any).pulumiOutputs || {}) as any,
+      buildEnv,
+    )
+
+    if (!response.success) {
+      return { success: false, error: response.error || 'Failed to start deploy workflow' }
+    }
+
+    await payload.update({
+      collection: 'deployments',
+      id: deploymentId,
+      data: {
+        workflowId: response.workflowId,
+        status: 'deploying',
+        lastDeployedAt: new Date().toISOString(),
+      },
+      overrideAccess: true,
+    })
+
+    return { success: true, workflowId: response.workflowId }
+  } catch (error) {
+    console.error('Failed to start deploy-to-launch:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to start deployment'
+
+    await payload.update({
+      collection: 'deployments',
+      id: deploymentId,
+      data: { status: 'failed', deploymentError: errorMessage },
+      overrideAccess: true,
+    })
+
+    return { success: false, error: errorMessage }
   }
 }

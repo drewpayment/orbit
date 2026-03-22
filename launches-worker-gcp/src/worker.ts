@@ -1,5 +1,6 @@
 import { NativeConnection, Worker } from "@temporalio/worker";
 import * as activities from "./activities";
+import * as path from "path";
 
 async function run() {
   const temporalAddress = process.env.TEMPORAL_ADDRESS || "localhost:7233";
@@ -17,6 +18,7 @@ async function run() {
     namespace,
     activities,
     taskQueue,
+    workflowsPath: path.resolve(__dirname, "workflows"),
   });
 
   console.log(`GCP worker started, listening on task queue: ${taskQueue}`);

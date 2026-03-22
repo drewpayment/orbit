@@ -12,6 +12,7 @@ service LaunchService {
   rpc ApproveLaunch(ApproveLaunchRequest) returns (ApproveLaunchResponse);
   rpc DeorbitLaunch(DeorbitLaunchRequest) returns (DeorbitLaunchResponse);
   rpc AbortLaunch(AbortLaunchRequest) returns (AbortLaunchResponse);
+  rpc DeployToLaunch(DeployToLaunchRequest) returns (DeployToLaunchResponse);
 }
 
 message StartLaunchRequest {
@@ -22,6 +23,10 @@ message StartLaunchRequest {
   string region = 5;
   google.protobuf.Struct parameters = 6;
   bool approval_required = 7;
+  string pulumi_project_path = 8;
+  string workspace_id = 9;
+  bool auto_approved = 10;
+  string launched_by = 11;
 }
 
 message StartLaunchResponse {
@@ -74,4 +79,24 @@ message AbortLaunchRequest {
 message AbortLaunchResponse {
   bool success = 1;
   string error = 2;
+}
+
+message DeployToLaunchRequest {
+  string deployment_id = 1;
+  string launch_id = 2;
+  string strategy = 3;
+  string cloud_account_id = 4;
+  string provider = 5;
+  string repo_url = 6;
+  string branch = 7;
+  string build_command = 8;
+  string output_directory = 9;
+  google.protobuf.Struct launch_outputs = 10;
+  map<string, string> build_env = 11;
+}
+
+message DeployToLaunchResponse {
+  bool success = 1;
+  string workflow_id = 2;
+  string error = 3;
 }

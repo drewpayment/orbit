@@ -11,13 +11,28 @@ dev-docker: ## Start all services in Docker (recommended)
 	@./scripts/dev-start.sh
 
 dev-local: ## Start infrastructure in Docker, run orbit-www locally
-	@echo "🚀 Starting infrastructure services..."
-	docker-compose up -d mongo temporal-postgresql temporal-elasticsearch temporal-server temporal-ui temporal-worker postgres redis
+	@echo "🚀 Starting infrastructure and application services..."
+	docker compose up -d \
+		mongo postgres redis \
+		temporal-postgresql temporal-elasticsearch temporal-server temporal-ui temporal-worker \
+		redpanda redpanda-console \
+		minio minio-init orbit-registry \
+		bifrost traefik \
+		repository-service kafka-service plugins-service build-service buildkit \
+		launches-worker-aws launches-worker-gcp launches-worker-azure \
+		prometheus
 	@echo ""
-	@echo "✅ Infrastructure started!"
+	@echo "✅ All services started!"
 	@echo ""
 	@echo "📝 To start orbit-www locally:"
 	@echo "  cd orbit-www && bun run dev"
+	@echo ""
+	@echo "🔗 Service URLs:"
+	@echo "  Frontend:          http://localhost:3000  (run locally)"
+	@echo "  Temporal UI:       http://localhost:8080"
+	@echo "  Redpanda Console:  http://localhost:8083"
+	@echo "  MinIO Console:     http://localhost:9001"
+	@echo "  Prometheus:        http://localhost:9090"
 	@echo ""
 
 test: test-go test-frontend ## Run all tests

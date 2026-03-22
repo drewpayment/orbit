@@ -392,9 +392,8 @@ func main() {
 	w.RegisterWorkflow(workflows.LaunchWorkflow)
 
 	// Create and register launch activities
-	// TODO: Create PayloadLaunchClient when implementing full integration
-	var launchPayloadClient activities.PayloadLaunchClient = nil
-	launchActivities := activities.NewLaunchActivities(launchPayloadClient, logger)
+	launchPayloadClientImpl := services.NewPayloadLaunchClient(orbitAPIURL, orbitInternalAPIKey)
+	launchActivities := activities.NewLaunchActivities(launchPayloadClientImpl, logger)
 	w.RegisterActivity(launchActivities.ValidateLaunchInputs)
 	w.RegisterActivity(launchActivities.UpdateLaunchStatus)
 	w.RegisterActivity(launchActivities.StoreLaunchOutputs)

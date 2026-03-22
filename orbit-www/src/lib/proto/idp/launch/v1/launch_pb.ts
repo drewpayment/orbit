@@ -11,7 +11,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file idp/launch/v1/launch.proto.
  */
 export const file_idp_launch_v1_launch: GenFile = /*@__PURE__*/
-  fileDesc("ChppZHAvbGF1bmNoL3YxL2xhdW5jaC5wcm90bxINaWRwLmxhdW5jaC52MSLCAQoSU3RhcnRMYXVuY2hSZXF1ZXN0EhEKCWxhdW5jaF9pZBgBIAEoCRIVCg10ZW1wbGF0ZV9zbHVnGAIgASgJEhgKEGNsb3VkX2FjY291bnRfaWQYAyABKAkSEAoIcHJvdmlkZXIYBCABKAkSDgoGcmVnaW9uGAUgASgJEisKCnBhcmFtZXRlcnMYBiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EhkKEWFwcHJvdmFsX3JlcXVpcmVkGAcgASgIIkoKE1N0YXJ0TGF1bmNoUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBITCgt3b3JrZmxvd19pZBgCIAEoCRINCgVlcnJvchgDIAEoCSIvChhHZXRMYXVuY2hQcm9ncmVzc1JlcXVlc3QSEwoLd29ya2Zsb3dfaWQYASABKAkiiQEKGUdldExhdW5jaFByb2dyZXNzUmVzcG9uc2USDgoGc3RhdHVzGAEgASgJEhQKDGN1cnJlbnRfc3RlcBgCIAEoBRITCgt0b3RhbF9zdGVwcxgDIAEoBRIPCgdtZXNzYWdlGAQgASgJEhIKCnBlcmNlbnRhZ2UYBSABKAISDAoEbG9ncxgGIAMoCSJhChRBcHByb3ZlTGF1bmNoUmVxdWVzdBITCgt3b3JrZmxvd19pZBgBIAEoCRIQCghhcHByb3ZlZBgCIAEoCBITCgthcHByb3ZlZF9ieRgDIAEoCRINCgVub3RlcxgEIAEoCSI3ChVBcHByb3ZlTGF1bmNoUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBINCgVlcnJvchgCIAEoCSJRChREZW9yYml0TGF1bmNoUmVxdWVzdBITCgt3b3JrZmxvd19pZBgBIAEoCRIUCgxyZXF1ZXN0ZWRfYnkYAiABKAkSDgoGcmVhc29uGAMgASgJIjcKFURlb3JiaXRMYXVuY2hSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg0KBWVycm9yGAIgASgJIj8KEkFib3J0TGF1bmNoUmVxdWVzdBITCgt3b3JrZmxvd19pZBgBIAEoCRIUCgxyZXF1ZXN0ZWRfYnkYAiABKAkiNQoTQWJvcnRMYXVuY2hSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg0KBWVycm9yGAIgASgJMtsDCg1MYXVuY2hTZXJ2aWNlElQKC1N0YXJ0TGF1bmNoEiEuaWRwLmxhdW5jaC52MS5TdGFydExhdW5jaFJlcXVlc3QaIi5pZHAubGF1bmNoLnYxLlN0YXJ0TGF1bmNoUmVzcG9uc2USZgoRR2V0TGF1bmNoUHJvZ3Jlc3MSJy5pZHAubGF1bmNoLnYxLkdldExhdW5jaFByb2dyZXNzUmVxdWVzdBooLmlkcC5sYXVuY2gudjEuR2V0TGF1bmNoUHJvZ3Jlc3NSZXNwb25zZRJaCg1BcHByb3ZlTGF1bmNoEiMuaWRwLmxhdW5jaC52MS5BcHByb3ZlTGF1bmNoUmVxdWVzdBokLmlkcC5sYXVuY2gudjEuQXBwcm92ZUxhdW5jaFJlc3BvbnNlEloKDURlb3JiaXRMYXVuY2gSIy5pZHAubGF1bmNoLnYxLkRlb3JiaXRMYXVuY2hSZXF1ZXN0GiQuaWRwLmxhdW5jaC52MS5EZW9yYml0TGF1bmNoUmVzcG9uc2USVAoLQWJvcnRMYXVuY2gSIS5pZHAubGF1bmNoLnYxLkFib3J0TGF1bmNoUmVxdWVzdBoiLmlkcC5sYXVuY2gudjEuQWJvcnRMYXVuY2hSZXNwb25zZUJCWkBnaXRodWIuY29tL2RyZXdwYXltZW50L29yYml0L3Byb3RvL2dlbi9nby9pZHAvbGF1bmNoL3YxO2xhdW5jaHYxYgZwcm90bzM", [file_google_protobuf_struct]);
+  fileDesc("ChppZHAvbGF1bmNoL3YxL2xhdW5jaC5wcm90bxINaWRwLmxhdW5jaC52MSKhAgoSU3RhcnRMYXVuY2hSZXF1ZXN0EhEKCWxhdW5jaF9pZBgBIAEoCRIVCg10ZW1wbGF0ZV9zbHVnGAIgASgJEhgKEGNsb3VkX2FjY291bnRfaWQYAyABKAkSEAoIcHJvdmlkZXIYBCABKAkSDgoGcmVnaW9uGAUgASgJEisKCnBhcmFtZXRlcnMYBiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EhkKEWFwcHJvdmFsX3JlcXVpcmVkGAcgASgIEhsKE3B1bHVtaV9wcm9qZWN0X3BhdGgYCCABKAkSFAoMd29ya3NwYWNlX2lkGAkgASgJEhUKDWF1dG9fYXBwcm92ZWQYCiABKAgSEwoLbGF1bmNoZWRfYnkYCyABKAkiSgoTU3RhcnRMYXVuY2hSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhMKC3dvcmtmbG93X2lkGAIgASgJEg0KBWVycm9yGAMgASgJIi8KGEdldExhdW5jaFByb2dyZXNzUmVxdWVzdBITCgt3b3JrZmxvd19pZBgBIAEoCSKJAQoZR2V0TGF1bmNoUHJvZ3Jlc3NSZXNwb25zZRIOCgZzdGF0dXMYASABKAkSFAoMY3VycmVudF9zdGVwGAIgASgFEhMKC3RvdGFsX3N0ZXBzGAMgASgFEg8KB21lc3NhZ2UYBCABKAkSEgoKcGVyY2VudGFnZRgFIAEoAhIMCgRsb2dzGAYgAygJImEKFEFwcHJvdmVMYXVuY2hSZXF1ZXN0EhMKC3dvcmtmbG93X2lkGAEgASgJEhAKCGFwcHJvdmVkGAIgASgIEhMKC2FwcHJvdmVkX2J5GAMgASgJEg0KBW5vdGVzGAQgASgJIjcKFUFwcHJvdmVMYXVuY2hSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg0KBWVycm9yGAIgASgJIlEKFERlb3JiaXRMYXVuY2hSZXF1ZXN0EhMKC3dvcmtmbG93X2lkGAEgASgJEhQKDHJlcXVlc3RlZF9ieRgCIAEoCRIOCgZyZWFzb24YAyABKAkiNwoVRGVvcmJpdExhdW5jaFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDQoFZXJyb3IYAiABKAkiPwoSQWJvcnRMYXVuY2hSZXF1ZXN0EhMKC3dvcmtmbG93X2lkGAEgASgJEhQKDHJlcXVlc3RlZF9ieRgCIAEoCSI1ChNBYm9ydExhdW5jaFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDQoFZXJyb3IYAiABKAki+wIKFURlcGxveVRvTGF1bmNoUmVxdWVzdBIVCg1kZXBsb3ltZW50X2lkGAEgASgJEhEKCWxhdW5jaF9pZBgCIAEoCRIQCghzdHJhdGVneRgDIAEoCRIYChBjbG91ZF9hY2NvdW50X2lkGAQgASgJEhAKCHByb3ZpZGVyGAUgASgJEhAKCHJlcG9fdXJsGAYgASgJEg4KBmJyYW5jaBgHIAEoCRIVCg1idWlsZF9jb21tYW5kGAggASgJEhgKEG91dHB1dF9kaXJlY3RvcnkYCSABKAkSLwoObGF1bmNoX291dHB1dHMYCiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EkUKCWJ1aWxkX2VudhgLIAMoCzIyLmlkcC5sYXVuY2gudjEuRGVwbG95VG9MYXVuY2hSZXF1ZXN0LkJ1aWxkRW52RW50cnkaLwoNQnVpbGRFbnZFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIk0KFkRlcGxveVRvTGF1bmNoUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBITCgt3b3JrZmxvd19pZBgCIAEoCRINCgVlcnJvchgDIAEoCTK6BAoNTGF1bmNoU2VydmljZRJUCgtTdGFydExhdW5jaBIhLmlkcC5sYXVuY2gudjEuU3RhcnRMYXVuY2hSZXF1ZXN0GiIuaWRwLmxhdW5jaC52MS5TdGFydExhdW5jaFJlc3BvbnNlEmYKEUdldExhdW5jaFByb2dyZXNzEicuaWRwLmxhdW5jaC52MS5HZXRMYXVuY2hQcm9ncmVzc1JlcXVlc3QaKC5pZHAubGF1bmNoLnYxLkdldExhdW5jaFByb2dyZXNzUmVzcG9uc2USWgoNQXBwcm92ZUxhdW5jaBIjLmlkcC5sYXVuY2gudjEuQXBwcm92ZUxhdW5jaFJlcXVlc3QaJC5pZHAubGF1bmNoLnYxLkFwcHJvdmVMYXVuY2hSZXNwb25zZRJaCg1EZW9yYml0TGF1bmNoEiMuaWRwLmxhdW5jaC52MS5EZW9yYml0TGF1bmNoUmVxdWVzdBokLmlkcC5sYXVuY2gudjEuRGVvcmJpdExhdW5jaFJlc3BvbnNlElQKC0Fib3J0TGF1bmNoEiEuaWRwLmxhdW5jaC52MS5BYm9ydExhdW5jaFJlcXVlc3QaIi5pZHAubGF1bmNoLnYxLkFib3J0TGF1bmNoUmVzcG9uc2USXQoORGVwbG95VG9MYXVuY2gSJC5pZHAubGF1bmNoLnYxLkRlcGxveVRvTGF1bmNoUmVxdWVzdBolLmlkcC5sYXVuY2gudjEuRGVwbG95VG9MYXVuY2hSZXNwb25zZUJCWkBnaXRodWIuY29tL2RyZXdwYXltZW50L29yYml0L3Byb3RvL2dlbi9nby9pZHAvbGF1bmNoL3YxO2xhdW5jaHYxYgZwcm90bzM", [file_google_protobuf_struct]);
 
 /**
  * @generated from message idp.launch.v1.StartLaunchRequest
@@ -51,6 +51,26 @@ export type StartLaunchRequest = Message<"idp.launch.v1.StartLaunchRequest"> & {
    * @generated from field: bool approval_required = 7;
    */
   approvalRequired: boolean;
+
+  /**
+   * @generated from field: string pulumi_project_path = 8;
+   */
+  pulumiProjectPath: string;
+
+  /**
+   * @generated from field: string workspace_id = 9;
+   */
+  workspaceId: string;
+
+  /**
+   * @generated from field: bool auto_approved = 10;
+   */
+  autoApproved: boolean;
+
+  /**
+   * @generated from field: string launched_by = 11;
+   */
+  launchedBy: string;
 };
 
 /**
@@ -294,6 +314,100 @@ export const AbortLaunchResponseSchema: GenMessage<AbortLaunchResponse> = /*@__P
   messageDesc(file_idp_launch_v1_launch, 9);
 
 /**
+ * @generated from message idp.launch.v1.DeployToLaunchRequest
+ */
+export type DeployToLaunchRequest = Message<"idp.launch.v1.DeployToLaunchRequest"> & {
+  /**
+   * @generated from field: string deployment_id = 1;
+   */
+  deploymentId: string;
+
+  /**
+   * @generated from field: string launch_id = 2;
+   */
+  launchId: string;
+
+  /**
+   * @generated from field: string strategy = 3;
+   */
+  strategy: string;
+
+  /**
+   * @generated from field: string cloud_account_id = 4;
+   */
+  cloudAccountId: string;
+
+  /**
+   * @generated from field: string provider = 5;
+   */
+  provider: string;
+
+  /**
+   * @generated from field: string repo_url = 6;
+   */
+  repoUrl: string;
+
+  /**
+   * @generated from field: string branch = 7;
+   */
+  branch: string;
+
+  /**
+   * @generated from field: string build_command = 8;
+   */
+  buildCommand: string;
+
+  /**
+   * @generated from field: string output_directory = 9;
+   */
+  outputDirectory: string;
+
+  /**
+   * @generated from field: google.protobuf.Struct launch_outputs = 10;
+   */
+  launchOutputs?: JsonObject;
+
+  /**
+   * @generated from field: map<string, string> build_env = 11;
+   */
+  buildEnv: { [key: string]: string };
+};
+
+/**
+ * Describes the message idp.launch.v1.DeployToLaunchRequest.
+ * Use `create(DeployToLaunchRequestSchema)` to create a new message.
+ */
+export const DeployToLaunchRequestSchema: GenMessage<DeployToLaunchRequest> = /*@__PURE__*/
+  messageDesc(file_idp_launch_v1_launch, 10);
+
+/**
+ * @generated from message idp.launch.v1.DeployToLaunchResponse
+ */
+export type DeployToLaunchResponse = Message<"idp.launch.v1.DeployToLaunchResponse"> & {
+  /**
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+
+  /**
+   * @generated from field: string workflow_id = 2;
+   */
+  workflowId: string;
+
+  /**
+   * @generated from field: string error = 3;
+   */
+  error: string;
+};
+
+/**
+ * Describes the message idp.launch.v1.DeployToLaunchResponse.
+ * Use `create(DeployToLaunchResponseSchema)` to create a new message.
+ */
+export const DeployToLaunchResponseSchema: GenMessage<DeployToLaunchResponse> = /*@__PURE__*/
+  messageDesc(file_idp_launch_v1_launch, 11);
+
+/**
  * @generated from service idp.launch.v1.LaunchService
  */
 export const LaunchService: GenService<{
@@ -336,6 +450,14 @@ export const LaunchService: GenService<{
     methodKind: "unary";
     input: typeof AbortLaunchRequestSchema;
     output: typeof AbortLaunchResponseSchema;
+  },
+  /**
+   * @generated from rpc idp.launch.v1.LaunchService.DeployToLaunch
+   */
+  deployToLaunch: {
+    methodKind: "unary";
+    input: typeof DeployToLaunchRequestSchema;
+    output: typeof DeployToLaunchResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_idp_launch_v1_launch, 0);

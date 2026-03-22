@@ -111,9 +111,10 @@ services:
       - TEMPORAL_ADDRESS=temporal-server:7233
       - TEMPORAL_NAMESPACE=default
       - TASK_QUEUE=launches_aws
-      - PULUMI_BACKEND_URL=s3://pulumi-state?endpoint=minio:9000&s3ForcePathStyle=true
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - PULUMI_BACKEND_URL=s3://pulumi-state?endpoint=minio:9000&disableSSL=true&s3ForcePathStyle=true
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-orbit-admin}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-orbit-secret-key}
+      - AWS_REGION=us-east-1
     restart: unless-stopped
 
   launches-worker-gcp:
@@ -130,10 +131,16 @@ services:
       - TEMPORAL_ADDRESS=temporal-server:7233
       - TEMPORAL_NAMESPACE=default
       - TASK_QUEUE=launches_gcp
-      - PULUMI_BACKEND_URL=s3://pulumi-state?endpoint=minio:9000&s3ForcePathStyle=true
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - GOOGLE_CREDENTIALS=${GOOGLE_CREDENTIALS:-}
+      - PULUMI_BACKEND_URL=s3://pulumi-state?endpoint=minio:9000&disableSSL=true&s3ForcePathStyle=true
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-orbit-admin}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-orbit-secret-key}
+      - AWS_REGION=us-east-1
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/gcp-sa.json
+      - PULUMI_CONFIG_PASSPHRASE=${PULUMI_CONFIG_PASSPHRASE:-orbit-dev-passphrase}
+      - ORBIT_API_URL=http://host.docker.internal:3000
+      - ORBIT_INTERNAL_API_KEY=${ORBIT_INTERNAL_API_KEY:-orbit-internal-dev-key}
+    volumes:
+      - ./launches-worker-gcp/gcp-sa.json:/app/gcp-sa.json:ro
     restart: unless-stopped
 
   launches-worker-azure:
@@ -150,9 +157,10 @@ services:
       - TEMPORAL_ADDRESS=temporal-server:7233
       - TEMPORAL_NAMESPACE=default
       - TASK_QUEUE=launches_azure
-      - PULUMI_BACKEND_URL=s3://pulumi-state?endpoint=minio:9000&s3ForcePathStyle=true
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - PULUMI_BACKEND_URL=s3://pulumi-state?endpoint=minio:9000&disableSSL=true&s3ForcePathStyle=true
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-orbit-admin}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-orbit-secret-key}
+      - AWS_REGION=us-east-1
       - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
       - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
       - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}

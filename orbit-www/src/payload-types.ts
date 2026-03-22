@@ -228,6 +228,10 @@ export interface User {
    */
   role?: ('super_admin' | 'admin' | 'user') | null;
   /**
+   * Better Auth user ID — auto-populated on first login
+   */
+  betterAuthId?: string | null;
+  /**
    * If checked, user can log in immediately after approval without verifying their email.
    */
   skipEmailVerification?: boolean | null;
@@ -1209,11 +1213,31 @@ export interface Deployment {
    */
   name: string;
   app: string | App;
-  generator: 'docker-compose' | 'helm' | 'custom';
+  generator?: ('docker-compose' | 'helm' | 'custom') | null;
   /**
    * Specific generator slug used (e.g., docker-compose-basic, helm-basic)
    */
   generatorSlug?: string | null;
+  /**
+   * Launch infrastructure this deployment targets
+   */
+  launch?: (string | null) | Launch;
+  /**
+   * Deployment strategy — auto-detected from Launch template when applicable
+   */
+  deployStrategy?: ('docker-compose' | 'helm' | 'custom' | 'gcs-static-site' | 'cloud-run') | null;
+  /**
+   * Snapshot of Launch infrastructure outputs at deploy time
+   */
+  launchOutputs?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   /**
    * Generator-specific configuration
    */
@@ -1260,6 +1284,149 @@ export interface Deployment {
     | number
     | boolean
     | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "launches".
+ */
+export interface Launch {
+  id: string;
+  name: string;
+  workspace: string | Workspace;
+  /**
+   * Link this launch to an app
+   */
+  app?: (string | null) | App;
+  cloudAccount: string | CloudAccount;
+  template?: (string | null) | LaunchTemplate;
+  provider: 'aws' | 'gcp' | 'azure' | 'digitalocean';
+  region: string;
+  status?:
+    | ('pending' | 'awaiting_approval' | 'launching' | 'active' | 'failed' | 'deorbiting' | 'deorbited' | 'aborted')
+    | null;
+  /**
+   * User-provided template parameters
+   */
+  parameters?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  pulumiStackName?: string | null;
+  /**
+   * Outputs from Pulumi stack
+   */
+  pulumiOutputs?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  workflowId?: string | null;
+  approvalConfig?: {
+    required?: boolean | null;
+    approvers?: (string | User)[] | null;
+    timeoutHours?: number | null;
+  };
+  approvedBy?: (string | null) | User;
+  launchError?: string | null;
+  lastLaunchedAt?: string | null;
+  lastDeorbitedAt?: string | null;
+  launchedBy?: (string | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "cloud-accounts".
+ */
+export interface CloudAccount {
+  id: string;
+  name: string;
+  provider: 'aws' | 'gcp' | 'azure' | 'digitalocean';
+  /**
+   * Provider-specific credentials (admin only)
+   */
+  credentials?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Default region for this cloud account
+   */
+  region?: string | null;
+  workspaces: (string | Workspace)[];
+  status?: ('connected' | 'disconnected' | 'error') | null;
+  lastValidatedAt?: string | null;
+  approvalRequired?: boolean | null;
+  approvers?: (string | User)[] | null;
+  createdBy?: (string | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "launch-templates".
+ */
+export interface LaunchTemplate {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  type: 'bundle' | 'resource';
+  provider: 'aws' | 'gcp' | 'azure' | 'digitalocean';
+  /**
+   * Array of equivalent template slugs on other providers
+   */
+  crossProviderSlugs?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  category: 'compute' | 'storage' | 'database' | 'networking' | 'container' | 'serverless';
+  /**
+   * JSON Schema for user parameters
+   */
+  parameterSchema:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Path to Pulumi program within provider worker
+   */
+  pulumiProjectPath: string;
+  /**
+   * e.g. "~5 min"
+   */
+  estimatedDuration?: string | null;
+  builtIn?: boolean | null;
+  /**
+   * Icon identifier for UI
+   */
+  icon?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -1424,149 +1591,6 @@ export interface Feedback {
    */
   read?: boolean | null;
   submittedBy?: (string | null) | User;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "cloud-accounts".
- */
-export interface CloudAccount {
-  id: string;
-  name: string;
-  provider: 'aws' | 'gcp' | 'azure' | 'digitalocean';
-  /**
-   * Provider-specific credentials (admin only)
-   */
-  credentials?:
-    | {
-        [k: string]: unknown;
-      }
-    | unknown[]
-    | string
-    | number
-    | boolean
-    | null;
-  /**
-   * Default region for this cloud account
-   */
-  region?: string | null;
-  workspaces: (string | Workspace)[];
-  status?: ('connected' | 'disconnected' | 'error') | null;
-  lastValidatedAt?: string | null;
-  approvalRequired?: boolean | null;
-  approvers?: (string | User)[] | null;
-  createdBy?: (string | null) | User;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "launch-templates".
- */
-export interface LaunchTemplate {
-  id: string;
-  name: string;
-  slug: string;
-  description: string;
-  type: 'bundle' | 'resource';
-  provider: 'aws' | 'gcp' | 'azure' | 'digitalocean';
-  /**
-   * Array of equivalent template slugs on other providers
-   */
-  crossProviderSlugs?:
-    | {
-        [k: string]: unknown;
-      }
-    | unknown[]
-    | string
-    | number
-    | boolean
-    | null;
-  category: 'compute' | 'storage' | 'database' | 'networking' | 'container' | 'serverless';
-  /**
-   * JSON Schema for user parameters
-   */
-  parameterSchema:
-    | {
-        [k: string]: unknown;
-      }
-    | unknown[]
-    | string
-    | number
-    | boolean
-    | null;
-  /**
-   * Path to Pulumi program within provider worker
-   */
-  pulumiProjectPath: string;
-  /**
-   * e.g. "~5 min"
-   */
-  estimatedDuration?: string | null;
-  builtIn?: boolean | null;
-  /**
-   * Icon identifier for UI
-   */
-  icon?: string | null;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "launches".
- */
-export interface Launch {
-  id: string;
-  name: string;
-  workspace: string | Workspace;
-  /**
-   * Link this launch to an app
-   */
-  app?: (string | null) | App;
-  cloudAccount: string | CloudAccount;
-  template?: (string | null) | LaunchTemplate;
-  provider: 'aws' | 'gcp' | 'azure' | 'digitalocean';
-  region: string;
-  status?:
-    | ('pending' | 'awaiting_approval' | 'launching' | 'active' | 'failed' | 'deorbiting' | 'deorbited' | 'aborted')
-    | null;
-  /**
-   * User-provided template parameters
-   */
-  parameters?:
-    | {
-        [k: string]: unknown;
-      }
-    | unknown[]
-    | string
-    | number
-    | boolean
-    | null;
-  pulumiStackName?: string | null;
-  /**
-   * Outputs from Pulumi stack
-   */
-  pulumiOutputs?:
-    | {
-        [k: string]: unknown;
-      }
-    | unknown[]
-    | string
-    | number
-    | boolean
-    | null;
-  workflowId?: string | null;
-  approvalConfig?: {
-    required?: boolean | null;
-    approvers?: (string | User)[] | null;
-    timeoutHours?: number | null;
-  };
-  approvedBy?: (string | null) | User;
-  launchError?: string | null;
-  lastLaunchedAt?: string | null;
-  lastDeorbitedAt?: string | null;
-  launchedBy?: (string | null) | User;
   updatedAt: string;
   createdAt: string;
 }
@@ -3414,6 +3438,7 @@ export interface UsersSelect<T extends boolean = true> {
   avatar?: T;
   status?: T;
   role?: T;
+  betterAuthId?: T;
   skipEmailVerification?: T;
   registrationApprovedAt?: T;
   registrationApprovedBy?: T;
@@ -3873,6 +3898,9 @@ export interface DeploymentsSelect<T extends boolean = true> {
   app?: T;
   generator?: T;
   generatorSlug?: T;
+  launch?: T;
+  deployStrategy?: T;
+  launchOutputs?: T;
   config?: T;
   target?:
     | T

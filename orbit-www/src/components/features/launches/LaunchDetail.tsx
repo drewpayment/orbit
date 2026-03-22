@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -16,6 +16,8 @@ import {
   CheckCircle2,
   Shield,
   AlertTriangle,
+  RotateCcw,
+  Trash2,
 } from 'lucide-react'
 import {
   Breadcrumb,
@@ -28,7 +30,7 @@ import {
 import { LaunchStatusBadge, type LaunchStatus } from './LaunchStatusBadge'
 import { LaunchProgress } from './LaunchProgress'
 import { DeorbitConfirmation } from './DeorbitConfirmation'
-import { abortLaunchAction, approveLaunchAction } from '@/app/actions/launches'
+import { abortLaunchAction, approveLaunchAction, retryLaunch, deleteLaunch } from '@/app/actions/launches'
 import { toast } from 'sonner'
 
 interface LaunchDoc {
@@ -98,14 +100,25 @@ export function LaunchDetail({ launch, currentUserId }: LaunchDetailProps) {
   const [isAborting, setIsAborting] = useState(false)
   const [isApproving, setIsApproving] = useState(false)
   const [isRejecting, setIsRejecting] = useState(false)
+  const [isRetrying, setIsRetrying] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const status = launch.status as LaunchStatus
   const template = resolveRelationship(launch.template as any)
   const cloudAccount = resolveRelationship(launch.cloudAccount as any)
   const app = resolveRelationship(launch.app as any)
 
-  const isInProgress = ['launching', 'pending', 'deorbiting'].includes(status)
+  const isInProgress = ['launching', 'pending', 'deorbiting', 'awaiting_approval'].includes(status)
   const defaultTab = isInProgress ? 'progress' : 'overview'
+
+  // Auto-refresh page when launch is in a transitional state
+  useEffect(() => {
+    if (!isInProgress) return
+    const interval = setInterval(() => {
+      router.refresh()
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [isInProgress, router])
 
   // Check if the current user is an approver
   const isApprover = launch.approvalConfig?.approvers?.some((approver) => {
@@ -179,6 +192,45 @@ export function LaunchDetail({ launch, currentUserId }: LaunchDetailProps) {
     }
   }
 
+  const canRetry = ['failed', 'aborted', 'launching'].includes(status)
+  const canDelete = ['failed', 'aborted', 'deorbited', 'pending', 'launching'].includes(status)
+
+  async function handleRetry() {
+    setIsRetrying(true)
+    try {
+      const result = await retryLaunch(launch.id)
+      if (result.success) {
+        toast.success(`Retrying "${launch.name}"`)
+        router.refresh()
+      } else {
+        toast.error(result.error || 'Failed to retry launch')
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to retry launch')
+    } finally {
+      setIsRetrying(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirm(`Are you sure you want to delete "${launch.name}"? This cannot be undone.`)) return
+
+    setIsDeleting(true)
+    try {
+      const result = await deleteLaunch(launch.id)
+      if (result.success) {
+        toast.success(`"${launch.name}" deleted`)
+        router.push('/launches')
+      } else {
+        toast.error(result.error || 'Failed to delete launch')
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete launch')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Breadcrumb Navigation */}
@@ -220,6 +272,40 @@ export function LaunchDetail({ launch, currentUserId }: LaunchDetailProps) {
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
+          {canRetry && (
+            <Button
+              onClick={handleRetry}
+              disabled={isRetrying}
+            >
+              {isRetrying ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Retrying...
+                </>
+              ) : (
+                <>
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Retry
+                </>
+              )}
+            </Button>
+          )}
+
+          {canDelete && (
+            <Button
+              variant="outline"
+              onClick={handleDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-2 h-4 w-4" />
+              )}
+              Delete
+            </Button>
+          )}
+
           {status === 'active' && (
             <Button
               variant="destructive"

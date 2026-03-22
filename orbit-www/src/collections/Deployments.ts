@@ -144,7 +144,6 @@ export const Deployments: CollectionConfig = {
     {
       name: 'generator',
       type: 'select',
-      required: true,
       options: [
         { label: 'Docker Compose', value: 'docker-compose' },
         { label: 'Helm', value: 'helm' },
@@ -156,6 +155,36 @@ export const Deployments: CollectionConfig = {
       type: 'text',
       admin: {
         description: 'Specific generator slug used (e.g., docker-compose-basic, helm-basic)',
+      },
+    },
+    {
+      name: 'launch',
+      type: 'relationship',
+      relationTo: 'launches',
+      admin: {
+        description: 'Launch infrastructure this deployment targets',
+      },
+    },
+    {
+      name: 'deployStrategy',
+      type: 'select',
+      options: [
+        { label: 'Docker Compose', value: 'docker-compose' },
+        { label: 'Helm', value: 'helm' },
+        { label: 'Custom', value: 'custom' },
+        { label: 'GCS Static Site', value: 'gcs-static-site' },
+        { label: 'Cloud Run', value: 'cloud-run' },
+      ],
+      admin: {
+        description: 'Deployment strategy — auto-detected from Launch template when applicable',
+      },
+    },
+    {
+      name: 'launchOutputs',
+      type: 'json',
+      admin: {
+        description: 'Snapshot of Launch infrastructure outputs at deploy time',
+        readOnly: true,
       },
     },
     {

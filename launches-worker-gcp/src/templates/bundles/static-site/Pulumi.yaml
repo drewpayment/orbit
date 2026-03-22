@@ -1,0 +1,3 @@
+name: orbit-gcp-static-site
+runtime: nodejs
+description: Static site hosting with GCS bucket, optional CDN and custom domain

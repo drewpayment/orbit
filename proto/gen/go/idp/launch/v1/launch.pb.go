@@ -23,16 +23,20 @@ const (
 )
 
 type StartLaunchRequest struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	LaunchId         string                 `protobuf:"bytes,1,opt,name=launch_id,json=launchId,proto3" json:"launch_id,omitempty"`
-	TemplateSlug     string                 `protobuf:"bytes,2,opt,name=template_slug,json=templateSlug,proto3" json:"template_slug,omitempty"`
-	CloudAccountId   string                 `protobuf:"bytes,3,opt,name=cloud_account_id,json=cloudAccountId,proto3" json:"cloud_account_id,omitempty"`
-	Provider         string                 `protobuf:"bytes,4,opt,name=provider,proto3" json:"provider,omitempty"`
-	Region           string                 `protobuf:"bytes,5,opt,name=region,proto3" json:"region,omitempty"`
-	Parameters       *structpb.Struct       `protobuf:"bytes,6,opt,name=parameters,proto3" json:"parameters,omitempty"`
-	ApprovalRequired bool                   `protobuf:"varint,7,opt,name=approval_required,json=approvalRequired,proto3" json:"approval_required,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	LaunchId          string                 `protobuf:"bytes,1,opt,name=launch_id,json=launchId,proto3" json:"launch_id,omitempty"`
+	TemplateSlug      string                 `protobuf:"bytes,2,opt,name=template_slug,json=templateSlug,proto3" json:"template_slug,omitempty"`
+	CloudAccountId    string                 `protobuf:"bytes,3,opt,name=cloud_account_id,json=cloudAccountId,proto3" json:"cloud_account_id,omitempty"`
+	Provider          string                 `protobuf:"bytes,4,opt,name=provider,proto3" json:"provider,omitempty"`
+	Region            string                 `protobuf:"bytes,5,opt,name=region,proto3" json:"region,omitempty"`
+	Parameters        *structpb.Struct       `protobuf:"bytes,6,opt,name=parameters,proto3" json:"parameters,omitempty"`
+	ApprovalRequired  bool                   `protobuf:"varint,7,opt,name=approval_required,json=approvalRequired,proto3" json:"approval_required,omitempty"`
+	PulumiProjectPath string                 `protobuf:"bytes,8,opt,name=pulumi_project_path,json=pulumiProjectPath,proto3" json:"pulumi_project_path,omitempty"`
+	WorkspaceId       string                 `protobuf:"bytes,9,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	AutoApproved      bool                   `protobuf:"varint,10,opt,name=auto_approved,json=autoApproved,proto3" json:"auto_approved,omitempty"`
+	LaunchedBy        string                 `protobuf:"bytes,11,opt,name=launched_by,json=launchedBy,proto3" json:"launched_by,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *StartLaunchRequest) Reset() {
@@ -112,6 +116,34 @@ func (x *StartLaunchRequest) GetApprovalRequired() bool {
 		return x.ApprovalRequired
 	}
 	return false
+}
+
+func (x *StartLaunchRequest) GetPulumiProjectPath() string {
+	if x != nil {
+		return x.PulumiProjectPath
+	}
+	return ""
+}
+
+func (x *StartLaunchRequest) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *StartLaunchRequest) GetAutoApproved() bool {
+	if x != nil {
+		return x.AutoApproved
+	}
+	return false
+}
+
+func (x *StartLaunchRequest) GetLaunchedBy() string {
+	if x != nil {
+		return x.LaunchedBy
+	}
+	return ""
 }
 
 type StartLaunchResponse struct {
@@ -638,11 +670,195 @@ func (x *AbortLaunchResponse) GetError() string {
 	return ""
 }
 
+type DeployToLaunchRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	DeploymentId    string                 `protobuf:"bytes,1,opt,name=deployment_id,json=deploymentId,proto3" json:"deployment_id,omitempty"`
+	LaunchId        string                 `protobuf:"bytes,2,opt,name=launch_id,json=launchId,proto3" json:"launch_id,omitempty"`
+	Strategy        string                 `protobuf:"bytes,3,opt,name=strategy,proto3" json:"strategy,omitempty"`
+	CloudAccountId  string                 `protobuf:"bytes,4,opt,name=cloud_account_id,json=cloudAccountId,proto3" json:"cloud_account_id,omitempty"`
+	Provider        string                 `protobuf:"bytes,5,opt,name=provider,proto3" json:"provider,omitempty"`
+	RepoUrl         string                 `protobuf:"bytes,6,opt,name=repo_url,json=repoUrl,proto3" json:"repo_url,omitempty"`
+	Branch          string                 `protobuf:"bytes,7,opt,name=branch,proto3" json:"branch,omitempty"`
+	BuildCommand    string                 `protobuf:"bytes,8,opt,name=build_command,json=buildCommand,proto3" json:"build_command,omitempty"`
+	OutputDirectory string                 `protobuf:"bytes,9,opt,name=output_directory,json=outputDirectory,proto3" json:"output_directory,omitempty"`
+	LaunchOutputs   *structpb.Struct       `protobuf:"bytes,10,opt,name=launch_outputs,json=launchOutputs,proto3" json:"launch_outputs,omitempty"`
+	BuildEnv        map[string]string      `protobuf:"bytes,11,rep,name=build_env,json=buildEnv,proto3" json:"build_env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *DeployToLaunchRequest) Reset() {
+	*x = DeployToLaunchRequest{}
+	mi := &file_idp_launch_v1_launch_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeployToLaunchRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeployToLaunchRequest) ProtoMessage() {}
+
+func (x *DeployToLaunchRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_launch_v1_launch_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeployToLaunchRequest.ProtoReflect.Descriptor instead.
+func (*DeployToLaunchRequest) Descriptor() ([]byte, []int) {
+	return file_idp_launch_v1_launch_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *DeployToLaunchRequest) GetDeploymentId() string {
+	if x != nil {
+		return x.DeploymentId
+	}
+	return ""
+}
+
+func (x *DeployToLaunchRequest) GetLaunchId() string {
+	if x != nil {
+		return x.LaunchId
+	}
+	return ""
+}
+
+func (x *DeployToLaunchRequest) GetStrategy() string {
+	if x != nil {
+		return x.Strategy
+	}
+	return ""
+}
+
+func (x *DeployToLaunchRequest) GetCloudAccountId() string {
+	if x != nil {
+		return x.CloudAccountId
+	}
+	return ""
+}
+
+func (x *DeployToLaunchRequest) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+func (x *DeployToLaunchRequest) GetRepoUrl() string {
+	if x != nil {
+		return x.RepoUrl
+	}
+	return ""
+}
+
+func (x *DeployToLaunchRequest) GetBranch() string {
+	if x != nil {
+		return x.Branch
+	}
+	return ""
+}
+
+func (x *DeployToLaunchRequest) GetBuildCommand() string {
+	if x != nil {
+		return x.BuildCommand
+	}
+	return ""
+}
+
+func (x *DeployToLaunchRequest) GetOutputDirectory() string {
+	if x != nil {
+		return x.OutputDirectory
+	}
+	return ""
+}
+
+func (x *DeployToLaunchRequest) GetLaunchOutputs() *structpb.Struct {
+	if x != nil {
+		return x.LaunchOutputs
+	}
+	return nil
+}
+
+func (x *DeployToLaunchRequest) GetBuildEnv() map[string]string {
+	if x != nil {
+		return x.BuildEnv
+	}
+	return nil
+}
+
+type DeployToLaunchResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	WorkflowId    string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	Error         string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeployToLaunchResponse) Reset() {
+	*x = DeployToLaunchResponse{}
+	mi := &file_idp_launch_v1_launch_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeployToLaunchResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeployToLaunchResponse) ProtoMessage() {}
+
+func (x *DeployToLaunchResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_launch_v1_launch_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeployToLaunchResponse.ProtoReflect.Descriptor instead.
+func (*DeployToLaunchResponse) Descriptor() ([]byte, []int) {
+	return file_idp_launch_v1_launch_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *DeployToLaunchResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *DeployToLaunchResponse) GetWorkflowId() string {
+	if x != nil {
+		return x.WorkflowId
+	}
+	return ""
+}
+
+func (x *DeployToLaunchResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 var File_idp_launch_v1_launch_proto protoreflect.FileDescriptor
 
 const file_idp_launch_v1_launch_proto_rawDesc = "" +
 	"\n" +
-	"\x1aidp/launch/v1/launch.proto\x12\ridp.launch.v1\x1a\x1cgoogle/protobuf/struct.proto\"\x9a\x02\n" +
+	"\x1aidp/launch/v1/launch.proto\x12\ridp.launch.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xb3\x03\n" +
 	"\x12StartLaunchRequest\x12\x1b\n" +
 	"\tlaunch_id\x18\x01 \x01(\tR\blaunchId\x12#\n" +
 	"\rtemplate_slug\x18\x02 \x01(\tR\ftemplateSlug\x12(\n" +
@@ -652,7 +868,13 @@ const file_idp_launch_v1_launch_proto_rawDesc = "" +
 	"\n" +
 	"parameters\x18\x06 \x01(\v2\x17.google.protobuf.StructR\n" +
 	"parameters\x12+\n" +
-	"\x11approval_required\x18\a \x01(\bR\x10approvalRequired\"f\n" +
+	"\x11approval_required\x18\a \x01(\bR\x10approvalRequired\x12.\n" +
+	"\x13pulumi_project_path\x18\b \x01(\tR\x11pulumiProjectPath\x12!\n" +
+	"\fworkspace_id\x18\t \x01(\tR\vworkspaceId\x12#\n" +
+	"\rauto_approved\x18\n" +
+	" \x01(\bR\fautoApproved\x12\x1f\n" +
+	"\vlaunched_by\x18\v \x01(\tR\n" +
+	"launchedBy\"f\n" +
 	"\x13StartLaunchResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -695,13 +917,35 @@ const file_idp_launch_v1_launch_proto_rawDesc = "" +
 	"\frequested_by\x18\x02 \x01(\tR\vrequestedBy\"E\n" +
 	"\x13AbortLaunchResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error2\xdb\x03\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\x8c\x04\n" +
+	"\x15DeployToLaunchRequest\x12#\n" +
+	"\rdeployment_id\x18\x01 \x01(\tR\fdeploymentId\x12\x1b\n" +
+	"\tlaunch_id\x18\x02 \x01(\tR\blaunchId\x12\x1a\n" +
+	"\bstrategy\x18\x03 \x01(\tR\bstrategy\x12(\n" +
+	"\x10cloud_account_id\x18\x04 \x01(\tR\x0ecloudAccountId\x12\x1a\n" +
+	"\bprovider\x18\x05 \x01(\tR\bprovider\x12\x19\n" +
+	"\brepo_url\x18\x06 \x01(\tR\arepoUrl\x12\x16\n" +
+	"\x06branch\x18\a \x01(\tR\x06branch\x12#\n" +
+	"\rbuild_command\x18\b \x01(\tR\fbuildCommand\x12)\n" +
+	"\x10output_directory\x18\t \x01(\tR\x0foutputDirectory\x12>\n" +
+	"\x0elaunch_outputs\x18\n" +
+	" \x01(\v2\x17.google.protobuf.StructR\rlaunchOutputs\x12O\n" +
+	"\tbuild_env\x18\v \x03(\v22.idp.launch.v1.DeployToLaunchRequest.BuildEnvEntryR\bbuildEnv\x1a;\n" +
+	"\rBuildEnvEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"i\n" +
+	"\x16DeployToLaunchResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1f\n" +
+	"\vworkflow_id\x18\x02 \x01(\tR\n" +
+	"workflowId\x12\x14\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error2\xba\x04\n" +
 	"\rLaunchService\x12T\n" +
 	"\vStartLaunch\x12!.idp.launch.v1.StartLaunchRequest\x1a\".idp.launch.v1.StartLaunchResponse\x12f\n" +
 	"\x11GetLaunchProgress\x12'.idp.launch.v1.GetLaunchProgressRequest\x1a(.idp.launch.v1.GetLaunchProgressResponse\x12Z\n" +
 	"\rApproveLaunch\x12#.idp.launch.v1.ApproveLaunchRequest\x1a$.idp.launch.v1.ApproveLaunchResponse\x12Z\n" +
 	"\rDeorbitLaunch\x12#.idp.launch.v1.DeorbitLaunchRequest\x1a$.idp.launch.v1.DeorbitLaunchResponse\x12T\n" +
-	"\vAbortLaunch\x12!.idp.launch.v1.AbortLaunchRequest\x1a\".idp.launch.v1.AbortLaunchResponseBBZ@github.com/drewpayment/orbit/proto/gen/go/idp/launch/v1;launchv1b\x06proto3"
+	"\vAbortLaunch\x12!.idp.launch.v1.AbortLaunchRequest\x1a\".idp.launch.v1.AbortLaunchResponse\x12]\n" +
+	"\x0eDeployToLaunch\x12$.idp.launch.v1.DeployToLaunchRequest\x1a%.idp.launch.v1.DeployToLaunchResponseBBZ@github.com/drewpayment/orbit/proto/gen/go/idp/launch/v1;launchv1b\x06proto3"
 
 var (
 	file_idp_launch_v1_launch_proto_rawDescOnce sync.Once
@@ -715,7 +959,7 @@ func file_idp_launch_v1_launch_proto_rawDescGZIP() []byte {
 	return file_idp_launch_v1_launch_proto_rawDescData
 }
 
-var file_idp_launch_v1_launch_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_idp_launch_v1_launch_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_idp_launch_v1_launch_proto_goTypes = []any{
 	(*StartLaunchRequest)(nil),        // 0: idp.launch.v1.StartLaunchRequest
 	(*StartLaunchResponse)(nil),       // 1: idp.launch.v1.StartLaunchResponse
@@ -727,25 +971,32 @@ var file_idp_launch_v1_launch_proto_goTypes = []any{
 	(*DeorbitLaunchResponse)(nil),     // 7: idp.launch.v1.DeorbitLaunchResponse
 	(*AbortLaunchRequest)(nil),        // 8: idp.launch.v1.AbortLaunchRequest
 	(*AbortLaunchResponse)(nil),       // 9: idp.launch.v1.AbortLaunchResponse
-	(*structpb.Struct)(nil),           // 10: google.protobuf.Struct
+	(*DeployToLaunchRequest)(nil),     // 10: idp.launch.v1.DeployToLaunchRequest
+	(*DeployToLaunchResponse)(nil),    // 11: idp.launch.v1.DeployToLaunchResponse
+	nil,                               // 12: idp.launch.v1.DeployToLaunchRequest.BuildEnvEntry
+	(*structpb.Struct)(nil),           // 13: google.protobuf.Struct
 }
 var file_idp_launch_v1_launch_proto_depIdxs = []int32{
-	10, // 0: idp.launch.v1.StartLaunchRequest.parameters:type_name -> google.protobuf.Struct
-	0,  // 1: idp.launch.v1.LaunchService.StartLaunch:input_type -> idp.launch.v1.StartLaunchRequest
-	2,  // 2: idp.launch.v1.LaunchService.GetLaunchProgress:input_type -> idp.launch.v1.GetLaunchProgressRequest
-	4,  // 3: idp.launch.v1.LaunchService.ApproveLaunch:input_type -> idp.launch.v1.ApproveLaunchRequest
-	6,  // 4: idp.launch.v1.LaunchService.DeorbitLaunch:input_type -> idp.launch.v1.DeorbitLaunchRequest
-	8,  // 5: idp.launch.v1.LaunchService.AbortLaunch:input_type -> idp.launch.v1.AbortLaunchRequest
-	1,  // 6: idp.launch.v1.LaunchService.StartLaunch:output_type -> idp.launch.v1.StartLaunchResponse
-	3,  // 7: idp.launch.v1.LaunchService.GetLaunchProgress:output_type -> idp.launch.v1.GetLaunchProgressResponse
-	5,  // 8: idp.launch.v1.LaunchService.ApproveLaunch:output_type -> idp.launch.v1.ApproveLaunchResponse
-	7,  // 9: idp.launch.v1.LaunchService.DeorbitLaunch:output_type -> idp.launch.v1.DeorbitLaunchResponse
-	9,  // 10: idp.launch.v1.LaunchService.AbortLaunch:output_type -> idp.launch.v1.AbortLaunchResponse
-	6,  // [6:11] is the sub-list for method output_type
-	1,  // [1:6] is the sub-list for method input_type
-	1,  // [1:1] is the sub-list for extension type_name
-	1,  // [1:1] is the sub-list for extension extendee
-	0,  // [0:1] is the sub-list for field type_name
+	13, // 0: idp.launch.v1.StartLaunchRequest.parameters:type_name -> google.protobuf.Struct
+	13, // 1: idp.launch.v1.DeployToLaunchRequest.launch_outputs:type_name -> google.protobuf.Struct
+	12, // 2: idp.launch.v1.DeployToLaunchRequest.build_env:type_name -> idp.launch.v1.DeployToLaunchRequest.BuildEnvEntry
+	0,  // 3: idp.launch.v1.LaunchService.StartLaunch:input_type -> idp.launch.v1.StartLaunchRequest
+	2,  // 4: idp.launch.v1.LaunchService.GetLaunchProgress:input_type -> idp.launch.v1.GetLaunchProgressRequest
+	4,  // 5: idp.launch.v1.LaunchService.ApproveLaunch:input_type -> idp.launch.v1.ApproveLaunchRequest
+	6,  // 6: idp.launch.v1.LaunchService.DeorbitLaunch:input_type -> idp.launch.v1.DeorbitLaunchRequest
+	8,  // 7: idp.launch.v1.LaunchService.AbortLaunch:input_type -> idp.launch.v1.AbortLaunchRequest
+	10, // 8: idp.launch.v1.LaunchService.DeployToLaunch:input_type -> idp.launch.v1.DeployToLaunchRequest
+	1,  // 9: idp.launch.v1.LaunchService.StartLaunch:output_type -> idp.launch.v1.StartLaunchResponse
+	3,  // 10: idp.launch.v1.LaunchService.GetLaunchProgress:output_type -> idp.launch.v1.GetLaunchProgressResponse
+	5,  // 11: idp.launch.v1.LaunchService.ApproveLaunch:output_type -> idp.launch.v1.ApproveLaunchResponse
+	7,  // 12: idp.launch.v1.LaunchService.DeorbitLaunch:output_type -> idp.launch.v1.DeorbitLaunchResponse
+	9,  // 13: idp.launch.v1.LaunchService.AbortLaunch:output_type -> idp.launch.v1.AbortLaunchResponse
+	11, // 14: idp.launch.v1.LaunchService.DeployToLaunch:output_type -> idp.launch.v1.DeployToLaunchResponse
+	9,  // [9:15] is the sub-list for method output_type
+	3,  // [3:9] is the sub-list for method input_type
+	3,  // [3:3] is the sub-list for extension type_name
+	3,  // [3:3] is the sub-list for extension extendee
+	0,  // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_idp_launch_v1_launch_proto_init() }
@@ -759,7 +1010,7 @@ func file_idp_launch_v1_launch_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_idp_launch_v1_launch_proto_rawDesc), len(file_idp_launch_v1_launch_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

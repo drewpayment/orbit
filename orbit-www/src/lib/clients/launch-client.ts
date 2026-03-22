@@ -15,11 +15,13 @@ import {
   ApproveLaunchRequestSchema,
   DeorbitLaunchRequestSchema,
   AbortLaunchRequestSchema,
+  DeployToLaunchRequestSchema,
   type StartLaunchResponse,
   type GetLaunchProgressResponse,
   type ApproveLaunchResponse,
   type DeorbitLaunchResponse,
   type AbortLaunchResponse,
+  type DeployToLaunchResponse,
 } from '@/lib/proto/idp/launch/v1/launch_pb'
 import type { JsonObject } from '@bufbuild/protobuf'
 
@@ -40,6 +42,10 @@ export async function startLaunchWorkflow(
   region: string,
   parameters: JsonObject,
   approvalRequired: boolean,
+  pulumiProjectPath: string,
+  workspaceId: string,
+  autoApproved: boolean,
+  launchedBy: string,
 ): Promise<StartLaunchResponse> {
   try {
     const request = create(StartLaunchRequestSchema, {
@@ -50,6 +56,10 @@ export async function startLaunchWorkflow(
       region,
       parameters,
       approvalRequired,
+      pulumiProjectPath,
+      workspaceId,
+      autoApproved,
+      launchedBy,
     })
 
     return await launchClient.startLaunch(request)
@@ -139,6 +149,44 @@ export async function abortLaunch(
     return await launchClient.abortLaunch(request)
   } catch (error) {
     console.error('Failed to abort launch:', error)
+    throw error
+  }
+}
+
+/**
+ * Deploy an application to Launch infrastructure
+ */
+export async function deployToLaunch(
+  deploymentId: string,
+  launchId: string,
+  strategy: string,
+  cloudAccountId: string,
+  provider: string,
+  repoUrl: string,
+  branch: string,
+  buildCommand: string,
+  outputDirectory: string,
+  launchOutputs: JsonObject,
+  buildEnv: Record<string, string>,
+): Promise<DeployToLaunchResponse> {
+  try {
+    const request = create(DeployToLaunchRequestSchema, {
+      deploymentId,
+      launchId,
+      strategy,
+      cloudAccountId,
+      provider,
+      repoUrl,
+      branch,
+      buildCommand,
+      outputDirectory,
+      launchOutputs,
+      buildEnv,
+    })
+
+    return await launchClient.deployToLaunch(request)
+  } catch (error) {
+    console.error('Failed to start deploy-to-launch workflow:', error)
     throw error
   }
 }

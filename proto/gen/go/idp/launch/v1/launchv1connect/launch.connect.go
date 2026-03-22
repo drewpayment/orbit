@@ -48,6 +48,9 @@ const (
 	// LaunchServiceAbortLaunchProcedure is the fully-qualified name of the LaunchService's AbortLaunch
 	// RPC.
 	LaunchServiceAbortLaunchProcedure = "/idp.launch.v1.LaunchService/AbortLaunch"
+	// LaunchServiceDeployToLaunchProcedure is the fully-qualified name of the LaunchService's
+	// DeployToLaunch RPC.
+	LaunchServiceDeployToLaunchProcedure = "/idp.launch.v1.LaunchService/DeployToLaunch"
 )
 
 // LaunchServiceClient is a client for the idp.launch.v1.LaunchService service.
@@ -57,6 +60,7 @@ type LaunchServiceClient interface {
 	ApproveLaunch(context.Context, *connect.Request[v1.ApproveLaunchRequest]) (*connect.Response[v1.ApproveLaunchResponse], error)
 	DeorbitLaunch(context.Context, *connect.Request[v1.DeorbitLaunchRequest]) (*connect.Response[v1.DeorbitLaunchResponse], error)
 	AbortLaunch(context.Context, *connect.Request[v1.AbortLaunchRequest]) (*connect.Response[v1.AbortLaunchResponse], error)
+	DeployToLaunch(context.Context, *connect.Request[v1.DeployToLaunchRequest]) (*connect.Response[v1.DeployToLaunchResponse], error)
 }
 
 // NewLaunchServiceClient constructs a client for the idp.launch.v1.LaunchService service. By
@@ -100,6 +104,12 @@ func NewLaunchServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(launchServiceMethods.ByName("AbortLaunch")),
 			connect.WithClientOptions(opts...),
 		),
+		deployToLaunch: connect.NewClient[v1.DeployToLaunchRequest, v1.DeployToLaunchResponse](
+			httpClient,
+			baseURL+LaunchServiceDeployToLaunchProcedure,
+			connect.WithSchema(launchServiceMethods.ByName("DeployToLaunch")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -110,6 +120,7 @@ type launchServiceClient struct {
 	approveLaunch     *connect.Client[v1.ApproveLaunchRequest, v1.ApproveLaunchResponse]
 	deorbitLaunch     *connect.Client[v1.DeorbitLaunchRequest, v1.DeorbitLaunchResponse]
 	abortLaunch       *connect.Client[v1.AbortLaunchRequest, v1.AbortLaunchResponse]
+	deployToLaunch    *connect.Client[v1.DeployToLaunchRequest, v1.DeployToLaunchResponse]
 }
 
 // StartLaunch calls idp.launch.v1.LaunchService.StartLaunch.
@@ -137,6 +148,11 @@ func (c *launchServiceClient) AbortLaunch(ctx context.Context, req *connect.Requ
 	return c.abortLaunch.CallUnary(ctx, req)
 }
 
+// DeployToLaunch calls idp.launch.v1.LaunchService.DeployToLaunch.
+func (c *launchServiceClient) DeployToLaunch(ctx context.Context, req *connect.Request[v1.DeployToLaunchRequest]) (*connect.Response[v1.DeployToLaunchResponse], error) {
+	return c.deployToLaunch.CallUnary(ctx, req)
+}
+
 // LaunchServiceHandler is an implementation of the idp.launch.v1.LaunchService service.
 type LaunchServiceHandler interface {
 	StartLaunch(context.Context, *connect.Request[v1.StartLaunchRequest]) (*connect.Response[v1.StartLaunchResponse], error)
@@ -144,6 +160,7 @@ type LaunchServiceHandler interface {
 	ApproveLaunch(context.Context, *connect.Request[v1.ApproveLaunchRequest]) (*connect.Response[v1.ApproveLaunchResponse], error)
 	DeorbitLaunch(context.Context, *connect.Request[v1.DeorbitLaunchRequest]) (*connect.Response[v1.DeorbitLaunchResponse], error)
 	AbortLaunch(context.Context, *connect.Request[v1.AbortLaunchRequest]) (*connect.Response[v1.AbortLaunchResponse], error)
+	DeployToLaunch(context.Context, *connect.Request[v1.DeployToLaunchRequest]) (*connect.Response[v1.DeployToLaunchResponse], error)
 }
 
 // NewLaunchServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -183,6 +200,12 @@ func NewLaunchServiceHandler(svc LaunchServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(launchServiceMethods.ByName("AbortLaunch")),
 		connect.WithHandlerOptions(opts...),
 	)
+	launchServiceDeployToLaunchHandler := connect.NewUnaryHandler(
+		LaunchServiceDeployToLaunchProcedure,
+		svc.DeployToLaunch,
+		connect.WithSchema(launchServiceMethods.ByName("DeployToLaunch")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/idp.launch.v1.LaunchService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case LaunchServiceStartLaunchProcedure:
@@ -195,6 +218,8 @@ func NewLaunchServiceHandler(svc LaunchServiceHandler, opts ...connect.HandlerOp
 			launchServiceDeorbitLaunchHandler.ServeHTTP(w, r)
 		case LaunchServiceAbortLaunchProcedure:
 			launchServiceAbortLaunchHandler.ServeHTTP(w, r)
+		case LaunchServiceDeployToLaunchProcedure:
+			launchServiceDeployToLaunchHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -222,4 +247,8 @@ func (UnimplementedLaunchServiceHandler) DeorbitLaunch(context.Context, *connect
 
 func (UnimplementedLaunchServiceHandler) AbortLaunch(context.Context, *connect.Request[v1.AbortLaunchRequest]) (*connect.Response[v1.AbortLaunchResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.launch.v1.LaunchService.AbortLaunch is not implemented"))
+}
+
+func (UnimplementedLaunchServiceHandler) DeployToLaunch(context.Context, *connect.Request[v1.DeployToLaunchRequest]) (*connect.Response[v1.DeployToLaunchResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.launch.v1.LaunchService.DeployToLaunch is not implemented"))
 }

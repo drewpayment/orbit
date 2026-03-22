@@ -17,17 +17,37 @@ type LaunchClientInterface interface {
 	SignalLaunchApproval(ctx context.Context, workflowID string, approved bool, approvedBy, notes string) error
 	SignalLaunchDeorbit(ctx context.Context, workflowID string, requestedBy, reason string) error
 	SignalLaunchAbort(ctx context.Context, workflowID string, requestedBy string) error
+	StartDeployToLaunchWorkflow(ctx context.Context, input *DeployToLaunchInput) (string, error)
 }
 
 // StartLaunchInput contains the inputs for starting a launch workflow
 type StartLaunchInput struct {
-	LaunchID         string
-	TemplateSlug     string
-	CloudAccountID   string
-	Provider         string
-	Region           string
-	Parameters       map[string]interface{}
-	ApprovalRequired bool
+	LaunchID          string
+	TemplateSlug      string
+	CloudAccountID    string
+	Provider          string
+	Region            string
+	Parameters        map[string]interface{}
+	ApprovalRequired  bool
+	PulumiProjectPath string
+	WorkspaceID       string
+	AutoApproved      bool
+	LaunchedBy        string
+}
+
+// DeployToLaunchInput contains inputs for deploying an app to Launch infrastructure
+type DeployToLaunchInput struct {
+	DeploymentID    string
+	LaunchID        string
+	Strategy        string
+	CloudAccountID  string
+	Provider        string
+	RepoURL         string
+	Branch          string
+	BuildCommand    string
+	OutputDirectory string
+	LaunchOutputs   map[string]interface{}
+	BuildEnv        map[string]string
 }
 
 // LaunchProgressResult contains the progress data from a launch workflow query
@@ -82,13 +102,17 @@ func (s *LaunchServer) StartLaunch(ctx context.Context, req *connect.Request[lau
 
 	// Create workflow input
 	input := &StartLaunchInput{
-		LaunchID:         msg.LaunchId,
-		TemplateSlug:     msg.TemplateSlug,
-		CloudAccountID:   msg.CloudAccountId,
-		Provider:         msg.Provider,
-		Region:           msg.Region,
-		Parameters:       params,
-		ApprovalRequired: msg.ApprovalRequired,
+		LaunchID:          msg.LaunchId,
+		TemplateSlug:      msg.TemplateSlug,
+		CloudAccountID:    msg.CloudAccountId,
+		Provider:          msg.Provider,
+		Region:            msg.Region,
+		Parameters:        params,
+		ApprovalRequired:  msg.ApprovalRequired,
+		PulumiProjectPath: msg.PulumiProjectPath,
+		WorkspaceID:       msg.WorkspaceId,
+		AutoApproved:      msg.AutoApproved,
+		LaunchedBy:        msg.LaunchedBy,
 	}
 
 	// Start the Temporal workflow
@@ -185,5 +209,49 @@ func (s *LaunchServer) AbortLaunch(ctx context.Context, req *connect.Request[lau
 
 	return connect.NewResponse(&launchv1.AbortLaunchResponse{
 		Success: true,
+	}), nil
+}
+
+// DeployToLaunch starts a deploy-to-launch workflow
+func (s *LaunchServer) DeployToLaunch(ctx context.Context, req *connect.Request[launchv1.DeployToLaunchRequest]) (*connect.Response[launchv1.DeployToLaunchResponse], error) {
+	msg := req.Msg
+
+	if msg.DeploymentId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("deployment_id is required"))
+	}
+	if msg.LaunchId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("launch_id is required"))
+	}
+	if msg.Strategy == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("strategy is required"))
+	}
+
+	var launchOutputs map[string]interface{}
+	if msg.LaunchOutputs != nil {
+		launchOutputs = msg.LaunchOutputs.AsMap()
+	}
+
+	input := &DeployToLaunchInput{
+		DeploymentID:    msg.DeploymentId,
+		LaunchID:        msg.LaunchId,
+		Strategy:        msg.Strategy,
+		CloudAccountID:  msg.CloudAccountId,
+		Provider:        msg.Provider,
+		RepoURL:         msg.RepoUrl,
+		Branch:          msg.Branch,
+		BuildCommand:    msg.BuildCommand,
+		OutputDirectory: msg.OutputDirectory,
+		LaunchOutputs:   launchOutputs,
+		BuildEnv:        msg.BuildEnv,
+	}
+
+	workflowID, err := s.temporalClient.StartDeployToLaunchWorkflow(ctx, input)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to start deploy-to-launch workflow: %w", err))
+	}
+
+	return connect.NewResponse(&launchv1.DeployToLaunchResponse{
+		WorkflowId: workflowID,
+		Success:    true,
 	}), nil
 }

@@ -31,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Cloud,
   Plus,
@@ -41,6 +42,8 @@ import {
   Pencil,
   Plug,
   ShieldCheck,
+  Upload,
+  FileText,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { ProviderIcon } from '@/components/features/launches/ProviderIcon'
@@ -456,19 +459,11 @@ export function CloudAccountsSettingsClient() {
             )}
 
             {form.provider === 'gcp' && (
-              <div className="space-y-2">
-                <Label htmlFor="gcp-json">
-                  Service Account JSON {editing && '(leave blank to keep existing)'}
-                </Label>
-                <Textarea
-                  id="gcp-json"
-                  rows={6}
-                  className="font-mono text-xs"
-                  placeholder={editing ? '(existing credentials hidden)' : '{ "type": "service_account", ... }'}
-                  value={form.gcpServiceAccountJson}
-                  onChange={(e) => setForm({ ...form, gcpServiceAccountJson: e.target.value })}
-                />
-              </div>
+              <GcpCredentialInput
+                value={form.gcpServiceAccountJson}
+                editing={!!editing}
+                onChange={(val) => setForm({ ...form, gcpServiceAccountJson: val })}
+              />
             )}
 
             {form.provider === 'azure' && (
@@ -603,6 +598,102 @@ export function CloudAccountsSettingsClient() {
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// GCP credential input (file upload or paste)
+// ---------------------------------------------------------------------------
+
+function GcpCredentialInput({
+  value,
+  editing,
+  onChange,
+}: {
+  value: string
+  editing: boolean
+  onChange: (val: string) => void
+}) {
+  const [fileName, setFileName] = useState<string | null>(null)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (evt) => {
+      const text = evt.target?.result as string
+      try {
+        // Validate it's valid JSON
+        JSON.parse(text)
+        onChange(text)
+        setFileName(file.name)
+      } catch {
+        toast.error('Invalid JSON file. Please select a valid service account key file.')
+      }
+    }
+    reader.readAsText(file)
+  }
+
+  return (
+    <div className="space-y-2">
+      <Label>
+        Service Account JSON {editing && '(leave blank to keep existing)'}
+      </Label>
+      <Tabs defaultValue="file" className="w-full">
+        <TabsList className="w-full">
+          <TabsTrigger value="file" className="flex-1 gap-1.5">
+            <Upload className="h-3.5 w-3.5" />
+            Upload File
+          </TabsTrigger>
+          <TabsTrigger value="paste" className="flex-1 gap-1.5">
+            <FileText className="h-3.5 w-3.5" />
+            Paste JSON
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="file" className="mt-3">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex w-full flex-col items-center gap-2 rounded-md border border-dashed p-6 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary cursor-pointer"
+          >
+            <Upload className="h-8 w-8" />
+            {fileName ? (
+              <span className="font-medium text-foreground">{fileName}</span>
+            ) : (
+              <span>Click to select a service account JSON key file</span>
+            )}
+          </button>
+          {value && fileName && (
+            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+              <CheckCircle className="h-3 w-3 text-green-500" />
+              File loaded successfully
+            </p>
+          )}
+        </TabsContent>
+        <TabsContent value="paste" className="mt-3">
+          <Textarea
+            id="gcp-json"
+            rows={6}
+            className="font-mono text-xs"
+            placeholder={editing ? '(existing credentials hidden)' : '{ "type": "service_account", ... }'}
+            value={value}
+            onChange={(e) => {
+              onChange(e.target.value)
+              setFileName(null)
+            }}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
   )
 }
 

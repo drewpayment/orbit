@@ -142,7 +142,28 @@ export async function startLaunch(launchId: string) {
   try {
     const approvalRequired = launch.approvalConfig?.required || false
 
+    // Determine if auto-approval applies (launcher is in the approvers list)
+    // Note: session.user.id is a Better Auth ID, but approvers are Payload user IDs.
+    // We need to look up the Payload user by email to compare.
+    let autoApproved = false
+    if (approvalRequired) {
+      const payloadUser = await payload.find({
+        collection: 'users',
+        where: { email: { equals: session.user.email } },
+        limit: 1,
+        depth: 0,
+      })
+      const payloadUserId = payloadUser.docs[0]?.id
+      if (payloadUserId) {
+        const approverIds = (launch.approvalConfig?.approvers || []).map(
+          (a: string | { id: string }) => typeof a === 'string' ? a : a.id,
+        )
+        autoApproved = approverIds.includes(payloadUserId)
+      }
+    }
+
     // Call gRPC to start the workflow
+    const workspaceId = typeof launch.workspace === 'string' ? launch.workspace : launch.workspace?.id || ''
     const response = await startLaunchWorkflow(
       launchId,
       template.slug,
@@ -151,6 +172,10 @@ export async function startLaunch(launchId: string) {
       launch.region,
       (launch.parameters as JsonObject) || {},
       approvalRequired,
+      template.pulumiProjectPath,
+      workspaceId,
+      autoApproved,
+      session.user.id,
     )
 
     if (!response.success) {
@@ -158,14 +183,18 @@ export async function startLaunch(launchId: string) {
     }
 
     // Update launch record with workflow ID and status
+    const updateData: Record<string, unknown> = {
+      workflowId: response.workflowId,
+      status: 'launching',
+      lastLaunchedAt: new Date().toISOString(),
+    }
+    if (autoApproved) {
+      updateData.approvedBy = session.user.id
+    }
     await payload.update({
       collection: 'launches',
       id: launchId,
-      data: {
-        workflowId: response.workflowId,
-        status: 'launching',
-        lastLaunchedAt: new Date().toISOString(),
-      },
+      data: updateData,
     })
 
     return { success: true, workflowId: response.workflowId }
@@ -189,6 +218,73 @@ export async function startLaunch(launchId: string) {
 
     return { success: false, error: errorMessage }
   }
+}
+
+export async function retryLaunch(launchId: string) {
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session?.user) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  const payload = await getPayload({ config })
+
+  const launch = await payload.findByID({
+    collection: 'launches',
+    id: launchId,
+    depth: 0,
+  })
+
+  if (!launch) {
+    return { success: false, error: 'Launch not found' }
+  }
+
+  if (!['failed', 'aborted', 'launching'].includes(launch.status)) {
+    return { success: false, error: `Cannot retry a launch with status "${launch.status}"` }
+  }
+
+  // Reset status to pending and clear error before retrying
+  await payload.update({
+    collection: 'launches',
+    id: launchId,
+    data: {
+      status: 'pending',
+      launchError: null,
+      workflowId: null,
+    },
+  })
+
+  // Start the workflow again
+  return startLaunch(launchId)
+}
+
+export async function deleteLaunch(launchId: string) {
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session?.user) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  const payload = await getPayload({ config })
+
+  const launch = await payload.findByID({
+    collection: 'launches',
+    id: launchId,
+    depth: 0,
+  })
+
+  if (!launch) {
+    return { success: false, error: 'Launch not found' }
+  }
+
+  if (['active', 'deorbiting', 'awaiting_approval'].includes(launch.status)) {
+    return { success: false, error: `Cannot delete a launch with status "${launch.status}". Abort or deorbit first.` }
+  }
+
+  await payload.delete({
+    collection: 'launches',
+    id: launchId,
+  })
+
+  return { success: true }
 }
 
 export async function getLaunchStatus(launchId: string) {

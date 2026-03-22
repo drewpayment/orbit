@@ -24,6 +24,7 @@ const (
 	LaunchService_ApproveLaunch_FullMethodName     = "/idp.launch.v1.LaunchService/ApproveLaunch"
 	LaunchService_DeorbitLaunch_FullMethodName     = "/idp.launch.v1.LaunchService/DeorbitLaunch"
 	LaunchService_AbortLaunch_FullMethodName       = "/idp.launch.v1.LaunchService/AbortLaunch"
+	LaunchService_DeployToLaunch_FullMethodName    = "/idp.launch.v1.LaunchService/DeployToLaunch"
 )
 
 // LaunchServiceClient is the client API for LaunchService service.
@@ -35,6 +36,7 @@ type LaunchServiceClient interface {
 	ApproveLaunch(ctx context.Context, in *ApproveLaunchRequest, opts ...grpc.CallOption) (*ApproveLaunchResponse, error)
 	DeorbitLaunch(ctx context.Context, in *DeorbitLaunchRequest, opts ...grpc.CallOption) (*DeorbitLaunchResponse, error)
 	AbortLaunch(ctx context.Context, in *AbortLaunchRequest, opts ...grpc.CallOption) (*AbortLaunchResponse, error)
+	DeployToLaunch(ctx context.Context, in *DeployToLaunchRequest, opts ...grpc.CallOption) (*DeployToLaunchResponse, error)
 }
 
 type launchServiceClient struct {
@@ -95,6 +97,16 @@ func (c *launchServiceClient) AbortLaunch(ctx context.Context, in *AbortLaunchRe
 	return out, nil
 }
 
+func (c *launchServiceClient) DeployToLaunch(ctx context.Context, in *DeployToLaunchRequest, opts ...grpc.CallOption) (*DeployToLaunchResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeployToLaunchResponse)
+	err := c.cc.Invoke(ctx, LaunchService_DeployToLaunch_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // LaunchServiceServer is the server API for LaunchService service.
 // All implementations must embed UnimplementedLaunchServiceServer
 // for forward compatibility.
@@ -104,6 +116,7 @@ type LaunchServiceServer interface {
 	ApproveLaunch(context.Context, *ApproveLaunchRequest) (*ApproveLaunchResponse, error)
 	DeorbitLaunch(context.Context, *DeorbitLaunchRequest) (*DeorbitLaunchResponse, error)
 	AbortLaunch(context.Context, *AbortLaunchRequest) (*AbortLaunchResponse, error)
+	DeployToLaunch(context.Context, *DeployToLaunchRequest) (*DeployToLaunchResponse, error)
 	mustEmbedUnimplementedLaunchServiceServer()
 }
 
@@ -128,6 +141,9 @@ func (UnimplementedLaunchServiceServer) DeorbitLaunch(context.Context, *DeorbitL
 }
 func (UnimplementedLaunchServiceServer) AbortLaunch(context.Context, *AbortLaunchRequest) (*AbortLaunchResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AbortLaunch not implemented")
+}
+func (UnimplementedLaunchServiceServer) DeployToLaunch(context.Context, *DeployToLaunchRequest) (*DeployToLaunchResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeployToLaunch not implemented")
 }
 func (UnimplementedLaunchServiceServer) mustEmbedUnimplementedLaunchServiceServer() {}
 func (UnimplementedLaunchServiceServer) testEmbeddedByValue()                       {}
@@ -240,6 +256,24 @@ func _LaunchService_AbortLaunch_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LaunchService_DeployToLaunch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeployToLaunchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LaunchServiceServer).DeployToLaunch(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LaunchService_DeployToLaunch_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LaunchServiceServer).DeployToLaunch(ctx, req.(*DeployToLaunchRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // LaunchService_ServiceDesc is the grpc.ServiceDesc for LaunchService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -266,6 +300,10 @@ var LaunchService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AbortLaunch",
 			Handler:    _LaunchService_AbortLaunch_Handler,
+		},
+		{
+			MethodName: "DeployToLaunch",
+			Handler:    _LaunchService_DeployToLaunch_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

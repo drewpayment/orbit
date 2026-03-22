@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AbortLaunchRequest, AbortLaunchResponse, ApproveLaunchRequest, ApproveLaunchResponse, DeorbitLaunchRequest, DeorbitLaunchResponse, GetLaunchProgressRequest, GetLaunchProgressResponse, StartLaunchRequest, StartLaunchResponse } from "./launch_pb.js";
+import { AbortLaunchRequest, AbortLaunchResponse, ApproveLaunchRequest, ApproveLaunchResponse, DeorbitLaunchRequest, DeorbitLaunchResponse, DeployToLaunchRequest, DeployToLaunchResponse, GetLaunchProgressRequest, GetLaunchProgressResponse, StartLaunchRequest, StartLaunchResponse } from "./launch_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -55,6 +55,15 @@ export const LaunchService = {
       name: "AbortLaunch",
       I: AbortLaunchRequest,
       O: AbortLaunchResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc idp.launch.v1.LaunchService.DeployToLaunch
+     */
+    deployToLaunch: {
+      name: "DeployToLaunch",
+      I: DeployToLaunchRequest,
+      O: DeployToLaunchResponse,
       kind: MethodKind.Unary,
     },
   }

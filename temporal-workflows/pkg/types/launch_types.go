@@ -9,6 +9,8 @@ type LaunchWorkflowInput struct {
 	Region            string                 `json:"region"`
 	Parameters        map[string]interface{} `json:"parameters"`
 	ApprovalRequired  bool                   `json:"approvalRequired"`
+	AutoApproved      bool                   `json:"autoApproved"`
+	LaunchedBy        string                 `json:"launchedBy"`
 	PulumiProjectPath string                 `json:"pulumiProjectPath"`
 	WorkspaceID       string                 `json:"workspaceId"`
 }
@@ -79,4 +81,34 @@ type UpdateLaunchStatusInput struct {
 type StoreLaunchOutputsInput struct {
 	LaunchID string                 `json:"launchId"`
 	Outputs  map[string]interface{} `json:"outputs"`
+}
+
+// DeployToLaunchInput contains parameters for deploying an app to Launch infrastructure
+type DeployToLaunchInput struct {
+	DeploymentID    string                 `json:"deploymentId"`
+	LaunchID        string                 `json:"launchId"`
+	Strategy        string                 `json:"strategy"`
+	CloudAccountID  string                 `json:"cloudAccountId"`
+	Provider        string                 `json:"provider"`
+	RepoURL         string                 `json:"repoUrl"`
+	Branch          string                 `json:"branch"`
+	BuildCommand    string                 `json:"buildCommand"`
+	OutputDirectory string                 `json:"outputDirectory"`
+	LaunchOutputs   map[string]interface{} `json:"launchOutputs"`
+	BuildEnv        map[string]string      `json:"buildEnv"`
+}
+
+// DeployToLaunchResult contains the result of a deploy-to-launch operation
+type DeployToLaunchResult struct {
+	DeployedURL string   `json:"deployedUrl"`
+	FilesCount  int      `json:"filesCount"`
+	Summary     []string `json:"summary"`
+}
+
+// UpdateDeploymentStatusInput contains data for updating a deployment's status
+type UpdateDeploymentStatusInput struct {
+	DeploymentID string `json:"deploymentId"`
+	Status       string `json:"status"`
+	Error        string `json:"error,omitempty"`
+	URL          string `json:"url,omitempty"`
 }
