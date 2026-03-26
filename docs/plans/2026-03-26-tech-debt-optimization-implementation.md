@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-26
 **Author:** Gage (Principal Software Engineer)
-**Based on:** [Design Document](./2026-03-26-tech-debt-optimization-design.md)
+**Based on:** [Design Document](./2026-03-26-tech-debt-optimization-design.md), [QA Plan](./2026-03-26-tech-debt-optimization-qa-plan.md)
 **Branch:** `feat/tech-debt-optimization`
 
 ---
@@ -22,6 +22,8 @@ Before diving into implementation, here are decisions on the design doc's open q
 ---
 
 ## Wave 1: Kafka Persistence Layer (PostgreSQL Migration)
+
+> **QA-001: Clean-Slate Migration.** This is a clean-slate migration — no data migration is needed. The in-memory stubs were volatile by design (all state was lost on every restart). Switching to PostgreSQL is purely additive. The Kafka service will log `"INFO: Using PostgreSQL persistence — in-memory stubs removed"` on startup to make this explicit. PR description and any CHANGELOG entry must state the clean-slate nature.
 
 ### 1.1 — PostgreSQL Schema Migrations
 
@@ -167,7 +169,12 @@ Tables to create:
 **File:** `000001_initial_schema.down.sql`
 - DROP all tables in reverse dependency order
 
-**Verification:** `golang-migrate` can run up/down cleanly against a fresh PostgreSQL instance.
+**File:** `testdata/seed.sql`
+- Minimal seed data: 1 cluster, 1 topic, 1 schema — used for migration round-trip testing
+
+**Verification:**
+1. `golang-migrate` can run `up` cleanly against a fresh PostgreSQL instance
+2. **QA-003: Migration round-trip test:** `up` → seed data → `down` → `up` again. Second `up` must succeed cleanly with no leftover state. All tables exist and are empty after the round-trip.
 
 ---
 
@@ -265,14 +272,38 @@ clusterRepo := postgres.NewClusterRepository(pool)
 
 **Strategy:** Build-tag gated integration tests (`//go:build integration`)
 
+**QA-004: Shared pool + per-test transaction rollback.** To prevent connection pool exhaustion, all tests share one `pgxpool.Pool` (max 5 connections) created at suite level. Individual tests use per-test transactions that roll back on cleanup — no data leaks between tests, no connection exhaustion.
+
 Each test file follows this pattern:
-1. Setup: Create test database connection, run migrations
-2. Test: CRUD operations, edge cases, not-found errors
-3. Teardown: Truncate tables
+1. Suite setup (once): Connect to test PostgreSQL, run migrations, store shared pool
+2. Per-test setup: Begin transaction from shared pool
+3. Test: CRUD operations, edge cases, not-found errors (all through the transaction)
+4. Per-test cleanup: Rollback transaction (automatic via `t.Cleanup`)
 
 **Test helper:** `services/kafka/internal/repository/postgres/testutil_test.go`
-- Connects to test PostgreSQL (from env var or testcontainers)
-- Provides `setupTestDB(t)` that returns a pool and cleanup func
+
+```go
+var testPool *pgxpool.Pool
+
+func TestMain(m *testing.M) {
+    // One pool for the entire test suite (max 5 conns)
+    pool, err := pgxpool.New(ctx, os.Getenv("TEST_DATABASE_URL"))
+    // ... run migrations ...
+    testPool = pool
+    code := m.Run()
+    pool.Close()
+    os.Exit(code)
+}
+
+func setupTestTx(t *testing.T) pgx.Tx {
+    tx, err := testPool.Begin(context.Background())
+    require.NoError(t, err)
+    t.Cleanup(func() { tx.Rollback(context.Background()) })
+    return tx
+}
+```
+
+**Note:** Repository constructors accept a `Querier` interface (`pgxpool.Pool` and `pgx.Tx` both satisfy it) so tests can inject the transaction directly.
 
 **Minimum test coverage per repo:**
 - Create + GetByID round-trip
@@ -281,9 +312,54 @@ Each test file follows this pattern:
 - Delete removes item
 - Not-found returns correct domain error
 
+**Stability verification:** Run the full integration test suite 3 times consecutively. All 3 runs must pass with zero connection errors.
+
 ---
 
-### 1.5 — Infrastructure Updates
+### 1.5 — CI Debt Metrics Baseline
+
+**QA-005: Metrics from day one, not Wave 4.** The entire initiative is about measurable reduction — we need baselines before any code changes land.
+
+**File:** `.github/workflows/tech-debt-metrics.yml` (or added as a step to existing CI workflow)
+
+```yaml
+- name: Tech Debt Metrics
+  run: |
+    echo "## Tech Debt Metrics" >> $GITHUB_STEP_SUMMARY
+    echo "| Metric | Count |" >> $GITHUB_STEP_SUMMARY
+    echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+
+    INMEM=$(grep -r "inMemory.*Repository" services/kafka/ --include="*.go" | grep -v _test.go | wc -l | tr -d ' ')
+    echo "| In-memory stubs | $INMEM |" >> $GITHUB_STEP_SUMMARY
+
+    ASANY=$(grep -r "as any" orbit-www/src/ --include="*.ts" --include="*.tsx" | wc -l | tr -d ' ')
+    echo "| as any casts | $ASANY |" >> $GITHUB_STEP_SUMMARY
+
+    TODO_TESTS=$(grep -r "\.todo(" orbit-www/src/ --include="*.ts" | wc -l | tr -d ' ')
+    echo "| .todo() tests | $TODO_TESTS |" >> $GITHUB_STEP_SUMMARY
+
+    STUBS=$(grep -rn "status.Errorf(codes.Unimplemented" services/ --include="*.go" | wc -l | tr -d ' ')
+    echo "| Stubbed gRPC handlers | $STUBS |" >> $GITHUB_STEP_SUMMARY
+
+    TODOS=$(grep -rE "TODO|FIXME|HACK" services/ orbit-www/src/ --include="*.go" --include="*.ts" --include="*.tsx" | wc -l | tr -d ' ')
+    echo "| TODO/FIXME/HACK | $TODOS |" >> $GITHUB_STEP_SUMMARY
+```
+
+**Baseline (2026-03-26):**
+
+| Metric | Baseline |
+|--------|----------|
+| In-memory stubs | 10 |
+| `as any` casts | 406 |
+| `.todo()` tests | 32 |
+| Stubbed gRPC handlers | ~30 |
+| TODO/FIXME/HACK | 156+ |
+
+**Regression threshold:** Fail the build if any metric increases by more than 5 from baseline.
+
+---
+
+### 1.6 — Infrastructure Updates
 
 **`docker-compose.yml`** — Add init script for kafka_service database:
 - `infrastructure/postgres-init/02-kafka-service.sql`: `CREATE DATABASE kafka_service;`
@@ -310,6 +386,26 @@ Each test file follows this pattern:
 ### 2.3 — Frontend Action Wiring
 - Resolve TODOs in `orbit-www/src/app/actions/kafka-*.ts` by connecting to real gRPC endpoints
 
+### 2.4 — Contract Tests
+
+**QA-006: Proto-based contract testing.** The `.proto` files are the single source of truth for both Go and TypeScript clients.
+
+**Go side:** Test that each implemented handler accepts valid proto requests and returns valid proto responses matching the schema. Test files in `services/repository/internal/grpc/*_test.go` with naming convention `TestGRPC_<HandlerName>`.
+
+**TypeScript side:** Generate TypeScript types from the same `.proto` files via `buf` (already installed locally in `orbit-www/node_modules`). Verify the frontend gRPC client (Connect-ES) matches.
+
+**CI step:** `buf breaking --against '.git#branch=main'` on every PR touching `*.proto` files to catch breaking changes.
+
+**Verification:**
+```bash
+# Go contract tests
+cd services/repository && go test -run TestGRPC ./internal/grpc/...
+# Proto breaking change detection
+buf breaking --against '.git#branch=main'
+# TypeScript client type check
+cd orbit-www && npx tsc --noEmit
+```
+
 ---
 
 ## Wave 3: Type Safety (Summary)
@@ -318,6 +414,18 @@ Each test file follows this pattern:
 - Add Better Auth fields to Payload collection schemas
 - Regenerate `payload-types.ts`
 - Bulk-replace `(req.user as any).field` patterns
+
+**QA-007: `tsc --noEmit` before/after checkpoint.** Capture TypeScript error count before regeneration, then verify it is equal or lower after applying changes. This gates the Wave 3 PR — no merge if error count increases.
+
+```bash
+# Before (capture baseline)
+cd orbit-www && npx tsc --noEmit 2>&1 | grep "Found .* error" || echo "0 errors"
+# Regenerate types
+bun run payload generate:types
+# Apply bulk replacements
+# After (must be <= baseline)
+npx tsc --noEmit 2>&1 | grep "Found .* error" || echo "0 errors"
+```
 
 ### 3.2 — Gradual Cleanup
 - Fix remaining `as any` casts in files touched during Waves 1-2
@@ -334,16 +442,68 @@ Each test file follows this pattern:
 ### 4.2 — Kafka Topic Sharing Tests
 - Implement all 32 `.todo` tests in `kafka-topic-catalog.integration.test.ts`
 
+**QA-008: Test isolation.** Each integration test creates its own `workspace_id` (random UUID) and uses it for all entities. Topic names include a random suffix: `test-topic-${crypto.randomUUID().slice(0,8)}`. Tests must not rely on global state or assume the database is empty. For Go tests, use the per-test transaction rollback pattern from Wave 1.4. For TypeScript tests, use `beforeEach` to create a fresh workspace context.
+
+**CI strategy:** Run tests sequentially first. Enable parallelism only after 5 consecutive randomized runs pass (`bun test --randomize` / `go test -shuffle=on`).
+
+### 4.3 — E2E Smoke Test: Kafka Topic Sharing Critical Path
+
+**QA-002: Full critical path E2E test.** Individual wave tests cover components in isolation. This test covers the complete flow end-to-end against the full docker-compose stack (no mocks).
+
+**Test outline:**
+```
+E2E: Kafka Topic Sharing Critical Path
+  1. Create a Kafka topic in workspace A → 201, topic created
+  2. From workspace B, request a share on that topic → 201, share pending
+  3. Approve the share request from workspace A → 200, share approved
+  4. GET share → status = "approved", share active
+  5. Verify: service account for workspace B has read ACL on the topic
+```
+
+**Location:** `services/kafka/tests/e2e/kafka_sharing_test.go` or `orbit-www/tests/e2e/kafka-sharing.spec.ts`
+
+**CI:** Runs as a separate job after all unit/integration tests pass. Must pass on every PR merge to `feat/tech-debt-optimization` and before branch merges to `main`.
+
 ---
 
 ## Verification Checkpoints
 
-| Checkpoint | Command | Expected Result |
-|-----------|---------|-----------------|
-| Migrations run | `golang-migrate -path ./migrations -database $DATABASE_URL up` | All tables created |
-| Go builds | `cd services/kafka && go build ./...` | No errors |
-| Unit tests pass | `cd services/kafka && go test ./...` | All pass |
-| Integration tests pass | `cd services/kafka && go test -tags=integration ./...` | All pass |
-| Service starts | `docker compose up kafka-service` | Connects to PG, runs migrations, serves gRPC |
-| Data persists | Create cluster via gRPC, restart service, query cluster | Cluster survives restart |
-| In-memory stub count | `grep -r "inMemory.*Repository" services/kafka/ \| grep -v _test.go \| wc -l` | 0 (was 10) |
+Full checkpoint matrix is defined in the [QA Plan](./2026-03-26-tech-debt-optimization-qa-plan.md#4-verification-checkpoints-per-wave). Key checkpoints per wave:
+
+### Wave 1
+
+| # | Check | Command | Pass Criteria |
+|---|-------|---------|---------------|
+| 1.1 | Migrations apply | `golang-migrate -path ./migrations -database $DATABASE_URL up` | Exit 0, all tables created |
+| 1.2 | Migration round-trip (QA-003) | up → seed → down → up | No errors, tables exist and empty |
+| 1.3 | Go builds | `cd services/kafka && go build ./...` | Exit 0 |
+| 1.4 | Unit tests pass | `cd services/kafka && go test -tags=integration ./internal/repository/postgres/...` | All pass, 90%+ coverage |
+| 1.5 | Pool stability (QA-004) | Run test suite 3x consecutively | 3/3 pass, 0 connection errors |
+| 1.6 | Service starts with PG | `docker compose up kafka-service` | Logs `"Using PostgreSQL persistence"` |
+| 1.7 | Data persists | Create entity → restart → query | Entity survives restart |
+| 1.8 | In-memory stubs removed | `grep -r "inMemory.*Repository" services/kafka/ \| grep -v _test.go \| wc -l` | 0 (was 10) |
+| 1.9 | Debt metrics CI (QA-005) | Push PR, check GitHub Actions | Metrics posted to step summary |
+
+### Wave 2
+
+| # | Check | Command | Pass Criteria |
+|---|-------|---------|---------------|
+| 2.1 | Contract tests (QA-006) | `go test -run TestGRPC ./internal/grpc/...` | All pass |
+| 2.2 | Proto compatibility | `buf breaking --against '.git#branch=main'` | No breaking changes |
+| 2.3 | Frontend actions | `bun test` for kafka action tests | All pass |
+
+### Wave 3
+
+| # | Check | Command | Pass Criteria |
+|---|-------|---------|---------------|
+| 3.1 | Type gen succeeds | `bun run payload generate:types` | Exit 0 |
+| 3.2 | tsc checkpoint (QA-007) | `npx tsc --noEmit` | Error count <= baseline |
+| 3.3 | `as any` reduced | `grep -r "as any" orbit-www/src/ --include="*.ts" --include="*.tsx" \| wc -l` | < 150 |
+
+### Wave 4
+
+| # | Check | Command | Pass Criteria |
+|---|-------|---------|---------------|
+| 4.1 | All .todo tests pass | `grep -r "\.todo(" orbit-www/src/ --include="*.ts" \| wc -l` | 0 |
+| 4.2 | E2E smoke (QA-002) | Full critical path test | create → share → approve → ACL |
+| 4.3 | Randomized stability (QA-008) | 5x randomized runs | 5/5 pass |
