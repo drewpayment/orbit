@@ -56,6 +56,10 @@ func (m *mockLaunchClient) SignalLaunchAbort(ctx context.Context, workflowID str
 	return nil
 }
 
+func (m *mockLaunchClient) StartDeployToLaunchWorkflow(ctx context.Context, input *DeployToLaunchInput) (string, error) {
+	return "wf-deploy-123", nil
+}
+
 // --- StartLaunch Tests ---
 
 func TestStartLaunch_Success(t *testing.T) {
