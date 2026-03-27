@@ -57,7 +57,8 @@ jobs:
         echo "| \`.todo()\` tests | $TODO_TESTS | $TODO_TESTS_BASELINE | $TODO_TESTS_STATUS |" >> $GITHUB_STEP_SUMMARY
 
         # --- Stubbed gRPC handlers (all services) ---
-        STUBS=$(grep -rc "status.Error.*codes.Unimplemented" services/ --include="*.go" 2>/dev/null | grep -v _test.go | awk -F: '{s+=$NF}END{print s+0}')
+        STUBS=$(grep -rl "status.Error.*codes.Unimplemented" services/ --include="*.go" 2>/dev/null | grep -v _test.go | wc -l | tr -d ' ')
+        STUBS="${STUBS:-0}"
         STUBS_BASELINE=10
         if [ "$STUBS" -gt "$STUBS_BASELINE" ]; then
           STUBS_STATUS="regression"
@@ -84,18 +85,16 @@ jobs:
         echo "_Baselines captured 2026-03-27 on \`feat/tech-debt-optimization\`._" >> $GITHUB_STEP_SUMMARY
 
         # --- Export for regression check ---
-        {
-          echo "inmem=${INMEM}"
-          echo "inmem_baseline=${INMEM_BASELINE}"
-          echo "asany=${ASANY}"
-          echo "asany_baseline=${ASANY_BASELINE}"
-          echo "todo_tests=${TODO_TESTS}"
-          echo "todo_tests_baseline=${TODO_TESTS_BASELINE}"
-          echo "stubs=${STUBS}"
-          echo "stubs_baseline=${STUBS_BASELINE}"
-          echo "todos=${TODOS}"
-          echo "todos_baseline=${TODOS_BASELINE}"
-        } >> "$GITHUB_OUTPUT"
+        echo "inmem=${INMEM:-0}" >> "$GITHUB_OUTPUT"
+        echo "inmem_baseline=${INMEM_BASELINE}" >> "$GITHUB_OUTPUT"
+        echo "asany=${ASANY:-0}" >> "$GITHUB_OUTPUT"
+        echo "asany_baseline=${ASANY_BASELINE}" >> "$GITHUB_OUTPUT"
+        echo "todo_tests=${TODO_TESTS:-0}" >> "$GITHUB_OUTPUT"
+        echo "todo_tests_baseline=${TODO_TESTS_BASELINE}" >> "$GITHUB_OUTPUT"
+        echo "stubs=${STUBS:-0}" >> "$GITHUB_OUTPUT"
+        echo "stubs_baseline=${STUBS_BASELINE}" >> "$GITHUB_OUTPUT"
+        echo "todos=${TODOS:-0}" >> "$GITHUB_OUTPUT"
+        echo "todos_baseline=${TODOS_BASELINE}" >> "$GITHUB_OUTPUT"
 
     - name: Check for regressions
       run: |
