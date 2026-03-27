@@ -200,14 +200,14 @@ E2E: Kafka Topic Sharing Critical Path
     echo "| TODO/FIXME/HACK | $TODOS |" >> $GITHUB_STEP_SUMMARY
 ```
 
-**Baseline (2026-03-26):**
-| Metric | Baseline |
-|--------|----------|
-| In-memory stubs | 10 |
-| `as any` casts | 406 |
-| `.todo()` tests | 32 |
-| Stubbed gRPC handlers | ~30 |
-| TODO/FIXME/HACK | 156+ |
+**Baseline (updated 2026-03-27 post-Wave 1):**
+| Metric | Pre-Wave 1 | Post-Wave 1 | CI Baseline |
+|--------|-----------|-------------|-------------|
+| In-memory stubs | 18 | 0 | 0 |
+| `as any` casts | 379 | 379 | 379 |
+| `.todo()` tests | 32 | 32 | 32 |
+| Stubbed gRPC handlers | 10 | 10 | 10 |
+| TODO/FIXME/HACK | 157 | 155 | 155 |
 
 ---
 

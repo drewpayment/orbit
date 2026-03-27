@@ -22,7 +22,7 @@ jobs:
 
         # --- In-memory repository stubs (kafka service) ---
         INMEM=$(grep -c "inMemory.*{}" services/kafka/cmd/server/main.go 2>/dev/null || echo "0")
-        INMEM_BASELINE=18
+        INMEM_BASELINE=0
         if [ "$INMEM" -gt "$INMEM_BASELINE" ]; then
           INMEM_STATUS="regression"
         elif [ "$INMEM" -lt "$INMEM_BASELINE" ]; then
@@ -70,7 +70,7 @@ jobs:
 
         # --- TODO/FIXME/HACK comments ---
         TODOS=$(grep -rE "TODO|FIXME|HACK" services/ orbit-www/src/ --include="*.go" --include="*.ts" --include="*.tsx" 2>/dev/null | wc -l | tr -d ' ')
-        TODOS_BASELINE=157
+        TODOS_BASELINE=155
         if [ "$TODOS" -gt "$TODOS_BASELINE" ]; then
           TODOS_STATUS="regression"
         elif [ "$TODOS" -lt "$TODOS_BASELINE" ]; then
