@@ -9,7 +9,7 @@ export const Users: CollectionConfig = {
   },
   access: {
     admin: ({ req }) => {
-      const role = (req.user as any)?.role
+      const role = req.user?.role
       return role === 'super_admin' || role === 'admin'
     },
   },

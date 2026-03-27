@@ -51,14 +51,13 @@ export const userApprovalAfterChangeHook: CollectionAfterChangeHook = async ({
     )
 
     // Update Payload doc with approval metadata
-    // Type assertion needed because generated types don't include new fields until next build
     await payload.update({
       collection: 'users',
       id: doc.id,
       data: {
         registrationApprovedAt: new Date().toISOString(),
         registrationApprovedBy: adminUser?.id,
-      } as any,
+      },
       context: { skipApprovalHook: true },
     })
 

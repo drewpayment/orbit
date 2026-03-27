@@ -12,7 +12,7 @@ export const WorkspaceMembers: CollectionConfig = {
     read: async ({ req }) => {
       if (!req.user) return false
       if (isSuperAdmin(req.user)) return true
-      const betterAuthId = (req.user as any).betterAuthId
+      const betterAuthId = req.user?.betterAuthId
       if (!betterAuthId) return false
       const ids = await getMemberWorkspaceIds(req.payload, betterAuthId)
       if (ids.length === 0) return false
@@ -24,7 +24,7 @@ export const WorkspaceMembers: CollectionConfig = {
       if (isSuperAdmin(req.user)) return true
       const workspaceId = data?.workspace
       if (!workspaceId) return false
-      const betterAuthId = (req.user as any).betterAuthId
+      const betterAuthId = req.user?.betterAuthId
       if (!betterAuthId) return false
       return isWorkspaceAdminOrOwner(req.payload, betterAuthId, workspaceId as string)
     },
@@ -32,7 +32,7 @@ export const WorkspaceMembers: CollectionConfig = {
     update: async ({ req, id }) => {
       if (!req.user) return false
       if (isSuperAdmin(req.user)) return true
-      const betterAuthId = (req.user as any).betterAuthId
+      const betterAuthId = req.user?.betterAuthId
       if (!betterAuthId) return false
       if (!id) return false
       const member = await req.payload.findByID({
@@ -49,7 +49,7 @@ export const WorkspaceMembers: CollectionConfig = {
     delete: async ({ req, id }) => {
       if (!req.user) return false
       if (isSuperAdmin(req.user)) return true
-      const betterAuthId = (req.user as any).betterAuthId
+      const betterAuthId = req.user?.betterAuthId
       if (!betterAuthId) return false
       if (!id) return false
       const member = await req.payload.findByID({

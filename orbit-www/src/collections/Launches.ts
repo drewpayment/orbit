@@ -13,7 +13,7 @@ export const Launches: CollectionConfig = {
       if (!user) return false
 
       // Platform admins can see all launches
-      const role = (user as any).role
+      const role = user?.role
       if (role === 'super_admin' || role === 'admin') return true
 
       // Get user's workspace memberships

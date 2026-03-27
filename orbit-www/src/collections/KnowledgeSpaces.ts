@@ -11,10 +11,10 @@ export const KnowledgeSpaces: CollectionConfig = {
     // Read: Platform admins see all, workspace members see their workspaces' spaces
     read: async ({ req: { user, payload } }) => {
       if (!user) return false
-      const role = (user as any).role
+      const role = user?.role
       if (role === 'super_admin' || role === 'admin') return true
 
-      const betterAuthId = (user as any).betterAuthId
+      const betterAuthId = user?.betterAuthId
       if (!betterAuthId) return false
 
       const memberships = await payload.find({
@@ -42,10 +42,10 @@ export const KnowledgeSpaces: CollectionConfig = {
     // Update: Platform admins or workspace admins/owners
     update: async ({ req: { user, payload }, id }) => {
       if (!user || !id) return false
-      const role = (user as any).role
+      const role = user?.role
       if (role === 'super_admin' || role === 'admin') return true
 
-      const betterAuthId = (user as any).betterAuthId
+      const betterAuthId = user?.betterAuthId
       if (!betterAuthId) return false
 
       const space = await payload.findByID({
@@ -76,10 +76,10 @@ export const KnowledgeSpaces: CollectionConfig = {
     // Delete: Platform admins or workspace owners only
     delete: async ({ req: { user, payload }, id }) => {
       if (!user || !id) return false
-      const role = (user as any).role
+      const role = user?.role
       if (role === 'super_admin' || role === 'admin') return true
 
-      const betterAuthId = (user as any).betterAuthId
+      const betterAuthId = user?.betterAuthId
       if (!betterAuthId) return false
 
       const space = await payload.findByID({

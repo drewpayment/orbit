@@ -16,7 +16,7 @@ export const Workspaces: CollectionConfig = {
     update: async ({ req }) => {
       if (!req.user) return false
       if (isSuperAdmin(req.user)) return true
-      const betterAuthId = (req.user as any).betterAuthId
+      const betterAuthId = req.user?.betterAuthId
       if (!betterAuthId) return false
       const ids = await getAdminOrOwnerWorkspaceIds(req.payload, betterAuthId)
       if (ids.length === 0) return false
@@ -26,7 +26,7 @@ export const Workspaces: CollectionConfig = {
     delete: async ({ req }) => {
       if (!req.user) return false
       if (isSuperAdmin(req.user)) return true
-      const betterAuthId = (req.user as any).betterAuthId
+      const betterAuthId = req.user?.betterAuthId
       if (!betterAuthId) return false
       const ids = await getOwnerWorkspaceIds(req.payload, betterAuthId)
       if (ids.length === 0) return false
@@ -267,7 +267,7 @@ export const Workspaces: CollectionConfig = {
         // When a workspace is created, automatically add the creator as owner
         if (operation === 'create' && user) {
           try {
-            const betterAuthId = (user as any).betterAuthId
+            const betterAuthId = user?.betterAuthId
             if (betterAuthId) {
               await payload.create({
                 collection: 'workspace-members',
