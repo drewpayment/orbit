@@ -57,8 +57,10 @@ jobs:
         echo "| \`.todo()\` tests | $TODO_TESTS | $TODO_TESTS_BASELINE | $TODO_TESTS_STATUS |" >> $GITHUB_STEP_SUMMARY
 
         # --- Stubbed gRPC handlers (all services) ---
-        STUBS=$(grep -rl "status.Error.*codes.Unimplemented" services/ --include="*.go" 2>/dev/null | grep -v _test.go | wc -l | tr -d ' ')
-        STUBS="${STUBS:-0}"
+        STUBS_FILE=$(mktemp)
+        grep -rl "codes.Unimplemented" services/ --include="*.go" 2>/dev/null | grep -v _test.go > "$STUBS_FILE" || true
+        STUBS=$(wc -l < "$STUBS_FILE" | tr -d ' ')
+        rm -f "$STUBS_FILE"
         STUBS_BASELINE=10
         if [ "$STUBS" -gt "$STUBS_BASELINE" ]; then
           STUBS_STATUS="regression"
