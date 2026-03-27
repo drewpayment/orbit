@@ -70,7 +70,7 @@ jobs:
 
         # --- TODO/FIXME/HACK comments ---
         TODOS=$(grep -rE "TODO|FIXME|HACK" services/ orbit-www/src/ --include="*.go" --include="*.ts" --include="*.tsx" 2>/dev/null | wc -l | tr -d ' ')
-        TODOS_BASELINE=155
+        TODOS_BASELINE=135
         if [ "$TODOS" -gt "$TODOS_BASELINE" ]; then
           TODOS_STATUS="regression"
         elif [ "$TODOS" -lt "$TODOS_BASELINE" ]; then
