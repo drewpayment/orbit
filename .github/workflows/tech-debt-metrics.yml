@@ -46,7 +46,7 @@ jobs:
 
         # --- .todo() skipped tests (frontend) ---
         TODO_TESTS=$(grep -r "\.todo(" orbit-www/src/ --include="*.ts" --include="*.tsx" 2>/dev/null | wc -l | tr -d ' ')
-        TODO_TESTS_BASELINE=32
+        TODO_TESTS_BASELINE=0
         if [ "$TODO_TESTS" -gt "$TODO_TESTS_BASELINE" ]; then
           TODO_TESTS_STATUS="regression"
         elif [ "$TODO_TESTS" -lt "$TODO_TESTS_BASELINE" ]; then
