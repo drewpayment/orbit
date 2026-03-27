@@ -2,8 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getPayloadUserFromSession } from '@/lib/auth/session'
 import {
   PermissionTemplate,
   type VirtualClusterConfig as ProtoVirtualClusterConfig,
@@ -16,25 +15,6 @@ import { bifrostClient } from '@/lib/grpc/bifrost-client'
 // ============================================================================
 // Payload Type Definitions (for internal use)
 // ============================================================================
-
-/**
- * Represents a workspace role assignment from the Payload CMS.
- */
-interface WorkspaceRoleAssignment {
-  id: string
-  user: string | { id: string }
-  workspace: string | { id: string }
-  role:
-    | string
-    | {
-        id: string
-        name: string
-        slug: string
-        scope: 'platform' | 'workspace'
-      }
-  createdAt?: string
-  updatedAt?: string
-}
 
 // ============================================================================
 // Type Definitions (exported for UI consumption)
@@ -268,62 +248,17 @@ function mapProtoToPolicy(proto: ProtoPolicy): PolicyConfig {
  * This function follows the same pattern as kafka-admin.ts requireAdmin.
  */
 export async function requireAdmin(): Promise<{ userId: string }> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
-
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     throw new Error('Unauthorized: Authentication required')
   }
 
-  const payload = await getPayload({ config })
-
-  // First, find the Payload user by email (bridges Better-Auth and Payload user systems)
-  const payloadUsers = await payload.find({
-    collection: 'users',
-    where: {
-      email: { equals: session.user.email },
-    },
-    limit: 1,
-  })
-
-  const payloadUser = payloadUsers.docs[0]
-  if (!payloadUser) {
-    throw new Error('Unauthorized: User not found in system')
-  }
-
-  // Check for platform-level admin role using the Payload user ID
-  // Note: Using type assertion for collection name since Payload types may not include custom collections
-  // We fetch all assignments with depth to populate relationships, then filter by user
-  const roleAssignments = await payload.find({
-    collection: 'user-workspace-roles' as 'users', // Type workaround for custom collection
-    depth: 2,
-    limit: 1000,
-  })
-
-  const isAdmin = roleAssignments.docs.some((assignment: unknown) => {
-    const typedAssignment = assignment as WorkspaceRoleAssignment
-
-    // Check if this assignment belongs to our user
-    const assignmentUserId = typeof typedAssignment.user === 'object'
-      ? (typedAssignment.user as { id?: string })?.id
-      : typedAssignment.user
-    if (assignmentUserId !== payloadUser.id) return false
-
-    const role = typeof typedAssignment.role === 'object' ? typedAssignment.role : null
-    if (!role) return false
-    // Check if user has platform admin role (super-admin, admin, or platform-admin)
-    return (
-      role.scope === 'platform' &&
-      (role.slug === 'admin' || role.slug === 'platform-admin' || role.slug === 'super-admin')
-    )
-  })
-
-  if (!isAdmin) {
+  const role = payloadUser.role
+  if (role !== 'super_admin' && role !== 'admin') {
     throw new Error('Unauthorized: Admin privileges required')
   }
 
-  return { userId: session.user.id }
+  return { userId: payloadUser.betterAuthId || payloadUser.id }
 }
 
 // ============================================================================
