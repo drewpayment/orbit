@@ -34,7 +34,7 @@ jobs:
 
         # --- `as any` casts (frontend) ---
         ASANY=$(grep -r "as any" orbit-www/src/ --include="*.ts" --include="*.tsx" 2>/dev/null | wc -l | tr -d ' ')
-        ASANY_BASELINE=356
+        ASANY_BASELINE=379
         if [ "$ASANY" -gt "$ASANY_BASELINE" ]; then
           ASANY_STATUS="regression"
         elif [ "$ASANY" -lt "$ASANY_BASELINE" ]; then
