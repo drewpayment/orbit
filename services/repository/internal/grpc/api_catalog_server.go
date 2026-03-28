@@ -514,18 +514,17 @@ func (s *APICatalogServer) handleServiceError(err error) error {
 	}
 
 	// Map service errors to appropriate gRPC status codes
-	// TODO: Implement proper domain error mapping
 	switch {
 	case isDomainError(err, "NOT_FOUND"):
-		return status.Errorf(codes.NotFound, err.Error())
+		return status.Errorf(codes.NotFound, "%s", err.Error())
 	case isDomainError(err, "ALREADY_EXISTS"):
-		return status.Errorf(codes.AlreadyExists, err.Error())
+		return status.Errorf(codes.AlreadyExists, "%s", err.Error())
 	case isDomainError(err, "INVALID_REQUEST"):
-		return status.Errorf(codes.InvalidArgument, err.Error())
+		return status.Errorf(codes.InvalidArgument, "%s", err.Error())
 	case isDomainError(err, "UNAUTHORIZED"):
-		return status.Errorf(codes.Unauthenticated, err.Error())
+		return status.Errorf(codes.Unauthenticated, "%s", err.Error())
 	case isDomainError(err, "FORBIDDEN"):
-		return status.Errorf(codes.PermissionDenied, err.Error())
+		return status.Errorf(codes.PermissionDenied, "%s", err.Error())
 	default:
 		s.logger.Error("Unhandled service error", "error", err)
 		return status.Errorf(codes.Internal, "internal server error")

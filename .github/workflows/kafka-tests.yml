@@ -1,0 +1,152 @@
+name: Kafka Service Tests
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'services/kafka/**'
+      - '.github/workflows/kafka-tests.yml'
+  workflow_dispatch:
+
+jobs:
+  unit-tests:
+    name: Kafka Unit Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./services/kafka
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+        cache: true
+
+    - name: Run unit tests
+      run: go test -race -count=1 ./...
+
+    - name: Run unit tests with coverage (non-race)
+      run: |
+        go test -coverprofile=coverage.out -covermode=atomic ./... || true
+        if [ -f coverage.out ]; then
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//' || echo "N/A")
+          echo "## Kafka Unit Test Coverage: ${COVERAGE}%" >> $GITHUB_STEP_SUMMARY
+        fi
+
+  migration-roundtrip:
+    name: Migration Round-Trip
+    runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.title, 'kafka') || contains(github.event.pull_request.labels.*.name, 'kafka')
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: kafka_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgres://test:test@localhost:5432/kafka_test?sslmode=disable
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install golang-migrate
+      run: |
+        curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.0/migrate.linux-amd64.tar.gz | tar xvz
+        sudo mv migrate /usr/local/bin/migrate
+
+    - name: Run migrations up
+      run: migrate -path ./services/kafka/migrations -database "$TEST_DATABASE_URL" up
+
+    - name: Verify tables created
+      run: |
+        TABLES=$(PGPASSWORD=test psql -h localhost -U test -d kafka_test -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name LIKE 'kafka_%';")
+        TABLES=$(echo "$TABLES" | tr -d ' ')
+        echo "Tables created: $TABLES"
+        if [ "$TABLES" -eq "0" ]; then
+          echo "::error::No kafka tables created after migration up"
+          exit 1
+        fi
+        echo "## Migration Up: $TABLES kafka tables created" >> $GITHUB_STEP_SUMMARY
+
+    - name: Run migrations down
+      run: migrate -path ./services/kafka/migrations -database "$TEST_DATABASE_URL" down -all
+
+    - name: Verify tables removed
+      run: |
+        TABLES=$(PGPASSWORD=test psql -h localhost -U test -d kafka_test -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name LIKE 'kafka_%';")
+        TABLES=$(echo "$TABLES" | tr -d ' ')
+        if [ "$TABLES" -ne "0" ]; then
+          echo "::error::$TABLES kafka tables remain after migration down"
+          exit 1
+        fi
+        echo "Migration down: all kafka tables removed" >> $GITHUB_STEP_SUMMARY
+
+    - name: Re-apply migrations (round-trip)
+      run: migrate -path ./services/kafka/migrations -database "$TEST_DATABASE_URL" up
+
+    - name: Verify clean round-trip
+      run: |
+        TABLES=$(PGPASSWORD=test psql -h localhost -U test -d kafka_test -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name LIKE 'kafka_%';")
+        TABLES=$(echo "$TABLES" | tr -d ' ')
+        echo "Round-trip complete: $TABLES kafka tables" >> $GITHUB_STEP_SUMMARY
+
+        # Verify no leftover data from before down migration
+        for table in $(PGPASSWORD=test psql -h localhost -U test -d kafka_test -t -c "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name LIKE 'kafka_%';"); do
+          table=$(echo "$table" | tr -d ' ')
+          if [ -n "$table" ]; then
+            COUNT=$(PGPASSWORD=test psql -h localhost -U test -d kafka_test -t -c "SELECT count(*) FROM $table;")
+            COUNT=$(echo "$COUNT" | tr -d ' ')
+            if [ "$COUNT" -ne "0" ]; then
+              echo "::error::Table $table has $COUNT rows after round-trip (expected 0)"
+              exit 1
+            fi
+          fi
+        done
+
+        echo "All tables clean after round-trip migration." >> $GITHUB_STEP_SUMMARY
+
+  integration-tests:
+    name: Kafka Integration Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: kafka_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgres://test:test@localhost:5432/kafka_test?sslmode=disable
+    defaults:
+      run:
+        working-directory: ./services/kafka
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+        cache: true
+
+    - name: Run integration tests (PostgreSQL repos only)
+      run: go test -race -tags=integration -timeout 300s ./internal/repository/postgres/...
+
+    - name: Run tests with shuffle (ordering stability)
+      run: go test -race -tags=integration -shuffle=on -count=1 ./internal/repository/postgres/...

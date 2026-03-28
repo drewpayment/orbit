@@ -14,7 +14,7 @@ export const CloudAccounts: CollectionConfig = {
       if (!user) return false
 
       // Platform admins can see all cloud accounts
-      const role = (user as any).role
+      const role = user?.role
       if (role === 'super_admin' || role === 'admin') return true
 
       // Get user's workspace memberships
@@ -68,7 +68,7 @@ export const CloudAccounts: CollectionConfig = {
       admin: {
         description: 'Provider-specific credentials (admin only)',
         condition: (data, siblingData, { user }) => {
-          const role = (user as any)?.role
+          const role = user?.role
           return role === 'super_admin' || role === 'admin'
         },
       },

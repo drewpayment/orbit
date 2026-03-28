@@ -474,11 +474,14 @@ services:
     environment:
       - GRPC_PORT=50055
       - ENVIRONMENT=development
+      - DATABASE_URL=postgres://orbit:orbit@postgres:5432/kafka_service?sslmode=disable
     depends_on:
       temporal-server:
         condition: service_healthy
       redpanda:
         condition: service_healthy
+      postgres:
+        condition: service_started
     restart: unless-stopped
 
   repository-service:

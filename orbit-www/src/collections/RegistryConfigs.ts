@@ -11,7 +11,7 @@ export const RegistryConfigs: CollectionConfig = {
   access: {
     read: async ({ req: { user, payload }, id }) => {
       if (!user) return false
-      const userId = (user as any).betterAuthId || user.id
+      const userId = user?.betterAuthId || user.id
       if (!id) {
         // List view - filter by workspace membership
         const workspaceIds = await getWorkspaceIdsForUser(payload, userId)
@@ -31,7 +31,7 @@ export const RegistryConfigs: CollectionConfig = {
     },
     create: async ({ req: { user, payload }, data }) => {
       if (!user || !data?.workspace) return false
-      const userId = (user as any).betterAuthId || user.id
+      const userId = user?.betterAuthId || user.id
 
       const workspaceId =
         typeof data.workspace === 'string' ? data.workspace : data.workspace.id
@@ -52,7 +52,7 @@ export const RegistryConfigs: CollectionConfig = {
     },
     update: async ({ req: { user, payload }, id }) => {
       if (!user || !id) return false
-      const userId = (user as any).betterAuthId || user.id
+      const userId = user?.betterAuthId || user.id
 
       const config = await payload.findByID({
         collection: 'registry-configs',
@@ -83,7 +83,7 @@ export const RegistryConfigs: CollectionConfig = {
     },
     delete: async ({ req: { user, payload }, id }) => {
       if (!user || !id) return false
-      const userId = (user as any).betterAuthId || user.id
+      const userId = user?.betterAuthId || user.id
 
       const config = await payload.findByID({
         collection: 'registry-configs',

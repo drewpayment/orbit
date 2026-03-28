@@ -572,22 +572,34 @@ func (s *RepositoryServer) handleServiceError(err error) error {
 		return nil
 	}
 
-	// Map service errors to appropriate gRPC status codes
-	// TODO: Implement proper domain error mapping
-	switch {
-	case isDomainError(err, "NOT_FOUND"):
-		return status.Errorf(codes.NotFound, err.Error())
-	case isDomainError(err, "ALREADY_EXISTS"):
-		return status.Errorf(codes.AlreadyExists, err.Error())
-	case isDomainError(err, "INVALID_REQUEST"):
-		return status.Errorf(codes.InvalidArgument, err.Error())
-	case isDomainError(err, "UNAUTHORIZED"):
-		return status.Errorf(codes.Unauthenticated, err.Error())
-	case isDomainError(err, "FORBIDDEN"):
-		return status.Errorf(codes.PermissionDenied, err.Error())
-	default:
+	// Check if it's a domain error and map to gRPC status codes
+	de, ok := err.(domain.DomainError)
+	if !ok {
 		s.logger.Error("Unhandled service error", "error", err)
 		return status.Errorf(codes.Internal, "internal server error")
+	}
+
+	switch de.Code {
+	case "REPOSITORY_NOT_FOUND", "WORKSPACE_NOT_FOUND", "USER_NOT_FOUND",
+		"MEMBER_NOT_FOUND", "DEPENDENCY_NOT_FOUND", "INVITATION_NOT_FOUND":
+		return status.Errorf(codes.NotFound, "%s", de.Message)
+	case "REPOSITORY_EXISTS", "WORKSPACE_EXISTS", "USER_ALREADY_EXISTS",
+		"MEMBER_EXISTS", "DEPENDENCY_EXISTS":
+		return status.Errorf(codes.AlreadyExists, "%s", de.Message)
+	case "INVALID_REPOSITORY_NAME", "INVALID_REPOSITORY_SLUG", "INVALID_REPOSITORY_TYPE",
+		"INVALID_WORKSPACE_ID", "INVALID_WORKSPACE_NAME", "INVALID_WORKSPACE_SLUG",
+		"INVALID_USERNAME", "INVALID_EMAIL", "INVALID_DISPLAY_NAME",
+		"INVALID_GIT_URL", "TEMPLATE_VARIABLE_MISSING", "REQUIRED_VARIABLE_MISSING":
+		return status.Errorf(codes.InvalidArgument, "%s", de.Message)
+	case "INVALID_CREDENTIALS":
+		return status.Errorf(codes.Unauthenticated, "%s", de.Message)
+	case "INSUFFICIENT_PERMISSION", "ACCOUNT_LOCKED", "ACCOUNT_INACTIVE":
+		return status.Errorf(codes.PermissionDenied, "%s", de.Message)
+	case "GENERATION_IN_PROGRESS", "CIRCULAR_DEPENDENCY", "REPOSITORY_ARCHIVED":
+		return status.Errorf(codes.FailedPrecondition, "%s", de.Message)
+	default:
+		s.logger.Error("Unhandled domain error", "code", de.Code, "message", de.Message)
+		return status.Errorf(codes.Internal, "%s", de.Message)
 	}
 }
 
@@ -599,11 +611,13 @@ func (s *RepositoryServer) initiateCodeGeneration(ctx context.Context, repositor
 	// For now, this is a placeholder
 }
 
-// Utility function to check domain error types
+// isDomainError checks if an error is a domain error with the given code.
 func isDomainError(err error, errorType string) bool {
-	// TODO: Implement proper domain error type checking
-	// This is a placeholder implementation
-	return false
+	de, ok := err.(domain.DomainError)
+	if !ok {
+		return false
+	}
+	return de.Code == errorType
 }
 
 // RegisterServer registers the repository server with a gRPC server

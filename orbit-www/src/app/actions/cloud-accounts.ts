@@ -45,7 +45,7 @@ async function requireAdmin() {
   if (!payloadUser) {
     return { authorized: false as const, error: 'Unauthorized' }
   }
-  const role = (payloadUser as any).role
+  const role = payloadUser.role
   if (role !== 'super_admin' && role !== 'admin') {
     return { authorized: false as const, error: 'Forbidden: admin access required' }
   }

@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 
@@ -16,8 +15,9 @@ import (
 	"github.com/drewpayment/orbit/services/kafka/internal/adapters/apache"
 	"github.com/drewpayment/orbit/services/kafka/internal/domain"
 	kafkagrpc "github.com/drewpayment/orbit/services/kafka/internal/grpc"
+	"github.com/drewpayment/orbit/services/kafka/internal/repository/postgres"
 	"github.com/drewpayment/orbit/services/kafka/internal/service"
-	"github.com/google/uuid"
+	"github.com/drewpayment/orbit/services/kafka/migrations"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -28,32 +28,40 @@ import (
 type Config struct {
 	GRPCPort    int
 	Environment string
+	DatabaseURL string
 }
 
 func main() {
 	cfg := loadConfig()
 
 	// Set up context with cancellation
-	_, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Set up signal handling
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Initialize dependencies
-	// TODO: Initialize actual repositories connected to Payload CMS
-	// For now, we'll create placeholder implementations
-	clusterRepo := newInMemoryClusterRepository()
-	providerRepo := &inMemoryProviderRepository{}
-	mappingRepo := &inMemoryMappingRepository{}
-	topicRepo := &inMemoryTopicRepository{}
-	policyRepo := &inMemoryPolicyRepository{}
-	schemaRepo := &inMemorySchemaRepository{}
-	registryRepo := &inMemoryRegistryRepository{}
-	shareRepo := &inMemoryShareRepository{}
-	sharePolicyRepo := &inMemorySharePolicyRepository{}
-	serviceAccountRepo := &inMemoryServiceAccountRepository{}
+	// Initialize PostgreSQL persistence
+	// QA-001: Clean-slate migration — in-memory stubs were volatile, no data to migrate.
+	pool, err := postgres.NewPool(ctx, cfg.DatabaseURL, migrations.FS)
+	if err != nil {
+		log.Fatalf("failed to connect to database: %v", err)
+	}
+	defer pool.Close()
+	log.Println("INFO: Using PostgreSQL persistence — in-memory stubs removed")
+
+	// Initialize repositories backed by PostgreSQL
+	clusterRepo := postgres.NewClusterRepository(pool)
+	providerRepo := postgres.NewProviderRepository()
+	mappingRepo := postgres.NewMappingRepository(pool)
+	topicRepo := postgres.NewTopicRepository(pool)
+	policyRepo := postgres.NewPolicyRepository(pool)
+	schemaRepo := postgres.NewSchemaRepository(pool)
+	registryRepo := postgres.NewRegistryRepository(pool)
+	shareRepo := postgres.NewShareRepository(pool)
+	sharePolicyRepo := postgres.NewSharePolicyRepository(pool)
+	serviceAccountRepo := postgres.NewServiceAccountRepository(pool)
 
 	// Initialize adapter factory with real Kafka adapter
 	adapterFactory := &kafkaAdapterFactory{}
@@ -108,6 +116,7 @@ func main() {
 	time.Sleep(2 * time.Second)
 
 	grpcServer.GracefulStop()
+	pool.Close()
 	cancel()
 
 	log.Println("Server stopped")
@@ -124,9 +133,15 @@ func loadConfig() *Config {
 		env = "development"
 	}
 
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres://orbit:orbit@localhost:5433/kafka_service?sslmode=disable"
+	}
+
 	return &Config{
 		GRPCPort:    port,
 		Environment: env,
+		DatabaseURL: dbURL,
 	}
 }
 
@@ -142,201 +157,10 @@ func loggingInterceptor(
 	return resp, err
 }
 
-// Placeholder repository implementations
-// TODO: Replace with actual implementations connected to Payload CMS
-
-type inMemoryClusterRepository struct {
-	clusters map[uuid.UUID]*domain.KafkaCluster
-	mu       sync.RWMutex
-}
-
-func newInMemoryClusterRepository() *inMemoryClusterRepository {
-	return &inMemoryClusterRepository{
-		clusters: make(map[uuid.UUID]*domain.KafkaCluster),
-	}
-}
-
-func (r *inMemoryClusterRepository) Create(ctx context.Context, cluster *domain.KafkaCluster) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.clusters[cluster.ID] = cluster
-	return nil
-}
-func (r *inMemoryClusterRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.KafkaCluster, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	if cluster, ok := r.clusters[id]; ok {
-		return cluster, nil
-	}
-	return nil, nil
-}
-func (r *inMemoryClusterRepository) List(ctx context.Context) ([]*domain.KafkaCluster, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	result := make([]*domain.KafkaCluster, 0, len(r.clusters))
-	for _, cluster := range r.clusters {
-		result = append(result, cluster)
-	}
-	return result, nil
-}
-func (r *inMemoryClusterRepository) Update(ctx context.Context, cluster *domain.KafkaCluster) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if _, ok := r.clusters[cluster.ID]; ok {
-		r.clusters[cluster.ID] = cluster
-		return nil
-	}
-	return domain.ErrClusterNotFound
-}
-func (r *inMemoryClusterRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if _, ok := r.clusters[id]; ok {
-		delete(r.clusters, id)
-		return nil
-	}
-	return domain.ErrClusterNotFound
-}
-
-type inMemoryProviderRepository struct{}
-
-func (r *inMemoryProviderRepository) GetByID(ctx context.Context, id string) (*domain.KafkaProvider, error) {
-	providers := domain.DefaultProviders()
-	for i := range providers {
-		if providers[i].ID == id {
-			return &providers[i], nil
-		}
-	}
-	return nil, nil
-}
-func (r *inMemoryProviderRepository) List(ctx context.Context) ([]*domain.KafkaProvider, error) {
-	providers := domain.DefaultProviders()
-	result := make([]*domain.KafkaProvider, len(providers))
-	for i := range providers {
-		result[i] = &providers[i]
-	}
-	return result, nil
-}
-
-type inMemoryMappingRepository struct{}
-
-func (r *inMemoryMappingRepository) Create(ctx context.Context, mapping *domain.KafkaEnvironmentMapping) error {
-	return nil
-}
-func (r *inMemoryMappingRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.KafkaEnvironmentMapping, error) {
-	return nil, nil
-}
-func (r *inMemoryMappingRepository) List(ctx context.Context, environment string) ([]*domain.KafkaEnvironmentMapping, error) {
-	return nil, nil
-}
-func (r *inMemoryMappingRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	return nil
-}
-func (r *inMemoryMappingRepository) GetDefaultForEnvironment(ctx context.Context, environment string) (*domain.KafkaEnvironmentMapping, error) {
-	return nil, nil
-}
-
-type inMemoryTopicRepository struct{}
-
-func (r *inMemoryTopicRepository) Create(ctx context.Context, topic *domain.KafkaTopic) error {
-	return nil
-}
-func (r *inMemoryTopicRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.KafkaTopic, error) {
-	return nil, nil
-}
-func (r *inMemoryTopicRepository) GetByName(ctx context.Context, workspaceID uuid.UUID, environment, name string) (*domain.KafkaTopic, error) {
-	return nil, domain.ErrTopicNotFound
-}
-func (r *inMemoryTopicRepository) List(ctx context.Context, workspaceID uuid.UUID, environment string) ([]*domain.KafkaTopic, error) {
-	return nil, nil
-}
-func (r *inMemoryTopicRepository) Update(ctx context.Context, topic *domain.KafkaTopic) error {
-	return nil
-}
-func (r *inMemoryTopicRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	return nil
-}
-
-type inMemoryPolicyRepository struct{}
-
-func (r *inMemoryPolicyRepository) GetEffectivePolicy(ctx context.Context, workspaceID uuid.UUID, environment string) (*domain.KafkaTopicPolicy, error) {
-	return nil, domain.ErrPolicyNotFound
-}
-
-type inMemorySchemaRepository struct{}
-
-func (r *inMemorySchemaRepository) Create(ctx context.Context, schema *domain.KafkaSchema) error {
-	return nil
-}
-func (r *inMemorySchemaRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.KafkaSchema, error) {
-	return nil, nil
-}
-func (r *inMemorySchemaRepository) GetBySubject(ctx context.Context, topicID uuid.UUID, schemaType string) (*domain.KafkaSchema, error) {
-	return nil, domain.ErrSchemaNotFound
-}
-func (r *inMemorySchemaRepository) List(ctx context.Context, topicID uuid.UUID) ([]*domain.KafkaSchema, error) {
-	return nil, nil
-}
-func (r *inMemorySchemaRepository) Update(ctx context.Context, schema *domain.KafkaSchema) error {
-	return nil
-}
-func (r *inMemorySchemaRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	return nil
-}
-
-type inMemoryRegistryRepository struct{}
-
-func (r *inMemoryRegistryRepository) GetByClusterID(ctx context.Context, clusterID uuid.UUID) (*domain.SchemaRegistry, error) {
-	return nil, nil
-}
-
-type inMemoryShareRepository struct{}
-
-func (r *inMemoryShareRepository) Create(ctx context.Context, share *domain.KafkaTopicShare) error {
-	return nil
-}
-func (r *inMemoryShareRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.KafkaTopicShare, error) {
-	return nil, nil
-}
-func (r *inMemoryShareRepository) List(ctx context.Context, filter service.ShareFilter) ([]*domain.KafkaTopicShare, error) {
-	return nil, nil
-}
-func (r *inMemoryShareRepository) Update(ctx context.Context, share *domain.KafkaTopicShare) error {
-	return nil
-}
-func (r *inMemoryShareRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	return nil
-}
-func (r *inMemoryShareRepository) GetExisting(ctx context.Context, topicID, workspaceID uuid.UUID) (*domain.KafkaTopicShare, error) {
-	return nil, domain.ErrShareNotFound
-}
-
-type inMemorySharePolicyRepository struct{}
-
-func (r *inMemorySharePolicyRepository) GetEffectivePolicy(ctx context.Context, workspaceID uuid.UUID, topicID uuid.UUID) (*domain.KafkaTopicSharePolicy, error) {
-	return nil, domain.ErrPolicyNotFound
-}
-
-type inMemoryServiceAccountRepository struct{}
-
-func (r *inMemoryServiceAccountRepository) Create(ctx context.Context, account *domain.KafkaServiceAccount) error {
-	return nil
-}
-func (r *inMemoryServiceAccountRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.KafkaServiceAccount, error) {
-	return nil, nil
-}
-func (r *inMemoryServiceAccountRepository) List(ctx context.Context, workspaceID uuid.UUID) ([]*domain.KafkaServiceAccount, error) {
-	return nil, nil
-}
-func (r *inMemoryServiceAccountRepository) Update(ctx context.Context, account *domain.KafkaServiceAccount) error {
-	return nil
-}
-
 // Real adapter factory using Apache Kafka adapter
 type kafkaAdapterFactory struct{}
 
 func (f *kafkaAdapterFactory) CreateKafkaAdapter(cluster *domain.KafkaCluster, credentials map[string]string) (adapters.KafkaAdapter, error) {
-	// Get bootstrap servers from connection config
 	bootstrapServers := cluster.ConnectionConfig["bootstrap.servers"]
 	if bootstrapServers == "" {
 		return nil, fmt.Errorf("bootstrap.servers not configured")
@@ -346,6 +170,5 @@ func (f *kafkaAdapterFactory) CreateKafkaAdapter(cluster *domain.KafkaCluster, c
 }
 
 func (f *kafkaAdapterFactory) CreateSchemaRegistryAdapter(registry *domain.SchemaRegistry, credentials map[string]string) (adapters.SchemaRegistryAdapter, error) {
-	// Schema registry adapter not yet implemented
 	return nil, fmt.Errorf("schema registry adapter not configured")
 }
