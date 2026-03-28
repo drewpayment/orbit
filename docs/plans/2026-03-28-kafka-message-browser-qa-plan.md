@@ -27,7 +27,7 @@ This feature spans three services (Bifrost, Kafka service, Next.js frontend) acr
 
 **Mitigation:**
 - Verify `defer client.Close()` is present in the `BrowseMessages` handler
-- Add a context timeout to the consumer lifecycle (e.g., 30s max, matching the design doc's <2s target with margin)
+- Add a context timeout to the consumer lifecycle (10s, confirmed by Drew — return partial results if broker is slow)
 - Test: cancel the gRPC context mid-browse and verify the consumer is cleaned up (no lingering connections in Redpanda admin)
 
 **Verification:**
@@ -81,19 +81,23 @@ grpcurl -plaintext localhost:50060 idp.gateway.v1.BifrostAdminService/BrowseMess
 
 **Issue:** The access control flow checks share permissions before delegating to Bifrost. If the `canProduce` check has a logic error (e.g., `read` share incorrectly grants write), unauthorized users could produce messages.
 
+**Simplified permission model (confirmed by Drew 2026-03-28):**
+- Any share type (`read`, `write`, `read-write`) grants browse access
+- Only `write` or `read-write` grants produce access
+- No write-without-browse scenario exists
+
 **Mitigation:**
-- Test all 6 permission combinations explicitly:
+- Test all 5 permission combinations explicitly:
 
 | User Type | Share Permission | Expected Browse | Expected Produce |
 |-----------|-----------------|----------------|-----------------|
 | Topic owner (workspace member) | N/A | ALLOW | ALLOW |
 | Shared user | `read` | ALLOW | DENY |
-| Shared user | `write` | DENY* | ALLOW |
+| Shared user | `write` | ALLOW | ALLOW |
 | Shared user | `read-write` | ALLOW | ALLOW |
 | No share | N/A | DENY | DENY |
-| Expired share | `read-write` | DENY | DENY |
 
-*Note: check with design — does `write`-only grant browse? The design doc says "Share with `read` or `read-write` permission → allow browse" and "Share with `write` or `read-write` permission → allow produce." This means `write`-only does NOT grant browse. Verify this is implemented correctly.
+- Additionally test expired share: `read-write` expired → DENY both
 
 ---
 
@@ -221,7 +225,7 @@ cd orbit-www && bun run build
 | C.1 | Frontend builds | `cd orbit-www && bun run build` | Exit 0 |
 | C.2 | tsc clean | `cd orbit-www && npx tsc --noEmit 2>&1 \| grep -c "error TS"` | <= 120 |
 | C.3 | Frontend tests pass | `cd orbit-www && bun run test:int` | 0 failures |
-| C.4 | Permission matrix | 6 test cases per Concern 4 table | All match expected |
+| C.4 | Permission matrix | 5 permission combos + expired share per Concern 4 | All match expected |
 | C.5 | Messages tab renders | Navigate to topic detail | 6th tab present |
 | C.6 | Browse returns messages | Click Messages tab on topic with data | Table populated |
 | C.7 | Produce works | Submit produce form on owned topic | Toast success, message in list |
@@ -251,8 +255,8 @@ This is the highest-risk area — new permission surfaces for browse and produce
 describe('browseTopicMessages')
   it('allows workspace member to browse own topic')
   it('allows user with read share to browse')
+  it('allows user with write share to browse')
   it('allows user with read-write share to browse')
-  it('denies user with write-only share from browsing')
   it('denies user with no share from browsing')
   it('denies user with expired share from browsing')
   it('denies unauthenticated user')
@@ -269,12 +273,12 @@ describe('produceTopicMessage')
 describe('getMessagePermissions')
   it('returns canBrowse=true, canProduce=true for owner')
   it('returns canBrowse=true, canProduce=false for read share')
-  it('returns canBrowse=false, canProduce=true for write share')
+  it('returns canBrowse=true, canProduce=true for write share')
   it('returns canBrowse=true, canProduce=true for read-write share')
   it('returns canBrowse=false, canProduce=false for no share')
 ```
 
-Total: 21 access control test cases.
+Total: 19 access control test cases.
 
 ---
 
@@ -310,19 +314,20 @@ Total: 21 access control test cases.
 | Consumer leak causes broker connection exhaustion | Low | Critical | Defer cleanup + context timeout + cancel test | QA + Eng |
 | Adapter swap breaks existing topic operations | Medium | High | Full regression suite after Phase B | QA |
 | Bifrost admin port exposed externally | Low | Critical | Verify docker-compose port mapping | QA |
-| Permission bypass allows unauthorized produce | Low | Critical | 21 access control tests + manual verification | QA |
+| Permission bypass allows unauthorized produce | Low | Critical | 19 access control tests + manual verification | QA |
 | Cursor manipulation reads cross-topic data | Low | High | Cursor validation tests + topic scoping | QA + Eng |
 | Monaco in initial bundle degrades page load | Medium | Medium | Bundle analysis after Phase C | QA |
 | Prefix translation inconsistency across handlers | Medium | Medium | Full CRUD cycle test per virtual cluster | QA |
 
 ---
 
-## 9. Open Questions for Implementation
+## 9. Open Questions — Resolved
 
-1. **Write-only share behavior:** The design doc says `write` permission allows produce but NOT browse. Is this intentional? A user who can produce but can't see what's in the topic seems unusual. Clarify before implementing access control tests.
+All questions answered by Drew on 2026-03-28:
 
-2. **Consumer timeout:** What's the max duration for a single `BrowseMessages` call before Bifrost kills the temporary consumer? Recommend 30s as a hard timeout.
-
-3. **Rate limiting on produce:** Is there any rate limit on `ProduceMessage`? Without one, a user with write access could flood a topic. Consider a per-user rate limit (e.g., 10 produces/minute) in the Kafka service layer.
-
-4. **Cursor TTL:** Should cursors expire? A stale cursor could reference offsets that have been compacted/deleted. The handler should gracefully handle "offset out of range" errors.
+| # | Question | Answer | Impact on QA |
+|---|----------|--------|-------------|
+| 1 | Write-only share → browse? | **Yes.** Any share type grants browse. `write`/`read-write` also grant produce. | Removed write-only-no-browse test case. Simplified to 5 permission combos. |
+| 2 | Consumer timeout? | **10 seconds.** Return partial results if broker is slow. | Updated Concern 1 mitigation. Test: verify partial results on slow broker. |
+| 3 | Rate limiting on produce? | **Not for MVP.** Internal dev tool, not public API. | No rate limit tests needed. Revisit for v2 if exposed externally. |
+| 4 | Cursor TTL? | **30 minutes.** Fail gracefully on stale/compacted offsets. | Add test: use cursor >30min old → graceful error, not panic. Test compacted offset → "offset out of range" handled. |
