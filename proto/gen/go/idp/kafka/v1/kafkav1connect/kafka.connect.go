@@ -123,6 +123,12 @@ const (
 	// KafkaServiceGetTopicLineageProcedure is the fully-qualified name of the KafkaService's
 	// GetTopicLineage RPC.
 	KafkaServiceGetTopicLineageProcedure = "/idp.kafka.v1.KafkaService/GetTopicLineage"
+	// KafkaServiceBrowseTopicMessagesProcedure is the fully-qualified name of the KafkaService's
+	// BrowseTopicMessages RPC.
+	KafkaServiceBrowseTopicMessagesProcedure = "/idp.kafka.v1.KafkaService/BrowseTopicMessages"
+	// KafkaServiceProduceTopicMessageProcedure is the fully-qualified name of the KafkaService's
+	// ProduceTopicMessage RPC.
+	KafkaServiceProduceTopicMessageProcedure = "/idp.kafka.v1.KafkaService/ProduceTopicMessage"
 )
 
 // KafkaServiceClient is a client for the idp.kafka.v1.KafkaService service.
@@ -166,6 +172,9 @@ type KafkaServiceClient interface {
 	// Metrics & Lineage
 	GetTopicMetrics(context.Context, *connect.Request[v1.GetTopicMetricsRequest]) (*connect.Response[v1.GetTopicMetricsResponse], error)
 	GetTopicLineage(context.Context, *connect.Request[v1.GetTopicLineageRequest]) (*connect.Response[v1.GetTopicLineageResponse], error)
+	// Message Browse & Produce
+	BrowseTopicMessages(context.Context, *connect.Request[v1.BrowseTopicMessagesRequest]) (*connect.Response[v1.BrowseTopicMessagesResponse], error)
+	ProduceTopicMessage(context.Context, *connect.Request[v1.ProduceTopicMessageRequest]) (*connect.Response[v1.ProduceTopicMessageResponse], error)
 }
 
 // NewKafkaServiceClient constructs a client for the idp.kafka.v1.KafkaService service. By default,
@@ -365,6 +374,18 @@ func NewKafkaServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(kafkaServiceMethods.ByName("GetTopicLineage")),
 			connect.WithClientOptions(opts...),
 		),
+		browseTopicMessages: connect.NewClient[v1.BrowseTopicMessagesRequest, v1.BrowseTopicMessagesResponse](
+			httpClient,
+			baseURL+KafkaServiceBrowseTopicMessagesProcedure,
+			connect.WithSchema(kafkaServiceMethods.ByName("BrowseTopicMessages")),
+			connect.WithClientOptions(opts...),
+		),
+		produceTopicMessage: connect.NewClient[v1.ProduceTopicMessageRequest, v1.ProduceTopicMessageResponse](
+			httpClient,
+			baseURL+KafkaServiceProduceTopicMessageProcedure,
+			connect.WithSchema(kafkaServiceMethods.ByName("ProduceTopicMessage")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -401,6 +422,8 @@ type kafkaServiceClient struct {
 	discoverTopics            *connect.Client[v1.DiscoverTopicsRequest, v1.DiscoverTopicsResponse]
 	getTopicMetrics           *connect.Client[v1.GetTopicMetricsRequest, v1.GetTopicMetricsResponse]
 	getTopicLineage           *connect.Client[v1.GetTopicLineageRequest, v1.GetTopicLineageResponse]
+	browseTopicMessages       *connect.Client[v1.BrowseTopicMessagesRequest, v1.BrowseTopicMessagesResponse]
+	produceTopicMessage       *connect.Client[v1.ProduceTopicMessageRequest, v1.ProduceTopicMessageResponse]
 }
 
 // ListProviders calls idp.kafka.v1.KafkaService.ListProviders.
@@ -558,6 +581,16 @@ func (c *kafkaServiceClient) GetTopicLineage(ctx context.Context, req *connect.R
 	return c.getTopicLineage.CallUnary(ctx, req)
 }
 
+// BrowseTopicMessages calls idp.kafka.v1.KafkaService.BrowseTopicMessages.
+func (c *kafkaServiceClient) BrowseTopicMessages(ctx context.Context, req *connect.Request[v1.BrowseTopicMessagesRequest]) (*connect.Response[v1.BrowseTopicMessagesResponse], error) {
+	return c.browseTopicMessages.CallUnary(ctx, req)
+}
+
+// ProduceTopicMessage calls idp.kafka.v1.KafkaService.ProduceTopicMessage.
+func (c *kafkaServiceClient) ProduceTopicMessage(ctx context.Context, req *connect.Request[v1.ProduceTopicMessageRequest]) (*connect.Response[v1.ProduceTopicMessageResponse], error) {
+	return c.produceTopicMessage.CallUnary(ctx, req)
+}
+
 // KafkaServiceHandler is an implementation of the idp.kafka.v1.KafkaService service.
 type KafkaServiceHandler interface {
 	// Cluster Management (Platform Admin)
@@ -599,6 +632,9 @@ type KafkaServiceHandler interface {
 	// Metrics & Lineage
 	GetTopicMetrics(context.Context, *connect.Request[v1.GetTopicMetricsRequest]) (*connect.Response[v1.GetTopicMetricsResponse], error)
 	GetTopicLineage(context.Context, *connect.Request[v1.GetTopicLineageRequest]) (*connect.Response[v1.GetTopicLineageResponse], error)
+	// Message Browse & Produce
+	BrowseTopicMessages(context.Context, *connect.Request[v1.BrowseTopicMessagesRequest]) (*connect.Response[v1.BrowseTopicMessagesResponse], error)
+	ProduceTopicMessage(context.Context, *connect.Request[v1.ProduceTopicMessageRequest]) (*connect.Response[v1.ProduceTopicMessageResponse], error)
 }
 
 // NewKafkaServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -794,6 +830,18 @@ func NewKafkaServiceHandler(svc KafkaServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(kafkaServiceMethods.ByName("GetTopicLineage")),
 		connect.WithHandlerOptions(opts...),
 	)
+	kafkaServiceBrowseTopicMessagesHandler := connect.NewUnaryHandler(
+		KafkaServiceBrowseTopicMessagesProcedure,
+		svc.BrowseTopicMessages,
+		connect.WithSchema(kafkaServiceMethods.ByName("BrowseTopicMessages")),
+		connect.WithHandlerOptions(opts...),
+	)
+	kafkaServiceProduceTopicMessageHandler := connect.NewUnaryHandler(
+		KafkaServiceProduceTopicMessageProcedure,
+		svc.ProduceTopicMessage,
+		connect.WithSchema(kafkaServiceMethods.ByName("ProduceTopicMessage")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/idp.kafka.v1.KafkaService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case KafkaServiceListProvidersProcedure:
@@ -858,6 +906,10 @@ func NewKafkaServiceHandler(svc KafkaServiceHandler, opts ...connect.HandlerOpti
 			kafkaServiceGetTopicMetricsHandler.ServeHTTP(w, r)
 		case KafkaServiceGetTopicLineageProcedure:
 			kafkaServiceGetTopicLineageHandler.ServeHTTP(w, r)
+		case KafkaServiceBrowseTopicMessagesProcedure:
+			kafkaServiceBrowseTopicMessagesHandler.ServeHTTP(w, r)
+		case KafkaServiceProduceTopicMessageProcedure:
+			kafkaServiceProduceTopicMessageHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -989,4 +1041,12 @@ func (UnimplementedKafkaServiceHandler) GetTopicMetrics(context.Context, *connec
 
 func (UnimplementedKafkaServiceHandler) GetTopicLineage(context.Context, *connect.Request[v1.GetTopicLineageRequest]) (*connect.Response[v1.GetTopicLineageResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.kafka.v1.KafkaService.GetTopicLineage is not implemented"))
+}
+
+func (UnimplementedKafkaServiceHandler) BrowseTopicMessages(context.Context, *connect.Request[v1.BrowseTopicMessagesRequest]) (*connect.Response[v1.BrowseTopicMessagesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.kafka.v1.KafkaService.BrowseTopicMessages is not implemented"))
+}
+
+func (UnimplementedKafkaServiceHandler) ProduceTopicMessage(context.Context, *connect.Request[v1.ProduceTopicMessageRequest]) (*connect.Response[v1.ProduceTopicMessageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.kafka.v1.KafkaService.ProduceTopicMessage is not implemented"))
 }

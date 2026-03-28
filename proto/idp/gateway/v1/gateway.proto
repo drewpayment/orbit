@@ -46,6 +46,20 @@ service BifrostAdminService {
   rpc ListConsumerGroups(ListConsumerGroupsRequest) returns (ListConsumerGroupsResponse);
   rpc DescribeConsumerGroup(DescribeConsumerGroupRequest) returns (DescribeConsumerGroupResponse);
   rpc ResetConsumerGroupOffsets(ResetConsumerGroupOffsetsRequest) returns (ResetConsumerGroupOffsetsResponse);
+
+  // Topic management (broker operations via virtual cluster)
+  rpc CreateTopic(BifrostCreateTopicRequest) returns (BifrostCreateTopicResponse);
+  rpc DeleteTopic(BifrostDeleteTopicRequest) returns (BifrostDeleteTopicResponse);
+  rpc DescribeTopic(BifrostDescribeTopicRequest) returns (BifrostDescribeTopicResponse);
+  rpc UpdateTopicConfig(BifrostUpdateTopicConfigRequest) returns (BifrostUpdateTopicConfigResponse);
+  rpc ListTopics(BifrostListTopicsRequest) returns (BifrostListTopicsResponse);
+
+  // Topic metrics
+  rpc GetTopicMetrics(BifrostGetTopicMetricsRequest) returns (BifrostGetTopicMetricsResponse);
+
+  // Message operations
+  rpc BrowseMessages(BrowseMessagesRequest) returns (BrowseMessagesResponse);
+  rpc ProduceMessage(ProduceMessageRequest) returns (ProduceMessageResponse);
 }
 
 // ============================================================================
@@ -420,4 +434,145 @@ message ResetConsumerGroupOffsetsResponse {
   bool success = 1;
   string error = 2;
   repeated PartitionLag new_offsets = 3;  // New offset positions after reset
+}
+
+// ============================================================================
+// Topic Management Messages (Broker Operations)
+// ============================================================================
+
+message BifrostCreateTopicRequest {
+  string virtual_cluster_id = 1;
+  string topic_name = 2;                    // Virtual name (prefix applied by Bifrost)
+  int32 partitions = 3;
+  int32 replication_factor = 4;
+  map<string, string> config = 5;           // Topic-level config overrides
+}
+
+message BifrostCreateTopicResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message BifrostDeleteTopicRequest {
+  string virtual_cluster_id = 1;
+  string topic_name = 2;
+}
+
+message BifrostDeleteTopicResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message BifrostDescribeTopicRequest {
+  string virtual_cluster_id = 1;
+  string topic_name = 2;
+}
+
+message BifrostDescribeTopicResponse {
+  int32 partition_count = 1;
+  int32 replication_factor = 2;
+  map<string, string> config = 3;
+  repeated BifrostPartitionInfo partitions = 4;
+  string error = 5;
+}
+
+message BifrostPartitionInfo {
+  int32 partition_id = 1;
+  int64 start_offset = 2;
+  int64 end_offset = 3;
+  int32 leader = 4;
+  repeated int32 replicas = 5;
+  repeated int32 isr = 6;
+}
+
+message BifrostUpdateTopicConfigRequest {
+  string virtual_cluster_id = 1;
+  string topic_name = 2;
+  map<string, string> config_entries = 3;   // Key-value config to set
+}
+
+message BifrostUpdateTopicConfigResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message BifrostListTopicsRequest {
+  string virtual_cluster_id = 1;
+}
+
+message BifrostListTopicsResponse {
+  repeated string topic_names = 1;          // Virtual names (prefix stripped)
+  string error = 2;
+}
+
+// ============================================================================
+// Topic Metrics Messages
+// ============================================================================
+
+message BifrostGetTopicMetricsRequest {
+  string virtual_cluster_id = 1;
+  string topic_name = 2;
+}
+
+message BifrostGetTopicMetricsResponse {
+  int64 message_count = 1;                  // Total messages (sum of partition offsets)
+  int64 total_bytes = 2;                    // Estimated total size
+  repeated BifrostPartitionInfo partitions = 3;
+  string error = 4;
+}
+
+// ============================================================================
+// Message Browse/Produce Messages
+// ============================================================================
+
+enum SeekType {
+  SEEK_TYPE_UNSPECIFIED = 0;
+  SEEK_TYPE_NEWEST = 1;
+  SEEK_TYPE_OLDEST = 2;
+  SEEK_TYPE_OFFSET = 3;
+}
+
+message BrowseMessagesRequest {
+  string virtual_cluster_id = 1;
+  string topic_name = 2;                    // Virtual name
+  repeated int32 partitions = 3;            // Empty = all partitions
+  SeekType seek_type = 4;
+  int64 start_offset = 5;                   // Used when seek_type = OFFSET
+  int32 limit = 6;                          // Max messages to return (default 50)
+  string cursor = 7;                        // Opaque cursor for pagination
+}
+
+message BrowseMessagesResponse {
+  repeated BifrostKafkaMessage messages = 1;
+  string next_cursor = 2;                   // Opaque cursor for next page
+  bool has_more = 3;
+  string error = 4;
+}
+
+message BifrostKafkaMessage {
+  int32 partition = 1;
+  int64 offset = 2;
+  int64 timestamp = 3;                      // Unix milliseconds
+  bytes key = 4;
+  bytes value = 5;
+  map<string, bytes> headers = 6;
+  int32 key_size = 7;                       // Original size before truncation
+  int32 value_size = 8;                     // Original size before truncation
+  bool truncated = 9;
+}
+
+message ProduceMessageRequest {
+  string virtual_cluster_id = 1;
+  string topic_name = 2;                    // Virtual name
+  optional int32 partition = 3;             // Optional; auto-assign if not set
+  bytes key = 4;
+  bytes value = 5;
+  map<string, bytes> headers = 6;
+}
+
+message ProduceMessageResponse {
+  int32 partition = 1;
+  int64 offset = 2;
+  int64 timestamp = 3;                      // Unix milliseconds
+  string error = 4;
 }

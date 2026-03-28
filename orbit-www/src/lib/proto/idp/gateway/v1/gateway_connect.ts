@@ -5,7 +5,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { DeletePolicyRequest, DeletePolicyResponse, DeleteVirtualClusterRequest, DeleteVirtualClusterResponse, DescribeConsumerGroupRequest, DescribeConsumerGroupResponse, EmitClientActivityRequest, EmitClientActivityResponse, GetFullConfigRequest, GetFullConfigResponse, GetStatusRequest, GetStatusResponse, ListConsumerGroupsRequest, ListConsumerGroupsResponse, ListCredentialsRequest, ListCredentialsResponse, ListPoliciesRequest, ListPoliciesResponse, ListTopicACLsRequest, ListTopicACLsResponse, ListVirtualClustersRequest, ListVirtualClustersResponse, ResetConsumerGroupOffsetsRequest, ResetConsumerGroupOffsetsResponse, RevokeCredentialRequest, RevokeCredentialResponse, RevokeTopicACLRequest, RevokeTopicACLResponse, SetVirtualClusterReadOnlyRequest, SetVirtualClusterReadOnlyResponse, TopicConfigUpdatedRequest, TopicConfigUpdatedResponse, TopicCreatedRequest, TopicCreatedResponse, TopicDeletedRequest, TopicDeletedResponse, UpsertCredentialRequest, UpsertCredentialResponse, UpsertPolicyRequest, UpsertPolicyResponse, UpsertTopicACLRequest, UpsertTopicACLResponse, UpsertVirtualClusterRequest, UpsertVirtualClusterResponse } from "./gateway_pb.js";
+import { BifrostCreateTopicRequest, BifrostCreateTopicResponse, BifrostDeleteTopicRequest, BifrostDeleteTopicResponse, BifrostDescribeTopicRequest, BifrostDescribeTopicResponse, BifrostGetTopicMetricsRequest, BifrostGetTopicMetricsResponse, BifrostListTopicsRequest, BifrostListTopicsResponse, BifrostUpdateTopicConfigRequest, BifrostUpdateTopicConfigResponse, BrowseMessagesRequest, BrowseMessagesResponse, DeletePolicyRequest, DeletePolicyResponse, DeleteVirtualClusterRequest, DeleteVirtualClusterResponse, DescribeConsumerGroupRequest, DescribeConsumerGroupResponse, EmitClientActivityRequest, EmitClientActivityResponse, GetFullConfigRequest, GetFullConfigResponse, GetStatusRequest, GetStatusResponse, ListConsumerGroupsRequest, ListConsumerGroupsResponse, ListCredentialsRequest, ListCredentialsResponse, ListPoliciesRequest, ListPoliciesResponse, ListTopicACLsRequest, ListTopicACLsResponse, ListVirtualClustersRequest, ListVirtualClustersResponse, ProduceMessageRequest, ProduceMessageResponse, ResetConsumerGroupOffsetsRequest, ResetConsumerGroupOffsetsResponse, RevokeCredentialRequest, RevokeCredentialResponse, RevokeTopicACLRequest, RevokeTopicACLResponse, SetVirtualClusterReadOnlyRequest, SetVirtualClusterReadOnlyResponse, TopicConfigUpdatedRequest, TopicConfigUpdatedResponse, TopicCreatedRequest, TopicCreatedResponse, TopicDeletedRequest, TopicDeletedResponse, UpsertCredentialRequest, UpsertCredentialResponse, UpsertPolicyRequest, UpsertPolicyResponse, UpsertTopicACLRequest, UpsertTopicACLResponse, UpsertVirtualClusterRequest, UpsertVirtualClusterResponse } from "./gateway_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -188,6 +188,84 @@ export const BifrostAdminService = {
       name: "ResetConsumerGroupOffsets",
       I: ResetConsumerGroupOffsetsRequest,
       O: ResetConsumerGroupOffsetsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Topic management (broker operations via virtual cluster)
+     *
+     * @generated from rpc idp.gateway.v1.BifrostAdminService.CreateTopic
+     */
+    createTopic: {
+      name: "CreateTopic",
+      I: BifrostCreateTopicRequest,
+      O: BifrostCreateTopicResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc idp.gateway.v1.BifrostAdminService.DeleteTopic
+     */
+    deleteTopic: {
+      name: "DeleteTopic",
+      I: BifrostDeleteTopicRequest,
+      O: BifrostDeleteTopicResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc idp.gateway.v1.BifrostAdminService.DescribeTopic
+     */
+    describeTopic: {
+      name: "DescribeTopic",
+      I: BifrostDescribeTopicRequest,
+      O: BifrostDescribeTopicResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc idp.gateway.v1.BifrostAdminService.UpdateTopicConfig
+     */
+    updateTopicConfig: {
+      name: "UpdateTopicConfig",
+      I: BifrostUpdateTopicConfigRequest,
+      O: BifrostUpdateTopicConfigResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc idp.gateway.v1.BifrostAdminService.ListTopics
+     */
+    listTopics: {
+      name: "ListTopics",
+      I: BifrostListTopicsRequest,
+      O: BifrostListTopicsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Topic metrics
+     *
+     * @generated from rpc idp.gateway.v1.BifrostAdminService.GetTopicMetrics
+     */
+    getTopicMetrics: {
+      name: "GetTopicMetrics",
+      I: BifrostGetTopicMetricsRequest,
+      O: BifrostGetTopicMetricsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Message operations
+     *
+     * @generated from rpc idp.gateway.v1.BifrostAdminService.BrowseMessages
+     */
+    browseMessages: {
+      name: "BrowseMessages",
+      I: BrowseMessagesRequest,
+      O: BrowseMessagesResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc idp.gateway.v1.BifrostAdminService.ProduceMessage
+     */
+    produceMessage: {
+      name: "ProduceMessage",
+      I: ProduceMessageRequest,
+      O: ProduceMessageResponse,
       kind: MethodKind.Unary,
     },
   }
