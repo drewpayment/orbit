@@ -24,10 +24,27 @@ import {
   Share2,
   GitBranch,
   Network,
+  MessageSquare,
 } from 'lucide-react'
 import { TopicLineagePanel } from '@/components/kafka/TopicLineagePanel'
 import { toast } from 'sonner'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
+
+const TopicMessagesPanel = dynamic(
+  () =>
+    import('@/components/features/kafka/TopicMessagesPanel').then(
+      (mod) => mod.TopicMessagesPanel,
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+      </div>
+    ),
+  },
+)
 import {
   getTopic,
   listSchemas,
@@ -196,6 +213,10 @@ export function TopicDetailClient({
             <Network className="h-4 w-4" />
             Lineage
           </TabsTrigger>
+          <TabsTrigger value="messages" className="flex items-center gap-2">
+            <MessageSquare className="h-4 w-4" />
+            Messages
+          </TabsTrigger>
           <TabsTrigger value="sharing" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
             Sharing
@@ -258,6 +279,17 @@ export function TopicDetailClient({
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="messages" className="mt-6">
+          {activeTab === 'messages' && (
+            <TopicMessagesPanel
+              topicId={topicId}
+              workspaceId={workspaceId}
+              workspaceSlug={workspaceSlug}
+              partitionCount={topic.partitions}
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="lineage" className="mt-6">
