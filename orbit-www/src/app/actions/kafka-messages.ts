@@ -95,6 +95,87 @@ function encodeString(str: string | undefined): Uint8Array {
   return new TextEncoder().encode(str)
 }
 
+/**
+ * Check if a user has access to a topic, and what level.
+ * Returns { canBrowse, canProduce } based on ownership or share permissions.
+ *
+ * Permission model:
+ * - Topic owner (workspace member) → browse + produce
+ * - Any share type (read, write, read-write) → browse
+ * - write or read-write share → browse + produce
+ * - No access → canBrowse: false, canProduce: false
+ */
+async function checkTopicAccess(
+  userId: string,
+  topicId: string,
+  requestingWorkspaceId: string,
+): Promise<{ canBrowse: boolean; canProduce: boolean; error?: string }> {
+  const payload = await getPayload({ config })
+
+  // Look up the topic to find its owner workspace
+  const topic = await payload.findByID({
+    collection: 'kafka-topics',
+    id: topicId,
+    depth: 0,
+    overrideAccess: true,
+  })
+
+  if (!topic) {
+    return { canBrowse: false, canProduce: false, error: 'Topic not found' }
+  }
+
+  const ownerWorkspaceId = typeof topic.workspace === 'string'
+    ? topic.workspace
+    : topic.workspace?.id
+
+  if (!ownerWorkspaceId) {
+    return { canBrowse: false, canProduce: false, error: 'Topic has no workspace' }
+  }
+
+  // Check if user is a member of the topic's workspace (owner access)
+  const membership = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { workspace: { equals: ownerWorkspaceId } },
+        { user: { equals: userId } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    limit: 1,
+    overrideAccess: true,
+  })
+
+  if (membership.docs.length > 0) {
+    // Topic owner — full access
+    return { canBrowse: true, canProduce: true }
+  }
+
+  // Check if user's workspace has an approved share for this topic
+  const share = await payload.find({
+    collection: 'kafka-topic-shares',
+    where: {
+      and: [
+        { topic: { equals: topicId } },
+        { targetWorkspace: { equals: requestingWorkspaceId } },
+        { status: { equals: 'approved' } },
+      ],
+    },
+    limit: 1,
+    overrideAccess: true,
+  })
+
+  if (share.docs.length === 0) {
+    return { canBrowse: false, canProduce: false, error: "You don't have access to this topic" }
+  }
+
+  const accessLevel = share.docs[0].accessLevel
+  const canProduce = accessLevel === 'write' || accessLevel === 'read-write'
+
+  // Any share type grants browse access
+  return { canBrowse: true, canProduce }
+}
+
 // ============================================================================
 // Server Actions
 // ============================================================================
@@ -105,6 +186,14 @@ export async function browseTopicMessages(
   const payloadUser = await getPayloadUserFromSession()
   if (!payloadUser) {
     return { success: false, error: 'Not authenticated' }
+  }
+
+  const userId = payloadUser.betterAuthId || payloadUser.id
+
+  // Access control: verify user can browse this topic
+  const access = await checkTopicAccess(userId, input.topicId, input.workspaceId)
+  if (!access.canBrowse) {
+    return { success: false, error: access.error || "You don't have access to browse this topic" }
   }
 
   try {
@@ -137,7 +226,7 @@ export async function browseTopicMessages(
       messages,
       nextCursor: response.nextCursor || undefined,
       hasMore: response.hasMore,
-      canProduce: response.canProduce,
+      canProduce: access.canProduce,
     }
   } catch (error) {
     console.error('[browseTopicMessages] Error:', error)
@@ -153,6 +242,14 @@ export async function produceTopicMessage(
   const payloadUser = await getPayloadUserFromSession()
   if (!payloadUser) {
     return { success: false, error: 'Not authenticated' }
+  }
+
+  const userId = payloadUser.betterAuthId || payloadUser.id
+
+  // Access control: verify user can produce to this topic
+  const access = await checkTopicAccess(userId, input.topicId, input.workspaceId)
+  if (!access.canProduce) {
+    return { success: false, error: access.error || "You don't have permission to produce to this topic" }
   }
 
   try {
@@ -199,35 +296,15 @@ export async function getMessagePermissions(
     return { success: false, error: 'Not authenticated' }
   }
 
-  try {
-    // Use a zero-limit browse to check permissions without fetching data
-    const response = await kafkaClient.browseTopicMessages({
-      topicId,
-      workspaceId,
-      seekType: MessageSeekType.NEWEST,
-      startOffset: BigInt(0),
-      partitions: [],
-      limit: 0,
-      cursor: '',
-    })
+  const userId = payloadUser.betterAuthId || payloadUser.id
 
-    return {
-      success: true,
-      permissions: {
-        canBrowse: true,
-        canProduce: response.canProduce,
-      },
-    }
-  } catch (error) {
-    // Permission denied means no browse access
-    const message = error instanceof Error ? error.message : ''
-    if (message.includes('PermissionDenied') || message.includes('permission')) {
-      return {
-        success: true,
-        permissions: { canBrowse: false, canProduce: false },
-      }
-    }
-    console.error('[getMessagePermissions] Error:', error)
-    return { success: false, error: 'Failed to check permissions' }
+  const access = await checkTopicAccess(userId, topicId, workspaceId)
+
+  return {
+    success: true,
+    permissions: {
+      canBrowse: access.canBrowse,
+      canProduce: access.canProduce,
+    },
   }
 }
