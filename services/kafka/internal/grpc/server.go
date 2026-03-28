@@ -44,9 +44,9 @@ func NewKafkaServer(
 type KafkaServerOption func(*KafkaServer)
 
 // WithMessageAdapter enables message browse/produce via the given adapter.
-func WithMessageAdapter(adapter adapters.KafkaAdapter, topicService *service.TopicService) KafkaServerOption {
+func WithMessageAdapter(adapter adapters.KafkaAdapter) KafkaServerOption {
 	return func(s *KafkaServer) {
-		s.messageHandler = NewMessageHandler(adapter, topicService)
+		s.messageHandler = NewMessageHandler(adapter)
 	}
 }
 

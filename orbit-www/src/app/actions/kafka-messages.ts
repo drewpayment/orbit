@@ -109,10 +109,10 @@ async function checkTopicAccess(
   userId: string,
   topicId: string,
   requestingWorkspaceId: string,
-): Promise<{ canBrowse: boolean; canProduce: boolean; error?: string }> {
+): Promise<{ canBrowse: boolean; canProduce: boolean; virtualClusterId?: string; topicName?: string; error?: string }> {
   const payload = await getPayload({ config })
 
-  // Look up the topic to find its owner workspace
+  // Look up the topic to find its owner workspace + virtual cluster
   const topic = await payload.findByID({
     collection: 'kafka-topics',
     id: topicId,
@@ -127,6 +127,12 @@ async function checkTopicAccess(
   const ownerWorkspaceId = typeof topic.workspace === 'string'
     ? topic.workspace
     : topic.workspace?.id
+
+  // Resolve virtual cluster ID for Bifrost routing
+  const virtualClusterId = typeof topic.virtualCluster === 'string'
+    ? topic.virtualCluster
+    : (topic.virtualCluster as any)?.id
+  const topicName = topic.name
 
   if (!ownerWorkspaceId) {
     return { canBrowse: false, canProduce: false, error: 'Topic has no workspace' }
@@ -148,7 +154,7 @@ async function checkTopicAccess(
 
   if (membership.docs.length > 0) {
     // Topic owner — full access
-    return { canBrowse: true, canProduce: true }
+    return { canBrowse: true, canProduce: true, virtualClusterId, topicName }
   }
 
   // Check if user's workspace has an approved share for this topic
@@ -173,7 +179,7 @@ async function checkTopicAccess(
   const canProduce = accessLevel === 'write' || accessLevel === 'read-write'
 
   // Any share type grants browse access
-  return { canBrowse: true, canProduce }
+  return { canBrowse: true, canProduce, virtualClusterId, topicName }
 }
 
 // ============================================================================
@@ -197,9 +203,12 @@ export async function browseTopicMessages(
   }
 
   try {
+    // Pass the resolved topic name and virtual cluster ID to the gRPC handler.
+    // topicId carries the virtual topic name, workspaceId carries the virtual cluster ID.
+    // The handler passes these directly to Bifrost without PostgreSQL lookup.
     const response = await kafkaClient.browseTopicMessages({
-      topicId: input.topicId,
-      workspaceId: input.workspaceId,
+      topicId: access.topicName || input.topicId,
+      workspaceId: access.virtualClusterId || input.workspaceId,
       seekType: SEEK_TYPE_MAP[input.seekType ?? 'NEWEST'],
       startOffset: BigInt(input.startOffset ?? 0),
       partitions: input.partition != null ? [input.partition] : [],
@@ -261,8 +270,8 @@ export async function produceTopicMessage(
     }
 
     const response = await kafkaClient.produceTopicMessage({
-      topicId: input.topicId,
-      workspaceId: input.workspaceId,
+      topicId: access.topicName || input.topicId,
+      workspaceId: access.virtualClusterId || input.workspaceId,
       partition: input.partition ?? undefined,
       key: encodeString(input.key),
       value: encodeString(input.value),
