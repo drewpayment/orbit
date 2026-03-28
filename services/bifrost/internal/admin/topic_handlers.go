@@ -374,10 +374,7 @@ func (s *Service) BrowseMessages(ctx context.Context, req *gatewayv1.BrowseMessa
 
 	offsets[physicalTopic] = partitionOffsets
 
-	// Create temporary consumer with timeout
-	browseCtx, cancel := context.WithTimeout(ctx, browseTimeout)
-	defer cancel()
-
+	// Create temporary consumer
 	client, err := kgo.NewClient(
 		kgo.SeedBrokers(vc.PhysicalBootstrapServers),
 		kgo.ConsumePartitions(offsets),
@@ -387,8 +384,13 @@ func (s *Service) BrowseMessages(ctx context.Context, req *gatewayv1.BrowseMessa
 	}
 	defer client.Close()
 
-	// Fetch messages
-	fetches := client.PollRecords(browseCtx, limit)
+	// Fetch messages with a short initial poll, then return whatever we have.
+	// PollRecords blocks until `limit` records or context deadline. For topics
+	// with few messages this would wait the full timeout. Instead, use a 2s
+	// initial poll to get available records quickly.
+	pollCtx, pollCancel := context.WithTimeout(ctx, 2*time.Second)
+	defer pollCancel()
+	fetches := client.PollRecords(pollCtx, limit)
 
 	// Build response
 	var messages []*gatewayv1.BifrostKafkaMessage
