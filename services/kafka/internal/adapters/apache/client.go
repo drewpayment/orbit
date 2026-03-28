@@ -777,6 +777,16 @@ func parseHostPort(addr string, defaultHost string, defaultPort int) (string, in
 	return host, port
 }
 
+// BrowseMessages is not supported on the direct apache adapter — use the Bifrost adapter.
+func (c *Client) BrowseMessages(ctx context.Context, topicName string, partitions []int32, seekType string, startOffset int64, limit int32, cursor string) (*adapters.BrowseResult, error) {
+	return nil, fmt.Errorf("BrowseMessages not supported on direct adapter — use Bifrost adapter")
+}
+
+// ProduceMessage is not supported on the direct apache adapter — use the Bifrost adapter.
+func (c *Client) ProduceMessage(ctx context.Context, topicName string, partition *int32, key, value []byte, headers map[string][]byte) (*adapters.ProduceResult, error) {
+	return nil, fmt.Errorf("ProduceMessage not supported on direct adapter — use Bifrost adapter")
+}
+
 // Ensure Client implements KafkaAdapter
 var _ adapters.KafkaAdapter = (*Client)(nil)
 
