@@ -2,22 +2,48 @@ package grpc
 
 import (
 	"context"
+	"fmt"
 
 	kafkav1 "github.com/drewpayment/orbit/proto/gen/go/idp/kafka/v1"
 	"github.com/drewpayment/orbit/services/kafka/internal/adapters"
+	"github.com/drewpayment/orbit/services/kafka/internal/service"
+	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 // MessageHandler handles message browse and produce gRPC calls.
-// It delegates broker operations to the KafkaAdapter (which routes through Bifrost).
+// It resolves topic IDs to virtual cluster IDs and topic names,
+// then delegates broker operations to the KafkaAdapter (Bifrost).
 type MessageHandler struct {
-	adapter adapters.KafkaAdapter
+	adapter      adapters.KafkaAdapter
+	topicService *service.TopicService
 }
 
 // NewMessageHandler creates a new MessageHandler.
-func NewMessageHandler(adapter adapters.KafkaAdapter) *MessageHandler {
-	return &MessageHandler{adapter: adapter}
+func NewMessageHandler(adapter adapters.KafkaAdapter, topicService *service.TopicService) *MessageHandler {
+	return &MessageHandler{adapter: adapter, topicService: topicService}
+}
+
+// resolveTopicInfo looks up a topic by ID and returns its virtual cluster ID and name.
+func (h *MessageHandler) resolveTopicInfo(ctx context.Context, topicID string) (virtualClusterID, topicName string, err error) {
+	id, err := uuid.Parse(topicID)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid topic ID: %w", err)
+	}
+
+	topic, err := h.topicService.GetTopic(ctx, id)
+	if err != nil {
+		return "", "", fmt.Errorf("topic not found: %w", err)
+	}
+
+	// The topic's ClusterID field stores the virtual cluster ID in the Bifrost model
+	vcID := topic.ClusterID.String()
+	if vcID == "00000000-0000-0000-0000-000000000000" {
+		return "", "", fmt.Errorf("topic has no virtual cluster assigned")
+	}
+
+	return vcID, topic.Name, nil
 }
 
 // BrowseTopicMessages fetches messages from a topic.
@@ -26,7 +52,6 @@ func (h *MessageHandler) BrowseTopicMessages(ctx context.Context, req *kafkav1.B
 		return nil, status.Errorf(codes.InvalidArgument, "topic_id is required")
 	}
 
-	// Map seek type
 	seekType := "NEWEST"
 	switch req.SeekType {
 	case kafkav1.MessageSeekType_MESSAGE_SEEK_TYPE_OLDEST:
@@ -40,11 +65,17 @@ func (h *MessageHandler) BrowseTopicMessages(ctx context.Context, req *kafkav1.B
 		limit = 50
 	}
 
+	// Resolve topic ID → virtual cluster ID + topic name
+	vcID, topicName, err := h.resolveTopicInfo(ctx, req.TopicId)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "resolve topic: %v", err)
+	}
+
 	// Access control is enforced at the server action layer (Next.js) which
 	// verifies workspace membership and share permissions before calling this
-	// gRPC endpoint. The adapter passes through to Bifrost for broker operations.
+	// gRPC endpoint.
 
-	result, err := h.adapter.BrowseMessages(ctx, req.TopicId, req.Partitions, seekType, req.StartOffset, limit, req.Cursor)
+	result, err := h.adapter.BrowseMessages(ctx, vcID, topicName, req.Partitions, seekType, req.StartOffset, limit, req.Cursor)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "browse messages: %v", err)
 	}
@@ -78,6 +109,12 @@ func (h *MessageHandler) ProduceTopicMessage(ctx context.Context, req *kafkav1.P
 		return nil, status.Errorf(codes.InvalidArgument, "topic_id is required")
 	}
 
+	// Resolve topic ID → virtual cluster ID + topic name
+	vcID, topicName, err := h.resolveTopicInfo(ctx, req.TopicId)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "resolve topic: %v", err)
+	}
+
 	// Access control enforced at server action layer (workspace membership + share check).
 
 	var partition *int32
@@ -86,7 +123,7 @@ func (h *MessageHandler) ProduceTopicMessage(ctx context.Context, req *kafkav1.P
 		partition = &p
 	}
 
-	result, err := h.adapter.ProduceMessage(ctx, req.TopicId, partition, req.Key, req.Value, req.Headers)
+	result, err := h.adapter.ProduceMessage(ctx, vcID, topicName, partition, req.Key, req.Value, req.Headers)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "produce message: %v", err)
 	}

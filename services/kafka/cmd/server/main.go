@@ -85,7 +85,7 @@ func main() {
 	if err != nil {
 		log.Printf("Warning: Could not connect to Bifrost at %s: %v (message browsing disabled)", cfg.BifrostAdminAddr, err)
 	} else {
-		serverOpts = append(serverOpts, kafkagrpc.WithMessageAdapter(bifrostAdapter))
+		serverOpts = append(serverOpts, kafkagrpc.WithMessageAdapter(bifrostAdapter, topicService))
 		log.Printf("Connected to Bifrost admin at %s", cfg.BifrostAdminAddr)
 	}
 

@@ -235,7 +235,7 @@ func (c *Client) ListConsumerGroups(ctx context.Context) ([]adapters.ConsumerGro
 // Message Operations
 // ============================================================================
 
-func (c *Client) BrowseMessages(ctx context.Context, topicName string, partitions []int32, seekType string, startOffset int64, limit int32, cursor string) (*adapters.BrowseResult, error) {
+func (c *Client) BrowseMessages(ctx context.Context, virtualClusterID, topicName string, partitions []int32, seekType string, startOffset int64, limit int32, cursor string) (*adapters.BrowseResult, error) {
 	st := gatewayv1.SeekType_SEEK_TYPE_NEWEST
 	switch seekType {
 	case "OLDEST":
@@ -245,7 +245,7 @@ func (c *Client) BrowseMessages(ctx context.Context, topicName string, partition
 	}
 
 	resp, err := c.client.BrowseMessages(ctx, &gatewayv1.BrowseMessagesRequest{
-		VirtualClusterId: c.vcID,
+		VirtualClusterId: virtualClusterID,
 		TopicName:        topicName,
 		Partitions:       partitions,
 		SeekType:         st,
@@ -286,9 +286,9 @@ func (c *Client) BrowseMessages(ctx context.Context, topicName string, partition
 	}, nil
 }
 
-func (c *Client) ProduceMessage(ctx context.Context, topicName string, partition *int32, key, value []byte, headers map[string][]byte) (*adapters.ProduceResult, error) {
+func (c *Client) ProduceMessage(ctx context.Context, virtualClusterID, topicName string, partition *int32, key, value []byte, headers map[string][]byte) (*adapters.ProduceResult, error) {
 	req := &gatewayv1.ProduceMessageRequest{
-		VirtualClusterId: c.vcID,
+		VirtualClusterId: virtualClusterID,
 		TopicName:        topicName,
 		Key:              key,
 		Value:            value,
