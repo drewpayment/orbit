@@ -469,7 +469,11 @@ func (s *Service) ProduceMessage(ctx context.Context, req *gatewayv1.ProduceMess
 		"topic":              req.TopicName,
 	}).Debug("Producing message")
 
-	client, err := kgo.NewClient(kgo.SeedBrokers(vc.PhysicalBootstrapServers))
+	client, err := kgo.NewClient(
+		kgo.SeedBrokers(vc.PhysicalBootstrapServers),
+		kgo.RequestTimeoutOverhead(10*time.Second),
+		kgo.ProduceRequestTimeout(10*time.Second),
+	)
 	if err != nil {
 		return &gatewayv1.ProduceMessageResponse{Error: "failed to create producer: " + err.Error()}, nil
 	}
@@ -489,7 +493,9 @@ func (s *Service) ProduceMessage(ctx context.Context, req *gatewayv1.ProduceMess
 		record.Headers = append(record.Headers, kgo.RecordHeader{Key: k, Value: v})
 	}
 
-	results := client.ProduceSync(ctx, record)
+	produceCtx, produceCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer produceCancel()
+	results := client.ProduceSync(produceCtx, record)
 	if len(results) == 0 {
 		return &gatewayv1.ProduceMessageResponse{Error: "no produce result"}, nil
 	}

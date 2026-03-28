@@ -19,8 +19,9 @@ func main() {
 
 	client := gatewayv1.NewBifrostAdminServiceClient(conn)
 
-	resp, err := client.UpsertVirtualCluster(context.Background(), &gatewayv1.UpsertVirtualClusterRequest{
-		Config: &gatewayv1.VirtualClusterConfig{
+	// Seed virtual clusters
+	clusters := []gatewayv1.VirtualClusterConfig{
+		{
 			Id:                       "69c71df64bd38b26df224f73",
 			WorkspaceSlug:            "engineering",
 			Environment:              "dev",
@@ -30,11 +31,28 @@ func main() {
 			AdvertisedPort:           9092,
 			PhysicalBootstrapServers: "redpanda:9092",
 		},
-	})
-	if err != nil {
-		log.Fatal(err)
+		{
+			Id:                       "69c7e3c1d0b6ac3981a08d39",
+			WorkspaceSlug:            "engineering",
+			Environment:              "prod",
+			TopicPrefix:              "engineering-engineering-prod-",
+			GroupPrefix:              "engineering-engineering-prod-",
+			AdvertisedHost:           "engineering-prod.prod.kafka.orbit.io",
+			AdvertisedPort:           9092,
+			PhysicalBootstrapServers: "192.168.86.200:31092",
+		},
 	}
-	fmt.Printf("Upserted virtual cluster: success=%v\n", resp.Success)
+
+	for _, vc := range clusters {
+		resp, err := client.UpsertVirtualCluster(context.Background(), &gatewayv1.UpsertVirtualClusterRequest{
+			Config: &vc,
+		})
+		if err != nil {
+			log.Printf("Failed to upsert %s: %v", vc.Id, err)
+			continue
+		}
+		fmt.Printf("Upserted %s (%s-%s): success=%v\n", vc.Id, vc.WorkspaceSlug, vc.Environment, resp.Success)
+	}
 
 	status, err := client.GetStatus(context.Background(), &gatewayv1.GetStatusRequest{})
 	if err != nil {
