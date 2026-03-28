@@ -605,6 +605,9 @@ export async function listServiceAccounts(
 
     const payload = await getPayload({ config })
 
+    // Use overrideAccess since auth is verified above and the collection's
+    // read access control depends on workspace-members being populated.
+    // The virtualCluster filter already scopes results appropriately.
     const accounts = await payload.find({
       collection: 'kafka-service-accounts',
       where: {
@@ -612,8 +615,7 @@ export async function listServiceAccounts(
       },
       sort: '-createdAt',
       limit: 100,
-      user: payloadUser,
-      overrideAccess: false,
+      overrideAccess: true,
     })
 
     const serviceAccounts: ServiceAccountData[] = accounts.docs.map((acc) => ({
