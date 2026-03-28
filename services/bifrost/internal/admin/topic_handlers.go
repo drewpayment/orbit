@@ -337,57 +337,61 @@ func (s *Service) BrowseMessages(ctx context.Context, req *gatewayv1.BrowseMessa
 		"limit":              limit,
 	}).Debug("Browsing messages")
 
-	// Build partition offset map from cursor or seek type
-	offsets := make(map[string]map[int32]kgo.Offset)
-	partitionOffsets := make(map[int32]kgo.Offset)
+	// Determine starting offset
+	var startOffset kgo.Offset
+	switch req.SeekType {
+	case gatewayv1.SeekType_SEEK_TYPE_OLDEST:
+		startOffset = kgo.NewOffset().AtStart()
+	case gatewayv1.SeekType_SEEK_TYPE_OFFSET:
+		startOffset = kgo.NewOffset().At(req.StartOffset)
+	default: // NEWEST / UNSPECIFIED
+		startOffset = kgo.NewOffset().AtStart() // Fetch all, sort by offset desc later
+	}
+
+	// Build client options
+	clientOpts := []kgo.Opt{
+		kgo.SeedBrokers(vc.PhysicalBootstrapServers),
+	}
 
 	if req.Cursor != "" {
-		// Resume from cursor
+		// Resume from cursor — use explicit partition offsets
 		cursor, err := decodeCursor(req.Cursor)
 		if err != nil {
 			return &gatewayv1.BrowseMessagesResponse{Error: err.Error()}, nil
 		}
+		partitionOffsets := make(map[int32]kgo.Offset)
 		for p, o := range cursor.Partitions {
 			partitionOffsets[p] = kgo.NewOffset().At(o)
 		}
+		clientOpts = append(clientOpts, kgo.ConsumePartitions(map[string]map[int32]kgo.Offset{
+			physicalTopic: partitionOffsets,
+		}))
+	} else if len(req.Partitions) > 0 {
+		// Specific partitions requested
+		partitionOffsets := make(map[int32]kgo.Offset)
+		for _, p := range req.Partitions {
+			partitionOffsets[p] = startOffset
+		}
+		clientOpts = append(clientOpts, kgo.ConsumePartitions(map[string]map[int32]kgo.Offset{
+			physicalTopic: partitionOffsets,
+		}))
 	} else {
-		// Use seek type for initial fetch
-		switch req.SeekType {
-		case gatewayv1.SeekType_SEEK_TYPE_OLDEST:
-			partitionOffsets[-1] = kgo.NewOffset().AtStart()
-		case gatewayv1.SeekType_SEEK_TYPE_OFFSET:
-			partitionOffsets[-1] = kgo.NewOffset().At(req.StartOffset)
-		default: // NEWEST / UNSPECIFIED
-			partitionOffsets[-1] = kgo.NewOffset().AtEnd().Relative(int64(-limit))
-		}
-
-		// If specific partitions requested, set only those
-		if len(req.Partitions) > 0 {
-			specified := make(map[int32]kgo.Offset)
-			defaultOffset := partitionOffsets[-1]
-			for _, p := range req.Partitions {
-				specified[p] = defaultOffset
-			}
-			partitionOffsets = specified
-		}
+		// All partitions — use ConsumeTopics with reset offset
+		clientOpts = append(clientOpts,
+			kgo.ConsumeTopics(physicalTopic),
+			kgo.ConsumeResetOffset(startOffset),
+		)
 	}
 
-	offsets[physicalTopic] = partitionOffsets
-
 	// Create temporary consumer
-	client, err := kgo.NewClient(
-		kgo.SeedBrokers(vc.PhysicalBootstrapServers),
-		kgo.ConsumePartitions(offsets),
-	)
+	client, err := kgo.NewClient(clientOpts...)
 	if err != nil {
 		return &gatewayv1.BrowseMessagesResponse{Error: "failed to create consumer: " + err.Error()}, nil
 	}
 	defer client.Close()
 
-	// Fetch messages with a short initial poll, then return whatever we have.
-	// PollRecords blocks until `limit` records or context deadline. For topics
-	// with few messages this would wait the full timeout. Instead, use a 2s
-	// initial poll to get available records quickly.
+	// Fetch messages with a short poll. PollRecords blocks until `limit`
+	// records or context deadline. Use 2s to return quickly.
 	pollCtx, pollCancel := context.WithTimeout(ctx, 2*time.Second)
 	defer pollCancel()
 	fetches := client.PollRecords(pollCtx, limit)
