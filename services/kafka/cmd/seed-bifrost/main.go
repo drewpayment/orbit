@@ -28,7 +28,7 @@ func main() {
 			GroupPrefix:              "engineering-engineering-dev-",
 			AdvertisedHost:           "engineering-dev.dev.kafka.orbit.io",
 			AdvertisedPort:           9092,
-			PhysicalBootstrapServers: "redpanda:19092",
+			PhysicalBootstrapServers: "redpanda:9092",
 		},
 	})
 	if err != nil {
