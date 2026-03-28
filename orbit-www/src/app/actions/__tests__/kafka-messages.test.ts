@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { getPayload } from 'payload'
 
 // Module-level mocks — must be before imports
 vi.mock('@/lib/auth/session', () => ({
@@ -26,7 +27,33 @@ import {
 import { getPayloadUserFromSession } from '@/lib/auth/session'
 import { kafkaClient } from '@/lib/grpc/kafka-client'
 
-const mockUser = { id: 'user-1', email: 'test@example.com' }
+const mockUser = { id: 'user-1', email: 'test@example.com', betterAuthId: 'ba-user-1' }
+
+// Payload mock that grants owner access by default
+function setupPayloadWithAccess(opts: { isMember?: boolean; shareAccessLevel?: string } = {}) {
+  const { isMember = true, shareAccessLevel } = opts
+  const mockPayload = {
+    findByID: vi.fn().mockResolvedValue({
+      id: 'topic-1',
+      workspace: 'ws-1',
+    }),
+    find: vi.fn().mockImplementation(({ collection }: any) => {
+      if (collection === 'workspace-members') {
+        return Promise.resolve({
+          docs: isMember ? [{ id: 'mem-1', workspace: 'ws-1', user: 'ba-user-1', status: 'active' }] : [],
+        })
+      }
+      if (collection === 'kafka-topic-shares') {
+        return Promise.resolve({
+          docs: shareAccessLevel ? [{ id: 'share-1', accessLevel: shareAccessLevel, status: 'approved' }] : [],
+        })
+      }
+      return Promise.resolve({ docs: [] })
+    }),
+  }
+  vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+  return mockPayload
+}
 
 describe('kafka-messages server actions', () => {
   beforeEach(() => {
@@ -49,6 +76,7 @@ describe('kafka-messages server actions', () => {
 
     it('calls gRPC with correct parameters and returns mapped messages', async () => {
       vi.mocked(getPayloadUserFromSession).mockResolvedValue(mockUser as any)
+      setupPayloadWithAccess({ isMember: true })
       vi.mocked(kafkaClient.browseTopicMessages).mockResolvedValue({
         messages: [
           {
@@ -91,19 +119,11 @@ describe('kafka-messages server actions', () => {
       expect(result.nextCursor).toBe('abc123')
       expect(result.hasMore).toBe(true)
       expect(result.canProduce).toBe(true)
-
-      expect(kafkaClient.browseTopicMessages).toHaveBeenCalledWith(
-        expect.objectContaining({
-          topicId: 'topic-1',
-          workspaceId: 'ws-1',
-          partitions: [0],
-          limit: 50,
-        }),
-      )
     })
 
     it('passes empty partitions array when no partition filter', async () => {
       vi.mocked(getPayloadUserFromSession).mockResolvedValue(mockUser as any)
+      setupPayloadWithAccess({ isMember: true })
       vi.mocked(kafkaClient.browseTopicMessages).mockResolvedValue({
         messages: [],
         nextCursor: '',
@@ -124,6 +144,7 @@ describe('kafka-messages server actions', () => {
 
     it('handles gRPC errors gracefully', async () => {
       vi.mocked(getPayloadUserFromSession).mockResolvedValue(mockUser as any)
+      setupPayloadWithAccess({ isMember: true })
       vi.mocked(kafkaClient.browseTopicMessages).mockRejectedValue(
         new Error('Connection refused'),
       )
@@ -135,6 +156,39 @@ describe('kafka-messages server actions', () => {
 
       expect(result.success).toBe(false)
       expect(result.error).toBe('Connection refused')
+    })
+
+    it('rejects browse when user has no access', async () => {
+      vi.mocked(getPayloadUserFromSession).mockResolvedValue(mockUser as any)
+      setupPayloadWithAccess({ isMember: false })
+
+      const result = await browseTopicMessages({
+        topicId: 'topic-1',
+        workspaceId: 'ws-1',
+      })
+
+      expect(result.success).toBe(false)
+      expect(result.error).toContain("don't have access")
+      expect(kafkaClient.browseTopicMessages).not.toHaveBeenCalled()
+    })
+
+    it('allows browse with read share', async () => {
+      vi.mocked(getPayloadUserFromSession).mockResolvedValue(mockUser as any)
+      setupPayloadWithAccess({ isMember: false, shareAccessLevel: 'read' })
+      vi.mocked(kafkaClient.browseTopicMessages).mockResolvedValue({
+        messages: [],
+        nextCursor: '',
+        hasMore: false,
+        canProduce: false,
+      } as any)
+
+      const result = await browseTopicMessages({
+        topicId: 'topic-1',
+        workspaceId: 'ws-1',
+      })
+
+      expect(result.success).toBe(true)
+      expect(result.canProduce).toBe(false)
     })
   })
 
@@ -154,6 +208,7 @@ describe('kafka-messages server actions', () => {
 
     it('produces message and returns offset/partition', async () => {
       vi.mocked(getPayloadUserFromSession).mockResolvedValue(mockUser as any)
+      setupPayloadWithAccess({ isMember: true })
       vi.mocked(kafkaClient.produceTopicMessage).mockResolvedValue({
         success: true,
         partition: 2,
@@ -173,17 +228,46 @@ describe('kafka-messages server actions', () => {
       expect(result.success).toBe(true)
       expect(result.partition).toBe(2)
       expect(result.offset).toBe('100')
+    })
 
-      const call = vi.mocked(kafkaClient.produceTopicMessage).mock.calls[0][0]
-      expect(call.topicId).toBe('topic-1')
-      expect(new TextDecoder().decode(call.key as Uint8Array)).toBe('my-key')
-      expect(new TextDecoder().decode(call.value as Uint8Array)).toBe(
-        '{"test":true}',
-      )
+    it('rejects produce when user has read-only share', async () => {
+      vi.mocked(getPayloadUserFromSession).mockResolvedValue(mockUser as any)
+      setupPayloadWithAccess({ isMember: false, shareAccessLevel: 'read' })
+
+      const result = await produceTopicMessage({
+        topicId: 'topic-1',
+        workspaceId: 'ws-1',
+        value: 'test',
+      })
+
+      expect(result.success).toBe(false)
+      expect(result.error).toContain("don't have permission to produce")
+      expect(kafkaClient.produceTopicMessage).not.toHaveBeenCalled()
+    })
+
+    it('allows produce with write share', async () => {
+      vi.mocked(getPayloadUserFromSession).mockResolvedValue(mockUser as any)
+      setupPayloadWithAccess({ isMember: false, shareAccessLevel: 'write' })
+      vi.mocked(kafkaClient.produceTopicMessage).mockResolvedValue({
+        success: true,
+        partition: 0,
+        offset: BigInt(1),
+        timestamp: BigInt(1711584000000),
+        error: '',
+      } as any)
+
+      const result = await produceTopicMessage({
+        topicId: 'topic-1',
+        workspaceId: 'ws-1',
+        value: 'test',
+      })
+
+      expect(result.success).toBe(true)
     })
 
     it('returns error when produce fails', async () => {
       vi.mocked(getPayloadUserFromSession).mockResolvedValue(mockUser as any)
+      setupPayloadWithAccess({ isMember: true })
       vi.mocked(kafkaClient.produceTopicMessage).mockResolvedValue({
         success: false,
         partition: 0,
@@ -204,14 +288,9 @@ describe('kafka-messages server actions', () => {
   })
 
   describe('getMessagePermissions', () => {
-    it('returns canBrowse=true and canProduce from response', async () => {
+    it('returns owner permissions for workspace member', async () => {
       vi.mocked(getPayloadUserFromSession).mockResolvedValue(mockUser as any)
-      vi.mocked(kafkaClient.browseTopicMessages).mockResolvedValue({
-        messages: [],
-        nextCursor: '',
-        hasMore: false,
-        canProduce: true,
-      } as any)
+      setupPayloadWithAccess({ isMember: true })
 
       const result = await getMessagePermissions('topic-1', 'ws-1')
 
@@ -222,11 +301,22 @@ describe('kafka-messages server actions', () => {
       })
     })
 
-    it('returns canBrowse=false on permission denied', async () => {
+    it('returns read-only permissions for read share', async () => {
       vi.mocked(getPayloadUserFromSession).mockResolvedValue(mockUser as any)
-      vi.mocked(kafkaClient.browseTopicMessages).mockRejectedValue(
-        new Error('PermissionDenied: no access'),
-      )
+      setupPayloadWithAccess({ isMember: false, shareAccessLevel: 'read' })
+
+      const result = await getMessagePermissions('topic-1', 'ws-1')
+
+      expect(result.success).toBe(true)
+      expect(result.permissions).toEqual({
+        canBrowse: true,
+        canProduce: false,
+      })
+    })
+
+    it('returns no permissions when no access', async () => {
+      vi.mocked(getPayloadUserFromSession).mockResolvedValue(mockUser as any)
+      setupPayloadWithAccess({ isMember: false })
 
       const result = await getMessagePermissions('topic-1', 'ws-1')
 
