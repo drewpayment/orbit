@@ -344,6 +344,10 @@ service KafkaService {
   // Metrics & Lineage
   rpc GetTopicMetrics(GetTopicMetricsRequest) returns (GetTopicMetricsResponse);
   rpc GetTopicLineage(GetTopicLineageRequest) returns (GetTopicLineageResponse);
+
+  // Message Browse & Produce
+  rpc BrowseTopicMessages(BrowseTopicMessagesRequest) returns (BrowseTopicMessagesResponse);
+  rpc ProduceTopicMessage(ProduceTopicMessageRequest) returns (ProduceTopicMessageResponse);
 }
 
 // ============================================================================
@@ -680,4 +684,61 @@ message LineageNode {
   string client_id = 5;
   int64 bytes_transferred = 6;
   google.protobuf.Timestamp last_seen = 7;
+}
+
+// ============================================================================
+// Message Browse & Produce
+// ============================================================================
+
+enum MessageSeekType {
+  MESSAGE_SEEK_TYPE_UNSPECIFIED = 0;
+  MESSAGE_SEEK_TYPE_NEWEST = 1;
+  MESSAGE_SEEK_TYPE_OLDEST = 2;
+  MESSAGE_SEEK_TYPE_OFFSET = 3;
+}
+
+message BrowseTopicMessagesRequest {
+  string topic_id = 1;                      // Orbit topic ID
+  string workspace_id = 2;                  // Requesting workspace
+  MessageSeekType seek_type = 3;
+  int64 start_offset = 4;                   // Used when seek_type = OFFSET
+  repeated int32 partitions = 5;            // Empty = all partitions
+  int32 limit = 6;                          // Max messages (default 50)
+  string cursor = 7;                        // Opaque cursor for pagination
+}
+
+message BrowseTopicMessagesResponse {
+  repeated KafkaMessage messages = 1;
+  string next_cursor = 2;
+  bool has_more = 3;
+  bool can_produce = 4;                     // Whether user can produce to this topic
+}
+
+message ProduceTopicMessageRequest {
+  string topic_id = 1;                      // Orbit topic ID
+  string workspace_id = 2;                  // Requesting workspace
+  optional int32 partition = 3;
+  bytes key = 4;
+  bytes value = 5;
+  map<string, bytes> headers = 6;
+}
+
+message ProduceTopicMessageResponse {
+  bool success = 1;
+  int32 partition = 2;
+  int64 offset = 3;
+  int64 timestamp = 4;                      // Unix milliseconds
+  string error = 5;
+}
+
+message KafkaMessage {
+  int32 partition = 1;
+  int64 offset = 2;
+  int64 timestamp = 3;                      // Unix milliseconds
+  bytes key = 4;
+  bytes value = 5;
+  map<string, bytes> headers = 6;
+  int32 key_size = 7;                       // Original size before truncation
+  int32 value_size = 8;                     // Original size before truncation
+  bool truncated = 9;
 }

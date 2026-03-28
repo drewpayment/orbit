@@ -13,6 +13,7 @@ import (
 	kafkav1 "github.com/drewpayment/orbit/proto/gen/go/idp/kafka/v1"
 	"github.com/drewpayment/orbit/services/kafka/internal/adapters"
 	"github.com/drewpayment/orbit/services/kafka/internal/adapters/apache"
+	bifrostadapter "github.com/drewpayment/orbit/services/kafka/internal/adapters/bifrost"
 	"github.com/drewpayment/orbit/services/kafka/internal/domain"
 	kafkagrpc "github.com/drewpayment/orbit/services/kafka/internal/grpc"
 	"github.com/drewpayment/orbit/services/kafka/internal/repository/postgres"
@@ -26,9 +27,10 @@ import (
 
 // Config holds server configuration
 type Config struct {
-	GRPCPort    int
-	Environment string
-	DatabaseURL string
+	GRPCPort         int
+	Environment      string
+	DatabaseURL      string
+	BifrostAdminAddr string
 }
 
 func main() {
@@ -77,8 +79,18 @@ func main() {
 		grpc.UnaryInterceptor(loggingInterceptor),
 	)
 
+	// Create Bifrost adapter for message browse/produce
+	var serverOpts []kafkagrpc.KafkaServerOption
+	bifrostAdapter, err := bifrostadapter.NewClient(cfg.BifrostAdminAddr, "") // vcID resolved per-request
+	if err != nil {
+		log.Printf("Warning: Could not connect to Bifrost at %s: %v (message browsing disabled)", cfg.BifrostAdminAddr, err)
+	} else {
+		serverOpts = append(serverOpts, kafkagrpc.WithMessageAdapter(bifrostAdapter))
+		log.Printf("Connected to Bifrost admin at %s", cfg.BifrostAdminAddr)
+	}
+
 	// Register services
-	kafkaServer := kafkagrpc.NewKafkaServer(clusterService, topicService, schemaService, shareService)
+	kafkaServer := kafkagrpc.NewKafkaServer(clusterService, topicService, schemaService, shareService, serverOpts...)
 	kafkav1.RegisterKafkaServiceServer(grpcServer, kafkaServer)
 
 	// Register health service
@@ -138,10 +150,16 @@ func loadConfig() *Config {
 		dbURL = "postgres://orbit:orbit@localhost:5433/kafka_service?sslmode=disable"
 	}
 
+	bifrostAddr := os.Getenv("BIFROST_ADMIN_ADDR")
+	if bifrostAddr == "" {
+		bifrostAddr = "localhost:50060"
+	}
+
 	return &Config{
-		GRPCPort:    port,
-		Environment: env,
-		DatabaseURL: dbURL,
+		GRPCPort:         port,
+		Environment:      env,
+		DatabaseURL:      dbURL,
+		BifrostAdminAddr: bifrostAddr,
 	}
 }
 

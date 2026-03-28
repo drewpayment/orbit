@@ -50,6 +50,8 @@ const (
 	KafkaService_DiscoverTopics_FullMethodName            = "/idp.kafka.v1.KafkaService/DiscoverTopics"
 	KafkaService_GetTopicMetrics_FullMethodName           = "/idp.kafka.v1.KafkaService/GetTopicMetrics"
 	KafkaService_GetTopicLineage_FullMethodName           = "/idp.kafka.v1.KafkaService/GetTopicLineage"
+	KafkaService_BrowseTopicMessages_FullMethodName       = "/idp.kafka.v1.KafkaService/BrowseTopicMessages"
+	KafkaService_ProduceTopicMessage_FullMethodName       = "/idp.kafka.v1.KafkaService/ProduceTopicMessage"
 )
 
 // KafkaServiceClient is the client API for KafkaService service.
@@ -95,6 +97,9 @@ type KafkaServiceClient interface {
 	// Metrics & Lineage
 	GetTopicMetrics(ctx context.Context, in *GetTopicMetricsRequest, opts ...grpc.CallOption) (*GetTopicMetricsResponse, error)
 	GetTopicLineage(ctx context.Context, in *GetTopicLineageRequest, opts ...grpc.CallOption) (*GetTopicLineageResponse, error)
+	// Message Browse & Produce
+	BrowseTopicMessages(ctx context.Context, in *BrowseTopicMessagesRequest, opts ...grpc.CallOption) (*BrowseTopicMessagesResponse, error)
+	ProduceTopicMessage(ctx context.Context, in *ProduceTopicMessageRequest, opts ...grpc.CallOption) (*ProduceTopicMessageResponse, error)
 }
 
 type kafkaServiceClient struct {
@@ -415,6 +420,26 @@ func (c *kafkaServiceClient) GetTopicLineage(ctx context.Context, in *GetTopicLi
 	return out, nil
 }
 
+func (c *kafkaServiceClient) BrowseTopicMessages(ctx context.Context, in *BrowseTopicMessagesRequest, opts ...grpc.CallOption) (*BrowseTopicMessagesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BrowseTopicMessagesResponse)
+	err := c.cc.Invoke(ctx, KafkaService_BrowseTopicMessages_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *kafkaServiceClient) ProduceTopicMessage(ctx context.Context, in *ProduceTopicMessageRequest, opts ...grpc.CallOption) (*ProduceTopicMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProduceTopicMessageResponse)
+	err := c.cc.Invoke(ctx, KafkaService_ProduceTopicMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // KafkaServiceServer is the server API for KafkaService service.
 // All implementations must embed UnimplementedKafkaServiceServer
 // for forward compatibility.
@@ -458,6 +483,9 @@ type KafkaServiceServer interface {
 	// Metrics & Lineage
 	GetTopicMetrics(context.Context, *GetTopicMetricsRequest) (*GetTopicMetricsResponse, error)
 	GetTopicLineage(context.Context, *GetTopicLineageRequest) (*GetTopicLineageResponse, error)
+	// Message Browse & Produce
+	BrowseTopicMessages(context.Context, *BrowseTopicMessagesRequest) (*BrowseTopicMessagesResponse, error)
+	ProduceTopicMessage(context.Context, *ProduceTopicMessageRequest) (*ProduceTopicMessageResponse, error)
 	mustEmbedUnimplementedKafkaServiceServer()
 }
 
@@ -560,6 +588,12 @@ func (UnimplementedKafkaServiceServer) GetTopicMetrics(context.Context, *GetTopi
 }
 func (UnimplementedKafkaServiceServer) GetTopicLineage(context.Context, *GetTopicLineageRequest) (*GetTopicLineageResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetTopicLineage not implemented")
+}
+func (UnimplementedKafkaServiceServer) BrowseTopicMessages(context.Context, *BrowseTopicMessagesRequest) (*BrowseTopicMessagesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BrowseTopicMessages not implemented")
+}
+func (UnimplementedKafkaServiceServer) ProduceTopicMessage(context.Context, *ProduceTopicMessageRequest) (*ProduceTopicMessageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ProduceTopicMessage not implemented")
 }
 func (UnimplementedKafkaServiceServer) mustEmbedUnimplementedKafkaServiceServer() {}
 func (UnimplementedKafkaServiceServer) testEmbeddedByValue()                      {}
@@ -1140,6 +1174,42 @@ func _KafkaService_GetTopicLineage_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _KafkaService_BrowseTopicMessages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BrowseTopicMessagesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KafkaServiceServer).BrowseTopicMessages(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KafkaService_BrowseTopicMessages_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KafkaServiceServer).BrowseTopicMessages(ctx, req.(*BrowseTopicMessagesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _KafkaService_ProduceTopicMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProduceTopicMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KafkaServiceServer).ProduceTopicMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KafkaService_ProduceTopicMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KafkaServiceServer).ProduceTopicMessage(ctx, req.(*ProduceTopicMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // KafkaService_ServiceDesc is the grpc.ServiceDesc for KafkaService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1270,6 +1340,14 @@ var KafkaService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetTopicLineage",
 			Handler:    _KafkaService_GetTopicLineage_Handler,
+		},
+		{
+			MethodName: "BrowseTopicMessages",
+			Handler:    _KafkaService_BrowseTopicMessages_Handler,
+		},
+		{
+			MethodName: "ProduceTopicMessage",
+			Handler:    _KafkaService_ProduceTopicMessage_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

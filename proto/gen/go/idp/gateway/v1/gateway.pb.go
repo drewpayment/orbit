@@ -189,6 +189,58 @@ func (OffsetResetType) EnumDescriptor() ([]byte, []int) {
 	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{2}
 }
 
+type SeekType int32
+
+const (
+	SeekType_SEEK_TYPE_UNSPECIFIED SeekType = 0
+	SeekType_SEEK_TYPE_NEWEST      SeekType = 1
+	SeekType_SEEK_TYPE_OLDEST      SeekType = 2
+	SeekType_SEEK_TYPE_OFFSET      SeekType = 3
+)
+
+// Enum value maps for SeekType.
+var (
+	SeekType_name = map[int32]string{
+		0: "SEEK_TYPE_UNSPECIFIED",
+		1: "SEEK_TYPE_NEWEST",
+		2: "SEEK_TYPE_OLDEST",
+		3: "SEEK_TYPE_OFFSET",
+	}
+	SeekType_value = map[string]int32{
+		"SEEK_TYPE_UNSPECIFIED": 0,
+		"SEEK_TYPE_NEWEST":      1,
+		"SEEK_TYPE_OLDEST":      2,
+		"SEEK_TYPE_OFFSET":      3,
+	}
+)
+
+func (x SeekType) Enum() *SeekType {
+	p := new(SeekType)
+	*p = x
+	return p
+}
+
+func (x SeekType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SeekType) Descriptor() protoreflect.EnumDescriptor {
+	return file_idp_gateway_v1_gateway_proto_enumTypes[3].Descriptor()
+}
+
+func (SeekType) Type() protoreflect.EnumType {
+	return &file_idp_gateway_v1_gateway_proto_enumTypes[3]
+}
+
+func (x SeekType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SeekType.Descriptor instead.
+func (SeekType) EnumDescriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{3}
+}
+
 type VirtualClusterConfig struct {
 	state                    protoimpl.MessageState `protogen:"open.v1"`
 	Id                       string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -3232,6 +3284,1198 @@ func (x *ResetConsumerGroupOffsetsResponse) GetNewOffsets() []*PartitionLag {
 	return nil
 }
 
+type BifrostCreateTopicRequest struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	VirtualClusterId  string                 `protobuf:"bytes,1,opt,name=virtual_cluster_id,json=virtualClusterId,proto3" json:"virtual_cluster_id,omitempty"`
+	TopicName         string                 `protobuf:"bytes,2,opt,name=topic_name,json=topicName,proto3" json:"topic_name,omitempty"` // Virtual name (prefix applied by Bifrost)
+	Partitions        int32                  `protobuf:"varint,3,opt,name=partitions,proto3" json:"partitions,omitempty"`
+	ReplicationFactor int32                  `protobuf:"varint,4,opt,name=replication_factor,json=replicationFactor,proto3" json:"replication_factor,omitempty"`
+	Config            map[string]string      `protobuf:"bytes,5,rep,name=config,proto3" json:"config,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Topic-level config overrides
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *BifrostCreateTopicRequest) Reset() {
+	*x = BifrostCreateTopicRequest{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[54]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BifrostCreateTopicRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BifrostCreateTopicRequest) ProtoMessage() {}
+
+func (x *BifrostCreateTopicRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[54]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BifrostCreateTopicRequest.ProtoReflect.Descriptor instead.
+func (*BifrostCreateTopicRequest) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{54}
+}
+
+func (x *BifrostCreateTopicRequest) GetVirtualClusterId() string {
+	if x != nil {
+		return x.VirtualClusterId
+	}
+	return ""
+}
+
+func (x *BifrostCreateTopicRequest) GetTopicName() string {
+	if x != nil {
+		return x.TopicName
+	}
+	return ""
+}
+
+func (x *BifrostCreateTopicRequest) GetPartitions() int32 {
+	if x != nil {
+		return x.Partitions
+	}
+	return 0
+}
+
+func (x *BifrostCreateTopicRequest) GetReplicationFactor() int32 {
+	if x != nil {
+		return x.ReplicationFactor
+	}
+	return 0
+}
+
+func (x *BifrostCreateTopicRequest) GetConfig() map[string]string {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
+type BifrostCreateTopicResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BifrostCreateTopicResponse) Reset() {
+	*x = BifrostCreateTopicResponse{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[55]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BifrostCreateTopicResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BifrostCreateTopicResponse) ProtoMessage() {}
+
+func (x *BifrostCreateTopicResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[55]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BifrostCreateTopicResponse.ProtoReflect.Descriptor instead.
+func (*BifrostCreateTopicResponse) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{55}
+}
+
+func (x *BifrostCreateTopicResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *BifrostCreateTopicResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type BifrostDeleteTopicRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	VirtualClusterId string                 `protobuf:"bytes,1,opt,name=virtual_cluster_id,json=virtualClusterId,proto3" json:"virtual_cluster_id,omitempty"`
+	TopicName        string                 `protobuf:"bytes,2,opt,name=topic_name,json=topicName,proto3" json:"topic_name,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *BifrostDeleteTopicRequest) Reset() {
+	*x = BifrostDeleteTopicRequest{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[56]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BifrostDeleteTopicRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BifrostDeleteTopicRequest) ProtoMessage() {}
+
+func (x *BifrostDeleteTopicRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[56]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BifrostDeleteTopicRequest.ProtoReflect.Descriptor instead.
+func (*BifrostDeleteTopicRequest) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *BifrostDeleteTopicRequest) GetVirtualClusterId() string {
+	if x != nil {
+		return x.VirtualClusterId
+	}
+	return ""
+}
+
+func (x *BifrostDeleteTopicRequest) GetTopicName() string {
+	if x != nil {
+		return x.TopicName
+	}
+	return ""
+}
+
+type BifrostDeleteTopicResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BifrostDeleteTopicResponse) Reset() {
+	*x = BifrostDeleteTopicResponse{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BifrostDeleteTopicResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BifrostDeleteTopicResponse) ProtoMessage() {}
+
+func (x *BifrostDeleteTopicResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[57]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BifrostDeleteTopicResponse.ProtoReflect.Descriptor instead.
+func (*BifrostDeleteTopicResponse) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{57}
+}
+
+func (x *BifrostDeleteTopicResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *BifrostDeleteTopicResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type BifrostDescribeTopicRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	VirtualClusterId string                 `protobuf:"bytes,1,opt,name=virtual_cluster_id,json=virtualClusterId,proto3" json:"virtual_cluster_id,omitempty"`
+	TopicName        string                 `protobuf:"bytes,2,opt,name=topic_name,json=topicName,proto3" json:"topic_name,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *BifrostDescribeTopicRequest) Reset() {
+	*x = BifrostDescribeTopicRequest{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[58]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BifrostDescribeTopicRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BifrostDescribeTopicRequest) ProtoMessage() {}
+
+func (x *BifrostDescribeTopicRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[58]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BifrostDescribeTopicRequest.ProtoReflect.Descriptor instead.
+func (*BifrostDescribeTopicRequest) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{58}
+}
+
+func (x *BifrostDescribeTopicRequest) GetVirtualClusterId() string {
+	if x != nil {
+		return x.VirtualClusterId
+	}
+	return ""
+}
+
+func (x *BifrostDescribeTopicRequest) GetTopicName() string {
+	if x != nil {
+		return x.TopicName
+	}
+	return ""
+}
+
+type BifrostDescribeTopicResponse struct {
+	state             protoimpl.MessageState  `protogen:"open.v1"`
+	PartitionCount    int32                   `protobuf:"varint,1,opt,name=partition_count,json=partitionCount,proto3" json:"partition_count,omitempty"`
+	ReplicationFactor int32                   `protobuf:"varint,2,opt,name=replication_factor,json=replicationFactor,proto3" json:"replication_factor,omitempty"`
+	Config            map[string]string       `protobuf:"bytes,3,rep,name=config,proto3" json:"config,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Partitions        []*BifrostPartitionInfo `protobuf:"bytes,4,rep,name=partitions,proto3" json:"partitions,omitempty"`
+	Error             string                  `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *BifrostDescribeTopicResponse) Reset() {
+	*x = BifrostDescribeTopicResponse{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[59]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BifrostDescribeTopicResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BifrostDescribeTopicResponse) ProtoMessage() {}
+
+func (x *BifrostDescribeTopicResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[59]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BifrostDescribeTopicResponse.ProtoReflect.Descriptor instead.
+func (*BifrostDescribeTopicResponse) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{59}
+}
+
+func (x *BifrostDescribeTopicResponse) GetPartitionCount() int32 {
+	if x != nil {
+		return x.PartitionCount
+	}
+	return 0
+}
+
+func (x *BifrostDescribeTopicResponse) GetReplicationFactor() int32 {
+	if x != nil {
+		return x.ReplicationFactor
+	}
+	return 0
+}
+
+func (x *BifrostDescribeTopicResponse) GetConfig() map[string]string {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
+func (x *BifrostDescribeTopicResponse) GetPartitions() []*BifrostPartitionInfo {
+	if x != nil {
+		return x.Partitions
+	}
+	return nil
+}
+
+func (x *BifrostDescribeTopicResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type BifrostPartitionInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PartitionId   int32                  `protobuf:"varint,1,opt,name=partition_id,json=partitionId,proto3" json:"partition_id,omitempty"`
+	StartOffset   int64                  `protobuf:"varint,2,opt,name=start_offset,json=startOffset,proto3" json:"start_offset,omitempty"`
+	EndOffset     int64                  `protobuf:"varint,3,opt,name=end_offset,json=endOffset,proto3" json:"end_offset,omitempty"`
+	Leader        int32                  `protobuf:"varint,4,opt,name=leader,proto3" json:"leader,omitempty"`
+	Replicas      []int32                `protobuf:"varint,5,rep,packed,name=replicas,proto3" json:"replicas,omitempty"`
+	Isr           []int32                `protobuf:"varint,6,rep,packed,name=isr,proto3" json:"isr,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BifrostPartitionInfo) Reset() {
+	*x = BifrostPartitionInfo{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[60]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BifrostPartitionInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BifrostPartitionInfo) ProtoMessage() {}
+
+func (x *BifrostPartitionInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[60]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BifrostPartitionInfo.ProtoReflect.Descriptor instead.
+func (*BifrostPartitionInfo) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{60}
+}
+
+func (x *BifrostPartitionInfo) GetPartitionId() int32 {
+	if x != nil {
+		return x.PartitionId
+	}
+	return 0
+}
+
+func (x *BifrostPartitionInfo) GetStartOffset() int64 {
+	if x != nil {
+		return x.StartOffset
+	}
+	return 0
+}
+
+func (x *BifrostPartitionInfo) GetEndOffset() int64 {
+	if x != nil {
+		return x.EndOffset
+	}
+	return 0
+}
+
+func (x *BifrostPartitionInfo) GetLeader() int32 {
+	if x != nil {
+		return x.Leader
+	}
+	return 0
+}
+
+func (x *BifrostPartitionInfo) GetReplicas() []int32 {
+	if x != nil {
+		return x.Replicas
+	}
+	return nil
+}
+
+func (x *BifrostPartitionInfo) GetIsr() []int32 {
+	if x != nil {
+		return x.Isr
+	}
+	return nil
+}
+
+type BifrostUpdateTopicConfigRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	VirtualClusterId string                 `protobuf:"bytes,1,opt,name=virtual_cluster_id,json=virtualClusterId,proto3" json:"virtual_cluster_id,omitempty"`
+	TopicName        string                 `protobuf:"bytes,2,opt,name=topic_name,json=topicName,proto3" json:"topic_name,omitempty"`
+	ConfigEntries    map[string]string      `protobuf:"bytes,3,rep,name=config_entries,json=configEntries,proto3" json:"config_entries,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Key-value config to set
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *BifrostUpdateTopicConfigRequest) Reset() {
+	*x = BifrostUpdateTopicConfigRequest{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[61]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BifrostUpdateTopicConfigRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BifrostUpdateTopicConfigRequest) ProtoMessage() {}
+
+func (x *BifrostUpdateTopicConfigRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[61]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BifrostUpdateTopicConfigRequest.ProtoReflect.Descriptor instead.
+func (*BifrostUpdateTopicConfigRequest) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{61}
+}
+
+func (x *BifrostUpdateTopicConfigRequest) GetVirtualClusterId() string {
+	if x != nil {
+		return x.VirtualClusterId
+	}
+	return ""
+}
+
+func (x *BifrostUpdateTopicConfigRequest) GetTopicName() string {
+	if x != nil {
+		return x.TopicName
+	}
+	return ""
+}
+
+func (x *BifrostUpdateTopicConfigRequest) GetConfigEntries() map[string]string {
+	if x != nil {
+		return x.ConfigEntries
+	}
+	return nil
+}
+
+type BifrostUpdateTopicConfigResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BifrostUpdateTopicConfigResponse) Reset() {
+	*x = BifrostUpdateTopicConfigResponse{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[62]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BifrostUpdateTopicConfigResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BifrostUpdateTopicConfigResponse) ProtoMessage() {}
+
+func (x *BifrostUpdateTopicConfigResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[62]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BifrostUpdateTopicConfigResponse.ProtoReflect.Descriptor instead.
+func (*BifrostUpdateTopicConfigResponse) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{62}
+}
+
+func (x *BifrostUpdateTopicConfigResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *BifrostUpdateTopicConfigResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type BifrostListTopicsRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	VirtualClusterId string                 `protobuf:"bytes,1,opt,name=virtual_cluster_id,json=virtualClusterId,proto3" json:"virtual_cluster_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *BifrostListTopicsRequest) Reset() {
+	*x = BifrostListTopicsRequest{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[63]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BifrostListTopicsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BifrostListTopicsRequest) ProtoMessage() {}
+
+func (x *BifrostListTopicsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[63]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BifrostListTopicsRequest.ProtoReflect.Descriptor instead.
+func (*BifrostListTopicsRequest) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{63}
+}
+
+func (x *BifrostListTopicsRequest) GetVirtualClusterId() string {
+	if x != nil {
+		return x.VirtualClusterId
+	}
+	return ""
+}
+
+type BifrostListTopicsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TopicNames    []string               `protobuf:"bytes,1,rep,name=topic_names,json=topicNames,proto3" json:"topic_names,omitempty"` // Virtual names (prefix stripped)
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BifrostListTopicsResponse) Reset() {
+	*x = BifrostListTopicsResponse{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[64]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BifrostListTopicsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BifrostListTopicsResponse) ProtoMessage() {}
+
+func (x *BifrostListTopicsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[64]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BifrostListTopicsResponse.ProtoReflect.Descriptor instead.
+func (*BifrostListTopicsResponse) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{64}
+}
+
+func (x *BifrostListTopicsResponse) GetTopicNames() []string {
+	if x != nil {
+		return x.TopicNames
+	}
+	return nil
+}
+
+func (x *BifrostListTopicsResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type BifrostGetTopicMetricsRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	VirtualClusterId string                 `protobuf:"bytes,1,opt,name=virtual_cluster_id,json=virtualClusterId,proto3" json:"virtual_cluster_id,omitempty"`
+	TopicName        string                 `protobuf:"bytes,2,opt,name=topic_name,json=topicName,proto3" json:"topic_name,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *BifrostGetTopicMetricsRequest) Reset() {
+	*x = BifrostGetTopicMetricsRequest{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[65]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BifrostGetTopicMetricsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BifrostGetTopicMetricsRequest) ProtoMessage() {}
+
+func (x *BifrostGetTopicMetricsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[65]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BifrostGetTopicMetricsRequest.ProtoReflect.Descriptor instead.
+func (*BifrostGetTopicMetricsRequest) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{65}
+}
+
+func (x *BifrostGetTopicMetricsRequest) GetVirtualClusterId() string {
+	if x != nil {
+		return x.VirtualClusterId
+	}
+	return ""
+}
+
+func (x *BifrostGetTopicMetricsRequest) GetTopicName() string {
+	if x != nil {
+		return x.TopicName
+	}
+	return ""
+}
+
+type BifrostGetTopicMetricsResponse struct {
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	MessageCount  int64                   `protobuf:"varint,1,opt,name=message_count,json=messageCount,proto3" json:"message_count,omitempty"` // Total messages (sum of partition offsets)
+	TotalBytes    int64                   `protobuf:"varint,2,opt,name=total_bytes,json=totalBytes,proto3" json:"total_bytes,omitempty"`       // Estimated total size
+	Partitions    []*BifrostPartitionInfo `protobuf:"bytes,3,rep,name=partitions,proto3" json:"partitions,omitempty"`
+	Error         string                  `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BifrostGetTopicMetricsResponse) Reset() {
+	*x = BifrostGetTopicMetricsResponse{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[66]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BifrostGetTopicMetricsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BifrostGetTopicMetricsResponse) ProtoMessage() {}
+
+func (x *BifrostGetTopicMetricsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[66]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BifrostGetTopicMetricsResponse.ProtoReflect.Descriptor instead.
+func (*BifrostGetTopicMetricsResponse) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{66}
+}
+
+func (x *BifrostGetTopicMetricsResponse) GetMessageCount() int64 {
+	if x != nil {
+		return x.MessageCount
+	}
+	return 0
+}
+
+func (x *BifrostGetTopicMetricsResponse) GetTotalBytes() int64 {
+	if x != nil {
+		return x.TotalBytes
+	}
+	return 0
+}
+
+func (x *BifrostGetTopicMetricsResponse) GetPartitions() []*BifrostPartitionInfo {
+	if x != nil {
+		return x.Partitions
+	}
+	return nil
+}
+
+func (x *BifrostGetTopicMetricsResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type BrowseMessagesRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	VirtualClusterId string                 `protobuf:"bytes,1,opt,name=virtual_cluster_id,json=virtualClusterId,proto3" json:"virtual_cluster_id,omitempty"`
+	TopicName        string                 `protobuf:"bytes,2,opt,name=topic_name,json=topicName,proto3" json:"topic_name,omitempty"` // Virtual name
+	Partitions       []int32                `protobuf:"varint,3,rep,packed,name=partitions,proto3" json:"partitions,omitempty"`        // Empty = all partitions
+	SeekType         SeekType               `protobuf:"varint,4,opt,name=seek_type,json=seekType,proto3,enum=idp.gateway.v1.SeekType" json:"seek_type,omitempty"`
+	StartOffset      int64                  `protobuf:"varint,5,opt,name=start_offset,json=startOffset,proto3" json:"start_offset,omitempty"` // Used when seek_type = OFFSET
+	Limit            int32                  `protobuf:"varint,6,opt,name=limit,proto3" json:"limit,omitempty"`                                // Max messages to return (default 50)
+	Cursor           string                 `protobuf:"bytes,7,opt,name=cursor,proto3" json:"cursor,omitempty"`                               // Opaque cursor for pagination
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *BrowseMessagesRequest) Reset() {
+	*x = BrowseMessagesRequest{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[67]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowseMessagesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowseMessagesRequest) ProtoMessage() {}
+
+func (x *BrowseMessagesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[67]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowseMessagesRequest.ProtoReflect.Descriptor instead.
+func (*BrowseMessagesRequest) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{67}
+}
+
+func (x *BrowseMessagesRequest) GetVirtualClusterId() string {
+	if x != nil {
+		return x.VirtualClusterId
+	}
+	return ""
+}
+
+func (x *BrowseMessagesRequest) GetTopicName() string {
+	if x != nil {
+		return x.TopicName
+	}
+	return ""
+}
+
+func (x *BrowseMessagesRequest) GetPartitions() []int32 {
+	if x != nil {
+		return x.Partitions
+	}
+	return nil
+}
+
+func (x *BrowseMessagesRequest) GetSeekType() SeekType {
+	if x != nil {
+		return x.SeekType
+	}
+	return SeekType_SEEK_TYPE_UNSPECIFIED
+}
+
+func (x *BrowseMessagesRequest) GetStartOffset() int64 {
+	if x != nil {
+		return x.StartOffset
+	}
+	return 0
+}
+
+func (x *BrowseMessagesRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *BrowseMessagesRequest) GetCursor() string {
+	if x != nil {
+		return x.Cursor
+	}
+	return ""
+}
+
+type BrowseMessagesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Messages      []*BifrostKafkaMessage `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
+	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"` // Opaque cursor for next page
+	HasMore       bool                   `protobuf:"varint,3,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
+	Error         string                 `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BrowseMessagesResponse) Reset() {
+	*x = BrowseMessagesResponse{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[68]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowseMessagesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowseMessagesResponse) ProtoMessage() {}
+
+func (x *BrowseMessagesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[68]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowseMessagesResponse.ProtoReflect.Descriptor instead.
+func (*BrowseMessagesResponse) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{68}
+}
+
+func (x *BrowseMessagesResponse) GetMessages() []*BifrostKafkaMessage {
+	if x != nil {
+		return x.Messages
+	}
+	return nil
+}
+
+func (x *BrowseMessagesResponse) GetNextCursor() string {
+	if x != nil {
+		return x.NextCursor
+	}
+	return ""
+}
+
+func (x *BrowseMessagesResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
+}
+
+func (x *BrowseMessagesResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type BifrostKafkaMessage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Partition     int32                  `protobuf:"varint,1,opt,name=partition,proto3" json:"partition,omitempty"`
+	Offset        int64                  `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
+	Timestamp     int64                  `protobuf:"varint,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"` // Unix milliseconds
+	Key           []byte                 `protobuf:"bytes,4,opt,name=key,proto3" json:"key,omitempty"`
+	Value         []byte                 `protobuf:"bytes,5,opt,name=value,proto3" json:"value,omitempty"`
+	Headers       map[string][]byte      `protobuf:"bytes,6,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	KeySize       int32                  `protobuf:"varint,7,opt,name=key_size,json=keySize,proto3" json:"key_size,omitempty"`       // Original size before truncation
+	ValueSize     int32                  `protobuf:"varint,8,opt,name=value_size,json=valueSize,proto3" json:"value_size,omitempty"` // Original size before truncation
+	Truncated     bool                   `protobuf:"varint,9,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BifrostKafkaMessage) Reset() {
+	*x = BifrostKafkaMessage{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[69]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BifrostKafkaMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BifrostKafkaMessage) ProtoMessage() {}
+
+func (x *BifrostKafkaMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[69]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BifrostKafkaMessage.ProtoReflect.Descriptor instead.
+func (*BifrostKafkaMessage) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{69}
+}
+
+func (x *BifrostKafkaMessage) GetPartition() int32 {
+	if x != nil {
+		return x.Partition
+	}
+	return 0
+}
+
+func (x *BifrostKafkaMessage) GetOffset() int64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *BifrostKafkaMessage) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+func (x *BifrostKafkaMessage) GetKey() []byte {
+	if x != nil {
+		return x.Key
+	}
+	return nil
+}
+
+func (x *BifrostKafkaMessage) GetValue() []byte {
+	if x != nil {
+		return x.Value
+	}
+	return nil
+}
+
+func (x *BifrostKafkaMessage) GetHeaders() map[string][]byte {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
+func (x *BifrostKafkaMessage) GetKeySize() int32 {
+	if x != nil {
+		return x.KeySize
+	}
+	return 0
+}
+
+func (x *BifrostKafkaMessage) GetValueSize() int32 {
+	if x != nil {
+		return x.ValueSize
+	}
+	return 0
+}
+
+func (x *BifrostKafkaMessage) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
+type ProduceMessageRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	VirtualClusterId string                 `protobuf:"bytes,1,opt,name=virtual_cluster_id,json=virtualClusterId,proto3" json:"virtual_cluster_id,omitempty"`
+	TopicName        string                 `protobuf:"bytes,2,opt,name=topic_name,json=topicName,proto3" json:"topic_name,omitempty"` // Virtual name
+	Partition        *int32                 `protobuf:"varint,3,opt,name=partition,proto3,oneof" json:"partition,omitempty"`           // Optional; auto-assign if not set
+	Key              []byte                 `protobuf:"bytes,4,opt,name=key,proto3" json:"key,omitempty"`
+	Value            []byte                 `protobuf:"bytes,5,opt,name=value,proto3" json:"value,omitempty"`
+	Headers          map[string][]byte      `protobuf:"bytes,6,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ProduceMessageRequest) Reset() {
+	*x = ProduceMessageRequest{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[70]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProduceMessageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProduceMessageRequest) ProtoMessage() {}
+
+func (x *ProduceMessageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[70]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProduceMessageRequest.ProtoReflect.Descriptor instead.
+func (*ProduceMessageRequest) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{70}
+}
+
+func (x *ProduceMessageRequest) GetVirtualClusterId() string {
+	if x != nil {
+		return x.VirtualClusterId
+	}
+	return ""
+}
+
+func (x *ProduceMessageRequest) GetTopicName() string {
+	if x != nil {
+		return x.TopicName
+	}
+	return ""
+}
+
+func (x *ProduceMessageRequest) GetPartition() int32 {
+	if x != nil && x.Partition != nil {
+		return *x.Partition
+	}
+	return 0
+}
+
+func (x *ProduceMessageRequest) GetKey() []byte {
+	if x != nil {
+		return x.Key
+	}
+	return nil
+}
+
+func (x *ProduceMessageRequest) GetValue() []byte {
+	if x != nil {
+		return x.Value
+	}
+	return nil
+}
+
+func (x *ProduceMessageRequest) GetHeaders() map[string][]byte {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
+type ProduceMessageResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Partition     int32                  `protobuf:"varint,1,opt,name=partition,proto3" json:"partition,omitempty"`
+	Offset        int64                  `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
+	Timestamp     int64                  `protobuf:"varint,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"` // Unix milliseconds
+	Error         string                 `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProduceMessageResponse) Reset() {
+	*x = ProduceMessageResponse{}
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[71]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProduceMessageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProduceMessageResponse) ProtoMessage() {}
+
+func (x *ProduceMessageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_gateway_v1_gateway_proto_msgTypes[71]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProduceMessageResponse.ProtoReflect.Descriptor instead.
+func (*ProduceMessageResponse) Descriptor() ([]byte, []int) {
+	return file_idp_gateway_v1_gateway_proto_rawDescGZIP(), []int{71}
+}
+
+func (x *ProduceMessageResponse) GetPartition() int32 {
+	if x != nil {
+		return x.Partition
+	}
+	return 0
+}
+
+func (x *ProduceMessageResponse) GetOffset() int64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *ProduceMessageResponse) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+func (x *ProduceMessageResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 var File_idp_gateway_v1_gateway_proto protoreflect.FileDescriptor
 
 const file_idp_gateway_v1_gateway_proto_rawDesc = "" +
@@ -3452,7 +4696,130 @@ const file_idp_gateway_v1_gateway_proto_rawDesc = "" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x12=\n" +
 	"\vnew_offsets\x18\x03 \x03(\v2\x1c.idp.gateway.v1.PartitionLagR\n" +
-	"newOffsets*\xbc\x01\n" +
+	"newOffsets\"\xc1\x02\n" +
+	"\x19BifrostCreateTopicRequest\x12,\n" +
+	"\x12virtual_cluster_id\x18\x01 \x01(\tR\x10virtualClusterId\x12\x1d\n" +
+	"\n" +
+	"topic_name\x18\x02 \x01(\tR\ttopicName\x12\x1e\n" +
+	"\n" +
+	"partitions\x18\x03 \x01(\x05R\n" +
+	"partitions\x12-\n" +
+	"\x12replication_factor\x18\x04 \x01(\x05R\x11replicationFactor\x12M\n" +
+	"\x06config\x18\x05 \x03(\v25.idp.gateway.v1.BifrostCreateTopicRequest.ConfigEntryR\x06config\x1a9\n" +
+	"\vConfigEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"L\n" +
+	"\x1aBifrostCreateTopicResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"h\n" +
+	"\x19BifrostDeleteTopicRequest\x12,\n" +
+	"\x12virtual_cluster_id\x18\x01 \x01(\tR\x10virtualClusterId\x12\x1d\n" +
+	"\n" +
+	"topic_name\x18\x02 \x01(\tR\ttopicName\"L\n" +
+	"\x1aBifrostDeleteTopicResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"j\n" +
+	"\x1bBifrostDescribeTopicRequest\x12,\n" +
+	"\x12virtual_cluster_id\x18\x01 \x01(\tR\x10virtualClusterId\x12\x1d\n" +
+	"\n" +
+	"topic_name\x18\x02 \x01(\tR\ttopicName\"\xdf\x02\n" +
+	"\x1cBifrostDescribeTopicResponse\x12'\n" +
+	"\x0fpartition_count\x18\x01 \x01(\x05R\x0epartitionCount\x12-\n" +
+	"\x12replication_factor\x18\x02 \x01(\x05R\x11replicationFactor\x12P\n" +
+	"\x06config\x18\x03 \x03(\v28.idp.gateway.v1.BifrostDescribeTopicResponse.ConfigEntryR\x06config\x12D\n" +
+	"\n" +
+	"partitions\x18\x04 \x03(\v2$.idp.gateway.v1.BifrostPartitionInfoR\n" +
+	"partitions\x12\x14\n" +
+	"\x05error\x18\x05 \x01(\tR\x05error\x1a9\n" +
+	"\vConfigEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc1\x01\n" +
+	"\x14BifrostPartitionInfo\x12!\n" +
+	"\fpartition_id\x18\x01 \x01(\x05R\vpartitionId\x12!\n" +
+	"\fstart_offset\x18\x02 \x01(\x03R\vstartOffset\x12\x1d\n" +
+	"\n" +
+	"end_offset\x18\x03 \x01(\x03R\tendOffset\x12\x16\n" +
+	"\x06leader\x18\x04 \x01(\x05R\x06leader\x12\x1a\n" +
+	"\breplicas\x18\x05 \x03(\x05R\breplicas\x12\x10\n" +
+	"\x03isr\x18\x06 \x03(\x05R\x03isr\"\x9b\x02\n" +
+	"\x1fBifrostUpdateTopicConfigRequest\x12,\n" +
+	"\x12virtual_cluster_id\x18\x01 \x01(\tR\x10virtualClusterId\x12\x1d\n" +
+	"\n" +
+	"topic_name\x18\x02 \x01(\tR\ttopicName\x12i\n" +
+	"\x0econfig_entries\x18\x03 \x03(\v2B.idp.gateway.v1.BifrostUpdateTopicConfigRequest.ConfigEntriesEntryR\rconfigEntries\x1a@\n" +
+	"\x12ConfigEntriesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"R\n" +
+	" BifrostUpdateTopicConfigResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"H\n" +
+	"\x18BifrostListTopicsRequest\x12,\n" +
+	"\x12virtual_cluster_id\x18\x01 \x01(\tR\x10virtualClusterId\"R\n" +
+	"\x19BifrostListTopicsResponse\x12\x1f\n" +
+	"\vtopic_names\x18\x01 \x03(\tR\n" +
+	"topicNames\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"l\n" +
+	"\x1dBifrostGetTopicMetricsRequest\x12,\n" +
+	"\x12virtual_cluster_id\x18\x01 \x01(\tR\x10virtualClusterId\x12\x1d\n" +
+	"\n" +
+	"topic_name\x18\x02 \x01(\tR\ttopicName\"\xc2\x01\n" +
+	"\x1eBifrostGetTopicMetricsResponse\x12#\n" +
+	"\rmessage_count\x18\x01 \x01(\x03R\fmessageCount\x12\x1f\n" +
+	"\vtotal_bytes\x18\x02 \x01(\x03R\n" +
+	"totalBytes\x12D\n" +
+	"\n" +
+	"partitions\x18\x03 \x03(\v2$.idp.gateway.v1.BifrostPartitionInfoR\n" +
+	"partitions\x12\x14\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\"\x8c\x02\n" +
+	"\x15BrowseMessagesRequest\x12,\n" +
+	"\x12virtual_cluster_id\x18\x01 \x01(\tR\x10virtualClusterId\x12\x1d\n" +
+	"\n" +
+	"topic_name\x18\x02 \x01(\tR\ttopicName\x12\x1e\n" +
+	"\n" +
+	"partitions\x18\x03 \x03(\x05R\n" +
+	"partitions\x125\n" +
+	"\tseek_type\x18\x04 \x01(\x0e2\x18.idp.gateway.v1.SeekTypeR\bseekType\x12!\n" +
+	"\fstart_offset\x18\x05 \x01(\x03R\vstartOffset\x12\x14\n" +
+	"\x05limit\x18\x06 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06cursor\x18\a \x01(\tR\x06cursor\"\xab\x01\n" +
+	"\x16BrowseMessagesResponse\x12?\n" +
+	"\bmessages\x18\x01 \x03(\v2#.idp.gateway.v1.BifrostKafkaMessageR\bmessages\x12\x1f\n" +
+	"\vnext_cursor\x18\x02 \x01(\tR\n" +
+	"nextCursor\x12\x19\n" +
+	"\bhas_more\x18\x03 \x01(\bR\ahasMore\x12\x14\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\"\xf1\x02\n" +
+	"\x13BifrostKafkaMessage\x12\x1c\n" +
+	"\tpartition\x18\x01 \x01(\x05R\tpartition\x12\x16\n" +
+	"\x06offset\x18\x02 \x01(\x03R\x06offset\x12\x1c\n" +
+	"\ttimestamp\x18\x03 \x01(\x03R\ttimestamp\x12\x10\n" +
+	"\x03key\x18\x04 \x01(\fR\x03key\x12\x14\n" +
+	"\x05value\x18\x05 \x01(\fR\x05value\x12J\n" +
+	"\aheaders\x18\x06 \x03(\v20.idp.gateway.v1.BifrostKafkaMessage.HeadersEntryR\aheaders\x12\x19\n" +
+	"\bkey_size\x18\a \x01(\x05R\akeySize\x12\x1d\n" +
+	"\n" +
+	"value_size\x18\b \x01(\x05R\tvalueSize\x12\x1c\n" +
+	"\ttruncated\x18\t \x01(\bR\ttruncated\x1a:\n" +
+	"\fHeadersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01\"\xc7\x02\n" +
+	"\x15ProduceMessageRequest\x12,\n" +
+	"\x12virtual_cluster_id\x18\x01 \x01(\tR\x10virtualClusterId\x12\x1d\n" +
+	"\n" +
+	"topic_name\x18\x02 \x01(\tR\ttopicName\x12!\n" +
+	"\tpartition\x18\x03 \x01(\x05H\x00R\tpartition\x88\x01\x01\x12\x10\n" +
+	"\x03key\x18\x04 \x01(\fR\x03key\x12\x14\n" +
+	"\x05value\x18\x05 \x01(\fR\x05value\x12L\n" +
+	"\aheaders\x18\x06 \x03(\v22.idp.gateway.v1.ProduceMessageRequest.HeadersEntryR\aheaders\x1a:\n" +
+	"\fHeadersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01B\f\n" +
+	"\n" +
+	"_partition\"\x82\x01\n" +
+	"\x16ProduceMessageResponse\x12\x1c\n" +
+	"\tpartition\x18\x01 \x01(\x05R\tpartition\x12\x16\n" +
+	"\x06offset\x18\x02 \x01(\x03R\x06offset\x12\x1c\n" +
+	"\ttimestamp\x18\x03 \x01(\x03R\ttimestamp\x12\x14\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error*\xbc\x01\n" +
 	"\x12PermissionTemplate\x12#\n" +
 	"\x1fPERMISSION_TEMPLATE_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cPERMISSION_TEMPLATE_PRODUCER\x10\x01\x12 \n" +
@@ -3470,7 +4837,12 @@ const file_idp_gateway_v1_gateway_proto_rawDesc = "" +
 	"\x1dOFFSET_RESET_TYPE_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aOFFSET_RESET_TYPE_EARLIEST\x10\x01\x12\x1c\n" +
 	"\x18OFFSET_RESET_TYPE_LATEST\x10\x02\x12\x1f\n" +
-	"\x1bOFFSET_RESET_TYPE_TIMESTAMP\x10\x032\xe7\x0e\n" +
+	"\x1bOFFSET_RESET_TYPE_TIMESTAMP\x10\x03*g\n" +
+	"\bSeekType\x12\x19\n" +
+	"\x15SEEK_TYPE_UNSPECIFIED\x10\x00\x12\x14\n" +
+	"\x10SEEK_TYPE_NEWEST\x10\x01\x12\x14\n" +
+	"\x10SEEK_TYPE_OLDEST\x10\x02\x12\x14\n" +
+	"\x10SEEK_TYPE_OFFSET\x10\x032\xae\x15\n" +
 	"\x13BifrostAdminService\x12q\n" +
 	"\x14UpsertVirtualCluster\x12+.idp.gateway.v1.UpsertVirtualClusterRequest\x1a,.idp.gateway.v1.UpsertVirtualClusterResponse\x12q\n" +
 	"\x14DeleteVirtualCluster\x12+.idp.gateway.v1.DeleteVirtualClusterRequest\x1a,.idp.gateway.v1.DeleteVirtualClusterResponse\x12\x80\x01\n" +
@@ -3489,7 +4861,16 @@ const file_idp_gateway_v1_gateway_proto_rawDesc = "" +
 	"\rListTopicACLs\x12$.idp.gateway.v1.ListTopicACLsRequest\x1a%.idp.gateway.v1.ListTopicACLsResponse\x12k\n" +
 	"\x12ListConsumerGroups\x12).idp.gateway.v1.ListConsumerGroupsRequest\x1a*.idp.gateway.v1.ListConsumerGroupsResponse\x12t\n" +
 	"\x15DescribeConsumerGroup\x12,.idp.gateway.v1.DescribeConsumerGroupRequest\x1a-.idp.gateway.v1.DescribeConsumerGroupResponse\x12\x80\x01\n" +
-	"\x19ResetConsumerGroupOffsets\x120.idp.gateway.v1.ResetConsumerGroupOffsetsRequest\x1a1.idp.gateway.v1.ResetConsumerGroupOffsetsResponse2\xa8\x03\n" +
+	"\x19ResetConsumerGroupOffsets\x120.idp.gateway.v1.ResetConsumerGroupOffsetsRequest\x1a1.idp.gateway.v1.ResetConsumerGroupOffsetsResponse\x12d\n" +
+	"\vCreateTopic\x12).idp.gateway.v1.BifrostCreateTopicRequest\x1a*.idp.gateway.v1.BifrostCreateTopicResponse\x12d\n" +
+	"\vDeleteTopic\x12).idp.gateway.v1.BifrostDeleteTopicRequest\x1a*.idp.gateway.v1.BifrostDeleteTopicResponse\x12j\n" +
+	"\rDescribeTopic\x12+.idp.gateway.v1.BifrostDescribeTopicRequest\x1a,.idp.gateway.v1.BifrostDescribeTopicResponse\x12v\n" +
+	"\x11UpdateTopicConfig\x12/.idp.gateway.v1.BifrostUpdateTopicConfigRequest\x1a0.idp.gateway.v1.BifrostUpdateTopicConfigResponse\x12a\n" +
+	"\n" +
+	"ListTopics\x12(.idp.gateway.v1.BifrostListTopicsRequest\x1a).idp.gateway.v1.BifrostListTopicsResponse\x12p\n" +
+	"\x0fGetTopicMetrics\x12-.idp.gateway.v1.BifrostGetTopicMetricsRequest\x1a..idp.gateway.v1.BifrostGetTopicMetricsResponse\x12_\n" +
+	"\x0eBrowseMessages\x12%.idp.gateway.v1.BrowseMessagesRequest\x1a&.idp.gateway.v1.BrowseMessagesResponse\x12_\n" +
+	"\x0eProduceMessage\x12%.idp.gateway.v1.ProduceMessageRequest\x1a&.idp.gateway.v1.ProduceMessageResponse2\xa8\x03\n" +
 	"\x16BifrostCallbackService\x12Y\n" +
 	"\fTopicCreated\x12#.idp.gateway.v1.TopicCreatedRequest\x1a$.idp.gateway.v1.TopicCreatedResponse\x12Y\n" +
 	"\fTopicDeleted\x12#.idp.gateway.v1.TopicDeletedRequest\x1a$.idp.gateway.v1.TopicDeletedResponse\x12k\n" +
@@ -3509,149 +4890,198 @@ func file_idp_gateway_v1_gateway_proto_rawDescGZIP() []byte {
 	return file_idp_gateway_v1_gateway_proto_rawDescData
 }
 
-var file_idp_gateway_v1_gateway_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_idp_gateway_v1_gateway_proto_msgTypes = make([]protoimpl.MessageInfo, 57)
+var file_idp_gateway_v1_gateway_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_idp_gateway_v1_gateway_proto_msgTypes = make([]protoimpl.MessageInfo, 80)
 var file_idp_gateway_v1_gateway_proto_goTypes = []any{
 	(PermissionTemplate)(0),                   // 0: idp.gateway.v1.PermissionTemplate
 	(ConsumerGroupState)(0),                   // 1: idp.gateway.v1.ConsumerGroupState
 	(OffsetResetType)(0),                      // 2: idp.gateway.v1.OffsetResetType
-	(*VirtualClusterConfig)(nil),              // 3: idp.gateway.v1.VirtualClusterConfig
-	(*UpsertVirtualClusterRequest)(nil),       // 4: idp.gateway.v1.UpsertVirtualClusterRequest
-	(*UpsertVirtualClusterResponse)(nil),      // 5: idp.gateway.v1.UpsertVirtualClusterResponse
-	(*DeleteVirtualClusterRequest)(nil),       // 6: idp.gateway.v1.DeleteVirtualClusterRequest
-	(*DeleteVirtualClusterResponse)(nil),      // 7: idp.gateway.v1.DeleteVirtualClusterResponse
-	(*SetVirtualClusterReadOnlyRequest)(nil),  // 8: idp.gateway.v1.SetVirtualClusterReadOnlyRequest
-	(*SetVirtualClusterReadOnlyResponse)(nil), // 9: idp.gateway.v1.SetVirtualClusterReadOnlyResponse
-	(*GetFullConfigRequest)(nil),              // 10: idp.gateway.v1.GetFullConfigRequest
-	(*GetFullConfigResponse)(nil),             // 11: idp.gateway.v1.GetFullConfigResponse
-	(*GetStatusRequest)(nil),                  // 12: idp.gateway.v1.GetStatusRequest
-	(*GetStatusResponse)(nil),                 // 13: idp.gateway.v1.GetStatusResponse
-	(*ListVirtualClustersRequest)(nil),        // 14: idp.gateway.v1.ListVirtualClustersRequest
-	(*ListVirtualClustersResponse)(nil),       // 15: idp.gateway.v1.ListVirtualClustersResponse
-	(*CustomPermission)(nil),                  // 16: idp.gateway.v1.CustomPermission
-	(*CredentialConfig)(nil),                  // 17: idp.gateway.v1.CredentialConfig
-	(*UpsertCredentialRequest)(nil),           // 18: idp.gateway.v1.UpsertCredentialRequest
-	(*UpsertCredentialResponse)(nil),          // 19: idp.gateway.v1.UpsertCredentialResponse
-	(*RevokeCredentialRequest)(nil),           // 20: idp.gateway.v1.RevokeCredentialRequest
-	(*RevokeCredentialResponse)(nil),          // 21: idp.gateway.v1.RevokeCredentialResponse
-	(*ListCredentialsRequest)(nil),            // 22: idp.gateway.v1.ListCredentialsRequest
-	(*ListCredentialsResponse)(nil),           // 23: idp.gateway.v1.ListCredentialsResponse
-	(*PolicyConfig)(nil),                      // 24: idp.gateway.v1.PolicyConfig
-	(*UpsertPolicyRequest)(nil),               // 25: idp.gateway.v1.UpsertPolicyRequest
-	(*UpsertPolicyResponse)(nil),              // 26: idp.gateway.v1.UpsertPolicyResponse
-	(*DeletePolicyRequest)(nil),               // 27: idp.gateway.v1.DeletePolicyRequest
-	(*DeletePolicyResponse)(nil),              // 28: idp.gateway.v1.DeletePolicyResponse
-	(*ListPoliciesRequest)(nil),               // 29: idp.gateway.v1.ListPoliciesRequest
-	(*ListPoliciesResponse)(nil),              // 30: idp.gateway.v1.ListPoliciesResponse
-	(*TopicACLEntry)(nil),                     // 31: idp.gateway.v1.TopicACLEntry
-	(*UpsertTopicACLRequest)(nil),             // 32: idp.gateway.v1.UpsertTopicACLRequest
-	(*UpsertTopicACLResponse)(nil),            // 33: idp.gateway.v1.UpsertTopicACLResponse
-	(*RevokeTopicACLRequest)(nil),             // 34: idp.gateway.v1.RevokeTopicACLRequest
-	(*RevokeTopicACLResponse)(nil),            // 35: idp.gateway.v1.RevokeTopicACLResponse
-	(*ListTopicACLsRequest)(nil),              // 36: idp.gateway.v1.ListTopicACLsRequest
-	(*ListTopicACLsResponse)(nil),             // 37: idp.gateway.v1.ListTopicACLsResponse
-	(*TopicCreatedRequest)(nil),               // 38: idp.gateway.v1.TopicCreatedRequest
-	(*TopicCreatedResponse)(nil),              // 39: idp.gateway.v1.TopicCreatedResponse
-	(*TopicDeletedRequest)(nil),               // 40: idp.gateway.v1.TopicDeletedRequest
-	(*TopicDeletedResponse)(nil),              // 41: idp.gateway.v1.TopicDeletedResponse
-	(*TopicConfigUpdatedRequest)(nil),         // 42: idp.gateway.v1.TopicConfigUpdatedRequest
-	(*TopicConfigUpdatedResponse)(nil),        // 43: idp.gateway.v1.TopicConfigUpdatedResponse
-	(*PolicyViolation)(nil),                   // 44: idp.gateway.v1.PolicyViolation
-	(*ClientActivityRecord)(nil),              // 45: idp.gateway.v1.ClientActivityRecord
-	(*EmitClientActivityRequest)(nil),         // 46: idp.gateway.v1.EmitClientActivityRequest
-	(*EmitClientActivityResponse)(nil),        // 47: idp.gateway.v1.EmitClientActivityResponse
-	(*ConsumerGroupSummary)(nil),              // 48: idp.gateway.v1.ConsumerGroupSummary
-	(*PartitionLag)(nil),                      // 49: idp.gateway.v1.PartitionLag
-	(*ConsumerGroupDetail)(nil),               // 50: idp.gateway.v1.ConsumerGroupDetail
-	(*ListConsumerGroupsRequest)(nil),         // 51: idp.gateway.v1.ListConsumerGroupsRequest
-	(*ListConsumerGroupsResponse)(nil),        // 52: idp.gateway.v1.ListConsumerGroupsResponse
-	(*DescribeConsumerGroupRequest)(nil),      // 53: idp.gateway.v1.DescribeConsumerGroupRequest
-	(*DescribeConsumerGroupResponse)(nil),     // 54: idp.gateway.v1.DescribeConsumerGroupResponse
-	(*ResetConsumerGroupOffsetsRequest)(nil),  // 55: idp.gateway.v1.ResetConsumerGroupOffsetsRequest
-	(*ResetConsumerGroupOffsetsResponse)(nil), // 56: idp.gateway.v1.ResetConsumerGroupOffsetsResponse
-	nil,                           // 57: idp.gateway.v1.GetStatusResponse.VersionInfoEntry
-	nil,                           // 58: idp.gateway.v1.TopicCreatedRequest.ConfigEntry
-	nil,                           // 59: idp.gateway.v1.TopicConfigUpdatedRequest.ConfigEntry
-	(*timestamppb.Timestamp)(nil), // 60: google.protobuf.Timestamp
+	(SeekType)(0),                             // 3: idp.gateway.v1.SeekType
+	(*VirtualClusterConfig)(nil),              // 4: idp.gateway.v1.VirtualClusterConfig
+	(*UpsertVirtualClusterRequest)(nil),       // 5: idp.gateway.v1.UpsertVirtualClusterRequest
+	(*UpsertVirtualClusterResponse)(nil),      // 6: idp.gateway.v1.UpsertVirtualClusterResponse
+	(*DeleteVirtualClusterRequest)(nil),       // 7: idp.gateway.v1.DeleteVirtualClusterRequest
+	(*DeleteVirtualClusterResponse)(nil),      // 8: idp.gateway.v1.DeleteVirtualClusterResponse
+	(*SetVirtualClusterReadOnlyRequest)(nil),  // 9: idp.gateway.v1.SetVirtualClusterReadOnlyRequest
+	(*SetVirtualClusterReadOnlyResponse)(nil), // 10: idp.gateway.v1.SetVirtualClusterReadOnlyResponse
+	(*GetFullConfigRequest)(nil),              // 11: idp.gateway.v1.GetFullConfigRequest
+	(*GetFullConfigResponse)(nil),             // 12: idp.gateway.v1.GetFullConfigResponse
+	(*GetStatusRequest)(nil),                  // 13: idp.gateway.v1.GetStatusRequest
+	(*GetStatusResponse)(nil),                 // 14: idp.gateway.v1.GetStatusResponse
+	(*ListVirtualClustersRequest)(nil),        // 15: idp.gateway.v1.ListVirtualClustersRequest
+	(*ListVirtualClustersResponse)(nil),       // 16: idp.gateway.v1.ListVirtualClustersResponse
+	(*CustomPermission)(nil),                  // 17: idp.gateway.v1.CustomPermission
+	(*CredentialConfig)(nil),                  // 18: idp.gateway.v1.CredentialConfig
+	(*UpsertCredentialRequest)(nil),           // 19: idp.gateway.v1.UpsertCredentialRequest
+	(*UpsertCredentialResponse)(nil),          // 20: idp.gateway.v1.UpsertCredentialResponse
+	(*RevokeCredentialRequest)(nil),           // 21: idp.gateway.v1.RevokeCredentialRequest
+	(*RevokeCredentialResponse)(nil),          // 22: idp.gateway.v1.RevokeCredentialResponse
+	(*ListCredentialsRequest)(nil),            // 23: idp.gateway.v1.ListCredentialsRequest
+	(*ListCredentialsResponse)(nil),           // 24: idp.gateway.v1.ListCredentialsResponse
+	(*PolicyConfig)(nil),                      // 25: idp.gateway.v1.PolicyConfig
+	(*UpsertPolicyRequest)(nil),               // 26: idp.gateway.v1.UpsertPolicyRequest
+	(*UpsertPolicyResponse)(nil),              // 27: idp.gateway.v1.UpsertPolicyResponse
+	(*DeletePolicyRequest)(nil),               // 28: idp.gateway.v1.DeletePolicyRequest
+	(*DeletePolicyResponse)(nil),              // 29: idp.gateway.v1.DeletePolicyResponse
+	(*ListPoliciesRequest)(nil),               // 30: idp.gateway.v1.ListPoliciesRequest
+	(*ListPoliciesResponse)(nil),              // 31: idp.gateway.v1.ListPoliciesResponse
+	(*TopicACLEntry)(nil),                     // 32: idp.gateway.v1.TopicACLEntry
+	(*UpsertTopicACLRequest)(nil),             // 33: idp.gateway.v1.UpsertTopicACLRequest
+	(*UpsertTopicACLResponse)(nil),            // 34: idp.gateway.v1.UpsertTopicACLResponse
+	(*RevokeTopicACLRequest)(nil),             // 35: idp.gateway.v1.RevokeTopicACLRequest
+	(*RevokeTopicACLResponse)(nil),            // 36: idp.gateway.v1.RevokeTopicACLResponse
+	(*ListTopicACLsRequest)(nil),              // 37: idp.gateway.v1.ListTopicACLsRequest
+	(*ListTopicACLsResponse)(nil),             // 38: idp.gateway.v1.ListTopicACLsResponse
+	(*TopicCreatedRequest)(nil),               // 39: idp.gateway.v1.TopicCreatedRequest
+	(*TopicCreatedResponse)(nil),              // 40: idp.gateway.v1.TopicCreatedResponse
+	(*TopicDeletedRequest)(nil),               // 41: idp.gateway.v1.TopicDeletedRequest
+	(*TopicDeletedResponse)(nil),              // 42: idp.gateway.v1.TopicDeletedResponse
+	(*TopicConfigUpdatedRequest)(nil),         // 43: idp.gateway.v1.TopicConfigUpdatedRequest
+	(*TopicConfigUpdatedResponse)(nil),        // 44: idp.gateway.v1.TopicConfigUpdatedResponse
+	(*PolicyViolation)(nil),                   // 45: idp.gateway.v1.PolicyViolation
+	(*ClientActivityRecord)(nil),              // 46: idp.gateway.v1.ClientActivityRecord
+	(*EmitClientActivityRequest)(nil),         // 47: idp.gateway.v1.EmitClientActivityRequest
+	(*EmitClientActivityResponse)(nil),        // 48: idp.gateway.v1.EmitClientActivityResponse
+	(*ConsumerGroupSummary)(nil),              // 49: idp.gateway.v1.ConsumerGroupSummary
+	(*PartitionLag)(nil),                      // 50: idp.gateway.v1.PartitionLag
+	(*ConsumerGroupDetail)(nil),               // 51: idp.gateway.v1.ConsumerGroupDetail
+	(*ListConsumerGroupsRequest)(nil),         // 52: idp.gateway.v1.ListConsumerGroupsRequest
+	(*ListConsumerGroupsResponse)(nil),        // 53: idp.gateway.v1.ListConsumerGroupsResponse
+	(*DescribeConsumerGroupRequest)(nil),      // 54: idp.gateway.v1.DescribeConsumerGroupRequest
+	(*DescribeConsumerGroupResponse)(nil),     // 55: idp.gateway.v1.DescribeConsumerGroupResponse
+	(*ResetConsumerGroupOffsetsRequest)(nil),  // 56: idp.gateway.v1.ResetConsumerGroupOffsetsRequest
+	(*ResetConsumerGroupOffsetsResponse)(nil), // 57: idp.gateway.v1.ResetConsumerGroupOffsetsResponse
+	(*BifrostCreateTopicRequest)(nil),         // 58: idp.gateway.v1.BifrostCreateTopicRequest
+	(*BifrostCreateTopicResponse)(nil),        // 59: idp.gateway.v1.BifrostCreateTopicResponse
+	(*BifrostDeleteTopicRequest)(nil),         // 60: idp.gateway.v1.BifrostDeleteTopicRequest
+	(*BifrostDeleteTopicResponse)(nil),        // 61: idp.gateway.v1.BifrostDeleteTopicResponse
+	(*BifrostDescribeTopicRequest)(nil),       // 62: idp.gateway.v1.BifrostDescribeTopicRequest
+	(*BifrostDescribeTopicResponse)(nil),      // 63: idp.gateway.v1.BifrostDescribeTopicResponse
+	(*BifrostPartitionInfo)(nil),              // 64: idp.gateway.v1.BifrostPartitionInfo
+	(*BifrostUpdateTopicConfigRequest)(nil),   // 65: idp.gateway.v1.BifrostUpdateTopicConfigRequest
+	(*BifrostUpdateTopicConfigResponse)(nil),  // 66: idp.gateway.v1.BifrostUpdateTopicConfigResponse
+	(*BifrostListTopicsRequest)(nil),          // 67: idp.gateway.v1.BifrostListTopicsRequest
+	(*BifrostListTopicsResponse)(nil),         // 68: idp.gateway.v1.BifrostListTopicsResponse
+	(*BifrostGetTopicMetricsRequest)(nil),     // 69: idp.gateway.v1.BifrostGetTopicMetricsRequest
+	(*BifrostGetTopicMetricsResponse)(nil),    // 70: idp.gateway.v1.BifrostGetTopicMetricsResponse
+	(*BrowseMessagesRequest)(nil),             // 71: idp.gateway.v1.BrowseMessagesRequest
+	(*BrowseMessagesResponse)(nil),            // 72: idp.gateway.v1.BrowseMessagesResponse
+	(*BifrostKafkaMessage)(nil),               // 73: idp.gateway.v1.BifrostKafkaMessage
+	(*ProduceMessageRequest)(nil),             // 74: idp.gateway.v1.ProduceMessageRequest
+	(*ProduceMessageResponse)(nil),            // 75: idp.gateway.v1.ProduceMessageResponse
+	nil,                                       // 76: idp.gateway.v1.GetStatusResponse.VersionInfoEntry
+	nil,                                       // 77: idp.gateway.v1.TopicCreatedRequest.ConfigEntry
+	nil,                                       // 78: idp.gateway.v1.TopicConfigUpdatedRequest.ConfigEntry
+	nil,                                       // 79: idp.gateway.v1.BifrostCreateTopicRequest.ConfigEntry
+	nil,                                       // 80: idp.gateway.v1.BifrostDescribeTopicResponse.ConfigEntry
+	nil,                                       // 81: idp.gateway.v1.BifrostUpdateTopicConfigRequest.ConfigEntriesEntry
+	nil,                                       // 82: idp.gateway.v1.BifrostKafkaMessage.HeadersEntry
+	nil,                                       // 83: idp.gateway.v1.ProduceMessageRequest.HeadersEntry
+	(*timestamppb.Timestamp)(nil),             // 84: google.protobuf.Timestamp
 }
 var file_idp_gateway_v1_gateway_proto_depIdxs = []int32{
-	3,  // 0: idp.gateway.v1.UpsertVirtualClusterRequest.config:type_name -> idp.gateway.v1.VirtualClusterConfig
-	3,  // 1: idp.gateway.v1.GetFullConfigResponse.virtual_clusters:type_name -> idp.gateway.v1.VirtualClusterConfig
-	17, // 2: idp.gateway.v1.GetFullConfigResponse.credentials:type_name -> idp.gateway.v1.CredentialConfig
-	24, // 3: idp.gateway.v1.GetFullConfigResponse.policies:type_name -> idp.gateway.v1.PolicyConfig
-	31, // 4: idp.gateway.v1.GetFullConfigResponse.topic_acls:type_name -> idp.gateway.v1.TopicACLEntry
-	57, // 5: idp.gateway.v1.GetStatusResponse.version_info:type_name -> idp.gateway.v1.GetStatusResponse.VersionInfoEntry
-	3,  // 6: idp.gateway.v1.ListVirtualClustersResponse.virtual_clusters:type_name -> idp.gateway.v1.VirtualClusterConfig
+	4,  // 0: idp.gateway.v1.UpsertVirtualClusterRequest.config:type_name -> idp.gateway.v1.VirtualClusterConfig
+	4,  // 1: idp.gateway.v1.GetFullConfigResponse.virtual_clusters:type_name -> idp.gateway.v1.VirtualClusterConfig
+	18, // 2: idp.gateway.v1.GetFullConfigResponse.credentials:type_name -> idp.gateway.v1.CredentialConfig
+	25, // 3: idp.gateway.v1.GetFullConfigResponse.policies:type_name -> idp.gateway.v1.PolicyConfig
+	32, // 4: idp.gateway.v1.GetFullConfigResponse.topic_acls:type_name -> idp.gateway.v1.TopicACLEntry
+	76, // 5: idp.gateway.v1.GetStatusResponse.version_info:type_name -> idp.gateway.v1.GetStatusResponse.VersionInfoEntry
+	4,  // 6: idp.gateway.v1.ListVirtualClustersResponse.virtual_clusters:type_name -> idp.gateway.v1.VirtualClusterConfig
 	0,  // 7: idp.gateway.v1.CredentialConfig.template:type_name -> idp.gateway.v1.PermissionTemplate
-	16, // 8: idp.gateway.v1.CredentialConfig.custom_permissions:type_name -> idp.gateway.v1.CustomPermission
-	17, // 9: idp.gateway.v1.UpsertCredentialRequest.config:type_name -> idp.gateway.v1.CredentialConfig
-	17, // 10: idp.gateway.v1.ListCredentialsResponse.credentials:type_name -> idp.gateway.v1.CredentialConfig
-	24, // 11: idp.gateway.v1.UpsertPolicyRequest.config:type_name -> idp.gateway.v1.PolicyConfig
-	24, // 12: idp.gateway.v1.ListPoliciesResponse.policies:type_name -> idp.gateway.v1.PolicyConfig
-	60, // 13: idp.gateway.v1.TopicACLEntry.expires_at:type_name -> google.protobuf.Timestamp
-	31, // 14: idp.gateway.v1.UpsertTopicACLRequest.entry:type_name -> idp.gateway.v1.TopicACLEntry
-	31, // 15: idp.gateway.v1.ListTopicACLsResponse.entries:type_name -> idp.gateway.v1.TopicACLEntry
-	58, // 16: idp.gateway.v1.TopicCreatedRequest.config:type_name -> idp.gateway.v1.TopicCreatedRequest.ConfigEntry
-	59, // 17: idp.gateway.v1.TopicConfigUpdatedRequest.config:type_name -> idp.gateway.v1.TopicConfigUpdatedRequest.ConfigEntry
-	60, // 18: idp.gateway.v1.ClientActivityRecord.window_start:type_name -> google.protobuf.Timestamp
-	60, // 19: idp.gateway.v1.ClientActivityRecord.window_end:type_name -> google.protobuf.Timestamp
-	45, // 20: idp.gateway.v1.EmitClientActivityRequest.records:type_name -> idp.gateway.v1.ClientActivityRecord
+	17, // 8: idp.gateway.v1.CredentialConfig.custom_permissions:type_name -> idp.gateway.v1.CustomPermission
+	18, // 9: idp.gateway.v1.UpsertCredentialRequest.config:type_name -> idp.gateway.v1.CredentialConfig
+	18, // 10: idp.gateway.v1.ListCredentialsResponse.credentials:type_name -> idp.gateway.v1.CredentialConfig
+	25, // 11: idp.gateway.v1.UpsertPolicyRequest.config:type_name -> idp.gateway.v1.PolicyConfig
+	25, // 12: idp.gateway.v1.ListPoliciesResponse.policies:type_name -> idp.gateway.v1.PolicyConfig
+	84, // 13: idp.gateway.v1.TopicACLEntry.expires_at:type_name -> google.protobuf.Timestamp
+	32, // 14: idp.gateway.v1.UpsertTopicACLRequest.entry:type_name -> idp.gateway.v1.TopicACLEntry
+	32, // 15: idp.gateway.v1.ListTopicACLsResponse.entries:type_name -> idp.gateway.v1.TopicACLEntry
+	77, // 16: idp.gateway.v1.TopicCreatedRequest.config:type_name -> idp.gateway.v1.TopicCreatedRequest.ConfigEntry
+	78, // 17: idp.gateway.v1.TopicConfigUpdatedRequest.config:type_name -> idp.gateway.v1.TopicConfigUpdatedRequest.ConfigEntry
+	84, // 18: idp.gateway.v1.ClientActivityRecord.window_start:type_name -> google.protobuf.Timestamp
+	84, // 19: idp.gateway.v1.ClientActivityRecord.window_end:type_name -> google.protobuf.Timestamp
+	46, // 20: idp.gateway.v1.EmitClientActivityRequest.records:type_name -> idp.gateway.v1.ClientActivityRecord
 	1,  // 21: idp.gateway.v1.ConsumerGroupSummary.state:type_name -> idp.gateway.v1.ConsumerGroupState
 	1,  // 22: idp.gateway.v1.ConsumerGroupDetail.state:type_name -> idp.gateway.v1.ConsumerGroupState
-	49, // 23: idp.gateway.v1.ConsumerGroupDetail.partitions:type_name -> idp.gateway.v1.PartitionLag
-	48, // 24: idp.gateway.v1.ListConsumerGroupsResponse.groups:type_name -> idp.gateway.v1.ConsumerGroupSummary
-	50, // 25: idp.gateway.v1.DescribeConsumerGroupResponse.group:type_name -> idp.gateway.v1.ConsumerGroupDetail
+	50, // 23: idp.gateway.v1.ConsumerGroupDetail.partitions:type_name -> idp.gateway.v1.PartitionLag
+	49, // 24: idp.gateway.v1.ListConsumerGroupsResponse.groups:type_name -> idp.gateway.v1.ConsumerGroupSummary
+	51, // 25: idp.gateway.v1.DescribeConsumerGroupResponse.group:type_name -> idp.gateway.v1.ConsumerGroupDetail
 	2,  // 26: idp.gateway.v1.ResetConsumerGroupOffsetsRequest.reset_type:type_name -> idp.gateway.v1.OffsetResetType
-	49, // 27: idp.gateway.v1.ResetConsumerGroupOffsetsResponse.new_offsets:type_name -> idp.gateway.v1.PartitionLag
-	4,  // 28: idp.gateway.v1.BifrostAdminService.UpsertVirtualCluster:input_type -> idp.gateway.v1.UpsertVirtualClusterRequest
-	6,  // 29: idp.gateway.v1.BifrostAdminService.DeleteVirtualCluster:input_type -> idp.gateway.v1.DeleteVirtualClusterRequest
-	8,  // 30: idp.gateway.v1.BifrostAdminService.SetVirtualClusterReadOnly:input_type -> idp.gateway.v1.SetVirtualClusterReadOnlyRequest
-	18, // 31: idp.gateway.v1.BifrostAdminService.UpsertCredential:input_type -> idp.gateway.v1.UpsertCredentialRequest
-	20, // 32: idp.gateway.v1.BifrostAdminService.RevokeCredential:input_type -> idp.gateway.v1.RevokeCredentialRequest
-	22, // 33: idp.gateway.v1.BifrostAdminService.ListCredentials:input_type -> idp.gateway.v1.ListCredentialsRequest
-	10, // 34: idp.gateway.v1.BifrostAdminService.GetFullConfig:input_type -> idp.gateway.v1.GetFullConfigRequest
-	12, // 35: idp.gateway.v1.BifrostAdminService.GetStatus:input_type -> idp.gateway.v1.GetStatusRequest
-	14, // 36: idp.gateway.v1.BifrostAdminService.ListVirtualClusters:input_type -> idp.gateway.v1.ListVirtualClustersRequest
-	25, // 37: idp.gateway.v1.BifrostAdminService.UpsertPolicy:input_type -> idp.gateway.v1.UpsertPolicyRequest
-	27, // 38: idp.gateway.v1.BifrostAdminService.DeletePolicy:input_type -> idp.gateway.v1.DeletePolicyRequest
-	29, // 39: idp.gateway.v1.BifrostAdminService.ListPolicies:input_type -> idp.gateway.v1.ListPoliciesRequest
-	32, // 40: idp.gateway.v1.BifrostAdminService.UpsertTopicACL:input_type -> idp.gateway.v1.UpsertTopicACLRequest
-	34, // 41: idp.gateway.v1.BifrostAdminService.RevokeTopicACL:input_type -> idp.gateway.v1.RevokeTopicACLRequest
-	36, // 42: idp.gateway.v1.BifrostAdminService.ListTopicACLs:input_type -> idp.gateway.v1.ListTopicACLsRequest
-	51, // 43: idp.gateway.v1.BifrostAdminService.ListConsumerGroups:input_type -> idp.gateway.v1.ListConsumerGroupsRequest
-	53, // 44: idp.gateway.v1.BifrostAdminService.DescribeConsumerGroup:input_type -> idp.gateway.v1.DescribeConsumerGroupRequest
-	55, // 45: idp.gateway.v1.BifrostAdminService.ResetConsumerGroupOffsets:input_type -> idp.gateway.v1.ResetConsumerGroupOffsetsRequest
-	38, // 46: idp.gateway.v1.BifrostCallbackService.TopicCreated:input_type -> idp.gateway.v1.TopicCreatedRequest
-	40, // 47: idp.gateway.v1.BifrostCallbackService.TopicDeleted:input_type -> idp.gateway.v1.TopicDeletedRequest
-	42, // 48: idp.gateway.v1.BifrostCallbackService.TopicConfigUpdated:input_type -> idp.gateway.v1.TopicConfigUpdatedRequest
-	46, // 49: idp.gateway.v1.BifrostCallbackService.EmitClientActivity:input_type -> idp.gateway.v1.EmitClientActivityRequest
-	5,  // 50: idp.gateway.v1.BifrostAdminService.UpsertVirtualCluster:output_type -> idp.gateway.v1.UpsertVirtualClusterResponse
-	7,  // 51: idp.gateway.v1.BifrostAdminService.DeleteVirtualCluster:output_type -> idp.gateway.v1.DeleteVirtualClusterResponse
-	9,  // 52: idp.gateway.v1.BifrostAdminService.SetVirtualClusterReadOnly:output_type -> idp.gateway.v1.SetVirtualClusterReadOnlyResponse
-	19, // 53: idp.gateway.v1.BifrostAdminService.UpsertCredential:output_type -> idp.gateway.v1.UpsertCredentialResponse
-	21, // 54: idp.gateway.v1.BifrostAdminService.RevokeCredential:output_type -> idp.gateway.v1.RevokeCredentialResponse
-	23, // 55: idp.gateway.v1.BifrostAdminService.ListCredentials:output_type -> idp.gateway.v1.ListCredentialsResponse
-	11, // 56: idp.gateway.v1.BifrostAdminService.GetFullConfig:output_type -> idp.gateway.v1.GetFullConfigResponse
-	13, // 57: idp.gateway.v1.BifrostAdminService.GetStatus:output_type -> idp.gateway.v1.GetStatusResponse
-	15, // 58: idp.gateway.v1.BifrostAdminService.ListVirtualClusters:output_type -> idp.gateway.v1.ListVirtualClustersResponse
-	26, // 59: idp.gateway.v1.BifrostAdminService.UpsertPolicy:output_type -> idp.gateway.v1.UpsertPolicyResponse
-	28, // 60: idp.gateway.v1.BifrostAdminService.DeletePolicy:output_type -> idp.gateway.v1.DeletePolicyResponse
-	30, // 61: idp.gateway.v1.BifrostAdminService.ListPolicies:output_type -> idp.gateway.v1.ListPoliciesResponse
-	33, // 62: idp.gateway.v1.BifrostAdminService.UpsertTopicACL:output_type -> idp.gateway.v1.UpsertTopicACLResponse
-	35, // 63: idp.gateway.v1.BifrostAdminService.RevokeTopicACL:output_type -> idp.gateway.v1.RevokeTopicACLResponse
-	37, // 64: idp.gateway.v1.BifrostAdminService.ListTopicACLs:output_type -> idp.gateway.v1.ListTopicACLsResponse
-	52, // 65: idp.gateway.v1.BifrostAdminService.ListConsumerGroups:output_type -> idp.gateway.v1.ListConsumerGroupsResponse
-	54, // 66: idp.gateway.v1.BifrostAdminService.DescribeConsumerGroup:output_type -> idp.gateway.v1.DescribeConsumerGroupResponse
-	56, // 67: idp.gateway.v1.BifrostAdminService.ResetConsumerGroupOffsets:output_type -> idp.gateway.v1.ResetConsumerGroupOffsetsResponse
-	39, // 68: idp.gateway.v1.BifrostCallbackService.TopicCreated:output_type -> idp.gateway.v1.TopicCreatedResponse
-	41, // 69: idp.gateway.v1.BifrostCallbackService.TopicDeleted:output_type -> idp.gateway.v1.TopicDeletedResponse
-	43, // 70: idp.gateway.v1.BifrostCallbackService.TopicConfigUpdated:output_type -> idp.gateway.v1.TopicConfigUpdatedResponse
-	47, // 71: idp.gateway.v1.BifrostCallbackService.EmitClientActivity:output_type -> idp.gateway.v1.EmitClientActivityResponse
-	50, // [50:72] is the sub-list for method output_type
-	28, // [28:50] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	50, // 27: idp.gateway.v1.ResetConsumerGroupOffsetsResponse.new_offsets:type_name -> idp.gateway.v1.PartitionLag
+	79, // 28: idp.gateway.v1.BifrostCreateTopicRequest.config:type_name -> idp.gateway.v1.BifrostCreateTopicRequest.ConfigEntry
+	80, // 29: idp.gateway.v1.BifrostDescribeTopicResponse.config:type_name -> idp.gateway.v1.BifrostDescribeTopicResponse.ConfigEntry
+	64, // 30: idp.gateway.v1.BifrostDescribeTopicResponse.partitions:type_name -> idp.gateway.v1.BifrostPartitionInfo
+	81, // 31: idp.gateway.v1.BifrostUpdateTopicConfigRequest.config_entries:type_name -> idp.gateway.v1.BifrostUpdateTopicConfigRequest.ConfigEntriesEntry
+	64, // 32: idp.gateway.v1.BifrostGetTopicMetricsResponse.partitions:type_name -> idp.gateway.v1.BifrostPartitionInfo
+	3,  // 33: idp.gateway.v1.BrowseMessagesRequest.seek_type:type_name -> idp.gateway.v1.SeekType
+	73, // 34: idp.gateway.v1.BrowseMessagesResponse.messages:type_name -> idp.gateway.v1.BifrostKafkaMessage
+	82, // 35: idp.gateway.v1.BifrostKafkaMessage.headers:type_name -> idp.gateway.v1.BifrostKafkaMessage.HeadersEntry
+	83, // 36: idp.gateway.v1.ProduceMessageRequest.headers:type_name -> idp.gateway.v1.ProduceMessageRequest.HeadersEntry
+	5,  // 37: idp.gateway.v1.BifrostAdminService.UpsertVirtualCluster:input_type -> idp.gateway.v1.UpsertVirtualClusterRequest
+	7,  // 38: idp.gateway.v1.BifrostAdminService.DeleteVirtualCluster:input_type -> idp.gateway.v1.DeleteVirtualClusterRequest
+	9,  // 39: idp.gateway.v1.BifrostAdminService.SetVirtualClusterReadOnly:input_type -> idp.gateway.v1.SetVirtualClusterReadOnlyRequest
+	19, // 40: idp.gateway.v1.BifrostAdminService.UpsertCredential:input_type -> idp.gateway.v1.UpsertCredentialRequest
+	21, // 41: idp.gateway.v1.BifrostAdminService.RevokeCredential:input_type -> idp.gateway.v1.RevokeCredentialRequest
+	23, // 42: idp.gateway.v1.BifrostAdminService.ListCredentials:input_type -> idp.gateway.v1.ListCredentialsRequest
+	11, // 43: idp.gateway.v1.BifrostAdminService.GetFullConfig:input_type -> idp.gateway.v1.GetFullConfigRequest
+	13, // 44: idp.gateway.v1.BifrostAdminService.GetStatus:input_type -> idp.gateway.v1.GetStatusRequest
+	15, // 45: idp.gateway.v1.BifrostAdminService.ListVirtualClusters:input_type -> idp.gateway.v1.ListVirtualClustersRequest
+	26, // 46: idp.gateway.v1.BifrostAdminService.UpsertPolicy:input_type -> idp.gateway.v1.UpsertPolicyRequest
+	28, // 47: idp.gateway.v1.BifrostAdminService.DeletePolicy:input_type -> idp.gateway.v1.DeletePolicyRequest
+	30, // 48: idp.gateway.v1.BifrostAdminService.ListPolicies:input_type -> idp.gateway.v1.ListPoliciesRequest
+	33, // 49: idp.gateway.v1.BifrostAdminService.UpsertTopicACL:input_type -> idp.gateway.v1.UpsertTopicACLRequest
+	35, // 50: idp.gateway.v1.BifrostAdminService.RevokeTopicACL:input_type -> idp.gateway.v1.RevokeTopicACLRequest
+	37, // 51: idp.gateway.v1.BifrostAdminService.ListTopicACLs:input_type -> idp.gateway.v1.ListTopicACLsRequest
+	52, // 52: idp.gateway.v1.BifrostAdminService.ListConsumerGroups:input_type -> idp.gateway.v1.ListConsumerGroupsRequest
+	54, // 53: idp.gateway.v1.BifrostAdminService.DescribeConsumerGroup:input_type -> idp.gateway.v1.DescribeConsumerGroupRequest
+	56, // 54: idp.gateway.v1.BifrostAdminService.ResetConsumerGroupOffsets:input_type -> idp.gateway.v1.ResetConsumerGroupOffsetsRequest
+	58, // 55: idp.gateway.v1.BifrostAdminService.CreateTopic:input_type -> idp.gateway.v1.BifrostCreateTopicRequest
+	60, // 56: idp.gateway.v1.BifrostAdminService.DeleteTopic:input_type -> idp.gateway.v1.BifrostDeleteTopicRequest
+	62, // 57: idp.gateway.v1.BifrostAdminService.DescribeTopic:input_type -> idp.gateway.v1.BifrostDescribeTopicRequest
+	65, // 58: idp.gateway.v1.BifrostAdminService.UpdateTopicConfig:input_type -> idp.gateway.v1.BifrostUpdateTopicConfigRequest
+	67, // 59: idp.gateway.v1.BifrostAdminService.ListTopics:input_type -> idp.gateway.v1.BifrostListTopicsRequest
+	69, // 60: idp.gateway.v1.BifrostAdminService.GetTopicMetrics:input_type -> idp.gateway.v1.BifrostGetTopicMetricsRequest
+	71, // 61: idp.gateway.v1.BifrostAdminService.BrowseMessages:input_type -> idp.gateway.v1.BrowseMessagesRequest
+	74, // 62: idp.gateway.v1.BifrostAdminService.ProduceMessage:input_type -> idp.gateway.v1.ProduceMessageRequest
+	39, // 63: idp.gateway.v1.BifrostCallbackService.TopicCreated:input_type -> idp.gateway.v1.TopicCreatedRequest
+	41, // 64: idp.gateway.v1.BifrostCallbackService.TopicDeleted:input_type -> idp.gateway.v1.TopicDeletedRequest
+	43, // 65: idp.gateway.v1.BifrostCallbackService.TopicConfigUpdated:input_type -> idp.gateway.v1.TopicConfigUpdatedRequest
+	47, // 66: idp.gateway.v1.BifrostCallbackService.EmitClientActivity:input_type -> idp.gateway.v1.EmitClientActivityRequest
+	6,  // 67: idp.gateway.v1.BifrostAdminService.UpsertVirtualCluster:output_type -> idp.gateway.v1.UpsertVirtualClusterResponse
+	8,  // 68: idp.gateway.v1.BifrostAdminService.DeleteVirtualCluster:output_type -> idp.gateway.v1.DeleteVirtualClusterResponse
+	10, // 69: idp.gateway.v1.BifrostAdminService.SetVirtualClusterReadOnly:output_type -> idp.gateway.v1.SetVirtualClusterReadOnlyResponse
+	20, // 70: idp.gateway.v1.BifrostAdminService.UpsertCredential:output_type -> idp.gateway.v1.UpsertCredentialResponse
+	22, // 71: idp.gateway.v1.BifrostAdminService.RevokeCredential:output_type -> idp.gateway.v1.RevokeCredentialResponse
+	24, // 72: idp.gateway.v1.BifrostAdminService.ListCredentials:output_type -> idp.gateway.v1.ListCredentialsResponse
+	12, // 73: idp.gateway.v1.BifrostAdminService.GetFullConfig:output_type -> idp.gateway.v1.GetFullConfigResponse
+	14, // 74: idp.gateway.v1.BifrostAdminService.GetStatus:output_type -> idp.gateway.v1.GetStatusResponse
+	16, // 75: idp.gateway.v1.BifrostAdminService.ListVirtualClusters:output_type -> idp.gateway.v1.ListVirtualClustersResponse
+	27, // 76: idp.gateway.v1.BifrostAdminService.UpsertPolicy:output_type -> idp.gateway.v1.UpsertPolicyResponse
+	29, // 77: idp.gateway.v1.BifrostAdminService.DeletePolicy:output_type -> idp.gateway.v1.DeletePolicyResponse
+	31, // 78: idp.gateway.v1.BifrostAdminService.ListPolicies:output_type -> idp.gateway.v1.ListPoliciesResponse
+	34, // 79: idp.gateway.v1.BifrostAdminService.UpsertTopicACL:output_type -> idp.gateway.v1.UpsertTopicACLResponse
+	36, // 80: idp.gateway.v1.BifrostAdminService.RevokeTopicACL:output_type -> idp.gateway.v1.RevokeTopicACLResponse
+	38, // 81: idp.gateway.v1.BifrostAdminService.ListTopicACLs:output_type -> idp.gateway.v1.ListTopicACLsResponse
+	53, // 82: idp.gateway.v1.BifrostAdminService.ListConsumerGroups:output_type -> idp.gateway.v1.ListConsumerGroupsResponse
+	55, // 83: idp.gateway.v1.BifrostAdminService.DescribeConsumerGroup:output_type -> idp.gateway.v1.DescribeConsumerGroupResponse
+	57, // 84: idp.gateway.v1.BifrostAdminService.ResetConsumerGroupOffsets:output_type -> idp.gateway.v1.ResetConsumerGroupOffsetsResponse
+	59, // 85: idp.gateway.v1.BifrostAdminService.CreateTopic:output_type -> idp.gateway.v1.BifrostCreateTopicResponse
+	61, // 86: idp.gateway.v1.BifrostAdminService.DeleteTopic:output_type -> idp.gateway.v1.BifrostDeleteTopicResponse
+	63, // 87: idp.gateway.v1.BifrostAdminService.DescribeTopic:output_type -> idp.gateway.v1.BifrostDescribeTopicResponse
+	66, // 88: idp.gateway.v1.BifrostAdminService.UpdateTopicConfig:output_type -> idp.gateway.v1.BifrostUpdateTopicConfigResponse
+	68, // 89: idp.gateway.v1.BifrostAdminService.ListTopics:output_type -> idp.gateway.v1.BifrostListTopicsResponse
+	70, // 90: idp.gateway.v1.BifrostAdminService.GetTopicMetrics:output_type -> idp.gateway.v1.BifrostGetTopicMetricsResponse
+	72, // 91: idp.gateway.v1.BifrostAdminService.BrowseMessages:output_type -> idp.gateway.v1.BrowseMessagesResponse
+	75, // 92: idp.gateway.v1.BifrostAdminService.ProduceMessage:output_type -> idp.gateway.v1.ProduceMessageResponse
+	40, // 93: idp.gateway.v1.BifrostCallbackService.TopicCreated:output_type -> idp.gateway.v1.TopicCreatedResponse
+	42, // 94: idp.gateway.v1.BifrostCallbackService.TopicDeleted:output_type -> idp.gateway.v1.TopicDeletedResponse
+	44, // 95: idp.gateway.v1.BifrostCallbackService.TopicConfigUpdated:output_type -> idp.gateway.v1.TopicConfigUpdatedResponse
+	48, // 96: idp.gateway.v1.BifrostCallbackService.EmitClientActivity:output_type -> idp.gateway.v1.EmitClientActivityResponse
+	67, // [67:97] is the sub-list for method output_type
+	37, // [37:67] is the sub-list for method input_type
+	37, // [37:37] is the sub-list for extension type_name
+	37, // [37:37] is the sub-list for extension extendee
+	0,  // [0:37] is the sub-list for field type_name
 }
 
 func init() { file_idp_gateway_v1_gateway_proto_init() }
@@ -3659,13 +5089,14 @@ func file_idp_gateway_v1_gateway_proto_init() {
 	if File_idp_gateway_v1_gateway_proto != nil {
 		return
 	}
+	file_idp_gateway_v1_gateway_proto_msgTypes[70].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_idp_gateway_v1_gateway_proto_rawDesc), len(file_idp_gateway_v1_gateway_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   57,
+			NumEnums:      4,
+			NumMessages:   80,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

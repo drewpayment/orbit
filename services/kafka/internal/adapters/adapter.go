@@ -28,6 +28,10 @@ type KafkaAdapter interface {
 	GetTopicMetrics(ctx context.Context, topicName string) (*TopicMetrics, error)
 	GetConsumerGroupLag(ctx context.Context, groupID string) (*ConsumerGroupLag, error)
 	ListConsumerGroups(ctx context.Context) ([]ConsumerGroupInfo, error)
+
+	// Message operations — virtualClusterID and topicName are resolved by the caller
+	BrowseMessages(ctx context.Context, virtualClusterID, topicName string, partitions []int32, seekType string, startOffset int64, limit int32, cursor string) (*BrowseResult, error)
+	ProduceMessage(ctx context.Context, virtualClusterID, topicName string, partition *int32, key, value []byte, headers map[string][]byte) (*ProduceResult, error)
 }
 
 // SchemaRegistryAdapter defines the interface for schema registry operations

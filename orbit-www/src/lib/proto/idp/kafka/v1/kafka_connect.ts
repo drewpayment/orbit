@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ApproveTopicAccessRequest, ApproveTopicAccessResponse, ApproveTopicRequest, ApproveTopicResponse, CheckSchemaCompatibilityRequest, CheckSchemaCompatibilityResponse, CreateEnvironmentMappingRequest, CreateEnvironmentMappingResponse, CreateServiceAccountRequest, CreateServiceAccountResponse, CreateTopicDirectRequest, CreateTopicDirectResponse, CreateTopicRequest, CreateTopicResponse, DeleteClusterRequest, DeleteClusterResponse, DeleteEnvironmentMappingRequest, DeleteEnvironmentMappingResponse, DeleteTopicByNameRequest, DeleteTopicByNameResponse, DeleteTopicRequest, DeleteTopicResponse, DiscoverTopicsRequest, DiscoverTopicsResponse, GetSchemaRequest, GetSchemaResponse, GetTopicLineageRequest, GetTopicLineageResponse, GetTopicMetricsRequest, GetTopicMetricsResponse, GetTopicRequest, GetTopicResponse, ListClustersRequest, ListClustersResponse, ListEnvironmentMappingsRequest, ListEnvironmentMappingsResponse, ListProvidersRequest, ListProvidersResponse, ListSchemasRequest, ListSchemasResponse, ListServiceAccountsRequest, ListServiceAccountsResponse, ListTopicSharesRequest, ListTopicSharesResponse, ListTopicsRequest, ListTopicsResponse, RegisterClusterRequest, RegisterClusterResponse, RegisterSchemaRequest, RegisterSchemaResponse, RequestTopicAccessRequest, RequestTopicAccessResponse, RevokeServiceAccountRequest, RevokeServiceAccountResponse, RevokeTopicAccessRequest, RevokeTopicAccessResponse, UpdateTopicRequest, UpdateTopicResponse, ValidateClusterConnectionRequest, ValidateClusterConnectionResponse, ValidateClusterRequest, ValidateClusterResponse } from "./kafka_pb.js";
+import { ApproveTopicAccessRequest, ApproveTopicAccessResponse, ApproveTopicRequest, ApproveTopicResponse, BrowseTopicMessagesRequest, BrowseTopicMessagesResponse, CheckSchemaCompatibilityRequest, CheckSchemaCompatibilityResponse, CreateEnvironmentMappingRequest, CreateEnvironmentMappingResponse, CreateServiceAccountRequest, CreateServiceAccountResponse, CreateTopicDirectRequest, CreateTopicDirectResponse, CreateTopicRequest, CreateTopicResponse, DeleteClusterRequest, DeleteClusterResponse, DeleteEnvironmentMappingRequest, DeleteEnvironmentMappingResponse, DeleteTopicByNameRequest, DeleteTopicByNameResponse, DeleteTopicRequest, DeleteTopicResponse, DiscoverTopicsRequest, DiscoverTopicsResponse, GetSchemaRequest, GetSchemaResponse, GetTopicLineageRequest, GetTopicLineageResponse, GetTopicMetricsRequest, GetTopicMetricsResponse, GetTopicRequest, GetTopicResponse, ListClustersRequest, ListClustersResponse, ListEnvironmentMappingsRequest, ListEnvironmentMappingsResponse, ListProvidersRequest, ListProvidersResponse, ListSchemasRequest, ListSchemasResponse, ListServiceAccountsRequest, ListServiceAccountsResponse, ListTopicSharesRequest, ListTopicSharesResponse, ListTopicsRequest, ListTopicsResponse, ProduceTopicMessageRequest, ProduceTopicMessageResponse, RegisterClusterRequest, RegisterClusterResponse, RegisterSchemaRequest, RegisterSchemaResponse, RequestTopicAccessRequest, RequestTopicAccessResponse, RevokeServiceAccountRequest, RevokeServiceAccountResponse, RevokeTopicAccessRequest, RevokeTopicAccessResponse, UpdateTopicRequest, UpdateTopicResponse, ValidateClusterConnectionRequest, ValidateClusterConnectionResponse, ValidateClusterRequest, ValidateClusterResponse } from "./kafka_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -305,6 +305,26 @@ export const KafkaService = {
       name: "GetTopicLineage",
       I: GetTopicLineageRequest,
       O: GetTopicLineageResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Message Browse & Produce
+     *
+     * @generated from rpc idp.kafka.v1.KafkaService.BrowseTopicMessages
+     */
+    browseTopicMessages: {
+      name: "BrowseTopicMessages",
+      I: BrowseTopicMessagesRequest,
+      O: BrowseTopicMessagesResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc idp.kafka.v1.KafkaService.ProduceTopicMessage
+     */
+    produceTopicMessage: {
+      name: "ProduceTopicMessage",
+      I: ProduceTopicMessageRequest,
+      O: ProduceTopicMessageResponse,
       kind: MethodKind.Unary,
     },
   }

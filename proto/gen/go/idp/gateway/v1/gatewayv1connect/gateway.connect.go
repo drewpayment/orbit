@@ -91,6 +91,30 @@ const (
 	// BifrostAdminServiceResetConsumerGroupOffsetsProcedure is the fully-qualified name of the
 	// BifrostAdminService's ResetConsumerGroupOffsets RPC.
 	BifrostAdminServiceResetConsumerGroupOffsetsProcedure = "/idp.gateway.v1.BifrostAdminService/ResetConsumerGroupOffsets"
+	// BifrostAdminServiceCreateTopicProcedure is the fully-qualified name of the BifrostAdminService's
+	// CreateTopic RPC.
+	BifrostAdminServiceCreateTopicProcedure = "/idp.gateway.v1.BifrostAdminService/CreateTopic"
+	// BifrostAdminServiceDeleteTopicProcedure is the fully-qualified name of the BifrostAdminService's
+	// DeleteTopic RPC.
+	BifrostAdminServiceDeleteTopicProcedure = "/idp.gateway.v1.BifrostAdminService/DeleteTopic"
+	// BifrostAdminServiceDescribeTopicProcedure is the fully-qualified name of the
+	// BifrostAdminService's DescribeTopic RPC.
+	BifrostAdminServiceDescribeTopicProcedure = "/idp.gateway.v1.BifrostAdminService/DescribeTopic"
+	// BifrostAdminServiceUpdateTopicConfigProcedure is the fully-qualified name of the
+	// BifrostAdminService's UpdateTopicConfig RPC.
+	BifrostAdminServiceUpdateTopicConfigProcedure = "/idp.gateway.v1.BifrostAdminService/UpdateTopicConfig"
+	// BifrostAdminServiceListTopicsProcedure is the fully-qualified name of the BifrostAdminService's
+	// ListTopics RPC.
+	BifrostAdminServiceListTopicsProcedure = "/idp.gateway.v1.BifrostAdminService/ListTopics"
+	// BifrostAdminServiceGetTopicMetricsProcedure is the fully-qualified name of the
+	// BifrostAdminService's GetTopicMetrics RPC.
+	BifrostAdminServiceGetTopicMetricsProcedure = "/idp.gateway.v1.BifrostAdminService/GetTopicMetrics"
+	// BifrostAdminServiceBrowseMessagesProcedure is the fully-qualified name of the
+	// BifrostAdminService's BrowseMessages RPC.
+	BifrostAdminServiceBrowseMessagesProcedure = "/idp.gateway.v1.BifrostAdminService/BrowseMessages"
+	// BifrostAdminServiceProduceMessageProcedure is the fully-qualified name of the
+	// BifrostAdminService's ProduceMessage RPC.
+	BifrostAdminServiceProduceMessageProcedure = "/idp.gateway.v1.BifrostAdminService/ProduceMessage"
 	// BifrostCallbackServiceTopicCreatedProcedure is the fully-qualified name of the
 	// BifrostCallbackService's TopicCreated RPC.
 	BifrostCallbackServiceTopicCreatedProcedure = "/idp.gateway.v1.BifrostCallbackService/TopicCreated"
@@ -132,6 +156,17 @@ type BifrostAdminServiceClient interface {
 	ListConsumerGroups(context.Context, *connect.Request[v1.ListConsumerGroupsRequest]) (*connect.Response[v1.ListConsumerGroupsResponse], error)
 	DescribeConsumerGroup(context.Context, *connect.Request[v1.DescribeConsumerGroupRequest]) (*connect.Response[v1.DescribeConsumerGroupResponse], error)
 	ResetConsumerGroupOffsets(context.Context, *connect.Request[v1.ResetConsumerGroupOffsetsRequest]) (*connect.Response[v1.ResetConsumerGroupOffsetsResponse], error)
+	// Topic management (broker operations via virtual cluster)
+	CreateTopic(context.Context, *connect.Request[v1.BifrostCreateTopicRequest]) (*connect.Response[v1.BifrostCreateTopicResponse], error)
+	DeleteTopic(context.Context, *connect.Request[v1.BifrostDeleteTopicRequest]) (*connect.Response[v1.BifrostDeleteTopicResponse], error)
+	DescribeTopic(context.Context, *connect.Request[v1.BifrostDescribeTopicRequest]) (*connect.Response[v1.BifrostDescribeTopicResponse], error)
+	UpdateTopicConfig(context.Context, *connect.Request[v1.BifrostUpdateTopicConfigRequest]) (*connect.Response[v1.BifrostUpdateTopicConfigResponse], error)
+	ListTopics(context.Context, *connect.Request[v1.BifrostListTopicsRequest]) (*connect.Response[v1.BifrostListTopicsResponse], error)
+	// Topic metrics
+	GetTopicMetrics(context.Context, *connect.Request[v1.BifrostGetTopicMetricsRequest]) (*connect.Response[v1.BifrostGetTopicMetricsResponse], error)
+	// Message operations
+	BrowseMessages(context.Context, *connect.Request[v1.BrowseMessagesRequest]) (*connect.Response[v1.BrowseMessagesResponse], error)
+	ProduceMessage(context.Context, *connect.Request[v1.ProduceMessageRequest]) (*connect.Response[v1.ProduceMessageResponse], error)
 }
 
 // NewBifrostAdminServiceClient constructs a client for the idp.gateway.v1.BifrostAdminService
@@ -253,6 +288,54 @@ func NewBifrostAdminServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(bifrostAdminServiceMethods.ByName("ResetConsumerGroupOffsets")),
 			connect.WithClientOptions(opts...),
 		),
+		createTopic: connect.NewClient[v1.BifrostCreateTopicRequest, v1.BifrostCreateTopicResponse](
+			httpClient,
+			baseURL+BifrostAdminServiceCreateTopicProcedure,
+			connect.WithSchema(bifrostAdminServiceMethods.ByName("CreateTopic")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteTopic: connect.NewClient[v1.BifrostDeleteTopicRequest, v1.BifrostDeleteTopicResponse](
+			httpClient,
+			baseURL+BifrostAdminServiceDeleteTopicProcedure,
+			connect.WithSchema(bifrostAdminServiceMethods.ByName("DeleteTopic")),
+			connect.WithClientOptions(opts...),
+		),
+		describeTopic: connect.NewClient[v1.BifrostDescribeTopicRequest, v1.BifrostDescribeTopicResponse](
+			httpClient,
+			baseURL+BifrostAdminServiceDescribeTopicProcedure,
+			connect.WithSchema(bifrostAdminServiceMethods.ByName("DescribeTopic")),
+			connect.WithClientOptions(opts...),
+		),
+		updateTopicConfig: connect.NewClient[v1.BifrostUpdateTopicConfigRequest, v1.BifrostUpdateTopicConfigResponse](
+			httpClient,
+			baseURL+BifrostAdminServiceUpdateTopicConfigProcedure,
+			connect.WithSchema(bifrostAdminServiceMethods.ByName("UpdateTopicConfig")),
+			connect.WithClientOptions(opts...),
+		),
+		listTopics: connect.NewClient[v1.BifrostListTopicsRequest, v1.BifrostListTopicsResponse](
+			httpClient,
+			baseURL+BifrostAdminServiceListTopicsProcedure,
+			connect.WithSchema(bifrostAdminServiceMethods.ByName("ListTopics")),
+			connect.WithClientOptions(opts...),
+		),
+		getTopicMetrics: connect.NewClient[v1.BifrostGetTopicMetricsRequest, v1.BifrostGetTopicMetricsResponse](
+			httpClient,
+			baseURL+BifrostAdminServiceGetTopicMetricsProcedure,
+			connect.WithSchema(bifrostAdminServiceMethods.ByName("GetTopicMetrics")),
+			connect.WithClientOptions(opts...),
+		),
+		browseMessages: connect.NewClient[v1.BrowseMessagesRequest, v1.BrowseMessagesResponse](
+			httpClient,
+			baseURL+BifrostAdminServiceBrowseMessagesProcedure,
+			connect.WithSchema(bifrostAdminServiceMethods.ByName("BrowseMessages")),
+			connect.WithClientOptions(opts...),
+		),
+		produceMessage: connect.NewClient[v1.ProduceMessageRequest, v1.ProduceMessageResponse](
+			httpClient,
+			baseURL+BifrostAdminServiceProduceMessageProcedure,
+			connect.WithSchema(bifrostAdminServiceMethods.ByName("ProduceMessage")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -276,6 +359,14 @@ type bifrostAdminServiceClient struct {
 	listConsumerGroups        *connect.Client[v1.ListConsumerGroupsRequest, v1.ListConsumerGroupsResponse]
 	describeConsumerGroup     *connect.Client[v1.DescribeConsumerGroupRequest, v1.DescribeConsumerGroupResponse]
 	resetConsumerGroupOffsets *connect.Client[v1.ResetConsumerGroupOffsetsRequest, v1.ResetConsumerGroupOffsetsResponse]
+	createTopic               *connect.Client[v1.BifrostCreateTopicRequest, v1.BifrostCreateTopicResponse]
+	deleteTopic               *connect.Client[v1.BifrostDeleteTopicRequest, v1.BifrostDeleteTopicResponse]
+	describeTopic             *connect.Client[v1.BifrostDescribeTopicRequest, v1.BifrostDescribeTopicResponse]
+	updateTopicConfig         *connect.Client[v1.BifrostUpdateTopicConfigRequest, v1.BifrostUpdateTopicConfigResponse]
+	listTopics                *connect.Client[v1.BifrostListTopicsRequest, v1.BifrostListTopicsResponse]
+	getTopicMetrics           *connect.Client[v1.BifrostGetTopicMetricsRequest, v1.BifrostGetTopicMetricsResponse]
+	browseMessages            *connect.Client[v1.BrowseMessagesRequest, v1.BrowseMessagesResponse]
+	produceMessage            *connect.Client[v1.ProduceMessageRequest, v1.ProduceMessageResponse]
 }
 
 // UpsertVirtualCluster calls idp.gateway.v1.BifrostAdminService.UpsertVirtualCluster.
@@ -368,6 +459,46 @@ func (c *bifrostAdminServiceClient) ResetConsumerGroupOffsets(ctx context.Contex
 	return c.resetConsumerGroupOffsets.CallUnary(ctx, req)
 }
 
+// CreateTopic calls idp.gateway.v1.BifrostAdminService.CreateTopic.
+func (c *bifrostAdminServiceClient) CreateTopic(ctx context.Context, req *connect.Request[v1.BifrostCreateTopicRequest]) (*connect.Response[v1.BifrostCreateTopicResponse], error) {
+	return c.createTopic.CallUnary(ctx, req)
+}
+
+// DeleteTopic calls idp.gateway.v1.BifrostAdminService.DeleteTopic.
+func (c *bifrostAdminServiceClient) DeleteTopic(ctx context.Context, req *connect.Request[v1.BifrostDeleteTopicRequest]) (*connect.Response[v1.BifrostDeleteTopicResponse], error) {
+	return c.deleteTopic.CallUnary(ctx, req)
+}
+
+// DescribeTopic calls idp.gateway.v1.BifrostAdminService.DescribeTopic.
+func (c *bifrostAdminServiceClient) DescribeTopic(ctx context.Context, req *connect.Request[v1.BifrostDescribeTopicRequest]) (*connect.Response[v1.BifrostDescribeTopicResponse], error) {
+	return c.describeTopic.CallUnary(ctx, req)
+}
+
+// UpdateTopicConfig calls idp.gateway.v1.BifrostAdminService.UpdateTopicConfig.
+func (c *bifrostAdminServiceClient) UpdateTopicConfig(ctx context.Context, req *connect.Request[v1.BifrostUpdateTopicConfigRequest]) (*connect.Response[v1.BifrostUpdateTopicConfigResponse], error) {
+	return c.updateTopicConfig.CallUnary(ctx, req)
+}
+
+// ListTopics calls idp.gateway.v1.BifrostAdminService.ListTopics.
+func (c *bifrostAdminServiceClient) ListTopics(ctx context.Context, req *connect.Request[v1.BifrostListTopicsRequest]) (*connect.Response[v1.BifrostListTopicsResponse], error) {
+	return c.listTopics.CallUnary(ctx, req)
+}
+
+// GetTopicMetrics calls idp.gateway.v1.BifrostAdminService.GetTopicMetrics.
+func (c *bifrostAdminServiceClient) GetTopicMetrics(ctx context.Context, req *connect.Request[v1.BifrostGetTopicMetricsRequest]) (*connect.Response[v1.BifrostGetTopicMetricsResponse], error) {
+	return c.getTopicMetrics.CallUnary(ctx, req)
+}
+
+// BrowseMessages calls idp.gateway.v1.BifrostAdminService.BrowseMessages.
+func (c *bifrostAdminServiceClient) BrowseMessages(ctx context.Context, req *connect.Request[v1.BrowseMessagesRequest]) (*connect.Response[v1.BrowseMessagesResponse], error) {
+	return c.browseMessages.CallUnary(ctx, req)
+}
+
+// ProduceMessage calls idp.gateway.v1.BifrostAdminService.ProduceMessage.
+func (c *bifrostAdminServiceClient) ProduceMessage(ctx context.Context, req *connect.Request[v1.ProduceMessageRequest]) (*connect.Response[v1.ProduceMessageResponse], error) {
+	return c.produceMessage.CallUnary(ctx, req)
+}
+
 // BifrostAdminServiceHandler is an implementation of the idp.gateway.v1.BifrostAdminService
 // service.
 type BifrostAdminServiceHandler interface {
@@ -396,6 +527,17 @@ type BifrostAdminServiceHandler interface {
 	ListConsumerGroups(context.Context, *connect.Request[v1.ListConsumerGroupsRequest]) (*connect.Response[v1.ListConsumerGroupsResponse], error)
 	DescribeConsumerGroup(context.Context, *connect.Request[v1.DescribeConsumerGroupRequest]) (*connect.Response[v1.DescribeConsumerGroupResponse], error)
 	ResetConsumerGroupOffsets(context.Context, *connect.Request[v1.ResetConsumerGroupOffsetsRequest]) (*connect.Response[v1.ResetConsumerGroupOffsetsResponse], error)
+	// Topic management (broker operations via virtual cluster)
+	CreateTopic(context.Context, *connect.Request[v1.BifrostCreateTopicRequest]) (*connect.Response[v1.BifrostCreateTopicResponse], error)
+	DeleteTopic(context.Context, *connect.Request[v1.BifrostDeleteTopicRequest]) (*connect.Response[v1.BifrostDeleteTopicResponse], error)
+	DescribeTopic(context.Context, *connect.Request[v1.BifrostDescribeTopicRequest]) (*connect.Response[v1.BifrostDescribeTopicResponse], error)
+	UpdateTopicConfig(context.Context, *connect.Request[v1.BifrostUpdateTopicConfigRequest]) (*connect.Response[v1.BifrostUpdateTopicConfigResponse], error)
+	ListTopics(context.Context, *connect.Request[v1.BifrostListTopicsRequest]) (*connect.Response[v1.BifrostListTopicsResponse], error)
+	// Topic metrics
+	GetTopicMetrics(context.Context, *connect.Request[v1.BifrostGetTopicMetricsRequest]) (*connect.Response[v1.BifrostGetTopicMetricsResponse], error)
+	// Message operations
+	BrowseMessages(context.Context, *connect.Request[v1.BrowseMessagesRequest]) (*connect.Response[v1.BrowseMessagesResponse], error)
+	ProduceMessage(context.Context, *connect.Request[v1.ProduceMessageRequest]) (*connect.Response[v1.ProduceMessageResponse], error)
 }
 
 // NewBifrostAdminServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -513,6 +655,54 @@ func NewBifrostAdminServiceHandler(svc BifrostAdminServiceHandler, opts ...conne
 		connect.WithSchema(bifrostAdminServiceMethods.ByName("ResetConsumerGroupOffsets")),
 		connect.WithHandlerOptions(opts...),
 	)
+	bifrostAdminServiceCreateTopicHandler := connect.NewUnaryHandler(
+		BifrostAdminServiceCreateTopicProcedure,
+		svc.CreateTopic,
+		connect.WithSchema(bifrostAdminServiceMethods.ByName("CreateTopic")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bifrostAdminServiceDeleteTopicHandler := connect.NewUnaryHandler(
+		BifrostAdminServiceDeleteTopicProcedure,
+		svc.DeleteTopic,
+		connect.WithSchema(bifrostAdminServiceMethods.ByName("DeleteTopic")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bifrostAdminServiceDescribeTopicHandler := connect.NewUnaryHandler(
+		BifrostAdminServiceDescribeTopicProcedure,
+		svc.DescribeTopic,
+		connect.WithSchema(bifrostAdminServiceMethods.ByName("DescribeTopic")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bifrostAdminServiceUpdateTopicConfigHandler := connect.NewUnaryHandler(
+		BifrostAdminServiceUpdateTopicConfigProcedure,
+		svc.UpdateTopicConfig,
+		connect.WithSchema(bifrostAdminServiceMethods.ByName("UpdateTopicConfig")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bifrostAdminServiceListTopicsHandler := connect.NewUnaryHandler(
+		BifrostAdminServiceListTopicsProcedure,
+		svc.ListTopics,
+		connect.WithSchema(bifrostAdminServiceMethods.ByName("ListTopics")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bifrostAdminServiceGetTopicMetricsHandler := connect.NewUnaryHandler(
+		BifrostAdminServiceGetTopicMetricsProcedure,
+		svc.GetTopicMetrics,
+		connect.WithSchema(bifrostAdminServiceMethods.ByName("GetTopicMetrics")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bifrostAdminServiceBrowseMessagesHandler := connect.NewUnaryHandler(
+		BifrostAdminServiceBrowseMessagesProcedure,
+		svc.BrowseMessages,
+		connect.WithSchema(bifrostAdminServiceMethods.ByName("BrowseMessages")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bifrostAdminServiceProduceMessageHandler := connect.NewUnaryHandler(
+		BifrostAdminServiceProduceMessageProcedure,
+		svc.ProduceMessage,
+		connect.WithSchema(bifrostAdminServiceMethods.ByName("ProduceMessage")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/idp.gateway.v1.BifrostAdminService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case BifrostAdminServiceUpsertVirtualClusterProcedure:
@@ -551,6 +741,22 @@ func NewBifrostAdminServiceHandler(svc BifrostAdminServiceHandler, opts ...conne
 			bifrostAdminServiceDescribeConsumerGroupHandler.ServeHTTP(w, r)
 		case BifrostAdminServiceResetConsumerGroupOffsetsProcedure:
 			bifrostAdminServiceResetConsumerGroupOffsetsHandler.ServeHTTP(w, r)
+		case BifrostAdminServiceCreateTopicProcedure:
+			bifrostAdminServiceCreateTopicHandler.ServeHTTP(w, r)
+		case BifrostAdminServiceDeleteTopicProcedure:
+			bifrostAdminServiceDeleteTopicHandler.ServeHTTP(w, r)
+		case BifrostAdminServiceDescribeTopicProcedure:
+			bifrostAdminServiceDescribeTopicHandler.ServeHTTP(w, r)
+		case BifrostAdminServiceUpdateTopicConfigProcedure:
+			bifrostAdminServiceUpdateTopicConfigHandler.ServeHTTP(w, r)
+		case BifrostAdminServiceListTopicsProcedure:
+			bifrostAdminServiceListTopicsHandler.ServeHTTP(w, r)
+		case BifrostAdminServiceGetTopicMetricsProcedure:
+			bifrostAdminServiceGetTopicMetricsHandler.ServeHTTP(w, r)
+		case BifrostAdminServiceBrowseMessagesProcedure:
+			bifrostAdminServiceBrowseMessagesHandler.ServeHTTP(w, r)
+		case BifrostAdminServiceProduceMessageProcedure:
+			bifrostAdminServiceProduceMessageHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -630,6 +836,38 @@ func (UnimplementedBifrostAdminServiceHandler) DescribeConsumerGroup(context.Con
 
 func (UnimplementedBifrostAdminServiceHandler) ResetConsumerGroupOffsets(context.Context, *connect.Request[v1.ResetConsumerGroupOffsetsRequest]) (*connect.Response[v1.ResetConsumerGroupOffsetsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.ResetConsumerGroupOffsets is not implemented"))
+}
+
+func (UnimplementedBifrostAdminServiceHandler) CreateTopic(context.Context, *connect.Request[v1.BifrostCreateTopicRequest]) (*connect.Response[v1.BifrostCreateTopicResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.CreateTopic is not implemented"))
+}
+
+func (UnimplementedBifrostAdminServiceHandler) DeleteTopic(context.Context, *connect.Request[v1.BifrostDeleteTopicRequest]) (*connect.Response[v1.BifrostDeleteTopicResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.DeleteTopic is not implemented"))
+}
+
+func (UnimplementedBifrostAdminServiceHandler) DescribeTopic(context.Context, *connect.Request[v1.BifrostDescribeTopicRequest]) (*connect.Response[v1.BifrostDescribeTopicResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.DescribeTopic is not implemented"))
+}
+
+func (UnimplementedBifrostAdminServiceHandler) UpdateTopicConfig(context.Context, *connect.Request[v1.BifrostUpdateTopicConfigRequest]) (*connect.Response[v1.BifrostUpdateTopicConfigResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.UpdateTopicConfig is not implemented"))
+}
+
+func (UnimplementedBifrostAdminServiceHandler) ListTopics(context.Context, *connect.Request[v1.BifrostListTopicsRequest]) (*connect.Response[v1.BifrostListTopicsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.ListTopics is not implemented"))
+}
+
+func (UnimplementedBifrostAdminServiceHandler) GetTopicMetrics(context.Context, *connect.Request[v1.BifrostGetTopicMetricsRequest]) (*connect.Response[v1.BifrostGetTopicMetricsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.GetTopicMetrics is not implemented"))
+}
+
+func (UnimplementedBifrostAdminServiceHandler) BrowseMessages(context.Context, *connect.Request[v1.BrowseMessagesRequest]) (*connect.Response[v1.BrowseMessagesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.BrowseMessages is not implemented"))
+}
+
+func (UnimplementedBifrostAdminServiceHandler) ProduceMessage(context.Context, *connect.Request[v1.ProduceMessageRequest]) (*connect.Response[v1.ProduceMessageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.gateway.v1.BifrostAdminService.ProduceMessage is not implemented"))
 }
 
 // BifrostCallbackServiceClient is a client for the idp.gateway.v1.BifrostCallbackService service.

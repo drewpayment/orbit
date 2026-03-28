@@ -475,12 +475,15 @@ services:
       - GRPC_PORT=50055
       - ENVIRONMENT=development
       - DATABASE_URL=postgres://orbit:orbit@postgres:5432/kafka_service?sslmode=disable
+      - BIFROST_ADMIN_ADDR=bifrost:50060
     depends_on:
       temporal-server:
         condition: service_healthy
       redpanda:
         condition: service_healthy
       postgres:
+        condition: service_started
+      bifrost:
         condition: service_started
     restart: unless-stopped
 

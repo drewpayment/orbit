@@ -4,7 +4,10 @@ import (
 	"context"
 
 	kafkav1 "github.com/drewpayment/orbit/proto/gen/go/idp/kafka/v1"
+	"github.com/drewpayment/orbit/services/kafka/internal/adapters"
 	"github.com/drewpayment/orbit/services/kafka/internal/service"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // KafkaServer implements the KafkaService gRPC server
@@ -14,6 +17,7 @@ type KafkaServer struct {
 	topicHandler   *TopicHandler
 	schemaHandler  *SchemaHandler
 	shareHandler   *ShareHandler
+	messageHandler *MessageHandler
 }
 
 // NewKafkaServer creates a new KafkaServer
@@ -22,12 +26,27 @@ func NewKafkaServer(
 	topicService *service.TopicService,
 	schemaService *service.SchemaService,
 	shareService *service.ShareService,
+	opts ...KafkaServerOption,
 ) *KafkaServer {
-	return &KafkaServer{
+	s := &KafkaServer{
 		clusterHandler: NewClusterHandler(clusterService),
 		topicHandler:   NewTopicHandler(topicService),
 		schemaHandler:  NewSchemaHandler(schemaService),
 		shareHandler:   NewShareHandler(shareService),
+	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+// KafkaServerOption configures optional KafkaServer dependencies.
+type KafkaServerOption func(*KafkaServer)
+
+// WithMessageAdapter enables message browse/produce via the given adapter.
+func WithMessageAdapter(adapter adapters.KafkaAdapter) KafkaServerOption {
+	return func(s *KafkaServer) {
+		s.messageHandler = NewMessageHandler(adapter)
 	}
 }
 
@@ -161,4 +180,19 @@ func (s *KafkaServer) GetTopicMetrics(ctx context.Context, req *kafkav1.GetTopic
 
 func (s *KafkaServer) GetTopicLineage(ctx context.Context, req *kafkav1.GetTopicLineageRequest) (*kafkav1.GetTopicLineageResponse, error) {
 	return s.topicHandler.GetTopicLineage(ctx, req)
+}
+
+// Message Browse & Produce
+func (s *KafkaServer) BrowseTopicMessages(ctx context.Context, req *kafkav1.BrowseTopicMessagesRequest) (*kafkav1.BrowseTopicMessagesResponse, error) {
+	if s.messageHandler == nil {
+		return nil, status.Errorf(codes.Unavailable, "message browsing not configured")
+	}
+	return s.messageHandler.BrowseTopicMessages(ctx, req)
+}
+
+func (s *KafkaServer) ProduceTopicMessage(ctx context.Context, req *kafkav1.ProduceTopicMessageRequest) (*kafkav1.ProduceTopicMessageResponse, error) {
+	if s.messageHandler == nil {
+		return nil, status.Errorf(codes.Unavailable, "message producing not configured")
+	}
+	return s.messageHandler.ProduceTopicMessage(ctx, req)
 }

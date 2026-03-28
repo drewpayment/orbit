@@ -154,6 +154,33 @@ type SchemaInfo struct {
 	Schema     string
 }
 
+// MessageRecord represents a single Kafka message
+type MessageRecord struct {
+	Partition int32
+	Offset    int64
+	Timestamp int64 // unix milliseconds
+	Key       []byte
+	Value     []byte
+	Headers   map[string][]byte
+	KeySize   int32
+	ValueSize int32
+	Truncated bool
+}
+
+// BrowseResult contains the result of browsing messages
+type BrowseResult struct {
+	Messages   []MessageRecord
+	NextCursor string
+	HasMore    bool
+}
+
+// ProduceResult contains the result of producing a message
+type ProduceResult struct {
+	Partition int32
+	Offset    int64
+	Timestamp int64 // unix milliseconds
+}
+
 // ACLsForServiceAccount generates the ACLs needed for a service account
 func ACLsForServiceAccount(account *domain.KafkaServiceAccount, topicName, consumerGroup string) []ACLSpec {
 	principal := "User:" + account.Name

@@ -39,6 +39,14 @@ const (
 	BifrostAdminService_ListConsumerGroups_FullMethodName        = "/idp.gateway.v1.BifrostAdminService/ListConsumerGroups"
 	BifrostAdminService_DescribeConsumerGroup_FullMethodName     = "/idp.gateway.v1.BifrostAdminService/DescribeConsumerGroup"
 	BifrostAdminService_ResetConsumerGroupOffsets_FullMethodName = "/idp.gateway.v1.BifrostAdminService/ResetConsumerGroupOffsets"
+	BifrostAdminService_CreateTopic_FullMethodName               = "/idp.gateway.v1.BifrostAdminService/CreateTopic"
+	BifrostAdminService_DeleteTopic_FullMethodName               = "/idp.gateway.v1.BifrostAdminService/DeleteTopic"
+	BifrostAdminService_DescribeTopic_FullMethodName             = "/idp.gateway.v1.BifrostAdminService/DescribeTopic"
+	BifrostAdminService_UpdateTopicConfig_FullMethodName         = "/idp.gateway.v1.BifrostAdminService/UpdateTopicConfig"
+	BifrostAdminService_ListTopics_FullMethodName                = "/idp.gateway.v1.BifrostAdminService/ListTopics"
+	BifrostAdminService_GetTopicMetrics_FullMethodName           = "/idp.gateway.v1.BifrostAdminService/GetTopicMetrics"
+	BifrostAdminService_BrowseMessages_FullMethodName            = "/idp.gateway.v1.BifrostAdminService/BrowseMessages"
+	BifrostAdminService_ProduceMessage_FullMethodName            = "/idp.gateway.v1.BifrostAdminService/ProduceMessage"
 )
 
 // BifrostAdminServiceClient is the client API for BifrostAdminService service.
@@ -70,6 +78,17 @@ type BifrostAdminServiceClient interface {
 	ListConsumerGroups(ctx context.Context, in *ListConsumerGroupsRequest, opts ...grpc.CallOption) (*ListConsumerGroupsResponse, error)
 	DescribeConsumerGroup(ctx context.Context, in *DescribeConsumerGroupRequest, opts ...grpc.CallOption) (*DescribeConsumerGroupResponse, error)
 	ResetConsumerGroupOffsets(ctx context.Context, in *ResetConsumerGroupOffsetsRequest, opts ...grpc.CallOption) (*ResetConsumerGroupOffsetsResponse, error)
+	// Topic management (broker operations via virtual cluster)
+	CreateTopic(ctx context.Context, in *BifrostCreateTopicRequest, opts ...grpc.CallOption) (*BifrostCreateTopicResponse, error)
+	DeleteTopic(ctx context.Context, in *BifrostDeleteTopicRequest, opts ...grpc.CallOption) (*BifrostDeleteTopicResponse, error)
+	DescribeTopic(ctx context.Context, in *BifrostDescribeTopicRequest, opts ...grpc.CallOption) (*BifrostDescribeTopicResponse, error)
+	UpdateTopicConfig(ctx context.Context, in *BifrostUpdateTopicConfigRequest, opts ...grpc.CallOption) (*BifrostUpdateTopicConfigResponse, error)
+	ListTopics(ctx context.Context, in *BifrostListTopicsRequest, opts ...grpc.CallOption) (*BifrostListTopicsResponse, error)
+	// Topic metrics
+	GetTopicMetrics(ctx context.Context, in *BifrostGetTopicMetricsRequest, opts ...grpc.CallOption) (*BifrostGetTopicMetricsResponse, error)
+	// Message operations
+	BrowseMessages(ctx context.Context, in *BrowseMessagesRequest, opts ...grpc.CallOption) (*BrowseMessagesResponse, error)
+	ProduceMessage(ctx context.Context, in *ProduceMessageRequest, opts ...grpc.CallOption) (*ProduceMessageResponse, error)
 }
 
 type bifrostAdminServiceClient struct {
@@ -260,6 +279,86 @@ func (c *bifrostAdminServiceClient) ResetConsumerGroupOffsets(ctx context.Contex
 	return out, nil
 }
 
+func (c *bifrostAdminServiceClient) CreateTopic(ctx context.Context, in *BifrostCreateTopicRequest, opts ...grpc.CallOption) (*BifrostCreateTopicResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BifrostCreateTopicResponse)
+	err := c.cc.Invoke(ctx, BifrostAdminService_CreateTopic_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bifrostAdminServiceClient) DeleteTopic(ctx context.Context, in *BifrostDeleteTopicRequest, opts ...grpc.CallOption) (*BifrostDeleteTopicResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BifrostDeleteTopicResponse)
+	err := c.cc.Invoke(ctx, BifrostAdminService_DeleteTopic_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bifrostAdminServiceClient) DescribeTopic(ctx context.Context, in *BifrostDescribeTopicRequest, opts ...grpc.CallOption) (*BifrostDescribeTopicResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BifrostDescribeTopicResponse)
+	err := c.cc.Invoke(ctx, BifrostAdminService_DescribeTopic_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bifrostAdminServiceClient) UpdateTopicConfig(ctx context.Context, in *BifrostUpdateTopicConfigRequest, opts ...grpc.CallOption) (*BifrostUpdateTopicConfigResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BifrostUpdateTopicConfigResponse)
+	err := c.cc.Invoke(ctx, BifrostAdminService_UpdateTopicConfig_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bifrostAdminServiceClient) ListTopics(ctx context.Context, in *BifrostListTopicsRequest, opts ...grpc.CallOption) (*BifrostListTopicsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BifrostListTopicsResponse)
+	err := c.cc.Invoke(ctx, BifrostAdminService_ListTopics_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bifrostAdminServiceClient) GetTopicMetrics(ctx context.Context, in *BifrostGetTopicMetricsRequest, opts ...grpc.CallOption) (*BifrostGetTopicMetricsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BifrostGetTopicMetricsResponse)
+	err := c.cc.Invoke(ctx, BifrostAdminService_GetTopicMetrics_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bifrostAdminServiceClient) BrowseMessages(ctx context.Context, in *BrowseMessagesRequest, opts ...grpc.CallOption) (*BrowseMessagesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BrowseMessagesResponse)
+	err := c.cc.Invoke(ctx, BifrostAdminService_BrowseMessages_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bifrostAdminServiceClient) ProduceMessage(ctx context.Context, in *ProduceMessageRequest, opts ...grpc.CallOption) (*ProduceMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProduceMessageResponse)
+	err := c.cc.Invoke(ctx, BifrostAdminService_ProduceMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BifrostAdminServiceServer is the server API for BifrostAdminService service.
 // All implementations must embed UnimplementedBifrostAdminServiceServer
 // for forward compatibility.
@@ -289,6 +388,17 @@ type BifrostAdminServiceServer interface {
 	ListConsumerGroups(context.Context, *ListConsumerGroupsRequest) (*ListConsumerGroupsResponse, error)
 	DescribeConsumerGroup(context.Context, *DescribeConsumerGroupRequest) (*DescribeConsumerGroupResponse, error)
 	ResetConsumerGroupOffsets(context.Context, *ResetConsumerGroupOffsetsRequest) (*ResetConsumerGroupOffsetsResponse, error)
+	// Topic management (broker operations via virtual cluster)
+	CreateTopic(context.Context, *BifrostCreateTopicRequest) (*BifrostCreateTopicResponse, error)
+	DeleteTopic(context.Context, *BifrostDeleteTopicRequest) (*BifrostDeleteTopicResponse, error)
+	DescribeTopic(context.Context, *BifrostDescribeTopicRequest) (*BifrostDescribeTopicResponse, error)
+	UpdateTopicConfig(context.Context, *BifrostUpdateTopicConfigRequest) (*BifrostUpdateTopicConfigResponse, error)
+	ListTopics(context.Context, *BifrostListTopicsRequest) (*BifrostListTopicsResponse, error)
+	// Topic metrics
+	GetTopicMetrics(context.Context, *BifrostGetTopicMetricsRequest) (*BifrostGetTopicMetricsResponse, error)
+	// Message operations
+	BrowseMessages(context.Context, *BrowseMessagesRequest) (*BrowseMessagesResponse, error)
+	ProduceMessage(context.Context, *ProduceMessageRequest) (*ProduceMessageResponse, error)
 	mustEmbedUnimplementedBifrostAdminServiceServer()
 }
 
@@ -352,6 +462,30 @@ func (UnimplementedBifrostAdminServiceServer) DescribeConsumerGroup(context.Cont
 }
 func (UnimplementedBifrostAdminServiceServer) ResetConsumerGroupOffsets(context.Context, *ResetConsumerGroupOffsetsRequest) (*ResetConsumerGroupOffsetsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ResetConsumerGroupOffsets not implemented")
+}
+func (UnimplementedBifrostAdminServiceServer) CreateTopic(context.Context, *BifrostCreateTopicRequest) (*BifrostCreateTopicResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateTopic not implemented")
+}
+func (UnimplementedBifrostAdminServiceServer) DeleteTopic(context.Context, *BifrostDeleteTopicRequest) (*BifrostDeleteTopicResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteTopic not implemented")
+}
+func (UnimplementedBifrostAdminServiceServer) DescribeTopic(context.Context, *BifrostDescribeTopicRequest) (*BifrostDescribeTopicResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DescribeTopic not implemented")
+}
+func (UnimplementedBifrostAdminServiceServer) UpdateTopicConfig(context.Context, *BifrostUpdateTopicConfigRequest) (*BifrostUpdateTopicConfigResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateTopicConfig not implemented")
+}
+func (UnimplementedBifrostAdminServiceServer) ListTopics(context.Context, *BifrostListTopicsRequest) (*BifrostListTopicsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListTopics not implemented")
+}
+func (UnimplementedBifrostAdminServiceServer) GetTopicMetrics(context.Context, *BifrostGetTopicMetricsRequest) (*BifrostGetTopicMetricsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetTopicMetrics not implemented")
+}
+func (UnimplementedBifrostAdminServiceServer) BrowseMessages(context.Context, *BrowseMessagesRequest) (*BrowseMessagesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BrowseMessages not implemented")
+}
+func (UnimplementedBifrostAdminServiceServer) ProduceMessage(context.Context, *ProduceMessageRequest) (*ProduceMessageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ProduceMessage not implemented")
 }
 func (UnimplementedBifrostAdminServiceServer) mustEmbedUnimplementedBifrostAdminServiceServer() {}
 func (UnimplementedBifrostAdminServiceServer) testEmbeddedByValue()                             {}
@@ -698,6 +832,150 @@ func _BifrostAdminService_ResetConsumerGroupOffsets_Handler(srv interface{}, ctx
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BifrostAdminService_CreateTopic_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BifrostCreateTopicRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostAdminServiceServer).CreateTopic(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostAdminService_CreateTopic_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostAdminServiceServer).CreateTopic(ctx, req.(*BifrostCreateTopicRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BifrostAdminService_DeleteTopic_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BifrostDeleteTopicRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostAdminServiceServer).DeleteTopic(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostAdminService_DeleteTopic_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostAdminServiceServer).DeleteTopic(ctx, req.(*BifrostDeleteTopicRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BifrostAdminService_DescribeTopic_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BifrostDescribeTopicRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostAdminServiceServer).DescribeTopic(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostAdminService_DescribeTopic_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostAdminServiceServer).DescribeTopic(ctx, req.(*BifrostDescribeTopicRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BifrostAdminService_UpdateTopicConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BifrostUpdateTopicConfigRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostAdminServiceServer).UpdateTopicConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostAdminService_UpdateTopicConfig_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostAdminServiceServer).UpdateTopicConfig(ctx, req.(*BifrostUpdateTopicConfigRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BifrostAdminService_ListTopics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BifrostListTopicsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostAdminServiceServer).ListTopics(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostAdminService_ListTopics_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostAdminServiceServer).ListTopics(ctx, req.(*BifrostListTopicsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BifrostAdminService_GetTopicMetrics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BifrostGetTopicMetricsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostAdminServiceServer).GetTopicMetrics(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostAdminService_GetTopicMetrics_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostAdminServiceServer).GetTopicMetrics(ctx, req.(*BifrostGetTopicMetricsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BifrostAdminService_BrowseMessages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BrowseMessagesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostAdminServiceServer).BrowseMessages(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostAdminService_BrowseMessages_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostAdminServiceServer).BrowseMessages(ctx, req.(*BrowseMessagesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BifrostAdminService_ProduceMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProduceMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BifrostAdminServiceServer).ProduceMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BifrostAdminService_ProduceMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BifrostAdminServiceServer).ProduceMessage(ctx, req.(*ProduceMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BifrostAdminService_ServiceDesc is the grpc.ServiceDesc for BifrostAdminService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -776,6 +1054,38 @@ var BifrostAdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResetConsumerGroupOffsets",
 			Handler:    _BifrostAdminService_ResetConsumerGroupOffsets_Handler,
+		},
+		{
+			MethodName: "CreateTopic",
+			Handler:    _BifrostAdminService_CreateTopic_Handler,
+		},
+		{
+			MethodName: "DeleteTopic",
+			Handler:    _BifrostAdminService_DeleteTopic_Handler,
+		},
+		{
+			MethodName: "DescribeTopic",
+			Handler:    _BifrostAdminService_DescribeTopic_Handler,
+		},
+		{
+			MethodName: "UpdateTopicConfig",
+			Handler:    _BifrostAdminService_UpdateTopicConfig_Handler,
+		},
+		{
+			MethodName: "ListTopics",
+			Handler:    _BifrostAdminService_ListTopics_Handler,
+		},
+		{
+			MethodName: "GetTopicMetrics",
+			Handler:    _BifrostAdminService_GetTopicMetrics_Handler,
+		},
+		{
+			MethodName: "BrowseMessages",
+			Handler:    _BifrostAdminService_BrowseMessages_Handler,
+		},
+		{
+			MethodName: "ProduceMessage",
+			Handler:    _BifrostAdminService_ProduceMessage_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

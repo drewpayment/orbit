@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -24,10 +25,27 @@ import {
   Share2,
   GitBranch,
   Network,
+  MessageSquare,
 } from 'lucide-react'
 import { TopicLineagePanel } from '@/components/kafka/TopicLineagePanel'
 import { toast } from 'sonner'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
+
+const TopicMessagesPanel = dynamic(
+  () =>
+    import('@/components/features/kafka/TopicMessagesPanel').then(
+      (mod) => mod.TopicMessagesPanel,
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+      </div>
+    ),
+  },
+)
 import {
   getTopic,
   listSchemas,
@@ -56,7 +74,24 @@ export function TopicDetailClient({
   const [shares, setShares] = useState<KafkaTopicShare[]>([])
   const [metrics, setMetrics] = useState<TopicMetrics[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState('overview')
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+
+  const validTabs = useMemo(() => ['overview', 'schemas', 'metrics', 'lineage', 'messages', 'sharing'], [])
+  const tabFromUrl = searchParams.get('tab')
+  const activeTab = validTabs.includes(tabFromUrl ?? '') ? tabFromUrl! : 'overview'
+
+  const setActiveTab = useCallback((tab: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (tab === 'overview') {
+      params.delete('tab')
+    } else {
+      params.set('tab', tab)
+    }
+    const query = params.toString()
+    router.replace(`${pathname}${query ? `?${query}` : ''}`, { scroll: false })
+  }, [searchParams, router, pathname])
 
   const loadTopic = useCallback(async () => {
     setLoading(true)
@@ -196,6 +231,10 @@ export function TopicDetailClient({
             <Network className="h-4 w-4" />
             Lineage
           </TabsTrigger>
+          <TabsTrigger value="messages" className="flex items-center gap-2">
+            <MessageSquare className="h-4 w-4" />
+            Messages
+          </TabsTrigger>
           <TabsTrigger value="sharing" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
             Sharing
@@ -258,6 +297,17 @@ export function TopicDetailClient({
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="messages" className="mt-6">
+          {activeTab === 'messages' && (
+            <TopicMessagesPanel
+              topicId={topicId}
+              workspaceId={workspaceId}
+              workspaceSlug={workspaceSlug}
+              partitionCount={topic.partitions}
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="lineage" className="mt-6">
