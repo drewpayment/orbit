@@ -1,0 +1,87 @@
+# ClickHouse migration init job — creates tables PostHog's migrate_clickhouse expects
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: posthog-clickhouse-init
+  namespace: orbit
+  labels:
+    app.kubernetes.io/name: posthog
+    app.kubernetes.io/component: clickhouse-init
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: posthog
+        app.kubernetes.io/component: clickhouse-init
+    spec:
+      serviceAccountName: orbit
+      restartPolicy: OnFailure
+      containers:
+        - name: clickhouse-init
+          image: clickhouse/clickhouse-server:25.12.8.9
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Waiting for ClickHouse..."
+              TIMEOUT=120
+              ELAPSED=0
+              until clickhouse-client --host=posthog-clickhouse --port=9000 --query="SELECT 1" &> /dev/null; do
+                echo "ClickHouse not ready yet (elapsed: ${ELAPSED}s)..."
+                sleep 2
+                ELAPSED=$((ELAPSED + 2))
+                if [ $ELAPSED -ge $TIMEOUT ]; then
+                    echo "Timeout waiting for ClickHouse after ${TIMEOUT}s"
+                    exit 1
+                fi
+              done
+              echo "ClickHouse is ready."
+
+              echo "Initializing ClickHouse migration tables..."
+
+              # Create the base migration tracking table (Replicated)
+              clickhouse-client --host=posthog-clickhouse --port=9000 --query "
+              CREATE TABLE IF NOT EXISTS posthog.infi_clickhouse_orm_migrations (
+                module_name String,
+                package_name String,
+                applied Date
+              ) ENGINE = ReplicatedMergeTree(
+                '/posthog/tables/infi_clickhouse_orm_migrations',
+                'replica_{replica}'
+              )
+              ORDER BY (module_name, package_name)
+              SETTINGS index_granularity = 8192;
+              "
+
+              # Create the distributed view for cross-shard queries
+              clickhouse-client --host=posthog-clickhouse --port=9000 --query "
+              CREATE TABLE IF NOT EXISTS posthog.infi_clickhouse_orm_migrations_distributed AS posthog.infi_clickhouse_orm_migrations
+              ENGINE = Distributed(
+                'posthog_migrations',
+                'posthog',
+                'infi_clickhouse_orm_migrations'
+              );
+              "
+
+              echo "ClickHouse migration tables initialized successfully"
+
+              # Force-create lazy system log tables that PostHog migrations depend on
+              echo "Ensuring system log tables exist..."
+              clickhouse-client --host=posthog-clickhouse --port=9000 --query "SYSTEM FLUSH LOGS" || true
+              for table in crash_log part_log trace_log; do
+                clickhouse-client --host=posthog-clickhouse --port=9000 --query "SELECT 1 FROM system.${table} LIMIT 0" 2>/dev/null && \
+                  echo "  system.${table} exists" || \
+                  echo "  system.${table} not yet created (ok - not needed until first event)"
+              done
+
+              # Verify tables exist
+              clickhouse-client --host=posthog-clickhouse --port=9000 --query "
+              SHOW TABLES IN posthog WHERE name LIKE '%infi_clickhouse_orm_migrations%'
+              "

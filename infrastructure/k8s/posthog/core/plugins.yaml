@@ -1,0 +1,118 @@
+# PostHog plugin server (Node.js — CDP/pipelines)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: posthog-plugins
+  namespace: orbit
+  labels:
+    app.kubernetes.io/name: posthog
+    app.kubernetes.io/component: plugins
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: posthog
+      app.kubernetes.io/component: plugins
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: posthog
+        app.kubernetes.io/component: plugins
+    spec:
+      serviceAccountName: orbit
+      containers:
+        - name: plugins
+          image: posthog/posthog-node:latest
+          command: ["node", "nodejs/dist/index.js"]
+          envFrom:
+            - configMapRef:
+                name: posthog-env
+          env:
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: POSTHOG_SECRET_KEY
+            - name: ENCRYPTION_SALT_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: POSTHOG_ENCRYPTION_SALT_KEYS
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: POSTHOG_DB_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://posthog:$(PGPASSWORD)@posthog-db:5432/posthog"
+            - name: PERSONS_DATABASE_URL
+              value: "postgres://posthog:$(PGPASSWORD)@posthog-db:5432/posthog"
+            - name: BEHAVIORAL_COHORTS_DATABASE_URL
+              value: "postgres://posthog:$(PGPASSWORD)@posthog-db:5432/posthog"
+            - name: CYCLOTRON_DATABASE_URL
+              value: "postgres://posthog:$(PGPASSWORD)@posthog-db:5432/posthog"
+            - name: OBJECT_STORAGE_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: MINIO_ROOT_USER
+            - name: OBJECT_STORAGE_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: MINIO_ROOT_PASSWORD
+            - name: SESSION_RECORDING_V2_S3_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: MINIO_ROOT_USER
+            - name: SESSION_RECORDING_V2_S3_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: MINIO_ROOT_PASSWORD
+            - name: SESSION_RECORDING_V2_S3_TIMEOUT_MS
+              value: "120000"
+            - name: COOKIELESS_REDIS_HOST
+              value: "posthog-redis"
+            - name: COOKIELESS_REDIS_PORT
+              value: "6379"
+            - name: SESSION_RECORDING_API_REDIS_HOST
+              value: "posthog-redis"
+            - name: SESSION_RECORDING_API_REDIS_PORT
+              value: "6379"
+            - name: CDP_REDIS_HOST
+              value: "posthog-redis"
+            - name: CDP_REDIS_PORT
+              value: "6379"
+            - name: LOGS_REDIS_HOST
+              value: "posthog-redis"
+            - name: LOGS_REDIS_PORT
+              value: "6379"
+            - name: LOGS_REDIS_TLS
+              value: "false"
+          ports:
+            - containerPort: 6738
+              name: http
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              memory: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: posthog-plugins
+  namespace: orbit
+spec:
+  ports:
+    - name: http
+      port: 6738
+      targetPort: 6738
+  selector:
+    app.kubernetes.io/name: posthog
+    app.kubernetes.io/component: plugins

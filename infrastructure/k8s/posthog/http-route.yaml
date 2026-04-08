@@ -1,0 +1,78 @@
+# infrastructure/k8s/posthog/http-route.yaml
+#
+# PostHog routing: UI + ingest endpoints.
+# The ingest route splits traffic between the Rust capture service (events/recordings)
+# and the Django web server (everything else including the UI).
+#
+# TODO: Update hostnames and parentRefs to match your gateway setup.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: posthog-ui
+  namespace: orbit
+spec:
+  parentRefs:
+    - name: gateway-external
+      namespace: gateway
+      sectionName: https
+  hostnames:
+    - "posthog.hoytlabs.app"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: posthog-web
+          port: 8000
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: posthog-ingest
+  namespace: orbit
+  labels:
+    external-dns: "true"
+  annotations:
+    external-dns.alpha.kubernetes.io/target: "hoytlabs.app"
+spec:
+  parentRefs:
+    - name: gateway-external
+      namespace: gateway
+      sectionName: https
+  hostnames:
+    - "ingest-posthog.hoytlabs.app"
+  rules:
+    # Event capture endpoints -> Rust capture service
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /e
+        - path:
+            type: PathPrefix
+            value: /i/v0
+        - path:
+            type: PathPrefix
+            value: /capture
+        - path:
+            type: PathPrefix
+            value: /batch
+      backendRefs:
+        - name: posthog-capture
+          port: 3000
+    # Session replay capture
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /s
+      backendRefs:
+        - name: posthog-replay-capture
+          port: 3000
+    # Fallback -> Django web
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: posthog-web
+          port: 8000

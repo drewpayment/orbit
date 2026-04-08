@@ -1,0 +1,127 @@
+# PostHog Rust capture services (events + session replay)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: posthog-capture
+  namespace: orbit
+  labels:
+    app.kubernetes.io/name: posthog
+    app.kubernetes.io/component: capture
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: posthog
+      app.kubernetes.io/component: capture
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: posthog
+        app.kubernetes.io/component: capture
+    spec:
+      serviceAccountName: orbit
+      containers:
+        - name: capture
+          image: ghcr.io/posthog/posthog/capture:master
+          env:
+            - name: ADDRESS
+              value: "0.0.0.0:3000"
+            - name: KAFKA_TOPIC
+              value: "events_plugin_ingestion"
+            - name: KAFKA_HOSTS
+              value: "posthog-kafka:9092"
+            - name: REDIS_URL
+              value: "redis://posthog-redis:6379/"
+            - name: CAPTURE_MODE
+              value: "events"
+            - name: RUST_LOG
+              value: "info,rdkafka=warn"
+          ports:
+            - containerPort: 3000
+              name: http
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: posthog-capture
+  namespace: orbit
+spec:
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+  selector:
+    app.kubernetes.io/name: posthog
+    app.kubernetes.io/component: capture
+---
+# Session replay capture
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: posthog-replay-capture
+  namespace: orbit
+  labels:
+    app.kubernetes.io/name: posthog
+    app.kubernetes.io/component: replay-capture
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: posthog
+      app.kubernetes.io/component: replay-capture
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: posthog
+        app.kubernetes.io/component: replay-capture
+    spec:
+      serviceAccountName: orbit
+      containers:
+        - name: replay-capture
+          image: ghcr.io/posthog/posthog/capture:master
+          env:
+            - name: ADDRESS
+              value: "0.0.0.0:3000"
+            - name: KAFKA_TOPIC
+              value: "session_recording_snapshot_item_events"
+            - name: KAFKA_HOSTS
+              value: "posthog-kafka:9092"
+            - name: REDIS_URL
+              value: "redis://posthog-redis:6379/"
+            - name: CAPTURE_MODE
+              value: "recordings"
+            - name: RUST_LOG
+              value: "info,rdkafka=warn"
+          ports:
+            - containerPort: 3000
+              name: http
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: posthog-replay-capture
+  namespace: orbit
+spec:
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+  selector:
+    app.kubernetes.io/name: posthog
+    app.kubernetes.io/component: replay-capture

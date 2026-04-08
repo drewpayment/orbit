@@ -18,3 +18,7 @@ data:
   BIFROST_TLS_ENABLED: "true"
   # Optional: set to your docs site URL to show Docs links in the UI
   # NEXT_PUBLIC_DOCS_URL: "https://orbit-docs.hoytlabs.app"
+  # PostHog Analytics (self-hosted)
+  # Set NEXT_PUBLIC_POSTHOG_KEY to your PostHog project API key after initial setup
+  # NEXT_PUBLIC_POSTHOG_KEY: "phc_your_project_api_key"
+  NEXT_PUBLIC_POSTHOG_HOST: "https://ingest-posthog.hoytlabs.app"
