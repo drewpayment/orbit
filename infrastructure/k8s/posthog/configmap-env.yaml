@@ -10,6 +10,8 @@ kind: ConfigMap
 metadata:
   name: posthog-env
   namespace: orbit
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
 data:
   # General
   DEPLOYMENT: "hobby"

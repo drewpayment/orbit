@@ -59,6 +59,58 @@ PostHog services are tightly coupled — the web server, worker, plugin server, 
 - Plugin server crashes (Node.js version expects different Postgres schema)
 - Capture service rejecting events the ingestion service expects
 
+## ArgoCD Sync Order (CRITICAL)
+
+PostHog has a strict startup dependency chain. If services start out of order, migrations fail, data is lost, or services crash-loop. The sync wave annotations enforce the correct order.
+
+### Sync Wave Map
+
+```
+Wave -1: ConfigMap (posthog-env)
+         └── Must exist before any pod references it via envFrom
+
+Wave  0: Data Layer (all deploy in parallel, must all be healthy before wave 1)
+         ├── posthog-db         (Postgres)
+         ├── posthog-redis      (Valkey)
+         ├── posthog-kafka      (Redpanda)
+         └── posthog-clickhouse (ClickHouse + embedded Keeper)
+
+Wave  1: Init Jobs (ArgoCD Sync hooks, run after data layer is healthy)
+         ├── posthog-clickhouse-init  → creates migration tracking tables in ClickHouse
+         └── posthog-kafka-init       → creates all required Kafka topics via rpk
+
+Wave  2: Migration Job (ArgoCD Sync hook, runs after init jobs complete)
+         └── posthog-migrate          → Django migrations + ClickHouse migrations + async migrations
+             Waits for both Postgres AND ClickHouse to be reachable before starting
+
+Wave  3: Application Services (all deploy in parallel, after migrations complete)
+         ├── posthog-web              (Django web server)
+         ├── posthog-worker           (Celery worker + scheduler)
+         ├── posthog-plugins          (Node.js plugin server / CDP)
+         ├── posthog-capture          (Rust event capture)
+         ├── posthog-replay-capture   (Rust session replay capture)
+         ├── posthog-ingestion        (Node.js ingestion bridge)
+         ├── posthog-property-defs    (Rust property definitions)
+         └── HTTPRoutes               (posthog-ui, posthog-ingest)
+```
+
+### Why this order matters
+
+1. **ClickHouse init MUST run before migrations** — PostHog's `migrate_clickhouse` command expects `infi_clickhouse_orm_migrations` table to already exist. Without the init job, the migration job will crash.
+2. **Kafka topics MUST exist before ingestion/capture start** — the Rust capture service and Node.js ingestion service expect topics to exist. They will crash-loop if topics are missing.
+3. **Django migrations MUST complete before web/worker start** — the web server checks migration state on boot and the Celery worker requires async migrations to be run.
+4. **Init jobs use ArgoCD Sync hooks** (`argocd.argoproj.io/hook: Sync`) with `BeforeHookCreation` delete policy — this means old job pods are cleaned up before each sync, and the jobs re-run on every sync to ensure idempotency.
+
+### Shared Application Consideration
+
+In Orbit, PostHog is part of the **main ArgoCD Application** (not a separate Application like in the reference setup). This means:
+- PostHog's sync waves run alongside all other Orbit resources
+- All existing Orbit resources (MongoDB, Temporal, etc.) default to wave 0 and will deploy alongside PostHog's data layer
+- This is fine — Orbit's existing services and PostHog's data layer have no interdependencies
+- **If you later add sync waves to other Orbit resources**, be aware that PostHog's waves 1-3 will wait for ALL wave 0 resources to be healthy, including non-PostHog ones
+
+If PostHog deployment becomes too slow or complex due to shared sync waves, consider splitting it into its own ArgoCD Application (separate `Application` manifest pointing at `infrastructure/k8s/posthog/`).
+
 ## Network Routing
 
 ### Dashboard — INTERNAL ONLY

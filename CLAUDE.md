@@ -198,8 +198,10 @@ Orbit deploys a full self-hosted PostHog stack on k8s for analytics and session 
 Key points for working on PostHog-related code:
 - **Never change PostHog image digests independently** — all services must be upgraded together (see the doc for why)
 - The PostHog dashboard is **internal-only** (`gateway-internal`), the ingest endpoint is **public** (`gateway-external`)
+- **ArgoCD sync waves are critical**: wave -1 (configmap) → 0 (data layer) → 1 (init jobs) → 2 (migrations) → 3 (app services). Do not remove or reorder sync wave annotations — PostHog will break if services start before migrations complete.
 - Frontend integration is in `orbit-www/src/components/providers/posthog-provider.tsx` — gracefully no-ops when env vars are unset
 - If adding a Content Security Policy, whitelist `ingest-posthog.hoytlabs.app` in `script-src` and `connect-src`
+- If Cloudflare is in the path: Brotli compression and auto-minification must be disabled for the ingest hostname
 
 ### Database & Migrations
 
