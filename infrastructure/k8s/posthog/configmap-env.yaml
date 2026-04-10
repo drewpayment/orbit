@@ -15,6 +15,9 @@ metadata:
 data:
   # General
   DEPLOYMENT: "hobby"
+  PRIMARY_DB: "clickhouse"
+  OPT_OUT_CAPTURE: "true"
+  LOGGING_FORMATTER_NAME: "json"
   SKIP_ASYNC_MIGRATIONS_SETUP: "1"
   POSTHOG_SKIP_MIGRATION_CHECKS: "1"
   OTEL_SDK_DISABLED: "true"
@@ -63,9 +66,11 @@ data:
 
   # CDP
   CDP_API_URL: "http://posthog-plugins:6738"
-  RECORDING_API_URL: "http://posthog-plugins:6738"
+  # Recording API is a dedicated service, NOT the plugin server
+  RECORDING_API_URL: "http://posthog-recording-api:6738"
 
-  # Feature flags (served by Python web for hobby deployment)
+  # Feature flags — served by the Rust feature-flags service on port 3001
+  # FLAGS_REDIS_ENABLED is false because the Rust service queries Postgres directly
   FLAGS_REDIS_ENABLED: "false"
 
   # API limits

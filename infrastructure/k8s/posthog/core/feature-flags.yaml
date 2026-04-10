@@ -1,0 +1,115 @@
+# PostHog feature-flags service (Rust)
+#
+# Serves the /decide endpoint (POST /decide/?v=3) which the JS SDK calls
+# to determine whether session replay, feature flags, etc. are enabled.
+# In newer PostHog versions, Django no longer serves /decide publicly —
+# it returns 403 CSRF or redirects to login. This Rust service handles it.
+#
+# CRITICAL: Without this service, session replay silently fails to start
+# because the SDK never learns that recording is enabled.
+#
+# Requires GeoIP database (GeoLite2-City.mmdb) — downloaded via init container.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: posthog-feature-flags
+  namespace: orbit
+  labels:
+    app.kubernetes.io/name: posthog
+    app.kubernetes.io/component: feature-flags
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: posthog
+      app.kubernetes.io/component: feature-flags
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: posthog
+        app.kubernetes.io/component: feature-flags
+    spec:
+      serviceAccountName: orbit
+      initContainers:
+        # GeoIP database — the Rust feature-flags service panics without it
+        - name: fetch-geoip
+          image: busybox:1.36
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Downloading GeoLite2-City.mmdb..."
+              wget -q -O /share/GeoLite2-City.mmdb https://mmdbcdn.posthog.net/
+              if [ -f /share/GeoLite2-City.mmdb ]; then
+                echo "GeoIP database downloaded successfully ($(wc -c < /share/GeoLite2-City.mmdb) bytes)"
+              else
+                echo "ERROR: Failed to download GeoIP database"
+                exit 1
+              fi
+          volumeMounts:
+            - name: geoip-data
+              mountPath: /share
+      containers:
+        - name: feature-flags
+          image: ghcr.io/posthog/posthog/feature-flags:master@sha256:c47226b3a3b648d543fc407053abb0c0873cc142fdb15849e7c7f65064035b3b
+          env:
+            - name: ADDRESS
+              value: "0.0.0.0:3001"
+            - name: KAFKA_HOSTS
+              value: "posthog-kafka:9092"
+            - name: REDIS_URL
+              value: "redis://posthog-redis:6379/"
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: POSTHOG_DB_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://posthog:$(PGPASSWORD)@posthog-db:5432/posthog"
+            - name: RUST_LOG
+              value: "info"
+            - name: MAXMIND_DB_PATH
+              value: "/share/GeoLite2-City.mmdb"
+            - name: COOKIELESS_REDIS_HOST
+              value: "posthog-redis"
+            - name: COOKIELESS_REDIS_PORT
+              value: "6379"
+          ports:
+            - containerPort: 3001
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /_readiness
+              port: 3001
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: geoip-data
+              mountPath: /share
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: geoip-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: posthog-feature-flags
+  namespace: orbit
+spec:
+  ports:
+    - name: http
+      port: 3001
+      targetPort: 3001
+  selector:
+    app.kubernetes.io/name: posthog
+    app.kubernetes.io/component: feature-flags

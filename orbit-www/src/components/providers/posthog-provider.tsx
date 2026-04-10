@@ -56,6 +56,7 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
       capture_pageleave: true,
       autocapture: true,
       disable_session_recording: false,
+      disable_compression: true, // required: Cloudflare double-gzips if enabled
       loaded: (ph) => {
         ph.startSessionRecording()
       },

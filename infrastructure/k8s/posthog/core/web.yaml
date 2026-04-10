@@ -74,7 +74,7 @@ spec:
               name: http
           startupProbe:
             httpGet:
-              path: /_health
+              path: /_livez
               port: 8000
               httpHeaders:
                 - name: Host
@@ -83,9 +83,19 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 45
             failureThreshold: 60
+          livenessProbe:
+            httpGet:
+              path: /_livez
+              port: 8000
+              httpHeaders:
+                - name: Host
+                  value: posthog.hoytlabs.app
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /_health
+              path: /_readyz?role=web
               port: 8000
               httpHeaders:
                 - name: Host

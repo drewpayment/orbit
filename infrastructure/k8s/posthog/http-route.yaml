@@ -47,6 +47,20 @@ spec:
   hostnames:
     - "ingest-posthog.hoytlabs.app"
   rules:
+    # /decide endpoint -> Rust feature-flags service
+    # The JS SDK calls POST /decide/?v=3 to learn if session replay,
+    # feature flags, etc. are enabled. In newer PostHog, Django returns
+    # 403 CSRF or redirects to login — the Rust service handles it.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /decide
+        - path:
+            type: PathPrefix
+            value: /flags
+      backendRefs:
+        - name: posthog-feature-flags
+          port: 3001
     # Event capture endpoints -> Rust capture service
     - matches:
         - path:

@@ -18,5 +18,7 @@ resources:
   - core/workers.yaml
   - core/plugins.yaml
   - core/capture.yaml
+  - core/feature-flags.yaml
   - core/ingestion.yaml
+  - core/session-replay.yaml
   - core/microservices.yaml
