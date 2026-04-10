@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import { Instrument_Serif, Inter } from 'next/font/google'
 import { ThemeProvider } from '@/components/theme-provider'
 import { RuntimeEnvScript } from '@/components/runtime-env-script'
+import { PostHogProvider } from '@/components/providers/posthog-provider'
 import '@/app/globals.css'
 
 const instrumentSerif = Instrument_Serif({
@@ -53,7 +54,9 @@ export default function MarketingLayout({
           enableSystem={false}
           disableTransitionOnChange
         >
-          {children}
+          <PostHogProvider>
+            {children}
+          </PostHogProvider>
         </ThemeProvider>
       </body>
     </html>

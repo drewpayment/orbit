@@ -10,6 +10,8 @@
 
 const PUBLIC_ENV_KEYS = [
   'NEXT_PUBLIC_APP_URL',
+  'NEXT_PUBLIC_POSTHOG_KEY',
+  'NEXT_PUBLIC_POSTHOG_HOST',
 ] as const
 
 type PublicEnvKey = (typeof PUBLIC_ENV_KEYS)[number]

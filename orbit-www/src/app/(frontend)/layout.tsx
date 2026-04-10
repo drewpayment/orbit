@@ -6,6 +6,7 @@ import { AuthGuard } from '@/components/auth-guard'
 import { GitHubHealthProviderWrapper } from '@/components/providers/GitHubHealthProviderWrapper'
 import { Toaster } from '@/components/ui/sonner'
 import { RuntimeEnvScript } from '@/components/runtime-env-script'
+import { PostHogProvider } from '@/components/providers/posthog-provider'
 import '../globals.css'
 
 const crimsonPro = Crimson_Pro({
@@ -35,14 +36,16 @@ export default function FrontendLayout({ children }: { children: React.ReactNode
           enableSystem={false}
           disableTransitionOnChange
         >
-          <BreadcrumbProvider>
-            <AuthGuard>
-              <GitHubHealthProviderWrapper>
-                <main>{children}</main>
-              </GitHubHealthProviderWrapper>
-            </AuthGuard>
-          </BreadcrumbProvider>
-          <Toaster />
+          <PostHogProvider>
+            <BreadcrumbProvider>
+              <AuthGuard>
+                <GitHubHealthProviderWrapper>
+                  <main>{children}</main>
+                </GitHubHealthProviderWrapper>
+              </AuthGuard>
+            </BreadcrumbProvider>
+            <Toaster />
+          </PostHogProvider>
         </ThemeProvider>
       </body>
     </html>
