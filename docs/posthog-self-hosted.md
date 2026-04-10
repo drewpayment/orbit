@@ -256,7 +256,14 @@ These directories must be created on `192.168.86.44` before deployment.
 
 **Events not appearing in PostHog**: Check browser Network tab for requests to `ingest-posthog.hoytlabs.app/e`. If they 502/503, the capture service may not be running. If they succeed but PostHog shows nothing, check Kafka topics and the ingestion service logs.
 
-**Session recordings not working**: Verify `/s` path routes to replay-capture. Check that `disable_session_recording: false` is set in the provider. Verify S3/MinIO connectivity from the worker pod.
+**Session recordings not working**: Session replay requires four services working together:
+1. **posthog-feature-flags** must serve `/decide` — the SDK calls `POST /decide/?v=3` to learn that recording is enabled. If `/decide` falls through to Django, it returns 403 CSRF and recording silently never starts.
+2. **posthog-replay-capture** receives recording data at `/s/` and writes to Kafka.
+3. **posthog-ingestion-replay** consumes from Kafka and persists blobs to S3/MinIO. Without it, recordings are lost after Kafka retention (1 hour in hobby mode).
+4. **posthog-recording-api** serves playback from S3/MinIO.
+Check the HTTPRoute routes `/decide` to `posthog-feature-flags:3001` and `/s` to `posthog-replay-capture:3000`. Verify S3/MinIO connectivity from the ingestion-replay and recording-api pods.
+
+**feature-flags CrashLoopBackOff**: The Rust binary panics without `GeoLite2-City.mmdb`. The init container must successfully download it from `https://mmdbcdn.posthog.net/`. Check init container logs with `kubectl logs <pod> -c fetch-geoip`. Setting `MAXMIND_DB_PATH=""` does NOT disable GeoIP — you must provide the file.
 
 **PostHog UI login fails**: Check Django migration job completed successfully. Verify Postgres is accessible from the web pod. Check `SECRET_KEY` is set correctly.
 
