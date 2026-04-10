@@ -8,12 +8,16 @@ Orbit deploys a full self-hosted PostHog analytics stack on Kubernetes. This was
 Browser → ingest-posthog.hoytlabs.app (PUBLIC, via Cloudflare)
            ├── /e, /capture, /batch → posthog-capture (Rust, port 3000)
            ├── /s                   → posthog-replay-capture (Rust, port 3000)
+           ├── /decide, /flags      → posthog-feature-flags (Rust, port 3001)
            └── /*                   → posthog-web (Django, port 8000)
 
          posthog.hoytlabs.app (INTERNAL ONLY, LAN gateway)
            └── /*                   → posthog-web (Django, port 8000)
 
 posthog-capture → Redpanda (Kafka) → posthog-ingestion (Node.js) → ClickHouse
+posthog-replay-capture → Kafka → posthog-ingestion-replay (Node.js) → S3/MinIO
+posthog-recording-api (Node.js) → reads recordings from S3/MinIO for playback
+posthog-feature-flags (Rust) → serves /decide (enables session replay + feature flags)
 posthog-web ←→ Postgres (metadata) + ClickHouse (analytics queries)
 posthog-worker (Celery) → background jobs, exports, async migrations
 posthog-plugins (Node.js) → CDP pipelines, destinations
@@ -29,6 +33,9 @@ posthog-plugins (Node.js) → CDP pipelines, destinations
 | posthog-capture | `ghcr.io/posthog/posthog/capture` | Rust event capture service |
 | posthog-replay-capture | `ghcr.io/posthog/posthog/capture` | Rust session replay capture |
 | posthog-ingestion | `posthog/posthog-node` | Node.js ingestion bridge (Kafka → ClickHouse) |
+| posthog-feature-flags | `ghcr.io/posthog/posthog/feature-flags` | Rust /decide endpoint (enables session replay + feature flags) |
+| posthog-ingestion-replay | `posthog/posthog-node` | Session replay ingestion (Kafka → S3, recordings-blob-ingestion-v2) |
+| posthog-recording-api | `posthog/posthog-node` | Session replay playback API (reads from S3) |
 | posthog-property-defs | `ghcr.io/posthog/posthog/property-defs-rs` | Rust property definitions |
 | posthog-db | `postgres:15.12-alpine` | PostHog-dedicated Postgres |
 | posthog-redis | `valkey/valkey:8.0-alpine` | PostHog-dedicated Redis |
@@ -38,8 +45,7 @@ posthog-plugins (Node.js) → CDP pipelines, destinations
 ### Disabled Services
 
 These are defined but set to `replicas: 0`:
-- **posthog-livestream** — requires GeoIP MMDB file
-- Feature flags are handled by the Python web server for the hobby deployment
+- **posthog-livestream** — requires GeoIP MMDB file (separate from feature-flags which has its own GeoIP init container)
 
 ## Image Version Pinning (CRITICAL)
 
@@ -89,7 +95,10 @@ Wave  3: Application Services (all deploy in parallel, after migrations complete
          ├── posthog-plugins          (Node.js plugin server / CDP)
          ├── posthog-capture          (Rust event capture)
          ├── posthog-replay-capture   (Rust session replay capture)
+         ├── posthog-feature-flags    (Rust /decide endpoint + GeoIP init container)
          ├── posthog-ingestion        (Node.js ingestion bridge)
+         ├── posthog-ingestion-replay (Node.js session replay Kafka → S3)
+         ├── posthog-recording-api    (Node.js session replay playback)
          ├── posthog-property-defs    (Rust property definitions)
          └── HTTPRoutes               (posthog-ui, posthog-ingest)
 ```
@@ -128,6 +137,7 @@ If PostHog deployment becomes too slow or complex due to shared sync waves, cons
 - **Path routing**:
   - `/e`, `/i/v0`, `/capture`, `/batch` → Rust capture service
   - `/s` → Rust replay-capture service
+  - `/decide`, `/flags` → Rust feature-flags service (CRITICAL for session replay)
   - `/` fallback → Django web (serves JS SDK assets like `array.full.js`)
 
 ## Cloudflare Configuration
@@ -168,13 +178,18 @@ The PostHog JS client in Orbit is configured with `disable_compression: true` in
 If Orbit ever adds a CSP header (middleware, gateway policy, etc.), whitelist the PostHog ingest host:
 
 ```
-script-src 'self' 'unsafe-inline' https://ingest-posthog.hoytlabs.app;
+script-src 'self' 'unsafe-inline' blob: https://ingest-posthog.hoytlabs.app;
 connect-src 'self' https://ingest-posthog.hoytlabs.app;
+worker-src blob:;
 ```
 
-- `script-src` — the JS SDK loads from `ingest-posthog.hoytlabs.app/static/array.full.js`
-- `'unsafe-inline'` — needed for the `posthog.init()` call in PostHogProvider
-- `connect-src` — XHR/fetch calls to send events and recordings
+- `script-src` — `'unsafe-inline'` for `posthog.init()`, `blob:` for session recording Web Worker, host for `array.full.js` SDK
+- `connect-src` — XHR/fetch calls to send events and recordings (`/e`, `/s`, `/decide`)
+- `worker-src blob:` — session recording (rrweb) loads a Web Worker via blob URL
+
+### Referrer-Policy
+
+If the app sets a `Referrer-Policy` header, it **must NOT** be `no-referrer`. PostHog's `/decide` is a cross-origin POST; Django CSRF middleware requires the `Referer` header. Use `strict-origin-when-cross-origin` instead.
 
 ## Frontend Integration
 
