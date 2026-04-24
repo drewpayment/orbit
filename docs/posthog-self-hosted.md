@@ -65,6 +65,22 @@ PostHog services are tightly coupled — the web server, worker, plugin server, 
 - Plugin server crashes (Node.js version expects different Postgres schema)
 - Capture service rejecting events the ingestion service expects
 
+### Known ceiling: WarpStream drift (2026-04-09+)
+
+`posthog/posthog` images built after **2026-04-09** run the new `0227_warpstream` ClickHouse migration (upstream commit `fccbc6b92e`, PR #53820). That migration references Kafka-engine tables via a `warpstream_calculated_events` named collection and a `CLICKHOUSE_SATELLITE_CLUSTERS` list (`ai_events,aux,ops,sessions`) that only exist in PostHog's managed-Cloud WarpStream infrastructure.
+
+On self-hosted, a straight upgrade fails with either:
+- `DB::Exception: There is no named collection 'warpstream_calculated_events'`
+- `DB::Exception: Requested cluster '<ai_events|aux|ops|sessions>' not found (code 701)`
+
+The migration job hits `backoffLimit`, the ArgoCD PostSync hook wedges, and the entire app sync gets stuck.
+
+**Mitigations already applied in `infrastructure/k8s/posthog/`:**
+- `posthog/posthog` images pinned to `sha256:334b0b6...` (2026-04-05, pre-WarpStream) across `web.yaml`, `workers.yaml`, `jobs.yaml`
+- `config/clickhouse/config.d/default.xml` declares the four satellite clusters (`ai_events`, `aux`, `ops`, `sessions`) and the `warpstream_calculated_events` named collection as single-node aliases — so if/when we do bump past the WarpStream migration, ClickHouse will have the objects it needs
+
+**Do NOT let Renovate auto-merge bumps of `posthog/posthog:latest`.** Always validate a new digest against the talos-argocd-proxmox deployment first — that repo tracks what PostHog self-hosted actually supports.
+
 ## ArgoCD Sync Order (CRITICAL)
 
 PostHog has a strict startup dependency chain. If services start out of order, migrations fail, data is lost, or services crash-loop. The sync wave annotations enforce the correct order.
@@ -268,3 +284,5 @@ Check the HTTPRoute routes `/decide` to `posthog-feature-flags:3001` and `/s` to
 **PostHog UI login fails**: Check Django migration job completed successfully. Verify Postgres is accessible from the web pod. Check `SECRET_KEY` is set correctly.
 
 **ClickHouse errors on startup**: The clickhouse-init job must complete before the migrate job. Verify ArgoCD sync waves are ordered correctly (wave 0 → data layer, wave 1 → init jobs, wave 2 → migration, wave 3 → app services).
+
+**`migrate_clickhouse` fails with "no named collection 'warpstream_calculated_events'" or "Requested cluster 'ai_events' not found (code 701)"**: You picked up a `posthog/posthog` image built on/after 2026-04-09 which runs the WarpStream migration. See the "Known ceiling: WarpStream drift" section above. Either roll the image back to the pinned `sha256:334b0b6...` digest, or ensure `config/clickhouse/config.d/default.xml` declares the four satellite clusters AND the `warpstream_calculated_events` named collection (the ConfigMap must be re-mounted — bounce the ClickHouse pod) before re-running the migration job.
