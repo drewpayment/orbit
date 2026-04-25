@@ -1,0 +1,81 @@
+# PostHog ingestion — bridges capture service and ClickHouse
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: posthog-ingestion
+  namespace: orbit
+  labels:
+    app.kubernetes.io/name: posthog
+    app.kubernetes.io/component: ingestion-general
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: posthog
+      app.kubernetes.io/component: ingestion-general
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: posthog
+        app.kubernetes.io/component: ingestion-general
+    spec:
+      serviceAccountName: orbit
+      containers:
+        - name: ingestion-general
+          image: posthog/posthog-node:latest@sha256:863e76e040ad41aef79f605c33ec71f1529bddf94cfd88941c935da9bde97235
+          command: ["node", "nodejs/dist/index.js"]
+          envFrom:
+            - configMapRef:
+                name: posthog-env
+          env:
+            - name: PLUGIN_SERVER_MODE
+              value: "ingestion-v2-combined"
+            - name: DISABLE_MMDB
+              value: "true"
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: POSTHOG_SECRET_KEY
+            - name: ENCRYPTION_SALT_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: POSTHOG_ENCRYPTION_SALT_KEYS
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: POSTHOG_DB_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://posthog:$(PGPASSWORD)@posthog-db:5432/posthog"
+            - name: PERSONS_DATABASE_URL
+              value: "postgres://posthog:$(PGPASSWORD)@posthog-db:5432/posthog"
+            - name: BEHAVIORAL_COHORTS_DATABASE_URL
+              value: "postgres://posthog:$(PGPASSWORD)@posthog-db:5432/posthog"
+            - name: OBJECT_STORAGE_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: MINIO_ROOT_USER
+            - name: OBJECT_STORAGE_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: MINIO_ROOT_PASSWORD
+            - name: COOKIELESS_REDIS_HOST
+              value: "posthog-redis"
+            - name: COOKIELESS_REDIS_PORT
+              value: "6379"
+            - name: CDP_REDIS_HOST
+              value: "posthog-redis"
+            - name: CDP_REDIS_PORT
+              value: "6379"
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              memory: 2Gi

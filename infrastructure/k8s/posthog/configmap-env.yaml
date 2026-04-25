@@ -1,0 +1,77 @@
+# infrastructure/k8s/posthog/configmap-env.yaml
+#
+# Shared environment variables for all PostHog services.
+# Adapted from mitchross's proven self-hosted PostHog k8s setup.
+#
+# IMPORTANT: Update ALLOWED_HOSTS, SITE_URL, CSRF_TRUSTED_ORIGINS, and
+# OBJECT_STORAGE_ENDPOINT to match your deployment environment.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: posthog-env
+  namespace: orbit
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+data:
+  # General
+  DEPLOYMENT: "hobby"
+  PRIMARY_DB: "clickhouse"
+  OPT_OUT_CAPTURE: "true"
+  LOGGING_FORMATTER_NAME: "json"
+  SKIP_ASYNC_MIGRATIONS_SETUP: "1"
+  POSTHOG_SKIP_MIGRATION_CHECKS: "1"
+  OTEL_SDK_DISABLED: "true"
+  DISABLE_SECURE_SSL_REDIRECT: "true"
+  IS_BEHIND_PROXY: "true"
+  # TODO: Set to your gateway/proxy IPs
+  TRUSTED_PROXIES: ""
+  # TODO: Set to your PostHog hostnames
+  ALLOWED_HOSTS: "posthog.hoytlabs.app,ingest-posthog.hoytlabs.app"
+  SITE_URL: "https://posthog.hoytlabs.app"
+  CSRF_TRUSTED_ORIGINS: "https://posthog.hoytlabs.app,https://ingest-posthog.hoytlabs.app,https://orbit.hoytlabs.app"
+
+  # PostgreSQL (posthog-dedicated instance within orbit namespace)
+  PGHOST: "posthog-db"
+  PGPORT: "5432"
+  PGDATABASE: "posthog"
+  PGUSER: "posthog"
+
+  # ClickHouse
+  CLICKHOUSE_HOST: "posthog-clickhouse"
+  CLICKHOUSE_DATABASE: "posthog"
+  CLICKHOUSE_SECURE: "false"
+  CLICKHOUSE_VERIFY: "false"
+  CLICKHOUSE_MIGRATIONS_CLUSTER: "posthog_migrations"
+  CLICKHOUSE_API_USER: "api"
+  CLICKHOUSE_API_PASSWORD: "apipass"
+  CLICKHOUSE_APP_USER: "app"
+  CLICKHOUSE_APP_PASSWORD: "apppass"
+
+  # Kafka/Redpanda
+  KAFKA_HOSTS: "posthog-kafka:9092"
+
+  # Redis
+  REDIS_URL: "redis://posthog-redis:6379/"
+
+  # Object Storage (uses Orbit's MinIO instance)
+  # If you need a separate bucket, create it via a MinIO init job
+  OBJECT_STORAGE_ENABLED: "true"
+  OBJECT_STORAGE_ENDPOINT: "http://minio:9000"
+  OBJECT_STORAGE_BUCKET: "posthog"
+  OBJECT_STORAGE_PUBLIC_ENDPOINT: "https://posthog.hoytlabs.app"
+  SESSION_RECORDING_V2_S3_ENDPOINT: "http://minio:9000"
+  SESSION_RECORDING_V2_S3_BUCKET: "posthog"
+  SESSION_RECORDING_V2_S3_REGION: "us-east-1"
+  SESSION_RECORDING_V2_S3_FORCE_PATH_STYLE: "true"
+
+  # CDP
+  CDP_API_URL: "http://posthog-plugins:6738"
+  # Recording API is a dedicated service, NOT the plugin server
+  RECORDING_API_URL: "http://posthog-recording-api:6738"
+
+  # Feature flags — served by the Rust feature-flags service on port 3001
+  # FLAGS_REDIS_ENABLED is false because the Rust service queries Postgres directly
+  FLAGS_REDIS_ENABLED: "false"
+
+  # API limits
+  API_QUERIES_PER_TEAM: '{"1": 100}'

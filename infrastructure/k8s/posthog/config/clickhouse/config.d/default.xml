@@ -1,0 +1,117 @@
+<clickhouse>
+    <tcp_port>9000</tcp_port>
+
+    <remote_servers>
+        <posthog>
+            <shard>
+                <replica>
+                    <host>posthog-clickhouse-0.posthog-clickhouse.orbit.svc.cluster.local</host>
+                    <port>9000</port>
+                </replica>
+            </shard>
+        </posthog>
+        <posthog_single_shard>
+            <shard>
+                <replica>
+                    <host>posthog-clickhouse-0.posthog-clickhouse.orbit.svc.cluster.local</host>
+                    <port>9000</port>
+                </replica>
+            </shard>
+        </posthog_single_shard>
+        <posthog_migrations>
+            <shard>
+                <replica>
+                    <host>posthog-clickhouse-0.posthog-clickhouse.orbit.svc.cluster.local</host>
+                    <port>9000</port>
+                </replica>
+            </shard>
+        </posthog_migrations>
+        <posthog_writable>
+            <shard>
+                <replica>
+                    <host>posthog-clickhouse-0.posthog-clickhouse.orbit.svc.cluster.local</host>
+                    <port>9000</port>
+                </replica>
+            </shard>
+        </posthog_writable>
+        <posthog_primary_replica>
+            <shard>
+                <replica>
+                    <host>posthog-clickhouse-0.posthog-clickhouse.orbit.svc.cluster.local</host>
+                    <port>9000</port>
+                </replica>
+            </shard>
+        </posthog_primary_replica>
+        <!--
+          Satellite clusters — PostHog's `CLICKHOUSE_SATELLITE_CLUSTERS`
+          defaults to `"ai_events,aux,ops,sessions"` (see
+          posthog/settings/data_stores.py). All four must exist or
+          `migrate_clickhouse` fails with
+          `DB::Exception: Requested cluster '<name>' not found (code 701)`
+          and cascades into the PostSync hook wedging Argo. On a single-
+          node install we point every satellite at the same host; queries
+          resolve transparently.
+        -->
+        <ai_events>
+            <shard>
+                <replica>
+                    <host>posthog-clickhouse-0.posthog-clickhouse.orbit.svc.cluster.local</host>
+                    <port>9000</port>
+                </replica>
+            </shard>
+        </ai_events>
+        <aux>
+            <shard>
+                <replica>
+                    <host>posthog-clickhouse-0.posthog-clickhouse.orbit.svc.cluster.local</host>
+                    <port>9000</port>
+                </replica>
+            </shard>
+        </aux>
+        <ops>
+            <shard>
+                <replica>
+                    <host>posthog-clickhouse-0.posthog-clickhouse.orbit.svc.cluster.local</host>
+                    <port>9000</port>
+                </replica>
+            </shard>
+        </ops>
+        <sessions>
+            <shard>
+                <replica>
+                    <host>posthog-clickhouse-0.posthog-clickhouse.orbit.svc.cluster.local</host>
+                    <port>9000</port>
+                </replica>
+            </shard>
+        </sessions>
+    </remote_servers>
+
+    <!--
+      named_collections — kept in sync with upstream
+      PostHog/posthog:docker/clickhouse/config.d/default.xml. All three
+      collections just point at $KAFKA_HOSTS; they exist as aliases so
+      Kafka-engine table DDL in migrations can reference
+      `kafka(warpstream_calculated_events, ...)` instead of hard-coding
+      brokers. Missing `warpstream_calculated_events` is what broke
+      migrate_clickhouse on 2026-04-19 after PostHog PR #53820 (commit
+      fccbc6b92e, 2026-04-09) added the 0227_warpstream migration.
+    -->
+    <named_collections>
+        <msk_cluster>
+            <kafka_broker_list from_env="KAFKA_HOSTS"/>
+        </msk_cluster>
+        <warpstream_ingestion>
+            <kafka_broker_list from_env="KAFKA_HOSTS"/>
+        </warpstream_ingestion>
+        <warpstream_calculated_events>
+            <kafka_broker_list from_env="KAFKA_HOSTS"/>
+        </warpstream_calculated_events>
+    </named_collections>
+
+    <macros>
+        <shard>01</shard>
+        <replica>ch1</replica>
+        <hostClusterType>online</hostClusterType>
+        <hostClusterRole>data</hostClusterRole>
+    </macros>
+</clickhouse>

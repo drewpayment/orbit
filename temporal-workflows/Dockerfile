@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /build
 
@@ -23,6 +23,7 @@ COPY temporal-workflows/ ./temporal-workflows/
 
 # Build the worker
 WORKDIR /build/temporal-workflows
+RUN go mod tidy
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/worker ./cmd/worker
 
 # Runtime stage

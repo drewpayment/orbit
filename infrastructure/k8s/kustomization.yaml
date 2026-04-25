@@ -35,3 +35,6 @@ resources:
   - launches-worker-aws
   - launches-worker-gcp
   - launches-worker-azure
+
+  # Analytics
+  - posthog

@@ -22,7 +22,7 @@ services:
       - discovery.type=single-node
       - ES_JAVA_OPTS=-Xms256m -Xmx256m
       - xpack.security.enabled=false
-    image: elasticsearch:7.16.2
+    image: elasticsearch:7.17.24
     ports:
       - 9200:9200
     volumes:
@@ -66,10 +66,10 @@ services:
         condition: service_healthy
     environment:
       - TEMPORAL_ADDRESS=temporal-server:7233
-      - TEMPORAL_CORS_ORIGINS=http://localhost:3000,http://localhost:3001
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3100,http://localhost:3101
     image: temporalio/ui:2.30.0
     ports:
-      - 8080:8080
+      - 8090:8080
 
   temporal-worker:
     container_name: temporal-worker

@@ -1,0 +1,109 @@
+# PostHog-dedicated PostgreSQL instance (separate from Orbit's main PostgreSQL)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: orbit-posthog-postgres-pv
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: orbit-nfs
+  nfs:
+    server: 192.168.86.44
+    path: /mnt/tank/appdata/orbit/posthog/postgres
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: posthog-postgres-data
+  namespace: orbit
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: orbit-nfs
+  resources:
+    requests:
+      storage: 20Gi
+  volumeName: orbit-posthog-postgres-pv
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: posthog-db
+  namespace: orbit
+  labels:
+    app.kubernetes.io/name: posthog
+    app.kubernetes.io/component: db
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: posthog
+      app.kubernetes.io/component: db
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: posthog
+        app.kubernetes.io/component: db
+    spec:
+      serviceAccountName: orbit
+      containers:
+        - name: db
+          image: postgres:15.12-alpine
+          env:
+            - name: POSTGRES_USER
+              value: posthog
+            - name: POSTGRES_DB
+              value: posthog
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: POSTHOG_DB_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+              name: postgres
+          livenessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "pg_isready -U posthog"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 30
+          readinessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "pg_isready -U posthog"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 4Gi
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: posthog-postgres-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: posthog-db
+  namespace: orbit
+spec:
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+  selector:
+    app.kubernetes.io/name: posthog
+    app.kubernetes.io/component: db
