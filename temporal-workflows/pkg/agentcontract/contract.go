@@ -40,12 +40,23 @@ const (
 	ToolProposeToUser = "propose_to_user"
 	ToolDone          = "done"
 
-	ToolShellExec   = "shell_exec"
-	ToolHTTPRequest = "http_request"
-	ToolReadFile    = "read_file"
-	ToolWriteFile   = "write_file"
-	ToolListDir     = "list_dir"
-	ToolRepoInspect = "repo_inspect"
+	ToolShellExec       = "shell_exec"
+	ToolHTTPRequest     = "http_request"
+	ToolReadFile        = "read_file"
+	ToolWriteFile       = "write_file"
+	ToolListDir         = "list_dir"
+	ToolRepoInspect     = "repo_inspect"
+	ToolRequestApproval = "request_approval"
+	ToolRegisterTool    = "register_tool"
+)
+
+// ApprovalKind classifies HITL gates the agent surfaces. The chat UI uses
+// this to pick the right card style; admin auditing groups by kind.
+const (
+	ApprovalKindCustom            = "custom"
+	ApprovalKindProposal          = "proposal"
+	ApprovalKindDestructiveCmd    = "destructive_command"
+	ApprovalKindToolRegistration  = "tool_registration"
 )
 
 // Activity names for Spike 2 sandbox + IO activities.

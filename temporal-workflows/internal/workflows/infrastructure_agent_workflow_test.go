@@ -190,6 +190,140 @@ func TestInfrastructureAgentWorkflow_UnknownToolFedBackToAgent(t *testing.T) {
 	require.True(t, foundToolErr, "missing tool error feedback")
 }
 
+func TestInfrastructureAgentWorkflow_RequestApprovalBlocksThenResolves(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	registerSandboxStubs(env)
+
+	llm := &scriptedLLM{
+		steps: []agentactivity.LLMNextStepResult{
+			{
+				ToolCalls: []providers.ToolCall{
+					{ID: "tc-approve", Name: ToolRequestApproval, Arguments: map[string]any{
+						"title":         "Run terraform apply",
+						"kind":          "destructive_command",
+						"body_markdown": "About to apply 17 changes.",
+					}},
+				},
+				StopReason: "tool_use",
+			},
+			{
+				ToolCalls: []providers.ToolCall{
+					{ID: "tc-done", Name: ToolDone, Arguments: map[string]any{"summary": "applied"}},
+				},
+				StopReason: "tool_use",
+			},
+		},
+	}
+	env.RegisterActivityWithOptions(llm.Run, activity.RegisterOptions{Name: ActivityLLMNextStep})
+
+	// Approval signal arrives a moment after the workflow surfaces the
+	// approval request. The workflow should block in awaitApproval until it
+	// arrives, then resume.
+	env.RegisterDelayedCallback(func() {
+		// Read the workflow's pending approvals to discover the approval id
+		// the workflow generated, then signal it.
+		queryRes, err := env.QueryWorkflow(AgentQuerySnapshot)
+		require.NoError(t, err)
+		var snap AgentSnapshot
+		require.NoError(t, queryRes.Get(&snap))
+		require.Len(t, snap.PendingApprovals, 1, "expected one pending approval")
+
+		env.SignalWorkflow(AgentSignalApproval, ApprovalSignalPayload{
+			ApprovalID: snap.PendingApprovals[0].ApprovalID,
+			Approved:   true,
+			ResolvedBy: "admin-1",
+			Notes:      "lgtm",
+		})
+	}, 100*time.Millisecond)
+
+	env.ExecuteWorkflow(InfrastructureAgentWorkflow, InfrastructureAgentInput{
+		AgentRunID:    "run-approve",
+		WorkspaceID:   "ws-1",
+		LLMProviderID: "prov-1",
+		InitialPrompt: "do destructive thing",
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	require.Equal(t, int32(2), llm.calls.Load(), "expected 2 LLM steps")
+
+	// The second LLM call must have seen the approval result in its history.
+	require.Len(t, llm.captured, 2)
+	var found bool
+	for _, m := range llm.captured[1].Messages {
+		if m.Role == providers.RoleTool && m.ToolCallID == "tc-approve" {
+			require.Contains(t, m.Content, `"approved":true`)
+			require.Contains(t, m.Content, `"resolved_by":"admin-1"`)
+			found = true
+		}
+	}
+	require.True(t, found, "approval result not in LLM history")
+}
+
+func TestInfrastructureAgentWorkflow_RequestApprovalRejectionFedBack(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	registerSandboxStubs(env)
+
+	llm := &scriptedLLM{
+		steps: []agentactivity.LLMNextStepResult{
+			{
+				ToolCalls: []providers.ToolCall{
+					{ID: "tc-approve", Name: ToolRequestApproval, Arguments: map[string]any{
+						"title":         "Drop the prod database",
+						"kind":          "destructive_command",
+						"body_markdown": "DROP TABLE users;",
+					}},
+				},
+				StopReason: "tool_use",
+			},
+			{
+				ToolCalls: []providers.ToolCall{
+					{ID: "tc-done", Name: ToolDone, Arguments: map[string]any{"summary": "aborted"}},
+				},
+				StopReason: "tool_use",
+			},
+		},
+	}
+	env.RegisterActivityWithOptions(llm.Run, activity.RegisterOptions{Name: ActivityLLMNextStep})
+
+	env.RegisterDelayedCallback(func() {
+		q, err := env.QueryWorkflow(AgentQuerySnapshot)
+		require.NoError(t, err)
+		var snap AgentSnapshot
+		require.NoError(t, q.Get(&snap))
+		require.Len(t, snap.PendingApprovals, 1)
+		env.SignalWorkflow(AgentSignalApproval, ApprovalSignalPayload{
+			ApprovalID: snap.PendingApprovals[0].ApprovalID,
+			Approved:   false,
+			ResolvedBy: "admin-2",
+			Notes:      "absolutely not",
+		})
+	}, 50*time.Millisecond)
+
+	env.ExecuteWorkflow(InfrastructureAgentWorkflow, InfrastructureAgentInput{
+		AgentRunID:    "run-reject",
+		WorkspaceID:   "ws-1",
+		LLMProviderID: "prov-1",
+		InitialPrompt: "drop the table",
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+
+	require.Len(t, llm.captured, 2)
+	var found bool
+	for _, m := range llm.captured[1].Messages {
+		if m.Role == providers.RoleTool && m.ToolCallID == "tc-approve" {
+			require.Contains(t, m.Content, `"approved":false`)
+			require.Contains(t, m.Content, "absolutely not")
+			found = true
+		}
+	}
+	require.True(t, found, "rejection result not in LLM history")
+}
+
 func TestInfrastructureAgentWorkflow_ShellExecDispatchesToActivity(t *testing.T) {
 	suite := &testsuite.WorkflowTestSuite{}
 	env := suite.NewTestWorkflowEnvironment()

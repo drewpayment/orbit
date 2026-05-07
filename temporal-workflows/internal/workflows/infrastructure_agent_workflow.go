@@ -67,12 +67,13 @@ const (
 	ToolProposeToUser = agentcontract.ToolProposeToUser
 	ToolDone          = agentcontract.ToolDone
 
-	ToolShellExec   = agentcontract.ToolShellExec
-	ToolHTTPRequest = agentcontract.ToolHTTPRequest
-	ToolReadFile    = agentcontract.ToolReadFile
-	ToolWriteFile   = agentcontract.ToolWriteFile
-	ToolListDir     = agentcontract.ToolListDir
-	ToolRepoInspect = agentcontract.ToolRepoInspect
+	ToolShellExec       = agentcontract.ToolShellExec
+	ToolHTTPRequest     = agentcontract.ToolHTTPRequest
+	ToolReadFile        = agentcontract.ToolReadFile
+	ToolWriteFile       = agentcontract.ToolWriteFile
+	ToolListDir         = agentcontract.ToolListDir
+	ToolRepoInspect     = agentcontract.ToolRepoInspect
+	ToolRequestApproval = agentcontract.ToolRequestApproval
 
 	EventKindConversationTurn = agentcontract.EventKindConversationTurn
 	EventKindTokenDelta       = agentcontract.EventKindTokenDelta
@@ -501,8 +502,84 @@ func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agen
 			"truncated_at": res.TruncatedAt,
 		}), false
 
+	case ToolRequestApproval:
+		title, _ := tc.Arguments["title"].(string)
+		kind, _ := tc.Arguments["kind"].(string)
+		if kind == "" {
+			kind = agentcontract.ApprovalKindCustom
+		}
+		body, _ := tc.Arguments["body_markdown"].(string)
+		approvalID := workflowUUID(ctx)
+
+		state.pendingApprovals[approvalID] = PendingApproval{
+			ApprovalID:   approvalID,
+			Kind:         kind,
+			Title:        title,
+			BodyMarkdown: body,
+			CreatedAt:    workflow.Now(ctx),
+		}
+		prevStatus := state.status
+		state.status = "awaiting_approval"
+		emitEvent(ctx, state, EventKindApprovalRequest, map[string]any{
+			"approval_id":   approvalID,
+			"kind":          kind,
+			"title":         title,
+			"body_markdown": body,
+		})
+		emitEvent(ctx, state, EventKindStatusUpdate, map[string]any{
+			"status":  "awaiting_approval",
+			"message": title,
+		})
+
+		// Block until a signal with this approval_id arrives. Other ids are
+		// dropped (they'll be re-issued when their parent approval prompts
+		// are reopened); abort short-circuits the wait.
+		resolution, aborted := awaitApproval(ctx, approvalCh, approvalID)
+		delete(state.pendingApprovals, approvalID)
+		state.status = prevStatus
+		if aborted {
+			state.terminated = true
+			return jsonResult(map[string]any{
+				"approved": false,
+				"reason":   "agent run aborted",
+			}), true
+		}
+		emitEvent(ctx, state, EventKindApprovalResolved, map[string]any{
+			"approval_id": approvalID,
+			"approved":    resolution.Approved,
+			"resolved_by": resolution.ResolvedBy,
+			"notes":       resolution.Notes,
+		})
+		return jsonResult(map[string]any{
+			"approved":    resolution.Approved,
+			"resolved_by": resolution.ResolvedBy,
+			"notes":       resolution.Notes,
+		}), false
+
 	default:
 		return fmt.Sprintf("ERROR: unknown tool %q.", tc.Name), false
+	}
+}
+
+// awaitApproval blocks until an ApprovalSignal with matching approvalID
+// arrives. Mismatched signals are dropped (best-effort; callers re-emit the
+// approval prompt when their gate reopens). Returns aborted=true when the
+// abort path fires; callers must terminate the loop in that case.
+//
+// Implementation note: the loop uses workflow.NewSelector instead of a
+// straight Receive so it can also watch for state.terminated set by the
+// abort goroutine without racing with signal delivery.
+func awaitApproval(ctx workflow.Context, approvalCh workflow.ReceiveChannel, approvalID string) (ApprovalSignalPayload, bool) {
+	for {
+		var p ApprovalSignalPayload
+		approvalCh.Receive(ctx, &p)
+		if p.ApprovalID == approvalID {
+			return p, false
+		}
+		if ctx.Err() != nil {
+			return ApprovalSignalPayload{}, true
+		}
+		// mismatched id: drop and keep waiting.
 	}
 }
 
@@ -657,6 +734,19 @@ func builtInToolSchemas() []providers.ToolSchema {
 				"required": []string{"repo_url"},
 			},
 		},
+		{
+			Name: ToolRequestApproval,
+			Description: "Request explicit human approval before proceeding. The workflow blocks on this; the chat UI surfaces an inline Approve/Reject card. Use BEFORE any destructive command (terraform destroy, kubectl delete, az ... delete) and any time the user has not yet given consent for a billable / observable action. Returns {approved, resolved_by, notes}.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"title":         map[string]any{"type": "string", "description": "Short headline shown on the approval card."},
+					"kind":          map[string]any{"type": "string", "enum": []string{"destructive_command", "tool_registration", "proposal", "custom"}, "description": "Defaults to 'custom'."},
+					"body_markdown": map[string]any{"type": "string", "description": "Full detail rendered as markdown. Embed the exact command/diff being approved."},
+				},
+				"required": []string{"title", "body_markdown"},
+			},
+		},
 	}
 }
 
@@ -702,6 +792,7 @@ You operate inside a deterministic Temporal workflow that exposes a small set of
 
 Tools:
 - propose_to_user(title, summary, body_markdown): post a structured plan to the user and wait for their reply
+- request_approval(title, kind, body_markdown): block on an explicit human approve/reject decision (use BEFORE every destructive command)
 - done(summary): end the run
 - shell_exec(command, working_dir?): run a bash command in the sandbox (az / gcloud / kubectl / helm / terraform / pulumi / git etc.)
 - http_request(method, url, headers?, body?): outbound HTTP gated by the workspace allowlist
