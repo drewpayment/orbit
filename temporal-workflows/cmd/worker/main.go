@@ -6,10 +6,14 @@ import (
 	"log/slog"
 	"os"
 
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
 	"github.com/drewpayment/orbit/temporal-workflows/internal/activities"
+	agentactivity "github.com/drewpayment/orbit/temporal-workflows/internal/activities/agent"
+	_ "github.com/drewpayment/orbit/temporal-workflows/internal/agent/providers/anthropic"     // register provider
+	_ "github.com/drewpayment/orbit/temporal-workflows/internal/agent/providers/openai_compat" // register provider
 	internalClients "github.com/drewpayment/orbit/temporal-workflows/internal/clients"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/services"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/workflows"
@@ -420,6 +424,20 @@ func main() {
 	w.RegisterActivity(specSyncActivities.UpsertAPISchemaToCatalog)
 	w.RegisterActivity(specSyncActivities.RemoveOrphanedSpecs)
 	log.Println("API spec sync activities registered")
+
+	// =======================================================================
+	// Infrastructure Agent
+	// =======================================================================
+
+	w.RegisterWorkflow(workflows.InfrastructureAgentWorkflow)
+
+	llmProviderClient := services.NewPayloadLLMProviderClient(orbitAPIURL, orbitInternalAPIKey, logger)
+	tokenSigniller := services.NewTemporalTokenSigniller(c, logger)
+	agentActivities := agentactivity.NewAgentActivities(llmProviderClient, tokenSigniller, logger, agentactivity.AgentActivitiesOptions{})
+	w.RegisterActivityWithOptions(agentActivities.LLMNextStep, activity.RegisterOptions{
+		Name: workflows.ActivityLLMNextStep,
+	})
+	log.Println("Infrastructure Agent workflow + activities registered")
 
 	log.Println("Starting Temporal worker...")
 	log.Printf("Temporal address: %s", temporalAddress)

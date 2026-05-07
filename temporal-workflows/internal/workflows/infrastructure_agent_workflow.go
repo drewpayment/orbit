@@ -11,28 +11,33 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	agentactivity "github.com/drewpayment/orbit/temporal-workflows/internal/activities/agent"
+	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/contract"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/providers"
 )
 
-// Signal names for the InfrastructureAgentWorkflow.
+// Signal/query/activity names re-exported from the contract package so the
+// workflow file remains the canonical reference.
 const (
-	AgentSignalUserMessage  = "AgentUserMessage"
-	AgentSignalApproval     = "AgentApproval"
-	AgentSignalAbort        = "AgentAbort"
-	AgentSignalTokenStream  = "AgentTokenStream"
-	AgentSignalToolFinished = "AgentToolFinished"
+	AgentSignalUserMessage  = contract.SignalUserMessage
+	AgentSignalApproval     = contract.SignalApproval
+	AgentSignalAbort        = contract.SignalAbort
+	AgentSignalTokenStream  = contract.SignalTokenStream
+	AgentSignalToolFinished = contract.SignalToolFinished
+
+	AgentQuerySnapshot    = contract.QuerySnapshot
+	AgentQueryEventsSince = contract.QueryEventsSince
+	AgentQueryHasFinished = contract.QueryHasFinished
+
+	ActivityLLMNextStep = contract.ActivityLLMNextStep
 )
 
-// Query names.
-const (
-	AgentQuerySnapshot     = "AgentSnapshot"
-	AgentQueryEventsSince  = "AgentEventsSince"
-	AgentQueryHasFinished  = "AgentHasFinished"
-)
-
-// Activity names.
-const (
-	ActivityLLMNextStep = "LLMNextStep"
+// Type aliases for the contract payloads, kept here for source-code
+// continuity with the rest of the workflow.
+type (
+	TokenStreamSignalPayload = contract.TokenStreamSignalPayload
+	UserMessageSignalPayload = contract.UserMessageSignalPayload
+	ApprovalSignalPayload    = contract.ApprovalSignalPayload
+	AbortSignalPayload       = contract.AbortSignalPayload
 )
 
 // Built-in tools available in the Spike 1 skeleton. Subsequent spikes add
@@ -134,35 +139,6 @@ type PendingApproval struct {
 	BodyMarkdown string         `json:"body_markdown"`
 	Payload      map[string]any `json:"payload,omitempty"`
 	CreatedAt    time.Time      `json:"created_at"`
-}
-
-// ApprovalSignalPayload is the body of AgentSignalApproval.
-type ApprovalSignalPayload struct {
-	ApprovalID string `json:"approval_id"`
-	Approved   bool   `json:"approved"`
-	ResolvedBy string `json:"resolved_by"`
-	Notes      string `json:"notes"`
-}
-
-// UserMessageSignalPayload is the body of AgentSignalUserMessage.
-type UserMessageSignalPayload struct {
-	TurnID  string `json:"turn_id"`
-	UserID  string `json:"user_id"`
-	Message string `json:"message"`
-}
-
-// AbortSignalPayload is the body of AgentSignalAbort.
-type AbortSignalPayload struct {
-	RequestedBy string `json:"requested_by"`
-	Reason      string `json:"reason"`
-}
-
-// TokenStreamSignalPayload is the body of AgentSignalTokenStream. The LLM
-// activity emits these to push partial assistant text back into the workflow,
-// from which the gRPC streaming proxy fans it out via SSE to chat UIs.
-type TokenStreamSignalPayload struct {
-	TurnID string `json:"turn_id"`
-	Delta  string `json:"delta"`
 }
 
 // agentState is the in-workflow mutable state.
