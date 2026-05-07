@@ -14,6 +14,7 @@ import (
 
 	agentactivity "github.com/drewpayment/orbit/temporal-workflows/internal/activities/agent"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/providers"
+	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/safety"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/tooltemplate"
 	"github.com/drewpayment/orbit/temporal-workflows/pkg/agentcontract"
 )
@@ -135,6 +136,11 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 		return err
 	}
 
+	// Cancellable child context so the abort goroutine can wake up any
+	// blocking Receive (notably awaitApproval) by calling cancel().
+	loopCtx, cancelLoop := workflow.WithCancel(ctx)
+	defer cancelLoop()
+
 	// Activity options for the LLM step.
 	llmCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 5 * time.Minute,
@@ -217,23 +223,23 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 		}
 	}()
 
-	userMsgCh := workflow.GetSignalChannel(ctx, AgentSignalUserMessage)
-	approvalCh := workflow.GetSignalChannel(ctx, AgentSignalApproval)
-	abortCh := workflow.GetSignalChannel(ctx, AgentSignalAbort)
-	tokenCh := workflow.GetSignalChannel(ctx, AgentSignalTokenStream)
+	userMsgCh := workflow.GetSignalChannel(loopCtx, AgentSignalUserMessage)
+	approvalCh := workflow.GetSignalChannel(loopCtx, AgentSignalApproval)
+	abortCh := workflow.GetSignalChannel(ctx, AgentSignalAbort) // outer ctx so the goroutine survives loop cancellation
+	tokenCh := workflow.GetSignalChannel(loopCtx, AgentSignalTokenStream)
 
 	// Launch a goroutine to drain token-stream signals into state.
-	workflow.Go(ctx, func(ctx workflow.Context) {
+	workflow.Go(loopCtx, func(gctx workflow.Context) {
 		for !state.terminated {
 			var payload TokenStreamSignalPayload
-			more := tokenCh.Receive(ctx, &payload)
+			more := tokenCh.Receive(gctx, &payload)
 			if !more {
 				return
 			}
 			if payload.TurnID != "" && payload.TurnID == state.streamingTurnID {
 				state.streamingPartial += payload.Delta
 			}
-			emitEvent(ctx, &state, EventKindTokenDelta, map[string]any{
+			emitEvent(gctx, &state, EventKindTokenDelta, map[string]any{
 				"turn_id": payload.TurnID,
 				"delta":   payload.Delta,
 			})
@@ -243,6 +249,8 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 	// Launch goroutine to drain abort signals. Audit context is rebuilt
 	// inside the goroutine because Temporal forbids blocking on a future
 	// whose options were derived from a different coroutine's context.
+	// On abort we cancel loopCtx so any in-progress awaitApproval /
+	// awaitingUser select wakes up immediately.
 	workflow.Go(ctx, func(gctx workflow.Context) {
 		var payload AbortSignalPayload
 		more := abortCh.Receive(gctx, &payload)
@@ -265,6 +273,7 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 			EndedAt: workflow.Now(gctx).UTC().Format(time.RFC3339),
 		})
 		state.terminalAuditFlushed = true
+		cancelLoop()
 	})
 
 	// Seed the conversation with the initial user prompt if this is a fresh run.
@@ -288,11 +297,11 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 			emitEvent(ctx, &state, EventKindStatusUpdate, map[string]any{"status": "awaiting_user"})
 			markRun(auditCtx, wfID, agentactivity.UpdateAgentRunInput{Status: "awaiting_user"})
 
-			selector := workflow.NewSelector(ctx)
+			selector := workflow.NewSelector(loopCtx)
 			receivedUserMessage := false
 			selector.AddReceive(userMsgCh, func(c workflow.ReceiveChannel, _ bool) {
 				var msg UserMessageSignalPayload
-				c.Receive(ctx, &msg)
+				c.Receive(loopCtx, &msg)
 				appendTurn(ctx, &state, ConversationTurn{
 					TurnID:    msg.TurnID,
 					Role:      "user",
@@ -301,7 +310,10 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 				})
 				receivedUserMessage = true
 			})
-			selector.AddFuture(workflow.NewTimer(ctx, defaultUserWaitTimeout), func(workflow.Future) {
+			selector.AddFuture(workflow.NewTimer(loopCtx, defaultUserWaitTimeout), func(workflow.Future) {
+				if loopCtx.Err() != nil {
+					return // abort cancelled the timer; no-op
+				}
 				state.terminated = true
 				state.status = "timeout"
 				emitEvent(ctx, &state, EventKindStatusUpdate, map[string]any{
@@ -314,7 +326,7 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 				})
 				state.terminalAuditFlushed = true
 			})
-			selector.Select(ctx)
+			selector.Select(loopCtx)
 			if state.terminated || !receivedUserMessage {
 				continue
 			}
@@ -371,9 +383,10 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 		appendTurn(ctx, &state, assistantTurn)
 		state.streamingPartial = ""
 
-		// Dispatch tool calls.
+		// Dispatch tool calls. Use loopCtx so awaitApproval inside dispatch
+		// observes abort-induced cancellation.
 		for _, tc := range result.ToolCalls {
-			toolResult, terminated := dispatchTool(ctx, sandboxCtx, &state, &input, tc, approvalCh)
+			toolResult, terminated := dispatchTool(loopCtx, sandboxCtx, &state, &input, tc, approvalCh)
 			appendTurn(ctx, &state, ConversationTurn{
 				TurnID:     workflowUUID(ctx),
 				Role:       "tool",
@@ -481,6 +494,28 @@ func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agen
 	case ToolShellExec:
 		command, _ := tc.Arguments["command"].(string)
 		workingDir, _ := tc.Arguments["working_dir"].(string)
+
+		// Defense in depth: classify the command for destructive patterns
+		// (rm -rf, terraform destroy, kubectl delete, …). When matched, we
+		// gate the actual exec behind a synthesized destructive_command
+		// approval prompt regardless of whether the agent remembered to
+		// call request_approval first. The system prompt instructs the
+		// agent to gate destructive actions itself; this catches the case
+		// where the agent forgets or is talked into skipping by prompt
+		// injection.
+		if classification := safety.ClassifyShell(command); classification.Destructive {
+			ok, reason := requireDestructiveApproval(ctx, auditCtx, state, approvalCh, workflowID, command, classification)
+			if !ok {
+				return jsonResult(map[string]any{
+					"approved":  false,
+					"reason":    reason,
+					"command":   command,
+					"patterns":  classification.Patterns,
+					"exit_code": -1,
+				}), false
+			}
+		}
+
 		var res agentactivity.SandboxedShellResult
 		if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivitySandboxedShell, agentactivity.SandboxedShellInput{
 			WorkflowID: workflowID,
@@ -773,6 +808,15 @@ func dispatchRegisterTool(ctx workflow.Context, sandboxCtx workflow.Context, sta
 	inputSchemaJSON, _ := tc.Arguments["input_schema_json"].(string)
 	reasoning, _ := tc.Arguments["reasoning"].(string)
 
+	// Reject names that shadow built-in tools. The catalog merge would
+	// produce a duplicate entry the LLM sees, and the dispatch switch
+	// always favors the built-in over registered tools — so a registered
+	// shell_exec / done / request_approval would never actually run, just
+	// confuse the model.
+	if isBuiltInToolName(name) {
+		return jsonError("register_tool", fmt.Errorf("tool name %q collides with a built-in tool", name)), false
+	}
+
 	// Validate the template is well-formed BEFORE we surface an approval to
 	// the human reviewer. Saves them clicking through obviously-broken
 	// rows and gives the agent immediate feedback to fix typos.
@@ -877,6 +921,20 @@ func dispatchRegisterTool(ctx workflow.Context, sandboxCtx workflow.Context, sta
 	}), false
 }
 
+// isBuiltInToolName reports whether name collides with the workflow's
+// built-in tools. Used by dispatchRegisterTool to reject shadow names.
+func isBuiltInToolName(name string) bool {
+	switch name {
+	case ToolProposeToUser, ToolDone,
+		ToolShellExec, ToolHTTPRequest,
+		ToolReadFile, ToolWriteFile, ToolListDir,
+		ToolRepoInspect, ToolRequestApproval,
+		ToolRegisterTool, ToolStartHealthCheck:
+		return true
+	}
+	return false
+}
+
 // exampleArgsFromSchema returns a map filled with placeholder values for
 // every required property in the schema. Used by dispatchRegisterTool for
 // the template's pre-flight validation: every {{var}} placeholder must
@@ -893,6 +951,77 @@ func exampleArgsFromSchema(schemaJSON string) map[string]any {
 		out[k] = "x"
 	}
 	return out
+}
+
+// requireDestructiveApproval surfaces a destructive_command approval gate
+// keyed to the command and waits for human resolution. Returns (true, "")
+// on approve and (false, reason) on reject or abort. The audit row gets
+// the resolution appended either way so the run-history page records the
+// gate even when the action was rejected.
+func requireDestructiveApproval(ctx workflow.Context, auditCtx workflow.Context, state *agentState, approvalCh workflow.ReceiveChannel, workflowID, command string, classification safety.Classification) (bool, string) {
+	approvalID := workflowUUID(ctx)
+	title := "Destructive shell command — approval required"
+	body := fmt.Sprintf("The agent wants to run a command that matched the workflow's destructive-command policy.\n\n**Patterns:** %s\n\n**Command:**\n\n```\n%s\n```\n\nApprove only if you have verified this is the intended action.",
+		strings.Join(classification.Patterns, ", "), command)
+
+	state.pendingApprovals[approvalID] = PendingApproval{
+		ApprovalID:   approvalID,
+		Kind:         agentcontract.ApprovalKindDestructiveCmd,
+		Title:        title,
+		BodyMarkdown: body,
+		Payload: map[string]any{
+			"command":  command,
+			"patterns": classification.Patterns,
+		},
+		CreatedAt: workflow.Now(ctx),
+	}
+	prevStatus := state.status
+	state.status = "awaiting_approval"
+	emitEvent(ctx, state, EventKindApprovalRequest, map[string]any{
+		"approval_id":   approvalID,
+		"kind":          agentcontract.ApprovalKindDestructiveCmd,
+		"title":         title,
+		"body_markdown": body,
+		"command":       command,
+		"patterns":      classification.Patterns,
+	})
+	emitEvent(ctx, state, EventKindStatusUpdate, map[string]any{
+		"status":  "awaiting_approval",
+		"message": title,
+	})
+	markRun(auditCtx, workflowID, agentactivity.UpdateAgentRunInput{Status: "awaiting_approval"})
+
+	resolution, aborted := awaitApproval(ctx, approvalCh, approvalID)
+	delete(state.pendingApprovals, approvalID)
+	state.status = prevStatus
+	if aborted {
+		state.terminated = true
+		return false, "agent run aborted"
+	}
+	emitEvent(ctx, state, EventKindApprovalResolved, map[string]any{
+		"approval_id": approvalID,
+		"approved":    resolution.Approved,
+		"resolved_by": resolution.ResolvedBy,
+		"notes":       resolution.Notes,
+	})
+	markRun(auditCtx, workflowID, agentactivity.UpdateAgentRunInput{
+		Status:     prevStatus,
+		ApprovalID: approvalID,
+		Kind:       agentcontract.ApprovalKindDestructiveCmd,
+		Title:      title,
+		Resolution: resolutionLabel(resolution.Approved),
+		ResolvedBy: resolution.ResolvedBy,
+		ResolvedAt: workflow.Now(ctx).UTC().Format(time.RFC3339),
+		Notes:      resolution.Notes,
+	})
+	if !resolution.Approved {
+		reason := resolution.Notes
+		if reason == "" {
+			reason = "destructive command rejected"
+		}
+		return false, reason
+	}
+	return true, ""
 }
 
 // dispatchStartHealthCheck schedules a HealthCheckWorkflow as a child with
@@ -973,24 +1102,39 @@ func intArg(args map[string]any, key string, fallback int) int {
 }
 
 // awaitApproval blocks until an ApprovalSignal with matching approvalID
-// arrives. Mismatched signals are dropped (best-effort; callers re-emit the
-// approval prompt when their gate reopens). Returns aborted=true when the
-// abort path fires; callers must terminate the loop in that case.
+// arrives or the workflow context is cancelled (the abort goroutine calls
+// cancelLoop after surfacing an Abort signal). Mismatched signals are
+// dropped — callers re-emit the approval prompt when their gate reopens.
 //
-// Implementation note: the loop uses workflow.NewSelector instead of a
-// straight Receive so it can also watch for state.terminated set by the
-// abort goroutine without racing with signal delivery.
+// We use a Selector that watches both the approval channel and ctx.Done()
+// rather than relying on Receive returning more=false on cancellation,
+// because that contract isn't reliable across SDK versions.
 func awaitApproval(ctx workflow.Context, approvalCh workflow.ReceiveChannel, approvalID string) (ApprovalSignalPayload, bool) {
 	for {
-		var p ApprovalSignalPayload
-		approvalCh.Receive(ctx, &p)
-		if p.ApprovalID == approvalID {
-			return p, false
-		}
-		if ctx.Err() != nil {
+		var resolved ApprovalSignalPayload
+		var matched, aborted bool
+
+		sel := workflow.NewSelector(ctx)
+		sel.AddReceive(approvalCh, func(c workflow.ReceiveChannel, _ bool) {
+			var p ApprovalSignalPayload
+			c.Receive(ctx, &p)
+			if p.ApprovalID == approvalID {
+				resolved = p
+				matched = true
+			}
+			// Else: mismatched id; drop and the outer loop reselects.
+		})
+		sel.AddReceive(ctx.Done(), func(c workflow.ReceiveChannel, _ bool) {
+			aborted = true
+		})
+		sel.Select(ctx)
+
+		if aborted {
 			return ApprovalSignalPayload{}, true
 		}
-		// mismatched id: drop and keep waiting.
+		if matched {
+			return resolved, false
+		}
 	}
 }
 
