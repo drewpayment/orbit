@@ -10,43 +10,10 @@ import {
 } from '@/lib/access/workspace-access'
 import { agentClient } from '@/lib/grpc/agent-client'
 
-export interface AgentEventDTO {
-  sequence: bigint
-  emittedAt: string
-  kind:
-    | 'conversation_turn'
-    | 'token_delta'
-    | 'proposal_update'
-    | 'approval_request'
-    | 'approval_resolution'
-    | 'status_update'
-    | 'unknown'
-  conversationTurn?: {
-    turnId: string
-    role: string
-    content: string
-  }
-  tokenDelta?: { turnId: string; delta: string }
-  proposalUpdate?: {
-    proposalId: string
-    title: string
-    summary: string
-    bodyMarkdown: string
-  }
-  approvalRequest?: {
-    approvalId: string
-    kind: string
-    title: string
-    bodyMarkdown: string
-  }
-  approvalResolution?: {
-    approvalId: string
-    approved: boolean
-    resolvedBy: string
-    notes: string
-  }
-  statusUpdate?: { status: string; message: string }
-}
+// Server actions for the Infrastructure Agent chat UI. Live event streaming
+// runs through /api/agent/[runId]/stream (SSE proxy over the AgentService
+// server-streaming RPC); these actions cover the unary mutations (start a
+// run, send a message, approve / reject / abort).
 
 interface StartAgentRunInput {
   workspaceId: string
@@ -198,81 +165,3 @@ export async function abortAgentRun(input: {
   }
 }
 
-/**
- * Polling-style "stream" — drains all events emitted since `since` from the
- * AgentService server stream, then closes. The chat UI calls this on a
- * 500ms cadence; an SSE proxy can replace it without changing the UI.
- */
-export async function getAgentEvents(input: {
-  workspaceId: string
-  workflowId: string
-  since: bigint
-  maxBatch?: number
-}): Promise<{ success: boolean; events?: AgentEventDTO[]; latest?: bigint; error?: string }> {
-  const user = await getPayloadUserFromSession()
-  if (!user) return { success: false, error: 'Unauthorized' }
-  const payload = await getPayload({ config })
-  if (!(await isWorkspaceMember(payload, user.id, input.workspaceId))) {
-    return { success: false, error: 'Forbidden' }
-  }
-
-  try {
-    const events: AgentEventDTO[] = []
-    let latest = input.since
-    const max = input.maxBatch ?? 200
-
-    const stream = agentClient.streamAgentEvents({
-      workflowId: input.workflowId,
-      sinceSequence: input.since,
-    })
-
-    // Pull at most `max` events then break — the stream itself stays alive in
-    // the gRPC layer for as long as the workflow runs, but on this polling
-    // cadence we just want a snapshot batch.
-    const drained = drainWithLimit(stream, max)
-    for await (const evt of drained) {
-      const dto = mapEvent(evt)
-      events.push(dto)
-      if (evt.sequence > latest) latest = evt.sequence
-    }
-    return { success: true, events, latest }
-  } catch (err) {
-    return { success: false, error: (err as Error).message }
-  }
-}
-
-async function* drainWithLimit<T>(stream: AsyncIterable<T>, limit: number): AsyncIterable<T> {
-  let i = 0
-  for await (const item of stream) {
-    yield item
-    if (++i >= limit) return
-  }
-}
-
-function mapEvent(evt: any): AgentEventDTO {
-  const base: AgentEventDTO = {
-    sequence: evt.sequence,
-    emittedAt: evt.emittedAt?.seconds
-      ? new Date(Number(evt.emittedAt.seconds) * 1000).toISOString()
-      : new Date().toISOString(),
-    kind: 'unknown',
-  }
-  const e = evt.event
-  if (!e) return base
-  switch (e.case) {
-    case 'conversationTurn':
-      return { ...base, kind: 'conversation_turn', conversationTurn: e.value }
-    case 'tokenDelta':
-      return { ...base, kind: 'token_delta', tokenDelta: e.value }
-    case 'proposalUpdate':
-      return { ...base, kind: 'proposal_update', proposalUpdate: e.value }
-    case 'approvalRequest':
-      return { ...base, kind: 'approval_request', approvalRequest: e.value }
-    case 'approvalResolution':
-      return { ...base, kind: 'approval_resolution', approvalResolution: e.value }
-    case 'statusUpdate':
-      return { ...base, kind: 'status_update', statusUpdate: e.value }
-    default:
-      return base
-  }
-}

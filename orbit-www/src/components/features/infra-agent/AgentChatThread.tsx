@@ -10,11 +10,32 @@ import { Badge } from '@/components/ui/badge'
 import {
   abortAgentRun,
   approveAgentAction,
-  getAgentEvents,
   rejectAgentAction,
   sendAgentMessage,
-  type AgentEventDTO,
 } from '@/app/actions/infra-agent'
+
+/**
+ * Wire shape emitted by /api/agent/[runId]/stream. Mirrors AgentEvent in the
+ * proto with bigints stringified for JSON.
+ */
+interface AgentEventDTO {
+  sequence: string
+  emittedAt: string
+  kind:
+    | 'conversation_turn'
+    | 'token_delta'
+    | 'proposal_update'
+    | 'approval_request'
+    | 'approval_resolution'
+    | 'status_update'
+    | 'unknown'
+  conversationTurn?: { turnId: string; role: string; content: string }
+  tokenDelta?: { turnId: string; delta: string }
+  proposalUpdate?: { proposalId: string; title: string; summary: string; bodyMarkdown: string }
+  approvalRequest?: { approvalId: string; kind: string; title: string; bodyMarkdown: string }
+  approvalResolution?: { approvalId: string; approved: boolean; resolvedBy: string; notes: string }
+  statusUpdate?: { status: string; message: string }
+}
 
 interface Props {
   workspaceId: string
@@ -41,7 +62,8 @@ interface Proposal {
   bodyMarkdown: string
 }
 
-const POLL_INTERVAL_MS = 600
+// Reconnect backoff: 0.5s → 1s → 2s → 4s, capped.
+const RECONNECT_BACKOFF_MS = [500, 1000, 2000, 4000]
 
 export function AgentChatThread({ workspaceId, workflowId }: Props) {
   const [turns, setTurns] = useState<ChatTurn[]>([])
@@ -50,10 +72,9 @@ export function AgentChatThread({ workspaceId, workflowId }: Props) {
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([])
   const [status, setStatus] = useState('starting')
   const [statusMessage, setStatusMessage] = useState('')
+  const [connection, setConnection] = useState<'connecting' | 'live' | 'reconnecting' | 'closed'>('connecting')
   const [input, setInput] = useState('')
   const [pending, startTransition] = useTransition()
-  const sinceRef = useRef<bigint>(0n)
-  const cancelledRef = useRef(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const ingest = useCallback((events: AgentEventDTO[]) => {
@@ -129,38 +150,68 @@ export function AgentChatThread({ workspaceId, workflowId }: Props) {
     }
   }, [])
 
+  // SSE subscription. EventSource auto-reconnects with Last-Event-ID; we
+  // also handle our own reconnect-on-error path with exponential backoff
+  // (capped) since EventSource's built-in retry doesn't surface auth or
+  // server-side close events to us cleanly. The `done` event from the
+  // proxy means the workflow finished — we treat that as a clean close
+  // and do not reconnect.
   useEffect(() => {
-    cancelledRef.current = false
-    let timer: ReturnType<typeof setTimeout> | null = null
+    let cancelled = false
+    let attempt = 0
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+    let es: EventSource | null = null
 
-    async function loop() {
-      while (!cancelledRef.current) {
-        try {
-          const result = await getAgentEvents({
-            workspaceId,
-            workflowId,
-            since: sinceRef.current,
-          })
-          if (result.success && result.events) {
-            ingest(result.events)
-            if (result.latest !== undefined) sinceRef.current = result.latest
-          }
-        } catch {
-          // tolerate transient failures
-        }
-        if (cancelledRef.current) break
-        await new Promise<void>((resolve) => {
-          timer = setTimeout(resolve, POLL_INTERVAL_MS)
-        })
+    const connect = () => {
+      if (cancelled) return
+      setConnection(attempt === 0 ? 'connecting' : 'reconnecting')
+
+      const url = `/api/agent/${encodeURIComponent(workflowId)}/stream`
+      es = new EventSource(url)
+
+      es.onopen = () => {
+        attempt = 0
+        setConnection('live')
       }
+
+      es.onmessage = (msg) => {
+        try {
+          const dto = JSON.parse(msg.data) as AgentEventDTO
+          ingest([dto])
+        } catch {
+          // skip malformed message
+        }
+      }
+
+      es.addEventListener('done', () => {
+        cancelled = true
+        setConnection('closed')
+        es?.close()
+      })
+
+      es.addEventListener('error', () => {
+        // EventSource will retry on its own, but we want to disambiguate
+        // "transient network blip" from "server gave up". Close + reopen
+        // ourselves with a backoff so reconnects don't hammer the server
+        // when the workflow is genuinely gone.
+        es?.close()
+        if (cancelled) return
+        const delay = RECONNECT_BACKOFF_MS[Math.min(attempt, RECONNECT_BACKOFF_MS.length - 1)]
+        attempt += 1
+        setConnection('reconnecting')
+        reconnectTimer = setTimeout(connect, delay)
+      })
     }
 
-    loop()
+    connect()
+
     return () => {
-      cancelledRef.current = true
-      if (timer) clearTimeout(timer)
+      cancelled = true
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+      es?.close()
+      setConnection('closed')
     }
-  }, [workspaceId, workflowId, ingest])
+  }, [workflowId, ingest])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -197,6 +248,11 @@ export function AgentChatThread({ workspaceId, workflowId }: Props) {
     <div className="flex flex-col h-full gap-3">
       <div className="flex items-center gap-2 text-xs">
         <Badge variant={terminal ? 'destructive' : 'secondary'}>{status}</Badge>
+        {connection !== 'live' && connection !== 'closed' && (
+          <Badge variant="outline" className="text-amber-600 border-amber-500/50">
+            {connection === 'connecting' ? 'connecting…' : 'reconnecting…'}
+          </Badge>
+        )}
         {statusMessage && <span className="text-muted-foreground truncate">{statusMessage}</span>}
         <div className="ml-auto">
           {!terminal && (
