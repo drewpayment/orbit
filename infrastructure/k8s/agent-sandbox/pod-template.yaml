@@ -1,0 +1,74 @@
+# Sandbox pod template instantiated per agent run by the K8s
+# SandboxExecutor.
+#
+# Placeholders:
+#   $WORKFLOW_ID         — Temporal workflow id, used as the pod label.
+#   $WORKSPACE_ID        — workspace id (label only).
+#   $SANDBOX_IMAGE       — image to launch (defaults to orbit-agent-sandbox:latest).
+#   $EXTERNAL_SECRET_REF — name of the ExternalSecret rendering cloud creds
+#                          into env vars for this pod.
+#
+# Defaults are intentionally conservative: read-only root FS, no privilege
+# escalation, run as non-root, and a small CPU/memory allocation that the
+# executor can override per workspace.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: agent-sandbox-$WORKFLOW_ID
+  namespace: orbit-agent-sandbox
+  labels:
+    app.kubernetes.io/part-of: orbit
+    app.kubernetes.io/component: infrastructure-agent
+    orbit.dev/workflow-id: $WORKFLOW_ID
+    orbit.dev/workspace-id: $WORKSPACE_ID
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: agent
+      image: $SANDBOX_IMAGE
+      imagePullPolicy: IfNotPresent
+      command: ["sleep", "infinity"]
+      envFrom:
+        - secretRef:
+            name: $EXTERNAL_SECRET_REF
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 2000m
+          memory: 4Gi
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+      volumeMounts:
+        - name: workspace
+          mountPath: /home/agent/workspace
+        - name: tmp
+          mountPath: /tmp
+        - name: home-cache
+          mountPath: /home/agent/.cache
+        - name: home-config
+          mountPath: /home/agent/.config
+  volumes:
+    - name: workspace
+      emptyDir:
+        sizeLimit: 8Gi
+    - name: tmp
+      emptyDir:
+        sizeLimit: 1Gi
+    - name: home-cache
+      emptyDir:
+        sizeLimit: 1Gi
+    - name: home-config
+      emptyDir:
+        sizeLimit: 256Mi

@@ -1,0 +1,49 @@
+# NetworkPolicy template rendered per agent run by the K8s SandboxExecutor.
+#
+# Placeholders:
+#   $WORKFLOW_ID    — Temporal workflow id, used as the pod label selector.
+#   $EGRESS_RULES   — workspace-specific egress block. The worker generates
+#                     a NetworkPolicyEgressRule per allowed host suffix
+#                     using IPBlock CIDRs that resolve at apply time.
+#
+# Default posture: deny all ingress; allow only DNS plus the listed egress.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: orbit-agent-sandbox-$WORKFLOW_ID
+  namespace: orbit-agent-sandbox
+  labels:
+    app.kubernetes.io/part-of: orbit
+    app.kubernetes.io/component: infrastructure-agent
+    orbit.dev/workflow-id: $WORKFLOW_ID
+spec:
+  podSelector:
+    matchLabels:
+      orbit.dev/workflow-id: $WORKFLOW_ID
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    # DNS to the cluster's CoreDNS (kube-system).
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Workspace-allowlist egress rules go here. Example shape, replicated
+    # for each entry in the workspace's HTTPAllowlist:
+    #   - to:
+    #       - ipBlock:
+    #           cidr: 0.0.0.0/0
+    #     ports:
+    #       - protocol: TCP
+    #         port: 443
+    $EGRESS_RULES
