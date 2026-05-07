@@ -11,40 +11,54 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	agentactivity "github.com/drewpayment/orbit/temporal-workflows/internal/activities/agent"
-	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/contract"
+	"github.com/drewpayment/orbit/temporal-workflows/pkg/agentcontract"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/providers"
 )
 
 // Signal/query/activity names re-exported from the contract package so the
 // workflow file remains the canonical reference.
 const (
-	AgentSignalUserMessage  = contract.SignalUserMessage
-	AgentSignalApproval     = contract.SignalApproval
-	AgentSignalAbort        = contract.SignalAbort
-	AgentSignalTokenStream  = contract.SignalTokenStream
-	AgentSignalToolFinished = contract.SignalToolFinished
+	AgentSignalUserMessage  = agentcontract.SignalUserMessage
+	AgentSignalApproval     = agentcontract.SignalApproval
+	AgentSignalAbort        = agentcontract.SignalAbort
+	AgentSignalTokenStream  = agentcontract.SignalTokenStream
+	AgentSignalToolFinished = agentcontract.SignalToolFinished
 
-	AgentQuerySnapshot    = contract.QuerySnapshot
-	AgentQueryEventsSince = contract.QueryEventsSince
-	AgentQueryHasFinished = contract.QueryHasFinished
+	AgentQuerySnapshot    = agentcontract.QuerySnapshot
+	AgentQueryEventsSince = agentcontract.QueryEventsSince
+	AgentQueryHasFinished = agentcontract.QueryHasFinished
 
-	ActivityLLMNextStep = contract.ActivityLLMNextStep
+	ActivityLLMNextStep = agentcontract.ActivityLLMNextStep
 )
 
-// Type aliases for the contract payloads, kept here for source-code
+// Type aliases for the contract types, kept here for source-code
 // continuity with the rest of the workflow.
 type (
-	TokenStreamSignalPayload = contract.TokenStreamSignalPayload
-	UserMessageSignalPayload = contract.UserMessageSignalPayload
-	ApprovalSignalPayload    = contract.ApprovalSignalPayload
-	AbortSignalPayload       = contract.AbortSignalPayload
+	TokenStreamSignalPayload = agentcontract.TokenStreamSignalPayload
+	UserMessageSignalPayload = agentcontract.UserMessageSignalPayload
+	ApprovalSignalPayload    = agentcontract.ApprovalSignalPayload
+	AbortSignalPayload       = agentcontract.AbortSignalPayload
+
+	InfrastructureAgentInput = agentcontract.InfrastructureAgentInput
+	ConversationTurn         = agentcontract.ConversationTurn
+	ToolCallRecord           = agentcontract.ToolCallRecord
+	Proposal                 = agentcontract.Proposal
+	AgentEvent               = agentcontract.AgentEvent
+	AgentSnapshot            = agentcontract.AgentSnapshot
+	PendingApproval          = agentcontract.PendingApproval
 )
 
-// Built-in tools available in the Spike 1 skeleton. Subsequent spikes add
-// shell_exec, http_request, request_approval, register_tool, etc.
+// Tool / event-kind names re-exported from the contract package.
 const (
-	ToolProposeToUser = "propose_to_user"
-	ToolDone          = "done"
+	ToolProposeToUser = agentcontract.ToolProposeToUser
+	ToolDone          = agentcontract.ToolDone
+
+	EventKindConversationTurn = agentcontract.EventKindConversationTurn
+	EventKindTokenDelta       = agentcontract.EventKindTokenDelta
+	EventKindProposalUpdate   = agentcontract.EventKindProposalUpdate
+	EventKindApprovalRequest  = agentcontract.EventKindApprovalRequest
+	EventKindApprovalResolved = agentcontract.EventKindApprovalResolved
+	EventKindStatusUpdate     = agentcontract.EventKindStatusUpdate
 )
 
 // Default behavioral knobs. Tunable via input.
@@ -53,93 +67,6 @@ const (
 	defaultMaxHistoryTurns  = 80
 	defaultUserWaitTimeout  = 24 * time.Hour
 )
-
-// InfrastructureAgentInput is the workflow input.
-type InfrastructureAgentInput struct {
-	AgentRunID     string
-	WorkspaceID    string
-	RepositoryID   string
-	UserID         string
-	LLMProviderID  string
-	InitialPrompt  string
-
-	// Optional: override the system prompt. Empty uses the default.
-	SystemPrompt string
-
-	// Optional: continue-as-new carry-over.
-	History         []ConversationTurn
-	Events          []AgentEvent
-	NextSequence    uint64
-	IterationsSoFar int
-}
-
-// ConversationTurn captures one message in the agent transcript.
-type ConversationTurn struct {
-	TurnID    string                 `json:"turn_id"`
-	Role      string                 `json:"role"` // user | assistant | tool | system
-	Content   string                 `json:"content"`
-	ToolCalls []ToolCallRecord       `json:"tool_calls,omitempty"`
-	ToolCallID string                `json:"tool_call_id,omitempty"`
-	ToolName   string                `json:"tool_name,omitempty"`
-	Timestamp  time.Time             `json:"timestamp"`
-}
-
-// ToolCallRecord is the serializable form of a tool call.
-type ToolCallRecord struct {
-	ID        string         `json:"id"`
-	Name      string         `json:"name"`
-	Arguments map[string]any `json:"arguments"`
-}
-
-// Proposal is the latest agent proposal (rendered in the chat).
-type Proposal struct {
-	ProposalID   string `json:"proposal_id"`
-	Title        string `json:"title"`
-	Summary      string `json:"summary"`
-	BodyMarkdown string `json:"body_markdown"`
-	UpdatedAt    time.Time `json:"updated_at"`
-}
-
-// AgentEvent is one item in the workflow's event log, surfaced via query to the
-// gRPC streaming proxy. The Kind discriminates the payload.
-type AgentEvent struct {
-	Sequence  uint64    `json:"sequence"`
-	EmittedAt time.Time `json:"emitted_at"`
-	Kind      string    `json:"kind"` // see EventKind* constants
-	Payload   map[string]any `json:"payload"`
-}
-
-const (
-	EventKindConversationTurn = "conversation_turn"
-	EventKindTokenDelta       = "token_delta"
-	EventKindProposalUpdate   = "proposal_update"
-	EventKindApprovalRequest  = "approval_request"
-	EventKindApprovalResolved = "approval_resolution"
-	EventKindStatusUpdate     = "status_update"
-)
-
-// AgentSnapshot is what the chat UI reads on initial mount.
-type AgentSnapshot struct {
-	Status            string             `json:"status"`
-	Conversation      []ConversationTurn `json:"conversation"`
-	StreamingPartial  string             `json:"streaming_partial"`
-	StreamingTurnID   string             `json:"streaming_turn_id"`
-	Proposal          *Proposal          `json:"proposal,omitempty"`
-	PendingApprovals  []PendingApproval  `json:"pending_approvals"`
-	LatestSequence    uint64             `json:"latest_sequence"`
-	Backend           string             `json:"backend"`
-	Model             string             `json:"model"`
-}
-
-// PendingApproval is exposed for HITL UI rendering.
-type PendingApproval struct {
-	ApprovalID   string         `json:"approval_id"`
-	Kind         string         `json:"kind"` // proposal | tool_registration | destructive_command | custom
-	Title        string         `json:"title"`
-	BodyMarkdown string         `json:"body_markdown"`
-	Payload      map[string]any `json:"payload,omitempty"`
-	CreatedAt    time.Time      `json:"created_at"`
-}
 
 // agentState is the in-workflow mutable state.
 type agentState struct {

@@ -6,7 +6,7 @@ import (
 
 	"go.temporal.io/sdk/client"
 
-	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/contract"
+	"github.com/drewpayment/orbit/temporal-workflows/pkg/agentcontract"
 )
 
 // TemporalTokenSigniller pushes token-level partial completions back to a
@@ -30,7 +30,7 @@ func (s *TemporalTokenSigniller) SignalToken(ctx context.Context, workflowID, ru
 	if delta == "" {
 		return nil
 	}
-	return s.client.SignalWorkflow(ctx, workflowID, runID, contract.SignalTokenStream, contract.TokenStreamSignalPayload{
+	return s.client.SignalWorkflow(ctx, workflowID, runID, agentcontract.SignalTokenStream, agentcontract.TokenStreamSignalPayload{
 		TurnID: turnID,
 		Delta:  delta,
 	})

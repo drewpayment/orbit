@@ -14,6 +14,7 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
+	"github.com/drewpayment/orbit/proto/gen/go/idp/agent/v1/agentv1connect"
 	"github.com/drewpayment/orbit/proto/gen/go/idp/build/v1/buildv1connect"
 	"github.com/drewpayment/orbit/proto/gen/go/idp/deployment/v1/deploymentv1connect"
 	"github.com/drewpayment/orbit/proto/gen/go/idp/health/v1/healthv1connect"
@@ -448,6 +449,17 @@ func main() {
 		log.Println("LaunchService registered (Connect)")
 	} else {
 		log.Println("LaunchService not registered (Temporal client unavailable)")
+	}
+
+	// Register AgentService (Infrastructure Agent — Connect handler with
+	// server-streaming for chat events).
+	if temporalClient != nil {
+		agentServer := grpcserver.NewAgentServer(temporalClient.client, 0)
+		agentPath, agentHandler := agentv1connect.NewAgentServiceHandler(agentServer)
+		mux.Handle(agentPath, agentHandler)
+		log.Println("AgentService registered (Connect)")
+	} else {
+		log.Println("AgentService not registered (Temporal client unavailable)")
 	}
 
 	// Start HTTP health server on separate port
