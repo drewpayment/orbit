@@ -3,6 +3,7 @@
 import * as React from "react"
 import {
   BookOpen,
+  Bot,
   Building2,
   Cloud,
   Command,
@@ -127,6 +128,11 @@ const navPlatformData: NavPlatformItem[] = [
         url: "/platform/kafka/pending-approvals",
       },
     ],
+  },
+  {
+    title: "LLM Providers",
+    url: "/platform/llm-providers",
+    icon: Bot,
   },
   {
     title: "Workflows",

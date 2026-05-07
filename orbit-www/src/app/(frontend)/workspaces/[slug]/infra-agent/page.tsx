@@ -65,11 +65,12 @@ export default async function InfraAgentRunsPage({ params }: Props) {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              The agent needs a Bring-Your-Own LLM credential before it can talk to a model. Add one in the workspace
-              settings under <strong>LLM Providers</strong>, then return here.
+              The agent needs an LLM credential before it can talk to a model. Ask a platform admin
+              to add one for this workspace from the platform-admin{' '}
+              <strong>LLM Providers</strong> page, then return here.
             </p>
             <Button asChild>
-              <Link href={`/workspaces/${slug}/settings/llm-providers`}>Configure LLM Providers</Link>
+              <Link href="/platform/llm-providers">Open LLM Providers (admin)</Link>
             </Button>
           </CardContent>
         </Card>
