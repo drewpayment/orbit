@@ -48,6 +48,7 @@ const (
 	ToolRepoInspect     = "repo_inspect"
 	ToolRequestApproval = "request_approval"
 	ToolRegisterTool    = "register_tool"
+	ToolStartHealthCheck = "start_child_health_check"
 )
 
 // ApprovalKind classifies HITL gates the agent surfaces. The chat UI uses
@@ -76,6 +77,11 @@ const (
 	ActivityListApprovedAgentTools  = "ListApprovedAgentTools"
 	ActivityRegisterPendingAgentTool = "RegisterPendingAgentTool"
 	ActivityResolveAgentTool         = "ResolveAgentTool"
+)
+
+// Activity names for Spike 5 audit trail.
+const (
+	ActivityUpdateAgentRun = "UpdateAgentRun"
 )
 
 // Event kinds emitted into the workflow's event log.

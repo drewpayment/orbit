@@ -10,16 +10,18 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/workflow"
 
 	agentactivity "github.com/drewpayment/orbit/temporal-workflows/internal/activities/agent"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/providers"
 	"github.com/drewpayment/orbit/temporal-workflows/pkg/agentcontract"
 )
 
-// registerSandboxStubs satisfies the workflow's EnsureSandbox / Teardown /
-// ListApprovedAgentTools activity calls in the test environment with no-op
-// implementations. The list-approved stub returns an empty catalog; tests
-// that exercise registered-tool dispatch override it explicitly.
+// registerSandboxStubs satisfies the workflow's infrastructure-side
+// activity calls in the test environment with no-op implementations:
+// EnsureSandbox / Teardown / ListApprovedAgentTools / UpdateAgentRun.
+// Tests that exercise specific dispatches (e.g. shell_exec, register_tool)
+// override individual activities explicitly.
 func registerSandboxStubs(env *testsuite.TestWorkflowEnvironment) {
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, _ agentactivity.EnsureSandboxInput) (agentactivity.EnsureSandboxResult, error) {
@@ -36,6 +38,10 @@ func registerSandboxStubs(env *testsuite.TestWorkflowEnvironment) {
 			return agentactivity.ListApprovedToolsResult{}, nil
 		},
 		activity.RegisterOptions{Name: agentcontract.ActivityListApprovedAgentTools},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.UpdateAgentRunInput) error { return nil },
+		activity.RegisterOptions{Name: agentcontract.ActivityUpdateAgentRun},
 	)
 }
 
@@ -348,6 +354,10 @@ func TestInfrastructureAgentWorkflow_RegisterToolFullRoundTrip(t *testing.T) {
 		func(_ context.Context, _ agentactivity.TeardownSandboxInput) error { return nil },
 		activity.RegisterOptions{Name: agentcontract.ActivityTeardownSandbox},
 	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.UpdateAgentRunInput) error { return nil },
+		activity.RegisterOptions{Name: agentcontract.ActivityUpdateAgentRun},
+	)
 
 	// Mutable shared state: registry "database".
 	type entry struct {
@@ -562,6 +572,190 @@ func TestInfrastructureAgentWorkflow_RegisterToolRejectionDoesNotApprove(t *test
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
 	require.True(t, rejected, "resolve should have been called with approved=false")
+}
+
+func TestInfrastructureAgentWorkflow_StartHealthCheckSchedulesChildWorkflow(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	registerSandboxStubs(env)
+
+	// Stub the HealthCheckWorkflow itself so the child completes
+	// immediately. The agent workflow only awaits the child's start
+	// (Future.GetChildWorkflowExecution); it doesn't await completion.
+	healthCalls := 0
+	var capturedHealthInput HealthCheckWorkflowInput
+	env.RegisterWorkflowWithOptions(
+		func(ctx workflow.Context, in HealthCheckWorkflowInput) error {
+			healthCalls++
+			capturedHealthInput = in
+			return nil
+		},
+		workflow.RegisterOptions{Name: "HealthCheckWorkflow"},
+	)
+
+	llm := &scriptedLLM{
+		steps: []agentactivity.LLMNextStepResult{
+			{
+				ToolCalls: []providers.ToolCall{
+					{ID: "tc-hc", Name: ToolStartHealthCheck, Arguments: map[string]any{
+						"app_id":   "app-123",
+						"url":      "https://example.com/healthz",
+						"interval": float64(45),
+					}},
+				},
+				StopReason: "tool_use",
+			},
+			{
+				ToolCalls: []providers.ToolCall{
+					{ID: "tc-done", Name: ToolDone, Arguments: map[string]any{"summary": "monitored"}},
+				},
+				StopReason: "tool_use",
+			},
+		},
+	}
+	env.RegisterActivityWithOptions(llm.Run, activity.RegisterOptions{Name: ActivityLLMNextStep})
+
+	env.ExecuteWorkflow(InfrastructureAgentWorkflow, InfrastructureAgentInput{
+		AgentRunID:    "run-hc",
+		WorkspaceID:   "ws-1",
+		LLMProviderID: "prov-1",
+		InitialPrompt: "deploy and monitor",
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	require.Equal(t, 1, healthCalls, "expected child HealthCheckWorkflow to start once")
+	require.Equal(t, "app-123", capturedHealthInput.AppID)
+	require.Equal(t, "https://example.com/healthz", capturedHealthInput.HealthConfig.URL)
+	require.Equal(t, 45, capturedHealthInput.HealthConfig.Interval)
+
+	// Tool result fed back to second LLM call must include the child's
+	// workflow id.
+	require.Len(t, llm.captured, 2)
+	var found bool
+	for _, m := range llm.captured[1].Messages {
+		if m.Role == providers.RoleTool && m.ToolCallID == "tc-hc" {
+			require.Contains(t, m.Content, `"workflow_id"`)
+			require.Contains(t, m.Content, `"interval_seconds":45`)
+			found = true
+		}
+	}
+	require.True(t, found, "health check result not in LLM history")
+}
+
+func TestInfrastructureAgentWorkflow_StartHealthCheckRequiresAppIDAndURL(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	registerSandboxStubs(env)
+
+	llm := &scriptedLLM{
+		steps: []agentactivity.LLMNextStepResult{
+			{
+				ToolCalls: []providers.ToolCall{
+					{ID: "tc-hc", Name: ToolStartHealthCheck, Arguments: map[string]any{}},
+				},
+				StopReason: "tool_use",
+			},
+			{
+				ToolCalls: []providers.ToolCall{
+					{ID: "tc-done", Name: ToolDone, Arguments: map[string]any{"summary": "n/a"}},
+				},
+				StopReason: "tool_use",
+			},
+		},
+	}
+	env.RegisterActivityWithOptions(llm.Run, activity.RegisterOptions{Name: ActivityLLMNextStep})
+
+	env.ExecuteWorkflow(InfrastructureAgentWorkflow, InfrastructureAgentInput{
+		AgentRunID:    "run-hc-bad",
+		WorkspaceID:   "ws-1",
+		LLMProviderID: "prov-1",
+		InitialPrompt: "monitor without args",
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+
+	// The agent should see an error result and adapt.
+	require.Len(t, llm.captured, 2)
+	var found bool
+	for _, m := range llm.captured[1].Messages {
+		if m.Role == providers.RoleTool && m.ToolCallID == "tc-hc" {
+			require.Contains(t, m.Content, `"error"`)
+			require.Contains(t, m.Content, "app_id and url are required")
+			found = true
+		}
+	}
+	require.True(t, found, "validation error not in LLM history")
+}
+
+func TestInfrastructureAgentWorkflow_AuditTrailTracksTerminalCompletion(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+
+	// Sandbox + tools stubs.
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.EnsureSandboxInput) (agentactivity.EnsureSandboxResult, error) {
+			return agentactivity.EnsureSandboxResult{SandboxID: "stub", Backend: "stub", Ref: "/tmp/stub"}, nil
+		},
+		activity.RegisterOptions{Name: agentcontract.ActivityEnsureSandbox},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.TeardownSandboxInput) error { return nil },
+		activity.RegisterOptions{Name: agentcontract.ActivityTeardownSandbox},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.ListApprovedToolsInput) (agentactivity.ListApprovedToolsResult, error) {
+			return agentactivity.ListApprovedToolsResult{}, nil
+		},
+		activity.RegisterOptions{Name: agentcontract.ActivityListApprovedAgentTools},
+	)
+
+	// Capture every UpdateAgentRun call so the test can assert on the
+	// shape of the audit-trail patches.
+	var auditCalls []agentactivity.UpdateAgentRunInput
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, in agentactivity.UpdateAgentRunInput) error {
+			auditCalls = append(auditCalls, in)
+			return nil
+		},
+		activity.RegisterOptions{Name: agentcontract.ActivityUpdateAgentRun},
+	)
+
+	llm := &scriptedLLM{
+		steps: []agentactivity.LLMNextStepResult{
+			{
+				ToolCalls: []providers.ToolCall{
+					{ID: "tc-done", Name: ToolDone, Arguments: map[string]any{"summary": "audit-test summary"}},
+				},
+				StopReason: "tool_use",
+			},
+		},
+	}
+	env.RegisterActivityWithOptions(llm.Run, activity.RegisterOptions{Name: ActivityLLMNextStep})
+
+	env.ExecuteWorkflow(InfrastructureAgentWorkflow, InfrastructureAgentInput{
+		AgentRunID:    "run-audit",
+		WorkspaceID:   "ws-1",
+		LLMProviderID: "prov-1",
+		InitialPrompt: "do nothing then finish",
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+
+	// Expect at minimum: status=running (post-EnsureSandbox) → status=completed (ToolDone).
+	var sawRunning, sawCompleted bool
+	for _, c := range auditCalls {
+		if c.Status == "running" {
+			sawRunning = true
+		}
+		if c.Status == "completed" && c.Summary == "audit-test summary" && c.EndedAt != "" {
+			sawCompleted = true
+		}
+	}
+	require.True(t, sawRunning, "expected running status update; got %+v", auditCalls)
+	require.True(t, sawCompleted, "expected completed status update with summary + endedAt; got %+v", auditCalls)
 }
 
 func TestInfrastructureAgentWorkflow_ShellExecDispatchesToActivity(t *testing.T) {

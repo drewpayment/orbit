@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
@@ -76,6 +77,7 @@ const (
 	ToolRepoInspect     = agentcontract.ToolRepoInspect
 	ToolRequestApproval = agentcontract.ToolRequestApproval
 	ToolRegisterTool    = agentcontract.ToolRegisterTool
+	ToolStartHealthCheck = agentcontract.ToolStartHealthCheck
 
 	EventKindConversationTurn = agentcontract.EventKindConversationTurn
 	EventKindTokenDelta       = agentcontract.EventKindTokenDelta
@@ -94,20 +96,21 @@ const (
 
 // agentState is the in-workflow mutable state.
 type agentState struct {
-	status            string
-	history           []ConversationTurn
-	events            []AgentEvent
-	nextSeq           uint64
-	streamingPartial  string
-	streamingTurnID   string
-	proposal          *Proposal
-	pendingApprovals  map[string]PendingApproval
-	registeredTools   map[string]agentactivity.ApprovedAgentTool
-	terminated        bool
-	abortReason       string
-	iterations        int
-	backend           string
-	model             string
+	status               string
+	history              []ConversationTurn
+	events               []AgentEvent
+	nextSeq              uint64
+	streamingPartial     string
+	streamingTurnID      string
+	proposal             *Proposal
+	pendingApprovals     map[string]PendingApproval
+	registeredTools      map[string]agentactivity.ApprovedAgentTool
+	terminated           bool
+	abortReason          string
+	iterations           int
+	backend              string
+	model                string
+	terminalAuditFlushed bool // set when ToolDone / abort / timeout writes the final audit row
 }
 
 // InfrastructureAgentWorkflow drives the agentic deployment loop. It is the
@@ -160,20 +163,35 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 		},
 	})
 
+	// Activity options for the audit-trail update path. Short timeout +
+	// minimal retries — we never want a flaky agent-runs API to slow the
+	// workflow loop down.
+	auditCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Second,
+		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 2},
+	})
+
+	wfID := workflow.GetInfo(ctx).WorkflowExecution.ID
+
 	// Provision the per-run sandbox up-front so the first tool call doesn't
 	// pay creation cost on the critical path.
 	if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityEnsureSandbox, agentactivity.EnsureSandboxInput{
-		WorkflowID:      workflow.GetInfo(ctx).WorkflowExecution.ID,
+		WorkflowID:      wfID,
 		WorkspaceID:     input.WorkspaceID,
 		Image:           input.SandboxImage,
 		Env:             input.SandboxEnv,
 		EgressAllowlist: input.HTTPAllowlist,
 	}).Get(sandboxCtx, nil); err != nil {
+		markRun(auditCtx, wfID, agentactivity.UpdateAgentRunInput{Status: "failed"})
 		return fmt.Errorf("ensure sandbox: %w", err)
 	}
 
+	markRun(auditCtx, wfID, agentactivity.UpdateAgentRunInput{Status: "running"})
+
 	// Tear down the sandbox on workflow exit, on a disconnected context so
 	// it survives cancellation. Best-effort: errors logged but not returned.
+	// Also flushes a final audit-trail update if the workflow exits without
+	// reaching a terminal status (e.g. uncaught error path).
 	defer func() {
 		dctx, _ := workflow.NewDisconnectedContext(ctx)
 		teardownCtx := workflow.WithActivityOptions(dctx, workflow.ActivityOptions{
@@ -181,8 +199,22 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 			RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 2},
 		})
 		_ = workflow.ExecuteActivity(teardownCtx, agentcontract.ActivityTeardownSandbox, agentactivity.TeardownSandboxInput{
-			WorkflowID: workflow.GetInfo(ctx).WorkflowExecution.ID,
+			WorkflowID: wfID,
 		}).Get(teardownCtx, nil)
+
+		dauditCtx := workflow.WithActivityOptions(dctx, workflow.ActivityOptions{
+			StartToCloseTimeout: 5 * time.Second,
+			RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 2},
+		})
+		// terminalAuditFlushed is set by every place that writes a terminal
+		// status (ToolDone, abort path, timeout path, max-iters); the defer
+		// only fires the catch-all if none of those did.
+		if !state.terminalAuditFlushed {
+			markRun(dauditCtx, wfID, agentactivity.UpdateAgentRunInput{
+				Status:  state.status,
+				EndedAt: workflow.Now(ctx).UTC().Format(time.RFC3339),
+			})
+		}
 	}()
 
 	userMsgCh := workflow.GetSignalChannel(ctx, AgentSignalUserMessage)
@@ -208,20 +240,31 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 		}
 	})
 
-	// Launch goroutine to drain abort signals.
-	workflow.Go(ctx, func(ctx workflow.Context) {
+	// Launch goroutine to drain abort signals. Audit context is rebuilt
+	// inside the goroutine because Temporal forbids blocking on a future
+	// whose options were derived from a different coroutine's context.
+	workflow.Go(ctx, func(gctx workflow.Context) {
 		var payload AbortSignalPayload
-		more := abortCh.Receive(ctx, &payload)
+		more := abortCh.Receive(gctx, &payload)
 		if !more {
 			return
 		}
 		state.terminated = true
 		state.abortReason = payload.Reason
 		state.status = "aborted"
-		emitEvent(ctx, &state, EventKindStatusUpdate, map[string]any{
+		emitEvent(gctx, &state, EventKindStatusUpdate, map[string]any{
 			"status":  "aborted",
 			"message": fmt.Sprintf("aborted by %s: %s", payload.RequestedBy, payload.Reason),
 		})
+		gAuditCtx := workflow.WithActivityOptions(gctx, workflow.ActivityOptions{
+			StartToCloseTimeout: 5 * time.Second,
+			RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 2},
+		})
+		markRun(gAuditCtx, wfID, agentactivity.UpdateAgentRunInput{
+			Status:  "aborted",
+			EndedAt: workflow.Now(gctx).UTC().Format(time.RFC3339),
+		})
+		state.terminalAuditFlushed = true
 	})
 
 	// Seed the conversation with the initial user prompt if this is a fresh run.
@@ -243,6 +286,7 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 		if awaitingUser(&state) {
 			state.status = "awaiting_user"
 			emitEvent(ctx, &state, EventKindStatusUpdate, map[string]any{"status": "awaiting_user"})
+			markRun(auditCtx, wfID, agentactivity.UpdateAgentRunInput{Status: "awaiting_user"})
 
 			selector := workflow.NewSelector(ctx)
 			receivedUserMessage := false
@@ -264,11 +308,17 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 					"status":  "timeout",
 					"message": "no user response within 24 hours",
 				})
+				markRun(auditCtx, wfID, agentactivity.UpdateAgentRunInput{
+					Status:  "timeout",
+					EndedAt: workflow.Now(ctx).UTC().Format(time.RFC3339),
+				})
+				state.terminalAuditFlushed = true
 			})
 			selector.Select(ctx)
 			if state.terminated || !receivedUserMessage {
 				continue
 			}
+			markRun(auditCtx, wfID, agentactivity.UpdateAgentRunInput{Status: "running"})
 		}
 
 		// Drive one LLM step.
@@ -362,7 +412,25 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 		emitEvent(ctx, &state, EventKindStatusUpdate, map[string]any{"status": "completed"})
 	}
 
+	if !state.terminalAuditFlushed {
+		markRun(auditCtx, wfID, agentactivity.UpdateAgentRunInput{
+			Status:  state.status,
+			EndedAt: workflow.Now(ctx).UTC().Format(time.RFC3339),
+		})
+		state.terminalAuditFlushed = true
+	}
+
 	return nil
+}
+
+// markRun is the workflow's audit-trail update helper. Errors are logged
+// and swallowed — a flaky AgentRuns API must never block the workflow
+// loop. Called on every meaningful status transition.
+func markRun(ctx workflow.Context, workflowID string, in agentactivity.UpdateAgentRunInput) {
+	in.WorkflowID = workflowID
+	if err := workflow.ExecuteActivity(ctx, agentcontract.ActivityUpdateAgentRun, in).Get(ctx, nil); err != nil {
+		workflow.GetLogger(ctx).Warn("agent run audit update failed (non-fatal)", "err", err, "workflowId", workflowID)
+	}
 }
 
 // dispatchTool routes a single tool call to its handler. Returns the textual
@@ -370,6 +438,10 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 // the caller whether the loop should terminate.
 func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agentState, input *InfrastructureAgentInput, tc providers.ToolCall, approvalCh workflow.ReceiveChannel) (string, bool) {
 	workflowID := workflow.GetInfo(ctx).WorkflowExecution.ID
+	auditCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Second,
+		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 2},
+	})
 
 	switch tc.Name {
 	case ToolProposeToUser:
@@ -398,6 +470,12 @@ func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agen
 			"status":  "completed",
 			"message": summary,
 		})
+		markRun(auditCtx, workflowID, agentactivity.UpdateAgentRunInput{
+			Status:  "completed",
+			Summary: summary,
+			EndedAt: workflow.Now(ctx).UTC().Format(time.RFC3339),
+		})
+		state.terminalAuditFlushed = true
 		return "Marked done.", true
 
 	case ToolShellExec:
@@ -537,6 +615,7 @@ func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agen
 			"status":  "awaiting_approval",
 			"message": title,
 		})
+		markRun(auditCtx, workflowID, agentactivity.UpdateAgentRunInput{Status: "awaiting_approval"})
 
 		// Block until a signal with this approval_id arrives. Other ids are
 		// dropped (they'll be re-issued when their parent approval prompts
@@ -557,11 +636,25 @@ func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agen
 			"resolved_by": resolution.ResolvedBy,
 			"notes":       resolution.Notes,
 		})
+		// Audit append + status return.
+		markRun(auditCtx, workflowID, agentactivity.UpdateAgentRunInput{
+			Status:     prevStatus,
+			ApprovalID: approvalID,
+			Kind:       kind,
+			Title:      title,
+			Resolution: resolutionLabel(resolution.Approved),
+			ResolvedBy: resolution.ResolvedBy,
+			ResolvedAt: workflow.Now(ctx).UTC().Format(time.RFC3339),
+			Notes:      resolution.Notes,
+		})
 		return jsonResult(map[string]any{
 			"approved":    resolution.Approved,
 			"resolved_by": resolution.ResolvedBy,
 			"notes":       resolution.Notes,
 		}), false
+
+	case ToolStartHealthCheck:
+		return dispatchStartHealthCheck(ctx, state, tc)
 
 	case ToolRegisterTool:
 		return dispatchRegisterTool(ctx, sandboxCtx, state, tc, approvalCh, input)
@@ -802,6 +895,83 @@ func exampleArgsFromSchema(schemaJSON string) map[string]any {
 	return out
 }
 
+// dispatchStartHealthCheck schedules a HealthCheckWorkflow as a child with
+// PARENT_CLOSE_POLICY_ABANDON so it survives the agent run finishing. The
+// HealthCheckWorkflow is registered on the same task queue and walks its
+// own continue-as-new lifecycle. Returns the child's workflow id back to
+// the agent so it can reference / cancel later.
+func dispatchStartHealthCheck(ctx workflow.Context, state *agentState, tc providers.ToolCall) (string, bool) {
+	appID, _ := tc.Arguments["app_id"].(string)
+	url, _ := tc.Arguments["url"].(string)
+	method, _ := tc.Arguments["method"].(string)
+	if method == "" {
+		method = "GET"
+	}
+	expectedStatus := intArg(tc.Arguments, "expected_status", 200)
+	interval := intArg(tc.Arguments, "interval", 60)
+	timeout := intArg(tc.Arguments, "timeout", 10)
+
+	if appID == "" || url == "" {
+		return jsonError("start_child_health_check", fmt.Errorf("app_id and url are required")), false
+	}
+
+	childID := fmt.Sprintf("health-check-%s-%d", appID, workflow.Now(ctx).Unix())
+	childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+		WorkflowID:        childID,
+		TaskQueue:         "orbit-workflows",
+		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_ABANDON,
+	})
+
+	childInput := HealthCheckWorkflowInput{
+		AppID: appID,
+		HealthConfig: HealthConfig{
+			URL:            url,
+			Method:         method,
+			ExpectedStatus: expectedStatus,
+			Interval:       interval,
+			Timeout:        timeout,
+		},
+	}
+
+	future := workflow.ExecuteChildWorkflow(childCtx, HealthCheckWorkflow, childInput)
+	var execution workflow.Execution
+	if err := future.GetChildWorkflowExecution().Get(childCtx, &execution); err != nil {
+		return jsonError("start_child_health_check", err), false
+	}
+
+	return jsonResult(map[string]any{
+		"workflow_id":      execution.ID,
+		"run_id":           execution.RunID,
+		"app_id":           appID,
+		"url":              url,
+		"interval_seconds": interval,
+	}), false
+}
+
+// resolutionLabel maps the approval bool to the audit row's enum.
+func resolutionLabel(approved bool) string {
+	if approved {
+		return "approved"
+	}
+	return "rejected"
+}
+
+// intArg pulls a numeric argument from the LLM-supplied args map. The JSON
+// decoder produces float64 for numbers; callers want int.
+func intArg(args map[string]any, key string, fallback int) int {
+	if v, ok := args[key]; ok {
+		switch x := v.(type) {
+		case float64:
+			return int(x)
+		case int:
+			return x
+		case int64:
+			return int(x)
+		}
+	}
+	return fallback
+}
+
 // awaitApproval blocks until an ApprovalSignal with matching approvalID
 // arrives. Mismatched signals are dropped (best-effort; callers re-emit the
 // approval prompt when their gate reopens). Returns aborted=true when the
@@ -1004,6 +1174,22 @@ func builtInToolSchemas() []providers.ToolSchema {
 				"required": []string{"name", "description", "template_kind", "template_json"},
 			},
 		},
+		{
+			Name: ToolStartHealthCheck,
+			Description: "Schedule a periodic HTTP health check against a deployed URL. Starts a child HealthCheckWorkflow with parent_close=ABANDON so it keeps running after this agent run finishes. Returns the child workflow id; the child writes its own status back to the App referenced by app_id. Use this once you've successfully deployed something the user wants monitored.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"app_id":          map[string]any{"type": "string", "description": "Orbit App id the health check belongs to."},
+					"url":             map[string]any{"type": "string", "description": "URL to probe."},
+					"method":          map[string]any{"type": "string", "description": "HTTP method, default GET."},
+					"expected_status": map[string]any{"type": "integer", "description": "Expected HTTP status code, default 200."},
+					"interval":        map[string]any{"type": "integer", "description": "Seconds between checks. Default 60. Server-side minimum is 30."},
+					"timeout":         map[string]any{"type": "integer", "description": "Per-request timeout seconds. Default 10."},
+				},
+				"required": []string{"app_id", "url"},
+			},
+		},
 	}
 }
 
@@ -1056,6 +1242,7 @@ Tools:
 - http_request(method, url, headers?, body?): outbound HTTP gated by the workspace allowlist
 - read_file(path) / write_file(path, content) / list_dir(path?): file IO inside the sandbox
 - repo_inspect(repo_url, revision?, max_files?): survey a repo (tree + manifests) without a full clone when possible
+- start_child_health_check(app_id, url, ...): schedule a periodic HTTP health check that survives this run finishing
 
 Workflow:
 1. Use repo_inspect first to learn what the app is (language, framework, manifests).

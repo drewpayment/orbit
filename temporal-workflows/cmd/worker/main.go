@@ -496,6 +496,13 @@ func main() {
 	w.RegisterActivityWithOptions(registryActivities.RegisterPendingTool, activity.RegisterOptions{Name: agentcontract.ActivityRegisterPendingAgentTool})
 	w.RegisterActivityWithOptions(registryActivities.ResolveAgentTool, activity.RegisterOptions{Name: agentcontract.ActivityResolveAgentTool})
 
+	// Audit-trail activity keeps the AgentRuns Payload row in sync with
+	// live workflow state so the run-history page reflects current status,
+	// approvals, and final summary without a workflow query.
+	agentRunsClient := services.NewPayloadAgentRunsClient(orbitAPIURL, orbitInternalAPIKey, logger)
+	runActivities := agentactivity.NewAgentRunActivities(agentRunsClient, logger)
+	w.RegisterActivityWithOptions(runActivities.UpdateAgentRun, activity.RegisterOptions{Name: agentcontract.ActivityUpdateAgentRun})
+
 	log.Printf("Infrastructure Agent workflow + activities registered (sandbox backend=%s)", sandboxExec.Backend())
 
 	log.Println("Starting Temporal worker...")
