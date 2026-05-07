@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"log/slog"
 	"os"
@@ -14,6 +15,8 @@ import (
 	agentactivity "github.com/drewpayment/orbit/temporal-workflows/internal/activities/agent"
 	_ "github.com/drewpayment/orbit/temporal-workflows/internal/agent/providers/anthropic"     // register provider
 	_ "github.com/drewpayment/orbit/temporal-workflows/internal/agent/providers/openai_compat" // register provider
+	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/sandbox"
+	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/sandbox/k8s"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/sandbox/local"
 	internalClients "github.com/drewpayment/orbit/temporal-workflows/internal/clients"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/services"
@@ -22,6 +25,33 @@ import (
 	"github.com/drewpayment/orbit/temporal-workflows/pkg/clients"
 	"github.com/drewpayment/orbit/temporal-workflows/pkg/types"
 )
+
+// buildSandboxExecutor returns the SandboxExecutor backing the agent's
+// shell_exec / file IO / repo_inspect tools. AGENT_SANDBOX_BACKEND selects:
+//
+//	local  — subprocess into a temp dir on the worker host (default; used
+//	         by `make dev` and CI). Reads AGENT_SANDBOX_ROOT.
+//	k8s    — kubectl shell-out into a per-run pod (production). Reads
+//	         AGENT_SANDBOX_NAMESPACE, AGENT_SANDBOX_IMAGE, AGENT_SANDBOX_KUBECTL.
+func buildSandboxExecutor(logger *slog.Logger) (sandbox.SandboxExecutor, error) {
+	backend := os.Getenv("AGENT_SANDBOX_BACKEND")
+	if backend == "" {
+		backend = "local"
+	}
+	switch backend {
+	case "local":
+		return local.NewExecutor(os.Getenv("AGENT_SANDBOX_ROOT"))
+	case "k8s":
+		runner := k8s.NewKubectlRunner(os.Getenv("AGENT_SANDBOX_KUBECTL"))
+		return k8s.NewExecutor(runner, k8s.Options{
+			Namespace:    os.Getenv("AGENT_SANDBOX_NAMESPACE"),
+			DefaultImage: os.Getenv("AGENT_SANDBOX_IMAGE"),
+			Logger:       logger,
+		}), nil
+	default:
+		return nil, fmt.Errorf("unknown AGENT_SANDBOX_BACKEND=%q (want \"local\" or \"k8s\")", backend)
+	}
+}
 
 // healthClientAdapter adapts services.PayloadHealthClientImpl to activities.PayloadHealthClient
 type healthClientAdapter struct {
@@ -440,15 +470,14 @@ func main() {
 		Name: agentcontract.ActivityLLMNextStep,
 	})
 
-	// Sandbox activities. The local executor is correct for `make dev` and
-	// CI; production deployments swap in the K8s executor (follow-up commit)
-	// without changing any of the activity wiring.
-	sandboxRoot := os.Getenv("AGENT_SANDBOX_ROOT")
-	localExec, err := local.NewExecutor(sandboxRoot)
+	// Sandbox executor: AGENT_SANDBOX_BACKEND selects "local" (default,
+	// subprocess into a temp dir — used by `make dev` and CI) or "k8s"
+	// (kubectl shell-out into a per-run pod — used in production).
+	sandboxExec, err := buildSandboxExecutor(logger)
 	if err != nil {
-		log.Fatalf("Failed to construct local sandbox executor: %v", err)
+		log.Fatalf("Failed to construct sandbox executor: %v", err)
 	}
-	sandboxActivities := agentactivity.NewSandboxActivities(localExec, logger)
+	sandboxActivities := agentactivity.NewSandboxActivities(sandboxExec, logger)
 	w.RegisterActivityWithOptions(sandboxActivities.EnsureSandbox, activity.RegisterOptions{Name: agentcontract.ActivityEnsureSandbox})
 	w.RegisterActivityWithOptions(sandboxActivities.TeardownSandbox, activity.RegisterOptions{Name: agentcontract.ActivityTeardownSandbox})
 	w.RegisterActivityWithOptions(sandboxActivities.SandboxedShell, activity.RegisterOptions{Name: agentcontract.ActivitySandboxedShell})
@@ -457,7 +486,7 @@ func main() {
 	w.RegisterActivityWithOptions(sandboxActivities.SandboxListDir, activity.RegisterOptions{Name: agentcontract.ActivitySandboxListDir})
 	w.RegisterActivityWithOptions(sandboxActivities.HTTPRequest, activity.RegisterOptions{Name: agentcontract.ActivityHTTPRequest})
 	w.RegisterActivityWithOptions(sandboxActivities.RepoInspect, activity.RegisterOptions{Name: agentcontract.ActivityRepoInspect})
-	log.Printf("Infrastructure Agent workflow + activities registered (sandbox backend=%s)", localExec.Backend())
+	log.Printf("Infrastructure Agent workflow + activities registered (sandbox backend=%s)", sandboxExec.Backend())
 
 	log.Println("Starting Temporal worker...")
 	log.Printf("Temporal address: %s", temporalAddress)
