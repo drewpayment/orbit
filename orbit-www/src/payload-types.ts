@@ -93,6 +93,8 @@ export interface Config {
     'cloud-accounts': CloudAccount;
     'launch-templates': LaunchTemplate;
     launches: Launch;
+    'llm-providers': LlmProvider;
+    'agent-runs': AgentRun;
     'kafka-providers': KafkaProvider;
     'kafka-clusters': KafkaCluster;
     'kafka-environment-mappings': KafkaEnvironmentMapping;
@@ -150,6 +152,8 @@ export interface Config {
     'cloud-accounts': CloudAccountsSelect<false> | CloudAccountsSelect<true>;
     'launch-templates': LaunchTemplatesSelect<false> | LaunchTemplatesSelect<true>;
     launches: LaunchesSelect<false> | LaunchesSelect<true>;
+    'llm-providers': LlmProvidersSelect<false> | LlmProvidersSelect<true>;
+    'agent-runs': AgentRunsSelect<false> | AgentRunsSelect<true>;
     'kafka-providers': KafkaProvidersSelect<false> | KafkaProvidersSelect<true>;
     'kafka-clusters': KafkaClustersSelect<false> | KafkaClustersSelect<true>;
     'kafka-environment-mappings': KafkaEnvironmentMappingsSelect<false> | KafkaEnvironmentMappingsSelect<true>;
@@ -1591,6 +1595,99 @@ export interface Feedback {
    */
   read?: boolean | null;
   submittedBy?: (string | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Workspace-scoped LLM credentials for the Infrastructure Agent
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "llm-providers".
+ */
+export interface LlmProvider {
+  id: string;
+  workspace: string | Workspace;
+  /**
+   * Friendly name shown in the agent run UI (e.g. "Anthropic prod key")
+   */
+  displayName: string;
+  /**
+   * Which Provider plugin handles requests for this credential
+   */
+  provider: 'anthropic' | 'openai_compat';
+  /**
+   * Optional. Defaults: anthropic=https://api.anthropic.com, openai_compat=https://api.openai.com. Override for self-hosted backends (LM Studio: http://host.docker.internal:1234, Ollama: http://host.docker.internal:11434).
+   */
+  baseUrl?: string | null;
+  /**
+   * Model identifier (e.g. claude-opus-4-7, gpt-4o, llama3-70b)
+   */
+  model: string;
+  /**
+   * Encrypted at rest. Leave blank for self-hosted backends that don't require a key.
+   */
+  apiKey?: string | null;
+  /**
+   * When true, agent runs in this workspace use this provider unless explicitly overridden
+   */
+  isDefault?: boolean | null;
+  createdBy?: (string | null) | User;
+  lastModifiedBy?: (string | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Infrastructure Agent run history
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "agent-runs".
+ */
+export interface AgentRun {
+  id: string;
+  workspace: string | Workspace;
+  /**
+   * Optional: the app/repo the agent is acting on
+   */
+  repository?: (string | null) | App;
+  workflowId: string;
+  runId?: string | null;
+  /**
+   * Short label derived from the initial prompt
+   */
+  title: string;
+  initialPrompt: string;
+  llmProvider: string | LlmProvider;
+  status:
+    | 'starting'
+    | 'running'
+    | 'awaiting_user'
+    | 'awaiting_approval'
+    | 'completed'
+    | 'aborted'
+    | 'failed'
+    | 'timeout';
+  /**
+   * Final summary written by the agent on completion
+   */
+  summary?: string | null;
+  startedBy: string | User;
+  startedAt: string;
+  endedAt?: string | null;
+  /**
+   * One entry per HITL gate the agent encountered
+   */
+  approvals?:
+    | {
+        approvalId: string;
+        kind?: ('proposal' | 'tool_registration' | 'destructive_command' | 'custom') | null;
+        title?: string | null;
+        resolution?: ('approved' | 'rejected') | null;
+        resolvedBy?: (string | null) | User;
+        resolvedAt?: string | null;
+        notes?: string | null;
+        id?: string | null;
+      }[]
+    | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -3288,6 +3385,14 @@ export interface PayloadLockedDocument {
         value: string | Launch;
       } | null)
     | ({
+        relationTo: 'llm-providers';
+        value: string | LlmProvider;
+      } | null)
+    | ({
+        relationTo: 'agent-runs';
+        value: string | AgentRun;
+      } | null)
+    | ({
         relationTo: 'kafka-providers';
         value: string | KafkaProvider;
       } | null)
@@ -4092,6 +4197,55 @@ export interface LaunchesSelect<T extends boolean = true> {
   lastLaunchedAt?: T;
   lastDeorbitedAt?: T;
   launchedBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "llm-providers_select".
+ */
+export interface LlmProvidersSelect<T extends boolean = true> {
+  workspace?: T;
+  displayName?: T;
+  provider?: T;
+  baseUrl?: T;
+  model?: T;
+  apiKey?: T;
+  isDefault?: T;
+  createdBy?: T;
+  lastModifiedBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "agent-runs_select".
+ */
+export interface AgentRunsSelect<T extends boolean = true> {
+  workspace?: T;
+  repository?: T;
+  workflowId?: T;
+  runId?: T;
+  title?: T;
+  initialPrompt?: T;
+  llmProvider?: T;
+  status?: T;
+  summary?: T;
+  startedBy?: T;
+  startedAt?: T;
+  endedAt?: T;
+  approvals?:
+    | T
+    | {
+        approvalId?: T;
+        kind?: T;
+        title?: T;
+        resolution?: T;
+        resolvedBy?: T;
+        resolvedAt?: T;
+        notes?: T;
+        id?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
 }

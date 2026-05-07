@@ -34,6 +34,8 @@ import { Feedback } from './collections/Feedback'
 import { CloudAccounts } from './collections/CloudAccounts'
 import { LaunchTemplates } from './collections/LaunchTemplates'
 import { Launches } from './collections/Launches'
+import { LLMProviders } from './collections/LLMProviders'
+import { AgentRuns } from './collections/AgentRuns'
 
 // Kafka collections
 import {
@@ -102,6 +104,9 @@ export default buildConfig({
     CloudAccounts,
     LaunchTemplates,
     Launches,
+    // Infrastructure Agent
+    LLMProviders,
+    AgentRuns,
     // Kafka collections
     KafkaProviders,
     KafkaClusters,
