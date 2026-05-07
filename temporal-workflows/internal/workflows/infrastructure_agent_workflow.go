@@ -1,6 +1,7 @@
 package workflows
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -11,9 +12,22 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	agentactivity "github.com/drewpayment/orbit/temporal-workflows/internal/activities/agent"
-	"github.com/drewpayment/orbit/temporal-workflows/pkg/agentcontract"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/providers"
+	"github.com/drewpayment/orbit/temporal-workflows/pkg/agentcontract"
 )
+
+// defaultHTTPAllowlist is used when input.HTTPAllowlist is empty. Conservative
+// list of public hosts the agent often needs (read-only). Workspace admins can
+// override via input.HTTPAllowlist.
+var defaultHTTPAllowlist = []string{
+	"api.github.com",
+	"raw.githubusercontent.com",
+	"*.githubusercontent.com",
+	"registry.npmjs.org",
+	"pypi.org",
+	"pkg.go.dev",
+	"crates.io",
+}
 
 // Signal/query/activity names re-exported from the contract package so the
 // workflow file remains the canonical reference.
@@ -52,6 +66,13 @@ type (
 const (
 	ToolProposeToUser = agentcontract.ToolProposeToUser
 	ToolDone          = agentcontract.ToolDone
+
+	ToolShellExec   = agentcontract.ToolShellExec
+	ToolHTTPRequest = agentcontract.ToolHTTPRequest
+	ToolReadFile    = agentcontract.ToolReadFile
+	ToolWriteFile   = agentcontract.ToolWriteFile
+	ToolListDir     = agentcontract.ToolListDir
+	ToolRepoInspect = agentcontract.ToolRepoInspect
 
 	EventKindConversationTurn = agentcontract.EventKindConversationTurn
 	EventKindTokenDelta       = agentcontract.EventKindTokenDelta
@@ -119,6 +140,46 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 			NonRetryableErrorTypes: []string{"InvalidInput", "LLMNonRetryable"},
 		},
 	})
+
+	// Activity options for sandbox tools. Long timeouts because terraform /
+	// pulumi / kubectl can take a while; the activity heartbeats every 5s so
+	// these timeouts gate true hangs only.
+	sandboxCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 60 * time.Minute,
+		HeartbeatTimeout:    30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    2 * time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    30 * time.Second,
+			MaximumAttempts:    2,
+			NonRetryableErrorTypes: []string{"InvalidInput", "PathEscape", "HostNotAllowed"},
+		},
+	})
+
+	// Provision the per-run sandbox up-front so the first tool call doesn't
+	// pay creation cost on the critical path.
+	if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityEnsureSandbox, agentactivity.EnsureSandboxInput{
+		WorkflowID:      workflow.GetInfo(ctx).WorkflowExecution.ID,
+		WorkspaceID:     input.WorkspaceID,
+		Image:           input.SandboxImage,
+		Env:             input.SandboxEnv,
+		EgressAllowlist: input.HTTPAllowlist,
+	}).Get(sandboxCtx, nil); err != nil {
+		return fmt.Errorf("ensure sandbox: %w", err)
+	}
+
+	// Tear down the sandbox on workflow exit, on a disconnected context so
+	// it survives cancellation. Best-effort: errors logged but not returned.
+	defer func() {
+		dctx, _ := workflow.NewDisconnectedContext(ctx)
+		teardownCtx := workflow.WithActivityOptions(dctx, workflow.ActivityOptions{
+			StartToCloseTimeout: 2 * time.Minute,
+			RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 2},
+		})
+		_ = workflow.ExecuteActivity(teardownCtx, agentcontract.ActivityTeardownSandbox, agentactivity.TeardownSandboxInput{
+			WorkflowID: workflow.GetInfo(ctx).WorkflowExecution.ID,
+		}).Get(teardownCtx, nil)
+	}()
 
 	userMsgCh := workflow.GetSignalChannel(ctx, AgentSignalUserMessage)
 	approvalCh := workflow.GetSignalChannel(ctx, AgentSignalApproval)
@@ -254,7 +315,7 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 
 		// Dispatch tool calls.
 		for _, tc := range result.ToolCalls {
-			toolResult, terminated := dispatchTool(ctx, &state, tc, approvalCh)
+			toolResult, terminated := dispatchTool(ctx, sandboxCtx, &state, &input, tc, approvalCh)
 			appendTurn(ctx, &state, ConversationTurn{
 				TurnID:     workflowUUID(ctx),
 				Role:       "tool",
@@ -299,7 +360,9 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 // dispatchTool routes a single tool call to its handler. Returns the textual
 // result (fed back to the model as a tool-result message) and a flag telling
 // the caller whether the loop should terminate.
-func dispatchTool(ctx workflow.Context, state *agentState, tc providers.ToolCall, approvalCh workflow.ReceiveChannel) (string, bool) {
+func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agentState, input *InfrastructureAgentInput, tc providers.ToolCall, approvalCh workflow.ReceiveChannel) (string, bool) {
+	workflowID := workflow.GetInfo(ctx).WorkflowExecution.ID
+
 	switch tc.Name {
 	case ToolProposeToUser:
 		title, _ := tc.Arguments["title"].(string)
@@ -329,9 +392,153 @@ func dispatchTool(ctx workflow.Context, state *agentState, tc providers.ToolCall
 		})
 		return "Marked done.", true
 
+	case ToolShellExec:
+		command, _ := tc.Arguments["command"].(string)
+		workingDir, _ := tc.Arguments["working_dir"].(string)
+		var res agentactivity.SandboxedShellResult
+		if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivitySandboxedShell, agentactivity.SandboxedShellInput{
+			WorkflowID: workflowID,
+			CallID:     tc.ID,
+			Command:    command,
+			WorkingDir: workingDir,
+		}).Get(sandboxCtx, &res); err != nil {
+			return jsonError("shell_exec", err), false
+		}
+		return jsonResult(map[string]any{
+			"exit_code":   res.ExitCode,
+			"stdout":      res.Stdout,
+			"stderr":      res.Stderr,
+			"duration_ms": res.DurationMs,
+			"truncated":   res.Truncated,
+		}), false
+
+	case ToolHTTPRequest:
+		method, _ := tc.Arguments["method"].(string)
+		urlStr, _ := tc.Arguments["url"].(string)
+		body, _ := tc.Arguments["body"].(string)
+		headers := stringMap(tc.Arguments["headers"])
+		allow := input.HTTPAllowlist
+		if len(allow) == 0 {
+			allow = defaultHTTPAllowlist
+		}
+		var res agentactivity.HTTPRequestResult
+		if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityHTTPRequest, agentactivity.HTTPRequestInput{
+			WorkflowID: workflowID,
+			Method:     method,
+			URL:        urlStr,
+			Headers:    headers,
+			Body:       body,
+			Allowlist:  allow,
+		}).Get(sandboxCtx, &res); err != nil {
+			return jsonError("http_request", err), false
+		}
+		return jsonResult(map[string]any{
+			"status":      res.Status,
+			"status_code": res.StatusCode,
+			"headers":     res.Headers,
+			"body":        res.Body,
+			"truncated":   res.Truncated,
+			"duration_ms": res.DurationMs,
+		}), false
+
+	case ToolReadFile:
+		path, _ := tc.Arguments["path"].(string)
+		var res agentactivity.SandboxReadFileResult
+		if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivitySandboxReadFile, agentactivity.SandboxReadFileInput{
+			WorkflowID: workflowID,
+			Path:       path,
+		}).Get(sandboxCtx, &res); err != nil {
+			return jsonError("read_file", err), false
+		}
+		return jsonResult(map[string]any{
+			"content":    res.Content,
+			"size_bytes": res.SizeBytes,
+			"truncated":  res.Truncated,
+		}), false
+
+	case ToolWriteFile:
+		path, _ := tc.Arguments["path"].(string)
+		content, _ := tc.Arguments["content"].(string)
+		var res agentactivity.SandboxWriteFileResult
+		if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivitySandboxWriteFile, agentactivity.SandboxWriteFileInput{
+			WorkflowID: workflowID,
+			Path:       path,
+			Content:    content,
+		}).Get(sandboxCtx, &res); err != nil {
+			return jsonError("write_file", err), false
+		}
+		return jsonResult(map[string]any{"bytes_written": res.BytesWritten}), false
+
+	case ToolListDir:
+		path, _ := tc.Arguments["path"].(string)
+		var res agentactivity.SandboxListDirResult
+		if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivitySandboxListDir, agentactivity.SandboxListDirInput{
+			WorkflowID: workflowID,
+			Path:       path,
+		}).Get(sandboxCtx, &res); err != nil {
+			return jsonError("list_dir", err), false
+		}
+		return jsonResult(map[string]any{"entries": res.Entries}), false
+
+	case ToolRepoInspect:
+		repoURL, _ := tc.Arguments["repo_url"].(string)
+		revision, _ := tc.Arguments["revision"].(string)
+		var res agentactivity.RepoInspectResult
+		if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityRepoInspect, agentactivity.RepoInspectInput{
+			WorkflowID:  workflowID,
+			RepoURL:     repoURL,
+			Revision:    revision,
+			GitHubToken: input.GitHubToken,
+		}).Get(sandboxCtx, &res); err != nil {
+			return jsonError("repo_inspect", err), false
+		}
+		return jsonResult(map[string]any{
+			"source":      res.Source,
+			"revision":    res.Revision,
+			"clone_ref":   res.CloneRef,
+			"tree":        res.Tree,
+			"files":       res.Files,
+			"truncated_at": res.TruncatedAt,
+		}), false
+
 	default:
-		return fmt.Sprintf("ERROR: unknown tool %q (Spike 1 supports propose_to_user and done; more arrive in later spikes).", tc.Name), false
+		return fmt.Sprintf("ERROR: unknown tool %q.", tc.Name), false
 	}
+}
+
+// jsonResult marshals a tool result for the model. Always returns valid JSON
+// even on marshal failure so the LLM can reliably parse.
+func jsonResult(v map[string]any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Sprintf(`{"error":"marshal: %s"}`, err.Error())
+	}
+	return string(b)
+}
+
+// jsonError formats an activity error as a tool result so the model can see
+// what went wrong and adapt.
+func jsonError(tool string, err error) string {
+	return fmt.Sprintf(`{"error":%q,"tool":%q}`, err.Error(), tool)
+}
+
+// stringMap coerces a map[string]any (as decoded from LLM JSON) into the
+// map[string]string the activity expects. Non-string values are stringified.
+func stringMap(v any) map[string]string {
+	in, ok := v.(map[string]any)
+	if !ok {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, val := range in {
+		switch s := val.(type) {
+		case string:
+			out[k] = s
+		default:
+			out[k] = fmt.Sprintf("%v", val)
+		}
+	}
+	return out
 }
 
 func awaitingUser(state *agentState) bool {
@@ -382,6 +589,74 @@ func builtInToolSchemas() []providers.ToolSchema {
 				"required": []string{"summary"},
 			},
 		},
+		{
+			Name: ToolShellExec,
+			Description: "Run a bash command inside the run's sandbox. Use this for `az`, `gcloud`, `kubectl`, `helm`, `terraform`, `pulumi`, `git`, `npm`, etc. Output is captured and returned. Long commands heartbeat automatically. Returns {exit_code, stdout, stderr, duration_ms, truncated}.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"command":     map[string]any{"type": "string", "description": "The shell command to run via `bash -lc`."},
+					"working_dir": map[string]any{"type": "string", "description": "Optional. Defaults to the sandbox root."},
+				},
+				"required": []string{"command"},
+			},
+		},
+		{
+			Name: ToolHTTPRequest,
+			Description: "Make an outbound HTTP request, gated by the workspace's host allowlist. Use for cloud-provider REST APIs the agent doesn't have a CLI for. Returns {status, status_code, headers, body, truncated}.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"method":  map[string]any{"type": "string", "description": "GET / POST / PUT / DELETE / PATCH"},
+					"url":     map[string]any{"type": "string"},
+					"headers": map[string]any{"type": "object", "description": "Header name → value"},
+					"body":    map[string]any{"type": "string", "description": "Optional request body."},
+				},
+				"required": []string{"url"},
+			},
+		},
+		{
+			Name: ToolReadFile,
+			Description: "Read a file inside the sandbox. Path is relative to the sandbox root and rejected if it escapes.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"path": map[string]any{"type": "string"}},
+				"required":   []string{"path"},
+			},
+		},
+		{
+			Name: ToolWriteFile,
+			Description: "Write a file inside the sandbox (parent directories are created). Use to author terraform / helm / pulumi files before applying.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"path":    map[string]any{"type": "string"},
+					"content": map[string]any{"type": "string"},
+				},
+				"required": []string{"path", "content"},
+			},
+		},
+		{
+			Name: ToolListDir,
+			Description: "List the contents of a directory inside the sandbox.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"path": map[string]any{"type": "string", "description": "Defaults to '.'"}},
+			},
+		},
+		{
+			Name: ToolRepoInspect,
+			Description: "Survey a git repository (tree + key manifest files like README, package.json, go.mod, Dockerfile). Tries the GitHub API first; falls back to a shallow clone of the main branch into the sandbox at repo/<slug>/. Use this to learn what kind of app the user wants to deploy before proposing a plan.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"repo_url":  map[string]any{"type": "string", "description": "https://github.com/owner/repo or git URL"},
+					"revision":  map[string]any{"type": "string", "description": "Defaults to 'main'."},
+					"max_files": map[string]any{"type": "integer", "description": "Tree entry cap (default 200)."},
+				},
+				"required": []string{"repo_url"},
+			},
+		},
 	}
 }
 
@@ -425,11 +700,22 @@ const defaultSystemPrompt = `You are Orbit's infrastructure agent. You help the 
 
 You operate inside a deterministic Temporal workflow that exposes a small set of tools. You never execute commands directly; you emit tool-use requests and the workflow runs them inside a sandboxed environment with optional human approval. Tool results flow back into your next turn.
 
-Tools available right now:
-- propose_to_user: post a structured plan to the user and wait for their reply
-- done: end the run when the goal is achieved (or unrecoverably blocked)
+Tools:
+- propose_to_user(title, summary, body_markdown): post a structured plan to the user and wait for their reply
+- done(summary): end the run
+- shell_exec(command, working_dir?): run a bash command in the sandbox (az / gcloud / kubectl / helm / terraform / pulumi / git etc.)
+- http_request(method, url, headers?, body?): outbound HTTP gated by the workspace allowlist
+- read_file(path) / write_file(path, content) / list_dir(path?): file IO inside the sandbox
+- repo_inspect(repo_url, revision?, max_files?): survey a repo (tree + manifests) without a full clone when possible
 
-Style: be concise. Prefer structured proposals over wall-of-text. When the user's goal is unclear, ask. When you have enough information, post a propose_to_user with a concrete plan.`
+Workflow:
+1. Use repo_inspect first to learn what the app is (language, framework, manifests).
+2. Use shell_exec for further investigation as needed (e.g. cat package.json, ls deeper paths).
+3. Once you have a concrete plan, propose_to_user with the proposed commands embedded in body_markdown.
+4. After the user approves, run the plan via shell_exec calls.
+5. Call done with a final summary.
+
+Style: be concise. Prefer structured proposals over wall-of-text. When the user's goal is unclear, ask. Tool results are JSON; treat them programmatically. Never assume credentials are present until you've verified them with shell_exec (e.g. ` + "`" + `az account show` + "`" + `).`
 
 // --- state helpers ---
 

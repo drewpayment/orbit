@@ -12,7 +12,23 @@ import (
 
 	agentactivity "github.com/drewpayment/orbit/temporal-workflows/internal/activities/agent"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/providers"
+	"github.com/drewpayment/orbit/temporal-workflows/pkg/agentcontract"
 )
+
+// registerSandboxStubs satisfies the workflow's EnsureSandbox/Teardown
+// activity calls in the test environment with no-op implementations.
+func registerSandboxStubs(env *testsuite.TestWorkflowEnvironment) {
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.EnsureSandboxInput) (agentactivity.EnsureSandboxResult, error) {
+			return agentactivity.EnsureSandboxResult{SandboxID: "stub", Backend: "stub", Ref: "/tmp/stub"}, nil
+		},
+		activity.RegisterOptions{Name: agentcontract.ActivityEnsureSandbox},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.TeardownSandboxInput) error { return nil },
+		activity.RegisterOptions{Name: agentcontract.ActivityTeardownSandbox},
+	)
+}
 
 type scriptedLLM struct {
 	calls    atomic.Int32
@@ -36,6 +52,7 @@ func (s *scriptedLLM) Run(_ context.Context, in agentactivity.LLMNextStepInput) 
 func TestInfrastructureAgentWorkflow_ProposeWaitsForUserThenDone(t *testing.T) {
 	suite := &testsuite.WorkflowTestSuite{}
 	env := suite.NewTestWorkflowEnvironment()
+	registerSandboxStubs(env)
 
 	llm := &scriptedLLM{
 		steps: []agentactivity.LLMNextStepResult{
@@ -100,6 +117,7 @@ func TestInfrastructureAgentWorkflow_ProposeWaitsForUserThenDone(t *testing.T) {
 func TestInfrastructureAgentWorkflow_AbortBeforeFirstLLMCall(t *testing.T) {
 	suite := &testsuite.WorkflowTestSuite{}
 	env := suite.NewTestWorkflowEnvironment()
+	registerSandboxStubs(env)
 
 	llm := &scriptedLLM{}
 	env.RegisterActivityWithOptions(llm.Run, activity.RegisterOptions{Name: ActivityLLMNextStep})
@@ -128,12 +146,13 @@ func TestInfrastructureAgentWorkflow_AbortBeforeFirstLLMCall(t *testing.T) {
 func TestInfrastructureAgentWorkflow_UnknownToolFedBackToAgent(t *testing.T) {
 	suite := &testsuite.WorkflowTestSuite{}
 	env := suite.NewTestWorkflowEnvironment()
+	registerSandboxStubs(env)
 
 	llm := &scriptedLLM{
 		steps: []agentactivity.LLMNextStepResult{
 			{
 				ToolCalls: []providers.ToolCall{
-					{ID: "tc-1", Name: "shell_exec", Arguments: map[string]any{"command": "ls"}},
+					{ID: "tc-1", Name: "definitely_not_a_real_tool", Arguments: map[string]any{}},
 				},
 				StopReason: "tool_use",
 			},
@@ -160,8 +179,6 @@ func TestInfrastructureAgentWorkflow_UnknownToolFedBackToAgent(t *testing.T) {
 	require.NoError(t, env.GetWorkflowError())
 	require.Equal(t, int32(2), llm.calls.Load())
 
-	// The second LLM call's message history must include a tool result message
-	// from the unknown shell_exec call telling the model the tool isn't available.
 	require.Len(t, llm.captured, 2)
 	var foundToolErr bool
 	for _, m := range llm.captured[1].Messages {
@@ -171,4 +188,67 @@ func TestInfrastructureAgentWorkflow_UnknownToolFedBackToAgent(t *testing.T) {
 		}
 	}
 	require.True(t, foundToolErr, "missing tool error feedback")
+}
+
+func TestInfrastructureAgentWorkflow_ShellExecDispatchesToActivity(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	registerSandboxStubs(env)
+
+	// Stub the shell activity so we can assert what the workflow passes in.
+	var shellInputs []agentactivity.SandboxedShellInput
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, in agentactivity.SandboxedShellInput) (agentactivity.SandboxedShellResult, error) {
+			shellInputs = append(shellInputs, in)
+			return agentactivity.SandboxedShellResult{
+				ExitCode:   0,
+				Stdout:     "hello\n",
+				DurationMs: 12,
+			}, nil
+		},
+		activity.RegisterOptions{Name: agentcontract.ActivitySandboxedShell},
+	)
+
+	llm := &scriptedLLM{
+		steps: []agentactivity.LLMNextStepResult{
+			{
+				ToolCalls: []providers.ToolCall{
+					{ID: "tc-1", Name: ToolShellExec, Arguments: map[string]any{"command": "echo hello"}},
+				},
+				StopReason: "tool_use",
+			},
+			{
+				ToolCalls: []providers.ToolCall{
+					{ID: "tc-2", Name: ToolDone, Arguments: map[string]any{"summary": "ok"}},
+				},
+				StopReason: "tool_use",
+			},
+		},
+	}
+	env.RegisterActivityWithOptions(llm.Run, activity.RegisterOptions{Name: ActivityLLMNextStep})
+
+	env.ExecuteWorkflow(InfrastructureAgentWorkflow, InfrastructureAgentInput{
+		AgentRunID:    "run-shell",
+		WorkspaceID:   "ws-1",
+		LLMProviderID: "prov-1",
+		InitialPrompt: "run echo",
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	require.Len(t, shellInputs, 1)
+	require.Equal(t, "echo hello", shellInputs[0].Command)
+
+	// Second LLM call should have received the JSON tool result containing
+	// stdout "hello".
+	require.Len(t, llm.captured, 2)
+	var found bool
+	for _, m := range llm.captured[1].Messages {
+		if m.Role == providers.RoleTool && m.ToolCallID == "tc-1" {
+			require.Contains(t, m.Content, `"stdout":"hello\n"`)
+			require.Contains(t, m.Content, `"exit_code":0`)
+			found = true
+		}
+	}
+	require.True(t, found, "shell tool result not in history")
 }

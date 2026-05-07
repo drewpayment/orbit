@@ -33,11 +33,31 @@ const (
 	WorkflowInfrastructureAgent = "InfrastructureAgentWorkflow"
 )
 
-// Tool names exposed to the LLM. Spike 1 surface; subsequent spikes layer in
-// shell_exec, http_request, request_approval, register_tool, etc.
+// Tool names exposed to the LLM. Spike 1 surface plus the Spike 2 sandbox
+// tools (shell_exec, http_request, file IO, repo_inspect). Spikes 3+ layer in
+// request_approval, register_tool, etc.
 const (
 	ToolProposeToUser = "propose_to_user"
 	ToolDone          = "done"
+
+	ToolShellExec   = "shell_exec"
+	ToolHTTPRequest = "http_request"
+	ToolReadFile    = "read_file"
+	ToolWriteFile   = "write_file"
+	ToolListDir     = "list_dir"
+	ToolRepoInspect = "repo_inspect"
+)
+
+// Activity names for Spike 2 sandbox + IO activities.
+const (
+	ActivityEnsureSandbox    = "EnsureSandbox"
+	ActivityTeardownSandbox  = "TeardownSandbox"
+	ActivitySandboxedShell   = "SandboxedShell"
+	ActivitySandboxReadFile  = "SandboxReadFile"
+	ActivitySandboxWriteFile = "SandboxWriteFile"
+	ActivitySandboxListDir   = "SandboxListDir"
+	ActivityHTTPRequest      = "HTTPRequest"
+	ActivityRepoInspect      = "RepoInspect"
 )
 
 // Event kinds emitted into the workflow's event log.
@@ -60,6 +80,23 @@ type InfrastructureAgentInput struct {
 	InitialPrompt string
 
 	SystemPrompt string
+
+	// HTTPAllowlist restricts the http_request tool to a host suffix list.
+	// Empty (the default) falls back to a conservative set of public hosts
+	// in the workflow itself.
+	HTTPAllowlist []string
+
+	// SandboxImage overrides the default sandbox image (k8s only). Empty
+	// uses the executor's default.
+	SandboxImage string
+
+	// SandboxEnv is the env to project into the sandbox (workspace cloud
+	// creds, etc.). The activity layer is responsible for not logging values.
+	SandboxEnv map[string]string
+
+	// GitHubToken is forwarded to the repo_inspect tool when fetching from
+	// the GitHub API. May be empty for public repos.
+	GitHubToken string
 
 	History         []ConversationTurn
 	Events          []AgentEvent

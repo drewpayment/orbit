@@ -14,9 +14,11 @@ import (
 	agentactivity "github.com/drewpayment/orbit/temporal-workflows/internal/activities/agent"
 	_ "github.com/drewpayment/orbit/temporal-workflows/internal/agent/providers/anthropic"     // register provider
 	_ "github.com/drewpayment/orbit/temporal-workflows/internal/agent/providers/openai_compat" // register provider
+	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/sandbox/local"
 	internalClients "github.com/drewpayment/orbit/temporal-workflows/internal/clients"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/services"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/workflows"
+	"github.com/drewpayment/orbit/temporal-workflows/pkg/agentcontract"
 	"github.com/drewpayment/orbit/temporal-workflows/pkg/clients"
 	"github.com/drewpayment/orbit/temporal-workflows/pkg/types"
 )
@@ -435,9 +437,27 @@ func main() {
 	tokenSigniller := services.NewTemporalTokenSigniller(c, logger)
 	agentActivities := agentactivity.NewAgentActivities(llmProviderClient, tokenSigniller, logger, agentactivity.AgentActivitiesOptions{})
 	w.RegisterActivityWithOptions(agentActivities.LLMNextStep, activity.RegisterOptions{
-		Name: workflows.ActivityLLMNextStep,
+		Name: agentcontract.ActivityLLMNextStep,
 	})
-	log.Println("Infrastructure Agent workflow + activities registered")
+
+	// Sandbox activities. The local executor is correct for `make dev` and
+	// CI; production deployments swap in the K8s executor (follow-up commit)
+	// without changing any of the activity wiring.
+	sandboxRoot := os.Getenv("AGENT_SANDBOX_ROOT")
+	localExec, err := local.NewExecutor(sandboxRoot)
+	if err != nil {
+		log.Fatalf("Failed to construct local sandbox executor: %v", err)
+	}
+	sandboxActivities := agentactivity.NewSandboxActivities(localExec, logger)
+	w.RegisterActivityWithOptions(sandboxActivities.EnsureSandbox, activity.RegisterOptions{Name: agentcontract.ActivityEnsureSandbox})
+	w.RegisterActivityWithOptions(sandboxActivities.TeardownSandbox, activity.RegisterOptions{Name: agentcontract.ActivityTeardownSandbox})
+	w.RegisterActivityWithOptions(sandboxActivities.SandboxedShell, activity.RegisterOptions{Name: agentcontract.ActivitySandboxedShell})
+	w.RegisterActivityWithOptions(sandboxActivities.SandboxReadFile, activity.RegisterOptions{Name: agentcontract.ActivitySandboxReadFile})
+	w.RegisterActivityWithOptions(sandboxActivities.SandboxWriteFile, activity.RegisterOptions{Name: agentcontract.ActivitySandboxWriteFile})
+	w.RegisterActivityWithOptions(sandboxActivities.SandboxListDir, activity.RegisterOptions{Name: agentcontract.ActivitySandboxListDir})
+	w.RegisterActivityWithOptions(sandboxActivities.HTTPRequest, activity.RegisterOptions{Name: agentcontract.ActivityHTTPRequest})
+	w.RegisterActivityWithOptions(sandboxActivities.RepoInspect, activity.RegisterOptions{Name: agentcontract.ActivityRepoInspect})
+	log.Printf("Infrastructure Agent workflow + activities registered (sandbox backend=%s)", localExec.Backend())
 
 	log.Println("Starting Temporal worker...")
 	log.Printf("Temporal address: %s", temporalAddress)
