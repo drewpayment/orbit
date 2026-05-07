@@ -71,6 +71,13 @@ const (
 	ActivityRepoInspect      = "RepoInspect"
 )
 
+// Activity names for Spike 4 tool registry.
+const (
+	ActivityListApprovedAgentTools  = "ListApprovedAgentTools"
+	ActivityRegisterPendingAgentTool = "RegisterPendingAgentTool"
+	ActivityResolveAgentTool         = "ResolveAgentTool"
+)
+
 // Event kinds emitted into the workflow's event log.
 const (
 	EventKindConversationTurn = "conversation_turn"
@@ -171,6 +178,15 @@ type PendingApproval struct {
 	BodyMarkdown string         `json:"body_markdown"`
 	Payload      map[string]any `json:"payload,omitempty"`
 	CreatedAt    time.Time      `json:"created_at"`
+}
+
+// ProviderConfigSummary is the non-sensitive subset of a workspace's LLM
+// provider config returned by the ProviderLoader. The activity uses it for
+// telemetry; the workflow uses it to surface the backend/model in the
+// snapshot query so the UI can label which model an answer came from.
+type ProviderConfigSummary struct {
+	Backend string `json:"backend"` // "anthropic" | "openai_compat"
+	Model   string `json:"model"`
 }
 
 // TokenStreamSignalPayload is the body of SignalTokenStream.

@@ -11,8 +11,8 @@ import (
 	"net/url"
 	"time"
 
-	agentactivity "github.com/drewpayment/orbit/temporal-workflows/internal/activities/agent"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/providers"
+	"github.com/drewpayment/orbit/temporal-workflows/pkg/agentcontract"
 )
 
 // PayloadLLMProviderClient fetches workspace-scoped LLM credentials from the
@@ -51,17 +51,17 @@ type llmProviderResponse struct {
 }
 
 // LoadProvider implements agentactivity.ProviderLoader.
-func (c *PayloadLLMProviderClient) LoadProvider(ctx context.Context, workspaceID, providerID string) (providers.Provider, agentactivity.ProviderConfigSummary, error) {
+func (c *PayloadLLMProviderClient) LoadProvider(ctx context.Context, workspaceID, providerID string) (providers.Provider, agentcontract.ProviderConfigSummary, error) {
 	if c.baseURL == "" {
-		return nil, agentactivity.ProviderConfigSummary{}, errors.New("payload llm client: base URL not configured")
+		return nil, agentcontract.ProviderConfigSummary{}, errors.New("payload llm client: base URL not configured")
 	}
 	if providerID == "" {
-		return nil, agentactivity.ProviderConfigSummary{}, errors.New("payload llm client: provider id required")
+		return nil, agentcontract.ProviderConfigSummary{}, errors.New("payload llm client: provider id required")
 	}
 
 	u, err := url.Parse(fmt.Sprintf("%s/api/internal/llm-providers/%s", c.baseURL, providerID))
 	if err != nil {
-		return nil, agentactivity.ProviderConfigSummary{}, fmt.Errorf("build url: %w", err)
+		return nil, agentcontract.ProviderConfigSummary{}, fmt.Errorf("build url: %w", err)
 	}
 	if workspaceID != "" {
 		q := u.Query()
@@ -71,28 +71,28 @@ func (c *PayloadLLMProviderClient) LoadProvider(ctx context.Context, workspaceID
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
-		return nil, agentactivity.ProviderConfigSummary{}, fmt.Errorf("build request: %w", err)
+		return nil, agentcontract.ProviderConfigSummary{}, fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("X-API-Key", c.apiKey)
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, agentactivity.ProviderConfigSummary{}, fmt.Errorf("payload llm client: %w", err)
+		return nil, agentcontract.ProviderConfigSummary{}, fmt.Errorf("payload llm client: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return nil, agentactivity.ProviderConfigSummary{}, fmt.Errorf("read response: %w", err)
+		return nil, agentcontract.ProviderConfigSummary{}, fmt.Errorf("read response: %w", err)
 	}
 	if resp.StatusCode/100 != 2 {
-		return nil, agentactivity.ProviderConfigSummary{}, fmt.Errorf("payload llm client: HTTP %d: %s", resp.StatusCode, string(body))
+		return nil, agentcontract.ProviderConfigSummary{}, fmt.Errorf("payload llm client: HTTP %d: %s", resp.StatusCode, string(body))
 	}
 
 	var data llmProviderResponse
 	if err := json.Unmarshal(body, &data); err != nil {
-		return nil, agentactivity.ProviderConfigSummary{}, fmt.Errorf("parse response: %w", err)
+		return nil, agentcontract.ProviderConfigSummary{}, fmt.Errorf("parse response: %w", err)
 	}
 
 	prov, err := providers.Build(data.Provider, providers.Config{
@@ -101,10 +101,10 @@ func (c *PayloadLLMProviderClient) LoadProvider(ctx context.Context, workspaceID
 		Model:   data.Model,
 	})
 	if err != nil {
-		return nil, agentactivity.ProviderConfigSummary{}, err
+		return nil, agentcontract.ProviderConfigSummary{}, err
 	}
 
-	return prov, agentactivity.ProviderConfigSummary{
+	return prov, agentcontract.ProviderConfigSummary{
 		Backend: data.Provider,
 		Model:   data.Model,
 	}, nil

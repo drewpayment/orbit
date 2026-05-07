@@ -36,6 +36,7 @@ import { LaunchTemplates } from './collections/LaunchTemplates'
 import { Launches } from './collections/Launches'
 import { LLMProviders } from './collections/LLMProviders'
 import { AgentRuns } from './collections/AgentRuns'
+import { AgentTools } from './collections/AgentTools'
 
 // Kafka collections
 import {
@@ -107,6 +108,7 @@ export default buildConfig({
     // Infrastructure Agent
     LLMProviders,
     AgentRuns,
+    AgentTools,
     // Kafka collections
     KafkaProviders,
     KafkaClusters,

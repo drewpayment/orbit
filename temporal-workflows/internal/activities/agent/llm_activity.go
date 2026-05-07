@@ -14,21 +14,19 @@ import (
 	"go.temporal.io/sdk/temporal"
 
 	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/providers"
+	"github.com/drewpayment/orbit/temporal-workflows/pkg/agentcontract"
 )
 
 // ProviderLoader resolves a workspace-scoped LLM provider config (decrypts the
 // API key, picks the correct backend, returns a constructed Provider). The
 // activity calls this once per invocation and never logs or returns the key.
 type ProviderLoader interface {
-	LoadProvider(ctx context.Context, workspaceID, providerID string) (providers.Provider, ProviderConfigSummary, error)
+	LoadProvider(ctx context.Context, workspaceID, providerID string) (providers.Provider, agentcontract.ProviderConfigSummary, error)
 }
 
-// ProviderConfigSummary is the non-sensitive subset returned alongside a
-// Provider; useful for telemetry and audit.
-type ProviderConfigSummary struct {
-	Backend string // "anthropic" | "openai_compat"
-	Model   string
-}
+// ProviderConfigSummary is the local alias for the contract-package type so
+// existing callers keep compiling.
+type ProviderConfigSummary = agentcontract.ProviderConfigSummary
 
 // TokenSigniller pushes token-level partial output back to the parent workflow
 // as a signal so chat UIs can render streaming text. Implementations typically

@@ -95,6 +95,7 @@ export interface Config {
     launches: Launch;
     'llm-providers': LlmProvider;
     'agent-runs': AgentRun;
+    'agent-tools': AgentTool;
     'kafka-providers': KafkaProvider;
     'kafka-clusters': KafkaCluster;
     'kafka-environment-mappings': KafkaEnvironmentMapping;
@@ -154,6 +155,7 @@ export interface Config {
     launches: LaunchesSelect<false> | LaunchesSelect<true>;
     'llm-providers': LlmProvidersSelect<false> | LlmProvidersSelect<true>;
     'agent-runs': AgentRunsSelect<false> | AgentRunsSelect<true>;
+    'agent-tools': AgentToolsSelect<false> | AgentToolsSelect<true>;
     'kafka-providers': KafkaProvidersSelect<false> | KafkaProvidersSelect<true>;
     'kafka-clusters': KafkaClustersSelect<false> | KafkaClustersSelect<true>;
     'kafka-environment-mappings': KafkaEnvironmentMappingsSelect<false> | KafkaEnvironmentMappingsSelect<true>;
@@ -1688,6 +1690,49 @@ export interface AgentRun {
         id?: string | null;
       }[]
     | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Self-extending tool library for the Infrastructure Agent
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "agent-tools".
+ */
+export interface AgentTool {
+  id: string;
+  workspace: string | Workspace;
+  /**
+   * Slug-style tool name the agent invokes (e.g. deploy_azure_appservice). Must be unique per workspace and must not collide with built-in tools.
+   */
+  name: string;
+  /**
+   * Plain-language explanation shown to the LLM as part of its tool catalog. Concise: one paragraph at most.
+   */
+  description: string;
+  /**
+   * JSON Schema describing the tool args.
+   */
+  inputSchemaJson?: string | null;
+  templateKind: 'shell' | 'http' | 'composite';
+  /**
+   * Template body. {{var}} placeholders are substituted with the agent-supplied args (shell-escaped for the shell kind, JSON-escaped for http). See docs/plans/robust-twirling-crab.md §6.
+   */
+  templateJson: string;
+  /**
+   * The agent's rationale for why this tool is worth registering, captured at proposal time.
+   */
+  reasoning?: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  createdByRunId?: string | null;
+  approvedBy?: (string | null) | User;
+  approvedAt?: string | null;
+  rejectionReason?: string | null;
+  /**
+   * How many times the tool has been invoked since approval.
+   */
+  invocationCount?: number | null;
+  lastInvokedAt?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -3393,6 +3438,10 @@ export interface PayloadLockedDocument {
         value: string | AgentRun;
       } | null)
     | ({
+        relationTo: 'agent-tools';
+        value: string | AgentTool;
+      } | null)
+    | ({
         relationTo: 'kafka-providers';
         value: string | KafkaProvider;
       } | null)
@@ -4246,6 +4295,28 @@ export interface AgentRunsSelect<T extends boolean = true> {
         notes?: T;
         id?: T;
       };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "agent-tools_select".
+ */
+export interface AgentToolsSelect<T extends boolean = true> {
+  workspace?: T;
+  name?: T;
+  description?: T;
+  inputSchemaJson?: T;
+  templateKind?: T;
+  templateJson?: T;
+  reasoning?: T;
+  status?: T;
+  createdByRunId?: T;
+  approvedBy?: T;
+  approvedAt?: T;
+  rejectionReason?: T;
+  invocationCount?: T;
+  lastInvokedAt?: T;
   updatedAt?: T;
   createdAt?: T;
 }

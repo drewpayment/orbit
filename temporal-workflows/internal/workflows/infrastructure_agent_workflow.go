@@ -13,6 +13,7 @@ import (
 
 	agentactivity "github.com/drewpayment/orbit/temporal-workflows/internal/activities/agent"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/providers"
+	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/tooltemplate"
 	"github.com/drewpayment/orbit/temporal-workflows/pkg/agentcontract"
 )
 
@@ -74,6 +75,7 @@ const (
 	ToolListDir         = agentcontract.ToolListDir
 	ToolRepoInspect     = agentcontract.ToolRepoInspect
 	ToolRequestApproval = agentcontract.ToolRequestApproval
+	ToolRegisterTool    = agentcontract.ToolRegisterTool
 
 	EventKindConversationTurn = agentcontract.EventKindConversationTurn
 	EventKindTokenDelta       = agentcontract.EventKindTokenDelta
@@ -100,6 +102,7 @@ type agentState struct {
 	streamingTurnID   string
 	proposal          *Proposal
 	pendingApprovals  map[string]PendingApproval
+	registeredTools   map[string]agentactivity.ApprovedAgentTool
 	terminated        bool
 	abortReason       string
 	iterations        int
@@ -273,6 +276,10 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 		state.streamingTurnID = workflowUUID(ctx)
 		state.streamingPartial = ""
 
+		// Refresh the registered-tool catalog at the top of each iteration
+		// so newly approved tools become available mid-run.
+		refreshRegisteredTools(ctx, sandboxCtx, &state, input.WorkspaceID)
+
 		llmInput := agentactivity.LLMNextStepInput{
 			WorkflowID:  workflow.GetInfo(ctx).WorkflowExecution.ID,
 			RunID:       workflow.GetInfo(ctx).WorkflowExecution.RunID,
@@ -281,7 +288,7 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 			ProviderID:  input.LLMProviderID,
 			System:      effectiveSystemPrompt(input),
 			Messages:    historyToProviderMessages(state.history),
-			Tools:       builtInToolSchemas(),
+			Tools:       buildToolCatalog(&state),
 			MaxTokens:   4096,
 		}
 
@@ -556,9 +563,243 @@ func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agen
 			"notes":       resolution.Notes,
 		}), false
 
+	case ToolRegisterTool:
+		return dispatchRegisterTool(ctx, sandboxCtx, state, tc, approvalCh, input)
+
 	default:
+		// Registered tool? Expand its template and dispatch as primitive(s).
+		if reg, ok := state.registeredTools[tc.Name]; ok {
+			return dispatchRegisteredTool(ctx, sandboxCtx, state, input, tc, reg, approvalCh)
+		}
 		return fmt.Sprintf("ERROR: unknown tool %q.", tc.Name), false
 	}
+}
+
+// refreshRegisteredTools fetches the workspace's approved AgentTools and
+// stores them in state.registeredTools. Failures fall through silently —
+// the next iteration will retry, and the agent still has access to all
+// built-ins in the meantime.
+func refreshRegisteredTools(ctx workflow.Context, actCtx workflow.Context, state *agentState, workspaceID string) {
+	logger := workflow.GetLogger(ctx)
+	var res agentactivity.ListApprovedToolsResult
+	err := workflow.ExecuteActivity(actCtx, agentcontract.ActivityListApprovedAgentTools, agentactivity.ListApprovedToolsInput{
+		WorkspaceID: workspaceID,
+	}).Get(actCtx, &res)
+	if err != nil {
+		logger.Warn("list approved agent tools failed; using last cached set", "err", err)
+		return
+	}
+	out := make(map[string]agentactivity.ApprovedAgentTool, len(res.Tools))
+	for _, t := range res.Tools {
+		out[t.Name] = t
+	}
+	state.registeredTools = out
+}
+
+// buildToolCatalog returns the schemas the LLM sees: built-ins plus every
+// approved registered tool (whose schema is its inputSchemaJson). Names
+// are deterministically ordered for stable workflow histories.
+func buildToolCatalog(state *agentState) []providers.ToolSchema {
+	out := builtInToolSchemas()
+	if len(state.registeredTools) == 0 {
+		return out
+	}
+	names := make([]string, 0, len(state.registeredTools))
+	for n := range state.registeredTools {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		t := state.registeredTools[n]
+		schema := map[string]any{"type": "object"}
+		if t.InputSchemaJSON != "" {
+			var parsed map[string]any
+			if err := json.Unmarshal([]byte(t.InputSchemaJSON), &parsed); err == nil {
+				schema = parsed
+			}
+		}
+		out = append(out, providers.ToolSchema{
+			Name:        t.Name,
+			Description: t.Description,
+			InputSchema: schema,
+		})
+	}
+	return out
+}
+
+// dispatchRegisteredTool expands a registered tool's template into one or
+// more primitive calls and runs each via the standard primitive dispatch.
+// Composite templates aggregate results into a JSON array; single-call
+// templates return their primitive's result directly.
+func dispatchRegisteredTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agentState, input *InfrastructureAgentInput, tc providers.ToolCall, reg agentactivity.ApprovedAgentTool, approvalCh workflow.ReceiveChannel) (string, bool) {
+	calls, err := tooltemplate.Expand(tooltemplate.Kind(reg.TemplateKind), reg.TemplateJSON, tc.Arguments)
+	if err != nil {
+		return jsonError(reg.Name, err), false
+	}
+	if len(calls) == 0 {
+		return jsonError(reg.Name, fmt.Errorf("template expansion produced no calls")), false
+	}
+	results := make([]any, 0, len(calls))
+	for i, call := range calls {
+		// Synthesize a fresh tool call with the primitive's name and the
+		// expanded args; reuse the parent's CallID as a prefix so audit
+		// can stitch them back together.
+		synthetic := providers.ToolCall{
+			ID:        fmt.Sprintf("%s.step-%d", tc.ID, i),
+			Name:      call.Tool,
+			Arguments: call.Args,
+		}
+		out, terminated := dispatchTool(ctx, sandboxCtx, state, input, synthetic, approvalCh)
+		var parsed any
+		if jerr := json.Unmarshal([]byte(out), &parsed); jerr == nil {
+			results = append(results, parsed)
+		} else {
+			results = append(results, out)
+		}
+		if terminated {
+			break
+		}
+	}
+	if len(results) == 1 {
+		b, _ := json.Marshal(results[0])
+		return string(b), false
+	}
+	b, _ := json.Marshal(map[string]any{"steps": results})
+	return string(b), false
+}
+
+// dispatchRegisterTool persists the LLM's proposed tool template as a
+// pending row, surfaces a tool_registration approval prompt, and on
+// approval flips the row to approved. The agent's next turn sees
+// {approved, name, id, reason?} and can then invoke the tool by name.
+func dispatchRegisterTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agentState, tc providers.ToolCall, approvalCh workflow.ReceiveChannel, input *InfrastructureAgentInput) (string, bool) {
+	name, _ := tc.Arguments["name"].(string)
+	description, _ := tc.Arguments["description"].(string)
+	templateKind, _ := tc.Arguments["template_kind"].(string)
+	templateJSON, _ := tc.Arguments["template_json"].(string)
+	inputSchemaJSON, _ := tc.Arguments["input_schema_json"].(string)
+	reasoning, _ := tc.Arguments["reasoning"].(string)
+
+	// Validate the template is well-formed BEFORE we surface an approval to
+	// the human reviewer. Saves them clicking through obviously-broken
+	// rows and gives the agent immediate feedback to fix typos.
+	if _, err := tooltemplate.Expand(tooltemplate.Kind(templateKind), templateJSON, exampleArgsFromSchema(inputSchemaJSON)); err != nil {
+		return jsonError("register_tool", fmt.Errorf("template invalid: %w", err)), false
+	}
+
+	var registered agentactivity.RegisterPendingToolResult
+	if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityRegisterPendingAgentTool, agentactivity.RegisterPendingToolInput{
+		WorkspaceID:     input.WorkspaceID,
+		Name:            name,
+		Description:     description,
+		InputSchemaJSON: inputSchemaJSON,
+		TemplateKind:    templateKind,
+		TemplateJSON:    templateJSON,
+		Reasoning:       reasoning,
+		CreatedByRunID:  workflow.GetInfo(ctx).WorkflowExecution.ID,
+	}).Get(sandboxCtx, &registered); err != nil {
+		return jsonError("register_tool", err), false
+	}
+
+	approvalID := workflowUUID(ctx)
+	state.pendingApprovals[approvalID] = PendingApproval{
+		ApprovalID:   approvalID,
+		Kind:         agentcontract.ApprovalKindToolRegistration,
+		Title:        fmt.Sprintf("Register new agent tool: %s", name),
+		BodyMarkdown: fmt.Sprintf("**Description**\n\n%s\n\n**Reasoning**\n\n%s\n\n**Template (%s)**\n\n```json\n%s\n```\n\n**Input schema**\n\n```json\n%s\n```", description, reasoning, templateKind, templateJSON, inputSchemaJSON),
+		Payload: map[string]any{
+			"agent_tool_id":     registered.ID,
+			"name":              name,
+			"template_kind":     templateKind,
+			"template_json":     templateJSON,
+			"input_schema_json": inputSchemaJSON,
+			"reasoning":         reasoning,
+		},
+		CreatedAt: workflow.Now(ctx),
+	}
+	prevStatus := state.status
+	state.status = "awaiting_approval"
+	emitEvent(ctx, state, EventKindApprovalRequest, map[string]any{
+		"approval_id":   approvalID,
+		"kind":          agentcontract.ApprovalKindToolRegistration,
+		"title":         fmt.Sprintf("Register new agent tool: %s", name),
+		"body_markdown": fmt.Sprintf("Tool: `%s`\nKind: `%s`\n\n%s", name, templateKind, description),
+		"agent_tool_id": registered.ID,
+	})
+	emitEvent(ctx, state, EventKindStatusUpdate, map[string]any{
+		"status":  "awaiting_approval",
+		"message": fmt.Sprintf("tool registration: %s", name),
+	})
+
+	resolution, aborted := awaitApproval(ctx, approvalCh, approvalID)
+	delete(state.pendingApprovals, approvalID)
+	state.status = prevStatus
+	if aborted {
+		state.terminated = true
+		// Reject the pending row on abort so it doesn't linger as approvable.
+		_ = workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityResolveAgentTool, agentactivity.ResolveAgentToolInput{
+			ID: registered.ID, Approved: false, Reason: "agent run aborted",
+		}).Get(sandboxCtx, nil)
+		return jsonResult(map[string]any{"approved": false, "reason": "agent run aborted"}), true
+	}
+
+	if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityResolveAgentTool, agentactivity.ResolveAgentToolInput{
+		ID:         registered.ID,
+		Approved:   resolution.Approved,
+		ResolvedBy: resolution.ResolvedBy,
+		Reason:     resolution.Notes,
+	}).Get(sandboxCtx, nil); err != nil {
+		return jsonError("register_tool", fmt.Errorf("resolve: %w", err)), false
+	}
+
+	emitEvent(ctx, state, EventKindApprovalResolved, map[string]any{
+		"approval_id": approvalID,
+		"approved":    resolution.Approved,
+		"resolved_by": resolution.ResolvedBy,
+		"notes":       resolution.Notes,
+	})
+
+	if resolution.Approved {
+		// Eagerly add to in-memory catalog so the next LLM call sees it
+		// without waiting for the next refresh tick.
+		if state.registeredTools == nil {
+			state.registeredTools = map[string]agentactivity.ApprovedAgentTool{}
+		}
+		state.registeredTools[name] = agentactivity.ApprovedAgentTool{
+			ID:              registered.ID,
+			Name:            name,
+			Description:     description,
+			InputSchemaJSON: inputSchemaJSON,
+			TemplateKind:    templateKind,
+			TemplateJSON:    templateJSON,
+		}
+	}
+
+	return jsonResult(map[string]any{
+		"approved":      resolution.Approved,
+		"name":          name,
+		"agent_tool_id": registered.ID,
+		"resolved_by":   resolution.ResolvedBy,
+		"notes":         resolution.Notes,
+	}), false
+}
+
+// exampleArgsFromSchema returns a map filled with placeholder values for
+// every required property in the schema. Used by dispatchRegisterTool for
+// the template's pre-flight validation: every {{var}} placeholder must
+// resolve to *some* value, which means at minimum every placeholder must
+// appear as a property in the schema.
+func exampleArgsFromSchema(schemaJSON string) map[string]any {
+	var schema map[string]any
+	if err := json.Unmarshal([]byte(schemaJSON), &schema); err != nil {
+		return map[string]any{}
+	}
+	props, _ := schema["properties"].(map[string]any)
+	out := map[string]any{}
+	for k := range props {
+		out[k] = "x"
+	}
+	return out
 }
 
 // awaitApproval blocks until an ApprovalSignal with matching approvalID
@@ -747,6 +988,22 @@ func builtInToolSchemas() []providers.ToolSchema {
 				"required": []string{"title", "body_markdown"},
 			},
 		},
+		{
+			Name: ToolRegisterTool,
+			Description: `Register a new named tool for this workspace. The tool becomes a parameterized template over primitives (shell or http); after a workspace admin approves it the agent can invoke it by name in subsequent turns and the template expands to vetted primitive calls. You never write executable code — the template references {{var}} placeholders that bind to your supplied args at call time. Use this to capture a useful procedure once instead of re-deriving it every run (e.g. deploy_azure_appservice → shell_exec("az appservice create ...")). Returns {approved, name, agent_tool_id, resolved_by, notes}.`,
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"name":              map[string]any{"type": "string", "description": "Slug-style tool name (snake_case). Must not collide with built-ins."},
+					"description":       map[string]any{"type": "string", "description": "What the tool does, in one paragraph."},
+					"template_kind":     map[string]any{"type": "string", "enum": []string{"shell", "http", "composite"}},
+					"template_json":     map[string]any{"type": "string", "description": "JSON-encoded template body. Shell: {\"command\":\"...{{var}}...\"}. HTTP: {\"method\":\"GET\",\"url\":\"...\"}. Composite: {\"steps\":[{...}]}."},
+					"input_schema_json": map[string]any{"type": "string", "description": "JSON Schema for the tool's args. Every {{var}} placeholder in template_json must appear as a property here."},
+					"reasoning":         map[string]any{"type": "string", "description": "Why this tool is worth registering. Shown to the human reviewer."},
+				},
+				"required": []string{"name", "description", "template_kind", "template_json"},
+			},
+		},
 	}
 }
 
@@ -793,6 +1050,7 @@ You operate inside a deterministic Temporal workflow that exposes a small set of
 Tools:
 - propose_to_user(title, summary, body_markdown): post a structured plan to the user and wait for their reply
 - request_approval(title, kind, body_markdown): block on an explicit human approve/reject decision (use BEFORE every destructive command)
+- register_tool(name, description, template_kind, template_json, input_schema_json?, reasoning?): teach the system a new named tool that compiles to vetted primitives; admin approval required once, then callable by name
 - done(summary): end the run
 - shell_exec(command, working_dir?): run a bash command in the sandbox (az / gcloud / kubectl / helm / terraform / pulumi / git etc.)
 - http_request(method, url, headers?, body?): outbound HTTP gated by the workspace allowlist

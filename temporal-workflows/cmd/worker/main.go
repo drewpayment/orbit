@@ -486,6 +486,16 @@ func main() {
 	w.RegisterActivityWithOptions(sandboxActivities.SandboxListDir, activity.RegisterOptions{Name: agentcontract.ActivitySandboxListDir})
 	w.RegisterActivityWithOptions(sandboxActivities.HTTPRequest, activity.RegisterOptions{Name: agentcontract.ActivityHTTPRequest})
 	w.RegisterActivityWithOptions(sandboxActivities.RepoInspect, activity.RegisterOptions{Name: agentcontract.ActivityRepoInspect})
+
+	// Tool registry activities back the register_tool flow and the per-step
+	// catalog merge that lets newly approved AgentTools become available
+	// mid-run.
+	agentToolsClient := services.NewPayloadAgentToolsClient(orbitAPIURL, orbitInternalAPIKey, logger)
+	registryActivities := agentactivity.NewToolRegistryActivities(agentToolsClient, logger)
+	w.RegisterActivityWithOptions(registryActivities.ListApprovedTools, activity.RegisterOptions{Name: agentcontract.ActivityListApprovedAgentTools})
+	w.RegisterActivityWithOptions(registryActivities.RegisterPendingTool, activity.RegisterOptions{Name: agentcontract.ActivityRegisterPendingAgentTool})
+	w.RegisterActivityWithOptions(registryActivities.ResolveAgentTool, activity.RegisterOptions{Name: agentcontract.ActivityResolveAgentTool})
+
 	log.Printf("Infrastructure Agent workflow + activities registered (sandbox backend=%s)", sandboxExec.Backend())
 
 	log.Println("Starting Temporal worker...")
