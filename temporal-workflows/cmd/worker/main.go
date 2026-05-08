@@ -503,6 +503,15 @@ func main() {
 	runActivities := agentactivity.NewAgentRunActivities(agentRunsClient, logger)
 	w.RegisterActivityWithOptions(runActivities.UpdateAgentRun, activity.RegisterOptions{Name: agentcontract.ActivityUpdateAgentRun})
 
+	// Orbit-aware introspection: the orbit_list_apps / orbit_get_app /
+	// orbit_list_cloud_accounts tools call these activities to fetch
+	// sanitized workspace context (no credentials over the wire).
+	orbitContextClient := services.NewPayloadOrbitContextClient(orbitAPIURL, orbitInternalAPIKey, logger)
+	orbitActivities := agentactivity.NewOrbitContextActivities(orbitContextClient, logger)
+	w.RegisterActivityWithOptions(orbitActivities.OrbitListApps, activity.RegisterOptions{Name: agentcontract.ActivityOrbitListApps})
+	w.RegisterActivityWithOptions(orbitActivities.OrbitGetApp, activity.RegisterOptions{Name: agentcontract.ActivityOrbitGetApp})
+	w.RegisterActivityWithOptions(orbitActivities.OrbitListCloudAccounts, activity.RegisterOptions{Name: agentcontract.ActivityOrbitListCloudAccounts})
+
 	log.Printf("Infrastructure Agent workflow + activities registered (sandbox backend=%s)", sandboxExec.Backend())
 
 	log.Println("Starting Temporal worker...")

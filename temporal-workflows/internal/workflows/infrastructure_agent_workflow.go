@@ -76,9 +76,13 @@ const (
 	ToolWriteFile       = agentcontract.ToolWriteFile
 	ToolListDir         = agentcontract.ToolListDir
 	ToolRepoInspect     = agentcontract.ToolRepoInspect
-	ToolRequestApproval = agentcontract.ToolRequestApproval
-	ToolRegisterTool    = agentcontract.ToolRegisterTool
+	ToolRequestApproval  = agentcontract.ToolRequestApproval
+	ToolRegisterTool     = agentcontract.ToolRegisterTool
 	ToolStartHealthCheck = agentcontract.ToolStartHealthCheck
+
+	ToolOrbitListApps          = agentcontract.ToolOrbitListApps
+	ToolOrbitGetApp            = agentcontract.ToolOrbitGetApp
+	ToolOrbitListCloudAccounts = agentcontract.ToolOrbitListCloudAccounts
 
 	EventKindConversationTurn = agentcontract.EventKindConversationTurn
 	EventKindTokenDelta       = agentcontract.EventKindTokenDelta
@@ -694,6 +698,35 @@ func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agen
 	case ToolRegisterTool:
 		return dispatchRegisterTool(ctx, sandboxCtx, state, tc, approvalCh, input)
 
+	case ToolOrbitListApps:
+		var res agentactivity.OrbitListAppsResult
+		if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityOrbitListApps, agentactivity.OrbitListAppsInput{
+			WorkspaceID: input.WorkspaceID,
+		}).Get(sandboxCtx, &res); err != nil {
+			return jsonError("orbit_list_apps", err), false
+		}
+		return jsonResult(map[string]any{"apps": res.Apps}), false
+
+	case ToolOrbitGetApp:
+		appID, _ := tc.Arguments["app_id"].(string)
+		var res agentactivity.OrbitGetAppResult
+		if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityOrbitGetApp, agentactivity.OrbitGetAppInput{
+			WorkspaceID: input.WorkspaceID,
+			AppID:       appID,
+		}).Get(sandboxCtx, &res); err != nil {
+			return jsonError("orbit_get_app", err), false
+		}
+		return jsonResult(map[string]any{"app": res.App}), false
+
+	case ToolOrbitListCloudAccounts:
+		var res agentactivity.OrbitListCloudAccountsResult
+		if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityOrbitListCloudAccounts, agentactivity.OrbitListCloudAccountsInput{
+			WorkspaceID: input.WorkspaceID,
+		}).Get(sandboxCtx, &res); err != nil {
+			return jsonError("orbit_list_cloud_accounts", err), false
+		}
+		return jsonResult(map[string]any{"accounts": res.Accounts}), false
+
 	default:
 		// Registered tool? Expand its template and dispatch as primitive(s).
 		if reg, ok := state.registeredTools[tc.Name]; ok {
@@ -929,7 +962,8 @@ func isBuiltInToolName(name string) bool {
 		ToolShellExec, ToolHTTPRequest,
 		ToolReadFile, ToolWriteFile, ToolListDir,
 		ToolRepoInspect, ToolRequestApproval,
-		ToolRegisterTool, ToolStartHealthCheck:
+		ToolRegisterTool, ToolStartHealthCheck,
+		ToolOrbitListApps, ToolOrbitGetApp, ToolOrbitListCloudAccounts:
 		return true
 	}
 	return false
@@ -1334,6 +1368,27 @@ func builtInToolSchemas() []providers.ToolSchema {
 				"required": []string{"app_id", "url"},
 			},
 		},
+		{
+			Name:        ToolOrbitListApps,
+			Description: "List every app in the current workspace. Use this when the user references an app by name and you need its id, when you're deciding which apps to deploy, or when the workspace-context block is stale. Workspace is implicit — you cannot reach across workspaces. Returns {apps: [{id, name, description, status, repository}]}.",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+		},
+		{
+			Name:        ToolOrbitGetApp,
+			Description: "Fetch full details for one app in the current workspace: repository, health config, build config. Use this when the workspace-context summary doesn't have enough detail. Returns {app: {id, name, ..., health_config, build_config}}; returns AppNotFound when the id isn't in this workspace.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"app_id": map[string]any{"type": "string", "description": "The Orbit app id. Get from orbit_list_apps if you don't already know it."},
+				},
+				"required": []string{"app_id"},
+			},
+		},
+		{
+			Name:        ToolOrbitListCloudAccounts,
+			Description: "List every cloud account connected to the current workspace. Use this to pick the target account before proposing a deployment, or to confirm the user has the provider you need. Credentials are NEVER returned — they reach the sandbox only as env vars projected at run-start. Returns {accounts: [{id, name, provider, region, status, last_validated_at}]}.",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+		},
 	}
 }
 
@@ -1377,11 +1432,20 @@ const defaultSystemPrompt = `You are Orbit's infrastructure agent. You help the 
 
 You operate inside a deterministic Temporal workflow that exposes a small set of tools. You never execute commands directly; you emit tool-use requests and the workflow runs them inside a sandboxed environment with optional human approval. Tool results flow back into your next turn.
 
-Tools:
+The user's first message begins with a [Workspace context] block listing the apps and cloud accounts available in this run's workspace. Trust that block as the authoritative starting state — don't ask the user for information it already contains.
+
+Tools (Orbit context — workspace is fixed for this run):
+- orbit_list_apps(): list every app in the workspace (id, name, description, status, repository)
+- orbit_get_app(app_id): full details for one app (repository, health_config, build_config)
+- orbit_list_cloud_accounts(): every cloud account connected to the workspace (no credentials returned)
+
+Tools (conversation + control):
 - propose_to_user(title, summary, body_markdown): post a structured plan to the user and wait for their reply
 - request_approval(title, kind, body_markdown): block on an explicit human approve/reject decision (use BEFORE every destructive command)
 - register_tool(name, description, template_kind, template_json, input_schema_json?, reasoning?): teach the system a new named tool that compiles to vetted primitives; admin approval required once, then callable by name
 - done(summary): end the run
+
+Tools (sandbox execution):
 - shell_exec(command, working_dir?): run a bash command in the sandbox (az / gcloud / kubectl / helm / terraform / pulumi / git etc.)
 - http_request(method, url, headers?, body?): outbound HTTP gated by the workspace allowlist
 - read_file(path) / write_file(path, content) / list_dir(path?): file IO inside the sandbox
@@ -1389,11 +1453,12 @@ Tools:
 - start_child_health_check(app_id, url, ...): schedule a periodic HTTP health check that survives this run finishing
 
 Workflow:
-1. Use repo_inspect first to learn what the app is (language, framework, manifests).
-2. Use shell_exec for further investigation as needed (e.g. cat package.json, ls deeper paths).
-3. Once you have a concrete plan, propose_to_user with the proposed commands embedded in body_markdown.
-4. After the user approves, run the plan via shell_exec calls.
-5. Call done with a final summary.
+1. Read the [Workspace context] block in the user's prompt; if the app the user is asking about is already listed, use orbit_get_app to pull the repository / health / build details rather than asking the user.
+2. Use repo_inspect on that repository to learn what the app is (language, framework, manifests).
+3. Use shell_exec for further investigation as needed (e.g. cat package.json, ls deeper paths).
+4. Once you have a concrete plan, propose_to_user with the proposed commands embedded in body_markdown.
+5. After the user approves, run the plan via shell_exec calls.
+6. Call done with a final summary.
 
 Style: be concise. Prefer structured proposals over wall-of-text. When the user's goal is unclear, ask. Tool results are JSON; treat them programmatically. Never assume credentials are present until you've verified them with shell_exec (e.g. ` + "`" + `az account show` + "`" + `).`
 

@@ -43,6 +43,25 @@ func registerSandboxStubs(env *testsuite.TestWorkflowEnvironment) {
 		func(_ context.Context, _ agentactivity.UpdateAgentRunInput) error { return nil },
 		activity.RegisterOptions{Name: agentcontract.ActivityUpdateAgentRun},
 	)
+	// Orbit introspection: empty results unless a test overrides.
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.OrbitListAppsInput) (agentactivity.OrbitListAppsResult, error) {
+			return agentactivity.OrbitListAppsResult{}, nil
+		},
+		activity.RegisterOptions{Name: agentcontract.ActivityOrbitListApps},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.OrbitGetAppInput) (agentactivity.OrbitGetAppResult, error) {
+			return agentactivity.OrbitGetAppResult{}, nil
+		},
+		activity.RegisterOptions{Name: agentcontract.ActivityOrbitGetApp},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.OrbitListCloudAccountsInput) (agentactivity.OrbitListCloudAccountsResult, error) {
+			return agentactivity.OrbitListCloudAccountsResult{}, nil
+		},
+		activity.RegisterOptions{Name: agentcontract.ActivityOrbitListCloudAccounts},
+	)
 }
 
 type scriptedLLM struct {
