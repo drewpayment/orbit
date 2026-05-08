@@ -31,11 +31,17 @@ export async function startAgentRun(input: StartAgentRunInput) {
     return { success: false as const, error: 'Not a member of this workspace' }
   }
 
+  const promptWithContext = await buildPromptWithWorkspaceContext(
+    payload,
+    input.workspaceId,
+    input.initialPrompt,
+  )
+
   try {
     const resp = await agentClient.startInfrastructureAgent({
       workspaceId: input.workspaceId,
       repositoryId: input.repositoryId ?? '',
-      initialPrompt: input.initialPrompt,
+      initialPrompt: promptWithContext,
       llmProviderId: input.llmProviderId,
       userId: user.id,
     })
@@ -162,6 +168,75 @@ export async function abortAgentRun(input: {
     return { success: true as const }
   } catch (err) {
     return { success: false as const, error: (err as Error).message }
+  }
+}
+
+// buildPromptWithWorkspaceContext prepends a structured summary of the
+// current workspace (apps + cloud accounts) to the user's free-form goal so
+// the agent has immediate awareness without needing a tool round-trip on
+// turn 1. The orbit_* tools (orbit_get_app, orbit_list_cloud_accounts) let
+// the agent fetch additional detail later.
+async function buildPromptWithWorkspaceContext(
+  payload: Awaited<ReturnType<typeof getPayload>>,
+  workspaceId: string,
+  userPrompt: string,
+): Promise<string> {
+  try {
+    const [workspace, appsResult, cloudAccountsResult] = await Promise.all([
+      payload.findByID({ collection: 'workspaces', id: workspaceId, overrideAccess: true }),
+      payload.find({
+        collection: 'apps',
+        where: { workspace: { equals: workspaceId } },
+        limit: 50,
+        depth: 0,
+        overrideAccess: true,
+      }),
+      payload.find({
+        collection: 'cloud-accounts',
+        where: { workspaces: { equals: workspaceId } },
+        limit: 50,
+        depth: 0,
+        overrideAccess: true,
+      }),
+    ])
+
+    const lines: string[] = []
+    lines.push('[Workspace context — provided automatically by Orbit]')
+    lines.push(`Workspace: ${workspace.name} (slug: ${workspace.slug}, id: ${workspace.id})`)
+
+    if (appsResult.docs.length === 0) {
+      lines.push('Apps in this workspace: (none)')
+    } else {
+      lines.push(`Apps in this workspace (${appsResult.docs.length}):`)
+      for (const app of appsResult.docs) {
+        const repoUrl = (app as { repository?: { url?: string } }).repository?.url ?? '(no repo)'
+        const status = (app as { status?: string }).status ?? 'unknown'
+        lines.push(`  - ${app.name} (id: ${app.id}, repo: ${repoUrl}, status: ${status})`)
+      }
+    }
+
+    if (cloudAccountsResult.docs.length === 0) {
+      lines.push('Cloud accounts available to this workspace: (none — agent cannot deploy until one is connected)')
+    } else {
+      lines.push(`Cloud accounts available (${cloudAccountsResult.docs.length}):`)
+      for (const acc of cloudAccountsResult.docs) {
+        const provider = (acc as { provider?: string }).provider ?? 'unknown'
+        const region = (acc as { region?: string }).region ?? '(no default)'
+        const status = (acc as { status?: string }).status ?? 'unknown'
+        lines.push(`  - ${acc.name} (id: ${acc.id}, provider: ${provider}, region: ${region}, status: ${status})`)
+      }
+    }
+
+    lines.push('')
+    lines.push('Use orbit_get_app, orbit_list_apps, or orbit_list_cloud_accounts to fetch additional detail. Credentials are never returned by these tools — execute via shell_exec inside the sandbox where they are projected as env vars.')
+    lines.push('')
+    lines.push('[User goal]')
+    lines.push(userPrompt)
+
+    return lines.join('\n')
+  } catch (err) {
+    console.error('[infra-agent] buildPromptWithWorkspaceContext failed; sending raw prompt:', err)
+    return userPrompt
   }
 }
 

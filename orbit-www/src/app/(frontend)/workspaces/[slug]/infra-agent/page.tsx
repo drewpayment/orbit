@@ -9,6 +9,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
+import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
+import { AppSidebar } from '@/components/app-sidebar'
+import { SiteHeader } from '@/components/site-header'
+
 import { NewAgentRunForm } from '@/components/features/infra-agent/NewAgentRunForm'
 
 interface Props {
@@ -48,7 +52,12 @@ export default async function InfraAgentRunsPage({ params }: Props) {
   ])
 
   return (
-    <div className="container mx-auto py-8 space-y-6 max-w-5xl">
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset>
+        <SiteHeader />
+        <div className="flex flex-1 flex-col gap-4 p-8">
+          <div className="container mx-auto space-y-6 max-w-5xl">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Infrastructure Agent</h1>
@@ -117,7 +126,10 @@ export default async function InfraAgentRunsPage({ params }: Props) {
           )}
         </CardContent>
       </Card>
-    </div>
+          </div>
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
 

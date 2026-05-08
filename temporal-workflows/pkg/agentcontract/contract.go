@@ -49,6 +49,14 @@ const (
 	ToolRequestApproval = "request_approval"
 	ToolRegisterTool    = "register_tool"
 	ToolStartHealthCheck = "start_child_health_check"
+
+	// Orbit-aware introspection tools. The agent uses these to discover what
+	// apps and cloud accounts exist in the current workspace without leaving
+	// the sandbox. None of these return secrets — credentials reach the
+	// sandbox only as env vars projected at run-start.
+	ToolOrbitListApps          = "orbit_list_apps"
+	ToolOrbitGetApp            = "orbit_get_app"
+	ToolOrbitListCloudAccounts = "orbit_list_cloud_accounts"
 )
 
 // ApprovalKind classifies HITL gates the agent surfaces. The chat UI uses
@@ -82,6 +90,13 @@ const (
 // Activity names for Spike 5 audit trail.
 const (
 	ActivityUpdateAgentRun = "UpdateAgentRun"
+)
+
+// Activity names for Orbit introspection — back the orbit_* tools above.
+const (
+	ActivityOrbitListApps          = "OrbitListApps"
+	ActivityOrbitGetApp            = "OrbitGetApp"
+	ActivityOrbitListCloudAccounts = "OrbitListCloudAccounts"
 )
 
 // Event kinds emitted into the workflow's event log.

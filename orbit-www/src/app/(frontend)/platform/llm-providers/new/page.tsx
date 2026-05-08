@@ -1,10 +1,9 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { headers } from 'next/headers'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 
-import { auth } from '@/lib/auth'
+import { getPayloadUserFromSession } from '@/lib/auth/session'
 import { isPlatformAdmin } from '@/lib/access/workspace-access'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -19,19 +18,11 @@ export const metadata = {
 }
 
 export default async function NewLLMProviderPage() {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) redirect('/login')
+  const user = await getPayloadUserFromSession()
+  if (!user) redirect('/login')
+  if (!isPlatformAdmin(user)) redirect('/')
 
   const payload = await getPayload({ config })
-  const user = await payload.findByID({
-    collection: 'users',
-    id: session.user.id,
-    overrideAccess: true,
-  })
-  if (!user || !isPlatformAdmin(user)) {
-    redirect('/')
-  }
-
   const workspaces = await payload.find({
     collection: 'workspaces',
     sort: 'name',
@@ -44,7 +35,7 @@ export default async function NewLLMProviderPage() {
       <AppSidebar />
       <SidebarInset>
         <SiteHeader />
-        <div className="container mx-auto py-8 max-w-3xl space-y-6">
+        <div className="container mx-auto py-8 px-6 max-w-3xl space-y-6">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-semibold">New LLM Provider</h1>
             <Button asChild variant="outline">
