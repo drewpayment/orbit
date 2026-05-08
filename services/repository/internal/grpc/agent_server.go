@@ -362,6 +362,14 @@ func toProtoEvent(e agentcontract.AgentEvent) (*agentv1.AgentEvent, error) {
 				Message: asString(e.Payload, "message"),
 			},
 		}
+	case agentcontract.EventKindToolCallOutputChunk:
+		out.Event = &agentv1.AgentEvent_ToolCallOutputChunk{
+			ToolCallOutputChunk: &agentv1.ToolCallOutputChunk{
+				CallId: asString(e.Payload, "call_id"),
+				Stream: asString(e.Payload, "stream"),
+				Chunk:  asString(e.Payload, "chunk"),
+			},
+		}
 	default:
 		// Fallback: encode as a status update so the UI doesn't choke.
 		blob, _ := json.Marshal(e.Payload)

@@ -83,13 +83,15 @@ const (
 	ToolOrbitListApps          = agentcontract.ToolOrbitListApps
 	ToolOrbitGetApp            = agentcontract.ToolOrbitGetApp
 	ToolOrbitListCloudAccounts = agentcontract.ToolOrbitListCloudAccounts
+	ToolOrbitCloudLogin        = agentcontract.ToolOrbitCloudLogin
 
 	EventKindConversationTurn = agentcontract.EventKindConversationTurn
 	EventKindTokenDelta       = agentcontract.EventKindTokenDelta
 	EventKindProposalUpdate   = agentcontract.EventKindProposalUpdate
 	EventKindApprovalRequest  = agentcontract.EventKindApprovalRequest
 	EventKindApprovalResolved = agentcontract.EventKindApprovalResolved
-	EventKindStatusUpdate     = agentcontract.EventKindStatusUpdate
+	EventKindStatusUpdate        = agentcontract.EventKindStatusUpdate
+	EventKindToolCallOutputChunk = agentcontract.EventKindToolCallOutputChunk
 )
 
 // Default behavioral knobs. Tunable via input.
@@ -184,12 +186,15 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 	wfID := workflow.GetInfo(ctx).WorkflowExecution.ID
 
 	// Provision the per-run sandbox up-front so the first tool call doesn't
-	// pay creation cost on the critical path.
+	// pay creation cost on the critical path. CLI env defaults disable
+	// pagers and prompts so commands like `az login --use-device-code`
+	// and `gcloud auth login` don't hang on `less` or interactive
+	// confirmations.
 	if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityEnsureSandbox, agentactivity.EnsureSandboxInput{
 		WorkflowID:      wfID,
 		WorkspaceID:     input.WorkspaceID,
 		Image:           input.SandboxImage,
-		Env:             input.SandboxEnv,
+		Env:             mergeEnv(defaultSandboxEnv(), input.SandboxEnv),
 		EgressAllowlist: input.HTTPAllowlist,
 	}).Get(sandboxCtx, nil); err != nil {
 		markRun(auditCtx, wfID, agentactivity.UpdateAgentRunInput{Status: "failed"})
@@ -231,6 +236,7 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 	approvalCh := workflow.GetSignalChannel(loopCtx, AgentSignalApproval)
 	abortCh := workflow.GetSignalChannel(ctx, AgentSignalAbort) // outer ctx so the goroutine survives loop cancellation
 	tokenCh := workflow.GetSignalChannel(loopCtx, AgentSignalTokenStream)
+	toolOutputCh := workflow.GetSignalChannel(loopCtx, agentcontract.SignalToolOutput)
 
 	// Launch a goroutine to drain token-stream signals into state.
 	workflow.Go(loopCtx, func(gctx workflow.Context) {
@@ -246,6 +252,25 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 			emitEvent(gctx, &state, EventKindTokenDelta, map[string]any{
 				"turn_id": payload.TurnID,
 				"delta":   payload.Delta,
+			})
+		}
+	})
+
+	// Drain tool-output signals from the SandboxedShell activity. Each
+	// signal becomes a tool_call_output_chunk event the gRPC streaming
+	// proxy fans out as SSE so the chat UI renders shell output (e.g.
+	// `az login --use-device-code` device codes) as it arrives.
+	workflow.Go(loopCtx, func(gctx workflow.Context) {
+		for !state.terminated {
+			var payload agentcontract.ToolOutputSignalPayload
+			more := toolOutputCh.Receive(gctx, &payload)
+			if !more {
+				return
+			}
+			emitEvent(gctx, &state, EventKindToolCallOutputChunk, map[string]any{
+				"call_id": payload.CallID,
+				"stream":  payload.Stream,
+				"chunk":   payload.Chunk,
 			})
 		}
 	})
@@ -505,7 +530,7 @@ func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agen
 		// approval prompt regardless of whether the agent remembered to
 		// call request_approval first. The system prompt instructs the
 		// agent to gate destructive actions itself; this catches the case
-		// where the agent forgets or is talked into skipping by prompt
+		// where the agent forgets or is talched into skipping by prompt
 		// injection.
 		if classification := safety.ClassifyShell(command); classification.Destructive {
 			ok, reason := requireDestructiveApproval(ctx, auditCtx, state, approvalCh, workflowID, command, classification)
@@ -523,6 +548,7 @@ func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agen
 		var res agentactivity.SandboxedShellResult
 		if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivitySandboxedShell, agentactivity.SandboxedShellInput{
 			WorkflowID: workflowID,
+			RunID:      workflow.GetInfo(ctx).WorkflowExecution.RunID,
 			CallID:     tc.ID,
 			Command:    command,
 			WorkingDir: workingDir,
@@ -726,6 +752,9 @@ func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agen
 			return jsonError("orbit_list_cloud_accounts", err), false
 		}
 		return jsonResult(map[string]any{"accounts": res.Accounts}), false
+
+	case ToolOrbitCloudLogin:
+		return dispatchOrbitCloudLogin(ctx, sandboxCtx, state, tc)
 
 	default:
 		// Registered tool? Expand its template and dispatch as primitive(s).
@@ -1058,6 +1087,120 @@ func requireDestructiveApproval(ctx workflow.Context, auditCtx workflow.Context,
 	return true, ""
 }
 
+// dispatchOrbitCloudLogin runs the appropriate per-cloud CLI device-code
+// login command via SandboxedShell, with streaming output enabled so the
+// user sees the device code in the chat as the CLI prints it. The user
+// authenticates as themselves; tokens land in the sandbox pod and die
+// with TeardownSandbox — no credentials are stored in Orbit's data plane.
+//
+// The agent calls this when orbit_list_cloud_accounts is empty (or the
+// user wants to authenticate to a different account than the configured
+// one). It does NOT replace the cloud-accounts collection — that
+// collection is now an optional convenience for named bookmarks.
+func dispatchOrbitCloudLogin(ctx workflow.Context, sandboxCtx workflow.Context, state *agentState, tc providers.ToolCall) (string, bool) {
+	provider, _ := tc.Arguments["provider"].(string)
+	tenant, _ := tc.Arguments["tenant"].(string)
+
+	command, label, err := buildCloudLoginCommand(provider, tenant)
+	if err != nil {
+		return jsonError("orbit_cloud_login", err), false
+	}
+
+	emitEvent(ctx, state, EventKindStatusUpdate, map[string]any{
+		"status":  state.status,
+		"message": fmt.Sprintf("awaiting %s login — watch for the device code below", label),
+	})
+
+	workflowID := workflow.GetInfo(ctx).WorkflowExecution.ID
+	runID := workflow.GetInfo(ctx).WorkflowExecution.RunID
+	var res agentactivity.SandboxedShellResult
+	if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivitySandboxedShell, agentactivity.SandboxedShellInput{
+		WorkflowID: workflowID,
+		RunID:      runID,
+		CallID:     tc.ID,
+		Command:    command,
+		// Device-code flows give the user up to ~15 min to enter the code;
+		// budget 20 min so a slow user doesn't trip a sandbox timeout.
+		TimeoutSeconds: 1200,
+	}).Get(sandboxCtx, &res); err != nil {
+		return jsonError("orbit_cloud_login", err), false
+	}
+
+	authenticated := res.ExitCode == 0
+	return jsonResult(map[string]any{
+		"authenticated": authenticated,
+		"provider":      provider,
+		"exit_code":     res.ExitCode,
+		"stdout":        res.Stdout,
+		"stderr":        res.Stderr,
+		"duration_ms":   res.DurationMs,
+	}), false
+}
+
+// buildCloudLoginCommand returns (bash command, human label) for a given
+// provider. Each command is the canonical no-browser flow for that CLI.
+// Unknown / empty providers are rejected so the agent gets a clear error.
+func buildCloudLoginCommand(provider, tenant string) (string, string, error) {
+	switch provider {
+	case "azure":
+		cmd := "az login --use-device-code"
+		if tenant != "" {
+			cmd += " --tenant " + bashQuote(tenant)
+		}
+		// JSON output makes the post-login state easier for the agent to
+		// parse if it wants account info. The actual device code still
+		// streams to stdout.
+		cmd += " --output json"
+		return cmd, "Azure", nil
+	case "gcp":
+		return "gcloud auth login --no-launch-browser", "Google Cloud", nil
+	case "aws":
+		// `aws sso login` expects the user to have run `aws configure sso`
+		// previously. We let the failure message bubble up to the agent
+		// rather than guess at a setup wizard here.
+		return "aws sso login", "AWS", nil
+	default:
+		return "", "", fmt.Errorf("unknown provider %q (expected azure | gcp | aws)", provider)
+	}
+}
+
+// bashQuote single-quotes s for safe inclusion in a bash command line. The
+// classic '\'' trick escapes embedded single quotes.
+func bashQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// defaultSandboxEnv returns the env vars every sandbox starts with —
+// pager/prompt disabling so CLIs (az / gcloud / aws) run cleanly under
+// `bash -lc` without TTY trickery. Workspace-specific env (input.SandboxEnv)
+// overlays on top via mergeEnv so callers can still pin a different value.
+func defaultSandboxEnv() map[string]string {
+	return map[string]string{
+		"AZURE_CORE_NO_PAGER":          "1",
+		"AZURE_CORE_OUTPUT":            "json",
+		"AZURE_CORE_ONLY_SHOW_ERRORS":  "false",
+		"AWS_PAGER":                    "",
+		"CLOUDSDK_CORE_DISABLE_PROMPTS": "1",
+		"CLOUDSDK_PYTHON_SITEPACKAGES":  "1",
+		"GIT_TERMINAL_PROMPT":          "0",
+		"PYTHONUNBUFFERED":             "1",
+		"DEBIAN_FRONTEND":              "noninteractive",
+	}
+}
+
+// mergeEnv overlays b on top of a; b's values win. nil maps are treated
+// as empty.
+func mergeEnv(a, b map[string]string) map[string]string {
+	out := make(map[string]string, len(a)+len(b))
+	for k, v := range a {
+		out[k] = v
+	}
+	for k, v := range b {
+		out[k] = v
+	}
+	return out
+}
+
 // dispatchStartHealthCheck schedules a HealthCheckWorkflow as a child with
 // PARENT_CLOSE_POLICY_ABANDON so it survives the agent run finishing. The
 // HealthCheckWorkflow is registered on the same task queue and walks its
@@ -1386,8 +1529,27 @@ func builtInToolSchemas() []providers.ToolSchema {
 		},
 		{
 			Name:        ToolOrbitListCloudAccounts,
-			Description: "List every cloud account connected to the current workspace. Use this to pick the target account before proposing a deployment, or to confirm the user has the provider you need. Credentials are NEVER returned — they reach the sandbox only as env vars projected at run-start. Returns {accounts: [{id, name, provider, region, status, last_validated_at}]}.",
+			Description: "List every cloud account connected to the current workspace. Use this to pick the target account before proposing a deployment, or to confirm the user has the provider you need. Credentials are NEVER returned — they reach the sandbox only via orbit_cloud_login. Returns {accounts: [{id, name, provider, region, status, last_validated_at}]}.",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+		},
+		{
+			Name:        ToolOrbitCloudLogin,
+			Description: "Authenticate to a cloud provider as the USER, using the CLI's device-code flow (az login --use-device-code, aws sso login, gcloud auth login --no-launch-browser). The CLI prints a URL + code that surfaces in the chat in real time; the user opens the URL in their browser, enters the code, and the CLI completes. Tokens live in the sandbox pod and are destroyed when the run ends — Orbit never stores cloud credentials. Use this when orbit_list_cloud_accounts is empty, or when the user wants to authenticate to a different account than the configured one. Returns {authenticated, provider, exit_code, stdout, stderr, duration_ms}.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"provider": map[string]any{
+						"type":        "string",
+						"enum":        []string{"azure", "gcp", "aws"},
+						"description": "Cloud provider to authenticate against.",
+					},
+					"tenant": map[string]any{
+						"type":        "string",
+						"description": "Optional. Azure tenant id or domain. For other providers it's ignored.",
+					},
+				},
+				"required": []string{"provider"},
+			},
 		},
 	}
 }
@@ -1438,6 +1600,7 @@ Tools (Orbit context — workspace is fixed for this run):
 - orbit_list_apps(): list every app in the workspace (id, name, description, status, repository)
 - orbit_get_app(app_id): full details for one app (repository, health_config, build_config)
 - orbit_list_cloud_accounts(): every cloud account connected to the workspace (no credentials returned)
+- orbit_cloud_login(provider, tenant?): device-code login as the USER for azure | gcp | aws. The CLI prints a URL + code that streams into the chat; the user authenticates in their browser; tokens live in the sandbox pod and die with the run. Orbit never stores cloud credentials.
 
 Tools (conversation + control):
 - propose_to_user(title, summary, body_markdown): post a structured plan to the user and wait for their reply
@@ -1460,7 +1623,14 @@ Workflow:
 5. After the user approves, run the plan via shell_exec calls.
 6. Call done with a final summary.
 
-Style: be concise. Prefer structured proposals over wall-of-text. When the user's goal is unclear, ask. Tool results are JSON; treat them programmatically. Never assume credentials are present until you've verified them with shell_exec (e.g. ` + "`" + `az account show` + "`" + `).`
+Cloud authentication — IMPORTANT:
+- Orbit does NOT store cloud credentials. The sandbox starts with no AZURE_*, AWS_*, or GOOGLE_* env vars.
+- Before any deployment command that needs cloud access, call orbit_cloud_login(provider) — the user authenticates as themselves via device code in their browser.
+- Once authenticated, subsequent shell_exec calls to az / gcloud / aws use the user's tokens, which live in the sandbox pod (~/.azure, ~/.config/gcloud, ~/.aws) and disappear when the run ends.
+- If the user asks about a cloud they haven't logged into yet, run orbit_cloud_login FIRST. Do not ask them for credentials directly. Do not invent service-principal flows.
+- If orbit_list_cloud_accounts shows a row already configured for that provider, that row is informational (it's a saved bookmark, not a credential store) — you still need orbit_cloud_login to actually authenticate.
+
+Style: be concise. Prefer structured proposals over wall-of-text. When the user's goal is unclear, ask. Tool results are JSON; treat them programmatically. After orbit_cloud_login succeeds, verify with a quick shell_exec (e.g. ` + "`" + `az account show` + "`" + `) before proceeding to anything destructive or billable.`
 
 // --- state helpers ---
 

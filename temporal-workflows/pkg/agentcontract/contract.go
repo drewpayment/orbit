@@ -13,6 +13,7 @@ const (
 	SignalApproval     = "AgentApproval"
 	SignalAbort        = "AgentAbort"
 	SignalTokenStream  = "AgentTokenStream"
+	SignalToolOutput   = "AgentToolOutput"
 	SignalToolFinished = "AgentToolFinished"
 )
 
@@ -57,6 +58,13 @@ const (
 	ToolOrbitListApps          = "orbit_list_apps"
 	ToolOrbitGetApp            = "orbit_get_app"
 	ToolOrbitListCloudAccounts = "orbit_list_cloud_accounts"
+
+	// Cloud authentication. Wraps the per-cloud CLI's device-code login
+	// flow (az login --use-device-code, aws sso login, gcloud auth login
+	// --no-launch-browser) so the user authenticates as themselves once
+	// per run. Tokens live in the sandbox pod and die with TeardownSandbox
+	// — Orbit never stores cloud credentials.
+	ToolOrbitCloudLogin = "orbit_cloud_login"
 )
 
 // ApprovalKind classifies HITL gates the agent surfaces. The chat UI uses
@@ -101,12 +109,13 @@ const (
 
 // Event kinds emitted into the workflow's event log.
 const (
-	EventKindConversationTurn = "conversation_turn"
-	EventKindTokenDelta       = "token_delta"
-	EventKindProposalUpdate   = "proposal_update"
-	EventKindApprovalRequest  = "approval_request"
-	EventKindApprovalResolved = "approval_resolution"
-	EventKindStatusUpdate     = "status_update"
+	EventKindConversationTurn   = "conversation_turn"
+	EventKindTokenDelta         = "token_delta"
+	EventKindProposalUpdate     = "proposal_update"
+	EventKindApprovalRequest    = "approval_request"
+	EventKindApprovalResolved   = "approval_resolution"
+	EventKindStatusUpdate       = "status_update"
+	EventKindToolCallOutputChunk = "tool_call_output_chunk"
 )
 
 // InfrastructureAgentInput is the workflow input.
@@ -214,6 +223,17 @@ type ProviderConfigSummary struct {
 type TokenStreamSignalPayload struct {
 	TurnID string `json:"turn_id"`
 	Delta  string `json:"delta"`
+}
+
+// ToolOutputSignalPayload is the body of SignalToolOutput. The sandbox
+// activity emits one per stdout / stderr line of a running shell command
+// so the workflow can fan it out to the chat UI in real time — required
+// for any interactive CLI (e.g. `az login --use-device-code` whose device
+// code is otherwise hidden until the command exits).
+type ToolOutputSignalPayload struct {
+	CallID string `json:"call_id"`
+	Stream string `json:"stream"` // "stdout" | "stderr"
+	Chunk  string `json:"chunk"`
 }
 
 // UserMessageSignalPayload is the body of SignalUserMessage.

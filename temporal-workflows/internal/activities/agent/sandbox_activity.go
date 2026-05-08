@@ -13,25 +13,48 @@ import (
 	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/sandbox"
 )
 
+// ToolOutputSigniller pushes shell command output back to the parent
+// workflow as a Temporal signal so the chat UI can render lines as they
+// arrive. Implementations typically wrap a Temporal client.SignalWorkflow
+// call (see services.TemporalToolOutputSigniller). nil falls back to a
+// no-op which keeps the activity testable without a real Temporal client.
+type ToolOutputSigniller interface {
+	SignalToolOutput(ctx context.Context, workflowID, runID, callID, stream, chunk string) error
+}
+
+type noopToolOutputSigniller struct{}
+
+func (noopToolOutputSigniller) SignalToolOutput(context.Context, string, string, string, string, string) error {
+	return nil
+}
+
 // SandboxActivities groups sandbox-backed activities (shell exec, file IO,
 // http, repo inspect). They share one SandboxExecutor whose Backend()
 // determines whether commands run locally (dev) or in K8s (prod).
 type SandboxActivities struct {
-	executor sandbox.SandboxExecutor
-	logger   *slog.Logger
+	executor      sandbox.SandboxExecutor
+	outputSignal  ToolOutputSigniller
+	logger        *slog.Logger
 
 	// MaxOutputBytes caps stdout/stderr returned to the model. Defaults to
 	// 16384. Output above this size is truncated with a notice appended.
 	MaxOutputBytes int
 }
 
-// NewSandboxActivities constructs the activity group. exec is required.
-func NewSandboxActivities(exec sandbox.SandboxExecutor, logger *slog.Logger) *SandboxActivities {
+// NewSandboxActivities constructs the activity group. exec is required;
+// outputSignal may be nil in which case no streaming output flows back to
+// the workflow (the final stdout / stderr are still returned in the
+// SandboxedShellResult).
+func NewSandboxActivities(exec sandbox.SandboxExecutor, outputSignal ToolOutputSigniller, logger *slog.Logger) *SandboxActivities {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	if outputSignal == nil {
+		outputSignal = noopToolOutputSigniller{}
+	}
 	return &SandboxActivities{
 		executor:       exec,
+		outputSignal:   outputSignal,
 		logger:         logger,
 		MaxOutputBytes: 16384,
 	}
@@ -65,7 +88,8 @@ type TeardownSandboxInput struct {
 // SandboxedShellInput runs one shell command inside the sandbox.
 type SandboxedShellInput struct {
 	WorkflowID string
-	CallID     string // tool call id, for audit / future streaming
+	RunID      string // populated by the workflow; needed to address signal-back when streaming output
+	CallID     string // tool call id; ties streaming output back to the right chat bubble
 	Command    string
 	WorkingDir string
 	EnvOverrides map[string]string
@@ -117,8 +141,15 @@ func (a *SandboxActivities) TeardownSandbox(ctx context.Context, in TeardownSand
 }
 
 // SandboxedShell runs one shell command in the sandbox with a heartbeat
-// loop so long-running terraform / pulumi operations don't trip the heartbeat
-// timeout.
+// loop so long-running terraform / pulumi operations don't trip the
+// heartbeat timeout. stdout / stderr lines stream back to the workflow as
+// AgentToolOutput signals via the activity's ToolOutputSigniller — without
+// this, interactive CLIs like `az login --use-device-code` would hide
+// their device code until after the user had already entered it.
+//
+// Activity input must include CallID; signals without it are dropped by
+// the signiller, so the workflow can correlate output to the right tool
+// call bubble in the chat UI.
 func (a *SandboxActivities) SandboxedShell(ctx context.Context, in SandboxedShellInput) (SandboxedShellResult, error) {
 	if in.WorkflowID == "" || in.Command == "" {
 		return SandboxedShellResult{}, temporal.NewNonRetryableApplicationError("workflow_id and command required", "InvalidInput", nil)
@@ -128,12 +159,31 @@ func (a *SandboxActivities) SandboxedShell(ctx context.Context, in SandboxedShel
 	defer close(hbStop)
 	go heartbeatLoop(ctx, hbStop)
 
+	// Best-effort streaming. SignalWorkflow can fail (network, rate
+	// limit) — we log and keep going rather than aborting the whole
+	// command, since the buffered stdout/stderr are still returned in
+	// the SandboxedShellResult. Empty CallID disables streaming (the
+	// signaller would have nowhere to attach the chunk in the UI).
+	emit := func(stream, line string) {
+		if in.CallID == "" {
+			return
+		}
+		if err := a.outputSignal.SignalToolOutput(ctx, in.WorkflowID, in.RunID, in.CallID, stream, line); err != nil {
+			a.logger.Warn("tool output signal failed (non-fatal)",
+				"err", err, "workflowId", in.WorkflowID, "callId", in.CallID, "stream", stream)
+		}
+	}
+	onStdout := func(line string) { emit("stdout", line) }
+	onStderr := func(line string) { emit("stderr", line) }
+
 	timeout := time.Duration(in.TimeoutSeconds) * time.Second
 	res, err := a.executor.Exec(ctx, sandbox.SandboxID(in.WorkflowID), sandbox.ExecOptions{
 		Command:      in.Command,
 		WorkingDir:   in.WorkingDir,
 		EnvOverrides: in.EnvOverrides,
 		Timeout:      timeout,
+		OnStdout:     onStdout,
+		OnStderr:     onStderr,
 	})
 	if err != nil {
 		return SandboxedShellResult{}, fmt.Errorf("sandbox exec: %w", err)

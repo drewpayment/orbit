@@ -28,6 +28,7 @@ interface AgentEventDTO {
     | 'approval_request'
     | 'approval_resolution'
     | 'status_update'
+    | 'tool_call_output_chunk'
     | 'unknown'
   conversationTurn?: { turnId: string; role: string; content: string }
   tokenDelta?: { turnId: string; delta: string }
@@ -35,6 +36,7 @@ interface AgentEventDTO {
   approvalRequest?: { approvalId: string; kind: string; title: string; bodyMarkdown: string }
   approvalResolution?: { approvalId: string; approved: boolean; resolvedBy: string; notes: string }
   statusUpdate?: { status: string; message: string }
+  toolCallOutputChunk?: { callId: string; stream: string; chunk: string }
 }
 
 interface Props {
@@ -65,9 +67,18 @@ interface Proposal {
 // Reconnect backoff: 0.5s → 1s → 2s → 4s, capped.
 const RECONNECT_BACKOFF_MS = [500, 1000, 2000, 4000]
 
+interface ToolOutputBuffer {
+  callId: string
+  // Accumulated stdout/stderr; rendered as a single code block under the
+  // tool call so the user can read CLI prompts (e.g. az login device codes)
+  // before the activity has returned.
+  text: string
+}
+
 export function AgentChatThread({ workspaceId, workflowId }: Props) {
   const [turns, setTurns] = useState<ChatTurn[]>([])
   const [streamingTurns, setStreamingTurns] = useState<Record<string, string>>({})
+  const [toolOutputs, setToolOutputs] = useState<Record<string, ToolOutputBuffer>>({})
   const [proposal, setProposal] = useState<Proposal | null>(null)
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([])
   const [status, setStatus] = useState('starting')
@@ -113,6 +124,21 @@ export function AgentChatThread({ workspaceId, workflowId }: Props) {
             delete next[e.conversationTurn.turnId]
             modified = true
           }
+        }
+      }
+      return modified ? next : prev
+    })
+
+    setToolOutputs((prev) => {
+      let modified = false
+      const next = { ...prev }
+      for (const e of events) {
+        if (e.kind === 'tool_call_output_chunk' && e.toolCallOutputChunk) {
+          const { callId, chunk } = e.toolCallOutputChunk
+          if (!callId) continue
+          const existing = next[callId]?.text ?? ''
+          next[callId] = { callId, text: existing + chunk + '\n' }
+          modified = true
         }
       }
       return modified ? next : prev
@@ -271,6 +297,10 @@ export function AgentChatThread({ workspaceId, workflowId }: Props) {
           <ChatBubble key={`stream-${turnId}`} role="assistant" content={content + '▍'} />
         ))}
 
+        {Object.values(toolOutputs).map((buf) => (
+          <ToolOutputBubble key={`out-${buf.callId}`} text={buf.text} />
+        ))}
+
         {proposal && <ProposalBlock proposal={proposal} />}
 
         {pendingApprovals.map((a) => (
@@ -350,5 +380,16 @@ function ProposalBlock({ proposal }: { proposal: Proposal }) {
         <pre className="whitespace-pre-wrap text-sm font-sans pt-2">{proposal.bodyMarkdown}</pre>
       </CardContent>
     </Card>
+  )
+}
+
+function ToolOutputBubble({ text }: { text: string }) {
+  return (
+    <div className="flex justify-start">
+      <pre className="max-w-[85%] rounded-lg px-3 py-2 text-xs font-mono bg-slate-900 text-slate-100 whitespace-pre-wrap break-words">
+        <span className="text-[10px] uppercase opacity-60 block mb-0.5">shell output</span>
+        {text}
+      </pre>
+    </div>
   )
 }

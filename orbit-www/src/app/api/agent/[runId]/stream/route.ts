@@ -41,6 +41,7 @@ interface ServerEventDTO {
     | 'approval_request'
     | 'approval_resolution'
     | 'status_update'
+    | 'tool_call_output_chunk'
     | 'unknown'
   conversationTurn?: { turnId: string; role: string; content: string }
   tokenDelta?: { turnId: string; delta: string }
@@ -48,6 +49,7 @@ interface ServerEventDTO {
   approvalRequest?: { approvalId: string; kind: string; title: string; bodyMarkdown: string }
   approvalResolution?: { approvalId: string; approved: boolean; resolvedBy: string; notes: string }
   statusUpdate?: { status: string; message: string }
+  toolCallOutputChunk?: { callId: string; stream: string; chunk: string }
 }
 
 export async function GET(
@@ -172,6 +174,8 @@ function mapEvent(evt: any): ServerEventDTO {
       return { ...base, kind: 'approval_resolution', approvalResolution: e.value }
     case 'statusUpdate':
       return { ...base, kind: 'status_update', statusUpdate: e.value }
+    case 'toolCallOutputChunk':
+      return { ...base, kind: 'tool_call_output_chunk', toolCallOutputChunk: e.value }
     default:
       return base
   }

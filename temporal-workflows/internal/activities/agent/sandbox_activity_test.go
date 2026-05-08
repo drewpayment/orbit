@@ -17,7 +17,7 @@ func newTestSandboxActivities(t *testing.T) (*SandboxActivities, *local.Executor
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := NewSandboxActivities(exec, nil)
+	a := NewSandboxActivities(exec, nil, nil)
 	return a, exec
 }
 

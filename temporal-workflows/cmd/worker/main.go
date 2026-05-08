@@ -477,7 +477,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to construct sandbox executor: %v", err)
 	}
-	sandboxActivities := agentactivity.NewSandboxActivities(sandboxExec, logger)
+	toolOutputSigniller := services.NewTemporalToolOutputSigniller(c, logger)
+	sandboxActivities := agentactivity.NewSandboxActivities(sandboxExec, toolOutputSigniller, logger)
 	w.RegisterActivityWithOptions(sandboxActivities.EnsureSandbox, activity.RegisterOptions{Name: agentcontract.ActivityEnsureSandbox})
 	w.RegisterActivityWithOptions(sandboxActivities.TeardownSandbox, activity.RegisterOptions{Name: agentcontract.ActivityTeardownSandbox})
 	w.RegisterActivityWithOptions(sandboxActivities.SandboxedShell, activity.RegisterOptions{Name: agentcontract.ActivitySandboxedShell})
