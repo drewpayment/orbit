@@ -18,6 +18,7 @@ import {
   Rocket,
   Settings,
   Shield,
+  ShieldCheck,
   Workflow,
 } from "lucide-react"
 import Link from "next/link"
@@ -133,6 +134,11 @@ const navPlatformData: NavPlatformItem[] = [
     title: "LLM Providers",
     url: "/platform/llm-providers",
     icon: Bot,
+  },
+  {
+    title: "Approvals",
+    url: "/platform/approvals",
+    icon: ShieldCheck,
   },
   {
     title: "Workflows",

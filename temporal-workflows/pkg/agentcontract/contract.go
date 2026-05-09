@@ -101,6 +101,15 @@ const (
 	ActivityUpdateAgentRun = "UpdateAgentRun"
 )
 
+// Activity names for Spike 7 commit γ — aggregated pending-approvals queue.
+// The workflow calls these on every gate open/close in addition to its
+// inline state mutations so a reviewer who isn't watching the chat can
+// still see and resolve gates from /platform/approvals.
+const (
+	ActivityOpenPendingApproval    = "OpenPendingApproval"
+	ActivityResolvePendingApproval = "ResolvePendingApproval"
+)
+
 // Activity names for Orbit introspection — back the orbit_* tools above.
 const (
 	ActivityOrbitListApps          = "OrbitListApps"

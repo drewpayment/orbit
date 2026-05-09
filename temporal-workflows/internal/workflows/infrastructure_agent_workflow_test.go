@@ -62,6 +62,18 @@ func registerSandboxStubs(env *testsuite.TestWorkflowEnvironment) {
 		},
 		activity.RegisterOptions{Name: agentcontract.ActivityOrbitListCloudAccounts},
 	)
+	// Spike 7 commit γ — pending-approvals queue activities. Stubs return
+	// a synthetic row id; tests that care assert on an explicit override.
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.OpenPendingApprovalInput) (agentactivity.OpenPendingApprovalResult, error) {
+			return agentactivity.OpenPendingApprovalResult{ID: "row-stub"}, nil
+		},
+		activity.RegisterOptions{Name: agentcontract.ActivityOpenPendingApproval},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.ResolvePendingApprovalInput) error { return nil },
+		activity.RegisterOptions{Name: agentcontract.ActivityResolvePendingApproval},
+	)
 }
 
 type scriptedLLM struct {

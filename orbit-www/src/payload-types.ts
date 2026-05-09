@@ -97,6 +97,7 @@ export interface Config {
     'agent-runs': AgentRun;
     'agent-tools': AgentTool;
     'agent-tool-versions': AgentToolVersion;
+    'pending-approvals': PendingApproval;
     'kafka-providers': KafkaProvider;
     'kafka-clusters': KafkaCluster;
     'kafka-environment-mappings': KafkaEnvironmentMapping;
@@ -158,6 +159,7 @@ export interface Config {
     'agent-runs': AgentRunsSelect<false> | AgentRunsSelect<true>;
     'agent-tools': AgentToolsSelect<false> | AgentToolsSelect<true>;
     'agent-tool-versions': AgentToolVersionsSelect<false> | AgentToolVersionsSelect<true>;
+    'pending-approvals': PendingApprovalsSelect<false> | PendingApprovalsSelect<true>;
     'kafka-providers': KafkaProvidersSelect<false> | KafkaProvidersSelect<true>;
     'kafka-clusters': KafkaClustersSelect<false> | KafkaClustersSelect<true>;
     'kafka-environment-mappings': KafkaEnvironmentMappingsSelect<false> | KafkaEnvironmentMappingsSelect<true>;
@@ -1786,6 +1788,64 @@ export interface AgentToolVersion {
    * Comma-delimited list of fields the reviewer changed (name, description, template_json, input_schema_json, template_kind). Only set on reviewer_edited rows.
    */
   editedFields?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Aggregated view of agent approval gates across all runs
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "pending-approvals".
+ */
+export interface PendingApproval {
+  id: string;
+  workspace: string | Workspace;
+  /**
+   * Temporal workflow id (not run id) — stable across continue-as-new.
+   */
+  workflowId: string;
+  /**
+   * Most recent Temporal run id; useful for jumping into the chat thread.
+   */
+  runId?: string | null;
+  /**
+   * Optional link to the AgentRuns row (when the workflow has one).
+   */
+  agentRun?: (string | null) | AgentRun;
+  approvalId: string;
+  kind: 'tool_registration' | 'destructive_command' | 'proposal' | 'custom';
+  title: string;
+  /**
+   * Reviewer-facing body. Same content the chat card shows.
+   */
+  bodyMarkdown?: string | null;
+  /**
+   * Structured gate payload. For tool_registration: {name, description, templateKind, templateJson, inputSchemaJson}. For destructive_command: {command, matchedPattern}.
+   */
+  payload?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  status: 'pending' | 'resolved' | 'aborted';
+  /**
+   * Set when status flips to resolved.
+   */
+  resolution?: ('approved' | 'rejected') | null;
+  resolvedBy?: (string | null) | User;
+  resolvedAt?: string | null;
+  /**
+   * Reviewer notes / rejection reason.
+   */
+  notes?: string | null;
+  /**
+   * Snapshot of state.reviewerRounds at resolution time — how many back-and-forths the reviewer had with the agent before deciding.
+   */
+  reviewerRounds?: number | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -3499,6 +3559,10 @@ export interface PayloadLockedDocument {
         value: string | AgentToolVersion;
       } | null)
     | ({
+        relationTo: 'pending-approvals';
+        value: string | PendingApproval;
+      } | null)
+    | ({
         relationTo: 'kafka-providers';
         value: string | KafkaProvider;
       } | null)
@@ -4398,6 +4462,29 @@ export interface AgentToolVersionsSelect<T extends boolean = true> {
   templateJson?: T;
   editedBy?: T;
   editedFields?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "pending-approvals_select".
+ */
+export interface PendingApprovalsSelect<T extends boolean = true> {
+  workspace?: T;
+  workflowId?: T;
+  runId?: T;
+  agentRun?: T;
+  approvalId?: T;
+  kind?: T;
+  title?: T;
+  bodyMarkdown?: T;
+  payload?: T;
+  status?: T;
+  resolution?: T;
+  resolvedBy?: T;
+  resolvedAt?: T;
+  notes?: T;
+  reviewerRounds?: T;
   updatedAt?: T;
   createdAt?: T;
 }

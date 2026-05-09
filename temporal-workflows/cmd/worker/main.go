@@ -504,6 +504,14 @@ func main() {
 	runActivities := agentactivity.NewAgentRunActivities(agentRunsClient, logger)
 	w.RegisterActivityWithOptions(runActivities.UpdateAgentRun, activity.RegisterOptions{Name: agentcontract.ActivityUpdateAgentRun})
 
+	// Aggregated pending-approvals queue (Spike 7 commit γ). Mirrors every
+	// open approval gate into the PendingApprovals collection so reviewers
+	// outside the chat thread can find work via /platform/approvals.
+	pendingApprovalsClient := services.NewPayloadPendingApprovalsClient(orbitAPIURL, orbitInternalAPIKey, logger)
+	pendingActivities := agentactivity.NewPendingApprovalsActivities(pendingApprovalsClient, logger)
+	w.RegisterActivityWithOptions(pendingActivities.OpenPendingApproval, activity.RegisterOptions{Name: agentcontract.ActivityOpenPendingApproval})
+	w.RegisterActivityWithOptions(pendingActivities.ResolvePendingApproval, activity.RegisterOptions{Name: agentcontract.ActivityResolvePendingApproval})
+
 	// Orbit-aware introspection: the orbit_list_apps / orbit_get_app /
 	// orbit_list_cloud_accounts tools call these activities to fetch
 	// sanitized workspace context (no credentials over the wire).

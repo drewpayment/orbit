@@ -111,6 +111,12 @@ type agentState struct {
 	streamingTurnID      string
 	proposal             *Proposal
 	pendingApprovals     map[string]PendingApproval
+	// pendingApprovalRowIDs maps approval_id → PendingApprovals collection
+	// row id so the workflow can call ResolvePendingApproval on the right
+	// row when the gate closes (Spike 7 commit γ). Empty = the open call
+	// failed; resolve falls back to a no-op so a flaky internal API
+	// can't deadlock the gate.
+	pendingApprovalRowIDs map[string]string
 	registeredTools      map[string]agentactivity.ApprovedAgentTool
 	terminated           bool
 	abortReason          string
@@ -493,6 +499,64 @@ func markRun(ctx workflow.Context, workflowID string, in agentactivity.UpdateAge
 	}
 }
 
+// openPendingApproval mirrors a freshly-opened approval gate into the
+// PendingApprovals collection so the /platform/approvals queue page can
+// surface it (Spike 7 commit γ). Best-effort: on failure the gate still
+// resolves correctly inside the chat thread, the queue page just won't
+// show that one row.
+func openPendingApproval(ctx workflow.Context, state *agentState, input *InfrastructureAgentInput, approvalID, kind, title, body string, payload map[string]any) {
+	in := agentactivity.OpenPendingApprovalInput{
+		WorkspaceID:  input.WorkspaceID,
+		WorkflowID:   workflow.GetInfo(ctx).WorkflowExecution.ID,
+		RunID:        workflow.GetInfo(ctx).WorkflowExecution.RunID,
+		AgentRunID:   input.AgentRunID,
+		ApprovalID:   approvalID,
+		Kind:         kind,
+		Title:        title,
+		BodyMarkdown: body,
+		Payload:      payload,
+	}
+	var res agentactivity.OpenPendingApprovalResult
+	if err := workflow.ExecuteActivity(ctx, agentcontract.ActivityOpenPendingApproval, in).Get(ctx, &res); err != nil {
+		workflow.GetLogger(ctx).Warn("open pending-approval row failed (non-fatal)", "err", err, "approvalId", approvalID)
+		return
+	}
+	if res.ID != "" {
+		state.pendingApprovalRowIDs[approvalID] = res.ID
+	}
+}
+
+// resolvePendingApproval flips the queue row to resolved/aborted. Pulls
+// the row id out of state, then forgets it. Best-effort like its
+// counterpart — a missing row id (open call failed) is tolerated.
+//
+// Uses workflow.NewDisconnectedContext so abort paths (which cancel
+// loopCtx) can still flip the row to status=aborted; otherwise an
+// abort would leave the queue row stuck on pending forever.
+func resolvePendingApproval(ctx workflow.Context, state *agentState, approvalID, status, resolution, resolvedBy, notes string) {
+	rowID := state.pendingApprovalRowIDs[approvalID]
+	delete(state.pendingApprovalRowIDs, approvalID)
+	if rowID == "" {
+		return
+	}
+	disconnected, _ := workflow.NewDisconnectedContext(ctx)
+	actCtx := workflow.WithActivityOptions(disconnected, workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Second,
+		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 2},
+	})
+	in := agentactivity.ResolvePendingApprovalInput{
+		ID:             rowID,
+		Status:         status,
+		Resolution:     resolution,
+		ResolvedBy:     resolvedBy,
+		Notes:          notes,
+		ReviewerRounds: state.reviewerRounds,
+	}
+	if err := workflow.ExecuteActivity(actCtx, agentcontract.ActivityResolvePendingApproval, in).Get(actCtx, nil); err != nil {
+		workflow.GetLogger(ctx).Warn("resolve pending-approval row failed (non-fatal)", "err", err, "approvalId", approvalID)
+	}
+}
+
 // dispatchTool routes a single tool call to its handler. Returns the textual
 // result (fed back to the model as a tool-result message) and a flag telling
 // the caller whether the loop should terminate.
@@ -551,7 +615,7 @@ func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agen
 		// where the agent forgets or is talched into skipping by prompt
 		// injection.
 		if classification := safety.ClassifyShell(command); classification.Destructive {
-			ok, reason := requireDestructiveApproval(ctx, auditCtx, state, approvalCh, workflowID, command, classification)
+			ok, reason := requireDestructiveApproval(ctx, auditCtx, state, input, approvalCh, workflowID, command, classification)
 			if !ok {
 				return jsonResult(map[string]any{
 					"approved":  false,
@@ -699,6 +763,7 @@ func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agen
 			"message": title,
 		})
 		markRun(auditCtx, workflowID, agentactivity.UpdateAgentRunInput{Status: "awaiting_approval"})
+		openPendingApproval(auditCtx, state, input, approvalID, kind, title, body, nil)
 
 		// Block until a signal with this approval_id arrives. Other ids are
 		// dropped (they'll be re-issued when their parent approval prompts
@@ -708,6 +773,7 @@ func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agen
 		state.status = prevStatus
 		if aborted {
 			state.terminated = true
+			resolvePendingApproval(auditCtx, state, approvalID, "aborted", "", resolution.ResolvedBy, "agent run aborted")
 			return jsonResult(map[string]any{
 				"approved": false,
 				"reason":   "agent run aborted",
@@ -719,6 +785,7 @@ func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agen
 			"resolved_by": resolution.ResolvedBy,
 			"notes":       resolution.Notes,
 		})
+		resolvePendingApproval(auditCtx, state, approvalID, "resolved", resolutionLabel(resolution.Approved), resolution.ResolvedBy, resolution.Notes)
 		// Audit append + status return.
 		markRun(auditCtx, workflowID, agentactivity.UpdateAgentRunInput{
 			Status:     prevStatus,
@@ -919,11 +986,13 @@ func dispatchRegisterTool(ctx workflow.Context, sandboxCtx workflow.Context, sta
 	}
 
 	approvalID := workflowUUID(ctx)
+	approvalTitle := fmt.Sprintf("Register new agent tool: %s", name)
+	approvalBody := fmt.Sprintf("**Description**\n\n%s\n\n**Reasoning**\n\n%s\n\n**Template (%s)**\n\n```json\n%s\n```\n\n**Input schema**\n\n```json\n%s\n```", description, reasoning, templateKind, templateJSON, inputSchemaJSON)
 	state.pendingApprovals[approvalID] = PendingApproval{
 		ApprovalID:   approvalID,
 		Kind:         agentcontract.ApprovalKindToolRegistration,
-		Title:        fmt.Sprintf("Register new agent tool: %s", name),
-		BodyMarkdown: fmt.Sprintf("**Description**\n\n%s\n\n**Reasoning**\n\n%s\n\n**Template (%s)**\n\n```json\n%s\n```\n\n**Input schema**\n\n```json\n%s\n```", description, reasoning, templateKind, templateJSON, inputSchemaJSON),
+		Title:        approvalTitle,
+		BodyMarkdown: approvalBody,
 		Payload: map[string]any{
 			"agent_tool_id":     registered.ID,
 			"name":              name,
@@ -943,7 +1012,7 @@ func dispatchRegisterTool(ctx workflow.Context, sandboxCtx workflow.Context, sta
 	emitEvent(ctx, state, EventKindApprovalRequest, map[string]any{
 		"approval_id":       approvalID,
 		"kind":              agentcontract.ApprovalKindToolRegistration,
-		"title":             fmt.Sprintf("Register new agent tool: %s", name),
+		"title":             approvalTitle,
 		"body_markdown":     fmt.Sprintf("Tool: `%s`\nKind: `%s`\n\n%s", name, templateKind, description),
 		"agent_tool_id":     registered.ID,
 		"name":              name,
@@ -958,6 +1027,23 @@ func dispatchRegisterTool(ctx workflow.Context, sandboxCtx workflow.Context, sta
 		"message": fmt.Sprintf("tool registration: %s", name),
 	})
 
+	// Local audit context for best-effort PendingApprovals queue updates
+	// (Spike 7 commit γ). Mirrors the markRun pattern: short timeout, low
+	// retry count — failures are logged and swallowed.
+	auditCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Second,
+		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 2},
+	})
+	openPendingApproval(auditCtx, state, input, approvalID, agentcontract.ApprovalKindToolRegistration, approvalTitle, approvalBody, map[string]any{
+		"agent_tool_id":     registered.ID,
+		"name":              name,
+		"description":       description,
+		"template_kind":     templateKind,
+		"template_json":     templateJSON,
+		"input_schema_json": inputSchemaJSON,
+		"reasoning":         reasoning,
+	})
+
 	resolution, aborted := awaitApproval(ctx, approvalCh, approvalID)
 	delete(state.pendingApprovals, approvalID)
 	state.status = prevStatus
@@ -967,6 +1053,7 @@ func dispatchRegisterTool(ctx workflow.Context, sandboxCtx workflow.Context, sta
 		_ = workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityResolveAgentTool, agentactivity.ResolveAgentToolInput{
 			ID: registered.ID, Approved: false, Reason: "agent run aborted",
 		}).Get(sandboxCtx, nil)
+		resolvePendingApproval(auditCtx, state, approvalID, "aborted", "", resolution.ResolvedBy, "agent run aborted")
 		return jsonResult(map[string]any{"approved": false, "reason": "agent run aborted"}), true
 	}
 
@@ -1028,6 +1115,7 @@ func dispatchRegisterTool(ctx workflow.Context, sandboxCtx workflow.Context, sta
 		"edited_fields":          resolveResult.EditedFields,
 		"agent_tool_version_id":  resolveResult.AgentToolVersionID,
 	})
+	resolvePendingApproval(auditCtx, state, approvalID, "resolved", resolutionLabel(resolution.Approved), resolution.ResolvedBy, resolution.Notes)
 
 	if resolution.Approved {
 		// Eagerly add to in-memory catalog so the next LLM call sees it
@@ -1114,7 +1202,7 @@ func exampleArgsFromSchema(schemaJSON string) map[string]any {
 // on approve and (false, reason) on reject or abort. The audit row gets
 // the resolution appended either way so the run-history page records the
 // gate even when the action was rejected.
-func requireDestructiveApproval(ctx workflow.Context, auditCtx workflow.Context, state *agentState, approvalCh workflow.ReceiveChannel, workflowID, command string, classification safety.Classification) (bool, string) {
+func requireDestructiveApproval(ctx workflow.Context, auditCtx workflow.Context, state *agentState, input *InfrastructureAgentInput, approvalCh workflow.ReceiveChannel, workflowID, command string, classification safety.Classification) (bool, string) {
 	approvalID := workflowUUID(ctx)
 	title := "Destructive shell command — approval required"
 	body := fmt.Sprintf("The agent wants to run a command that matched the workflow's destructive-command policy.\n\n**Patterns:** %s\n\n**Command:**\n\n```\n%s\n```\n\nApprove only if you have verified this is the intended action.",
@@ -1146,12 +1234,17 @@ func requireDestructiveApproval(ctx workflow.Context, auditCtx workflow.Context,
 		"message": title,
 	})
 	markRun(auditCtx, workflowID, agentactivity.UpdateAgentRunInput{Status: "awaiting_approval"})
+	openPendingApproval(auditCtx, state, input, approvalID, agentcontract.ApprovalKindDestructiveCmd, title, body, map[string]any{
+		"command":  command,
+		"patterns": classification.Patterns,
+	})
 
 	resolution, aborted := awaitApproval(ctx, approvalCh, approvalID)
 	delete(state.pendingApprovals, approvalID)
 	state.status = prevStatus
 	if aborted {
 		state.terminated = true
+		resolvePendingApproval(auditCtx, state, approvalID, "aborted", "", resolution.ResolvedBy, "agent run aborted")
 		return false, "agent run aborted"
 	}
 	emitEvent(ctx, state, EventKindApprovalResolved, map[string]any{
@@ -1160,6 +1253,7 @@ func requireDestructiveApproval(ctx workflow.Context, auditCtx workflow.Context,
 		"resolved_by": resolution.ResolvedBy,
 		"notes":       resolution.Notes,
 	})
+	resolvePendingApproval(auditCtx, state, approvalID, "resolved", resolutionLabel(resolution.Approved), resolution.ResolvedBy, resolution.Notes)
 	markRun(auditCtx, workflowID, agentactivity.UpdateAgentRunInput{
 		Status:     prevStatus,
 		ApprovalID: approvalID,
@@ -1828,8 +1922,9 @@ func initState(ctx workflow.Context, input InfrastructureAgentInput) agentState 
 		history:          append([]ConversationTurn(nil), input.History...),
 		events:           append([]AgentEvent(nil), input.Events...),
 		nextSeq:          input.NextSequence,
-		pendingApprovals: map[string]PendingApproval{},
-		iterations:       input.IterationsSoFar,
+		pendingApprovals:      map[string]PendingApproval{},
+		pendingApprovalRowIDs: map[string]string{},
+		iterations:            input.IterationsSoFar,
 	}
 	if state.nextSeq == 0 {
 		state.nextSeq = 1
