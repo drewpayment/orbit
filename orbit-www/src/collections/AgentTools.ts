@@ -146,6 +146,16 @@ export const AgentTools: CollectionConfig = {
       type: 'date',
       admin: { readOnly: true },
     },
+    {
+      name: 'currentVersion',
+      type: 'number',
+      defaultValue: 1,
+      admin: {
+        readOnly: true,
+        description:
+          "Version number reflected in this row's templateJson / etc. The full version history lives in agent-tool-versions; this field is the pointer to which version is active.",
+      },
+    },
   ],
   indexes: [
     { fields: ['workspace', 'name'], unique: true },

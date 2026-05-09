@@ -918,12 +918,22 @@ func dispatchRegisterTool(ctx workflow.Context, sandboxCtx workflow.Context, sta
 	}
 	prevStatus := state.status
 	state.status = "awaiting_approval"
+	// Include the full template + schema in the event payload so the
+	// chat UI can render the editable form without a separate fetch.
+	// (The body_markdown already contains a human-readable rendering;
+	// these structured fields are for the editor.)
 	emitEvent(ctx, state, EventKindApprovalRequest, map[string]any{
-		"approval_id":   approvalID,
-		"kind":          agentcontract.ApprovalKindToolRegistration,
-		"title":         fmt.Sprintf("Register new agent tool: %s", name),
-		"body_markdown": fmt.Sprintf("Tool: `%s`\nKind: `%s`\n\n%s", name, templateKind, description),
-		"agent_tool_id": registered.ID,
+		"approval_id":       approvalID,
+		"kind":              agentcontract.ApprovalKindToolRegistration,
+		"title":             fmt.Sprintf("Register new agent tool: %s", name),
+		"body_markdown":     fmt.Sprintf("Tool: `%s`\nKind: `%s`\n\n%s", name, templateKind, description),
+		"agent_tool_id":     registered.ID,
+		"name":              name,
+		"description":       description,
+		"template_kind":     templateKind,
+		"template_json":     templateJSON,
+		"input_schema_json": inputSchemaJSON,
+		"reasoning":         reasoning,
 	})
 	emitEvent(ctx, state, EventKindStatusUpdate, map[string]any{
 		"status":  "awaiting_approval",
@@ -942,45 +952,110 @@ func dispatchRegisterTool(ctx workflow.Context, sandboxCtx workflow.Context, sta
 		return jsonResult(map[string]any{"approved": false, "reason": "agent run aborted"}), true
 	}
 
+	// α — apply reviewer edits (if any). Effective values are what the
+	// AgentTools row will be patched to; we validate those before signaling
+	// the activity so a typo'd edit fails the gate cleanly rather than
+	// poisoning the registry.
+	finalName := name
+	finalDescription := description
+	finalTemplateKind := templateKind
+	finalTemplateJSON := templateJSON
+	finalSchemaJSON := inputSchemaJSON
+	if resolution.Approved && resolution.Edited {
+		if resolution.EditedName != "" {
+			finalName = resolution.EditedName
+		}
+		if resolution.EditedDescription != "" {
+			finalDescription = resolution.EditedDescription
+		}
+		if resolution.EditedTemplateKind != "" {
+			finalTemplateKind = resolution.EditedTemplateKind
+		}
+		if resolution.EditedTemplateJSON != "" {
+			finalTemplateJSON = resolution.EditedTemplateJSON
+		}
+		if resolution.EditedSchemaJSON != "" {
+			finalSchemaJSON = resolution.EditedSchemaJSON
+		}
+		if isBuiltInToolName(finalName) {
+			return jsonError("register_tool", fmt.Errorf("edit invalid: name %q collides with a built-in tool", finalName)), false
+		}
+		if _, err := tooltemplate.Expand(tooltemplate.Kind(finalTemplateKind), finalTemplateJSON, exampleArgsFromSchema(finalSchemaJSON)); err != nil {
+			return jsonError("register_tool", fmt.Errorf("edit invalid: %w", err)), false
+		}
+	}
+
+	var resolveResult agentactivity.ResolveAgentToolResult
 	if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityResolveAgentTool, agentactivity.ResolveAgentToolInput{
-		ID:         registered.ID,
-		Approved:   resolution.Approved,
-		ResolvedBy: resolution.ResolvedBy,
-		Reason:     resolution.Notes,
-	}).Get(sandboxCtx, nil); err != nil {
+		ID:                 registered.ID,
+		Approved:           resolution.Approved,
+		ResolvedBy:         resolution.ResolvedBy,
+		Reason:             resolution.Notes,
+		Edited:             resolution.Approved && resolution.Edited,
+		EditedName:         resolution.EditedName,
+		EditedDescription:  resolution.EditedDescription,
+		EditedTemplateKind: resolution.EditedTemplateKind,
+		EditedTemplateJSON: resolution.EditedTemplateJSON,
+		EditedSchemaJSON:   resolution.EditedSchemaJSON,
+	}).Get(sandboxCtx, &resolveResult); err != nil {
 		return jsonError("register_tool", fmt.Errorf("resolve: %w", err)), false
 	}
 
 	emitEvent(ctx, state, EventKindApprovalResolved, map[string]any{
-		"approval_id": approvalID,
-		"approved":    resolution.Approved,
-		"resolved_by": resolution.ResolvedBy,
-		"notes":       resolution.Notes,
+		"approval_id":            approvalID,
+		"approved":               resolution.Approved,
+		"resolved_by":            resolution.ResolvedBy,
+		"notes":                  resolution.Notes,
+		"edited":                 resolution.Approved && len(resolveResult.EditedFields) > 0,
+		"edited_fields":          resolveResult.EditedFields,
+		"agent_tool_version_id":  resolveResult.AgentToolVersionID,
 	})
 
 	if resolution.Approved {
 		// Eagerly add to in-memory catalog so the next LLM call sees it
-		// without waiting for the next refresh tick.
+		// without waiting for the next refresh tick. Use the FINAL
+		// (post-edit) values.
 		if state.registeredTools == nil {
 			state.registeredTools = map[string]agentactivity.ApprovedAgentTool{}
 		}
-		state.registeredTools[name] = agentactivity.ApprovedAgentTool{
+		state.registeredTools[finalName] = agentactivity.ApprovedAgentTool{
 			ID:              registered.ID,
-			Name:            name,
-			Description:     description,
-			InputSchemaJSON: inputSchemaJSON,
-			TemplateKind:    templateKind,
-			TemplateJSON:    templateJSON,
+			Name:            finalName,
+			Description:     finalDescription,
+			InputSchemaJSON: finalSchemaJSON,
+			TemplateKind:    finalTemplateKind,
+			TemplateJSON:    finalTemplateJSON,
 		}
 	}
 
-	return jsonResult(map[string]any{
+	// Tool result the agent sees. Includes the diff between proposed and
+	// final so the model can reason about the correction.
+	result := map[string]any{
 		"approved":      resolution.Approved,
-		"name":          name,
+		"name":          finalName,
 		"agent_tool_id": registered.ID,
 		"resolved_by":   resolution.ResolvedBy,
 		"notes":         resolution.Notes,
-	}), false
+		"edited":        resolution.Approved && len(resolveResult.EditedFields) > 0,
+		"edited_fields": resolveResult.EditedFields,
+	}
+	if len(resolveResult.EditedFields) > 0 {
+		result["agent_proposed"] = map[string]any{
+			"name":              name,
+			"description":       description,
+			"template_kind":     templateKind,
+			"template_json":     templateJSON,
+			"input_schema_json": inputSchemaJSON,
+		}
+		result["final"] = map[string]any{
+			"name":              finalName,
+			"description":       finalDescription,
+			"template_kind":     finalTemplateKind,
+			"template_json":     finalTemplateJSON,
+			"input_schema_json": finalSchemaJSON,
+		}
+	}
+	return jsonResult(result), false
 }
 
 // isBuiltInToolName reports whether name collides with the workflow's

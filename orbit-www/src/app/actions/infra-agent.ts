@@ -148,6 +148,57 @@ export async function rejectAgentAction(input: {
   }
 }
 
+/**
+ * approveAgentActionWithEdits — commit α.
+ *
+ * For tool-registration approvals, the reviewer can edit the agent's
+ * proposed name / description / template / schema before approving.
+ * Empty fields mean "leave the agent's value unchanged"; the workflow
+ * pre-flight validates the resulting template via the Go template engine
+ * and rejects the gate cleanly if the edit produces an unparseable
+ * placeholder.
+ *
+ * Workspace admin/owner gating mirrors approveAgentAction.
+ */
+export async function approveAgentActionWithEdits(input: {
+  workspaceId: string
+  workflowId: string
+  approvalId: string
+  notes?: string
+  edits: {
+    name?: string
+    description?: string
+    templateKind?: 'shell' | 'http' | 'composite'
+    templateJson?: string
+    inputSchemaJson?: string
+  }
+}) {
+  const user = await getPayloadUserFromSession()
+  if (!user) return { success: false as const, error: 'Unauthorized' }
+  const payload = await getPayload({ config })
+  if (!(await isWorkspaceAdminOrOwner(payload, user.id, input.workspaceId))) {
+    return { success: false as const, error: 'Approval requires workspace admin or owner' }
+  }
+  try {
+    await agentClient.approveAction({
+      workflowId: input.workflowId,
+      approvalId: input.approvalId,
+      approvedBy: user.id,
+      notes: input.notes ?? '',
+      edits: {
+        name: input.edits.name ?? '',
+        description: input.edits.description ?? '',
+        templateKind: input.edits.templateKind ?? '',
+        templateJson: input.edits.templateJson ?? '',
+        inputSchemaJson: input.edits.inputSchemaJson ?? '',
+      },
+    })
+    return { success: true as const }
+  } catch (err) {
+    return { success: false as const, error: (err as Error).message }
+  }
+}
+
 export async function abortAgentRun(input: {
   workspaceId: string
   workflowId: string

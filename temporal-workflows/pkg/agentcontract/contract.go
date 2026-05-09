@@ -244,11 +244,26 @@ type UserMessageSignalPayload struct {
 }
 
 // ApprovalSignalPayload is the body of SignalApproval.
+//
+// Edited* fields are populated when the reviewer approves with edits
+// (commit α). They are only meaningful when Approved=true and Edited=true,
+// and only for approvals of kind ApprovalKindToolRegistration. Empty
+// Edited* fields with Edited=true mean "the reviewer touched the form
+// but didn't actually change anything" — the workflow treats that as an
+// unedited approval. Adding optional fields is wire-compatible with
+// pre-α workflows in flight.
 type ApprovalSignalPayload struct {
 	ApprovalID string `json:"approval_id"`
 	Approved   bool   `json:"approved"`
 	ResolvedBy string `json:"resolved_by"`
 	Notes      string `json:"notes"`
+
+	Edited             bool   `json:"edited,omitempty"`
+	EditedName         string `json:"edited_name,omitempty"`
+	EditedDescription  string `json:"edited_description,omitempty"`
+	EditedTemplateKind string `json:"edited_template_kind,omitempty"`
+	EditedTemplateJSON string `json:"edited_template_json,omitempty"`
+	EditedSchemaJSON   string `json:"edited_schema_json,omitempty"`
 }
 
 // AbortSignalPayload is the body of SignalAbort.

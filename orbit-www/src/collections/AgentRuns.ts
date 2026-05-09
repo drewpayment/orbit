@@ -154,6 +154,23 @@ export const AgentRuns: CollectionConfig = {
         { name: 'resolvedBy', type: 'relationship', relationTo: 'users' },
         { name: 'resolvedAt', type: 'date' },
         { name: 'notes', type: 'textarea' },
+        {
+          name: 'edited',
+          type: 'checkbox',
+          defaultValue: false,
+          admin: { description: 'Reviewer modified the registration before approving. Tool-registration approvals only.' },
+        },
+        { name: 'editedBy', type: 'relationship', relationTo: 'users' },
+        {
+          name: 'editedFields',
+          type: 'text',
+          admin: { description: 'Comma-delimited list of fields the reviewer changed.' },
+        },
+        {
+          name: 'agentToolVersionId',
+          type: 'text',
+          admin: { description: 'AgentToolVersions row id capturing the reviewer-edited snapshot, when edited.' },
+        },
       ],
     },
   ],

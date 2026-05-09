@@ -96,6 +96,7 @@ export interface Config {
     'llm-providers': LlmProvider;
     'agent-runs': AgentRun;
     'agent-tools': AgentTool;
+    'agent-tool-versions': AgentToolVersion;
     'kafka-providers': KafkaProvider;
     'kafka-clusters': KafkaCluster;
     'kafka-environment-mappings': KafkaEnvironmentMapping;
@@ -156,6 +157,7 @@ export interface Config {
     'llm-providers': LlmProvidersSelect<false> | LlmProvidersSelect<true>;
     'agent-runs': AgentRunsSelect<false> | AgentRunsSelect<true>;
     'agent-tools': AgentToolsSelect<false> | AgentToolsSelect<true>;
+    'agent-tool-versions': AgentToolVersionsSelect<false> | AgentToolVersionsSelect<true>;
     'kafka-providers': KafkaProvidersSelect<false> | KafkaProvidersSelect<true>;
     'kafka-clusters': KafkaClustersSelect<false> | KafkaClustersSelect<true>;
     'kafka-environment-mappings': KafkaEnvironmentMappingsSelect<false> | KafkaEnvironmentMappingsSelect<true>;
@@ -1687,6 +1689,19 @@ export interface AgentRun {
         resolvedBy?: (string | null) | User;
         resolvedAt?: string | null;
         notes?: string | null;
+        /**
+         * Reviewer modified the registration before approving. Tool-registration approvals only.
+         */
+        edited?: boolean | null;
+        editedBy?: (string | null) | User;
+        /**
+         * Comma-delimited list of fields the reviewer changed.
+         */
+        editedFields?: string | null;
+        /**
+         * AgentToolVersions row id capturing the reviewer-edited snapshot, when edited.
+         */
+        agentToolVersionId?: string | null;
         id?: string | null;
       }[]
     | null;
@@ -1733,6 +1748,44 @@ export interface AgentTool {
    */
   invocationCount?: number | null;
   lastInvokedAt?: string | null;
+  /**
+   * Version number reflected in this row's templateJson / etc. The full version history lives in agent-tool-versions; this field is the pointer to which version is active.
+   */
+  currentVersion?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Audit-trail version history for self-extending agent tools
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "agent-tool-versions".
+ */
+export interface AgentToolVersion {
+  id: string;
+  tool: string | AgentTool;
+  /**
+   * Monotonically increasing per-tool. v1 is the agent's first proposal.
+   */
+  versionNumber: number;
+  source: 'agent_proposed' | 'reviewer_edited';
+  /**
+   * Auto-computed from tool name + version. Used as title.
+   */
+  displayName?: string | null;
+  name: string;
+  description?: string | null;
+  inputSchemaJson?: string | null;
+  templateKind: 'shell' | 'http' | 'composite';
+  templateJson: string;
+  /**
+   * Set on reviewer_edited rows; null on agent_proposed rows.
+   */
+  editedBy?: (string | null) | User;
+  /**
+   * Comma-delimited list of fields the reviewer changed (name, description, template_json, input_schema_json, template_kind). Only set on reviewer_edited rows.
+   */
+  editedFields?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -3442,6 +3495,10 @@ export interface PayloadLockedDocument {
         value: string | AgentTool;
       } | null)
     | ({
+        relationTo: 'agent-tool-versions';
+        value: string | AgentToolVersion;
+      } | null)
+    | ({
         relationTo: 'kafka-providers';
         value: string | KafkaProvider;
       } | null)
@@ -4293,6 +4350,10 @@ export interface AgentRunsSelect<T extends boolean = true> {
         resolvedBy?: T;
         resolvedAt?: T;
         notes?: T;
+        edited?: T;
+        editedBy?: T;
+        editedFields?: T;
+        agentToolVersionId?: T;
         id?: T;
       };
   updatedAt?: T;
@@ -4317,6 +4378,26 @@ export interface AgentToolsSelect<T extends boolean = true> {
   rejectionReason?: T;
   invocationCount?: T;
   lastInvokedAt?: T;
+  currentVersion?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "agent-tool-versions_select".
+ */
+export interface AgentToolVersionsSelect<T extends boolean = true> {
+  tool?: T;
+  versionNumber?: T;
+  source?: T;
+  displayName?: T;
+  name?: T;
+  description?: T;
+  inputSchemaJson?: T;
+  templateKind?: T;
+  templateJson?: T;
+  editedBy?: T;
+  editedFields?: T;
   updatedAt?: T;
   createdAt?: T;
 }

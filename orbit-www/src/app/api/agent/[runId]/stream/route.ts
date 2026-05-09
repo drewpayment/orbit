@@ -46,7 +46,21 @@ interface ServerEventDTO {
   conversationTurn?: { turnId: string; role: string; content: string }
   tokenDelta?: { turnId: string; delta: string }
   proposalUpdate?: { proposalId: string; title: string; summary: string; bodyMarkdown: string }
-  approvalRequest?: { approvalId: string; kind: string; title: string; bodyMarkdown: string }
+  approvalRequest?: {
+    approvalId: string
+    kind: string
+    title: string
+    bodyMarkdown: string
+    // Structured fields for tool_registration approvals so the chat UI
+    // can render an editable form. Empty for other kinds.
+    name?: string
+    description?: string
+    templateKind?: string
+    templateJson?: string
+    inputSchemaJson?: string
+    reasoning?: string
+    agentToolId?: string
+  }
   approvalResolution?: { approvalId: string; approved: boolean; resolvedBy: string; notes: string }
   statusUpdate?: { status: string; message: string }
   toolCallOutputChunk?: { callId: string; stream: string; chunk: string }
@@ -168,8 +182,30 @@ function mapEvent(evt: any): ServerEventDTO {
       return { ...base, kind: 'token_delta', tokenDelta: e.value }
     case 'proposalUpdate':
       return { ...base, kind: 'proposal_update', proposalUpdate: e.value }
-    case 'approvalRequest':
-      return { ...base, kind: 'approval_request', approvalRequest: e.value }
+    case 'approvalRequest': {
+      // Hoist Struct payload fields into the DTO so the chat UI can
+      // populate an editable form without parsing body_markdown.
+      const v = e.value as { approvalId: string; kind: string; title: string; bodyMarkdown: string; payload?: { fields?: Record<string, { stringValue?: string }> } }
+      const fields = v.payload?.fields ?? {}
+      const fieldStr = (k: string) => (typeof fields[k]?.stringValue === 'string' ? fields[k].stringValue! : undefined)
+      return {
+        ...base,
+        kind: 'approval_request',
+        approvalRequest: {
+          approvalId: v.approvalId,
+          kind: v.kind,
+          title: v.title,
+          bodyMarkdown: v.bodyMarkdown,
+          name: fieldStr('name'),
+          description: fieldStr('description'),
+          templateKind: fieldStr('template_kind'),
+          templateJson: fieldStr('template_json'),
+          inputSchemaJson: fieldStr('input_schema_json'),
+          reasoning: fieldStr('reasoning'),
+          agentToolId: fieldStr('agent_tool_id'),
+        },
+      }
+    }
     case 'approvalResolution':
       return { ...base, kind: 'approval_resolution', approvalResolution: e.value }
     case 'statusUpdate':

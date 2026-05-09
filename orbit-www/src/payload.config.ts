@@ -37,6 +37,7 @@ import { Launches } from './collections/Launches'
 import { LLMProviders } from './collections/LLMProviders'
 import { AgentRuns } from './collections/AgentRuns'
 import { AgentTools } from './collections/AgentTools'
+import { AgentToolVersions } from './collections/AgentToolVersions'
 
 // Kafka collections
 import {
@@ -109,6 +110,7 @@ export default buildConfig({
     LLMProviders,
     AgentRuns,
     AgentTools,
+    AgentToolVersions,
     // Kafka collections
     KafkaProviders,
     KafkaClusters,

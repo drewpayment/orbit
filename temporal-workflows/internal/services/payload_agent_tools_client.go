@@ -130,13 +130,43 @@ func (c *PayloadAgentToolsClient) RegisterPending(ctx context.Context, in Regist
 	return out.ID, nil
 }
 
-// Resolve flips a pending row to approved or rejected.
-func (c *PayloadAgentToolsClient) Resolve(ctx context.Context, id string, approved bool, resolvedBy, reason string) error {
-	body, _ := json.Marshal(map[string]any{
+// AgentToolEdits carries reviewer-supplied modifications to a tool
+// registration. Empty fields mean "leave the agent's proposal unchanged."
+// The orbit-www route validates which fields actually changed and writes
+// the version history accordingly.
+type AgentToolEdits struct {
+	Name            string `json:"name,omitempty"`
+	Description     string `json:"description,omitempty"`
+	TemplateKind    string `json:"templateKind,omitempty"`
+	TemplateJSON    string `json:"templateJson,omitempty"`
+	InputSchemaJSON string `json:"inputSchemaJson,omitempty"`
+}
+
+// ResolveResult carries the route's response. AgentToolVersionID is
+// populated only when an edited row was written. EditedFields lists which
+// fields the route observed actually changed.
+type ResolveResult struct {
+	ID                  string   `json:"id"`
+	Status              string   `json:"status"`
+	AgentToolVersionID  string   `json:"agentToolVersionId,omitempty"`
+	EditedFields        []string `json:"editedFields,omitempty"`
+}
+
+// Resolve flips a pending row to approved or rejected. When edits is
+// non-nil the route writes an agent_proposed (v1) baseline plus, if any
+// field actually changed, a reviewer_edited (v2) row, then patches the
+// AgentTools row to the edited values.
+func (c *PayloadAgentToolsClient) Resolve(ctx context.Context, id string, approved bool, resolvedBy, reason string, edits *AgentToolEdits) (ResolveResult, error) {
+	payload := map[string]any{
 		"approved":   approved,
 		"resolvedBy": resolvedBy,
 		"reason":     reason,
-	})
+	}
+	if edits != nil {
+		payload["edited"] = true
+		payload["editedFields"] = edits
+	}
+	body, _ := json.Marshal(payload)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost,
 		c.baseURL+"/api/internal/agent-tools/"+url.PathEscape(id)+"/resolve",
 		bytes.NewReader(body))
@@ -144,12 +174,16 @@ func (c *PayloadAgentToolsClient) Resolve(ctx context.Context, id string, approv
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return err
+		return ResolveResult{}, err
 	}
 	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	if resp.StatusCode/100 != 2 {
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return fmt.Errorf("resolve agent tool: HTTP %d: %s", resp.StatusCode, string(respBody))
+		return ResolveResult{}, fmt.Errorf("resolve agent tool: HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
-	return nil
+	var out ResolveResult
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		return ResolveResult{}, fmt.Errorf("resolve agent tool: parse response: %w", err)
+	}
+	return out, nil
 }

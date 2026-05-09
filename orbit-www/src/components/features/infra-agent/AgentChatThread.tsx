@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import {
   abortAgentRun,
   approveAgentAction,
+  approveAgentActionWithEdits,
   rejectAgentAction,
   sendAgentMessage,
 } from '@/app/actions/infra-agent'
@@ -33,7 +34,19 @@ interface AgentEventDTO {
   conversationTurn?: { turnId: string; role: string; content: string }
   tokenDelta?: { turnId: string; delta: string }
   proposalUpdate?: { proposalId: string; title: string; summary: string; bodyMarkdown: string }
-  approvalRequest?: { approvalId: string; kind: string; title: string; bodyMarkdown: string }
+  approvalRequest?: {
+    approvalId: string
+    kind: string
+    title: string
+    bodyMarkdown: string
+    name?: string
+    description?: string
+    templateKind?: string
+    templateJson?: string
+    inputSchemaJson?: string
+    reasoning?: string
+    agentToolId?: string
+  }
   approvalResolution?: { approvalId: string; approved: boolean; resolvedBy: string; notes: string }
   statusUpdate?: { status: string; message: string }
   toolCallOutputChunk?: { callId: string; stream: string; chunk: string }
@@ -55,6 +68,13 @@ interface PendingApproval {
   kind: string
   title: string
   bodyMarkdown: string
+  // Structured editable payload — populated for tool_registration kind.
+  name?: string
+  description?: string
+  templateKind?: string
+  templateJson?: string
+  inputSchemaJson?: string
+  reasoning?: string
 }
 
 interface Proposal {
@@ -162,6 +182,12 @@ export function AgentChatThread({ workspaceId, workflowId }: Props) {
             kind: ar.kind,
             title: ar.title,
             bodyMarkdown: ar.bodyMarkdown,
+            name: ar.name,
+            description: ar.description,
+            templateKind: ar.templateKind,
+            templateJson: ar.templateJson,
+            inputSchemaJson: ar.inputSchemaJson,
+            reasoning: ar.reasoning,
           },
         ])
       }
@@ -304,23 +330,15 @@ export function AgentChatThread({ workspaceId, workflowId }: Props) {
         {proposal && <ProposalBlock proposal={proposal} />}
 
         {pendingApprovals.map((a) => (
-          <Card key={a.approvalId} className="border-amber-500/40 bg-amber-50/40">
-            <CardContent className="space-y-3 py-4">
-              <div>
-                <p className="text-xs uppercase text-amber-600 font-medium">{a.kind} • approval required</p>
-                <h3 className="font-semibold">{a.title}</h3>
-              </div>
-              <pre className="whitespace-pre-wrap text-sm font-sans">{a.bodyMarkdown}</pre>
-              <div className="flex gap-2">
-                <Button size="sm" onClick={() => onApprove(a.approvalId)} disabled={pending}>
-                  Approve
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => onReject(a.approvalId)} disabled={pending}>
-                  Reject
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <ApprovalCard
+            key={a.approvalId}
+            approval={a}
+            workspaceId={workspaceId}
+            workflowId={workflowId}
+            disabled={pending}
+            onApprove={() => onApprove(a.approvalId)}
+            onReject={() => onReject(a.approvalId)}
+          />
         ))}
       </div>
 
@@ -378,6 +396,196 @@ function ProposalBlock({ proposal }: { proposal: Proposal }) {
         <h3 className="font-semibold">{proposal.title}</h3>
         <p className="text-sm text-muted-foreground">{proposal.summary}</p>
         <pre className="whitespace-pre-wrap text-sm font-sans pt-2">{proposal.bodyMarkdown}</pre>
+      </CardContent>
+    </Card>
+  )
+}
+
+/**
+ * ApprovalCard renders the in-chat approval gate. For tool_registration
+ * kind it offers an "Edit" toggle that lets the reviewer modify the
+ * agent's proposed name / description / template / schema before
+ * approving — JSON fields are validated client-side first so the
+ * workflow's pre-flight expansion doesn't reject the gate over a typo.
+ */
+function ApprovalCard({
+  approval,
+  workspaceId,
+  workflowId,
+  disabled,
+  onApprove,
+  onReject,
+}: {
+  approval: PendingApproval
+  workspaceId: string
+  workflowId: string
+  disabled: boolean
+  onApprove: () => void
+  onReject: () => void
+}) {
+  const isToolReg = approval.kind === 'tool_registration'
+  const [editing, setEditing] = useState(false)
+  const [editName, setEditName] = useState(approval.name ?? '')
+  const [editDescription, setEditDescription] = useState(approval.description ?? '')
+  const [editTemplateKind, setEditTemplateKind] = useState(approval.templateKind ?? 'shell')
+  const [editTemplateJson, setEditTemplateJson] = useState(approval.templateJson ?? '')
+  const [editSchemaJson, setEditSchemaJson] = useState(approval.inputSchemaJson ?? '')
+  const [submitting, startSubmit] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+
+  const validateClient = (): string | null => {
+    if (editTemplateJson.trim()) {
+      try {
+        JSON.parse(editTemplateJson)
+      } catch {
+        return 'Template body is not valid JSON.'
+      }
+    }
+    if (editSchemaJson.trim()) {
+      try {
+        JSON.parse(editSchemaJson)
+      } catch {
+        return 'Input schema is not valid JSON.'
+      }
+    }
+    return null
+  }
+
+  const onApproveWithEdits = () => {
+    const v = validateClient()
+    if (v) {
+      setError(v)
+      return
+    }
+    setError(null)
+    startSubmit(async () => {
+      const res = await approveAgentActionWithEdits({
+        workspaceId,
+        workflowId,
+        approvalId: approval.approvalId,
+        edits: {
+          name: editName !== (approval.name ?? '') ? editName : undefined,
+          description: editDescription !== (approval.description ?? '') ? editDescription : undefined,
+          templateKind:
+            editTemplateKind !== (approval.templateKind ?? '')
+              ? (editTemplateKind as 'shell' | 'http' | 'composite')
+              : undefined,
+          templateJson:
+            editTemplateJson !== (approval.templateJson ?? '') ? editTemplateJson : undefined,
+          inputSchemaJson:
+            editSchemaJson !== (approval.inputSchemaJson ?? '') ? editSchemaJson : undefined,
+        },
+      })
+      if (!res.success) setError(res.error)
+    })
+  }
+
+  return (
+    <Card className="border-amber-500/40 bg-amber-50/40">
+      <CardContent className="space-y-3 py-4">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-xs uppercase text-amber-600 font-medium">
+              {approval.kind} • approval required
+            </p>
+            <h3 className="font-semibold">{approval.title}</h3>
+          </div>
+          {isToolReg && (
+            <Button
+              size="sm"
+              variant={editing ? 'secondary' : 'outline'}
+              onClick={() => setEditing((e) => !e)}
+              disabled={disabled || submitting}
+            >
+              {editing ? 'Cancel edits' : 'Edit'}
+            </Button>
+          )}
+        </div>
+
+        {!editing && (
+          <pre className="whitespace-pre-wrap text-sm font-sans">{approval.bodyMarkdown}</pre>
+        )}
+
+        {editing && isToolReg && (
+          <div className="space-y-3 text-xs">
+            <div className="space-y-1">
+              <label className="font-medium block">Name</label>
+              <input
+                className="w-full rounded border bg-white px-2 py-1 font-mono"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                disabled={disabled || submitting}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="font-medium block">Description</label>
+              <textarea
+                className="w-full rounded border bg-white px-2 py-1"
+                rows={2}
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                disabled={disabled || submitting}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="font-medium block">Template kind</label>
+              <select
+                className="w-full rounded border bg-white px-2 py-1 font-mono"
+                value={editTemplateKind}
+                onChange={(e) => setEditTemplateKind(e.target.value)}
+                disabled={disabled || submitting}
+              >
+                <option value="shell">shell</option>
+                <option value="http">http</option>
+                <option value="composite">composite</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="font-medium block">Template body (JSON)</label>
+              <textarea
+                className="w-full rounded border bg-white px-2 py-1 font-mono"
+                rows={6}
+                value={editTemplateJson}
+                onChange={(e) => setEditTemplateJson(e.target.value)}
+                disabled={disabled || submitting}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="font-medium block">Input schema (JSON)</label>
+              <textarea
+                className="w-full rounded border bg-white px-2 py-1 font-mono"
+                rows={4}
+                value={editSchemaJson}
+                onChange={(e) => setEditSchemaJson(e.target.value)}
+                disabled={disabled || submitting}
+              />
+            </div>
+            {approval.reasoning && (
+              <details className="text-muted-foreground">
+                <summary className="cursor-pointer">Agent's reasoning</summary>
+                <pre className="whitespace-pre-wrap pt-2">{approval.reasoning}</pre>
+              </details>
+            )}
+          </div>
+        )}
+
+        {error && <p className="text-xs text-destructive">{error}</p>}
+
+        <div className="flex gap-2 flex-wrap">
+          {!editing && (
+            <Button size="sm" onClick={onApprove} disabled={disabled || submitting}>
+              Approve as proposed
+            </Button>
+          )}
+          {editing && (
+            <Button size="sm" onClick={onApproveWithEdits} disabled={disabled || submitting}>
+              {submitting ? 'Approving…' : 'Approve with edits'}
+            </Button>
+          )}
+          <Button size="sm" variant="outline" onClick={onReject} disabled={disabled || submitting}>
+            Reject
+          </Button>
+        </div>
       </CardContent>
     </Card>
   )

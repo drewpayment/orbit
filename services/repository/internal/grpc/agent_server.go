@@ -120,7 +120,13 @@ func (s *AgentServer) SendMessage(
 	return connect.NewResponse(&agentv1.SendMessageResponse{TurnId: turnID}), nil
 }
 
-// ApproveAction sends an approval signal.
+// ApproveAction sends an approval signal. When the request carries an
+// optional Edits sub-message (commit α — approve-with-edits for tool
+// registrations), those fields ride along on the signal so the workflow
+// can validate and apply the reviewer's modifications before resolving.
+// Empty edit fields with edits.present=true mean "the reviewer touched
+// the form but didn't change anything" — the workflow treats that as an
+// unedited approval downstream.
 func (s *AgentServer) ApproveAction(
 	ctx context.Context,
 	req *connect.Request[agentv1.ApproveActionRequest],
@@ -129,12 +135,21 @@ func (s *AgentServer) ApproveAction(
 	if msg.WorkflowId == "" || msg.ApprovalId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("workflow_id and approval_id are required"))
 	}
-	if err := s.temporal.SignalWorkflow(ctx, msg.WorkflowId, "", agentcontract.SignalApproval, agentcontract.ApprovalSignalPayload{
+	payload := agentcontract.ApprovalSignalPayload{
 		ApprovalID: msg.ApprovalId,
 		Approved:   true,
 		ResolvedBy: msg.ApprovedBy,
 		Notes:      msg.Notes,
-	}); err != nil {
+	}
+	if edits := msg.GetEdits(); edits != nil {
+		payload.Edited = true
+		payload.EditedName = edits.GetName()
+		payload.EditedDescription = edits.GetDescription()
+		payload.EditedTemplateKind = edits.GetTemplateKind()
+		payload.EditedTemplateJSON = edits.GetTemplateJson()
+		payload.EditedSchemaJSON = edits.GetInputSchemaJson()
+	}
+	if err := s.temporal.SignalWorkflow(ctx, msg.WorkflowId, "", agentcontract.SignalApproval, payload); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("signal approval: %w", err))
 	}
 	return connect.NewResponse(&agentv1.ApproveActionResponse{Success: true}), nil
@@ -338,12 +353,23 @@ func toProtoEvent(e agentcontract.AgentEvent) (*agentv1.AgentEvent, error) {
 			},
 		}
 	case agentcontract.EventKindApprovalRequest:
+		// Tool-registration approvals carry the structured template +
+		// schema in the payload so the chat UI can render an editable
+		// form. structpb best-effort: fields it can't represent (e.g.
+		// nested map[string]any) are dropped gracefully.
+		var payloadStruct *structpb.Struct
+		if extras := approvalPayloadFields(e.Payload); len(extras) > 0 {
+			if s, err := structpb.NewStruct(extras); err == nil {
+				payloadStruct = s
+			}
+		}
 		out.Event = &agentv1.AgentEvent_ApprovalRequest{
 			ApprovalRequest: &agentv1.ApprovalRequest{
 				ApprovalId:   asString(e.Payload, "approval_id"),
 				Kind:         asString(e.Payload, "kind"),
 				Title:        asString(e.Payload, "title"),
 				BodyMarkdown: asString(e.Payload, "body_markdown"),
+				Payload:      payloadStruct,
 			},
 		}
 	case agentcontract.EventKindApprovalResolved:
@@ -395,4 +421,29 @@ func asBool(m map[string]any, key string) bool {
 		return v
 	}
 	return false
+}
+
+// approvalPayloadFields extracts the structured fields a chat UI needs to
+// render an editable approval form (e.g. tool_registration kind: name,
+// template, schema). The basic event fields (approval_id / kind / title /
+// body_markdown) are already on the proto's top-level so they're filtered
+// out here to keep the payload Struct small.
+func approvalPayloadFields(m map[string]any) map[string]any {
+	if m == nil {
+		return nil
+	}
+	skip := map[string]struct{}{
+		"approval_id":   {},
+		"kind":          {},
+		"title":         {},
+		"body_markdown": {},
+	}
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		if _, drop := skip[k]; drop {
+			continue
+		}
+		out[k] = v
+	}
+	return out
 }

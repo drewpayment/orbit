@@ -87,6 +87,24 @@ message ApproveActionRequest {
   string approved_by = 3;
   // Optional reviewer notes shown back to the agent.
   string notes = 4;
+  // Optional: reviewer-edited fields. Only meaningful for tool-registration
+  // approvals. When set, the workflow validates the edited template via
+  // the template engine before applying, persists an `agent_proposed` +
+  // `reviewer_edited` row pair to AgentToolVersions, and the resulting
+  // AgentTools row reflects the edited values. The agent's tool result
+  // includes both the originally-proposed and final templates so it can
+  // adapt from the correction.
+  optional ApprovalEdits edits = 5;
+}
+
+// ApprovalEdits carries reviewer modifications to a tool registration.
+// Empty fields mean "leave the agent's proposal unchanged for this field."
+message ApprovalEdits {
+  string name              = 1;
+  string description       = 2;
+  string template_kind     = 3;
+  string template_json     = 4;
+  string input_schema_json = 5;
 }
 
 message ApproveActionResponse {
