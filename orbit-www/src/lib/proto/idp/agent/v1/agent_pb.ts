@@ -12,7 +12,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file idp/agent/v1/agent.proto.
  */
 export const file_idp_agent_v1_agent: GenFile = /*@__PURE__*/
-  fileDesc("ChhpZHAvYWdlbnQvdjEvYWdlbnQucHJvdG8SDGlkcC5hZ2VudC52MSKQAQofU3RhcnRJbmZyYXN0cnVjdHVyZUFnZW50UmVxdWVzdBIUCgx3b3Jrc3BhY2VfaWQYASABKAkSFQoNcmVwb3NpdG9yeV9pZBgCIAEoCRIWCg5pbml0aWFsX3Byb21wdBgDIAEoCRIXCg9sbG1fcHJvdmlkZXJfaWQYBCABKAkSDwoHdXNlcl9pZBgFIAEoCSKNAQogU3RhcnRJbmZyYXN0cnVjdHVyZUFnZW50UmVzcG9uc2USEwoLd29ya2Zsb3dfaWQYASABKAkSDgoGcnVuX2lkGAIgASgJEhQKDGFnZW50X3J1bl9pZBgDIAEoCRIuCgpzdGFydGVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJLChJTZW5kTWVzc2FnZVJlcXVlc3QSEwoLd29ya2Zsb3dfaWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIPCgdtZXNzYWdlGAMgASgJIiYKE1NlbmRNZXNzYWdlUmVzcG9uc2USDwoHdHVybl9pZBgBIAEoCSKfAQoUQXBwcm92ZUFjdGlvblJlcXVlc3QSEwoLd29ya2Zsb3dfaWQYASABKAkSEwoLYXBwcm92YWxfaWQYAiABKAkSEwoLYXBwcm92ZWRfYnkYAyABKAkSDQoFbm90ZXMYBCABKAkSLwoFZWRpdHMYBSABKAsyGy5pZHAuYWdlbnQudjEuQXBwcm92YWxFZGl0c0gAiAEBQggKBl9lZGl0cyJ7Cg1BcHByb3ZhbEVkaXRzEgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSFQoNdGVtcGxhdGVfa2luZBgDIAEoCRIVCg10ZW1wbGF0ZV9qc29uGAQgASgJEhkKEWlucHV0X3NjaGVtYV9qc29uGAUgASgJIigKFUFwcHJvdmVBY3Rpb25SZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIImQKE1JlamVjdEFjdGlvblJlcXVlc3QSEwoLd29ya2Zsb3dfaWQYASABKAkSEwoLYXBwcm92YWxfaWQYAiABKAkSEwoLcmVqZWN0ZWRfYnkYAyABKAkSDgoGcmVhc29uGAQgASgJIicKFFJlamVjdEFjdGlvblJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgiTgoRQWJvcnRBZ2VudFJlcXVlc3QSEwoLd29ya2Zsb3dfaWQYASABKAkSFAoMcmVxdWVzdGVkX2J5GAIgASgJEg4KBnJlYXNvbhgDIAEoCSIlChJBYm9ydEFnZW50UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCJHChhTdHJlYW1BZ2VudEV2ZW50c1JlcXVlc3QSEwoLd29ya2Zsb3dfaWQYASABKAkSFgoOc2luY2Vfc2VxdWVuY2UYAiABKAQisQUKCkFnZW50RXZlbnQSEAoIc2VxdWVuY2UYASABKAQSLgoKZW1pdHRlZF9hdBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASOwoRY29udmVyc2F0aW9uX3R1cm4YCiABKAsyHi5pZHAuYWdlbnQudjEuQ29udmVyc2F0aW9uVHVybkgAEi8KC3Rva2VuX2RlbHRhGAsgASgLMhguaWRwLmFnZW50LnYxLlRva2VuRGVsdGFIABI3Cg9wcm9wb3NhbF91cGRhdGUYDCABKAsyHC5pZHAuYWdlbnQudjEuUHJvcG9zYWxVcGRhdGVIABI5ChBhcHByb3ZhbF9yZXF1ZXN0GA0gASgLMh0uaWRwLmFnZW50LnYxLkFwcHJvdmFsUmVxdWVzdEgAEj8KE2FwcHJvdmFsX3Jlc29sdXRpb24YDiABKAsyIC5pZHAuYWdlbnQudjEuQXBwcm92YWxSZXNvbHV0aW9uSAASNgoPdG9vbF9jYWxsX3N0YXJ0GA8gASgLMhsuaWRwLmFnZW50LnYxLlRvb2xDYWxsU3RhcnRIABJDChZ0b29sX2NhbGxfb3V0cHV0X2NodW5rGBAgASgLMiEuaWRwLmFnZW50LnYxLlRvb2xDYWxsT3V0cHV0Q2h1bmtIABIyCg10b29sX2NhbGxfZW5kGBEgASgLMhkuaWRwLmFnZW50LnYxLlRvb2xDYWxsRW5kSAASOAoNc3RhdHVzX3VwZGF0ZRgSIAEoCzIfLmlkcC5hZ2VudC52MS5BZ2VudFN0YXR1c1VwZGF0ZUgAEkoKGXRvb2xfcmVnaXN0cmF0aW9uX3JlcXVlc3QYEyABKAsyJS5pZHAuYWdlbnQudjEuVG9vbFJlZ2lzdHJhdGlvblJlcXVlc3RIAEIHCgVldmVudCJCChBDb252ZXJzYXRpb25UdXJuEg8KB3R1cm5faWQYASABKAkSDAoEcm9sZRgCIAEoCRIPCgdjb250ZW50GAMgASgJIiwKClRva2VuRGVsdGESDwoHdHVybl9pZBgBIAEoCRINCgVkZWx0YRgCIAEoCSKPAQoOUHJvcG9zYWxVcGRhdGUSEwoLcHJvcG9zYWxfaWQYASABKAkSDQoFdGl0bGUYAiABKAkSDwoHc3VtbWFyeRgDIAEoCRIVCg1ib2R5X21hcmtkb3duGAQgASgJEjEKBXN0ZXBzGAUgAygLMiIuaWRwLmFnZW50LnYxLlByaW1pdGl2ZUNhbGxQcmV2aWV3IlwKFFByaW1pdGl2ZUNhbGxQcmV2aWV3EgwKBHRvb2wYASABKAkSDwoHZGlzcGxheRgCIAEoCRIlCgRhcmdzGAMgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCKEAQoPQXBwcm92YWxSZXF1ZXN0EhMKC2FwcHJvdmFsX2lkGAEgASgJEgwKBGtpbmQYAiABKAkSDQoFdGl0bGUYAyABKAkSFQoNYm9keV9tYXJrZG93bhgEIAEoCRIoCgdwYXlsb2FkGAUgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCJfChJBcHByb3ZhbFJlc29sdXRpb24SEwoLYXBwcm92YWxfaWQYASABKAkSEAoIYXBwcm92ZWQYAiABKAgSEwoLcmVzb2x2ZWRfYnkYAyABKAkSDQoFbm90ZXMYBCABKAkiVQoNVG9vbENhbGxTdGFydBIPCgdjYWxsX2lkGAEgASgJEgwKBHRvb2wYAiABKAkSJQoEYXJncxgDIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QiRQoTVG9vbENhbGxPdXRwdXRDaHVuaxIPCgdjYWxsX2lkGAEgASgJEg4KBnN0cmVhbRgCIAEoCRINCgVjaHVuaxgDIAEoCSJ6CgtUb29sQ2FsbEVuZBIPCgdjYWxsX2lkGAEgASgJEg8KB3N1Y2Nlc3MYAiABKAgSEQoJZXhpdF9jb2RlGAMgASgFEg0KBWVycm9yGAQgASgJEicKBnJlc3VsdBgFIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QiNAoRQWdlbnRTdGF0dXNVcGRhdGUSDgoGc3RhdHVzGAEgASgJEg8KB21lc3NhZ2UYAiABKAkisgEKF1Rvb2xSZWdpc3RyYXRpb25SZXF1ZXN0EhMKC2FwcHJvdmFsX2lkGAEgASgJEhEKCXRvb2xfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIZChFpbnB1dF9zY2hlbWFfanNvbhgEIAEoCRIVCg10ZW1wbGF0ZV9raW5kGAUgASgJEhUKDXRlbXBsYXRlX2pzb24YBiABKAkSEQoJcmVhc29uaW5nGAcgASgJIlMKFExpc3RBZ2VudFJ1bnNSZXF1ZXN0EhQKDHdvcmtzcGFjZV9pZBgBIAEoCRIRCglwYWdlX3NpemUYAiABKAUSEgoKcGFnZV90b2tlbhgDIAEoCSJdChVMaXN0QWdlbnRSdW5zUmVzcG9uc2USKwoEcnVucxgBIAMoCzIdLmlkcC5hZ2VudC52MS5BZ2VudFJ1blN1bW1hcnkSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIvoBCg9BZ2VudFJ1blN1bW1hcnkSFAoMYWdlbnRfcnVuX2lkGAEgASgJEhMKC3dvcmtmbG93X2lkGAIgASgJEhQKDHdvcmtzcGFjZV9pZBgDIAEoCRIVCg1yZXBvc2l0b3J5X2lkGAQgASgJEg4KBnN0YXR1cxgFIAEoCRINCgV0aXRsZRgGIAEoCRIuCgpzdGFydGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIsCghlbmRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKc3RhcnRlZF9ieRgJIAEoCSIpChJHZXRBZ2VudFJ1blJlcXVlc3QSEwoLd29ya2Zsb3dfaWQYASABKAkihQIKE0dldEFnZW50UnVuUmVzcG9uc2USLgoHc3VtbWFyeRgBIAEoCzIdLmlkcC5hZ2VudC52MS5BZ2VudFJ1blN1bW1hcnkSNAoMY29udmVyc2F0aW9uGAIgAygLMh4uaWRwLmFnZW50LnYxLkNvbnZlcnNhdGlvblR1cm4SNQoPbGF0ZXN0X3Byb3Bvc2FsGAMgASgLMhwuaWRwLmFnZW50LnYxLlByb3Bvc2FsVXBkYXRlEjgKEXBlbmRpbmdfYXBwcm92YWxzGAQgAygLMh0uaWRwLmFnZW50LnYxLkFwcHJvdmFsUmVxdWVzdBIXCg9sYXRlc3Rfc2VxdWVuY2UYBSABKAQy5gUKDEFnZW50U2VydmljZRJ5ChhTdGFydEluZnJhc3RydWN0dXJlQWdlbnQSLS5pZHAuYWdlbnQudjEuU3RhcnRJbmZyYXN0cnVjdHVyZUFnZW50UmVxdWVzdBouLmlkcC5hZ2VudC52MS5TdGFydEluZnJhc3RydWN0dXJlQWdlbnRSZXNwb25zZRJSCgtTZW5kTWVzc2FnZRIgLmlkcC5hZ2VudC52MS5TZW5kTWVzc2FnZVJlcXVlc3QaIS5pZHAuYWdlbnQudjEuU2VuZE1lc3NhZ2VSZXNwb25zZRJYCg1BcHByb3ZlQWN0aW9uEiIuaWRwLmFnZW50LnYxLkFwcHJvdmVBY3Rpb25SZXF1ZXN0GiMuaWRwLmFnZW50LnYxLkFwcHJvdmVBY3Rpb25SZXNwb25zZRJVCgxSZWplY3RBY3Rpb24SIS5pZHAuYWdlbnQudjEuUmVqZWN0QWN0aW9uUmVxdWVzdBoiLmlkcC5hZ2VudC52MS5SZWplY3RBY3Rpb25SZXNwb25zZRJPCgpBYm9ydEFnZW50Eh8uaWRwLmFnZW50LnYxLkFib3J0QWdlbnRSZXF1ZXN0GiAuaWRwLmFnZW50LnYxLkFib3J0QWdlbnRSZXNwb25zZRJXChFTdHJlYW1BZ2VudEV2ZW50cxImLmlkcC5hZ2VudC52MS5TdHJlYW1BZ2VudEV2ZW50c1JlcXVlc3QaGC5pZHAuYWdlbnQudjEuQWdlbnRFdmVudDABElgKDUxpc3RBZ2VudFJ1bnMSIi5pZHAuYWdlbnQudjEuTGlzdEFnZW50UnVuc1JlcXVlc3QaIy5pZHAuYWdlbnQudjEuTGlzdEFnZW50UnVuc1Jlc3BvbnNlElIKC0dldEFnZW50UnVuEiAuaWRwLmFnZW50LnYxLkdldEFnZW50UnVuUmVxdWVzdBohLmlkcC5hZ2VudC52MS5HZXRBZ2VudFJ1blJlc3BvbnNlQkBaPmdpdGh1Yi5jb20vZHJld3BheW1lbnQvb3JiaXQvcHJvdG8vZ2VuL2dvL2lkcC9hZ2VudC92MTthZ2VudHYxYgZwcm90bzM", [file_google_protobuf_struct, file_google_protobuf_timestamp]);
+  fileDesc("ChhpZHAvYWdlbnQvdjEvYWdlbnQucHJvdG8SDGlkcC5hZ2VudC52MSKQAQofU3RhcnRJbmZyYXN0cnVjdHVyZUFnZW50UmVxdWVzdBIUCgx3b3Jrc3BhY2VfaWQYASABKAkSFQoNcmVwb3NpdG9yeV9pZBgCIAEoCRIWCg5pbml0aWFsX3Byb21wdBgDIAEoCRIXCg9sbG1fcHJvdmlkZXJfaWQYBCABKAkSDwoHdXNlcl9pZBgFIAEoCSKNAQogU3RhcnRJbmZyYXN0cnVjdHVyZUFnZW50UmVzcG9uc2USEwoLd29ya2Zsb3dfaWQYASABKAkSDgoGcnVuX2lkGAIgASgJEhQKDGFnZW50X3J1bl9pZBgDIAEoCRIuCgpzdGFydGVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJLChJTZW5kTWVzc2FnZVJlcXVlc3QSEwoLd29ya2Zsb3dfaWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIPCgdtZXNzYWdlGAMgASgJIiYKE1NlbmRNZXNzYWdlUmVzcG9uc2USDwoHdHVybl9pZBgBIAEoCSJoChpTZW5kUmV2aWV3ZXJNZXNzYWdlUmVxdWVzdBITCgt3b3JrZmxvd19pZBgBIAEoCRITCgthcHByb3ZhbF9pZBgCIAEoCRIPCgd1c2VyX2lkGAMgASgJEg8KB21lc3NhZ2UYBCABKAkiLgobU2VuZFJldmlld2VyTWVzc2FnZVJlc3BvbnNlEg8KB3R1cm5faWQYASABKAkinwEKFEFwcHJvdmVBY3Rpb25SZXF1ZXN0EhMKC3dvcmtmbG93X2lkGAEgASgJEhMKC2FwcHJvdmFsX2lkGAIgASgJEhMKC2FwcHJvdmVkX2J5GAMgASgJEg0KBW5vdGVzGAQgASgJEi8KBWVkaXRzGAUgASgLMhsuaWRwLmFnZW50LnYxLkFwcHJvdmFsRWRpdHNIAIgBAUIICgZfZWRpdHMiewoNQXBwcm92YWxFZGl0cxIMCgRuYW1lGAEgASgJEhMKC2Rlc2NyaXB0aW9uGAIgASgJEhUKDXRlbXBsYXRlX2tpbmQYAyABKAkSFQoNdGVtcGxhdGVfanNvbhgEIAEoCRIZChFpbnB1dF9zY2hlbWFfanNvbhgFIAEoCSIoChVBcHByb3ZlQWN0aW9uUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCJkChNSZWplY3RBY3Rpb25SZXF1ZXN0EhMKC3dvcmtmbG93X2lkGAEgASgJEhMKC2FwcHJvdmFsX2lkGAIgASgJEhMKC3JlamVjdGVkX2J5GAMgASgJEg4KBnJlYXNvbhgEIAEoCSInChRSZWplY3RBY3Rpb25SZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIk4KEUFib3J0QWdlbnRSZXF1ZXN0EhMKC3dvcmtmbG93X2lkGAEgASgJEhQKDHJlcXVlc3RlZF9ieRgCIAEoCRIOCgZyZWFzb24YAyABKAkiJQoSQWJvcnRBZ2VudFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgiRwoYU3RyZWFtQWdlbnRFdmVudHNSZXF1ZXN0EhMKC3dvcmtmbG93X2lkGAEgASgJEhYKDnNpbmNlX3NlcXVlbmNlGAIgASgEIrEFCgpBZ2VudEV2ZW50EhAKCHNlcXVlbmNlGAEgASgEEi4KCmVtaXR0ZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjsKEWNvbnZlcnNhdGlvbl90dXJuGAogASgLMh4uaWRwLmFnZW50LnYxLkNvbnZlcnNhdGlvblR1cm5IABIvCgt0b2tlbl9kZWx0YRgLIAEoCzIYLmlkcC5hZ2VudC52MS5Ub2tlbkRlbHRhSAASNwoPcHJvcG9zYWxfdXBkYXRlGAwgASgLMhwuaWRwLmFnZW50LnYxLlByb3Bvc2FsVXBkYXRlSAASOQoQYXBwcm92YWxfcmVxdWVzdBgNIAEoCzIdLmlkcC5hZ2VudC52MS5BcHByb3ZhbFJlcXVlc3RIABI/ChNhcHByb3ZhbF9yZXNvbHV0aW9uGA4gASgLMiAuaWRwLmFnZW50LnYxLkFwcHJvdmFsUmVzb2x1dGlvbkgAEjYKD3Rvb2xfY2FsbF9zdGFydBgPIAEoCzIbLmlkcC5hZ2VudC52MS5Ub29sQ2FsbFN0YXJ0SAASQwoWdG9vbF9jYWxsX291dHB1dF9jaHVuaxgQIAEoCzIhLmlkcC5hZ2VudC52MS5Ub29sQ2FsbE91dHB1dENodW5rSAASMgoNdG9vbF9jYWxsX2VuZBgRIAEoCzIZLmlkcC5hZ2VudC52MS5Ub29sQ2FsbEVuZEgAEjgKDXN0YXR1c191cGRhdGUYEiABKAsyHy5pZHAuYWdlbnQudjEuQWdlbnRTdGF0dXNVcGRhdGVIABJKChl0b29sX3JlZ2lzdHJhdGlvbl9yZXF1ZXN0GBMgASgLMiUuaWRwLmFnZW50LnYxLlRvb2xSZWdpc3RyYXRpb25SZXF1ZXN0SABCBwoFZXZlbnQiQgoQQ29udmVyc2F0aW9uVHVybhIPCgd0dXJuX2lkGAEgASgJEgwKBHJvbGUYAiABKAkSDwoHY29udGVudBgDIAEoCSIsCgpUb2tlbkRlbHRhEg8KB3R1cm5faWQYASABKAkSDQoFZGVsdGEYAiABKAkijwEKDlByb3Bvc2FsVXBkYXRlEhMKC3Byb3Bvc2FsX2lkGAEgASgJEg0KBXRpdGxlGAIgASgJEg8KB3N1bW1hcnkYAyABKAkSFQoNYm9keV9tYXJrZG93bhgEIAEoCRIxCgVzdGVwcxgFIAMoCzIiLmlkcC5hZ2VudC52MS5QcmltaXRpdmVDYWxsUHJldmlldyJcChRQcmltaXRpdmVDYWxsUHJldmlldxIMCgR0b29sGAEgASgJEg8KB2Rpc3BsYXkYAiABKAkSJQoEYXJncxgDIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QihAEKD0FwcHJvdmFsUmVxdWVzdBITCgthcHByb3ZhbF9pZBgBIAEoCRIMCgRraW5kGAIgASgJEg0KBXRpdGxlGAMgASgJEhUKDWJvZHlfbWFya2Rvd24YBCABKAkSKAoHcGF5bG9hZBgFIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QiXwoSQXBwcm92YWxSZXNvbHV0aW9uEhMKC2FwcHJvdmFsX2lkGAEgASgJEhAKCGFwcHJvdmVkGAIgASgIEhMKC3Jlc29sdmVkX2J5GAMgASgJEg0KBW5vdGVzGAQgASgJIlUKDVRvb2xDYWxsU3RhcnQSDwoHY2FsbF9pZBgBIAEoCRIMCgR0b29sGAIgASgJEiUKBGFyZ3MYAyABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IkUKE1Rvb2xDYWxsT3V0cHV0Q2h1bmsSDwoHY2FsbF9pZBgBIAEoCRIOCgZzdHJlYW0YAiABKAkSDQoFY2h1bmsYAyABKAkiegoLVG9vbENhbGxFbmQSDwoHY2FsbF9pZBgBIAEoCRIPCgdzdWNjZXNzGAIgASgIEhEKCWV4aXRfY29kZRgDIAEoBRINCgVlcnJvchgEIAEoCRInCgZyZXN1bHQYBSABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IjQKEUFnZW50U3RhdHVzVXBkYXRlEg4KBnN0YXR1cxgBIAEoCRIPCgdtZXNzYWdlGAIgASgJIrIBChdUb29sUmVnaXN0cmF0aW9uUmVxdWVzdBITCgthcHByb3ZhbF9pZBgBIAEoCRIRCgl0b29sX25hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSGQoRaW5wdXRfc2NoZW1hX2pzb24YBCABKAkSFQoNdGVtcGxhdGVfa2luZBgFIAEoCRIVCg10ZW1wbGF0ZV9qc29uGAYgASgJEhEKCXJlYXNvbmluZxgHIAEoCSJTChRMaXN0QWdlbnRSdW5zUmVxdWVzdBIUCgx3b3Jrc3BhY2VfaWQYASABKAkSEQoJcGFnZV9zaXplGAIgASgFEhIKCnBhZ2VfdG9rZW4YAyABKAkiXQoVTGlzdEFnZW50UnVuc1Jlc3BvbnNlEisKBHJ1bnMYASADKAsyHS5pZHAuYWdlbnQudjEuQWdlbnRSdW5TdW1tYXJ5EhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSL6AQoPQWdlbnRSdW5TdW1tYXJ5EhQKDGFnZW50X3J1bl9pZBgBIAEoCRITCgt3b3JrZmxvd19pZBgCIAEoCRIUCgx3b3Jrc3BhY2VfaWQYAyABKAkSFQoNcmVwb3NpdG9yeV9pZBgEIAEoCRIOCgZzdGF0dXMYBSABKAkSDQoFdGl0bGUYBiABKAkSLgoKc3RhcnRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZW5kZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCnN0YXJ0ZWRfYnkYCSABKAkiKQoSR2V0QWdlbnRSdW5SZXF1ZXN0EhMKC3dvcmtmbG93X2lkGAEgASgJIoUCChNHZXRBZ2VudFJ1blJlc3BvbnNlEi4KB3N1bW1hcnkYASABKAsyHS5pZHAuYWdlbnQudjEuQWdlbnRSdW5TdW1tYXJ5EjQKDGNvbnZlcnNhdGlvbhgCIAMoCzIeLmlkcC5hZ2VudC52MS5Db252ZXJzYXRpb25UdXJuEjUKD2xhdGVzdF9wcm9wb3NhbBgDIAEoCzIcLmlkcC5hZ2VudC52MS5Qcm9wb3NhbFVwZGF0ZRI4ChFwZW5kaW5nX2FwcHJvdmFscxgEIAMoCzIdLmlkcC5hZ2VudC52MS5BcHByb3ZhbFJlcXVlc3QSFwoPbGF0ZXN0X3NlcXVlbmNlGAUgASgEMtIGCgxBZ2VudFNlcnZpY2USeQoYU3RhcnRJbmZyYXN0cnVjdHVyZUFnZW50Ei0uaWRwLmFnZW50LnYxLlN0YXJ0SW5mcmFzdHJ1Y3R1cmVBZ2VudFJlcXVlc3QaLi5pZHAuYWdlbnQudjEuU3RhcnRJbmZyYXN0cnVjdHVyZUFnZW50UmVzcG9uc2USUgoLU2VuZE1lc3NhZ2USIC5pZHAuYWdlbnQudjEuU2VuZE1lc3NhZ2VSZXF1ZXN0GiEuaWRwLmFnZW50LnYxLlNlbmRNZXNzYWdlUmVzcG9uc2USagoTU2VuZFJldmlld2VyTWVzc2FnZRIoLmlkcC5hZ2VudC52MS5TZW5kUmV2aWV3ZXJNZXNzYWdlUmVxdWVzdBopLmlkcC5hZ2VudC52MS5TZW5kUmV2aWV3ZXJNZXNzYWdlUmVzcG9uc2USWAoNQXBwcm92ZUFjdGlvbhIiLmlkcC5hZ2VudC52MS5BcHByb3ZlQWN0aW9uUmVxdWVzdBojLmlkcC5hZ2VudC52MS5BcHByb3ZlQWN0aW9uUmVzcG9uc2USVQoMUmVqZWN0QWN0aW9uEiEuaWRwLmFnZW50LnYxLlJlamVjdEFjdGlvblJlcXVlc3QaIi5pZHAuYWdlbnQudjEuUmVqZWN0QWN0aW9uUmVzcG9uc2USTwoKQWJvcnRBZ2VudBIfLmlkcC5hZ2VudC52MS5BYm9ydEFnZW50UmVxdWVzdBogLmlkcC5hZ2VudC52MS5BYm9ydEFnZW50UmVzcG9uc2USVwoRU3RyZWFtQWdlbnRFdmVudHMSJi5pZHAuYWdlbnQudjEuU3RyZWFtQWdlbnRFdmVudHNSZXF1ZXN0GhguaWRwLmFnZW50LnYxLkFnZW50RXZlbnQwARJYCg1MaXN0QWdlbnRSdW5zEiIuaWRwLmFnZW50LnYxLkxpc3RBZ2VudFJ1bnNSZXF1ZXN0GiMuaWRwLmFnZW50LnYxLkxpc3RBZ2VudFJ1bnNSZXNwb25zZRJSCgtHZXRBZ2VudFJ1bhIgLmlkcC5hZ2VudC52MS5HZXRBZ2VudFJ1blJlcXVlc3QaIS5pZHAuYWdlbnQudjEuR2V0QWdlbnRSdW5SZXNwb25zZUJAWj5naXRodWIuY29tL2RyZXdwYXltZW50L29yYml0L3Byb3RvL2dlbi9nby9pZHAvYWdlbnQvdjE7YWdlbnR2MWIGcHJvdG8z", [file_google_protobuf_struct, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message idp.agent.v1.StartInfrastructureAgentRequest
@@ -138,6 +138,58 @@ export const SendMessageResponseSchema: GenMessage<SendMessageResponse> = /*@__P
   messageDesc(file_idp_agent_v1_agent, 3);
 
 /**
+ * SendReviewerMessageRequest carries a message that targets an open
+ * approval gate rather than the main conversation thread (commit β).
+ *
+ * @generated from message idp.agent.v1.SendReviewerMessageRequest
+ */
+export type SendReviewerMessageRequest = Message<"idp.agent.v1.SendReviewerMessageRequest"> & {
+  /**
+   * @generated from field: string workflow_id = 1;
+   */
+  workflowId: string;
+
+  /**
+   * @generated from field: string approval_id = 2;
+   */
+  approvalId: string;
+
+  /**
+   * @generated from field: string user_id = 3;
+   */
+  userId: string;
+
+  /**
+   * @generated from field: string message = 4;
+   */
+  message: string;
+};
+
+/**
+ * Describes the message idp.agent.v1.SendReviewerMessageRequest.
+ * Use `create(SendReviewerMessageRequestSchema)` to create a new message.
+ */
+export const SendReviewerMessageRequestSchema: GenMessage<SendReviewerMessageRequest> = /*@__PURE__*/
+  messageDesc(file_idp_agent_v1_agent, 4);
+
+/**
+ * @generated from message idp.agent.v1.SendReviewerMessageResponse
+ */
+export type SendReviewerMessageResponse = Message<"idp.agent.v1.SendReviewerMessageResponse"> & {
+  /**
+   * @generated from field: string turn_id = 1;
+   */
+  turnId: string;
+};
+
+/**
+ * Describes the message idp.agent.v1.SendReviewerMessageResponse.
+ * Use `create(SendReviewerMessageResponseSchema)` to create a new message.
+ */
+export const SendReviewerMessageResponseSchema: GenMessage<SendReviewerMessageResponse> = /*@__PURE__*/
+  messageDesc(file_idp_agent_v1_agent, 5);
+
+/**
  * @generated from message idp.agent.v1.ApproveActionRequest
  */
 export type ApproveActionRequest = Message<"idp.agent.v1.ApproveActionRequest"> & {
@@ -184,7 +236,7 @@ export type ApproveActionRequest = Message<"idp.agent.v1.ApproveActionRequest"> 
  * Use `create(ApproveActionRequestSchema)` to create a new message.
  */
 export const ApproveActionRequestSchema: GenMessage<ApproveActionRequest> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 4);
+  messageDesc(file_idp_agent_v1_agent, 6);
 
 /**
  * ApprovalEdits carries reviewer modifications to a tool registration.
@@ -224,7 +276,7 @@ export type ApprovalEdits = Message<"idp.agent.v1.ApprovalEdits"> & {
  * Use `create(ApprovalEditsSchema)` to create a new message.
  */
 export const ApprovalEditsSchema: GenMessage<ApprovalEdits> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 5);
+  messageDesc(file_idp_agent_v1_agent, 7);
 
 /**
  * @generated from message idp.agent.v1.ApproveActionResponse
@@ -241,7 +293,7 @@ export type ApproveActionResponse = Message<"idp.agent.v1.ApproveActionResponse"
  * Use `create(ApproveActionResponseSchema)` to create a new message.
  */
 export const ApproveActionResponseSchema: GenMessage<ApproveActionResponse> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 6);
+  messageDesc(file_idp_agent_v1_agent, 8);
 
 /**
  * @generated from message idp.agent.v1.RejectActionRequest
@@ -275,7 +327,7 @@ export type RejectActionRequest = Message<"idp.agent.v1.RejectActionRequest"> & 
  * Use `create(RejectActionRequestSchema)` to create a new message.
  */
 export const RejectActionRequestSchema: GenMessage<RejectActionRequest> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 7);
+  messageDesc(file_idp_agent_v1_agent, 9);
 
 /**
  * @generated from message idp.agent.v1.RejectActionResponse
@@ -292,7 +344,7 @@ export type RejectActionResponse = Message<"idp.agent.v1.RejectActionResponse"> 
  * Use `create(RejectActionResponseSchema)` to create a new message.
  */
 export const RejectActionResponseSchema: GenMessage<RejectActionResponse> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 8);
+  messageDesc(file_idp_agent_v1_agent, 10);
 
 /**
  * @generated from message idp.agent.v1.AbortAgentRequest
@@ -319,7 +371,7 @@ export type AbortAgentRequest = Message<"idp.agent.v1.AbortAgentRequest"> & {
  * Use `create(AbortAgentRequestSchema)` to create a new message.
  */
 export const AbortAgentRequestSchema: GenMessage<AbortAgentRequest> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 9);
+  messageDesc(file_idp_agent_v1_agent, 11);
 
 /**
  * @generated from message idp.agent.v1.AbortAgentResponse
@@ -336,7 +388,7 @@ export type AbortAgentResponse = Message<"idp.agent.v1.AbortAgentResponse"> & {
  * Use `create(AbortAgentResponseSchema)` to create a new message.
  */
 export const AbortAgentResponseSchema: GenMessage<AbortAgentResponse> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 10);
+  messageDesc(file_idp_agent_v1_agent, 12);
 
 /**
  * @generated from message idp.agent.v1.StreamAgentEventsRequest
@@ -361,7 +413,7 @@ export type StreamAgentEventsRequest = Message<"idp.agent.v1.StreamAgentEventsRe
  * Use `create(StreamAgentEventsRequestSchema)` to create a new message.
  */
 export const StreamAgentEventsRequestSchema: GenMessage<StreamAgentEventsRequest> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 11);
+  messageDesc(file_idp_agent_v1_agent, 13);
 
 /**
  * AgentEvent is the union of everything the chat UI cares about.
@@ -450,7 +502,7 @@ export type AgentEvent = Message<"idp.agent.v1.AgentEvent"> & {
  * Use `create(AgentEventSchema)` to create a new message.
  */
 export const AgentEventSchema: GenMessage<AgentEvent> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 12);
+  messageDesc(file_idp_agent_v1_agent, 14);
 
 /**
  * @generated from message idp.agent.v1.ConversationTurn
@@ -479,7 +531,7 @@ export type ConversationTurn = Message<"idp.agent.v1.ConversationTurn"> & {
  * Use `create(ConversationTurnSchema)` to create a new message.
  */
 export const ConversationTurnSchema: GenMessage<ConversationTurn> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 13);
+  messageDesc(file_idp_agent_v1_agent, 15);
 
 /**
  * @generated from message idp.agent.v1.TokenDelta
@@ -501,7 +553,7 @@ export type TokenDelta = Message<"idp.agent.v1.TokenDelta"> & {
  * Use `create(TokenDeltaSchema)` to create a new message.
  */
 export const TokenDeltaSchema: GenMessage<TokenDelta> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 14);
+  messageDesc(file_idp_agent_v1_agent, 16);
 
 /**
  * @generated from message idp.agent.v1.ProposalUpdate
@@ -543,7 +595,7 @@ export type ProposalUpdate = Message<"idp.agent.v1.ProposalUpdate"> & {
  * Use `create(ProposalUpdateSchema)` to create a new message.
  */
 export const ProposalUpdateSchema: GenMessage<ProposalUpdate> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 15);
+  messageDesc(file_idp_agent_v1_agent, 17);
 
 /**
  * @generated from message idp.agent.v1.PrimitiveCallPreview
@@ -575,7 +627,7 @@ export type PrimitiveCallPreview = Message<"idp.agent.v1.PrimitiveCallPreview"> 
  * Use `create(PrimitiveCallPreviewSchema)` to create a new message.
  */
 export const PrimitiveCallPreviewSchema: GenMessage<PrimitiveCallPreview> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 16);
+  messageDesc(file_idp_agent_v1_agent, 18);
 
 /**
  * @generated from message idp.agent.v1.ApprovalRequest
@@ -616,7 +668,7 @@ export type ApprovalRequest = Message<"idp.agent.v1.ApprovalRequest"> & {
  * Use `create(ApprovalRequestSchema)` to create a new message.
  */
 export const ApprovalRequestSchema: GenMessage<ApprovalRequest> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 17);
+  messageDesc(file_idp_agent_v1_agent, 19);
 
 /**
  * @generated from message idp.agent.v1.ApprovalResolution
@@ -648,7 +700,7 @@ export type ApprovalResolution = Message<"idp.agent.v1.ApprovalResolution"> & {
  * Use `create(ApprovalResolutionSchema)` to create a new message.
  */
 export const ApprovalResolutionSchema: GenMessage<ApprovalResolution> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 18);
+  messageDesc(file_idp_agent_v1_agent, 20);
 
 /**
  * @generated from message idp.agent.v1.ToolCallStart
@@ -675,7 +727,7 @@ export type ToolCallStart = Message<"idp.agent.v1.ToolCallStart"> & {
  * Use `create(ToolCallStartSchema)` to create a new message.
  */
 export const ToolCallStartSchema: GenMessage<ToolCallStart> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 19);
+  messageDesc(file_idp_agent_v1_agent, 21);
 
 /**
  * @generated from message idp.agent.v1.ToolCallOutputChunk
@@ -704,7 +756,7 @@ export type ToolCallOutputChunk = Message<"idp.agent.v1.ToolCallOutputChunk"> & 
  * Use `create(ToolCallOutputChunkSchema)` to create a new message.
  */
 export const ToolCallOutputChunkSchema: GenMessage<ToolCallOutputChunk> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 20);
+  messageDesc(file_idp_agent_v1_agent, 22);
 
 /**
  * @generated from message idp.agent.v1.ToolCallEnd
@@ -741,7 +793,7 @@ export type ToolCallEnd = Message<"idp.agent.v1.ToolCallEnd"> & {
  * Use `create(ToolCallEndSchema)` to create a new message.
  */
 export const ToolCallEndSchema: GenMessage<ToolCallEnd> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 21);
+  messageDesc(file_idp_agent_v1_agent, 23);
 
 /**
  * @generated from message idp.agent.v1.AgentStatusUpdate
@@ -765,7 +817,7 @@ export type AgentStatusUpdate = Message<"idp.agent.v1.AgentStatusUpdate"> & {
  * Use `create(AgentStatusUpdateSchema)` to create a new message.
  */
 export const AgentStatusUpdateSchema: GenMessage<AgentStatusUpdate> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 22);
+  messageDesc(file_idp_agent_v1_agent, 24);
 
 /**
  * @generated from message idp.agent.v1.ToolRegistrationRequest
@@ -818,7 +870,7 @@ export type ToolRegistrationRequest = Message<"idp.agent.v1.ToolRegistrationRequ
  * Use `create(ToolRegistrationRequestSchema)` to create a new message.
  */
 export const ToolRegistrationRequestSchema: GenMessage<ToolRegistrationRequest> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 23);
+  messageDesc(file_idp_agent_v1_agent, 25);
 
 /**
  * @generated from message idp.agent.v1.ListAgentRunsRequest
@@ -845,7 +897,7 @@ export type ListAgentRunsRequest = Message<"idp.agent.v1.ListAgentRunsRequest"> 
  * Use `create(ListAgentRunsRequestSchema)` to create a new message.
  */
 export const ListAgentRunsRequestSchema: GenMessage<ListAgentRunsRequest> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 24);
+  messageDesc(file_idp_agent_v1_agent, 26);
 
 /**
  * @generated from message idp.agent.v1.ListAgentRunsResponse
@@ -867,7 +919,7 @@ export type ListAgentRunsResponse = Message<"idp.agent.v1.ListAgentRunsResponse"
  * Use `create(ListAgentRunsResponseSchema)` to create a new message.
  */
 export const ListAgentRunsResponseSchema: GenMessage<ListAgentRunsResponse> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 25);
+  messageDesc(file_idp_agent_v1_agent, 27);
 
 /**
  * @generated from message idp.agent.v1.AgentRunSummary
@@ -924,7 +976,7 @@ export type AgentRunSummary = Message<"idp.agent.v1.AgentRunSummary"> & {
  * Use `create(AgentRunSummarySchema)` to create a new message.
  */
 export const AgentRunSummarySchema: GenMessage<AgentRunSummary> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 26);
+  messageDesc(file_idp_agent_v1_agent, 28);
 
 /**
  * @generated from message idp.agent.v1.GetAgentRunRequest
@@ -941,7 +993,7 @@ export type GetAgentRunRequest = Message<"idp.agent.v1.GetAgentRunRequest"> & {
  * Use `create(GetAgentRunRequestSchema)` to create a new message.
  */
 export const GetAgentRunRequestSchema: GenMessage<GetAgentRunRequest> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 27);
+  messageDesc(file_idp_agent_v1_agent, 29);
 
 /**
  * @generated from message idp.agent.v1.GetAgentRunResponse
@@ -980,7 +1032,7 @@ export type GetAgentRunResponse = Message<"idp.agent.v1.GetAgentRunResponse"> & 
  * Use `create(GetAgentRunResponseSchema)` to create a new message.
  */
 export const GetAgentRunResponseSchema: GenMessage<GetAgentRunResponse> = /*@__PURE__*/
-  messageDesc(file_idp_agent_v1_agent, 28);
+  messageDesc(file_idp_agent_v1_agent, 30);
 
 /**
  * AgentService drives the Infrastructure Agent — an LLM-driven Temporal
@@ -1012,6 +1064,21 @@ export const AgentService: GenService<{
     methodKind: "unary";
     input: typeof SendMessageRequestSchema;
     output: typeof SendMessageResponseSchema;
+  },
+  /**
+   * Send a reviewer message into an open approval gate (commit β —
+   * conversational review). The workflow appends the message as a
+   * conversation turn under the gate, runs an LLM step with no tool
+   * catalog (so the agent can only respond with text), and surfaces
+   * the response as a regular ConversationTurn event. The gate stays
+   * open; resolution still requires a real Approve / Reject signal.
+   *
+   * @generated from rpc idp.agent.v1.AgentService.SendReviewerMessage
+   */
+  sendReviewerMessage: {
+    methodKind: "unary";
+    input: typeof SendReviewerMessageRequestSchema;
+    output: typeof SendReviewerMessageResponseSchema;
   },
   /**
    * Approve a pending action (proposal, tool registration, destructive

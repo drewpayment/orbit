@@ -199,6 +199,46 @@ export async function approveAgentActionWithEdits(input: {
   }
 }
 
+/**
+ * sendReviewerMessage — commit β.
+ *
+ * Sends a reviewer message into an open approval gate. The workflow
+ * appends it as a conversation turn, runs an LLM step with no tools (so
+ * the agent can only respond with text), and surfaces the agent's reply
+ * as a regular ConversationTurn event. The gate stays open until a real
+ * Approve / Reject lands.
+ *
+ * Workspace membership is sufficient — anyone in the chat can ask the
+ * agent questions during a gate. Approval itself still requires admin.
+ */
+export async function sendReviewerMessage(input: {
+  workspaceId: string
+  workflowId: string
+  approvalId: string
+  message: string
+}) {
+  const user = await getPayloadUserFromSession()
+  if (!user) return { success: false as const, error: 'Unauthorized' }
+  const payload = await getPayload({ config })
+  if (!(await isWorkspaceMember(payload, user.id, input.workspaceId))) {
+    return { success: false as const, error: 'Forbidden' }
+  }
+  if (!input.message.trim()) {
+    return { success: false as const, error: 'Message is required' }
+  }
+  try {
+    await agentClient.sendReviewerMessage({
+      workflowId: input.workflowId,
+      approvalId: input.approvalId,
+      userId: user.id,
+      message: input.message,
+    })
+    return { success: true as const }
+  } catch (err) {
+    return { success: false as const, error: (err as Error).message }
+  }
+}
+
 export async function abortAgentRun(input: {
   workspaceId: string
   workflowId: string

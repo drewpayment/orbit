@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AbortAgentRequest, AbortAgentResponse, AgentEvent, ApproveActionRequest, ApproveActionResponse, GetAgentRunRequest, GetAgentRunResponse, ListAgentRunsRequest, ListAgentRunsResponse, RejectActionRequest, RejectActionResponse, SendMessageRequest, SendMessageResponse, StartInfrastructureAgentRequest, StartInfrastructureAgentResponse, StreamAgentEventsRequest } from "./agent_pb.js";
+import { AbortAgentRequest, AbortAgentResponse, AgentEvent, ApproveActionRequest, ApproveActionResponse, GetAgentRunRequest, GetAgentRunResponse, ListAgentRunsRequest, ListAgentRunsResponse, RejectActionRequest, RejectActionResponse, SendMessageRequest, SendMessageResponse, SendReviewerMessageRequest, SendReviewerMessageResponse, StartInfrastructureAgentRequest, StartInfrastructureAgentResponse, StreamAgentEventsRequest } from "./agent_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -39,6 +39,22 @@ export const AgentService = {
       name: "SendMessage",
       I: SendMessageRequest,
       O: SendMessageResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Send a reviewer message into an open approval gate (commit β —
+     * conversational review). The workflow appends the message as a
+     * conversation turn under the gate, runs an LLM step with no tool
+     * catalog (so the agent can only respond with text), and surfaces
+     * the response as a regular ConversationTurn event. The gate stays
+     * open; resolution still requires a real Approve / Reject signal.
+     *
+     * @generated from rpc idp.agent.v1.AgentService.SendReviewerMessage
+     */
+    sendReviewerMessage: {
+      name: "SendReviewerMessage",
+      I: SendReviewerMessageRequest,
+      O: SendReviewerMessageResponse,
       kind: MethodKind.Unary,
     },
     /**

@@ -120,6 +120,33 @@ func (s *AgentServer) SendMessage(
 	return connect.NewResponse(&agentv1.SendMessageResponse{TurnId: turnID}), nil
 }
 
+// SendReviewerMessage signals AgentReviewerMessage so the workflow's
+// reviewer-message goroutine appends the reviewer's text as a regular
+// conversation turn under the open gate, runs an LLM step with no
+// tools, and surfaces the agent's text response. The gate stays open;
+// resolution still requires a real Approval / Reject signal.
+func (s *AgentServer) SendReviewerMessage(
+	ctx context.Context,
+	req *connect.Request[agentv1.SendReviewerMessageRequest],
+) (*connect.Response[agentv1.SendReviewerMessageResponse], error) {
+	msg := req.Msg
+	if msg.WorkflowId == "" || msg.ApprovalId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("workflow_id and approval_id are required"))
+	}
+	if msg.Message == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("message is required"))
+	}
+	turnID := uuid.New().String()
+	if err := s.temporal.SignalWorkflow(ctx, msg.WorkflowId, "", agentcontract.SignalReviewerMessage, agentcontract.ReviewerMessageSignalPayload{
+		ApprovalID: msg.ApprovalId,
+		UserID:     msg.UserId,
+		Message:    msg.Message,
+	}); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("signal reviewer message: %w", err))
+	}
+	return connect.NewResponse(&agentv1.SendReviewerMessageResponse{TurnId: turnID}), nil
+}
+
 // ApproveAction sends an approval signal. When the request carries an
 // optional Edits sub-message (commit α — approve-with-edits for tool
 // registrations), those fields ride along on the signal so the workflow

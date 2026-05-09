@@ -9,12 +9,13 @@ import "time"
 
 // Signal names.
 const (
-	SignalUserMessage  = "AgentUserMessage"
-	SignalApproval     = "AgentApproval"
-	SignalAbort        = "AgentAbort"
-	SignalTokenStream  = "AgentTokenStream"
-	SignalToolOutput   = "AgentToolOutput"
-	SignalToolFinished = "AgentToolFinished"
+	SignalUserMessage     = "AgentUserMessage"
+	SignalApproval        = "AgentApproval"
+	SignalAbort           = "AgentAbort"
+	SignalTokenStream     = "AgentTokenStream"
+	SignalToolOutput      = "AgentToolOutput"
+	SignalToolFinished    = "AgentToolFinished"
+	SignalReviewerMessage = "AgentReviewerMessage"
 )
 
 // Query names.
@@ -198,6 +199,10 @@ type AgentSnapshot struct {
 	LatestSequence   uint64             `json:"latest_sequence"`
 	Backend          string             `json:"backend"`
 	Model            string             `json:"model"`
+	// ReviewerRounds counts reviewer↔agent exchanges that happened
+	// during open approval gates (commit β). Surfaced for instrumentation
+	// and a small "X rounds discussed" badge in the chat UI.
+	ReviewerRounds int `json:"reviewer_rounds"`
 }
 
 // PendingApproval is exposed for HITL UI rendering.
@@ -270,4 +275,18 @@ type ApprovalSignalPayload struct {
 type AbortSignalPayload struct {
 	RequestedBy string `json:"requested_by"`
 	Reason      string `json:"reason"`
+}
+
+// ReviewerMessageSignalPayload is the body of SignalReviewerMessage —
+// commit β. Sent when a reviewer wants to chat with the agent during an
+// open approval gate (e.g. "why this command?", "what's the rollback?").
+// The workflow's reviewer-message goroutine appends the message as a
+// conversation turn, runs an LLM step with NO tools (so the agent can
+// only respond with text — it cannot take action while a gate is open),
+// and increments state.reviewerRounds for instrumentation. The gate
+// itself stays open; resolution still requires a real Approval signal.
+type ReviewerMessageSignalPayload struct {
+	ApprovalID string `json:"approval_id"`
+	UserID     string `json:"user_id"`
+	Message    string `json:"message"`
 }

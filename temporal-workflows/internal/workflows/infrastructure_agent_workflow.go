@@ -115,6 +115,7 @@ type agentState struct {
 	terminated           bool
 	abortReason          string
 	iterations           int
+	reviewerRounds       int // reviewer↔agent exchanges during gates (β)
 	backend              string
 	model                string
 	terminalAuditFlushed bool // set when ToolDone / abort / timeout writes the final audit row
@@ -237,6 +238,7 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 	abortCh := workflow.GetSignalChannel(ctx, AgentSignalAbort) // outer ctx so the goroutine survives loop cancellation
 	tokenCh := workflow.GetSignalChannel(loopCtx, AgentSignalTokenStream)
 	toolOutputCh := workflow.GetSignalChannel(loopCtx, agentcontract.SignalToolOutput)
+	reviewerMsgCh := workflow.GetSignalChannel(loopCtx, agentcontract.SignalReviewerMessage)
 
 	// Launch a goroutine to drain token-stream signals into state.
 	workflow.Go(loopCtx, func(gctx workflow.Context) {
@@ -272,6 +274,22 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 				"stream":  payload.Stream,
 				"chunk":   payload.Chunk,
 			})
+		}
+	})
+
+	// Drain reviewer-message signals (commit β — conversational review).
+	// Each message arrives during an open approval gate and triggers a
+	// dedicated LLM step with NO tools, so the agent can respond in text
+	// but cannot take action while a gate is open. The gate stays open;
+	// resolution still requires a real Approval / Reject signal.
+	workflow.Go(loopCtx, func(gctx workflow.Context) {
+		for !state.terminated {
+			var payload agentcontract.ReviewerMessageSignalPayload
+			more := reviewerMsgCh.Receive(gctx, &payload)
+			if !more {
+				return
+			}
+			handleReviewerMessage(gctx, &state, &input, payload)
 		}
 	})
 
@@ -1353,6 +1371,101 @@ func intArg(args map[string]any, key string, fallback int) int {
 	return fallback
 }
 
+// handleReviewerMessage drives one reviewer↔agent exchange during an
+// open approval gate (commit β). The reviewer's text becomes a regular
+// user conversation turn (annotated so audit + the agent's own context
+// know it arrived under a gate), an LLM step runs with NO tools so the
+// agent can only respond with text, and the agent's reply becomes a
+// regular assistant conversation turn. The gate stays open.
+//
+// We deliberately drop any tool calls the LLM emits in this mode — the
+// agent talks but cannot act while waiting for human approval. Surfacing
+// them would create a path around the gate.
+//
+// Failure modes are tolerant: if the gate has already resolved by the
+// time the signal arrives we still process the message (it just becomes
+// a normal late conversation turn); if the LLM call fails we log and
+// drop, the next reviewer message can retry.
+func handleReviewerMessage(ctx workflow.Context, state *agentState, input *InfrastructureAgentInput, payload agentcontract.ReviewerMessageSignalPayload) {
+	logger := workflow.GetLogger(ctx)
+	if payload.Message == "" {
+		return
+	}
+
+	// Append the reviewer's message to history. The annotation prefix
+	// gives the model context that this turn is a side-conversation
+	// during an approval gate so it answers as a reviewer collaborator
+	// rather than continuing the deployment plan.
+	annotated := payload.Message
+	if payload.ApprovalID != "" {
+		annotated = fmt.Sprintf("[Reviewer asks during approval gate %s]: %s", payload.ApprovalID, payload.Message)
+	}
+	turnID := workflowUUID(ctx)
+	appendTurn(ctx, state, ConversationTurn{
+		TurnID:    turnID,
+		Role:      "user",
+		Content:   annotated,
+		Timestamp: workflow.Now(ctx),
+	})
+	state.reviewerRounds++
+
+	// LLM step. Empty Tools array means the model can only respond with
+	// text — clean way to enforce the no-action invariant without
+	// post-hoc filtering.
+	llmCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Minute,
+		HeartbeatTimeout:    30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:        2 * time.Second,
+			BackoffCoefficient:     2.0,
+			MaximumInterval:        30 * time.Second,
+			MaximumAttempts:        3,
+			NonRetryableErrorTypes: []string{"InvalidInput", "LLMNonRetryable"},
+		},
+	})
+	respTurnID := workflowUUID(ctx)
+	llmInput := agentactivity.LLMNextStepInput{
+		WorkflowID:  workflow.GetInfo(ctx).WorkflowExecution.ID,
+		RunID:       workflow.GetInfo(ctx).WorkflowExecution.RunID,
+		TurnID:      respTurnID,
+		WorkspaceID: input.WorkspaceID,
+		ProviderID:  input.LLMProviderID,
+		System:      reviewerModeSystemPrompt(input),
+		Messages:    historyToProviderMessages(state.history),
+		Tools:       nil,
+		MaxTokens:   2048,
+	}
+	var result agentactivity.LLMNextStepResult
+	if err := workflow.ExecuteActivity(llmCtx, ActivityLLMNextStep, llmInput).Get(llmCtx, &result); err != nil {
+		logger.Warn("reviewer-message LLM step failed (non-fatal)", "err", err, "approvalId", payload.ApprovalID)
+		return
+	}
+
+	// Agent's text response becomes a regular assistant turn. Tool calls
+	// (if any leaked through despite Tools=nil) are intentionally NOT
+	// recorded as ToolCallRecords on the turn — the workflow doesn't
+	// dispatch them. We log and drop.
+	if len(result.ToolCalls) > 0 {
+		logger.Warn("reviewer-mode LLM emitted tool calls; dropping",
+			"approvalId", payload.ApprovalID, "toolCount", len(result.ToolCalls))
+	}
+	appendTurn(ctx, state, ConversationTurn{
+		TurnID:    respTurnID,
+		Role:      "assistant",
+		Content:   result.Text,
+		Timestamp: workflow.Now(ctx),
+	})
+}
+
+// reviewerModeSystemPrompt overrides the workflow's default system prompt
+// when the agent is responding to reviewer questions during a gate.
+// Concise, instructive, makes the no-action invariant explicit so the
+// model doesn't hallucinate tool calls we'd then drop.
+func reviewerModeSystemPrompt(input *InfrastructureAgentInput) string {
+	base := effectiveSystemPrompt(*input)
+	return base + "\n\n[REVIEW MODE] You are currently parked on an approval gate. The user reviewing your last action has asked a question. Respond with text only — DO NOT emit any tool calls. The gate stays open until the human explicitly approves or rejects via the chat UI. Use this turn to explain your reasoning, suggest alternatives, or answer questions; do not propose new actions until the gate resolves."
+}
+
 // awaitApproval blocks until an ApprovalSignal with matching approvalID
 // arrives or the workflow context is cancelled (the abort goroutine calls
 // cancelLoop after surfacing an Abort signal). Mismatched signals are
@@ -1759,6 +1872,7 @@ func registerQueries(ctx workflow.Context, state *agentState) error {
 			LatestSequence:   lastSeq(state),
 			Backend:          state.backend,
 			Model:            state.model,
+			ReviewerRounds:   state.reviewerRounds,
 		}, nil
 	}); err != nil {
 		return err

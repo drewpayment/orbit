@@ -39,6 +39,9 @@ const (
 	// AgentServiceSendMessageProcedure is the fully-qualified name of the AgentService's SendMessage
 	// RPC.
 	AgentServiceSendMessageProcedure = "/idp.agent.v1.AgentService/SendMessage"
+	// AgentServiceSendReviewerMessageProcedure is the fully-qualified name of the AgentService's
+	// SendReviewerMessage RPC.
+	AgentServiceSendReviewerMessageProcedure = "/idp.agent.v1.AgentService/SendReviewerMessage"
 	// AgentServiceApproveActionProcedure is the fully-qualified name of the AgentService's
 	// ApproveAction RPC.
 	AgentServiceApproveActionProcedure = "/idp.agent.v1.AgentService/ApproveAction"
@@ -66,6 +69,13 @@ type AgentServiceClient interface {
 	// Send a chat-style message into a running agent. The workflow consumes it
 	// through a Temporal Update so the caller waits for acknowledgement.
 	SendMessage(context.Context, *connect.Request[v1.SendMessageRequest]) (*connect.Response[v1.SendMessageResponse], error)
+	// Send a reviewer message into an open approval gate (commit β —
+	// conversational review). The workflow appends the message as a
+	// conversation turn under the gate, runs an LLM step with no tool
+	// catalog (so the agent can only respond with text), and surfaces
+	// the response as a regular ConversationTurn event. The gate stays
+	// open; resolution still requires a real Approve / Reject signal.
+	SendReviewerMessage(context.Context, *connect.Request[v1.SendReviewerMessageRequest]) (*connect.Response[v1.SendReviewerMessageResponse], error)
 	// Approve a pending action (proposal, tool registration, destructive
 	// command). Backed by an `Approval` signal to the workflow.
 	ApproveAction(context.Context, *connect.Request[v1.ApproveActionRequest]) (*connect.Response[v1.ApproveActionResponse], error)
@@ -104,6 +114,12 @@ func NewAgentServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+AgentServiceSendMessageProcedure,
 			connect.WithSchema(agentServiceMethods.ByName("SendMessage")),
+			connect.WithClientOptions(opts...),
+		),
+		sendReviewerMessage: connect.NewClient[v1.SendReviewerMessageRequest, v1.SendReviewerMessageResponse](
+			httpClient,
+			baseURL+AgentServiceSendReviewerMessageProcedure,
+			connect.WithSchema(agentServiceMethods.ByName("SendReviewerMessage")),
 			connect.WithClientOptions(opts...),
 		),
 		approveAction: connect.NewClient[v1.ApproveActionRequest, v1.ApproveActionResponse](
@@ -149,6 +165,7 @@ func NewAgentServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 type agentServiceClient struct {
 	startInfrastructureAgent *connect.Client[v1.StartInfrastructureAgentRequest, v1.StartInfrastructureAgentResponse]
 	sendMessage              *connect.Client[v1.SendMessageRequest, v1.SendMessageResponse]
+	sendReviewerMessage      *connect.Client[v1.SendReviewerMessageRequest, v1.SendReviewerMessageResponse]
 	approveAction            *connect.Client[v1.ApproveActionRequest, v1.ApproveActionResponse]
 	rejectAction             *connect.Client[v1.RejectActionRequest, v1.RejectActionResponse]
 	abortAgent               *connect.Client[v1.AbortAgentRequest, v1.AbortAgentResponse]
@@ -165,6 +182,11 @@ func (c *agentServiceClient) StartInfrastructureAgent(ctx context.Context, req *
 // SendMessage calls idp.agent.v1.AgentService.SendMessage.
 func (c *agentServiceClient) SendMessage(ctx context.Context, req *connect.Request[v1.SendMessageRequest]) (*connect.Response[v1.SendMessageResponse], error) {
 	return c.sendMessage.CallUnary(ctx, req)
+}
+
+// SendReviewerMessage calls idp.agent.v1.AgentService.SendReviewerMessage.
+func (c *agentServiceClient) SendReviewerMessage(ctx context.Context, req *connect.Request[v1.SendReviewerMessageRequest]) (*connect.Response[v1.SendReviewerMessageResponse], error) {
+	return c.sendReviewerMessage.CallUnary(ctx, req)
 }
 
 // ApproveAction calls idp.agent.v1.AgentService.ApproveAction.
@@ -205,6 +227,13 @@ type AgentServiceHandler interface {
 	// Send a chat-style message into a running agent. The workflow consumes it
 	// through a Temporal Update so the caller waits for acknowledgement.
 	SendMessage(context.Context, *connect.Request[v1.SendMessageRequest]) (*connect.Response[v1.SendMessageResponse], error)
+	// Send a reviewer message into an open approval gate (commit β —
+	// conversational review). The workflow appends the message as a
+	// conversation turn under the gate, runs an LLM step with no tool
+	// catalog (so the agent can only respond with text), and surfaces
+	// the response as a regular ConversationTurn event. The gate stays
+	// open; resolution still requires a real Approve / Reject signal.
+	SendReviewerMessage(context.Context, *connect.Request[v1.SendReviewerMessageRequest]) (*connect.Response[v1.SendReviewerMessageResponse], error)
 	// Approve a pending action (proposal, tool registration, destructive
 	// command). Backed by an `Approval` signal to the workflow.
 	ApproveAction(context.Context, *connect.Request[v1.ApproveActionRequest]) (*connect.Response[v1.ApproveActionResponse], error)
@@ -239,6 +268,12 @@ func NewAgentServiceHandler(svc AgentServiceHandler, opts ...connect.HandlerOpti
 		AgentServiceSendMessageProcedure,
 		svc.SendMessage,
 		connect.WithSchema(agentServiceMethods.ByName("SendMessage")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentServiceSendReviewerMessageHandler := connect.NewUnaryHandler(
+		AgentServiceSendReviewerMessageProcedure,
+		svc.SendReviewerMessage,
+		connect.WithSchema(agentServiceMethods.ByName("SendReviewerMessage")),
 		connect.WithHandlerOptions(opts...),
 	)
 	agentServiceApproveActionHandler := connect.NewUnaryHandler(
@@ -283,6 +318,8 @@ func NewAgentServiceHandler(svc AgentServiceHandler, opts ...connect.HandlerOpti
 			agentServiceStartInfrastructureAgentHandler.ServeHTTP(w, r)
 		case AgentServiceSendMessageProcedure:
 			agentServiceSendMessageHandler.ServeHTTP(w, r)
+		case AgentServiceSendReviewerMessageProcedure:
+			agentServiceSendReviewerMessageHandler.ServeHTTP(w, r)
 		case AgentServiceApproveActionProcedure:
 			agentServiceApproveActionHandler.ServeHTTP(w, r)
 		case AgentServiceRejectActionProcedure:
@@ -310,6 +347,10 @@ func (UnimplementedAgentServiceHandler) StartInfrastructureAgent(context.Context
 
 func (UnimplementedAgentServiceHandler) SendMessage(context.Context, *connect.Request[v1.SendMessageRequest]) (*connect.Response[v1.SendMessageResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.agent.v1.AgentService.SendMessage is not implemented"))
+}
+
+func (UnimplementedAgentServiceHandler) SendReviewerMessage(context.Context, *connect.Request[v1.SendReviewerMessageRequest]) (*connect.Response[v1.SendReviewerMessageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.agent.v1.AgentService.SendReviewerMessage is not implemented"))
 }
 
 func (UnimplementedAgentServiceHandler) ApproveAction(context.Context, *connect.Request[v1.ApproveActionRequest]) (*connect.Response[v1.ApproveActionResponse], error) {

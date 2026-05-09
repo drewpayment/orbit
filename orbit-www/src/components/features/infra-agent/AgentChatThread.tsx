@@ -13,6 +13,7 @@ import {
   approveAgentActionWithEdits,
   rejectAgentAction,
   sendAgentMessage,
+  sendReviewerMessage,
 } from '@/app/actions/infra-agent'
 
 /**
@@ -425,13 +426,38 @@ function ApprovalCard({
 }) {
   const isToolReg = approval.kind === 'tool_registration'
   const [editing, setEditing] = useState(false)
+  const [replying, setReplying] = useState(false)
+  const [reviewerMessage, setReviewerMessage] = useState('')
   const [editName, setEditName] = useState(approval.name ?? '')
   const [editDescription, setEditDescription] = useState(approval.description ?? '')
   const [editTemplateKind, setEditTemplateKind] = useState(approval.templateKind ?? 'shell')
   const [editTemplateJson, setEditTemplateJson] = useState(approval.templateJson ?? '')
   const [editSchemaJson, setEditSchemaJson] = useState(approval.inputSchemaJson ?? '')
   const [submitting, startSubmit] = useTransition()
+  const [replySubmitting, startReplySubmit] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [replyError, setReplyError] = useState<string | null>(null)
+
+  const onSendReviewerMessage = () => {
+    if (!reviewerMessage.trim()) return
+    const text = reviewerMessage
+    setReplyError(null)
+    setReviewerMessage('')
+    startReplySubmit(async () => {
+      const res = await sendReviewerMessage({
+        workspaceId,
+        workflowId,
+        approvalId: approval.approvalId,
+        message: text,
+      })
+      if (!res.success) {
+        setReplyError(res.error)
+        setReviewerMessage(text)
+      } else {
+        setReplying(false)
+      }
+    })
+  }
 
   const validateClient = (): string | null => {
     if (editTemplateJson.trim()) {
@@ -585,7 +611,48 @@ function ApprovalCard({
           <Button size="sm" variant="outline" onClick={onReject} disabled={disabled || submitting}>
             Reject
           </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setReplying((r) => !r)}
+            disabled={disabled || submitting}
+          >
+            {replying ? 'Cancel reply' : 'Reply to agent'}
+          </Button>
         </div>
+
+        {replying && (
+          <div className="space-y-2 pt-2 border-t">
+            <p className="text-xs text-muted-foreground">
+              Ask the agent to clarify, justify, or explore alternatives. The gate stays open while
+              you discuss; the agent can only respond with text — not run new commands — until you
+              approve or reject.
+            </p>
+            <Textarea
+              value={reviewerMessage}
+              onChange={(e) => setReviewerMessage(e.target.value)}
+              placeholder="Why this command instead of …?"
+              rows={2}
+              disabled={disabled || replySubmitting}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault()
+                  onSendReviewerMessage()
+                }
+              }}
+            />
+            {replyError && <p className="text-xs text-destructive">{replyError}</p>}
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                onClick={onSendReviewerMessage}
+                disabled={disabled || replySubmitting || !reviewerMessage.trim()}
+              >
+                {replySubmitting ? 'Sending…' : 'Send to agent'}
+              </Button>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

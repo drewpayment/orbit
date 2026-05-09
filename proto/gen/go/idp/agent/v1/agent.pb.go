@@ -276,6 +276,120 @@ func (x *SendMessageResponse) GetTurnId() string {
 	return ""
 }
 
+// SendReviewerMessageRequest carries a message that targets an open
+// approval gate rather than the main conversation thread (commit β).
+type SendReviewerMessageRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	WorkflowId    string                 `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	ApprovalId    string                 `protobuf:"bytes,2,opt,name=approval_id,json=approvalId,proto3" json:"approval_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,3,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Message       string                 `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SendReviewerMessageRequest) Reset() {
+	*x = SendReviewerMessageRequest{}
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SendReviewerMessageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SendReviewerMessageRequest) ProtoMessage() {}
+
+func (x *SendReviewerMessageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SendReviewerMessageRequest.ProtoReflect.Descriptor instead.
+func (*SendReviewerMessageRequest) Descriptor() ([]byte, []int) {
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *SendReviewerMessageRequest) GetWorkflowId() string {
+	if x != nil {
+		return x.WorkflowId
+	}
+	return ""
+}
+
+func (x *SendReviewerMessageRequest) GetApprovalId() string {
+	if x != nil {
+		return x.ApprovalId
+	}
+	return ""
+}
+
+func (x *SendReviewerMessageRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *SendReviewerMessageRequest) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+type SendReviewerMessageResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TurnId        string                 `protobuf:"bytes,1,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SendReviewerMessageResponse) Reset() {
+	*x = SendReviewerMessageResponse{}
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SendReviewerMessageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SendReviewerMessageResponse) ProtoMessage() {}
+
+func (x *SendReviewerMessageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SendReviewerMessageResponse.ProtoReflect.Descriptor instead.
+func (*SendReviewerMessageResponse) Descriptor() ([]byte, []int) {
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *SendReviewerMessageResponse) GetTurnId() string {
+	if x != nil {
+		return x.TurnId
+	}
+	return ""
+}
+
 type ApproveActionRequest struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	WorkflowId string                 `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
@@ -298,7 +412,7 @@ type ApproveActionRequest struct {
 
 func (x *ApproveActionRequest) Reset() {
 	*x = ApproveActionRequest{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[4]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -310,7 +424,7 @@ func (x *ApproveActionRequest) String() string {
 func (*ApproveActionRequest) ProtoMessage() {}
 
 func (x *ApproveActionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[4]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -323,7 +437,7 @@ func (x *ApproveActionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApproveActionRequest.ProtoReflect.Descriptor instead.
 func (*ApproveActionRequest) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{4}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ApproveActionRequest) GetWorkflowId() string {
@@ -376,7 +490,7 @@ type ApprovalEdits struct {
 
 func (x *ApprovalEdits) Reset() {
 	*x = ApprovalEdits{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[5]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -388,7 +502,7 @@ func (x *ApprovalEdits) String() string {
 func (*ApprovalEdits) ProtoMessage() {}
 
 func (x *ApprovalEdits) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[5]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -401,7 +515,7 @@ func (x *ApprovalEdits) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApprovalEdits.ProtoReflect.Descriptor instead.
 func (*ApprovalEdits) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{5}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ApprovalEdits) GetName() string {
@@ -448,7 +562,7 @@ type ApproveActionResponse struct {
 
 func (x *ApproveActionResponse) Reset() {
 	*x = ApproveActionResponse{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[6]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -460,7 +574,7 @@ func (x *ApproveActionResponse) String() string {
 func (*ApproveActionResponse) ProtoMessage() {}
 
 func (x *ApproveActionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[6]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -473,7 +587,7 @@ func (x *ApproveActionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApproveActionResponse.ProtoReflect.Descriptor instead.
 func (*ApproveActionResponse) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{6}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ApproveActionResponse) GetSuccess() bool {
@@ -496,7 +610,7 @@ type RejectActionRequest struct {
 
 func (x *RejectActionRequest) Reset() {
 	*x = RejectActionRequest{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[7]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -508,7 +622,7 @@ func (x *RejectActionRequest) String() string {
 func (*RejectActionRequest) ProtoMessage() {}
 
 func (x *RejectActionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[7]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -521,7 +635,7 @@ func (x *RejectActionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RejectActionRequest.ProtoReflect.Descriptor instead.
 func (*RejectActionRequest) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{7}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *RejectActionRequest) GetWorkflowId() string {
@@ -561,7 +675,7 @@ type RejectActionResponse struct {
 
 func (x *RejectActionResponse) Reset() {
 	*x = RejectActionResponse{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[8]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -573,7 +687,7 @@ func (x *RejectActionResponse) String() string {
 func (*RejectActionResponse) ProtoMessage() {}
 
 func (x *RejectActionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[8]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -586,7 +700,7 @@ func (x *RejectActionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RejectActionResponse.ProtoReflect.Descriptor instead.
 func (*RejectActionResponse) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{8}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *RejectActionResponse) GetSuccess() bool {
@@ -607,7 +721,7 @@ type AbortAgentRequest struct {
 
 func (x *AbortAgentRequest) Reset() {
 	*x = AbortAgentRequest{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[9]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -619,7 +733,7 @@ func (x *AbortAgentRequest) String() string {
 func (*AbortAgentRequest) ProtoMessage() {}
 
 func (x *AbortAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[9]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -632,7 +746,7 @@ func (x *AbortAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AbortAgentRequest.ProtoReflect.Descriptor instead.
 func (*AbortAgentRequest) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{9}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *AbortAgentRequest) GetWorkflowId() string {
@@ -665,7 +779,7 @@ type AbortAgentResponse struct {
 
 func (x *AbortAgentResponse) Reset() {
 	*x = AbortAgentResponse{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[10]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -677,7 +791,7 @@ func (x *AbortAgentResponse) String() string {
 func (*AbortAgentResponse) ProtoMessage() {}
 
 func (x *AbortAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[10]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -690,7 +804,7 @@ func (x *AbortAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AbortAgentResponse.ProtoReflect.Descriptor instead.
 func (*AbortAgentResponse) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{10}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *AbortAgentResponse) GetSuccess() bool {
@@ -712,7 +826,7 @@ type StreamAgentEventsRequest struct {
 
 func (x *StreamAgentEventsRequest) Reset() {
 	*x = StreamAgentEventsRequest{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[11]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -724,7 +838,7 @@ func (x *StreamAgentEventsRequest) String() string {
 func (*StreamAgentEventsRequest) ProtoMessage() {}
 
 func (x *StreamAgentEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[11]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -737,7 +851,7 @@ func (x *StreamAgentEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamAgentEventsRequest.ProtoReflect.Descriptor instead.
 func (*StreamAgentEventsRequest) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{11}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *StreamAgentEventsRequest) GetWorkflowId() string {
@@ -778,7 +892,7 @@ type AgentEvent struct {
 
 func (x *AgentEvent) Reset() {
 	*x = AgentEvent{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[12]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -790,7 +904,7 @@ func (x *AgentEvent) String() string {
 func (*AgentEvent) ProtoMessage() {}
 
 func (x *AgentEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[12]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -803,7 +917,7 @@ func (x *AgentEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentEvent.ProtoReflect.Descriptor instead.
 func (*AgentEvent) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{12}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *AgentEvent) GetSequence() uint64 {
@@ -993,7 +1107,7 @@ type ConversationTurn struct {
 
 func (x *ConversationTurn) Reset() {
 	*x = ConversationTurn{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[13]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1005,7 +1119,7 @@ func (x *ConversationTurn) String() string {
 func (*ConversationTurn) ProtoMessage() {}
 
 func (x *ConversationTurn) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[13]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1018,7 +1132,7 @@ func (x *ConversationTurn) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConversationTurn.ProtoReflect.Descriptor instead.
 func (*ConversationTurn) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{13}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ConversationTurn) GetTurnId() string {
@@ -1052,7 +1166,7 @@ type TokenDelta struct {
 
 func (x *TokenDelta) Reset() {
 	*x = TokenDelta{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[14]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1064,7 +1178,7 @@ func (x *TokenDelta) String() string {
 func (*TokenDelta) ProtoMessage() {}
 
 func (x *TokenDelta) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[14]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1077,7 +1191,7 @@ func (x *TokenDelta) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TokenDelta.ProtoReflect.Descriptor instead.
 func (*TokenDelta) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{14}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *TokenDelta) GetTurnId() string {
@@ -1110,7 +1224,7 @@ type ProposalUpdate struct {
 
 func (x *ProposalUpdate) Reset() {
 	*x = ProposalUpdate{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[15]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1122,7 +1236,7 @@ func (x *ProposalUpdate) String() string {
 func (*ProposalUpdate) ProtoMessage() {}
 
 func (x *ProposalUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[15]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1135,7 +1249,7 @@ func (x *ProposalUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProposalUpdate.ProtoReflect.Descriptor instead.
 func (*ProposalUpdate) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{15}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ProposalUpdate) GetProposalId() string {
@@ -1187,7 +1301,7 @@ type PrimitiveCallPreview struct {
 
 func (x *PrimitiveCallPreview) Reset() {
 	*x = PrimitiveCallPreview{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[16]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1199,7 +1313,7 @@ func (x *PrimitiveCallPreview) String() string {
 func (*PrimitiveCallPreview) ProtoMessage() {}
 
 func (x *PrimitiveCallPreview) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[16]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1212,7 +1326,7 @@ func (x *PrimitiveCallPreview) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrimitiveCallPreview.ProtoReflect.Descriptor instead.
 func (*PrimitiveCallPreview) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{16}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *PrimitiveCallPreview) GetTool() string {
@@ -1251,7 +1365,7 @@ type ApprovalRequest struct {
 
 func (x *ApprovalRequest) Reset() {
 	*x = ApprovalRequest{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[17]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1263,7 +1377,7 @@ func (x *ApprovalRequest) String() string {
 func (*ApprovalRequest) ProtoMessage() {}
 
 func (x *ApprovalRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[17]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1276,7 +1390,7 @@ func (x *ApprovalRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApprovalRequest.ProtoReflect.Descriptor instead.
 func (*ApprovalRequest) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{17}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ApprovalRequest) GetApprovalId() string {
@@ -1326,7 +1440,7 @@ type ApprovalResolution struct {
 
 func (x *ApprovalResolution) Reset() {
 	*x = ApprovalResolution{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[18]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1338,7 +1452,7 @@ func (x *ApprovalResolution) String() string {
 func (*ApprovalResolution) ProtoMessage() {}
 
 func (x *ApprovalResolution) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[18]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1351,7 +1465,7 @@ func (x *ApprovalResolution) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApprovalResolution.ProtoReflect.Descriptor instead.
 func (*ApprovalResolution) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{18}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ApprovalResolution) GetApprovalId() string {
@@ -1393,7 +1507,7 @@ type ToolCallStart struct {
 
 func (x *ToolCallStart) Reset() {
 	*x = ToolCallStart{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[19]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1405,7 +1519,7 @@ func (x *ToolCallStart) String() string {
 func (*ToolCallStart) ProtoMessage() {}
 
 func (x *ToolCallStart) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[19]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1418,7 +1532,7 @@ func (x *ToolCallStart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolCallStart.ProtoReflect.Descriptor instead.
 func (*ToolCallStart) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{19}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ToolCallStart) GetCallId() string {
@@ -1454,7 +1568,7 @@ type ToolCallOutputChunk struct {
 
 func (x *ToolCallOutputChunk) Reset() {
 	*x = ToolCallOutputChunk{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[20]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1466,7 +1580,7 @@ func (x *ToolCallOutputChunk) String() string {
 func (*ToolCallOutputChunk) ProtoMessage() {}
 
 func (x *ToolCallOutputChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[20]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1479,7 +1593,7 @@ func (x *ToolCallOutputChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolCallOutputChunk.ProtoReflect.Descriptor instead.
 func (*ToolCallOutputChunk) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{20}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ToolCallOutputChunk) GetCallId() string {
@@ -1516,7 +1630,7 @@ type ToolCallEnd struct {
 
 func (x *ToolCallEnd) Reset() {
 	*x = ToolCallEnd{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[21]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1528,7 +1642,7 @@ func (x *ToolCallEnd) String() string {
 func (*ToolCallEnd) ProtoMessage() {}
 
 func (x *ToolCallEnd) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[21]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1541,7 +1655,7 @@ func (x *ToolCallEnd) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolCallEnd.ProtoReflect.Descriptor instead.
 func (*ToolCallEnd) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{21}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ToolCallEnd) GetCallId() string {
@@ -1590,7 +1704,7 @@ type AgentStatusUpdate struct {
 
 func (x *AgentStatusUpdate) Reset() {
 	*x = AgentStatusUpdate{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[22]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1602,7 +1716,7 @@ func (x *AgentStatusUpdate) String() string {
 func (*AgentStatusUpdate) ProtoMessage() {}
 
 func (x *AgentStatusUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[22]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1615,7 +1729,7 @@ func (x *AgentStatusUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentStatusUpdate.ProtoReflect.Descriptor instead.
 func (*AgentStatusUpdate) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{22}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *AgentStatusUpdate) GetStatus() string {
@@ -1649,7 +1763,7 @@ type ToolRegistrationRequest struct {
 
 func (x *ToolRegistrationRequest) Reset() {
 	*x = ToolRegistrationRequest{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[23]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1661,7 +1775,7 @@ func (x *ToolRegistrationRequest) String() string {
 func (*ToolRegistrationRequest) ProtoMessage() {}
 
 func (x *ToolRegistrationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[23]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1674,7 +1788,7 @@ func (x *ToolRegistrationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolRegistrationRequest.ProtoReflect.Descriptor instead.
 func (*ToolRegistrationRequest) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{23}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ToolRegistrationRequest) GetApprovalId() string {
@@ -1737,7 +1851,7 @@ type ListAgentRunsRequest struct {
 
 func (x *ListAgentRunsRequest) Reset() {
 	*x = ListAgentRunsRequest{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[24]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1749,7 +1863,7 @@ func (x *ListAgentRunsRequest) String() string {
 func (*ListAgentRunsRequest) ProtoMessage() {}
 
 func (x *ListAgentRunsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[24]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1762,7 +1876,7 @@ func (x *ListAgentRunsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentRunsRequest.ProtoReflect.Descriptor instead.
 func (*ListAgentRunsRequest) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{24}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ListAgentRunsRequest) GetWorkspaceId() string {
@@ -1796,7 +1910,7 @@ type ListAgentRunsResponse struct {
 
 func (x *ListAgentRunsResponse) Reset() {
 	*x = ListAgentRunsResponse{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[25]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1808,7 +1922,7 @@ func (x *ListAgentRunsResponse) String() string {
 func (*ListAgentRunsResponse) ProtoMessage() {}
 
 func (x *ListAgentRunsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[25]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1821,7 +1935,7 @@ func (x *ListAgentRunsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentRunsResponse.ProtoReflect.Descriptor instead.
 func (*ListAgentRunsResponse) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{25}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ListAgentRunsResponse) GetRuns() []*AgentRunSummary {
@@ -1855,7 +1969,7 @@ type AgentRunSummary struct {
 
 func (x *AgentRunSummary) Reset() {
 	*x = AgentRunSummary{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[26]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1867,7 +1981,7 @@ func (x *AgentRunSummary) String() string {
 func (*AgentRunSummary) ProtoMessage() {}
 
 func (x *AgentRunSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[26]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1880,7 +1994,7 @@ func (x *AgentRunSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentRunSummary.ProtoReflect.Descriptor instead.
 func (*AgentRunSummary) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{26}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *AgentRunSummary) GetAgentRunId() string {
@@ -1955,7 +2069,7 @@ type GetAgentRunRequest struct {
 
 func (x *GetAgentRunRequest) Reset() {
 	*x = GetAgentRunRequest{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[27]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1967,7 +2081,7 @@ func (x *GetAgentRunRequest) String() string {
 func (*GetAgentRunRequest) ProtoMessage() {}
 
 func (x *GetAgentRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[27]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1980,7 +2094,7 @@ func (x *GetAgentRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAgentRunRequest.ProtoReflect.Descriptor instead.
 func (*GetAgentRunRequest) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{27}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *GetAgentRunRequest) GetWorkflowId() string {
@@ -2004,7 +2118,7 @@ type GetAgentRunResponse struct {
 
 func (x *GetAgentRunResponse) Reset() {
 	*x = GetAgentRunResponse{}
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[28]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2016,7 +2130,7 @@ func (x *GetAgentRunResponse) String() string {
 func (*GetAgentRunResponse) ProtoMessage() {}
 
 func (x *GetAgentRunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_agent_v1_agent_proto_msgTypes[28]
+	mi := &file_idp_agent_v1_agent_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2029,7 +2143,7 @@ func (x *GetAgentRunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAgentRunResponse.ProtoReflect.Descriptor instead.
 func (*GetAgentRunResponse) Descriptor() ([]byte, []int) {
-	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{28}
+	return file_idp_agent_v1_agent_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *GetAgentRunResponse) GetSummary() *AgentRunSummary {
@@ -2092,6 +2206,15 @@ const file_idp_agent_v1_agent_proto_rawDesc = "" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x18\n" +
 	"\amessage\x18\x03 \x01(\tR\amessage\".\n" +
 	"\x13SendMessageResponse\x12\x17\n" +
+	"\aturn_id\x18\x01 \x01(\tR\x06turnId\"\x91\x01\n" +
+	"\x1aSendReviewerMessageRequest\x12\x1f\n" +
+	"\vworkflow_id\x18\x01 \x01(\tR\n" +
+	"workflowId\x12\x1f\n" +
+	"\vapproval_id\x18\x02 \x01(\tR\n" +
+	"approvalId\x12\x17\n" +
+	"\auser_id\x18\x03 \x01(\tR\x06userId\x12\x18\n" +
+	"\amessage\x18\x04 \x01(\tR\amessage\"6\n" +
+	"\x1bSendReviewerMessageResponse\x12\x17\n" +
 	"\aturn_id\x18\x01 \x01(\tR\x06turnId\"\xd1\x01\n" +
 	"\x14ApproveActionRequest\x12\x1f\n" +
 	"\vworkflow_id\x18\x01 \x01(\tR\n" +
@@ -2239,10 +2362,11 @@ const file_idp_agent_v1_agent_proto_rawDesc = "" +
 	"\fconversation\x18\x02 \x03(\v2\x1e.idp.agent.v1.ConversationTurnR\fconversation\x12E\n" +
 	"\x0flatest_proposal\x18\x03 \x01(\v2\x1c.idp.agent.v1.ProposalUpdateR\x0elatestProposal\x12J\n" +
 	"\x11pending_approvals\x18\x04 \x03(\v2\x1d.idp.agent.v1.ApprovalRequestR\x10pendingApprovals\x12'\n" +
-	"\x0flatest_sequence\x18\x05 \x01(\x04R\x0elatestSequence2\xe6\x05\n" +
+	"\x0flatest_sequence\x18\x05 \x01(\x04R\x0elatestSequence2\xd2\x06\n" +
 	"\fAgentService\x12y\n" +
 	"\x18StartInfrastructureAgent\x12-.idp.agent.v1.StartInfrastructureAgentRequest\x1a..idp.agent.v1.StartInfrastructureAgentResponse\x12R\n" +
-	"\vSendMessage\x12 .idp.agent.v1.SendMessageRequest\x1a!.idp.agent.v1.SendMessageResponse\x12X\n" +
+	"\vSendMessage\x12 .idp.agent.v1.SendMessageRequest\x1a!.idp.agent.v1.SendMessageResponse\x12j\n" +
+	"\x13SendReviewerMessage\x12(.idp.agent.v1.SendReviewerMessageRequest\x1a).idp.agent.v1.SendReviewerMessageResponse\x12X\n" +
 	"\rApproveAction\x12\".idp.agent.v1.ApproveActionRequest\x1a#.idp.agent.v1.ApproveActionResponse\x12U\n" +
 	"\fRejectAction\x12!.idp.agent.v1.RejectActionRequest\x1a\".idp.agent.v1.RejectActionResponse\x12O\n" +
 	"\n" +
@@ -2263,84 +2387,88 @@ func file_idp_agent_v1_agent_proto_rawDescGZIP() []byte {
 	return file_idp_agent_v1_agent_proto_rawDescData
 }
 
-var file_idp_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_idp_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_idp_agent_v1_agent_proto_goTypes = []any{
 	(*StartInfrastructureAgentRequest)(nil),  // 0: idp.agent.v1.StartInfrastructureAgentRequest
 	(*StartInfrastructureAgentResponse)(nil), // 1: idp.agent.v1.StartInfrastructureAgentResponse
 	(*SendMessageRequest)(nil),               // 2: idp.agent.v1.SendMessageRequest
 	(*SendMessageResponse)(nil),              // 3: idp.agent.v1.SendMessageResponse
-	(*ApproveActionRequest)(nil),             // 4: idp.agent.v1.ApproveActionRequest
-	(*ApprovalEdits)(nil),                    // 5: idp.agent.v1.ApprovalEdits
-	(*ApproveActionResponse)(nil),            // 6: idp.agent.v1.ApproveActionResponse
-	(*RejectActionRequest)(nil),              // 7: idp.agent.v1.RejectActionRequest
-	(*RejectActionResponse)(nil),             // 8: idp.agent.v1.RejectActionResponse
-	(*AbortAgentRequest)(nil),                // 9: idp.agent.v1.AbortAgentRequest
-	(*AbortAgentResponse)(nil),               // 10: idp.agent.v1.AbortAgentResponse
-	(*StreamAgentEventsRequest)(nil),         // 11: idp.agent.v1.StreamAgentEventsRequest
-	(*AgentEvent)(nil),                       // 12: idp.agent.v1.AgentEvent
-	(*ConversationTurn)(nil),                 // 13: idp.agent.v1.ConversationTurn
-	(*TokenDelta)(nil),                       // 14: idp.agent.v1.TokenDelta
-	(*ProposalUpdate)(nil),                   // 15: idp.agent.v1.ProposalUpdate
-	(*PrimitiveCallPreview)(nil),             // 16: idp.agent.v1.PrimitiveCallPreview
-	(*ApprovalRequest)(nil),                  // 17: idp.agent.v1.ApprovalRequest
-	(*ApprovalResolution)(nil),               // 18: idp.agent.v1.ApprovalResolution
-	(*ToolCallStart)(nil),                    // 19: idp.agent.v1.ToolCallStart
-	(*ToolCallOutputChunk)(nil),              // 20: idp.agent.v1.ToolCallOutputChunk
-	(*ToolCallEnd)(nil),                      // 21: idp.agent.v1.ToolCallEnd
-	(*AgentStatusUpdate)(nil),                // 22: idp.agent.v1.AgentStatusUpdate
-	(*ToolRegistrationRequest)(nil),          // 23: idp.agent.v1.ToolRegistrationRequest
-	(*ListAgentRunsRequest)(nil),             // 24: idp.agent.v1.ListAgentRunsRequest
-	(*ListAgentRunsResponse)(nil),            // 25: idp.agent.v1.ListAgentRunsResponse
-	(*AgentRunSummary)(nil),                  // 26: idp.agent.v1.AgentRunSummary
-	(*GetAgentRunRequest)(nil),               // 27: idp.agent.v1.GetAgentRunRequest
-	(*GetAgentRunResponse)(nil),              // 28: idp.agent.v1.GetAgentRunResponse
-	(*timestamppb.Timestamp)(nil),            // 29: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),                  // 30: google.protobuf.Struct
+	(*SendReviewerMessageRequest)(nil),       // 4: idp.agent.v1.SendReviewerMessageRequest
+	(*SendReviewerMessageResponse)(nil),      // 5: idp.agent.v1.SendReviewerMessageResponse
+	(*ApproveActionRequest)(nil),             // 6: idp.agent.v1.ApproveActionRequest
+	(*ApprovalEdits)(nil),                    // 7: idp.agent.v1.ApprovalEdits
+	(*ApproveActionResponse)(nil),            // 8: idp.agent.v1.ApproveActionResponse
+	(*RejectActionRequest)(nil),              // 9: idp.agent.v1.RejectActionRequest
+	(*RejectActionResponse)(nil),             // 10: idp.agent.v1.RejectActionResponse
+	(*AbortAgentRequest)(nil),                // 11: idp.agent.v1.AbortAgentRequest
+	(*AbortAgentResponse)(nil),               // 12: idp.agent.v1.AbortAgentResponse
+	(*StreamAgentEventsRequest)(nil),         // 13: idp.agent.v1.StreamAgentEventsRequest
+	(*AgentEvent)(nil),                       // 14: idp.agent.v1.AgentEvent
+	(*ConversationTurn)(nil),                 // 15: idp.agent.v1.ConversationTurn
+	(*TokenDelta)(nil),                       // 16: idp.agent.v1.TokenDelta
+	(*ProposalUpdate)(nil),                   // 17: idp.agent.v1.ProposalUpdate
+	(*PrimitiveCallPreview)(nil),             // 18: idp.agent.v1.PrimitiveCallPreview
+	(*ApprovalRequest)(nil),                  // 19: idp.agent.v1.ApprovalRequest
+	(*ApprovalResolution)(nil),               // 20: idp.agent.v1.ApprovalResolution
+	(*ToolCallStart)(nil),                    // 21: idp.agent.v1.ToolCallStart
+	(*ToolCallOutputChunk)(nil),              // 22: idp.agent.v1.ToolCallOutputChunk
+	(*ToolCallEnd)(nil),                      // 23: idp.agent.v1.ToolCallEnd
+	(*AgentStatusUpdate)(nil),                // 24: idp.agent.v1.AgentStatusUpdate
+	(*ToolRegistrationRequest)(nil),          // 25: idp.agent.v1.ToolRegistrationRequest
+	(*ListAgentRunsRequest)(nil),             // 26: idp.agent.v1.ListAgentRunsRequest
+	(*ListAgentRunsResponse)(nil),            // 27: idp.agent.v1.ListAgentRunsResponse
+	(*AgentRunSummary)(nil),                  // 28: idp.agent.v1.AgentRunSummary
+	(*GetAgentRunRequest)(nil),               // 29: idp.agent.v1.GetAgentRunRequest
+	(*GetAgentRunResponse)(nil),              // 30: idp.agent.v1.GetAgentRunResponse
+	(*timestamppb.Timestamp)(nil),            // 31: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),                  // 32: google.protobuf.Struct
 }
 var file_idp_agent_v1_agent_proto_depIdxs = []int32{
-	29, // 0: idp.agent.v1.StartInfrastructureAgentResponse.started_at:type_name -> google.protobuf.Timestamp
-	5,  // 1: idp.agent.v1.ApproveActionRequest.edits:type_name -> idp.agent.v1.ApprovalEdits
-	29, // 2: idp.agent.v1.AgentEvent.emitted_at:type_name -> google.protobuf.Timestamp
-	13, // 3: idp.agent.v1.AgentEvent.conversation_turn:type_name -> idp.agent.v1.ConversationTurn
-	14, // 4: idp.agent.v1.AgentEvent.token_delta:type_name -> idp.agent.v1.TokenDelta
-	15, // 5: idp.agent.v1.AgentEvent.proposal_update:type_name -> idp.agent.v1.ProposalUpdate
-	17, // 6: idp.agent.v1.AgentEvent.approval_request:type_name -> idp.agent.v1.ApprovalRequest
-	18, // 7: idp.agent.v1.AgentEvent.approval_resolution:type_name -> idp.agent.v1.ApprovalResolution
-	19, // 8: idp.agent.v1.AgentEvent.tool_call_start:type_name -> idp.agent.v1.ToolCallStart
-	20, // 9: idp.agent.v1.AgentEvent.tool_call_output_chunk:type_name -> idp.agent.v1.ToolCallOutputChunk
-	21, // 10: idp.agent.v1.AgentEvent.tool_call_end:type_name -> idp.agent.v1.ToolCallEnd
-	22, // 11: idp.agent.v1.AgentEvent.status_update:type_name -> idp.agent.v1.AgentStatusUpdate
-	23, // 12: idp.agent.v1.AgentEvent.tool_registration_request:type_name -> idp.agent.v1.ToolRegistrationRequest
-	16, // 13: idp.agent.v1.ProposalUpdate.steps:type_name -> idp.agent.v1.PrimitiveCallPreview
-	30, // 14: idp.agent.v1.PrimitiveCallPreview.args:type_name -> google.protobuf.Struct
-	30, // 15: idp.agent.v1.ApprovalRequest.payload:type_name -> google.protobuf.Struct
-	30, // 16: idp.agent.v1.ToolCallStart.args:type_name -> google.protobuf.Struct
-	30, // 17: idp.agent.v1.ToolCallEnd.result:type_name -> google.protobuf.Struct
-	26, // 18: idp.agent.v1.ListAgentRunsResponse.runs:type_name -> idp.agent.v1.AgentRunSummary
-	29, // 19: idp.agent.v1.AgentRunSummary.started_at:type_name -> google.protobuf.Timestamp
-	29, // 20: idp.agent.v1.AgentRunSummary.ended_at:type_name -> google.protobuf.Timestamp
-	26, // 21: idp.agent.v1.GetAgentRunResponse.summary:type_name -> idp.agent.v1.AgentRunSummary
-	13, // 22: idp.agent.v1.GetAgentRunResponse.conversation:type_name -> idp.agent.v1.ConversationTurn
-	15, // 23: idp.agent.v1.GetAgentRunResponse.latest_proposal:type_name -> idp.agent.v1.ProposalUpdate
-	17, // 24: idp.agent.v1.GetAgentRunResponse.pending_approvals:type_name -> idp.agent.v1.ApprovalRequest
+	31, // 0: idp.agent.v1.StartInfrastructureAgentResponse.started_at:type_name -> google.protobuf.Timestamp
+	7,  // 1: idp.agent.v1.ApproveActionRequest.edits:type_name -> idp.agent.v1.ApprovalEdits
+	31, // 2: idp.agent.v1.AgentEvent.emitted_at:type_name -> google.protobuf.Timestamp
+	15, // 3: idp.agent.v1.AgentEvent.conversation_turn:type_name -> idp.agent.v1.ConversationTurn
+	16, // 4: idp.agent.v1.AgentEvent.token_delta:type_name -> idp.agent.v1.TokenDelta
+	17, // 5: idp.agent.v1.AgentEvent.proposal_update:type_name -> idp.agent.v1.ProposalUpdate
+	19, // 6: idp.agent.v1.AgentEvent.approval_request:type_name -> idp.agent.v1.ApprovalRequest
+	20, // 7: idp.agent.v1.AgentEvent.approval_resolution:type_name -> idp.agent.v1.ApprovalResolution
+	21, // 8: idp.agent.v1.AgentEvent.tool_call_start:type_name -> idp.agent.v1.ToolCallStart
+	22, // 9: idp.agent.v1.AgentEvent.tool_call_output_chunk:type_name -> idp.agent.v1.ToolCallOutputChunk
+	23, // 10: idp.agent.v1.AgentEvent.tool_call_end:type_name -> idp.agent.v1.ToolCallEnd
+	24, // 11: idp.agent.v1.AgentEvent.status_update:type_name -> idp.agent.v1.AgentStatusUpdate
+	25, // 12: idp.agent.v1.AgentEvent.tool_registration_request:type_name -> idp.agent.v1.ToolRegistrationRequest
+	18, // 13: idp.agent.v1.ProposalUpdate.steps:type_name -> idp.agent.v1.PrimitiveCallPreview
+	32, // 14: idp.agent.v1.PrimitiveCallPreview.args:type_name -> google.protobuf.Struct
+	32, // 15: idp.agent.v1.ApprovalRequest.payload:type_name -> google.protobuf.Struct
+	32, // 16: idp.agent.v1.ToolCallStart.args:type_name -> google.protobuf.Struct
+	32, // 17: idp.agent.v1.ToolCallEnd.result:type_name -> google.protobuf.Struct
+	28, // 18: idp.agent.v1.ListAgentRunsResponse.runs:type_name -> idp.agent.v1.AgentRunSummary
+	31, // 19: idp.agent.v1.AgentRunSummary.started_at:type_name -> google.protobuf.Timestamp
+	31, // 20: idp.agent.v1.AgentRunSummary.ended_at:type_name -> google.protobuf.Timestamp
+	28, // 21: idp.agent.v1.GetAgentRunResponse.summary:type_name -> idp.agent.v1.AgentRunSummary
+	15, // 22: idp.agent.v1.GetAgentRunResponse.conversation:type_name -> idp.agent.v1.ConversationTurn
+	17, // 23: idp.agent.v1.GetAgentRunResponse.latest_proposal:type_name -> idp.agent.v1.ProposalUpdate
+	19, // 24: idp.agent.v1.GetAgentRunResponse.pending_approvals:type_name -> idp.agent.v1.ApprovalRequest
 	0,  // 25: idp.agent.v1.AgentService.StartInfrastructureAgent:input_type -> idp.agent.v1.StartInfrastructureAgentRequest
 	2,  // 26: idp.agent.v1.AgentService.SendMessage:input_type -> idp.agent.v1.SendMessageRequest
-	4,  // 27: idp.agent.v1.AgentService.ApproveAction:input_type -> idp.agent.v1.ApproveActionRequest
-	7,  // 28: idp.agent.v1.AgentService.RejectAction:input_type -> idp.agent.v1.RejectActionRequest
-	9,  // 29: idp.agent.v1.AgentService.AbortAgent:input_type -> idp.agent.v1.AbortAgentRequest
-	11, // 30: idp.agent.v1.AgentService.StreamAgentEvents:input_type -> idp.agent.v1.StreamAgentEventsRequest
-	24, // 31: idp.agent.v1.AgentService.ListAgentRuns:input_type -> idp.agent.v1.ListAgentRunsRequest
-	27, // 32: idp.agent.v1.AgentService.GetAgentRun:input_type -> idp.agent.v1.GetAgentRunRequest
-	1,  // 33: idp.agent.v1.AgentService.StartInfrastructureAgent:output_type -> idp.agent.v1.StartInfrastructureAgentResponse
-	3,  // 34: idp.agent.v1.AgentService.SendMessage:output_type -> idp.agent.v1.SendMessageResponse
-	6,  // 35: idp.agent.v1.AgentService.ApproveAction:output_type -> idp.agent.v1.ApproveActionResponse
-	8,  // 36: idp.agent.v1.AgentService.RejectAction:output_type -> idp.agent.v1.RejectActionResponse
-	10, // 37: idp.agent.v1.AgentService.AbortAgent:output_type -> idp.agent.v1.AbortAgentResponse
-	12, // 38: idp.agent.v1.AgentService.StreamAgentEvents:output_type -> idp.agent.v1.AgentEvent
-	25, // 39: idp.agent.v1.AgentService.ListAgentRuns:output_type -> idp.agent.v1.ListAgentRunsResponse
-	28, // 40: idp.agent.v1.AgentService.GetAgentRun:output_type -> idp.agent.v1.GetAgentRunResponse
-	33, // [33:41] is the sub-list for method output_type
-	25, // [25:33] is the sub-list for method input_type
+	4,  // 27: idp.agent.v1.AgentService.SendReviewerMessage:input_type -> idp.agent.v1.SendReviewerMessageRequest
+	6,  // 28: idp.agent.v1.AgentService.ApproveAction:input_type -> idp.agent.v1.ApproveActionRequest
+	9,  // 29: idp.agent.v1.AgentService.RejectAction:input_type -> idp.agent.v1.RejectActionRequest
+	11, // 30: idp.agent.v1.AgentService.AbortAgent:input_type -> idp.agent.v1.AbortAgentRequest
+	13, // 31: idp.agent.v1.AgentService.StreamAgentEvents:input_type -> idp.agent.v1.StreamAgentEventsRequest
+	26, // 32: idp.agent.v1.AgentService.ListAgentRuns:input_type -> idp.agent.v1.ListAgentRunsRequest
+	29, // 33: idp.agent.v1.AgentService.GetAgentRun:input_type -> idp.agent.v1.GetAgentRunRequest
+	1,  // 34: idp.agent.v1.AgentService.StartInfrastructureAgent:output_type -> idp.agent.v1.StartInfrastructureAgentResponse
+	3,  // 35: idp.agent.v1.AgentService.SendMessage:output_type -> idp.agent.v1.SendMessageResponse
+	5,  // 36: idp.agent.v1.AgentService.SendReviewerMessage:output_type -> idp.agent.v1.SendReviewerMessageResponse
+	8,  // 37: idp.agent.v1.AgentService.ApproveAction:output_type -> idp.agent.v1.ApproveActionResponse
+	10, // 38: idp.agent.v1.AgentService.RejectAction:output_type -> idp.agent.v1.RejectActionResponse
+	12, // 39: idp.agent.v1.AgentService.AbortAgent:output_type -> idp.agent.v1.AbortAgentResponse
+	14, // 40: idp.agent.v1.AgentService.StreamAgentEvents:output_type -> idp.agent.v1.AgentEvent
+	27, // 41: idp.agent.v1.AgentService.ListAgentRuns:output_type -> idp.agent.v1.ListAgentRunsResponse
+	30, // 42: idp.agent.v1.AgentService.GetAgentRun:output_type -> idp.agent.v1.GetAgentRunResponse
+	34, // [34:43] is the sub-list for method output_type
+	25, // [25:34] is the sub-list for method input_type
 	25, // [25:25] is the sub-list for extension type_name
 	25, // [25:25] is the sub-list for extension extendee
 	0,  // [0:25] is the sub-list for field type_name
@@ -2351,8 +2479,8 @@ func file_idp_agent_v1_agent_proto_init() {
 	if File_idp_agent_v1_agent_proto != nil {
 		return
 	}
-	file_idp_agent_v1_agent_proto_msgTypes[4].OneofWrappers = []any{}
-	file_idp_agent_v1_agent_proto_msgTypes[12].OneofWrappers = []any{
+	file_idp_agent_v1_agent_proto_msgTypes[6].OneofWrappers = []any{}
+	file_idp_agent_v1_agent_proto_msgTypes[14].OneofWrappers = []any{
 		(*AgentEvent_ConversationTurn)(nil),
 		(*AgentEvent_TokenDelta)(nil),
 		(*AgentEvent_ProposalUpdate)(nil),
@@ -2370,7 +2498,7 @@ func file_idp_agent_v1_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_idp_agent_v1_agent_proto_rawDesc), len(file_idp_agent_v1_agent_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   29,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

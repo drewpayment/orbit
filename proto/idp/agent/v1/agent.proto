@@ -20,6 +20,14 @@ service AgentService {
   // through a Temporal Update so the caller waits for acknowledgement.
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
 
+  // Send a reviewer message into an open approval gate (commit β —
+  // conversational review). The workflow appends the message as a
+  // conversation turn under the gate, runs an LLM step with no tool
+  // catalog (so the agent can only respond with text), and surfaces
+  // the response as a regular ConversationTurn event. The gate stays
+  // open; resolution still requires a real Approve / Reject signal.
+  rpc SendReviewerMessage(SendReviewerMessageRequest) returns (SendReviewerMessageResponse);
+
   // Approve a pending action (proposal, tool registration, destructive
   // command). Backed by an `Approval` signal to the workflow.
   rpc ApproveAction(ApproveActionRequest) returns (ApproveActionResponse);
@@ -77,6 +85,19 @@ message SendMessageRequest {
 
 message SendMessageResponse {
   // Identifier for the conversation turn the message was appended to.
+  string turn_id = 1;
+}
+
+// SendReviewerMessageRequest carries a message that targets an open
+// approval gate rather than the main conversation thread (commit β).
+message SendReviewerMessageRequest {
+  string workflow_id = 1;
+  string approval_id = 2;
+  string user_id     = 3;
+  string message     = 4;
+}
+
+message SendReviewerMessageResponse {
   string turn_id = 1;
 }
 

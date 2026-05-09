@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	AgentService_StartInfrastructureAgent_FullMethodName = "/idp.agent.v1.AgentService/StartInfrastructureAgent"
 	AgentService_SendMessage_FullMethodName              = "/idp.agent.v1.AgentService/SendMessage"
+	AgentService_SendReviewerMessage_FullMethodName      = "/idp.agent.v1.AgentService/SendReviewerMessage"
 	AgentService_ApproveAction_FullMethodName            = "/idp.agent.v1.AgentService/ApproveAction"
 	AgentService_RejectAction_FullMethodName             = "/idp.agent.v1.AgentService/RejectAction"
 	AgentService_AbortAgent_FullMethodName               = "/idp.agent.v1.AgentService/AbortAgent"
@@ -44,6 +45,13 @@ type AgentServiceClient interface {
 	// Send a chat-style message into a running agent. The workflow consumes it
 	// through a Temporal Update so the caller waits for acknowledgement.
 	SendMessage(ctx context.Context, in *SendMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
+	// Send a reviewer message into an open approval gate (commit β —
+	// conversational review). The workflow appends the message as a
+	// conversation turn under the gate, runs an LLM step with no tool
+	// catalog (so the agent can only respond with text), and surfaces
+	// the response as a regular ConversationTurn event. The gate stays
+	// open; resolution still requires a real Approve / Reject signal.
+	SendReviewerMessage(ctx context.Context, in *SendReviewerMessageRequest, opts ...grpc.CallOption) (*SendReviewerMessageResponse, error)
 	// Approve a pending action (proposal, tool registration, destructive
 	// command). Backed by an `Approval` signal to the workflow.
 	ApproveAction(ctx context.Context, in *ApproveActionRequest, opts ...grpc.CallOption) (*ApproveActionResponse, error)
@@ -83,6 +91,16 @@ func (c *agentServiceClient) SendMessage(ctx context.Context, in *SendMessageReq
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SendMessageResponse)
 	err := c.cc.Invoke(ctx, AgentService_SendMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) SendReviewerMessage(ctx context.Context, in *SendReviewerMessageRequest, opts ...grpc.CallOption) (*SendReviewerMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SendReviewerMessageResponse)
+	err := c.cc.Invoke(ctx, AgentService_SendReviewerMessage_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -173,6 +191,13 @@ type AgentServiceServer interface {
 	// Send a chat-style message into a running agent. The workflow consumes it
 	// through a Temporal Update so the caller waits for acknowledgement.
 	SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error)
+	// Send a reviewer message into an open approval gate (commit β —
+	// conversational review). The workflow appends the message as a
+	// conversation turn under the gate, runs an LLM step with no tool
+	// catalog (so the agent can only respond with text), and surfaces
+	// the response as a regular ConversationTurn event. The gate stays
+	// open; resolution still requires a real Approve / Reject signal.
+	SendReviewerMessage(context.Context, *SendReviewerMessageRequest) (*SendReviewerMessageResponse, error)
 	// Approve a pending action (proposal, tool registration, destructive
 	// command). Backed by an `Approval` signal to the workflow.
 	ApproveAction(context.Context, *ApproveActionRequest) (*ApproveActionResponse, error)
@@ -203,6 +228,9 @@ func (UnimplementedAgentServiceServer) StartInfrastructureAgent(context.Context,
 }
 func (UnimplementedAgentServiceServer) SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SendMessage not implemented")
+}
+func (UnimplementedAgentServiceServer) SendReviewerMessage(context.Context, *SendReviewerMessageRequest) (*SendReviewerMessageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SendReviewerMessage not implemented")
 }
 func (UnimplementedAgentServiceServer) ApproveAction(context.Context, *ApproveActionRequest) (*ApproveActionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ApproveAction not implemented")
@@ -275,6 +303,24 @@ func _AgentService_SendMessage_Handler(srv interface{}, ctx context.Context, dec
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AgentServiceServer).SendMessage(ctx, req.(*SendMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_SendReviewerMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendReviewerMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).SendReviewerMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_SendReviewerMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).SendReviewerMessage(ctx, req.(*SendReviewerMessageRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -394,6 +440,10 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SendMessage",
 			Handler:    _AgentService_SendMessage_Handler,
+		},
+		{
+			MethodName: "SendReviewerMessage",
+			Handler:    _AgentService_SendReviewerMessage_Handler,
 		},
 		{
 			MethodName: "ApproveAction",
