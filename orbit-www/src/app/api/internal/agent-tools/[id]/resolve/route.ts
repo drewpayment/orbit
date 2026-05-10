@@ -3,6 +3,12 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
+import type { AgentTool } from '@/payload-types'
+
+type TemplateKind = AgentTool['templateKind']
+const TEMPLATE_KINDS: readonly TemplateKind[] = ['shell', 'http', 'composite'] as const
+const isTemplateKind = (v: unknown): v is TemplateKind =>
+  typeof v === 'string' && (TEMPLATE_KINDS as readonly string[]).includes(v)
 
 const INTERNAL_API_KEY = process.env.ORBIT_INTERNAL_API_KEY
 
@@ -61,7 +67,7 @@ export async function POST(
       overrideAccess: true,
     })
 
-    const data: Record<string, unknown> = {
+    const data: Partial<AgentTool> = {
       status: approved ? 'approved' : 'rejected',
     }
     if (approved) {
@@ -90,7 +96,7 @@ export async function POST(
           inputSchemaJson: existing.inputSchemaJson ?? '',
           templateKind: existing.templateKind,
           templateJson: existing.templateJson,
-        } as any,
+        },
         overrideAccess: true,
       })
 
@@ -98,52 +104,57 @@ export async function POST(
       const want = {
         name: typeof edits.name === 'string' ? edits.name : '',
         description: typeof edits.description === 'string' ? edits.description : '',
-        templateKind: typeof edits.templateKind === 'string' ? edits.templateKind : '',
+        templateKind: isTemplateKind(edits.templateKind) ? edits.templateKind : undefined,
         templateJson: typeof edits.templateJson === 'string' ? edits.templateJson : '',
         inputSchemaJson: typeof edits.inputSchemaJson === 'string' ? edits.inputSchemaJson : '',
       }
-      const changed = (k: keyof typeof want, original: string) =>
+      const changedString = (k: 'name' | 'description' | 'templateJson' | 'inputSchemaJson', original: string) =>
         want[k] !== '' && want[k] !== original
+      const changedTemplateKind = (original: TemplateKind) =>
+        want.templateKind !== undefined && want.templateKind !== original
       if (body.edited) {
-        if (changed('name', existing.name)) editedFieldsList.push('name')
-        if (changed('description', existing.description ?? '')) editedFieldsList.push('description')
-        if (changed('templateKind', existing.templateKind)) editedFieldsList.push('template_kind')
-        if (changed('templateJson', existing.templateJson)) editedFieldsList.push('template_json')
-        if (changed('inputSchemaJson', existing.inputSchemaJson ?? '')) editedFieldsList.push('input_schema_json')
+        if (changedString('name', existing.name)) editedFieldsList.push('name')
+        if (changedString('description', existing.description ?? '')) editedFieldsList.push('description')
+        if (changedTemplateKind(existing.templateKind)) editedFieldsList.push('template_kind')
+        if (changedString('templateJson', existing.templateJson)) editedFieldsList.push('template_json')
+        if (changedString('inputSchemaJson', existing.inputSchemaJson ?? '')) editedFieldsList.push('input_schema_json')
       }
 
       if (editedFieldsList.length > 0) {
+        const editedTemplateKind =
+          want.templateKind !== undefined && changedTemplateKind(existing.templateKind)
+            ? want.templateKind
+            : existing.templateKind
         const editedVersion = await payload.create({
           collection: 'agent-tool-versions',
           data: {
             tool: existing.id,
             versionNumber: 2,
             source: 'reviewer_edited',
-            name: changed('name', existing.name) ? want.name : existing.name,
-            description: changed('description', existing.description ?? '')
+            name: changedString('name', existing.name) ? want.name : existing.name,
+            description: changedString('description', existing.description ?? '')
               ? want.description
               : (existing.description ?? ''),
-            inputSchemaJson: changed('inputSchemaJson', existing.inputSchemaJson ?? '')
+            inputSchemaJson: changedString('inputSchemaJson', existing.inputSchemaJson ?? '')
               ? want.inputSchemaJson
               : (existing.inputSchemaJson ?? ''),
-            templateKind: changed('templateKind', existing.templateKind)
-              ? want.templateKind
-              : existing.templateKind,
-            templateJson: changed('templateJson', existing.templateJson) ? want.templateJson : existing.templateJson,
+            templateKind: editedTemplateKind,
+            templateJson: changedString('templateJson', existing.templateJson) ? want.templateJson : existing.templateJson,
             editedBy: body.resolvedBy || null,
             editedFields: editedFieldsList.join(','),
-          } as any,
+          },
           overrideAccess: true,
         })
         agentToolVersionId = String(editedVersion.id)
 
         // Patch the AgentTools row to the edited values so the agent's
         // next invocation uses the human-curated version.
-        if (changed('name', existing.name)) data.name = want.name
-        if (changed('description', existing.description ?? '')) data.description = want.description
-        if (changed('templateKind', existing.templateKind)) data.templateKind = want.templateKind
-        if (changed('templateJson', existing.templateJson)) data.templateJson = want.templateJson
-        if (changed('inputSchemaJson', existing.inputSchemaJson ?? ''))
+        if (changedString('name', existing.name)) data.name = want.name
+        if (changedString('description', existing.description ?? '')) data.description = want.description
+        if (changedTemplateKind(existing.templateKind) && want.templateKind !== undefined)
+          data.templateKind = want.templateKind
+        if (changedString('templateJson', existing.templateJson)) data.templateJson = want.templateJson
+        if (changedString('inputSchemaJson', existing.inputSchemaJson ?? ''))
           data.inputSchemaJson = want.inputSchemaJson
         data.currentVersion = 2
       } else {

@@ -1,4 +1,4 @@
-import type { CollectionConfig } from 'payload'
+import type { CollectionConfig, Where } from 'payload'
 
 /**
  * PendingApprovals Collection (Spike 7 commit γ)
@@ -49,9 +49,11 @@ export const PendingApprovals: CollectionConfig = {
         typeof m.workspace === 'string' ? m.workspace : m.workspace.id,
       )
       if (workspaceIds.length === 0) {
-        return { id: { equals: '__none__' } } as any
+        const denyAll: Where = { id: { equals: '__none__' } }
+        return denyAll
       }
-      return { workspace: { in: workspaceIds } }
+      const where: Where = { workspace: { in: workspaceIds } }
+      return where
     },
     create: () => false,
     update: () => false,

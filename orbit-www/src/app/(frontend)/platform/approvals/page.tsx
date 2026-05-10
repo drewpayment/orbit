@@ -55,7 +55,7 @@ export default async function PlatformApprovalsPage() {
   // workspaces; plain members see their workspaces too (read-only — but
   // the approve/reject buttons are gated server-side by gRPC and live in
   // the chat thread, so this page is a discovery surface for everyone).
-  const platformAdmin = isPlatformAdmin(user as any)
+  const platformAdmin = isPlatformAdmin(user)
   let workspaceFilter: Record<string, unknown> | undefined
   if (!platformAdmin) {
     const adminOwnerIds = await getAdminOrOwnerWorkspaceIds(payload, user.id)

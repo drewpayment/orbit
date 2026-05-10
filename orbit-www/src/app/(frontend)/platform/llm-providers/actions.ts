@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 
 import { getPayloadUserFromSession } from '@/lib/auth/session'
 import { isPlatformAdmin } from '@/lib/access/workspace-access'
+import type { LlmProvider } from '@/payload-types'
 
 // Server actions for the platform-admin LLM Providers page. All mutations
 // re-check isPlatformAdmin server-side so a stale client view can't slip
@@ -100,7 +101,7 @@ export async function updateLLMProvider(input: UpdateInput) {
   }
   const payload = await getPayload({ config })
 
-  const data: Record<string, unknown> = { lastModifiedBy: user.id }
+  const data: Partial<LlmProvider> = { lastModifiedBy: user.id }
   if (input.displayName !== undefined) data.displayName = input.displayName
   if (input.provider !== undefined) data.provider = input.provider
   if (input.baseUrl !== undefined) data.baseUrl = input.baseUrl
@@ -114,7 +115,7 @@ export async function updateLLMProvider(input: UpdateInput) {
     await payload.update({
       collection: 'llm-providers',
       id: input.id,
-      data: data as any,
+      data,
       overrideAccess: true,
     })
     revalidatePath('/platform/llm-providers')

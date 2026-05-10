@@ -3,6 +3,38 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
+import type { AgentRun } from '@/payload-types'
+
+type AgentRunStatus = AgentRun['status']
+const STATUSES: readonly AgentRunStatus[] = [
+  'starting',
+  'running',
+  'awaiting_user',
+  'awaiting_approval',
+  'completed',
+  'aborted',
+  'failed',
+  'timeout',
+] as const
+
+type ApprovalEntry = NonNullable<AgentRun['approvals']>[number]
+type ApprovalKind = NonNullable<ApprovalEntry['kind']>
+const APPROVAL_KINDS: readonly ApprovalKind[] = [
+  'proposal',
+  'tool_registration',
+  'destructive_command',
+  'custom',
+] as const
+
+type ApprovalResolution = NonNullable<ApprovalEntry['resolution']>
+const APPROVAL_RESOLUTIONS: readonly ApprovalResolution[] = ['approved', 'rejected'] as const
+
+const isStatus = (v: unknown): v is AgentRunStatus =>
+  typeof v === 'string' && (STATUSES as readonly string[]).includes(v)
+const isApprovalKind = (v: unknown): v is ApprovalKind =>
+  typeof v === 'string' && (APPROVAL_KINDS as readonly string[]).includes(v)
+const isApprovalResolution = (v: unknown): v is ApprovalResolution =>
+  typeof v === 'string' && (APPROVAL_RESOLUTIONS as readonly string[]).includes(v)
 
 const INTERNAL_API_KEY = process.env.ORBIT_INTERNAL_API_KEY
 
@@ -61,9 +93,9 @@ export async function PATCH(
     return NextResponse.json({ error: 'agent run not found', code: 'NOT_FOUND' }, { status: 404 })
   }
 
-  const updates: Record<string, unknown> = {}
+  const updates: Partial<AgentRun> = {}
   if (body.patch) {
-    if (typeof body.patch.status === 'string') updates.status = body.patch.status
+    if (isStatus(body.patch.status)) updates.status = body.patch.status
     if (typeof body.patch.summary === 'string') updates.summary = body.patch.summary
     if (typeof body.patch.endedAt === 'string') updates.endedAt = body.patch.endedAt
   }
@@ -73,10 +105,10 @@ export async function PATCH(
     updates.approvals = [
       ...existing,
       {
-        approvalId: a.approvalId,
-        kind: a.kind,
-        title: a.title,
-        resolution: a.resolution, // 'approved' | 'rejected'
+        approvalId: String(a.approvalId),
+        kind: isApprovalKind(a.kind) ? a.kind : null,
+        title: typeof a.title === 'string' ? a.title : null,
+        resolution: isApprovalResolution(a.resolution) ? a.resolution : null,
         resolvedBy: a.resolvedBy ?? null,
         resolvedAt: a.resolvedAt ?? new Date().toISOString(),
         notes: a.notes ?? '',
@@ -92,7 +124,7 @@ export async function PATCH(
     const updated = await payload.update({
       collection: 'agent-runs',
       id: run.id,
-      data: updates as any,
+      data: updates,
       overrideAccess: true,
     })
     return NextResponse.json({ id: updated.id, status: updated.status })

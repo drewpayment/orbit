@@ -1,4 +1,4 @@
-import type { CollectionConfig } from 'payload'
+import type { CollectionConfig, Where } from 'payload'
 
 /**
  * AgentToolVersions Collection
@@ -49,14 +49,15 @@ export const AgentToolVersions: CollectionConfig = {
       // For MVP, return all rows the workspace-membership query would
       // allow at the tool layer. Practical effect: a workspace member
       // sees every version row for tools they could already see.
-      return {
+      const where: Where = {
         // Cheap heuristic: deny by default unless an editedBy user or
         // viewer is in those workspaces. Concrete narrowing happens in
         // the page layer that joins to AgentTools.
         // (Better filter: server-side only; this collection isn't a
         // primary surface for end users, so a permissive read is OK.)
         and: workspaceIds.length > 0 ? [] : [{ id: { equals: '__nope__' } }],
-      } as any
+      }
+      return where
     },
     create: () => false,
     update: () => false,
