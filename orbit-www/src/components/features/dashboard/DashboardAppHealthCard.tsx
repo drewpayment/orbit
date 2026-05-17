@@ -1,74 +1,53 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Layers } from 'lucide-react'
 import Link from 'next/link'
+import { Layers } from 'lucide-react'
 import type { App } from '@/payload-types'
 
 interface DashboardAppHealthCardProps {
   apps: App[]
 }
 
-const statusConfig: Record<string, { dotColor: string; badgeBg: string; badgeText: string; label: string }> = {
-  healthy: { dotColor: 'bg-green-500', badgeBg: 'bg-green-500/10', badgeText: 'text-green-500', label: 'healthy' },
-  degraded: { dotColor: 'bg-yellow-500', badgeBg: 'bg-yellow-500/10', badgeText: 'text-yellow-500', label: 'degraded' },
-  down: { dotColor: 'bg-red-500', badgeBg: 'bg-red-500/10', badgeText: 'text-red-500', label: 'down' },
-  unknown: { dotColor: 'bg-gray-500', badgeBg: 'bg-secondary', badgeText: 'text-muted-foreground', label: 'unknown' },
+const statusConfig: Record<string, { dot: string; ring: string }> = {
+  healthy: { dot: 'bg-green-500', ring: 'shadow-[0_0_0_3px_rgba(34,197,94,0.18)]' },
+  degraded: { dot: 'bg-yellow-500', ring: 'shadow-[0_0_0_3px_rgba(234,179,8,0.18)]' },
+  down: { dot: 'bg-red-500', ring: 'shadow-[0_0_0_3px_rgba(239,68,68,0.18)]' },
+  unknown: { dot: 'bg-muted-foreground/60', ring: '' },
 }
 
 export function DashboardAppHealthCard({ apps }: DashboardAppHealthCardProps) {
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <CardTitle className="text-base font-semibold">Application Health</CardTitle>
-            <p className="text-xs text-muted-foreground">Across all workspaces</p>
-          </div>
-          {apps.length > 0 && (
-            <Link href="/apps" className="text-xs font-medium text-primary hover:underline">
-              View all →
-            </Link>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="pt-0">
-        {apps.length === 0 ? (
-          <div className="text-center py-6">
-            <Layers className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">No applications yet</p>
-            <Link href="/apps/new" className="text-xs text-primary hover:underline mt-1 inline-block">
-              Create your first app
-            </Link>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {apps.map((app) => {
-              const status = app.status || 'unknown'
-              const config = statusConfig[status] || statusConfig.unknown
-              const ws = typeof app.workspace === 'object' ? app.workspace : null
-              const version = app.latestBuild && typeof app.latestBuild === 'object'
-                ? app.latestBuild.imageTag || ''
-                : ''
-              return (
-                <div
-                  key={app.id}
-                  className="flex items-center gap-3 rounded-lg p-2.5 transition-colors hover:bg-muted/50"
-                >
-                  <span className={`h-2.5 w-2.5 rounded-full ${config.dotColor} shrink-0`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{app.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {ws?.name}{version ? ` · ${version}` : ''}
-                    </p>
-                  </div>
-                  <span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${config.badgeBg} ${config.badgeText}`}>
-                    {config.label}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
+    <div className="rounded-xl border border-border bg-card px-4 py-3.5">
+      <h3 className="mb-3 flex items-center justify-between text-[13px] font-semibold tracking-[-0.005em] text-foreground">
+        Application health
+        {apps.length > 0 && (
+          <Link href="/apps" className="text-[11.5px] font-normal text-primary hover:text-primary/80">
+            View all →
+          </Link>
         )}
-      </CardContent>
-    </Card>
+      </h3>
+      {apps.length === 0 ? (
+        <div className="py-5 text-center">
+          <Layers className="mx-auto mb-1.5 h-7 w-7 text-muted-foreground" />
+          <p className="text-[12.5px] text-muted-foreground">No applications yet</p>
+          <Link href="/apps/new" className="mt-1 inline-block text-[11.5px] font-medium text-primary hover:underline">
+            Create your first app
+          </Link>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {apps.map((app) => {
+            const status = (app.status as keyof typeof statusConfig) || 'unknown'
+            const cfg = statusConfig[status] ?? statusConfig.unknown
+            const ws = typeof app.workspace === 'object' ? app.workspace : null
+            return (
+              <div key={app.id} className="flex items-center gap-2.5 rounded-md px-1 py-1.5">
+                <span className={`h-2 w-2 shrink-0 rounded-full ${cfg.dot} ${cfg.ring}`} />
+                <span className="flex-1 text-[12.5px] font-medium text-foreground">{app.name}</span>
+                <span className="text-[11px] text-muted-foreground">{ws?.name}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }

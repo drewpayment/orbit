@@ -11,6 +11,7 @@ const typeLabels: Record<Activity['type'], string> = {
   topic: 'Kafka',
   schema: 'API',
   doc: 'Docs',
+  agent: 'Agent',
 }
 
 const typeColors: Record<Activity['type'], string> = {
@@ -18,6 +19,7 @@ const typeColors: Record<Activity['type'], string> = {
   topic: 'bg-blue-500',
   schema: 'bg-purple-500',
   doc: 'bg-green-500',
+  agent: 'bg-orange-500',
 }
 
 export default async function NotificationsPage() {
