@@ -93,6 +93,14 @@ export interface Config {
     'cloud-accounts': CloudAccount;
     'launch-templates': LaunchTemplate;
     launches: Launch;
+    'llm-providers': LlmProvider;
+    'agent-runs': AgentRun;
+    'agent-tools': AgentTool;
+    'agent-tool-versions': AgentToolVersion;
+    patterns: Pattern;
+    'pattern-versions': PatternVersion;
+    'pattern-instances': PatternInstance;
+    'pending-approvals': PendingApproval;
     'kafka-providers': KafkaProvider;
     'kafka-clusters': KafkaCluster;
     'kafka-environment-mappings': KafkaEnvironmentMapping;
@@ -150,6 +158,14 @@ export interface Config {
     'cloud-accounts': CloudAccountsSelect<false> | CloudAccountsSelect<true>;
     'launch-templates': LaunchTemplatesSelect<false> | LaunchTemplatesSelect<true>;
     launches: LaunchesSelect<false> | LaunchesSelect<true>;
+    'llm-providers': LlmProvidersSelect<false> | LlmProvidersSelect<true>;
+    'agent-runs': AgentRunsSelect<false> | AgentRunsSelect<true>;
+    'agent-tools': AgentToolsSelect<false> | AgentToolsSelect<true>;
+    'agent-tool-versions': AgentToolVersionsSelect<false> | AgentToolVersionsSelect<true>;
+    patterns: PatternsSelect<false> | PatternsSelect<true>;
+    'pattern-versions': PatternVersionsSelect<false> | PatternVersionsSelect<true>;
+    'pattern-instances': PatternInstancesSelect<false> | PatternInstancesSelect<true>;
+    'pending-approvals': PendingApprovalsSelect<false> | PendingApprovalsSelect<true>;
     'kafka-providers': KafkaProvidersSelect<false> | KafkaProvidersSelect<true>;
     'kafka-clusters': KafkaClustersSelect<false> | KafkaClustersSelect<true>;
     'kafka-environment-mappings': KafkaEnvironmentMappingsSelect<false> | KafkaEnvironmentMappingsSelect<true>;
@@ -1591,6 +1607,417 @@ export interface Feedback {
    */
   read?: boolean | null;
   submittedBy?: (string | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Workspace-scoped LLM credentials for the Infrastructure Agent
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "llm-providers".
+ */
+export interface LlmProvider {
+  id: string;
+  workspace: string | Workspace;
+  /**
+   * Friendly name shown in the agent run UI (e.g. "Anthropic prod key")
+   */
+  displayName: string;
+  /**
+   * Which Provider plugin handles requests for this credential
+   */
+  provider: 'anthropic' | 'openai_compat';
+  /**
+   * Optional. Defaults: anthropic=https://api.anthropic.com, openai_compat=https://api.openai.com. Override for self-hosted backends (LM Studio: http://host.docker.internal:1234, Ollama: http://host.docker.internal:11434).
+   */
+  baseUrl?: string | null;
+  /**
+   * Model identifier (e.g. claude-opus-4-7, gpt-4o, llama3-70b)
+   */
+  model: string;
+  /**
+   * Encrypted at rest. Leave blank for self-hosted backends that don't require a key.
+   */
+  apiKey?: string | null;
+  /**
+   * When true, agent runs in this workspace use this provider unless explicitly overridden
+   */
+  isDefault?: boolean | null;
+  createdBy?: (string | null) | User;
+  lastModifiedBy?: (string | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Infrastructure Agent run history
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "agent-runs".
+ */
+export interface AgentRun {
+  id: string;
+  workspace: string | Workspace;
+  /**
+   * Optional: the app/repo the agent is acting on
+   */
+  repository?: (string | null) | App;
+  workflowId: string;
+  runId?: string | null;
+  /**
+   * Short label derived from the initial prompt
+   */
+  title: string;
+  initialPrompt: string;
+  llmProvider: string | LlmProvider;
+  status:
+    | 'starting'
+    | 'running'
+    | 'awaiting_user'
+    | 'awaiting_approval'
+    | 'completed'
+    | 'aborted'
+    | 'failed'
+    | 'timeout';
+  /**
+   * Final summary written by the agent on completion
+   */
+  summary?: string | null;
+  startedBy: string | User;
+  startedAt: string;
+  endedAt?: string | null;
+  /**
+   * One entry per HITL gate the agent encountered
+   */
+  approvals?:
+    | {
+        approvalId: string;
+        kind?: ('proposal' | 'tool_registration' | 'destructive_command' | 'custom') | null;
+        title?: string | null;
+        resolution?: ('approved' | 'rejected') | null;
+        resolvedBy?: (string | null) | User;
+        resolvedAt?: string | null;
+        notes?: string | null;
+        /**
+         * Reviewer modified the registration before approving. Tool-registration approvals only.
+         */
+        edited?: boolean | null;
+        editedBy?: (string | null) | User;
+        /**
+         * Comma-delimited list of fields the reviewer changed.
+         */
+        editedFields?: string | null;
+        /**
+         * AgentToolVersions row id capturing the reviewer-edited snapshot, when edited.
+         */
+        agentToolVersionId?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Self-extending tool library for the Infrastructure Agent
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "agent-tools".
+ */
+export interface AgentTool {
+  id: string;
+  workspace: string | Workspace;
+  /**
+   * Slug-style tool name the agent invokes (e.g. deploy_azure_appservice). Must be unique per workspace and must not collide with built-in tools.
+   */
+  name: string;
+  /**
+   * Plain-language explanation shown to the LLM as part of its tool catalog. Concise: one paragraph at most.
+   */
+  description: string;
+  /**
+   * JSON Schema describing the tool args.
+   */
+  inputSchemaJson?: string | null;
+  templateKind: 'shell' | 'http' | 'composite';
+  /**
+   * Template body. {{var}} placeholders are substituted with the agent-supplied args (shell-escaped for the shell kind, JSON-escaped for http). See docs/plans/robust-twirling-crab.md §6.
+   */
+  templateJson: string;
+  /**
+   * The agent's rationale for why this tool is worth registering, captured at proposal time.
+   */
+  reasoning?: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  createdByRunId?: string | null;
+  approvedBy?: (string | null) | User;
+  approvedAt?: string | null;
+  rejectionReason?: string | null;
+  /**
+   * How many times the tool has been invoked since approval.
+   */
+  invocationCount?: number | null;
+  lastInvokedAt?: string | null;
+  /**
+   * Version number reflected in this row's templateJson / etc. The full version history lives in agent-tool-versions; this field is the pointer to which version is active.
+   */
+  currentVersion?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Audit-trail version history for self-extending agent tools
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "agent-tool-versions".
+ */
+export interface AgentToolVersion {
+  id: string;
+  tool: string | AgentTool;
+  /**
+   * Monotonically increasing per-tool. v1 is the agent's first proposal.
+   */
+  versionNumber: number;
+  source: 'agent_proposed' | 'reviewer_edited';
+  /**
+   * Auto-computed from tool name + version. Used as title.
+   */
+  displayName?: string | null;
+  name: string;
+  description?: string | null;
+  inputSchemaJson?: string | null;
+  templateKind: 'shell' | 'http' | 'composite';
+  templateJson: string;
+  /**
+   * Set on reviewer_edited rows; null on agent_proposed rows.
+   */
+  editedBy?: (string | null) | User;
+  /**
+   * Comma-delimited list of fields the reviewer changed (name, description, template_json, input_schema_json, template_kind). Only set on reviewer_edited rows.
+   */
+  editedFields?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Platform-wide catalog of admin-approved deployment recipes
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "patterns".
+ */
+export interface Pattern {
+  id: string;
+  /**
+   * Slug-style pattern name the agent invokes (e.g. static_site_on_render). Globally unique. Must not collide with built-in tools.
+   */
+  name: string;
+  /**
+   * Human-readable name shown in the catalog UI (e.g. "Static site on Render").
+   */
+  displayName: string;
+  /**
+   * Plain-language explanation shown to the LLM and to users browsing the catalog. Concise: one paragraph at most.
+   */
+  description: string;
+  category: 'compute' | 'data' | 'cache' | 'queue' | 'observability' | 'edge' | 'static-site' | 'other';
+  /**
+   * Same three kinds the AgentTools registry supports — pattern execution reuses tooltemplate.Expand, the safety classifier, and the per-run sandbox.
+   */
+  templateKind: 'shell' | 'http' | 'composite';
+  /**
+   * Template body. {{var}} placeholders are substituted with the user-supplied parameters at instantiation time. Validated against the input schema before approval.
+   */
+  templateJson: string;
+  /**
+   * JSON Schema describing the parameters a PatternInstance must supply. Every {{var}} in templateJson must appear here as a property.
+   */
+  inputSchemaJson: string;
+  /**
+   * The agent's rationale for why this pattern is worth productizing, captured at proposal time.
+   */
+  reasoning?: string | null;
+  status: 'pending' | 'approved' | 'deprecated' | 'rejected';
+  /**
+   * Agent workflow id that proposed the pattern.
+   */
+  createdByRunId?: string | null;
+  /**
+   * User on whose behalf the proposing agent run executed.
+   */
+  createdByUser?: (string | null) | User;
+  approvedBy?: (string | null) | User;
+  approvedAt?: string | null;
+  rejectionReason?: string | null;
+  /**
+   * Version number reflected in this row's templateJson / inputSchemaJson. Full version history lives in pattern-versions; this field is the pointer to which version is active.
+   */
+  currentVersion?: number | null;
+  /**
+   * How many PatternInstances have been provisioned from this pattern.
+   */
+  instantiationCount?: number | null;
+  lastInstantiatedAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Audit-trail version history for platform-wide deployment patterns
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "pattern-versions".
+ */
+export interface PatternVersion {
+  id: string;
+  pattern: string | Pattern;
+  /**
+   * Monotonically increasing per-pattern. v1 is the agent's first proposal.
+   */
+  versionNumber: number;
+  source: 'agent_proposed' | 'reviewer_edited';
+  /**
+   * Auto-computed from pattern name + version. Used as title.
+   */
+  displayName?: string | null;
+  name: string;
+  patternDisplayName: string;
+  description?: string | null;
+  category: 'compute' | 'data' | 'cache' | 'queue' | 'observability' | 'edge' | 'static-site' | 'other';
+  templateKind: 'shell' | 'http' | 'composite';
+  templateJson: string;
+  inputSchemaJson: string;
+  /**
+   * Set on reviewer_edited rows; null on agent_proposed rows.
+   */
+  editedBy?: (string | null) | User;
+  /**
+   * Comma-delimited list of fields the reviewer changed (name, display_name, description, category, template_json, input_schema_json, template_kind). Only set on reviewer_edited rows.
+   */
+  editedFields?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Provisioned instances of platform Patterns within a workspace
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "pattern-instances".
+ */
+export interface PatternInstance {
+  id: string;
+  /**
+   * Security enclave the instance belongs to.
+   */
+  workspace: string | Workspace;
+  /**
+   * Catalog entry this instance was provisioned from.
+   */
+  pattern: string | Pattern;
+  /**
+   * Snapshot of patterns.currentVersion at instantiation time. A later pattern edit doesn't retroactively change a live instance.
+   */
+  patternVersion: number;
+  /**
+   * Human name within the workspace (unique per workspace).
+   */
+  name: string;
+  /**
+   * Optional binding to an App — set for instances that belong to a specific app (e.g. "Postgres for myapp"); blank for standalone resources.
+   */
+  app?: (string | null) | App;
+  /**
+   * User-supplied args. Must validate against the snapshot pattern's inputSchemaJson at instantiation time.
+   */
+  parameters:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  status: 'pending' | 'validating' | 'provisioning' | 'active' | 'failed' | 'deprovisioning' | 'deprovisioned';
+  /**
+   * Temporal workflow id that provisioned this instance. For v1 this is the agent run id; future iterations move long-running instances into a dedicated PatternInstantiationWorkflow under id `pattern-instance-{id}`.
+   */
+  workflowId?: string | null;
+  /**
+   * What the template produced (urls, ids, etc.). Populated on transition to active.
+   */
+  outputs?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Populated on transition to failed.
+   */
+  errorMessage?: string | null;
+  createdByUser?: (string | null) | User;
+  /**
+   * Agent run id that created the instance, if any.
+   */
+  createdByRunId?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Aggregated view of agent approval gates across all runs
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "pending-approvals".
+ */
+export interface PendingApproval {
+  id: string;
+  workspace: string | Workspace;
+  /**
+   * Temporal workflow id (not run id) — stable across continue-as-new.
+   */
+  workflowId: string;
+  /**
+   * Most recent Temporal run id; useful for jumping into the chat thread.
+   */
+  runId?: string | null;
+  /**
+   * Optional link to the AgentRuns row (when the workflow has one).
+   */
+  agentRun?: (string | null) | AgentRun;
+  approvalId: string;
+  kind: 'tool_registration' | 'pattern_registration' | 'destructive_command' | 'proposal' | 'custom';
+  title: string;
+  /**
+   * Reviewer-facing body. Same content the chat card shows.
+   */
+  bodyMarkdown?: string | null;
+  /**
+   * Structured gate payload. For tool_registration: {name, description, templateKind, templateJson, inputSchemaJson}. For pattern_registration: {name, displayName, description, category, templateKind, templateJson, inputSchemaJson, reasoning, pattern_id}. For destructive_command: {command, matchedPattern}.
+   */
+  payload?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  status: 'pending' | 'resolved' | 'aborted';
+  /**
+   * Set when status flips to resolved.
+   */
+  resolution?: ('approved' | 'rejected') | null;
+  resolvedBy?: (string | null) | User;
+  resolvedAt?: string | null;
+  /**
+   * Reviewer notes / rejection reason.
+   */
+  notes?: string | null;
+  /**
+   * Snapshot of state.reviewerRounds at resolution time — how many back-and-forths the reviewer had with the agent before deciding.
+   */
+  reviewerRounds?: number | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -3288,6 +3715,38 @@ export interface PayloadLockedDocument {
         value: string | Launch;
       } | null)
     | ({
+        relationTo: 'llm-providers';
+        value: string | LlmProvider;
+      } | null)
+    | ({
+        relationTo: 'agent-runs';
+        value: string | AgentRun;
+      } | null)
+    | ({
+        relationTo: 'agent-tools';
+        value: string | AgentTool;
+      } | null)
+    | ({
+        relationTo: 'agent-tool-versions';
+        value: string | AgentToolVersion;
+      } | null)
+    | ({
+        relationTo: 'patterns';
+        value: string | Pattern;
+      } | null)
+    | ({
+        relationTo: 'pattern-versions';
+        value: string | PatternVersion;
+      } | null)
+    | ({
+        relationTo: 'pattern-instances';
+        value: string | PatternInstance;
+      } | null)
+    | ({
+        relationTo: 'pending-approvals';
+        value: string | PendingApproval;
+      } | null)
+    | ({
         relationTo: 'kafka-providers';
         value: string | KafkaProvider;
       } | null)
@@ -4092,6 +4551,190 @@ export interface LaunchesSelect<T extends boolean = true> {
   lastLaunchedAt?: T;
   lastDeorbitedAt?: T;
   launchedBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "llm-providers_select".
+ */
+export interface LlmProvidersSelect<T extends boolean = true> {
+  workspace?: T;
+  displayName?: T;
+  provider?: T;
+  baseUrl?: T;
+  model?: T;
+  apiKey?: T;
+  isDefault?: T;
+  createdBy?: T;
+  lastModifiedBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "agent-runs_select".
+ */
+export interface AgentRunsSelect<T extends boolean = true> {
+  workspace?: T;
+  repository?: T;
+  workflowId?: T;
+  runId?: T;
+  title?: T;
+  initialPrompt?: T;
+  llmProvider?: T;
+  status?: T;
+  summary?: T;
+  startedBy?: T;
+  startedAt?: T;
+  endedAt?: T;
+  approvals?:
+    | T
+    | {
+        approvalId?: T;
+        kind?: T;
+        title?: T;
+        resolution?: T;
+        resolvedBy?: T;
+        resolvedAt?: T;
+        notes?: T;
+        edited?: T;
+        editedBy?: T;
+        editedFields?: T;
+        agentToolVersionId?: T;
+        id?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "agent-tools_select".
+ */
+export interface AgentToolsSelect<T extends boolean = true> {
+  workspace?: T;
+  name?: T;
+  description?: T;
+  inputSchemaJson?: T;
+  templateKind?: T;
+  templateJson?: T;
+  reasoning?: T;
+  status?: T;
+  createdByRunId?: T;
+  approvedBy?: T;
+  approvedAt?: T;
+  rejectionReason?: T;
+  invocationCount?: T;
+  lastInvokedAt?: T;
+  currentVersion?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "agent-tool-versions_select".
+ */
+export interface AgentToolVersionsSelect<T extends boolean = true> {
+  tool?: T;
+  versionNumber?: T;
+  source?: T;
+  displayName?: T;
+  name?: T;
+  description?: T;
+  inputSchemaJson?: T;
+  templateKind?: T;
+  templateJson?: T;
+  editedBy?: T;
+  editedFields?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "patterns_select".
+ */
+export interface PatternsSelect<T extends boolean = true> {
+  name?: T;
+  displayName?: T;
+  description?: T;
+  category?: T;
+  templateKind?: T;
+  templateJson?: T;
+  inputSchemaJson?: T;
+  reasoning?: T;
+  status?: T;
+  createdByRunId?: T;
+  createdByUser?: T;
+  approvedBy?: T;
+  approvedAt?: T;
+  rejectionReason?: T;
+  currentVersion?: T;
+  instantiationCount?: T;
+  lastInstantiatedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "pattern-versions_select".
+ */
+export interface PatternVersionsSelect<T extends boolean = true> {
+  pattern?: T;
+  versionNumber?: T;
+  source?: T;
+  displayName?: T;
+  name?: T;
+  patternDisplayName?: T;
+  description?: T;
+  category?: T;
+  templateKind?: T;
+  templateJson?: T;
+  inputSchemaJson?: T;
+  editedBy?: T;
+  editedFields?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "pattern-instances_select".
+ */
+export interface PatternInstancesSelect<T extends boolean = true> {
+  workspace?: T;
+  pattern?: T;
+  patternVersion?: T;
+  name?: T;
+  app?: T;
+  parameters?: T;
+  status?: T;
+  workflowId?: T;
+  outputs?: T;
+  errorMessage?: T;
+  createdByUser?: T;
+  createdByRunId?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "pending-approvals_select".
+ */
+export interface PendingApprovalsSelect<T extends boolean = true> {
+  workspace?: T;
+  workflowId?: T;
+  runId?: T;
+  agentRun?: T;
+  approvalId?: T;
+  kind?: T;
+  title?: T;
+  bodyMarkdown?: T;
+  payload?: T;
+  status?: T;
+  resolution?: T;
+  resolvedBy?: T;
+  resolvedAt?: T;
+  notes?: T;
+  reviewerRounds?: T;
   updatedAt?: T;
   createdAt?: T;
 }

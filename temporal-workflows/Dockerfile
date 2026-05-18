@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /build
 
@@ -28,7 +28,16 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /app/worker ./cmd/worker
 # Runtime stage
 FROM alpine:latest
 
-RUN apk --no-cache add ca-certificates
+# kubectl is needed when AGENT_SANDBOX_BACKEND=k8s — the Infrastructure
+# Agent's K8s SandboxExecutor shells out to it. Pinned to align with the
+# server version range in infrastructure/k8s/agent-sandbox/.
+ARG KUBECTL_VERSION=v1.31.1
+
+RUN apk --no-cache add ca-certificates curl bash git \
+    && ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') \
+    && curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${ARCH}/kubectl" -o /usr/local/bin/kubectl \
+    && chmod +x /usr/local/bin/kubectl \
+    && apk del curl
 
 WORKDIR /app
 

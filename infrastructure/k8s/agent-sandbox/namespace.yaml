@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: orbit-agent-sandbox
+  labels:
+    name: orbit-agent-sandbox
+    app.kubernetes.io/part-of: orbit
+    app.kubernetes.io/component: infrastructure-agent
+  annotations:
+    description: |
+      Per-agent-run sandbox pods land here. Created and destroyed by the
+      temporal worker's K8s SandboxExecutor. NetworkPolicies in this
+      namespace deny all ingress and gate egress to a workspace-scoped
+      allowlist.

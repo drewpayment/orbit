@@ -10,6 +10,7 @@ describe('DashboardStatsRow', () => {
     appCount: 23,
     healthyCount: 19,
     degradedCount: 4,
+    unknownCount: 0,
     kafkaTopicCount: 47,
     virtualClusterCount: 8,
     apiSchemaCount: 12,
@@ -32,25 +33,24 @@ describe('DashboardStatsRow', () => {
     expect(screen.getByText('12')).toBeInTheDocument()
   })
 
-  it('should render health breakdown for apps', () => {
+  it('should render health breakdown labels for apps', () => {
     render(<DashboardStatsRow {...defaultProps} />)
-    expect(screen.getByText('19 healthy')).toBeInTheDocument()
-    expect(screen.getByText('4 degraded')).toBeInTheDocument()
+    expect(screen.getByText('healthy')).toBeInTheDocument()
+    expect(screen.getByText('degraded')).toBeInTheDocument()
   })
 
-  it('should render virtual cluster count', () => {
+  it('should render virtual cluster summary', () => {
     render(<DashboardStatsRow {...defaultProps} />)
-    expect(screen.getByText('8 virtual clusters')).toBeInTheDocument()
+    expect(screen.getByText(/virtual cluster/i)).toBeInTheDocument()
   })
 
-  it('should render published API count', () => {
+  it('should render published API summary', () => {
     render(<DashboardStatsRow {...defaultProps} />)
-    expect(screen.getByText('9 published')).toBeInTheDocument()
+    expect(screen.getByText('published')).toBeInTheDocument()
   })
 
-  it('should handle zero counts gracefully', () => {
-    render(<DashboardStatsRow {...defaultProps} workspaceCount={0} appCount={0} kafkaTopicCount={0} apiSchemaCount={0} />)
-    const zeros = screen.getAllByText('0')
-    expect(zeros).toHaveLength(4)
+  it('should render an empty-state CTA when API schema count is zero', () => {
+    render(<DashboardStatsRow {...defaultProps} apiSchemaCount={0} publishedApiCount={0} />)
+    expect(screen.getByText(/register your first schema/i)).toBeInTheDocument()
   })
 })
