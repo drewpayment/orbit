@@ -118,14 +118,19 @@ message ApproveActionRequest {
   optional ApprovalEdits edits = 5;
 }
 
-// ApprovalEdits carries reviewer modifications to a tool registration.
-// Empty fields mean "leave the agent's proposal unchanged for this field."
+// ApprovalEdits carries reviewer modifications to a tool registration
+// or pattern registration. Empty fields mean "leave the agent's proposal
+// unchanged for this field." display_name + category are pattern-specific
+// (no analog in tool_registration); the workflow ignores them for
+// tool_registration gates.
 message ApprovalEdits {
   string name              = 1;
   string description       = 2;
   string template_kind     = 3;
   string template_json     = 4;
   string input_schema_json = 5;
+  string display_name      = 6;
+  string category          = 7;
 }
 
 message ApproveActionResponse {

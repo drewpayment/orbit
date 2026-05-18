@@ -17,6 +17,7 @@ import {
   RadioTower,
   Rocket,
   Settings,
+  Sparkles,
   Shield,
   ShieldCheck,
   Workflow,
@@ -44,7 +45,6 @@ const navMainData = [
       title: "Dashboard",
       url: "/dashboard",
       icon: LayoutDashboard,
-      isActive: true,
       items: [],
     },
     {
@@ -63,6 +63,14 @@ const navMainData = [
       title: "Applications",
       url: "/apps",
       icon: Layers,
+      items: [],
+    },
+    {
+      title: "Infra Agent",
+      url: "/agent",
+      icon: Sparkles,
+      // Active on the /agent hub and on any workspace-scoped agent run.
+      activeMatch: ["/agent", "/infra-agent"],
       items: [],
     },
     {

@@ -43,7 +43,16 @@ interface ServerEventDTO {
     | 'status_update'
     | 'tool_call_output_chunk'
     | 'unknown'
-  conversationTurn?: { turnId: string; role: string; content: string }
+  conversationTurn?: {
+    turnId: string
+    role: string
+    content: string
+    // toolName / toolCallId are surfaced when the proto adds them on
+    // the wire. Until then the UI categorizes tool turns from the JSON
+    // content shape.
+    toolName?: string
+    toolCallId?: string
+  }
   tokenDelta?: { turnId: string; delta: string }
   proposalUpdate?: { proposalId: string; title: string; summary: string; bodyMarkdown: string }
   approvalRequest?: {
@@ -51,15 +60,20 @@ interface ServerEventDTO {
     kind: string
     title: string
     bodyMarkdown: string
-    // Structured fields for tool_registration approvals so the chat UI
-    // can render an editable form. Empty for other kinds.
+    // Structured fields for tool_registration / pattern_registration
+    // approvals so the chat UI can render an editable form. Empty for
+    // other kinds. displayName + category + patternId are
+    // pattern-specific; the rest are shared.
     name?: string
+    displayName?: string
     description?: string
+    category?: string
     templateKind?: string
     templateJson?: string
     inputSchemaJson?: string
     reasoning?: string
     agentToolId?: string
+    patternId?: string
   }
   approvalResolution?: { approvalId: string; approved: boolean; resolvedBy: string; notes: string }
   statusUpdate?: { status: string; message: string }
@@ -176,8 +190,32 @@ function mapEvent(evt: any): ServerEventDTO {
   const e = evt.event
   if (!e) return base
   switch (e.case) {
-    case 'conversationTurn':
-      return { ...base, kind: 'conversation_turn', conversationTurn: e.value }
+    case 'conversationTurn': {
+      // The proto ConversationTurn currently carries only {turn_id, role,
+      // content}. tool_name / tool_call_id / tool_calls live on the Go
+      // workflow's internal struct but aren't on the wire (yet). The UI
+      // categorizes tool turns from the JSON content shape. When the
+      // proto is extended (Phase 2), populate these fields here and the
+      // UI will switch from heuristic to explicit categorization.
+      const v = e.value as {
+        turnId: string
+        role: string
+        content: string
+        toolCallId?: string
+        toolName?: string
+      }
+      return {
+        ...base,
+        kind: 'conversation_turn',
+        conversationTurn: {
+          turnId: v.turnId,
+          role: v.role,
+          content: v.content,
+          toolName: v.toolName || undefined,
+          toolCallId: v.toolCallId || undefined,
+        },
+      }
+    }
     case 'tokenDelta':
       return { ...base, kind: 'token_delta', tokenDelta: e.value }
     case 'proposalUpdate':
@@ -197,12 +235,15 @@ function mapEvent(evt: any): ServerEventDTO {
           title: v.title,
           bodyMarkdown: v.bodyMarkdown,
           name: fieldStr('name'),
+          displayName: fieldStr('display_name'),
           description: fieldStr('description'),
+          category: fieldStr('category'),
           templateKind: fieldStr('template_kind'),
           templateJson: fieldStr('template_json'),
           inputSchemaJson: fieldStr('input_schema_json'),
           reasoning: fieldStr('reasoning'),
           agentToolId: fieldStr('agent_tool_id'),
+          patternId: fieldStr('pattern_id'),
         },
       }
     }

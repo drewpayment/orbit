@@ -149,17 +149,30 @@ export async function rejectAgentAction(input: {
 }
 
 /**
- * approveAgentActionWithEdits — commit α.
+ * approveAgentActionWithEdits — commit α + pattern_registration.
  *
- * For tool-registration approvals, the reviewer can edit the agent's
- * proposed name / description / template / schema before approving.
- * Empty fields mean "leave the agent's value unchanged"; the workflow
- * pre-flight validates the resulting template via the Go template engine
- * and rejects the gate cleanly if the edit produces an unparseable
- * placeholder.
+ * For tool-registration and pattern_registration approvals, the reviewer
+ * can edit the agent's proposed fields before approving. Empty fields mean
+ * "leave the agent's value unchanged"; the workflow pre-flight validates
+ * the resulting template via the Go template engine and rejects the gate
+ * cleanly if the edit produces an unparseable placeholder.
+ *
+ * displayName + category are pattern-specific (no analog in
+ * tool_registration); the workflow ignores them for tool_registration
+ * gates.
  *
  * Workspace admin/owner gating mirrors approveAgentAction.
  */
+export type PatternCategory =
+  | 'compute'
+  | 'data'
+  | 'cache'
+  | 'queue'
+  | 'observability'
+  | 'edge'
+  | 'static-site'
+  | 'other'
+
 export async function approveAgentActionWithEdits(input: {
   workspaceId: string
   workflowId: string
@@ -167,7 +180,9 @@ export async function approveAgentActionWithEdits(input: {
   notes?: string
   edits: {
     name?: string
+    displayName?: string
     description?: string
+    category?: PatternCategory
     templateKind?: 'shell' | 'http' | 'composite'
     templateJson?: string
     inputSchemaJson?: string
@@ -187,7 +202,9 @@ export async function approveAgentActionWithEdits(input: {
       notes: input.notes ?? '',
       edits: {
         name: input.edits.name ?? '',
+        displayName: input.edits.displayName ?? '',
         description: input.edits.description ?? '',
+        category: input.edits.category ?? '',
         templateKind: input.edits.templateKind ?? '',
         templateJson: input.edits.templateJson ?? '',
         inputSchemaJson: input.edits.inputSchemaJson ?? '',

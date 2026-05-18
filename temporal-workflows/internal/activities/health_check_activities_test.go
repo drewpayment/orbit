@@ -83,15 +83,20 @@ func TestPerformHealthCheckActivity_Degraded(t *testing.T) {
 
 // mockPayloadHealthClient is a mock implementation of PayloadHealthClient for testing
 type mockPayloadHealthClient struct {
-	updateAppStatusErr   error
-	createHealthCheckErr error
-	updateAppStatusCalls []struct {
+	updateAppStatusErr       error
+	createHealthCheckErr     error
+	updateAppHealthConfigErr error
+	updateAppStatusCalls     []struct {
 		appID  string
 		status string
 	}
 	createHealthCheckCalls []struct {
 		appID  string
 		result HealthCheckResult
+	}
+	updateAppHealthConfigCalls []struct {
+		appID string
+		spec  HealthConfigSpec
 	}
 }
 
@@ -109,6 +114,14 @@ func (m *mockPayloadHealthClient) CreateHealthCheck(ctx context.Context, appID s
 		result HealthCheckResult
 	}{appID: appID, result: result})
 	return m.createHealthCheckErr
+}
+
+func (m *mockPayloadHealthClient) UpdateAppHealthConfig(ctx context.Context, appID string, spec HealthConfigSpec) error {
+	m.updateAppHealthConfigCalls = append(m.updateAppHealthConfigCalls, struct {
+		appID string
+		spec  HealthConfigSpec
+	}{appID: appID, spec: spec})
+	return m.updateAppHealthConfigErr
 }
 
 func TestRecordHealthResultActivity_Success(t *testing.T) {
@@ -209,4 +222,78 @@ func TestRecordHealthResultActivity_CreateHealthCheckFailure(t *testing.T) {
 	// Verify both methods were called
 	require.Len(t, mockClient.updateAppStatusCalls, 1)
 	require.Len(t, mockClient.createHealthCheckCalls, 1)
+}
+
+// --- ConfigureAppHealthCheckActivity (GitHub issue #44 — unification) ---
+
+func TestConfigureAppHealthCheck_Success(t *testing.T) {
+	mockClient := &mockPayloadHealthClient{}
+	a := NewHealthCheckActivities(mockClient)
+
+	input := ConfigureAppHealthCheckInput{
+		AppID: "app-123",
+		Spec: HealthConfigSpec{
+			URL:            "https://app.example.com/healthz",
+			Method:         "GET",
+			ExpectedStatus: 200,
+			Interval:       60,
+			Timeout:        10,
+		},
+	}
+
+	err := a.ConfigureAppHealthCheckActivity(context.Background(), input)
+	require.NoError(t, err)
+
+	require.Len(t, mockClient.updateAppHealthConfigCalls, 1)
+	call := mockClient.updateAppHealthConfigCalls[0]
+	assert.Equal(t, "app-123", call.appID)
+	assert.Equal(t, "https://app.example.com/healthz", call.spec.URL)
+	assert.Equal(t, "GET", call.spec.Method)
+	assert.Equal(t, 200, call.spec.ExpectedStatus)
+	assert.Equal(t, 60, call.spec.Interval)
+	assert.Equal(t, 10, call.spec.Timeout)
+}
+
+func TestConfigureAppHealthCheck_NilClient(t *testing.T) {
+	a := NewHealthCheckActivities(nil)
+	err := a.ConfigureAppHealthCheckActivity(context.Background(), ConfigureAppHealthCheckInput{
+		AppID: "app-1",
+		Spec:  HealthConfigSpec{URL: "https://x"},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "payload client not configured")
+}
+
+func TestConfigureAppHealthCheck_RejectsMissingAppID(t *testing.T) {
+	a := NewHealthCheckActivities(&mockPayloadHealthClient{})
+	err := a.ConfigureAppHealthCheckActivity(context.Background(), ConfigureAppHealthCheckInput{
+		AppID: "",
+		Spec:  HealthConfigSpec{URL: "https://x"},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "appId is required")
+}
+
+func TestConfigureAppHealthCheck_RejectsMissingURL(t *testing.T) {
+	a := NewHealthCheckActivities(&mockPayloadHealthClient{})
+	err := a.ConfigureAppHealthCheckActivity(context.Background(), ConfigureAppHealthCheckInput{
+		AppID: "app-1",
+		Spec:  HealthConfigSpec{},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "spec.url is required")
+}
+
+func TestConfigureAppHealthCheck_PropagatesPayloadError(t *testing.T) {
+	mockClient := &mockPayloadHealthClient{
+		updateAppHealthConfigErr: errors.New("422 schema validation"),
+	}
+	a := NewHealthCheckActivities(mockClient)
+
+	err := a.ConfigureAppHealthCheckActivity(context.Background(), ConfigureAppHealthCheckInput{
+		AppID: "app-1",
+		Spec:  HealthConfigSpec{URL: "https://x", Method: "GET", ExpectedStatus: 200, Interval: 60, Timeout: 10},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "422 schema validation")
 }

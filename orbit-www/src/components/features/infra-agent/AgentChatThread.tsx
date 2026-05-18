@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -14,7 +15,24 @@ import {
   rejectAgentAction,
   sendAgentMessage,
   sendReviewerMessage,
+  type PatternCategory,
 } from '@/app/actions/infra-agent'
+
+import { RunHeader } from './parts/RunHeader'
+import { PhaseTimeline } from './parts/PhaseTimeline'
+import { ContextStrip } from './parts/ContextStrip'
+import { ToolCard } from './parts/ToolCard'
+import { AgentThought } from './parts/AgentThought'
+import { Composer } from './parts/Composer'
+import { RecoveryBanner } from './parts/RecoveryBanner'
+import { parseToolTurn } from './lib/tool-parsing'
+import { derivePhases } from './lib/phases'
+
+// Matches the workflow's recoverableErrorPrefix constant — stays in sync
+// with temporal-workflows/internal/workflows/infrastructure_agent_workflow.go.
+// When the AgentStatusUpdate proto gains a structured payload field this
+// sentinel goes away in favor of a typed flag.
+const RECOVERABLE_LLM_ERROR_PREFIX = '[recoverable_llm_error] '
 
 /**
  * Wire shape emitted by /api/agent/[runId]/stream. Mirrors AgentEvent in the
@@ -32,7 +50,13 @@ interface AgentEventDTO {
     | 'status_update'
     | 'tool_call_output_chunk'
     | 'unknown'
-  conversationTurn?: { turnId: string; role: string; content: string }
+  conversationTurn?: {
+    turnId: string
+    role: string
+    content: string
+    toolName?: string
+    toolCallId?: string
+  }
   tokenDelta?: { turnId: string; delta: string }
   proposalUpdate?: { proposalId: string; title: string; summary: string; bodyMarkdown: string }
   approvalRequest?: {
@@ -41,27 +65,46 @@ interface AgentEventDTO {
     title: string
     bodyMarkdown: string
     name?: string
+    displayName?: string
     description?: string
+    category?: string
     templateKind?: string
     templateJson?: string
     inputSchemaJson?: string
     reasoning?: string
     agentToolId?: string
+    patternId?: string
   }
   approvalResolution?: { approvalId: string; approved: boolean; resolvedBy: string; notes: string }
   statusUpdate?: { status: string; message: string }
   toolCallOutputChunk?: { callId: string; stream: string; chunk: string }
 }
 
+interface RunContext {
+  title: string
+  startedAtIso: string
+  workspaceName: string
+  appName?: string
+  appFramework?: string
+  cloudName?: string
+  cloudProvider?: string
+  cloudRegion?: string
+  llmModel?: string
+}
+
 interface Props {
   workspaceId: string
   workflowId: string
+  /** Optional run/workspace context used by RunHeader + ContextStrip. */
+  context?: RunContext
 }
 
 interface ChatTurn {
   turnId: string
   role: string
   content: string
+  toolName?: string
+  toolCallId?: string
 }
 
 interface PendingApproval {
@@ -69,9 +112,13 @@ interface PendingApproval {
   kind: string
   title: string
   bodyMarkdown: string
-  // Structured editable payload — populated for tool_registration kind.
+  // Structured editable payload — populated for tool_registration and
+  // pattern_registration kinds. displayName + category are
+  // pattern-specific; the rest are shared.
   name?: string
+  displayName?: string
   description?: string
+  category?: string
   templateKind?: string
   templateJson?: string
   inputSchemaJson?: string
@@ -96,7 +143,7 @@ interface ToolOutputBuffer {
   text: string
 }
 
-export function AgentChatThread({ workspaceId, workflowId }: Props) {
+export function AgentChatThread({ workspaceId, workflowId, context }: Props) {
   const [turns, setTurns] = useState<ChatTurn[]>([])
   const [streamingTurns, setStreamingTurns] = useState<Record<string, string>>({})
   const [toolOutputs, setToolOutputs] = useState<Record<string, ToolOutputBuffer>>({})
@@ -104,6 +151,10 @@ export function AgentChatThread({ workspaceId, workflowId }: Props) {
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([])
   const [status, setStatus] = useState('starting')
   const [statusMessage, setStatusMessage] = useState('')
+  // Set when the workflow signals a recoverable LLM error — see issue #42.
+  // Cleared when any subsequent status_update arrives without the sentinel
+  // prefix (e.g. status goes back to "running" after /retry).
+  const [recoveryError, setRecoveryError] = useState<string | null>(null)
   const [connection, setConnection] = useState<'connecting' | 'live' | 'reconnecting' | 'closed'>('connecting')
   const [input, setInput] = useState('')
   const [pending, startTransition] = useTransition()
@@ -118,11 +169,18 @@ export function AgentChatThread({ workspaceId, workflowId }: Props) {
         if (e.kind === 'conversation_turn' && e.conversationTurn) {
           const ct = e.conversationTurn
           const idx = indexByTurnId.get(ct.turnId)
+          const turn: ChatTurn = {
+            turnId: ct.turnId,
+            role: ct.role,
+            content: ct.content,
+            toolName: ct.toolName,
+            toolCallId: ct.toolCallId,
+          }
           if (idx === undefined) {
             indexByTurnId.set(ct.turnId, next.length)
-            next.push({ turnId: ct.turnId, role: ct.role, content: ct.content })
+            next.push(turn)
           } else {
-            next[idx] = { turnId: ct.turnId, role: ct.role, content: ct.content }
+            next[idx] = turn
           }
           modified = true
         }
@@ -184,7 +242,9 @@ export function AgentChatThread({ workspaceId, workflowId }: Props) {
             title: ar.title,
             bodyMarkdown: ar.bodyMarkdown,
             name: ar.name,
+            displayName: ar.displayName,
             description: ar.description,
+            category: ar.category,
             templateKind: ar.templateKind,
             templateJson: ar.templateJson,
             inputSchemaJson: ar.inputSchemaJson,
@@ -198,7 +258,15 @@ export function AgentChatThread({ workspaceId, workflowId }: Props) {
       }
       if (e.kind === 'status_update' && e.statusUpdate) {
         setStatus(e.statusUpdate.status)
-        setStatusMessage(e.statusUpdate.message)
+        const msg = e.statusUpdate.message ?? ''
+        if (msg.startsWith(RECOVERABLE_LLM_ERROR_PREFIX)) {
+          const errText = msg.slice(RECOVERABLE_LLM_ERROR_PREFIX.length)
+          setRecoveryError(errText)
+          setStatusMessage(errText)
+        } else {
+          setRecoveryError(null)
+          setStatusMessage(msg)
+        }
       }
     }
   }, [])
@@ -280,6 +348,22 @@ export function AgentChatThread({ workspaceId, workflowId }: Props) {
     })
   }
 
+  // Recoverable-LLM-error actions. Both are just user-message signals
+  // with sentinel content the workflow special-cases.
+  const sendControl = (control: '/retry' | '/done') =>
+    startTransition(async () => {
+      const result = await sendAgentMessage({ workspaceId, workflowId, message: control })
+      if (!result.success) {
+        setStatusMessage(result.error)
+        return
+      }
+      // Optimistic: hide the banner immediately; if the workflow surfaces
+      // another recoverable error, the status_update handler will reset it.
+      setRecoveryError(null)
+    })
+  const onRetryLastTurn = () => sendControl('/retry')
+  const onMarkDone = () => sendControl('/done')
+
   const onApprove = (approvalId: string) =>
     startTransition(async () => {
       await approveAgentAction({ workspaceId, workflowId, approvalId })
@@ -297,106 +381,265 @@ export function AgentChatThread({ workspaceId, workflowId }: Props) {
 
   const terminal = ['completed', 'aborted', 'failed', 'timeout'].includes(status)
 
+  // Live elapsed-time counter for the header. Tick once a second; pause
+  // when the run is terminal so we don't keep re-rendering forever.
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  useEffect(() => {
+    if (terminal) return
+    const id = setInterval(() => setNowMs(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [terminal])
+  const elapsedLabel = useMemo(() => {
+    if (!context?.startedAtIso) return null
+    const startedMs = new Date(context.startedAtIso).getTime()
+    if (Number.isNaN(startedMs)) return null
+    return formatElapsed(Math.max(0, nowMs - startedMs))
+  }, [context?.startedAtIso, nowMs])
+
+  // Derive phase timeline from observable state.
+  const phases = useMemo(() => {
+    const toolTurnCount = turns.filter((t) => t.role === 'tool').length
+    const approvalOpen = pendingApprovals.length > 0
+    const approvalResolved = !approvalOpen && (proposal != null || statusHasExecutedHint(status))
+    return derivePhases({
+      status,
+      toolTurnCount,
+      proposalSeen: proposal != null,
+      approvalOpen,
+      approvalResolved,
+      // Approximated: tool turns *after* a proposal indicates execution
+      // is underway. Refined in Phase 2 when the workflow emits explicit
+      // phase markers.
+      executingToolCount: approvalResolved ? toolTurnCount : 0,
+    })
+  }, [turns, proposal, pendingApprovals.length, status])
+
+  const contextChips = useMemo(() => buildContextChips(context), [context])
+
   return (
-    <div className="flex flex-col h-full gap-3">
-      <div className="flex items-center gap-2 text-xs">
-        <Badge variant={terminal ? 'destructive' : 'secondary'}>{status}</Badge>
-        {connection !== 'live' && connection !== 'closed' && (
-          <Badge variant="outline" className="text-amber-600 border-amber-500/50">
-            {connection === 'connecting' ? 'connecting…' : 'reconnecting…'}
-          </Badge>
-        )}
-        {statusMessage && <span className="text-muted-foreground truncate">{statusMessage}</span>}
-        <div className="ml-auto">
-          {!terminal && (
-            <Button variant="ghost" size="sm" onClick={onAbort} disabled={pending}>
-              Abort
-            </Button>
+    <div className="flex flex-col h-full gap-4">
+      {context && (
+        <RunHeader
+          title={context.title}
+          status={status}
+          startedAt={new Date(context.startedAtIso).toLocaleString()}
+          elapsedLabel={elapsedLabel}
+          runId={workflowId}
+          terminal={terminal}
+          busy={pending}
+          onAbort={onAbort}
+        />
+      )}
+
+      <PhaseTimeline phases={phases} />
+
+      {contextChips.length > 0 && <ContextStrip chips={contextChips} />}
+
+      {(connection !== 'live' || statusMessage) && (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {connection !== 'live' && connection !== 'closed' && (
+            <Badge variant="outline" className="text-amber-500 border-amber-500/40">
+              {connection === 'connecting' ? 'connecting…' : 'reconnecting…'}
+            </Badge>
+          )}
+          {statusMessage && (
+            <span className="text-muted-foreground truncate">{statusMessage}</span>
           )}
         </div>
-      </div>
+      )}
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-3 pr-2">
-        {turns.map((t) => (
-          <ChatBubble key={t.turnId} role={t.role} content={t.content} />
-        ))}
-        {Object.entries(streamingTurns).map(([turnId, content]) => (
-          <ChatBubble key={`stream-${turnId}`} role="assistant" content={content + '▍'} />
-        ))}
-
-        {Object.values(toolOutputs).map((buf) => (
-          <ToolOutputBubble key={`out-${buf.callId}`} text={buf.text} />
-        ))}
-
-        {proposal && <ProposalBlock proposal={proposal} />}
-
-        {pendingApprovals.map((a) => (
-          <ApprovalCard
-            key={a.approvalId}
-            approval={a}
-            workspaceId={workspaceId}
-            workflowId={workflowId}
-            disabled={pending}
-            onApprove={() => onApprove(a.approvalId)}
-            onReject={() => onReject(a.approvalId)}
-          />
-        ))}
-      </div>
-
-      <div className="border-t pt-3">
-        <Textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={terminal ? 'Run finished. Start a new one to continue.' : 'Reply to the agent…'}
-          rows={2}
-          disabled={terminal}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault()
-              onSend()
+      <div ref={scrollRef} className="flex-1 overflow-y-auto pr-2">
+        <ActivityRail>
+          {turns.map((t) => {
+            if (t.role === 'tool') {
+              const parsed = parseToolTurn(t.content, { toolName: t.toolName })
+              return (
+                <ActivityRailItem
+                  key={t.turnId}
+                  variant={parsed.status === 'error' ? 'error' : 'ok'}
+                >
+                  <ToolCard parsed={parsed} />
+                </ActivityRailItem>
+              )
             }
-          }}
-        />
-        <div className="flex justify-between items-center mt-2">
-          <p className="text-xs text-muted-foreground">⌘/Ctrl+Enter to send</p>
-          <Button size="sm" onClick={onSend} disabled={terminal || pending || !input.trim()}>
-            Send
-          </Button>
-        </div>
+            if (t.role === 'assistant') {
+              return (
+                <ActivityRailItem key={t.turnId} variant="thought">
+                  <AgentThought content={t.content} />
+                </ActivityRailItem>
+              )
+            }
+            if (t.role === 'user') {
+              return (
+                <ActivityRailItem key={t.turnId} variant="user">
+                  <UserBubble content={t.content} />
+                </ActivityRailItem>
+              )
+            }
+            return null
+          })}
+          {Object.entries(streamingTurns).map(([turnId, content]) => (
+            <ActivityRailItem key={`stream-${turnId}`} variant="thought">
+              <AgentThought content={content + '▍'} />
+            </ActivityRailItem>
+          ))}
+
+          {Object.values(toolOutputs).map((buf) => (
+            <ActivityRailItem key={`out-${buf.callId}`} variant="running">
+              <ToolOutputBubble text={buf.text} />
+            </ActivityRailItem>
+          ))}
+
+          {proposal && (
+            <ActivityRailItem variant="accent">
+              <ProposalBlock proposal={proposal} />
+            </ActivityRailItem>
+          )}
+
+          {pendingApprovals.map((a) => (
+            <ActivityRailItem key={a.approvalId} variant="accent">
+              <ApprovalCard
+                approval={a}
+                workspaceId={workspaceId}
+                workflowId={workflowId}
+                disabled={pending}
+                onApprove={() => onApprove(a.approvalId)}
+                onReject={() => onReject(a.approvalId)}
+              />
+            </ActivityRailItem>
+          ))}
+        </ActivityRail>
       </div>
+
+      {recoveryError && !terminal && (
+        <RecoveryBanner
+          errorText={recoveryError}
+          onRetry={onRetryLastTurn}
+          onMarkDone={onMarkDone}
+          busy={pending}
+        />
+      )}
+
+      <Composer
+        value={input}
+        onChange={setInput}
+        onSend={onSend}
+        awaiting={status === 'awaiting_user'}
+        disabled={terminal}
+        sending={pending}
+      />
     </div>
   )
 }
 
-function ChatBubble({ role, content }: { role: string; content: string }) {
-  const isUser = role === 'user'
-  const isAssistant = role === 'assistant'
-  const isTool = role === 'tool'
+// ──────────────────────────── Activity rail ────────────────────────────
+// Vertical timeline rail with a colored node per item — gives the
+// transcript a thread of execution to scan down.
+function ActivityRail({ children }: { children: React.ReactNode }) {
+  return <div className="relative pl-5">
+    <div className="absolute left-[10px] top-1 bottom-1 w-px bg-border" aria-hidden />
+    <div className="flex flex-col gap-2">{children}</div>
+  </div>
+}
+
+function ActivityRailItem({
+  variant = 'ok',
+  children,
+}: {
+  variant?: 'ok' | 'error' | 'running' | 'thought' | 'user' | 'accent'
+  children: React.ReactNode
+}) {
+  const nodeClass = ({
+    ok: 'bg-emerald-500 border-emerald-500',
+    error: 'bg-red-500 border-red-500',
+    running: 'bg-sky-500 border-sky-500 shadow-[0_0_0_3px_rgba(56,189,248,0.18)]',
+    thought: 'bg-background border-orange-500/70 border-dashed',
+    user: 'bg-foreground/60 border-foreground/60',
+    accent: 'bg-orange-500 border-orange-500 shadow-[0_0_0_3px_rgba(255,106,44,0.22)]',
+  })[variant]
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div
-        className={[
-          'max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap',
-          isUser ? 'bg-primary text-primary-foreground' : '',
-          isAssistant ? 'bg-muted' : '',
-          isTool ? 'bg-slate-100 text-slate-700 border border-slate-200 font-mono text-xs' : '',
-        ].join(' ')}
-      >
-        {!isUser && <div className="text-[10px] uppercase opacity-60 mb-0.5">{role}</div>}
-        {content}
-      </div>
+    <div className="relative">
+      <span
+        className={`absolute -left-[14px] top-2 h-2.5 w-2.5 rounded-full border-[1.5px] ${nodeClass}`}
+        aria-hidden
+      />
+      {children}
     </div>
   )
+}
+
+function UserBubble({ content }: { content: string }) {
+  return (
+    <div className="rounded-lg bg-muted/40 border border-border/60 px-3 py-2 text-sm whitespace-pre-wrap">
+      <div className="mb-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">You</div>
+      {content}
+    </div>
+  )
+}
+
+function formatElapsed(ms: number): string {
+  const totalSec = Math.floor(ms / 1000)
+  const h = Math.floor(totalSec / 3600)
+  const m = Math.floor((totalSec % 3600) / 60)
+  const s = totalSec % 60
+  if (h > 0) return `${h}h ${m}m`
+  if (m > 0) return `${m}m ${s}s`
+  return `${s}s`
+}
+
+function statusHasExecutedHint(status: string): boolean {
+  return status === 'running' || status === 'completed'
+}
+
+function buildContextChips(ctx?: RunContext) {
+  if (!ctx) return []
+  const chips: Array<{ key: string; label: string; suffix?: string; icon: 'workspace' | 'github' | 'cloud' | 'model'; accent?: boolean }> = []
+  chips.push({ key: 'workspace', label: ctx.workspaceName, icon: 'workspace', accent: true })
+  if (ctx.appName) {
+    chips.push({ key: 'app', label: ctx.appName, suffix: ctx.appFramework, icon: 'github' })
+  }
+  if (ctx.cloudName) {
+    chips.push({
+      key: 'cloud',
+      label: ctx.cloudName,
+      suffix: [ctx.cloudProvider, ctx.cloudRegion].filter(Boolean).join(' · ') || undefined,
+      icon: 'cloud',
+    })
+  }
+  if (ctx.llmModel) {
+    chips.push({ key: 'model', label: ctx.llmModel, icon: 'model' })
+  }
+  return chips
 }
 
 function ProposalBlock({ proposal }: { proposal: Proposal }) {
+  const [open, setOpen] = useState(true)
   return (
-    <Card className="border-blue-500/40 bg-blue-50/40">
-      <CardContent className="py-4 space-y-2">
-        <p className="text-xs uppercase text-blue-600 font-medium">Latest proposal</p>
-        <h3 className="font-semibold">{proposal.title}</h3>
-        <p className="text-sm text-muted-foreground">{proposal.summary}</p>
-        <pre className="whitespace-pre-wrap text-sm font-sans pt-2">{proposal.bodyMarkdown}</pre>
+    <Card className="border-orange-500/30 bg-orange-500/[0.04]">
+      <CardContent className="space-y-2 py-3">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="flex w-full items-start gap-2 text-left cursor-pointer"
+        >
+          <span className="mt-1 inline-flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground">
+            {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] uppercase tracking-wider text-orange-400 font-semibold">
+              Latest proposal
+            </p>
+            <h3 className="text-sm font-semibold">{proposal.title}</h3>
+            {(!open || !proposal.summary) ? null : (
+              <p className="mt-0.5 text-xs text-muted-foreground">{proposal.summary}</p>
+            )}
+          </div>
+        </button>
+        {open && proposal.bodyMarkdown && (
+          <pre className="whitespace-pre-wrap pt-1 pl-6 text-sm font-sans">
+            {proposal.bodyMarkdown}
+          </pre>
+        )}
       </CardContent>
     </Card>
   )
@@ -425,11 +668,15 @@ function ApprovalCard({
   onReject: () => void
 }) {
   const isToolReg = approval.kind === 'tool_registration'
+  const isPatternReg = approval.kind === 'pattern_registration'
+  const isEditable = isToolReg || isPatternReg
   const [editing, setEditing] = useState(false)
   const [replying, setReplying] = useState(false)
   const [reviewerMessage, setReviewerMessage] = useState('')
   const [editName, setEditName] = useState(approval.name ?? '')
+  const [editDisplayName, setEditDisplayName] = useState(approval.displayName ?? '')
   const [editDescription, setEditDescription] = useState(approval.description ?? '')
+  const [editCategory, setEditCategory] = useState(approval.category ?? 'other')
   const [editTemplateKind, setEditTemplateKind] = useState(approval.templateKind ?? 'shell')
   const [editTemplateJson, setEditTemplateJson] = useState(approval.templateJson ?? '')
   const [editSchemaJson, setEditSchemaJson] = useState(approval.inputSchemaJson ?? '')
@@ -500,23 +747,46 @@ function ApprovalCard({
             editTemplateJson !== (approval.templateJson ?? '') ? editTemplateJson : undefined,
           inputSchemaJson:
             editSchemaJson !== (approval.inputSchemaJson ?? '') ? editSchemaJson : undefined,
+          // Pattern-specific edit fields. Ignored server-side for
+          // tool_registration; honored for pattern_registration.
+          displayName: isPatternReg && editDisplayName !== (approval.displayName ?? '')
+            ? editDisplayName
+            : undefined,
+          category: isPatternReg && editCategory !== (approval.category ?? '')
+            ? (editCategory as PatternCategory)
+            : undefined,
         },
       })
       if (!res.success) setError(res.error)
     })
   }
 
+  const [bodyOpen, setBodyOpen] = useState(true)
+
   return (
-    <Card className="border-amber-500/40 bg-amber-50/40">
-      <CardContent className="space-y-3 py-4">
+    <Card className="border-orange-500/40 bg-orange-500/[0.04]">
+      <CardContent className="space-y-3 py-3">
         <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="text-xs uppercase text-amber-600 font-medium">
-              {approval.kind} • approval required
-            </p>
-            <h3 className="font-semibold">{approval.title}</h3>
-          </div>
-          {isToolReg && (
+          <button
+            type="button"
+            onClick={() => setBodyOpen((o) => !o)}
+            className="flex min-w-0 flex-1 items-start gap-2 text-left cursor-pointer"
+          >
+            <span className="mt-1 inline-flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground">
+              {bodyOpen ? (
+                <ChevronDown className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5" />
+              )}
+            </span>
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-wider text-orange-400 font-semibold">
+                {approval.kind} • approval required
+              </p>
+              <h3 className="text-sm font-semibold">{approval.title}</h3>
+            </div>
+          </button>
+          {isEditable && (
             <Button
               size="sm"
               variant={editing ? 'secondary' : 'outline'}
@@ -528,11 +798,11 @@ function ApprovalCard({
           )}
         </div>
 
-        {!editing && (
-          <pre className="whitespace-pre-wrap text-sm font-sans">{approval.bodyMarkdown}</pre>
+        {bodyOpen && !editing && approval.bodyMarkdown && (
+          <pre className="whitespace-pre-wrap pl-6 text-sm font-sans">{approval.bodyMarkdown}</pre>
         )}
 
-        {editing && isToolReg && (
+        {editing && isEditable && (
           <div className="space-y-3 text-xs">
             <div className="space-y-1">
               <label className="font-medium block">Name</label>
@@ -543,6 +813,17 @@ function ApprovalCard({
                 disabled={disabled || submitting}
               />
             </div>
+            {isPatternReg && (
+              <div className="space-y-1">
+                <label className="font-medium block">Display name</label>
+                <input
+                  className="w-full rounded border bg-white px-2 py-1"
+                  value={editDisplayName}
+                  onChange={(e) => setEditDisplayName(e.target.value)}
+                  disabled={disabled || submitting}
+                />
+              </div>
+            )}
             <div className="space-y-1">
               <label className="font-medium block">Description</label>
               <textarea
@@ -553,6 +834,26 @@ function ApprovalCard({
                 disabled={disabled || submitting}
               />
             </div>
+            {isPatternReg && (
+              <div className="space-y-1">
+                <label className="font-medium block">Category</label>
+                <select
+                  className="w-full rounded border bg-white px-2 py-1 font-mono"
+                  value={editCategory}
+                  onChange={(e) => setEditCategory(e.target.value)}
+                  disabled={disabled || submitting}
+                >
+                  <option value="compute">compute</option>
+                  <option value="data">data</option>
+                  <option value="cache">cache</option>
+                  <option value="queue">queue</option>
+                  <option value="observability">observability</option>
+                  <option value="edge">edge</option>
+                  <option value="static-site">static-site</option>
+                  <option value="other">other</option>
+                </select>
+              </div>
+            )}
             <div className="space-y-1">
               <label className="font-medium block">Template kind</label>
               <select

@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/drewpayment/orbit/temporal-workflows/internal/activities"
 	agentactivity "github.com/drewpayment/orbit/temporal-workflows/internal/activities/agent"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/providers"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/safety"
@@ -77,13 +77,17 @@ const (
 	ToolListDir         = agentcontract.ToolListDir
 	ToolRepoInspect     = agentcontract.ToolRepoInspect
 	ToolRequestApproval  = agentcontract.ToolRequestApproval
-	ToolRegisterTool     = agentcontract.ToolRegisterTool
-	ToolStartHealthCheck = agentcontract.ToolStartHealthCheck
+	ToolRegisterTool       = agentcontract.ToolRegisterTool
+	ToolStartHealthCheck   = agentcontract.ToolStartHealthCheck
+	ToolProposePattern     = agentcontract.ToolProposePattern
+	ToolListPatterns       = agentcontract.ToolListPatterns
+	ToolInstantiatePattern = agentcontract.ToolInstantiatePattern
 
 	ToolOrbitListApps          = agentcontract.ToolOrbitListApps
 	ToolOrbitGetApp            = agentcontract.ToolOrbitGetApp
 	ToolOrbitListCloudAccounts = agentcontract.ToolOrbitListCloudAccounts
 	ToolOrbitCloudLogin        = agentcontract.ToolOrbitCloudLogin
+	ToolOrbitRepoClone         = agentcontract.ToolOrbitRepoClone
 
 	EventKindConversationTurn = agentcontract.EventKindConversationTurn
 	EventKindTokenDelta       = agentcontract.EventKindTokenDelta
@@ -118,6 +122,12 @@ type agentState struct {
 	// can't deadlock the gate.
 	pendingApprovalRowIDs map[string]string
 	registeredTools      map[string]agentactivity.ApprovedAgentTool
+	// availablePatterns is the in-memory snapshot of the platform-wide
+	// Patterns catalog (approved only), refreshed at the top of each LLM
+	// iteration via refreshAvailablePatterns. Keyed by pattern name to
+	// match registeredTools' shape; the LLM sees the catalog via the
+	// list_patterns tool result. See plans/merry-strolling-bumblebee.md.
+	availablePatterns    map[string]agentactivity.ApprovedPattern
 	terminated           bool
 	abortReason          string
 	iterations           int
@@ -125,6 +135,41 @@ type agentState struct {
 	backend              string
 	model                string
 	terminalAuditFlushed bool // set when ToolDone / abort / timeout writes the final audit row
+
+	// awaitingLLMRecovery is set when an LLM step errors *after* at least one
+	// tool has already executed. Instead of failing the run we park in
+	// awaiting_user with the error surfaced to chat; the user decides
+	// whether to /retry, /done, or type a follow-up. See GitHub issue #42.
+	awaitingLLMRecovery bool
+	lastLLMError        string
+}
+
+// User-control sentinels that the workflow recognizes during an
+// LLM-recovery wait. These are matched on the literal user-message
+// content; anything else is treated as a normal user follow-up.
+const (
+	userControlRetry = "/retry"
+	userControlDone  = "/done"
+)
+
+// Sentinel prefix used in status_update.message when the LLM step
+// errored after prior tools had executed. The UI detects this prefix
+// to render the retry / mark-done affordance and strips it for display.
+// Encoded on the message field because the AgentStatusUpdate proto
+// doesn't carry structured payload (yet).
+const recoverableErrorPrefix = "[recoverable_llm_error] "
+
+// hasExecutedAnyTools returns true if any tool result has been appended
+// to the conversation history. Used to gate the LLM-recovery path —
+// errors on the first LLM call (before any tool has run) still fail the
+// run because there is no meaningful work to preserve.
+func hasExecutedAnyTools(state *agentState) bool {
+	for _, t := range state.history {
+		if t.Role == "tool" {
+			return true
+		}
+	}
+	return false
 }
 
 // InfrastructureAgentWorkflow drives the agentic deployment loop. It is the
@@ -355,6 +400,40 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 			selector.AddReceive(userMsgCh, func(c workflow.ReceiveChannel, _ bool) {
 				var msg UserMessageSignalPayload
 				c.Receive(loopCtx, &msg)
+				trimmed := strings.TrimSpace(msg.Message)
+				// LLM-recovery control sentinels — only honored while we're
+				// parked in awaitingLLMRecovery. /retry replays the same
+				// history on the next LLM step (no turn appended); /done
+				// finalizes the run as completed without another LLM call.
+				if state.awaitingLLMRecovery {
+					switch trimmed {
+					case userControlRetry:
+						state.awaitingLLMRecovery = false
+						state.lastLLMError = ""
+						receivedUserMessage = true
+						return
+					case userControlDone:
+						state.awaitingLLMRecovery = false
+						state.lastLLMError = ""
+						state.terminated = true
+						state.status = "completed"
+						emitEvent(ctx, &state, EventKindStatusUpdate, map[string]any{
+							"status":  "completed",
+							"message": "completed by user after recoverable LLM error",
+						})
+						markRun(auditCtx, wfID, agentactivity.UpdateAgentRunInput{
+							Status:  "completed",
+							EndedAt: workflow.Now(ctx).UTC().Format(time.RFC3339),
+						})
+						state.terminalAuditFlushed = true
+						receivedUserMessage = true
+						return
+					}
+					// Any non-sentinel message clears the recovery flag and
+					// falls through to the normal append-as-user path.
+					state.awaitingLLMRecovery = false
+					state.lastLLMError = ""
+				}
 				appendTurn(ctx, &state, ConversationTurn{
 					TurnID:    msg.TurnID,
 					Role:      "user",
@@ -394,6 +473,10 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 		// Refresh the registered-tool catalog at the top of each iteration
 		// so newly approved tools become available mid-run.
 		refreshRegisteredTools(ctx, sandboxCtx, &state, input.WorkspaceID)
+		// Same shape for the platform-wide Patterns catalog — picked up
+		// by the agent via the list_patterns tool. See Phase 2 of
+		// plans/merry-strolling-bumblebee.md.
+		refreshAvailablePatterns(ctx, sandboxCtx, &state)
 
 		llmInput := agentactivity.LLMNextStepInput{
 			WorkflowID:  workflow.GetInfo(ctx).WorkflowExecution.ID,
@@ -409,6 +492,23 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 
 		var result agentactivity.LLMNextStepResult
 		if err := workflow.ExecuteActivity(llmCtx, ActivityLLMNextStep, llmInput).Get(llmCtx, &result); err != nil {
+			// Interim mitigation for issue #42: if the run has already
+			// executed at least one tool, the deployment work-product is
+			// real and shouldn't be thrown away because Anthropic 400'd on
+			// a wrap-up turn. Park in awaiting_user with the error visible
+			// in chat; the user finalizes via /retry, /done, or a normal
+			// follow-up message. First-turn errors still fail the run.
+			if hasExecutedAnyTools(&state) {
+				state.awaitingLLMRecovery = true
+				state.lastLLMError = err.Error()
+				state.status = "awaiting_user"
+				emitEvent(ctx, &state, EventKindStatusUpdate, map[string]any{
+					"status":  "awaiting_user",
+					"message": recoverableErrorPrefix + err.Error(),
+				})
+				markRun(auditCtx, wfID, agentactivity.UpdateAgentRunInput{Status: "awaiting_user"})
+				continue
+			}
 			state.status = "failed"
 			emitEvent(ctx, &state, EventKindStatusUpdate, map[string]any{
 				"status":  "failed",
@@ -809,6 +909,15 @@ func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agen
 	case ToolRegisterTool:
 		return dispatchRegisterTool(ctx, sandboxCtx, state, tc, approvalCh, input)
 
+	case ToolProposePattern:
+		return dispatchProposePattern(ctx, sandboxCtx, state, tc, approvalCh, input)
+
+	case ToolListPatterns:
+		return dispatchListPatterns(state, tc)
+
+	case ToolInstantiatePattern:
+		return dispatchInstantiatePattern(ctx, sandboxCtx, state, input, tc, approvalCh)
+
 	case ToolOrbitListApps:
 		var res agentactivity.OrbitListAppsResult
 		if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityOrbitListApps, agentactivity.OrbitListAppsInput{
@@ -841,6 +950,30 @@ func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agen
 	case ToolOrbitCloudLogin:
 		return dispatchOrbitCloudLogin(ctx, sandboxCtx, state, tc)
 
+	case ToolOrbitRepoClone:
+		appID, _ := tc.Arguments["app_id"].(string)
+		repoURL, _ := tc.Arguments["repo_url"].(string)
+		revision, _ := tc.Arguments["revision"].(string)
+		var res agentactivity.OrbitRepoCloneResult
+		if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityOrbitRepoClone, agentactivity.OrbitRepoCloneInput{
+			WorkflowID:  workflow.GetInfo(ctx).WorkflowExecution.ID,
+			WorkspaceID: input.WorkspaceID,
+			AppID:       appID,
+			RepoURL:     repoURL,
+			Revision:    revision,
+		}).Get(sandboxCtx, &res); err != nil {
+			return jsonError("orbit_repo_clone", err), false
+		}
+		return jsonResult(map[string]any{
+			"clone_path":      res.ClonePath,
+			"owner":           res.Owner,
+			"repo":            res.Repo,
+			"branch":          res.Branch,
+			"head_sha":        res.HeadSHA,
+			"installation_id": res.InstallationID,
+			"duration_ms":     res.DurationMs,
+		}), false
+
 	default:
 		// Registered tool? Expand its template and dispatch as primitive(s).
 		if reg, ok := state.registeredTools[tc.Name]; ok {
@@ -869,6 +1002,28 @@ func refreshRegisteredTools(ctx workflow.Context, actCtx workflow.Context, state
 		out[t.Name] = t
 	}
 	state.registeredTools = out
+}
+
+// refreshAvailablePatterns fetches the platform-wide approved Patterns
+// catalog and stores them in state.availablePatterns. Like
+// refreshRegisteredTools, failures fall through silently — the next
+// iteration will retry, and the agent still has access to all built-ins
+// + registered tools in the meantime. Called at the top of each LLM
+// iteration so newly approved patterns become discoverable mid-run.
+// See plans/merry-strolling-bumblebee.md (Phase 2).
+func refreshAvailablePatterns(ctx workflow.Context, actCtx workflow.Context, state *agentState) {
+	logger := workflow.GetLogger(ctx)
+	var res agentactivity.ListApprovedPatternsResult
+	err := workflow.ExecuteActivity(actCtx, agentcontract.ActivityListApprovedPatterns, agentactivity.ListApprovedPatternsInput{}).Get(actCtx, &res)
+	if err != nil {
+		logger.Warn("list approved patterns failed; using last cached set", "err", err)
+		return
+	}
+	out := make(map[string]agentactivity.ApprovedPattern, len(res.Patterns))
+	for _, p := range res.Patterns {
+		out[p.Name] = p
+	}
+	state.availablePatterns = out
 }
 
 // buildToolCatalog returns the schemas the LLM sees: built-ins plus every
@@ -1164,6 +1319,479 @@ func dispatchRegisterTool(ctx workflow.Context, sandboxCtx workflow.Context, sta
 	return jsonResult(result), false
 }
 
+// dispatchProposePattern is the platform-catalog counterpart to
+// dispatchRegisterTool: the agent proposes a reusable deployment recipe,
+// the workflow persists it as a pending Patterns row, opens a
+// pattern_registration approval gate, and on approval (with optional
+// admin edits) flips the row to approved. The agent's next turn sees
+// {approved, name, pattern_id, edited_fields?} — analogous to
+// register_tool's result. The pattern lives platform-wide (no workspace
+// scope), but the approval gate is still associated with this agent
+// run's workspace so admins can see the source.
+//
+// See plans/merry-strolling-bumblebee.md (Patterns Catalog spike).
+func dispatchProposePattern(ctx workflow.Context, sandboxCtx workflow.Context, state *agentState, tc providers.ToolCall, approvalCh workflow.ReceiveChannel, input *InfrastructureAgentInput) (string, bool) {
+	name, _ := tc.Arguments["name"].(string)
+	displayName, _ := tc.Arguments["display_name"].(string)
+	description, _ := tc.Arguments["description"].(string)
+	category, _ := tc.Arguments["category"].(string)
+	templateKind, _ := tc.Arguments["template_kind"].(string)
+	templateJSON, _ := tc.Arguments["template_json"].(string)
+	inputSchemaJSON, _ := tc.Arguments["input_schema_json"].(string)
+	reasoning, _ := tc.Arguments["reasoning"].(string)
+
+	// Reject names that shadow built-in tools — the LLM would see a
+	// duplicate entry in its catalog and the dispatch switch always favors
+	// the built-in over patterns, so the registered name would never
+	// actually run.
+	if isBuiltInToolName(name) {
+		return jsonError("propose_pattern", fmt.Errorf("pattern name %q collides with a built-in tool", name)), false
+	}
+
+	// Pre-flight template validation — saves the admin reviewer clicking
+	// through obviously-broken proposals and gives the agent immediate
+	// feedback to fix typos. Same machinery register_tool uses.
+	if _, err := tooltemplate.Expand(tooltemplate.Kind(templateKind), templateJSON, exampleArgsFromSchema(inputSchemaJSON)); err != nil {
+		return jsonError("propose_pattern", fmt.Errorf("template invalid: %w", err)), false
+	}
+
+	var registered agentactivity.RegisterPendingPatternResult
+	if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityRegisterPendingPattern, agentactivity.RegisterPendingPatternInput{
+		Name:            name,
+		DisplayName:     displayName,
+		Description:     description,
+		Category:        category,
+		TemplateKind:    templateKind,
+		TemplateJSON:    templateJSON,
+		InputSchemaJSON: inputSchemaJSON,
+		Reasoning:       reasoning,
+		CreatedByRunID:  workflow.GetInfo(ctx).WorkflowExecution.ID,
+		CreatedByUser:   input.UserID,
+	}).Get(sandboxCtx, &registered); err != nil {
+		return jsonError("propose_pattern", err), false
+	}
+
+	approvalID := workflowUUID(ctx)
+	approvalTitle := fmt.Sprintf("Register new pattern: %s", displayName)
+	approvalBody := fmt.Sprintf(
+		"**Pattern**: `%s`\n**Category**: %s\n\n**Description**\n\n%s\n\n**Reasoning**\n\n%s\n\n**Template (%s)**\n\n```json\n%s\n```\n\n**Input schema**\n\n```json\n%s\n```",
+		name, category, description, reasoning, templateKind, templateJSON, inputSchemaJSON,
+	)
+	state.pendingApprovals[approvalID] = PendingApproval{
+		ApprovalID:   approvalID,
+		Kind:         agentcontract.ApprovalKindPatternRegistration,
+		Title:        approvalTitle,
+		BodyMarkdown: approvalBody,
+		Payload: map[string]any{
+			"pattern_id":        registered.ID,
+			"name":              name,
+			"display_name":      displayName,
+			"description":       description,
+			"category":          category,
+			"template_kind":     templateKind,
+			"template_json":     templateJSON,
+			"input_schema_json": inputSchemaJSON,
+			"reasoning":         reasoning,
+		},
+		CreatedAt: workflow.Now(ctx),
+	}
+	prevStatus := state.status
+	state.status = "awaiting_approval"
+	emitEvent(ctx, state, EventKindApprovalRequest, map[string]any{
+		"approval_id":       approvalID,
+		"kind":              agentcontract.ApprovalKindPatternRegistration,
+		"title":             approvalTitle,
+		"body_markdown":     fmt.Sprintf("Pattern: `%s`\nCategory: `%s`\nKind: `%s`\n\n%s", name, category, templateKind, description),
+		"pattern_id":        registered.ID,
+		"name":              name,
+		"display_name":      displayName,
+		"description":       description,
+		"category":          category,
+		"template_kind":     templateKind,
+		"template_json":     templateJSON,
+		"input_schema_json": inputSchemaJSON,
+		"reasoning":         reasoning,
+	})
+	emitEvent(ctx, state, EventKindStatusUpdate, map[string]any{
+		"status":  "awaiting_approval",
+		"message": fmt.Sprintf("pattern registration: %s", name),
+	})
+
+	auditCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Second,
+		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 2},
+	})
+	openPendingApproval(auditCtx, state, input, approvalID, agentcontract.ApprovalKindPatternRegistration, approvalTitle, approvalBody, map[string]any{
+		"pattern_id":        registered.ID,
+		"name":              name,
+		"display_name":      displayName,
+		"description":       description,
+		"category":          category,
+		"template_kind":     templateKind,
+		"template_json":     templateJSON,
+		"input_schema_json": inputSchemaJSON,
+		"reasoning":         reasoning,
+	})
+
+	resolution, aborted := awaitApproval(ctx, approvalCh, approvalID)
+	delete(state.pendingApprovals, approvalID)
+	state.status = prevStatus
+	if aborted {
+		state.terminated = true
+		// Reject on abort so the row doesn't linger as approvable.
+		_ = workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityResolvePattern, agentactivity.ResolvePatternInput{
+			ID: registered.ID, Approved: false, Reason: "agent run aborted",
+		}).Get(sandboxCtx, nil)
+		resolvePendingApproval(auditCtx, state, approvalID, "aborted", "", resolution.ResolvedBy, "agent run aborted")
+		return jsonResult(map[string]any{"approved": false, "reason": "agent run aborted"}), true
+	}
+
+	// Apply admin edits if any. Validate the post-edit template before
+	// signaling the activity so a typo'd edit fails the gate cleanly.
+	finalName := name
+	finalDisplayName := displayName
+	finalDescription := description
+	finalCategory := category
+	finalTemplateKind := templateKind
+	finalTemplateJSON := templateJSON
+	finalSchemaJSON := inputSchemaJSON
+	if resolution.Approved && resolution.Edited {
+		if resolution.EditedName != "" {
+			finalName = resolution.EditedName
+		}
+		if resolution.EditedDisplayName != "" {
+			finalDisplayName = resolution.EditedDisplayName
+		}
+		if resolution.EditedDescription != "" {
+			finalDescription = resolution.EditedDescription
+		}
+		if resolution.EditedCategory != "" {
+			finalCategory = resolution.EditedCategory
+		}
+		if resolution.EditedTemplateKind != "" {
+			finalTemplateKind = resolution.EditedTemplateKind
+		}
+		if resolution.EditedTemplateJSON != "" {
+			finalTemplateJSON = resolution.EditedTemplateJSON
+		}
+		if resolution.EditedSchemaJSON != "" {
+			finalSchemaJSON = resolution.EditedSchemaJSON
+		}
+		if isBuiltInToolName(finalName) {
+			return jsonError("propose_pattern", fmt.Errorf("edit invalid: name %q collides with a built-in tool", finalName)), false
+		}
+		if _, err := tooltemplate.Expand(tooltemplate.Kind(finalTemplateKind), finalTemplateJSON, exampleArgsFromSchema(finalSchemaJSON)); err != nil {
+			return jsonError("propose_pattern", fmt.Errorf("edit invalid: %w", err)), false
+		}
+	}
+
+	var resolveResult agentactivity.ResolvePatternResult
+	if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityResolvePattern, agentactivity.ResolvePatternInput{
+		ID:                 registered.ID,
+		Approved:           resolution.Approved,
+		ResolvedBy:         resolution.ResolvedBy,
+		Reason:             resolution.Notes,
+		Edited:             resolution.Approved && resolution.Edited,
+		EditedName:         resolution.EditedName,
+		EditedDisplayName:  resolution.EditedDisplayName,
+		EditedDescription:  resolution.EditedDescription,
+		EditedCategory:     resolution.EditedCategory,
+		EditedTemplateKind: resolution.EditedTemplateKind,
+		EditedTemplateJSON: resolution.EditedTemplateJSON,
+		EditedSchemaJSON:   resolution.EditedSchemaJSON,
+	}).Get(sandboxCtx, &resolveResult); err != nil {
+		return jsonError("propose_pattern", fmt.Errorf("resolve: %w", err)), false
+	}
+
+	emitEvent(ctx, state, EventKindApprovalResolved, map[string]any{
+		"approval_id":         approvalID,
+		"approved":            resolution.Approved,
+		"resolved_by":         resolution.ResolvedBy,
+		"notes":               resolution.Notes,
+		"edited":              resolution.Approved && len(resolveResult.EditedFields) > 0,
+		"edited_fields":       resolveResult.EditedFields,
+		"pattern_version_id":  resolveResult.PatternVersionID,
+	})
+	resolvePendingApproval(auditCtx, state, approvalID, "resolved", resolutionLabel(resolution.Approved), resolution.ResolvedBy, resolution.Notes)
+
+	result := map[string]any{
+		"approved":      resolution.Approved,
+		"name":          finalName,
+		"display_name":  finalDisplayName,
+		"pattern_id":    registered.ID,
+		"resolved_by":   resolution.ResolvedBy,
+		"notes":         resolution.Notes,
+		"edited":        resolution.Approved && len(resolveResult.EditedFields) > 0,
+		"edited_fields": resolveResult.EditedFields,
+	}
+	if len(resolveResult.EditedFields) > 0 {
+		result["agent_proposed"] = map[string]any{
+			"name":              name,
+			"display_name":      displayName,
+			"description":       description,
+			"category":          category,
+			"template_kind":     templateKind,
+			"template_json":     templateJSON,
+			"input_schema_json": inputSchemaJSON,
+		}
+		result["final"] = map[string]any{
+			"name":              finalName,
+			"display_name":      finalDisplayName,
+			"description":       finalDescription,
+			"category":          finalCategory,
+			"template_kind":     finalTemplateKind,
+			"template_json":     finalTemplateJSON,
+			"input_schema_json": finalSchemaJSON,
+		}
+	}
+	return jsonResult(result), false
+}
+
+// dispatchListPatterns returns the in-memory snapshot of the
+// platform-wide Patterns catalog (approved only, refreshed at the top of
+// each LLM iteration). Optional `category` filter narrows the result so
+// the agent can browse e.g. "data" or "cache" without flooding its
+// context. Returns lightweight metadata only — no template_json (which
+// can be large); the agent reads it via instantiate_pattern's
+// pattern_id selection at execute time. See Phase 2 of
+// plans/merry-strolling-bumblebee.md.
+func dispatchListPatterns(state *agentState, tc providers.ToolCall) (string, bool) {
+	categoryFilter, _ := tc.Arguments["category"].(string)
+
+	names := make([]string, 0, len(state.availablePatterns))
+	for n := range state.availablePatterns {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+
+	type listed struct {
+		ID              string `json:"id"`
+		Name            string `json:"name"`
+		DisplayName     string `json:"display_name"`
+		Description     string `json:"description"`
+		Category        string `json:"category"`
+		CurrentVersion  int    `json:"current_version"`
+		InputSchemaJSON string `json:"input_schema_json"`
+	}
+	out := make([]listed, 0, len(names))
+	for _, n := range names {
+		p := state.availablePatterns[n]
+		if categoryFilter != "" && p.Category != categoryFilter {
+			continue
+		}
+		out = append(out, listed{
+			ID:              p.ID,
+			Name:            p.Name,
+			DisplayName:     p.DisplayName,
+			Description:     p.Description,
+			Category:        p.Category,
+			CurrentVersion:  p.CurrentVersion,
+			InputSchemaJSON: p.InputSchemaJSON,
+		})
+	}
+	return jsonResult(map[string]any{
+		"patterns": out,
+		"count":    len(out),
+	}), false
+}
+
+// dispatchInstantiatePattern provisions an approved Pattern into the
+// current workspace. Lifecycle:
+//   1. GetPatternByID — load templateJson + inputSchemaJson + version.
+//   2. Validate user-supplied parameters against the schema's required[].
+//   3. CreatePatternInstance — row at status=pending; bind to workspace,
+//      app (optional), name (unique per workspace), patternVersion snap.
+//   4. UpdateStatus(validating), then UpdateStatus(provisioning).
+//   5. tooltemplate.Expand against the user-supplied parameters and
+//      dispatch each expanded primitive via dispatchTool — same path
+//      registered tools use, so all the existing safety / approval /
+//      sandbox plumbing applies. Failures along the way short-circuit
+//      to UpdateStatus(failed, errorMessage=...).
+//   6. On success: UpdateStatus(active, outputs={...}). Outputs are the
+//      JSON-decoded results of each primitive call, in step order.
+//
+// See plans/merry-strolling-bumblebee.md (Phase 3). For v1, instance
+// execution lives inside the agent run. A future iteration moves
+// long-running instances into a dedicated PatternInstantiationWorkflow
+// without changing this schema.
+func dispatchInstantiatePattern(ctx workflow.Context, sandboxCtx workflow.Context, state *agentState, input *InfrastructureAgentInput, tc providers.ToolCall, approvalCh workflow.ReceiveChannel) (string, bool) {
+	patternID, _ := tc.Arguments["pattern_id"].(string)
+	workspaceID, _ := tc.Arguments["workspace_id"].(string)
+	if workspaceID == "" {
+		workspaceID = input.WorkspaceID
+	}
+	name, _ := tc.Arguments["name"].(string)
+	appID, _ := tc.Arguments["app_id"].(string)
+	rawParams, _ := tc.Arguments["parameters"].(map[string]any)
+	if rawParams == nil {
+		rawParams = map[string]any{}
+	}
+
+	if patternID == "" || workspaceID == "" || name == "" {
+		return jsonError("instantiate_pattern", fmt.Errorf("pattern_id, workspace_id, and name are required")), false
+	}
+
+	// Step 1: load the pattern's full content. PatternNotFound errors
+	// surface as a non-retryable application error from the activity.
+	var patternRes agentactivity.GetPatternByIDResult
+	if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityGetPatternByID,
+		agentactivity.GetPatternByIDInput{ID: patternID}).Get(sandboxCtx, &patternRes); err != nil {
+		return jsonError("instantiate_pattern", fmt.Errorf("get pattern: %w", err)), false
+	}
+	pattern := patternRes.Pattern
+	if pattern.Status != "approved" {
+		return jsonError("instantiate_pattern",
+			fmt.Errorf("pattern %q is %q; only approved patterns can be instantiated", pattern.Name, pattern.Status)), false
+	}
+
+	// Step 2: parameter validation against the snapshot schema. For v1
+	// we honor only "required" — full JSON Schema validation is a
+	// follow-up. Missing required keys short-circuit before we create
+	// a row, so the agent gets immediate feedback.
+	if missing := missingRequiredKeys(pattern.InputSchemaJSON, rawParams); len(missing) > 0 {
+		return jsonError("instantiate_pattern",
+			fmt.Errorf("missing required parameter(s): %s", strings.Join(missing, ", "))), false
+	}
+
+	// Step 3: create the row. CreatePatternInstance maps name-collision
+	// errors to a non-retryable application error so the agent can pick
+	// a different name without a retry loop.
+	var created agentactivity.CreatePatternInstanceResult
+	if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityCreatePatternInstance,
+		agentactivity.CreatePatternInstanceInput{
+			WorkspaceID:    workspaceID,
+			PatternID:      pattern.ID,
+			PatternVersion: pattern.CurrentVersion,
+			Name:           name,
+			AppID:          appID,
+			Parameters:     rawParams,
+			CreatedByUser:  input.UserID,
+			CreatedByRunID: workflow.GetInfo(ctx).WorkflowExecution.ID,
+			WorkflowID:     workflow.GetInfo(ctx).WorkflowExecution.ID,
+		}).Get(sandboxCtx, &created); err != nil {
+		return jsonError("instantiate_pattern", fmt.Errorf("create instance: %w", err)), false
+	}
+	instanceID := created.ID
+
+	// failInstance is a helper that writes status=failed + an
+	// errorMessage to the row, then returns the jsonError result so
+	// callers can `return failInstance(...)` in one line.
+	failInstance := func(stage, msg string) (string, bool) {
+		_ = workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityUpdatePatternInstanceStatus,
+			agentactivity.UpdatePatternInstanceStatusInput{
+				ID:           instanceID,
+				Status:       "failed",
+				ErrorMessage: fmt.Sprintf("%s: %s", stage, msg),
+			}).Get(sandboxCtx, nil)
+		return jsonError("instantiate_pattern", fmt.Errorf("%s: %s", stage, msg)), false
+	}
+
+	// Step 4a: validating.
+	_ = workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityUpdatePatternInstanceStatus,
+		agentactivity.UpdatePatternInstanceStatusInput{ID: instanceID, Status: "validating"}).Get(sandboxCtx, nil)
+
+	// Step 5a: pre-flight expand on the user-supplied parameters so a
+	// template that references {{var}} placeholders missing from the
+	// schema fails cleanly here, before any side-effects.
+	calls, err := tooltemplate.Expand(tooltemplate.Kind(pattern.TemplateKind), pattern.TemplateJSON, rawParams)
+	if err != nil {
+		return failInstance("template invalid", err.Error())
+	}
+	if len(calls) == 0 {
+		return failInstance("template invalid", "expansion produced no primitive calls")
+	}
+
+	// Step 4b: provisioning.
+	_ = workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityUpdatePatternInstanceStatus,
+		agentactivity.UpdatePatternInstanceStatusInput{ID: instanceID, Status: "provisioning"}).Get(sandboxCtx, nil)
+
+	// Step 5b: dispatch each expanded primitive via the standard tool
+	// path (sandbox, approval gates, safety classifier all apply).
+	// Capture each step's result; on any error short-circuit to failed.
+	results := make([]any, 0, len(calls))
+	for i, call := range calls {
+		synthetic := providers.ToolCall{
+			ID:        fmt.Sprintf("%s.step-%d", tc.ID, i),
+			Name:      call.Tool,
+			Arguments: call.Args,
+		}
+		out, terminated := dispatchTool(ctx, sandboxCtx, state, input, synthetic, approvalCh)
+		var parsed any
+		if jerr := json.Unmarshal([]byte(out), &parsed); jerr == nil {
+			results = append(results, parsed)
+			if errMap, ok := parsed.(map[string]any); ok {
+				if errVal, hasErr := errMap["error"]; hasErr {
+					return failInstance("step "+fmt.Sprintf("%d", i+1), fmt.Sprintf("%v", errVal))
+				}
+			}
+		} else {
+			results = append(results, out)
+		}
+		if terminated {
+			// Abort: don't mark failed (the agent run is exiting); the
+			// row stays at "provisioning" so an admin can see where it
+			// stopped. Future iteration: write status=aborted.
+			return jsonResult(map[string]any{
+				"instance_id":   instanceID,
+				"pattern_id":    pattern.ID,
+				"pattern_name":  pattern.Name,
+				"status":        "aborted",
+				"partial_steps": len(results),
+			}), true
+		}
+	}
+
+	// Step 6: active + outputs.
+	outputs := map[string]any{"steps": results}
+	_ = workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityUpdatePatternInstanceStatus,
+		agentactivity.UpdatePatternInstanceStatusInput{
+			ID:      instanceID,
+			Status:  "active",
+			Outputs: outputs,
+		}).Get(sandboxCtx, nil)
+
+	return jsonResult(map[string]any{
+		"instance_id":     instanceID,
+		"pattern_id":      pattern.ID,
+		"pattern_name":    pattern.Name,
+		"pattern_version": pattern.CurrentVersion,
+		"name":            name,
+		"workspace_id":    workspaceID,
+		"status":          "active",
+		"outputs":         outputs,
+	}), false
+}
+
+// missingRequiredKeys returns the names of required JSON-Schema
+// properties that are absent from args. Schema must be JSON-encoded; an
+// unparseable schema returns no missing keys (the agent's pre-flight
+// validation already runs on propose_pattern, so we don't block here on
+// schema syntax — that's the platform admin's problem at proposal time).
+func missingRequiredKeys(schemaJSON string, args map[string]any) []string {
+	if strings.TrimSpace(schemaJSON) == "" {
+		return nil
+	}
+	var schema map[string]any
+	if err := json.Unmarshal([]byte(schemaJSON), &schema); err != nil {
+		return nil
+	}
+	rawRequired, ok := schema["required"].([]any)
+	if !ok {
+		return nil
+	}
+	missing := make([]string, 0, len(rawRequired))
+	for _, r := range rawRequired {
+		key, ok := r.(string)
+		if !ok {
+			continue
+		}
+		if _, present := args[key]; !present {
+			missing = append(missing, key)
+		}
+	}
+	return missing
+}
+
 // isBuiltInToolName reports whether name collides with the workflow's
 // built-in tools. Used by dispatchRegisterTool to reject shadow names.
 func isBuiltInToolName(name string) bool {
@@ -1173,6 +1801,7 @@ func isBuiltInToolName(name string) bool {
 		ToolReadFile, ToolWriteFile, ToolListDir,
 		ToolRepoInspect, ToolRequestApproval,
 		ToolRegisterTool, ToolStartHealthCheck,
+		ToolProposePattern, ToolListPatterns, ToolInstantiatePattern,
 		ToolOrbitListApps, ToolOrbitGetApp, ToolOrbitListCloudAccounts:
 		return true
 	}
@@ -1388,11 +2017,14 @@ func mergeEnv(a, b map[string]string) map[string]string {
 	return out
 }
 
-// dispatchStartHealthCheck schedules a HealthCheckWorkflow as a child with
-// PARENT_CLOSE_POLICY_ABANDON so it survives the agent run finishing. The
-// HealthCheckWorkflow is registered on the same task queue and walks its
-// own continue-as-new lifecycle. Returns the child's workflow id back to
-// the agent so it can reference / cancel later.
+// dispatchStartHealthCheck writes the requested health-check spec to the
+// App's healthConfig via the internal API. The Apps.afterChange hook then
+// calls manageSchedule, which starts (or restarts under TERMINATE_IF_RUNNING)
+// the canonical HealthCheckWorkflow under the stable id
+// `health-check-{appId}`. This replaces the previous "spawn an ABANDONed
+// child workflow" approach so app.status and app.healthConfig stay in
+// sync and only one HealthCheckWorkflow ever runs per app. See GitHub
+// issue #44.
 func dispatchStartHealthCheck(ctx workflow.Context, state *agentState, tc providers.ToolCall) (string, bool) {
 	appID, _ := tc.Arguments["app_id"].(string)
 	url, _ := tc.Arguments["url"].(string)
@@ -1408,16 +2040,21 @@ func dispatchStartHealthCheck(ctx workflow.Context, state *agentState, tc provid
 		return jsonError("start_child_health_check", fmt.Errorf("app_id and url are required")), false
 	}
 
-	childID := fmt.Sprintf("health-check-%s-%d", appID, workflow.Now(ctx).Unix())
-	childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-		WorkflowID:        childID,
-		TaskQueue:         "orbit-workflows",
-		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_ABANDON,
+	// Reuse the LLM-step activity options' style for an internal-API call
+	// — short timeout, modest retries; the hook does the heavy lifting.
+	cfgCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    2 * time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    30 * time.Second,
+			MaximumAttempts:    3,
+		},
 	})
 
-	childInput := HealthCheckWorkflowInput{
+	input := activities.ConfigureAppHealthCheckInput{
 		AppID: appID,
-		HealthConfig: HealthConfig{
+		Spec: activities.HealthConfigSpec{
 			URL:            url,
 			Method:         method,
 			ExpectedStatus: expectedStatus,
@@ -1425,19 +2062,20 @@ func dispatchStartHealthCheck(ctx workflow.Context, state *agentState, tc provid
 			Timeout:        timeout,
 		},
 	}
-
-	future := workflow.ExecuteChildWorkflow(childCtx, HealthCheckWorkflow, childInput)
-	var execution workflow.Execution
-	if err := future.GetChildWorkflowExecution().Get(childCtx, &execution); err != nil {
-		return jsonError("start_child_health_check", err), false
+	if err := workflow.ExecuteActivity(cfgCtx, agentcontract.ActivityConfigureAppHealthCheck, input).Get(cfgCtx, nil); err != nil {
+		return jsonError("start_child_health_check", fmt.Errorf("configure health check: %w", err)), false
 	}
 
+	// The canonical workflow id Orbit uses for app health checks — useful
+	// to surface back to the LLM for any follow-up "is the check running?"
+	// reasoning, but the agent doesn't manage its lifecycle.
+	workflowID := fmt.Sprintf("health-check-%s", appID)
 	return jsonResult(map[string]any{
-		"workflow_id":      execution.ID,
-		"run_id":           execution.RunID,
+		"workflow_id":      workflowID,
 		"app_id":           appID,
 		"url":              url,
 		"interval_seconds": interval,
+		"managed_by":       "orbit-apps-hook",
 	}), false
 }
 
@@ -1633,6 +2271,12 @@ func stringMap(v any) map[string]string {
 }
 
 func awaitingUser(state *agentState) bool {
+	// Recovery wait after an LLM-step error — gated independently of
+	// the tool-history shape because the LLM failed before producing
+	// any new turn to inspect.
+	if state.awaitingLLMRecovery {
+		return true
+	}
 	if len(state.history) == 0 {
 		return false
 	}
@@ -1778,8 +2422,55 @@ func builtInToolSchemas() []providers.ToolSchema {
 			},
 		},
 		{
+			Name: ToolInstantiatePattern,
+			Description: `Provision an approved Pattern into a workspace. Pass pattern_id (from list_patterns), workspace_id (defaults to the current run's workspace), a unique name for the instance, and the parameters object (must satisfy the pattern's input_schema_json). The platform validates parameters, expands the template through the same engine that runs registered tools (shell / http / composite primitives), runs each primitive with the agent's existing safety + approval plumbing, and writes the result back as a PatternInstance row. Returns {instance_id, pattern_id, status, outputs}. Prefer this over shell when a matching pattern exists — patterns are audited, deterministic, and cheap to re-run.`,
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"pattern_id":   map[string]any{"type": "string", "description": "id of an approved Pattern (from list_patterns)."},
+					"workspace_id": map[string]any{"type": "string", "description": "Workspace to provision into. Defaults to the current run's workspace if omitted."},
+					"name":         map[string]any{"type": "string", "description": "Human name for the instance, unique within the target workspace."},
+					"parameters":   map[string]any{"type": "object", "description": "Args matching the pattern's input_schema_json."},
+					"app_id":       map[string]any{"type": "string", "description": "Optional: bind this instance to an existing App (e.g. \"Postgres for myapp\")."},
+				},
+				"required": []string{"pattern_id", "name", "parameters"},
+			},
+		},
+		{
+			Name: ToolListPatterns,
+			Description: `List the platform-wide Patterns catalog (admin-approved deployment recipes available to every workspace). Call this EARLY in a run — before reaching for shell — to see whether an existing pattern already solves the user's request. Each entry includes the pattern's id, name, display_name, description, category, and input_schema_json (the parameters it accepts). When a pattern matches, prefer it: invoke it via instantiate_pattern instead of re-deriving from shell. Returns {patterns: [...], count}.`,
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"category": map[string]any{
+						"type":        "string",
+						"enum":        []string{"compute", "data", "cache", "queue", "observability", "edge", "static-site", "other"},
+						"description": "Optional filter; omit to list the whole catalog.",
+					},
+				},
+			},
+		},
+		{
+			Name: ToolProposePattern,
+			Description: `Propose a new platform-wide deployment Pattern. Patterns are the durable, curated counterpart to register_tool — once a platform admin approves the proposal, the pattern lives in the global catalog and any workspace can instantiate it (via instantiate_pattern, later via a browse UI). Use this AFTER you've successfully completed a deployment via shell so the next person doesn't have to re-derive the steps. The pattern's template_json compiles via the same engine as register_tool (shell / http / composite). Returns {approved, name, pattern_id, resolved_by, notes, edited_fields}.`,
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"name":              map[string]any{"type": "string", "description": "Slug-style pattern name (snake_case). Globally unique across all workspaces."},
+					"display_name":      map[string]any{"type": "string", "description": "Human-readable name shown in the catalog UI."},
+					"description":       map[string]any{"type": "string", "description": "What the pattern provisions, in one paragraph."},
+					"category":          map[string]any{"type": "string", "enum": []string{"compute", "data", "cache", "queue", "observability", "edge", "static-site", "other"}, "description": "Catalog category. Browsers filter by this."},
+					"template_kind":     map[string]any{"type": "string", "enum": []string{"shell", "http", "composite"}},
+					"template_json":     map[string]any{"type": "string", "description": "JSON-encoded template body. Same shape as register_tool's template_json."},
+					"input_schema_json": map[string]any{"type": "string", "description": "JSON Schema for the parameters a PatternInstance must supply. Every {{var}} in template_json must appear as a property here."},
+					"reasoning":         map[string]any{"type": "string", "description": "Why this pattern is worth productizing. Shown to the platform admin reviewer."},
+				},
+				"required": []string{"name", "display_name", "description", "category", "template_kind", "template_json", "input_schema_json"},
+			},
+		},
+		{
 			Name: ToolStartHealthCheck,
-			Description: "Schedule a periodic HTTP health check against a deployed URL. Starts a child HealthCheckWorkflow with parent_close=ABANDON so it keeps running after this agent run finishes. Returns the child workflow id; the child writes its own status back to the App referenced by app_id. Use this once you've successfully deployed something the user wants monitored.",
+			Description: "Set up a periodic HTTP health check against a deployed URL. Writes the spec onto the App's healthConfig; Orbit's platform then runs exactly one HealthCheckWorkflow per app (durable, survives this agent run, survives worker restarts) and the App detail page shows live status. Idempotent — calling again with new params restarts the same canonical workflow. Use this once you've successfully deployed something the user wants monitored.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -1831,6 +2522,27 @@ func builtInToolSchemas() []providers.ToolSchema {
 					},
 				},
 				"required": []string{"provider"},
+			},
+		},
+		{
+			Name:        ToolOrbitRepoClone,
+			Description: "Clone a (private) GitHub repository connected to this workspace into the sandbox so you can read its files. Orbit mints a fresh short-lived GitHub App installation token from the workspace's connected installation — the token is never exposed to you or written to the cloned .git/config. You MUST supply EXACTLY ONE of app_id (preferred — Orbit resolves the repo URL from the Apps collection) OR repo_url (a full https://github.com/<owner>/<repo> URL when the repo isn't registered as an Orbit App). Optional revision selects a branch or tag (defaults to the repo's default branch). Returns {clone_path, owner, repo, branch, head_sha, installation_id, duration_ms}. The clone lives at clone_path relative to the sandbox's working dir and you can shell_exec into it (e.g. `cd <clone_path> && cat package.json`).",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"app_id": map[string]any{
+						"type":        "string",
+						"description": "Orbit app id (from orbit_list_apps). Preferred — Orbit resolves the repo URL from the Apps collection. Supply this OR repo_url, not both.",
+					},
+					"repo_url": map[string]any{
+						"type":        "string",
+						"description": "Fallback: a full https://github.com/<owner>/<repo> URL when the repo isn't registered as an Orbit App. Must be on github.com. Supply this OR app_id, not both.",
+					},
+					"revision": map[string]any{
+						"type":        "string",
+						"description": "Optional branch or tag to clone. Defaults to the repository's default branch.",
+					},
+				},
 			},
 		},
 	}
@@ -1895,14 +2607,19 @@ Tools (sandbox execution):
 - http_request(method, url, headers?, body?): outbound HTTP gated by the workspace allowlist
 - read_file(path) / write_file(path, content) / list_dir(path?): file IO inside the sandbox
 - repo_inspect(repo_url, revision?, max_files?): survey a repo (tree + manifests) without a full clone when possible
-- start_child_health_check(app_id, url, ...): schedule a periodic HTTP health check that survives this run finishing
+- start_child_health_check(app_id, url, ...): configure the App's healthConfig so Orbit runs one durable HealthCheckWorkflow per app (visible on the App detail page)
+
+Tools (platform-wide catalog — PREFER OVER SHELL when applicable):
+- list_patterns(category?): list admin-approved deployment Patterns curated by the platform team. Patterns are durable recipes that anyone in any workspace can rely on. Browse this catalog EARLY in the run so you can pick a vetted approach instead of re-deriving from shell.
+- instantiate_pattern(pattern_id, name, parameters, workspace_id?, app_id?): provision an approved Pattern into a workspace. The platform validates parameters against the pattern's schema, expands the template through the same engine as registered tools, runs each primitive with the agent's existing safety + approval plumbing, and writes the result as a PatternInstance row.
+- propose_pattern(name, display_name, description, category, template_kind, template_json, input_schema_json, reasoning?): codify a successful deployment so the next person doesn't have to figure it out. Use this AFTER a shell-driven deployment succeeds. The platform admin reviews; once approved the pattern joins the catalog above.
 
 Workflow:
 1. Read the [Workspace context] block in the user's prompt; if the app the user is asking about is already listed, use orbit_get_app to pull the repository / health / build details rather than asking the user.
-2. Use repo_inspect on that repository to learn what the app is (language, framework, manifests).
-3. Use shell_exec for further investigation as needed (e.g. cat package.json, ls deeper paths).
-4. Once you have a concrete plan, propose_to_user with the proposed commands embedded in body_markdown.
-5. After the user approves, run the plan via shell_exec calls.
+2. **First: call list_patterns to see whether the platform already has a vetted recipe for what the user wants.** If a pattern matches, propose_to_user with the pattern picked out, then on approval invoke it via instantiate_pattern — deterministic, audited, and faster than re-deriving from shell.
+3. If no pattern matches, fall back to the long-tail path: use repo_inspect on the repository to learn what the app is, use shell_exec for further investigation, then propose_to_user with the plan embedded in body_markdown.
+4. After the user approves, run the plan via shell_exec calls.
+5. **After a successful novel deployment, call propose_pattern to productize it.** Every successful agent run should leave a draft pattern behind so the next person doesn't pay the same reasoning cost.
 6. Call done with a final summary.
 
 Cloud authentication — IMPORTANT:

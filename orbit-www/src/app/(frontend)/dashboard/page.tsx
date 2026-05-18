@@ -1,36 +1,28 @@
+import Link from 'next/link'
+import { Button } from '@/components/ui/button'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
+import { Plus, LayoutTemplate } from 'lucide-react'
 import { getPayloadClient, getSession, getUserWorkspaceMemberships } from '@/lib/data/cached-queries'
 import {
-  DashboardHero,
-  DashboardSection,
+  DashboardGreeting,
   DashboardStatsRow,
   DashboardWorkspacesCard,
   DashboardAppHealthCard,
   DashboardActivityFeed,
   DashboardQuickActions,
-  DashboardAttention,
-  DashboardTemplates,
 } from '@/components/features/dashboard'
-import type {
-  Activity,
-  AttentionRun,
-  TemplateRow,
-  WorkspaceRowMeta,
-} from '@/components/features/dashboard'
-
-// Curated starter templates — surfaced on the dashboard before the Templates collection is wired up.
-const STARTER_TEMPLATES: TemplateRow[] = [
-  { id: 'static-site', name: 'Static site', description: 'Vite / Astro / Next.js export · Render', icon: 'box' },
-  { id: 'go-service', name: 'Go HTTP service', description: 'Chi router · Postgres · Vault secrets', icon: 'git' },
-  { id: 'kafka-consumer', name: 'Kafka consumer', description: 'Go · Schema Registry · DLQ', icon: 'wave' },
-  { id: 'api-schema', name: 'API schema', description: 'OpenAPI 3.1 · auto-published catalog', icon: 'doc' },
-]
+import type { Activity } from '@/components/features/dashboard'
 
 export default async function DashboardPage() {
-  const [payload, session] = await Promise.all([getPayloadClient(), getSession()])
+  // Phase 1: Get payload client + user session
+  const [payload, session] = await Promise.all([
+    getPayloadClient(),
+    getSession(),
+  ])
 
+  // Phase 2: Get user's workspace memberships
   const memberships = session?.user
     ? await getUserWorkspaceMemberships(session.user.id)
     : []
@@ -39,6 +31,7 @@ export default async function DashboardPage() {
     .map((m) => (typeof m.workspace === 'object' ? m.workspace?.id : m.workspace))
     .filter((id): id is string => !!id)
 
+  // Phase 3: Parallel aggregate queries across user's workspaces
   const hasWorkspaces = workspaceIds.length > 0
   const workspaceFilter = { workspace: { in: workspaceIds } }
 
@@ -53,35 +46,54 @@ export default async function DashboardPage() {
     knowledgeSpacesResult,
   ] = hasWorkspaces
     ? await Promise.all([
+        // Apps with status (used for stats + health card + activity)
         payload.find({
           collection: 'apps',
           where: workspaceFilter,
           sort: '-updatedAt',
-          limit: 25,
+          limit: 10,
           depth: 1,
         }),
-        payload.count({ collection: 'kafka-topics', where: workspaceFilter, overrideAccess: true }),
-        payload.count({ collection: 'kafka-virtual-clusters', where: workspaceFilter, overrideAccess: true }),
-        payload.count({ collection: 'api-schemas', where: workspaceFilter }),
+        // Kafka topic count (overrideAccess: server component has no user session for Kafka ACLs)
+        payload.count({
+          collection: 'kafka-topics',
+          where: workspaceFilter,
+          overrideAccess: true,
+        }),
+        // Virtual cluster count (overrideAccess: server component has no user session for Kafka ACLs)
+        payload.count({
+          collection: 'kafka-virtual-clusters',
+          where: workspaceFilter,
+          overrideAccess: true,
+        }),
+        // API schema count
+        payload.count({
+          collection: 'api-schemas',
+          where: workspaceFilter,
+        }),
+        // Published API schema count
         payload.count({
           collection: 'api-schemas',
           where: { ...workspaceFilter, status: { equals: 'published' } },
         }),
+        // Recent Kafka topics (for activity; overrideAccess: server component has no user session for Kafka ACLs)
         payload.find({
           collection: 'kafka-topics',
           where: workspaceFilter,
           sort: '-createdAt',
-          limit: 5,
+          limit: 3,
           depth: 1,
           overrideAccess: true,
         }),
+        // Recent API schemas (for activity)
         payload.find({
           collection: 'api-schemas',
           where: workspaceFilter,
           sort: '-updatedAt',
-          limit: 5,
+          limit: 3,
           depth: 1,
         }),
+        // Knowledge spaces (to get space IDs for recent docs)
         payload.find({
           collection: 'knowledge-spaces',
           where: workspaceFilter,
@@ -99,20 +111,7 @@ export default async function DashboardPage() {
         { docs: [] },
       ]
 
-  // Per-workspace counts in parallel (small N — bounded by membership count)
-  const perWorkspaceMeta = hasWorkspaces
-    ? await Promise.all(
-        workspaceIds.map(async (id) => {
-          const [apps, topics, schemas] = await Promise.all([
-            payload.count({ collection: 'apps', where: { workspace: { equals: id } } }),
-            payload.count({ collection: 'kafka-topics', where: { workspace: { equals: id } }, overrideAccess: true }),
-            payload.count({ collection: 'api-schemas', where: { workspace: { equals: id } } }),
-          ])
-          return [id, { apps: apps.totalDocs, topics: topics.totalDocs, schemas: schemas.totalDocs }] as const
-        }),
-      )
-    : []
-
+  // Phase 4: Recent docs (depends on knowledge spaces)
   const spaceIds = Array.isArray(knowledgeSpacesResult)
     ? []
     : 'docs' in knowledgeSpacesResult
@@ -124,185 +123,129 @@ export default async function DashboardPage() {
         collection: 'knowledge-pages',
         where: { knowledgeSpace: { in: spaceIds } },
         sort: '-updatedAt',
-        limit: 5,
+        limit: 3,
         depth: 1,
       })
     : { docs: [] }
 
+  // Compute stats
   const apps = 'docs' in appsResult ? appsResult.docs : []
   const appCount = 'totalDocs' in appsResult ? appsResult.totalDocs : 0
   const healthyCount = apps.filter((a) => a.status === 'healthy').length
   const degradedCount = apps.filter((a) => a.status === 'degraded' || a.status === 'down').length
-  const unknownCount = apps.filter((a) => !a.status || a.status === 'unknown').length
 
-  // Workspace metadata (apps/topics/schemas + lastActive computed from most-recent app per workspace)
-  const metaById: Record<string, WorkspaceRowMeta> = Object.fromEntries(
-    perWorkspaceMeta.map(([id, counts]) => [
-      id,
-      { ...counts, lastActive: lastActiveForWorkspace(apps, id) },
-    ]),
-  )
-
-  // Activity feed: build from real items
+  // Build activity feed from recent items
   const activities: Activity[] = []
+
+  // App activities
   for (const app of apps.slice(0, 3)) {
     activities.push({
       type: 'app',
-      kind: app.status === 'healthy' ? 'ok' : 'info',
       title: app.status === 'healthy' ? 'App deployed' : 'App status changed',
-      description: app.name,
-      workspace: typeof app.workspace === 'object' ? app.workspace?.name : undefined,
+      description: `${app.name} in ${typeof app.workspace === 'object' ? app.workspace?.name : 'workspace'}`,
       timestamp: app.updatedAt,
     })
   }
+
+  // Kafka topic activities
   const topics = 'docs' in recentTopics ? recentTopics.docs : []
-  for (const topic of topics.slice(0, 3)) {
+  for (const topic of topics) {
     activities.push({
       type: 'topic',
-      kind: 'info',
       title: 'Topic created',
-      description: topic.name,
-      workspace: typeof topic.workspace === 'object' ? topic.workspace?.name : undefined,
+      description: `${topic.name}`,
       timestamp: topic.createdAt,
     })
   }
+
+  // Schema activities
   const schemas = 'docs' in recentSchemas ? recentSchemas.docs : []
-  for (const schema of schemas.slice(0, 3)) {
+  for (const schema of schemas) {
     activities.push({
       type: 'schema',
-      kind: 'ok',
       title: schema.status === 'published' ? 'API published' : 'Schema registered',
       description: schema.name,
-      workspace: typeof schema.workspace === 'object' ? schema.workspace?.name : undefined,
       timestamp: schema.updatedAt,
     })
   }
+
+  // Doc activities
   const docs = 'docs' in recentDocs ? recentDocs.docs : []
-  for (const doc of docs.slice(0, 3)) {
+  for (const doc of docs) {
     activities.push({
       type: 'doc',
-      kind: 'ok',
       title: 'Doc updated',
       description: doc.title,
       timestamp: doc.updatedAt,
     })
   }
+
+  // Sort by timestamp descending, take top 5
   activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-  const topActivities = activities.slice(0, 12)
-
-  // In-flight agent runs — wired once the temporal infra-agent collection lands on main.
-  const attentionRuns: AttentionRun[] = []
-
-  // Primary Kafka broker hint — first virtual cluster of the membership set, when available.
-  const primaryBroker = hasWorkspaces
-    ? await payload
-        .find({
-          collection: 'kafka-virtual-clusters',
-          where: workspaceFilter,
-          limit: 1,
-          depth: 0,
-          overrideAccess: true,
-        })
-        .then((res) => (res.docs[0] as { name?: string; slug?: string } | undefined)?.slug)
-        .catch(() => undefined)
-    : undefined
+  const topActivities = activities.slice(0, 5)
 
   const userName = session?.user?.name?.split(' ')[0] || ''
-  const workspaceNames = memberships
-    .map((m) => (typeof m.workspace === 'object' ? m.workspace?.name : undefined))
-    .filter((n): n is string => !!n)
 
   return (
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
         <SiteHeader />
-        <div className="flex flex-1 flex-col px-8 pb-20 pt-7">
-          <DashboardHero
-            userName={userName}
-            attentionCount={attentionRuns.length}
-            workspaceCount={workspaceIds.length}
-          />
+        <div className="flex w-full min-w-0 flex-1 flex-col gap-7 p-8 stagger-reveal">
+          {/* Welcome Section */}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between stagger-item">
+            <div className="space-y-1">
+              <DashboardGreeting userName={userName} />
+              <p className="text-sm text-muted-foreground">
+                Here&apos;s what&apos;s happening across your workspaces
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" asChild>
+                <Link href="/admin/workspaces">
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  New Workspace
+                </Link>
+              </Button>
+              <Button size="sm" variant="outline" asChild>
+                <Link href="/templates">
+                  <LayoutTemplate className="mr-1.5 h-4 w-4" />
+                  Browse Templates
+                </Link>
+              </Button>
+            </div>
+          </div>
 
-          {attentionRuns.length > 0 && (
-            <>
-              <DashboardSection
-                title="Needs your attention"
-                count={attentionRuns.length}
-                moreLabel="View all runs"
-                moreHref="/agent"
-              />
-              <DashboardAttention runs={attentionRuns} />
-            </>
-          )}
+          {/* Stats Row */}
+          <div className="stagger-item">
+            <DashboardStatsRow
+              workspaceCount={workspaceIds.length}
+              appCount={appCount}
+              healthyCount={healthyCount}
+              degradedCount={degradedCount}
+              kafkaTopicCount={kafkaTopicCount.totalDocs}
+              virtualClusterCount={virtualClusterCount.totalDocs}
+              apiSchemaCount={apiSchemaCount.totalDocs}
+              publishedApiCount={publishedApiCount.totalDocs}
+            />
+          </div>
 
-          <DashboardSection title="Overview" />
-          <DashboardStatsRow
-            workspaceCount={workspaceIds.length}
-            workspaceNames={workspaceNames}
-            appCount={appCount}
-            healthyCount={healthyCount}
-            degradedCount={degradedCount}
-            unknownCount={unknownCount}
-            kafkaTopicCount={kafkaTopicCount.totalDocs}
-            virtualClusterCount={virtualClusterCount.totalDocs}
-            primaryBroker={primaryBroker}
-            apiSchemaCount={apiSchemaCount.totalDocs}
-            publishedApiCount={publishedApiCount.totalDocs}
-          />
-
-          <div className="mt-6 grid gap-7 lg:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="min-w-0">
-              <DashboardSection
-                title="My workspaces"
-                count={memberships.length}
-                moreLabel="All workspaces"
-                moreHref="/workspaces"
-              />
-              <DashboardWorkspacesCard memberships={memberships} metaById={metaById} />
-
-              <DashboardSection title="Recent activity" moreLabel="Activity log" moreHref="/notifications" />
-              <DashboardActivityFeed activities={topActivities} />
+          {/* Two-Column Layout */}
+          <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+            {/* Left Column */}
+            <div className="space-y-5 stagger-item">
+              <DashboardWorkspacesCard memberships={memberships} />
+              <DashboardAppHealthCard apps={apps.slice(0, 5)} />
             </div>
 
-            <div>
-              <DashboardSection title="Quick actions" />
+            {/* Right Column */}
+            <div className="space-y-5 stagger-item">
+              <DashboardActivityFeed activities={topActivities} />
               <DashboardQuickActions />
-
-              <div className="mt-4">
-                <DashboardAppHealthCard apps={apps.slice(0, 5)} />
-              </div>
-
-              <div className="mt-4">
-                <DashboardTemplates templates={STARTER_TEMPLATES} />
-              </div>
             </div>
           </div>
         </div>
       </SidebarInset>
     </SidebarProvider>
   )
-}
-
-function lastActiveForWorkspace(apps: Array<{ workspace?: unknown; updatedAt: string }>, workspaceId: string): string | undefined {
-  for (const app of apps) {
-    const wsId = typeof app.workspace === 'object' && app.workspace !== null && 'id' in app.workspace
-      ? (app.workspace as { id: string }).id
-      : (app.workspace as string | undefined)
-    if (wsId === workspaceId) {
-      const diff = Date.now() - new Date(app.updatedAt).getTime()
-      return formatShortRel(diff)
-    }
-  }
-  return undefined
-}
-
-function formatShortRel(ms: number): string {
-  const m = Math.round(ms / 60000)
-  if (m < 1) return 'just now'
-  if (m < 60) return `${m}m ago`
-  const h = Math.round(m / 60)
-  if (h < 24) return `${h}h ago`
-  const d = Math.round(h / 24)
-  return `${d}d ago`
 }

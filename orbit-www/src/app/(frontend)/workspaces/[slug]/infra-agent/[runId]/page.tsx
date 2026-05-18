@@ -9,6 +9,7 @@ import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 
 import { AgentChatThread } from '@/components/features/infra-agent/AgentChatThread'
+import { SetAgentBreadcrumbs } from '@/components/features/infra-agent/SetAgentBreadcrumbs'
 
 interface Props {
   params: Promise<{ slug: string; runId: string }>
@@ -36,26 +37,58 @@ export default async function AgentRunPage({ params }: Props) {
     collection: 'agent-runs',
     where: { workflowId: { equals: workflowId } },
     limit: 1,
+    depth: 1,
   })
   const run = runResult.docs[0]
   if (!run) notFound()
+
+  // Resolve the app + LLM provider for the context strip. App may be a
+  // string id (depth=0) or hydrated object (depth>=1); same for the
+  // provider. Depth=1 above hydrates one level which is what we want.
+  const appDoc =
+    typeof run.repository === 'string' || run.repository == null ? null : run.repository
+  const llmDoc =
+    typeof run.llmProvider === 'string' || run.llmProvider == null ? null : run.llmProvider
+
+  // First connected cloud account in this workspace (best effort — empty
+  // if none configured yet).
+  const cloudAccountsResult = await payload.find({
+    collection: 'cloud-accounts',
+    where: { workspaces: { contains: workspace.id }, status: { equals: 'connected' } },
+    limit: 1,
+    depth: 0,
+    overrideAccess: true,
+  })
+  const cloudDoc = cloudAccountsResult.docs[0] ?? null
 
   return (
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
         <SiteHeader />
+        <SetAgentBreadcrumbs
+          workspaceSlug={workspace.slug}
+          workspaceName={workspace.name}
+          runTitle={run.title ?? run.initialPrompt ?? 'Agent run'}
+        />
         <div className="flex flex-1 min-h-0 flex-col p-6">
           <div className="container mx-auto max-w-4xl flex flex-1 min-h-0 flex-col">
-            <header className="mb-4">
-              <h1 className="text-xl font-semibold truncate">{run.title}</h1>
-              <p className="text-xs text-muted-foreground">
-                Started {new Date(run.startedAt).toLocaleString()} • {workflowId}
-              </p>
-            </header>
-            <div className="flex-1 min-h-0">
-              <AgentChatThread workspaceId={workspace.id} workflowId={workflowId} />
-            </div>
+            <AgentChatThread
+              workspaceId={workspace.id}
+              workflowId={workflowId}
+              context={{
+                title: run.title ?? run.initialPrompt ?? 'Agent run',
+                startedAtIso: run.startedAt ?? new Date().toISOString(),
+                workspaceName: workspace.name,
+                appName: appDoc?.name ?? undefined,
+                appFramework: undefined,
+                cloudName: cloudDoc?.name ?? undefined,
+                cloudProvider:
+                  (cloudDoc as { provider?: string } | null)?.provider ?? undefined,
+                cloudRegion: (cloudDoc as { region?: string } | null)?.region ?? undefined,
+                llmModel: llmDoc?.model ?? undefined,
+              }}
+            />
           </div>
         </div>
       </SidebarInset>

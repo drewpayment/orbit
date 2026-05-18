@@ -72,6 +72,16 @@ func (a *healthClientAdapter) CreateHealthCheck(ctx context.Context, appID strin
 	})
 }
 
+func (a *healthClientAdapter) UpdateAppHealthConfig(ctx context.Context, appID string, spec activities.HealthConfigSpec) error {
+	return a.impl.UpdateAppHealthConfig(ctx, appID, services.HealthConfigSpec{
+		URL:            spec.URL,
+		Method:         spec.Method,
+		ExpectedStatus: spec.ExpectedStatus,
+		Interval:       spec.Interval,
+		Timeout:        spec.Timeout,
+	})
+}
+
 // buildClientAdapter adapts services.PayloadBuildClientImpl to activities.PayloadBuildClient
 type buildClientAdapter struct {
 	impl *services.PayloadBuildClientImpl
@@ -253,6 +263,7 @@ func main() {
 	healthCheckActivities := activities.NewHealthCheckActivities(payloadHealthClient)
 	w.RegisterActivity(healthCheckActivities.PerformHealthCheckActivity)
 	w.RegisterActivity(healthCheckActivities.RecordHealthResultActivity)
+	w.RegisterActivity(healthCheckActivities.ConfigureAppHealthCheckActivity)
 
 	// Register health check workflow
 	w.RegisterWorkflow(workflows.HealthCheckWorkflow)
@@ -497,6 +508,23 @@ func main() {
 	w.RegisterActivityWithOptions(registryActivities.RegisterPendingTool, activity.RegisterOptions{Name: agentcontract.ActivityRegisterPendingAgentTool})
 	w.RegisterActivityWithOptions(registryActivities.ResolveAgentTool, activity.RegisterOptions{Name: agentcontract.ActivityResolveAgentTool})
 
+	// Pattern registry activities — platform-wide catalog counterpart to
+	// the tool registry. Backs propose_pattern + the catalog merge for
+	// instantiate_pattern. See plans/merry-strolling-bumblebee.md.
+	patternsClient := services.NewPayloadPatternClient(orbitAPIURL, orbitInternalAPIKey, logger)
+	patternActivities := agentactivity.NewPatternRegistryActivities(patternsClient, logger)
+	w.RegisterActivityWithOptions(patternActivities.ListApprovedPatterns, activity.RegisterOptions{Name: agentcontract.ActivityListApprovedPatterns})
+	w.RegisterActivityWithOptions(patternActivities.RegisterPendingPattern, activity.RegisterOptions{Name: agentcontract.ActivityRegisterPendingPattern})
+	w.RegisterActivityWithOptions(patternActivities.ResolvePattern, activity.RegisterOptions{Name: agentcontract.ActivityResolvePattern})
+
+	// Pattern instance activities — Phase 3 of the Patterns catalog
+	// spike. Back the agent's instantiate_pattern dispatch.
+	patternInstanceClient := services.NewPayloadPatternInstanceClient(orbitAPIURL, orbitInternalAPIKey, logger)
+	patternInstanceActivities := agentactivity.NewPatternInstanceActivities(patternInstanceClient, logger)
+	w.RegisterActivityWithOptions(patternInstanceActivities.GetPatternByID, activity.RegisterOptions{Name: agentcontract.ActivityGetPatternByID})
+	w.RegisterActivityWithOptions(patternInstanceActivities.CreatePatternInstance, activity.RegisterOptions{Name: agentcontract.ActivityCreatePatternInstance})
+	w.RegisterActivityWithOptions(patternInstanceActivities.UpdatePatternInstanceStatus, activity.RegisterOptions{Name: agentcontract.ActivityUpdatePatternInstanceStatus})
+
 	// Audit-trail activity keeps the AgentRuns Payload row in sync with
 	// live workflow state so the run-history page reflects current status,
 	// approvals, and final summary without a workflow query.
@@ -520,6 +548,13 @@ func main() {
 	w.RegisterActivityWithOptions(orbitActivities.OrbitListApps, activity.RegisterOptions{Name: agentcontract.ActivityOrbitListApps})
 	w.RegisterActivityWithOptions(orbitActivities.OrbitGetApp, activity.RegisterOptions{Name: agentcontract.ActivityOrbitGetApp})
 	w.RegisterActivityWithOptions(orbitActivities.OrbitListCloudAccounts, activity.RegisterOptions{Name: agentcontract.ActivityOrbitListCloudAccounts})
+
+	// orbit_repo_clone — mints a fresh installation token from the
+	// workspace's connected GitHub App and clones the repo inside the
+	// sandbox. Token never reaches LLM context.
+	githubTokenClient := services.NewPayloadGitHubClient(orbitAPIURL, orbitInternalAPIKey, logger)
+	repoCloneActivities := agentactivity.NewOrbitRepoCloneActivities(sandboxExec, githubTokenClient, orbitContextClient, logger)
+	w.RegisterActivityWithOptions(repoCloneActivities.OrbitRepoClone, activity.RegisterOptions{Name: agentcontract.ActivityOrbitRepoClone})
 
 	log.Printf("Infrastructure Agent workflow + activities registered (sandbox backend=%s)", sandboxExec.Backend())
 

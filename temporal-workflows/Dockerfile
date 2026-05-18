@@ -33,7 +33,7 @@ FROM alpine:latest
 # server version range in infrastructure/k8s/agent-sandbox/.
 ARG KUBECTL_VERSION=v1.31.1
 
-RUN apk --no-cache add ca-certificates curl \
+RUN apk --no-cache add ca-certificates curl bash git \
     && ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') \
     && curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${ARCH}/kubectl" -o /usr/local/bin/kubectl \
     && chmod +x /usr/local/bin/kubectl \

@@ -171,7 +171,9 @@ func (s *AgentServer) ApproveAction(
 	if edits := msg.GetEdits(); edits != nil {
 		payload.Edited = true
 		payload.EditedName = edits.GetName()
+		payload.EditedDisplayName = edits.GetDisplayName()
 		payload.EditedDescription = edits.GetDescription()
+		payload.EditedCategory = edits.GetCategory()
 		payload.EditedTemplateKind = edits.GetTemplateKind()
 		payload.EditedTemplateJSON = edits.GetTemplateJson()
 		payload.EditedSchemaJSON = edits.GetInputSchemaJson()

@@ -52,6 +52,27 @@ const (
 	ToolRegisterTool    = "register_tool"
 	ToolStartHealthCheck = "start_child_health_check"
 
+	// ToolProposePattern is the platform-catalog counterpart to
+	// register_tool. The agent proposes a new reusable deployment recipe;
+	// a platform admin approves it once; thereafter it lives in the
+	// platform-wide Patterns catalog and any workspace can instantiate it.
+	// See plans/merry-strolling-bumblebee.md.
+	ToolProposePattern = "propose_pattern"
+
+	// ToolListPatterns returns the agent's view of the platform-wide
+	// Patterns catalog (approved patterns only). The agent should call
+	// this early in a run to discover whether an existing pattern already
+	// solves the user's request before re-deriving from shell.
+	ToolListPatterns = "list_patterns"
+
+	// ToolInstantiatePattern provisions an approved Pattern into a
+	// workspace. Creates a PatternInstance row, validates parameters
+	// against the pattern's input schema, expands the template via the
+	// same engine that runs register_tool templates, dispatches the
+	// expanded primitives, and writes outputs back. Phase 3 of the
+	// Patterns catalog spike.
+	ToolInstantiatePattern = "instantiate_pattern"
+
 	// Orbit-aware introspection tools. The agent uses these to discover what
 	// apps and cloud accounts exist in the current workspace without leaving
 	// the sandbox. None of these return secrets — credentials reach the
@@ -66,15 +87,23 @@ const (
 	// per run. Tokens live in the sandbox pod and die with TeardownSandbox
 	// — Orbit never stores cloud credentials.
 	ToolOrbitCloudLogin = "orbit_cloud_login"
+
+	// Private-repo clone via the workspace's connected GitHub App. Orbit
+	// mints a fresh installation token from the workspace's
+	// github-installations record, projects it into the sandbox as a
+	// one-shot URL-injected git clone, then scrubs the token from the
+	// resulting .git/config. The agent never sees the token.
+	ToolOrbitRepoClone = "orbit_repo_clone"
 )
 
 // ApprovalKind classifies HITL gates the agent surfaces. The chat UI uses
 // this to pick the right card style; admin auditing groups by kind.
 const (
-	ApprovalKindCustom            = "custom"
-	ApprovalKindProposal          = "proposal"
-	ApprovalKindDestructiveCmd    = "destructive_command"
-	ApprovalKindToolRegistration  = "tool_registration"
+	ApprovalKindCustom              = "custom"
+	ApprovalKindProposal            = "proposal"
+	ApprovalKindDestructiveCmd      = "destructive_command"
+	ApprovalKindToolRegistration    = "tool_registration"
+	ApprovalKindPatternRegistration = "pattern_registration"
 )
 
 // Activity names for Spike 2 sandbox + IO activities.
@@ -96,6 +125,19 @@ const (
 	ActivityResolveAgentTool         = "ResolveAgentTool"
 )
 
+// Activity names for the platform-wide Patterns catalog (one abstraction
+// up from AgentTools). See plans/merry-strolling-bumblebee.md.
+const (
+	ActivityListApprovedPatterns    = "ListApprovedPatterns"
+	ActivityRegisterPendingPattern  = "RegisterPendingPattern"
+	ActivityResolvePattern          = "ResolvePattern"
+
+	// Phase 3 — instantiation lifecycle.
+	ActivityGetPatternByID              = "GetPatternByID"
+	ActivityCreatePatternInstance       = "CreatePatternInstance"
+	ActivityUpdatePatternInstanceStatus = "UpdatePatternInstanceStatus"
+)
+
 // Activity names for Spike 5 audit trail.
 const (
 	ActivityUpdateAgentRun = "UpdateAgentRun"
@@ -115,6 +157,12 @@ const (
 	ActivityOrbitListApps          = "OrbitListApps"
 	ActivityOrbitGetApp            = "OrbitGetApp"
 	ActivityOrbitListCloudAccounts = "OrbitListCloudAccounts"
+	ActivityOrbitRepoClone         = "OrbitRepoClone"
+	// ActivityConfigureAppHealthCheck is the canonical write-through path
+	// for the agent's start_child_health_check tool — sets app.healthConfig
+	// and lets the Apps.afterChange hook drive the workflow lifecycle.
+	// See GitHub issue #44.
+	ActivityConfigureAppHealthCheck = "ConfigureAppHealthCheckActivity"
 )
 
 // Event kinds emitted into the workflow's event log.
@@ -261,11 +309,15 @@ type UserMessageSignalPayload struct {
 //
 // Edited* fields are populated when the reviewer approves with edits
 // (commit α). They are only meaningful when Approved=true and Edited=true,
-// and only for approvals of kind ApprovalKindToolRegistration. Empty
-// Edited* fields with Edited=true mean "the reviewer touched the form
-// but didn't actually change anything" — the workflow treats that as an
-// unedited approval. Adding optional fields is wire-compatible with
-// pre-α workflows in flight.
+// and apply to approvals of kind ApprovalKindToolRegistration or
+// ApprovalKindPatternRegistration. Empty Edited* fields with Edited=true
+// mean "the reviewer touched the form but didn't actually change
+// anything" — the workflow treats that as an unedited approval. Adding
+// optional fields is wire-compatible with pre-α workflows in flight.
+//
+// EditedDisplayName and EditedCategory are pattern-specific (no analog
+// in tool_registration); the workflow ignores them for tool_registration
+// gates.
 type ApprovalSignalPayload struct {
 	ApprovalID string `json:"approval_id"`
 	Approved   bool   `json:"approved"`
@@ -274,7 +326,9 @@ type ApprovalSignalPayload struct {
 
 	Edited             bool   `json:"edited,omitempty"`
 	EditedName         string `json:"edited_name,omitempty"`
+	EditedDisplayName  string `json:"edited_display_name,omitempty"`
 	EditedDescription  string `json:"edited_description,omitempty"`
+	EditedCategory     string `json:"edited_category,omitempty"`
 	EditedTemplateKind string `json:"edited_template_kind,omitempty"`
 	EditedTemplateJSON string `json:"edited_template_json,omitempty"`
 	EditedSchemaJSON   string `json:"edited_schema_json,omitempty"`

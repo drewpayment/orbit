@@ -99,6 +99,7 @@ export const PendingApprovals: CollectionConfig = {
       required: true,
       options: [
         { label: 'Tool registration', value: 'tool_registration' },
+        { label: 'Pattern registration', value: 'pattern_registration' },
         { label: 'Destructive command', value: 'destructive_command' },
         { label: 'Proposal', value: 'proposal' },
         { label: 'Custom', value: 'custom' },
@@ -119,7 +120,7 @@ export const PendingApprovals: CollectionConfig = {
       type: 'json',
       admin: {
         description:
-          'Structured gate payload. For tool_registration: {name, description, templateKind, templateJson, inputSchemaJson}. For destructive_command: {command, matchedPattern}.',
+          'Structured gate payload. For tool_registration: {name, description, templateKind, templateJson, inputSchemaJson}. For pattern_registration: {name, displayName, description, category, templateKind, templateJson, inputSchemaJson, reasoning, pattern_id}. For destructive_command: {command, matchedPattern}.',
       },
     },
     {

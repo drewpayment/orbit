@@ -38,7 +38,16 @@ export default function FrontendLayout({ children }: { children: React.ReactNode
           <BreadcrumbProvider>
             <AuthGuard>
               <GitHubHealthProviderWrapper>
-                <main>{children}</main>
+                {/*
+                 * Outer <main> wraps every (frontend) page. Width is
+                 * explicit (w-full + flex column) so child pages that
+                 * use SidebarInset don't fight the default intrinsic
+                 * sizing of an un-styled <main>. Pages without
+                 * SidebarInset still get a <main> landmark from here.
+                 */}
+                <main className="flex min-h-svh w-full flex-col">
+                  {children}
+                </main>
               </GitHubHealthProviderWrapper>
             </AuthGuard>
           </BreadcrumbProvider>

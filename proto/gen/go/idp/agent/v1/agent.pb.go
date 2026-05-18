@@ -475,8 +475,11 @@ func (x *ApproveActionRequest) GetEdits() *ApprovalEdits {
 	return nil
 }
 
-// ApprovalEdits carries reviewer modifications to a tool registration.
-// Empty fields mean "leave the agent's proposal unchanged for this field."
+// ApprovalEdits carries reviewer modifications to a tool registration
+// or pattern registration. Empty fields mean "leave the agent's proposal
+// unchanged for this field." display_name + category are pattern-specific
+// (no analog in tool_registration); the workflow ignores them for
+// tool_registration gates.
 type ApprovalEdits struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -484,6 +487,8 @@ type ApprovalEdits struct {
 	TemplateKind    string                 `protobuf:"bytes,3,opt,name=template_kind,json=templateKind,proto3" json:"template_kind,omitempty"`
 	TemplateJson    string                 `protobuf:"bytes,4,opt,name=template_json,json=templateJson,proto3" json:"template_json,omitempty"`
 	InputSchemaJson string                 `protobuf:"bytes,5,opt,name=input_schema_json,json=inputSchemaJson,proto3" json:"input_schema_json,omitempty"`
+	DisplayName     string                 `protobuf:"bytes,6,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	Category        string                 `protobuf:"bytes,7,opt,name=category,proto3" json:"category,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -549,6 +554,20 @@ func (x *ApprovalEdits) GetTemplateJson() string {
 func (x *ApprovalEdits) GetInputSchemaJson() string {
 	if x != nil {
 		return x.InputSchemaJson
+	}
+	return ""
+}
+
+func (x *ApprovalEdits) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *ApprovalEdits) GetCategory() string {
+	if x != nil {
+		return x.Category
 	}
 	return ""
 }
@@ -2225,13 +2244,15 @@ const file_idp_agent_v1_agent_proto_rawDesc = "" +
 	"approvedBy\x12\x14\n" +
 	"\x05notes\x18\x04 \x01(\tR\x05notes\x126\n" +
 	"\x05edits\x18\x05 \x01(\v2\x1b.idp.agent.v1.ApprovalEditsH\x00R\x05edits\x88\x01\x01B\b\n" +
-	"\x06_edits\"\xbb\x01\n" +
+	"\x06_edits\"\xfa\x01\n" +
 	"\rApprovalEdits\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12#\n" +
 	"\rtemplate_kind\x18\x03 \x01(\tR\ftemplateKind\x12#\n" +
 	"\rtemplate_json\x18\x04 \x01(\tR\ftemplateJson\x12*\n" +
-	"\x11input_schema_json\x18\x05 \x01(\tR\x0finputSchemaJson\"1\n" +
+	"\x11input_schema_json\x18\x05 \x01(\tR\x0finputSchemaJson\x12!\n" +
+	"\fdisplay_name\x18\x06 \x01(\tR\vdisplayName\x12\x1a\n" +
+	"\bcategory\x18\a \x01(\tR\bcategory\"1\n" +
 	"\x15ApproveActionResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\"\x90\x01\n" +
 	"\x13RejectActionRequest\x12\x1f\n" +

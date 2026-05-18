@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
-	"go.temporal.io/sdk/workflow"
 
+	"github.com/drewpayment/orbit/temporal-workflows/internal/activities"
 	agentactivity "github.com/drewpayment/orbit/temporal-workflows/internal/activities/agent"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/providers"
 	"github.com/drewpayment/orbit/temporal-workflows/pkg/agentcontract"
@@ -38,6 +38,15 @@ func registerSandboxStubs(env *testsuite.TestWorkflowEnvironment) {
 			return agentactivity.ListApprovedToolsResult{}, nil
 		},
 		activity.RegisterOptions{Name: agentcontract.ActivityListApprovedAgentTools},
+	)
+	// Phase-2 Patterns catalog refresh — called at the top of every LLM
+	// iteration alongside ListApprovedAgentTools. Empty result by default
+	// so tests that don't care just see an empty catalog.
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.ListApprovedPatternsInput) (agentactivity.ListApprovedPatternsResult, error) {
+			return agentactivity.ListApprovedPatternsResult{}, nil
+		},
+		activity.RegisterOptions{Name: agentcontract.ActivityListApprovedPatterns},
 	)
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, _ agentactivity.UpdateAgentRunInput) error { return nil },
@@ -414,6 +423,15 @@ func TestInfrastructureAgentWorkflow_RegisterToolFullRoundTrip(t *testing.T) {
 		activity.RegisterOptions{Name: agentcontract.ActivityListApprovedAgentTools},
 	)
 
+	// Phase-2 patterns refresh — called at the top of every LLM iteration.
+	// This test doesn't exercise the catalog so an empty stub suffices.
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.ListApprovedPatternsInput) (agentactivity.ListApprovedPatternsResult, error) {
+			return agentactivity.ListApprovedPatternsResult{}, nil
+		},
+		activity.RegisterOptions{Name: agentcontract.ActivityListApprovedPatterns},
+	)
+
 	// register-pending appends a row.
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, in agentactivity.RegisterPendingToolInput) (agentactivity.RegisterPendingToolResult, error) {
@@ -605,23 +623,27 @@ func TestInfrastructureAgentWorkflow_RegisterToolRejectionDoesNotApprove(t *test
 	require.True(t, rejected, "resolve should have been called with approved=false")
 }
 
-func TestInfrastructureAgentWorkflow_StartHealthCheckSchedulesChildWorkflow(t *testing.T) {
+func TestInfrastructureAgentWorkflow_StartHealthCheckWritesAppHealthConfig(t *testing.T) {
+	// Unified path (GitHub issue #44): start_child_health_check no longer
+	// spawns a child workflow. It executes the ConfigureAppHealthCheck
+	// activity, which writes app.healthConfig via Payload's internal API.
+	// The Apps afterChange hook then drives the canonical HealthCheckWorkflow.
 	suite := &testsuite.WorkflowTestSuite{}
 	env := suite.NewTestWorkflowEnvironment()
 	registerSandboxStubs(env)
 
-	// Stub the HealthCheckWorkflow itself so the child completes
-	// immediately. The agent workflow only awaits the child's start
-	// (Future.GetChildWorkflowExecution); it doesn't await completion.
-	healthCalls := 0
-	var capturedHealthInput HealthCheckWorkflowInput
-	env.RegisterWorkflowWithOptions(
-		func(ctx workflow.Context, in HealthCheckWorkflowInput) error {
-			healthCalls++
-			capturedHealthInput = in
+	// Capture the activity invocation. If the workflow still tried to
+	// spawn a child HealthCheckWorkflow, the test environment would fail
+	// because we haven't registered it.
+	var configureCalls int
+	var capturedInput activities.ConfigureAppHealthCheckInput
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, in activities.ConfigureAppHealthCheckInput) error {
+			configureCalls++
+			capturedInput = in
 			return nil
 		},
-		workflow.RegisterOptions{Name: "HealthCheckWorkflow"},
+		activity.RegisterOptions{Name: agentcontract.ActivityConfigureAppHealthCheck},
 	)
 
 	llm := &scriptedLLM{
@@ -655,18 +677,24 @@ func TestInfrastructureAgentWorkflow_StartHealthCheckSchedulesChildWorkflow(t *t
 
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
-	require.Equal(t, 1, healthCalls, "expected child HealthCheckWorkflow to start once")
-	require.Equal(t, "app-123", capturedHealthInput.AppID)
-	require.Equal(t, "https://example.com/healthz", capturedHealthInput.HealthConfig.URL)
-	require.Equal(t, 45, capturedHealthInput.HealthConfig.Interval)
+	require.Equal(t, 1, configureCalls, "expected ConfigureAppHealthCheck to be called exactly once")
+	require.Equal(t, "app-123", capturedInput.AppID)
+	require.Equal(t, "https://example.com/healthz", capturedInput.Spec.URL)
+	require.Equal(t, 45, capturedInput.Spec.Interval)
+	// Defaults from the dispatcher.
+	require.Equal(t, "GET", capturedInput.Spec.Method)
+	require.Equal(t, 200, capturedInput.Spec.ExpectedStatus)
+	require.Equal(t, 10, capturedInput.Spec.Timeout)
 
-	// Tool result fed back to second LLM call must include the child's
-	// workflow id.
+	// Tool result fed back to the second LLM call must reference the
+	// canonical workflow id (stable, no timestamp) and the managed_by tag
+	// so the LLM understands lifecycle isn't its problem.
 	require.Len(t, llm.captured, 2)
 	var found bool
 	for _, m := range llm.captured[1].Messages {
 		if m.Role == providers.RoleTool && m.ToolCallID == "tc-hc" {
-			require.Contains(t, m.Content, `"workflow_id"`)
+			require.Contains(t, m.Content, `"workflow_id":"health-check-app-123"`)
+			require.Contains(t, m.Content, `"managed_by":"orbit-apps-hook"`)
 			require.Contains(t, m.Content, `"interval_seconds":45`)
 			found = true
 		}

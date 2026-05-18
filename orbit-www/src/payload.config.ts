@@ -38,6 +38,9 @@ import { LLMProviders } from './collections/LLMProviders'
 import { AgentRuns } from './collections/AgentRuns'
 import { AgentTools } from './collections/AgentTools'
 import { AgentToolVersions } from './collections/AgentToolVersions'
+import { Patterns } from './collections/Patterns'
+import { PatternVersions } from './collections/PatternVersions'
+import { PatternInstances } from './collections/PatternInstances'
 import { PendingApprovals } from './collections/PendingApprovals'
 
 // Kafka collections
@@ -112,6 +115,9 @@ export default buildConfig({
     AgentRuns,
     AgentTools,
     AgentToolVersions,
+    Patterns,
+    PatternVersions,
+    PatternInstances,
     PendingApprovals,
     // Kafka collections
     KafkaProviders,
