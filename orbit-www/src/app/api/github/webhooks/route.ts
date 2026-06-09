@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import { verifyWebhookSignature } from '@/lib/github/webhooks'
-import { cancelGitHubTokenRefreshWorkflow } from '@/lib/temporal/client'
+import { cancelGitHubTokenRefreshWorkflow, ensureGitHubTokenRefreshWorkflow } from '@/lib/temporal/client'
 
 export async function POST(request: NextRequest) {
   const signature = request.headers.get('x-hub-signature-256')
@@ -61,8 +61,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function handleAppUninstalled(payload: any, githubInstallationId: number) {
-  // Find installation by GitHub installation ID
+async function findInstallation(payload: any, githubInstallationId: number) {
   const installations = await payload.find({
     collection: 'github-installations',
     where: {
@@ -72,15 +71,10 @@ async function handleAppUninstalled(payload: any, githubInstallationId: number) 
     },
     limit: 1,
   })
+  return installations.docs[0] ?? null
+}
 
-  if (installations.docs.length === 0) {
-    console.warn('[GitHub Webhook] Installation not found:', githubInstallationId)
-    return
-  }
-
-  const installation = installations.docs[0]
-
-  // Cancel Temporal workflow
+async function stopRefreshWorkflow(installation: any) {
   if (installation.temporalWorkflowId) {
     try {
       await cancelGitHubTokenRefreshWorkflow(installation.temporalWorkflowId)
@@ -89,45 +83,66 @@ async function handleAppUninstalled(payload: any, githubInstallationId: number) 
       console.error('[GitHub Webhook] Failed to cancel workflow:', error)
     }
   }
+}
 
-  // Update installation status
+async function handleAppUninstalled(payload: any, githubInstallationId: number) {
+  const installation = await findInstallation(payload, githubInstallationId)
+  if (!installation) {
+    console.warn('[GitHub Webhook] Installation not found:', githubInstallationId)
+    return
+  }
+
+  await stopRefreshWorkflow(installation)
+
   await payload.update({
     collection: 'github-installations',
     id: installation.id,
     data: {
       status: 'suspended',
       suspendedAt: new Date(),
-      suspensionReason: 'GitHub App uninstalled by user',
+      // Distinct from a GitHub-side suspend: uninstall does not auto-recover.
+      suspensionReason: 'GitHub App uninstalled',
       temporalWorkflowStatus: 'stopped',
     },
   })
 
-  console.log('[GitHub Webhook] Installation marked as suspended:', installation.id)
+  console.log('[GitHub Webhook] Installation marked uninstalled:', installation.id)
 }
 
 async function handleAppSuspended(payload: any, githubInstallationId: number) {
-  // Similar to uninstalled
-  await handleAppUninstalled(payload, githubInstallationId)
-}
-
-async function handleAppUnsuspended(payload: any, githubInstallationId: number) {
-  const installations = await payload.find({
-    collection: 'github-installations',
-    where: {
-      installationId: {
-        equals: githubInstallationId,
-      },
-    },
-    limit: 1,
-  })
-
-  if (installations.docs.length === 0) {
+  const installation = await findInstallation(payload, githubInstallationId)
+  if (!installation) {
+    console.warn('[GitHub Webhook] Installation not found:', githubInstallationId)
     return
   }
 
-  const installation = installations.docs[0]
+  await stopRefreshWorkflow(installation)
 
-  // Reactivate installation
+  await payload.update({
+    collection: 'github-installations',
+    id: installation.id,
+    data: {
+      status: 'suspended',
+      suspendedAt: new Date(),
+      // Temporary, recoverable: an unsuspend webhook restores it automatically.
+      suspensionReason: 'GitHub App suspended by GitHub',
+      temporalWorkflowStatus: 'stopped',
+    },
+  })
+
+  console.log('[GitHub Webhook] Installation marked suspended:', installation.id)
+}
+
+async function handleAppUnsuspended(payload: any, githubInstallationId: number) {
+  const installation = await findInstallation(payload, githubInstallationId)
+  if (!installation) {
+    return
+  }
+
+  // Restart the refresh workflow (idempotent) so the token starts refreshing
+  // again, then reactivate. If Temporal is unreachable the sweeper recovers it.
+  const workflowId = await ensureGitHubTokenRefreshWorkflow(installation.id)
+
   await payload.update({
     collection: 'github-installations',
     id: installation.id,
@@ -135,11 +150,10 @@ async function handleAppUnsuspended(payload: any, githubInstallationId: number) 
       status: 'active',
       suspendedAt: null,
       suspensionReason: null,
+      temporalWorkflowId: workflowId ?? installation.temporalWorkflowId,
+      temporalWorkflowStatus: workflowId ? 'running' : 'failed',
     },
   })
 
-  // Restart workflow
-  // TODO: Implement workflow restart logic
-
-  console.log('[GitHub Webhook] Installation reactivated:', installation.id)
+  console.log('[GitHub Webhook] Installation reactivated and refresh restarted:', installation.id)
 }

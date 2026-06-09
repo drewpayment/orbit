@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
 	"os"
+	"time"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
@@ -194,22 +197,25 @@ func main() {
 
 	// Register workflows
 	w.RegisterWorkflow(workflows.GitHubTokenRefreshWorkflow)
+	w.RegisterWorkflow(workflows.GitHubInstallationReconcileWorkflow)
 	w.RegisterWorkflow(workflows.TemplateInstantiationWorkflow)
 	w.RegisterWorkflow(workflows.DeploymentWorkflow)
 
-	// Initialize HTTP client for activities
-	activityClients := clients.NewHTTPActivityClients(orbitAPIURL)
+	// Initialize HTTP client for activities (with internal API key for
+	// /api/internal routes such as reconciliation).
+	activityClients := clients.NewHTTPActivityClientsWithAuth(orbitAPIURL, orbitInternalAPIKey)
 
 	// Register activities
 	w.RegisterActivity(activityClients.RefreshGitHubInstallationTokenActivity)
 	w.RegisterActivity(activityClients.UpdateInstallationStatusActivity)
+	w.RegisterActivity(activityClients.ReconcileGitHubInstallationsActivity)
 
 	// TODO: Implement PayloadClient, EncryptionService, and GitHubClient
 	// These will be created in later tasks
 	// For now, using nil to allow compilation
-	var payloadClient services.PayloadClient = nil       // TODO: Implement
+	var payloadClient services.PayloadClient = nil         // TODO: Implement
 	var encryptionService services.EncryptionService = nil // TODO: Implement
-	var githubClient services.GitHubClient = nil         // TODO: Implement
+	var githubClient services.GitHubClient = nil           // TODO: Implement
 
 	// Create GitHub service
 	githubService := services.NewGitHubService(payloadClient, encryptionService, githubClient)
@@ -558,6 +564,12 @@ func main() {
 
 	log.Printf("Infrastructure Agent workflow + activities registered (sandbox backend=%s)", sandboxExec.Backend())
 
+	// Ensure the GitHub installation reconciliation schedule exists. This is the
+	// backstop that (re)starts any active installation whose refresh workflow is
+	// not running — covering missed webhooks, worker restarts, and backfill of
+	// installations created before this system existed.
+	ensureGitHubReconcileSchedule(context.Background(), c)
+
 	log.Println("Starting Temporal worker...")
 	log.Printf("Temporal address: %s", temporalAddress)
 	log.Printf("Temporal namespace: %s", temporalNamespace)
@@ -572,4 +584,35 @@ func main() {
 	if err != nil {
 		log.Fatalln("Unable to start worker", err)
 	}
+}
+
+// ensureGitHubReconcileSchedule idempotently creates the 10-minute Temporal
+// Schedule that drives GitHub installation reconciliation. Safe to call on every
+// startup: an existing schedule is left in place.
+func ensureGitHubReconcileSchedule(ctx context.Context, c client.Client) {
+	const scheduleID = "github-installation-reconcile"
+
+	_, err := c.ScheduleClient().Create(ctx, client.ScheduleOptions{
+		ID: scheduleID,
+		Spec: client.ScheduleSpec{
+			Intervals: []client.ScheduleIntervalSpec{
+				{Every: 10 * time.Minute},
+			},
+		},
+		Action: &client.ScheduleWorkflowAction{
+			ID:        "github-installation-reconcile-wf",
+			Workflow:  "GitHubInstallationReconcileWorkflow",
+			TaskQueue: "orbit-workflows",
+		},
+	})
+	if err != nil {
+		var alreadyExists *serviceerror.AlreadyExists
+		if errors.As(err, &alreadyExists) {
+			log.Printf("GitHub reconcile schedule already exists: %s", scheduleID)
+			return
+		}
+		log.Printf("Warning: failed to create GitHub reconcile schedule: %v", err)
+		return
+	}
+	log.Printf("Created GitHub reconcile schedule: %s (every 10m)", scheduleID)
 }

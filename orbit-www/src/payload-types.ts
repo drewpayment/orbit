@@ -811,9 +811,9 @@ export interface GithubInstallation {
    */
   allowedWorkspaces?: (string | Workspace)[] | null;
   /**
-   * Installation health status
+   * Installation health status. "refresh_failed" is transient and self-heals; "needs_reconnect" is terminal and requires a human to reconnect.
    */
-  status: 'active' | 'suspended' | 'refresh_failed';
+  status: 'active' | 'suspended' | 'refresh_failed' | 'needs_reconnect';
   /**
    * When the installation was suspended
    */
@@ -822,6 +822,18 @@ export interface GithubInstallation {
    * Why the installation was suspended
    */
   suspensionReason?: string | null;
+  /**
+   * Consecutive token-refresh failures. Resets to 0 on a successful refresh.
+   */
+  consecutiveFailureCount?: number | null;
+  /**
+   * Most recent token-refresh failure reason
+   */
+  lastFailureReason?: string | null;
+  /**
+   * When the most recent token-refresh failure occurred
+   */
+  lastFailureAt?: string | null;
   /**
    * ID of the token refresh Temporal workflow
    */
@@ -4186,6 +4198,9 @@ export interface GithubInstallationsSelect<T extends boolean = true> {
   status?: T;
   suspendedAt?: T;
   suspensionReason?: T;
+  consecutiveFailureCount?: T;
+  lastFailureReason?: T;
+  lastFailureAt?: T;
   temporalWorkflowId?: T;
   temporalWorkflowStatus?: T;
   installedBy?: T;

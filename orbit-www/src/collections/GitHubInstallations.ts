@@ -163,9 +163,11 @@ export const GitHubInstallations: CollectionConfig = {
         { label: 'Active', value: 'active' },
         { label: 'Suspended', value: 'suspended' },
         { label: 'Token Refresh Failed', value: 'refresh_failed' },
+        { label: 'Needs Reconnect', value: 'needs_reconnect' },
       ],
       admin: {
-        description: 'Installation health status',
+        description:
+          'Installation health status. "refresh_failed" is transient and self-heals; "needs_reconnect" is terminal and requires a human to reconnect.',
         position: 'sidebar',
       },
     },
@@ -183,6 +185,36 @@ export const GitHubInstallations: CollectionConfig = {
       admin: {
         description: 'Why the installation was suspended',
         condition: (data) => data.status === 'suspended',
+      },
+    },
+
+    // ===== Refresh Health (maintained by the token refresh workflow) =====
+    {
+      name: 'consecutiveFailureCount',
+      type: 'number',
+      defaultValue: 0,
+      admin: {
+        description: 'Consecutive token-refresh failures. Resets to 0 on a successful refresh.',
+        readOnly: true,
+        position: 'sidebar',
+      },
+    },
+    {
+      name: 'lastFailureReason',
+      type: 'text',
+      admin: {
+        description: 'Most recent token-refresh failure reason',
+        readOnly: true,
+        condition: (data) => data.status === 'refresh_failed' || data.status === 'needs_reconnect',
+      },
+    },
+    {
+      name: 'lastFailureAt',
+      type: 'date',
+      admin: {
+        description: 'When the most recent token-refresh failure occurred',
+        readOnly: true,
+        condition: (data) => data.status === 'refresh_failed' || data.status === 'needs_reconnect',
       },
     },
 
@@ -247,11 +279,32 @@ export const GitHubInstallations: CollectionConfig = {
 
   hooks: {
     afterChange: [
-      async ({ doc, operation, req }) => {
-        // Future: Start Temporal workflow on create
-        if (operation === 'create') {
-          // TODO: Start GitHubTokenRefreshWorkflow
-          console.log('[GitHub Installation] Created:', doc.id)
+      // Authoritative single start site: every new installation gets its token
+      // refresh workflow started here, no matter which path created it.
+      async ({ doc, operation, req, context }) => {
+        if (operation !== 'create') return
+        // Guard against the update-within-hook re-trigger.
+        if ((context as { skipWorkflowStart?: boolean })?.skipWorkflowStart) return
+
+        try {
+          const { ensureGitHubTokenRefreshWorkflow } = await import('@/lib/temporal/client')
+          const workflowId = await ensureGitHubTokenRefreshWorkflow(doc.id)
+
+          await req.payload.update({
+            collection: 'github-installations',
+            id: doc.id,
+            data: {
+              temporalWorkflowId: workflowId ?? undefined,
+              temporalWorkflowStatus: workflowId ? 'running' : 'failed',
+            },
+            // Never throw out of the hook — a Temporal outage must not fail the
+            // install; the reconciliation sweeper will recover a 'failed' start.
+            context: { skipWorkflowStart: true },
+          })
+        } catch (err) {
+          req.payload.logger.error(
+            `[GitHub Installation] Failed to start refresh workflow for ${doc.id}: ${err}`
+          )
         }
       },
     ],

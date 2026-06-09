@@ -4,8 +4,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import { decrypt } from '@/lib/encryption'
+import { signalGitHubTokenRefresh } from '@/lib/temporal/client'
 
 const INTERNAL_API_KEY = process.env.ORBIT_INTERNAL_API_KEY
+
+// Treat a token within this window of expiry as expired, to absorb clock skew.
+const TOKEN_EXPIRY_BUFFER_MS = 60_000
 
 // POST /api/internal/github/token-for-repo
 //
@@ -81,10 +85,12 @@ export async function POST(request: NextRequest) {
     }
 
     const expiresAt = new Date(match.tokenExpiresAt)
-    if (expiresAt <= new Date()) {
+    if (expiresAt.getTime() <= Date.now() + TOKEN_EXPIRY_BUFFER_MS) {
+      // Nudge the refresh workflow so the next read self-heals.
+      await signalGitHubTokenRefresh(match.id)
       return NextResponse.json(
         {
-          error: 'Token expired, refresh workflow may be stalled',
+          error: 'Token expired or near expiry; refresh nudged',
           code: 'EXPIRED',
           installationId: match.installationId,
         },

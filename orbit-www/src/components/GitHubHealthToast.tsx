@@ -10,12 +10,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { AlertTriangle, ChevronDown, ExternalLink, RefreshCw } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ExternalLink } from 'lucide-react'
 
 const TOAST_ID = 'github-health-toast'
 
 export function GitHubHealthToast() {
-  const { health, dismissedUntil, dismiss, refresh, isRefreshing } = useGitHubHealth()
+  const { health, dismissedUntil, dismiss } = useGitHubHealth()
   const toastShownRef = useRef(false)
 
   useEffect(() => {
@@ -33,10 +33,11 @@ export function GitHubHealthToast() {
       return
     }
 
-    // Find installations with invalid tokens
-    const invalidInstallations = health.installations.filter(inst => !inst.tokenValid)
+    // Only alarm on terminal connections that need a human to reconnect.
+    // Transient refresh failures self-heal and intentionally show nothing.
+    const reconnectInstallations = health.installations.filter(inst => inst.needsReconnect)
 
-    if (invalidInstallations.length === 0) {
+    if (reconnectInstallations.length === 0) {
       toast.dismiss(TOAST_ID)
       toastShownRef.current = false
       return
@@ -46,10 +47,10 @@ export function GitHubHealthToast() {
     if (!toastShownRef.current) {
       toastShownRef.current = true
 
-      const accountNames = invalidInstallations.map(i => i.accountLogin).join(', ')
-      const message = invalidInstallations.length === 1
-        ? `Your GitHub token for "${accountNames}" has expired.`
-        : `${invalidInstallations.length} GitHub connections need attention.`
+      const accountNames = reconnectInstallations.map(i => i.accountLogin).join(', ')
+      const message = reconnectInstallations.length === 1
+        ? `The GitHub connection for "${accountNames}" needs to be reconnected.`
+        : `${reconnectInstallations.length} GitHub connections need to be reconnected.`
 
       toast.custom(
         (t) => (
@@ -58,31 +59,16 @@ export function GitHubHealthToast() {
               <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-amber-900 dark:text-amber-100">
-                  GitHub Connection Issue
+                  GitHub Connection — Action Required
                 </p>
                 <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
                   {message}
                 </p>
                 <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                  Repository operations will fail until resolved.
+                  Repository operations will fail until reconnected.
                 </p>
 
                 <div className="flex items-center gap-2 mt-3">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs border-amber-300 dark:border-amber-700"
-                    disabled={isRefreshing}
-                    onClick={async () => {
-                      await refresh()
-                      toast.dismiss(t)
-                      toastShownRef.current = false
-                    }}
-                  >
-                    <RefreshCw className={`h-3 w-3 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
-                    {isRefreshing ? 'Refreshing...' : 'Refresh'}
-                  </Button>
-
                   <Button
                     size="sm"
                     variant="outline"
@@ -92,7 +78,7 @@ export function GitHubHealthToast() {
                     }}
                   >
                     <ExternalLink className="h-3 w-3 mr-1" />
-                    Settings
+                    Reconnect GitHub
                   </Button>
 
                   <DropdownMenu>
@@ -142,7 +128,7 @@ export function GitHubHealthToast() {
         }
       )
     }
-  }, [health, dismissedUntil, dismiss, refresh, isRefreshing])
+  }, [health, dismissedUntil, dismiss])
 
   return null
 }

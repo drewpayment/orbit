@@ -5,7 +5,7 @@ import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import { encrypt } from '@/lib/encryption'
 import { getInstallation, createInstallationToken } from '@/lib/github/octokit'
-import { startGitHubTokenRefreshWorkflow } from '@/lib/temporal/client'
+import { ensureGitHubTokenRefreshWorkflow } from '@/lib/temporal/client'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
 
@@ -82,6 +82,11 @@ export async function GET(request: NextRequest) {
         },
       })
 
+      // Backstop: ensure the refresh workflow is running (idempotent). The
+      // afterChange hook only starts it on create, so a reinstall/update relies
+      // on this to recover a workflow that was cancelled on a prior uninstall.
+      await ensureGitHubTokenRefreshWorkflow(existing.docs[0].id)
+
       // Redirect to configuration page
       return NextResponse.redirect(
         new URL(`/admin/collections/github-installations/${existing.docs[0].id}`, request.url)
@@ -140,32 +145,9 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    // Start Temporal token refresh workflow
-    let workflowId: string
-    try {
-      workflowId = await startGitHubTokenRefreshWorkflow(githubInstallation.id)
-
-      // Update installation with workflow ID
-      await payload.update({
-        collection: 'github-installations',
-        id: githubInstallation.id,
-        data: {
-          temporalWorkflowId: workflowId,
-          temporalWorkflowStatus: 'running',
-        },
-      })
-    } catch (workflowError) {
-      console.error('[GitHub Installation] Failed to start workflow:', workflowError)
-
-      // Mark workflow as failed but don't fail installation
-      await payload.update({
-        collection: 'github-installations',
-        id: githubInstallation.id,
-        data: {
-          temporalWorkflowStatus: 'failed',
-        },
-      })
-    }
+    // The github-installations afterChange (create) hook starts the token
+    // refresh workflow and records temporalWorkflowId — single authoritative
+    // start site, so no inline start is needed here.
 
     // Redirect to workspace configuration page
     return NextResponse.redirect(
