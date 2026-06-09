@@ -25,6 +25,7 @@ import { ToolCard } from './parts/ToolCard'
 import { AgentThought } from './parts/AgentThought'
 import { Composer } from './parts/Composer'
 import { RecoveryBanner } from './parts/RecoveryBanner'
+import { FloatingStatusBar } from './parts/FloatingStatusBar'
 import { parseToolTurn } from './lib/tool-parsing'
 import { derivePhases } from './lib/phases'
 
@@ -159,6 +160,11 @@ export function AgentChatThread({ workspaceId, workflowId, context }: Props) {
   const [input, setInput] = useState('')
   const [pending, startTransition] = useTransition()
   const scrollRef = useRef<HTMLDivElement>(null)
+  const headerRef = useRef<HTMLDivElement>(null)
+  // True while the run header is scrolled out of the viewport — drives the
+  // floating status indicator so a long transcript still shows live status
+  // without a scroll back to the top.
+  const [headerVisible, setHeaderVisible] = useState(true)
 
   const ingest = useCallback((events: AgentEventDTO[]) => {
     setTurns((prev) => {
@@ -338,6 +344,21 @@ export function AgentChatThread({ workspaceId, workflowId, context }: Props) {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [turns, streamingTurns, proposal, pendingApprovals.length])
 
+  // Watch the run header — the floating status bar appears only when it's
+  // off-screen, so we don't double-render the same info at the top of the page.
+  useEffect(() => {
+    const el = headerRef.current
+    if (!el) return
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) setHeaderVisible(entry.isIntersecting)
+      },
+      { threshold: 0, rootMargin: '-48px 0px 0px 0px' },
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
+
   const onSend = () => {
     const text = input.trim()
     if (!text) return
@@ -416,19 +437,32 @@ export function AgentChatThread({ workspaceId, workflowId, context }: Props) {
 
   const contextChips = useMemo(() => buildContextChips(context), [context])
 
+  // Active phase for the floating status bar. Falls back to the last "done"
+  // phase on terminal runs so the bar still says something useful.
+  const activePhase = useMemo(() => {
+    return (
+      phases.find((p) => p.status === 'active') ??
+      [...phases].reverse().find((p) => p.status === 'done') ??
+      phases[0] ??
+      null
+    )
+  }, [phases])
+
   return (
     <div className="flex flex-col h-full gap-4">
       {context && (
-        <RunHeader
-          title={context.title}
-          status={status}
-          startedAt={new Date(context.startedAtIso).toLocaleString()}
-          elapsedLabel={elapsedLabel}
-          runId={workflowId}
-          terminal={terminal}
-          busy={pending}
-          onAbort={onAbort}
-        />
+        <div ref={headerRef}>
+          <RunHeader
+            title={context.title}
+            status={status}
+            startedAt={new Date(context.startedAtIso).toLocaleString()}
+            elapsedLabel={elapsedLabel}
+            runId={workflowId}
+            terminal={terminal}
+            busy={pending}
+            onAbort={onAbort}
+          />
+        </div>
       )}
 
       <PhaseTimeline phases={phases} />
@@ -527,6 +561,16 @@ export function AgentChatThread({ workspaceId, workflowId, context }: Props) {
         awaiting={status === 'awaiting_user'}
         disabled={terminal}
         sending={pending}
+      />
+
+      <FloatingStatusBar
+        visible={!headerVisible}
+        status={status}
+        elapsedLabel={elapsedLabel}
+        activePhase={activePhase}
+        terminal={terminal}
+        busy={pending}
+        onAbort={onAbort}
       />
     </div>
   )
