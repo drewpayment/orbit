@@ -5,23 +5,25 @@ import { DashboardQuickActions } from './DashboardQuickActions'
 describe('DashboardQuickActions', () => {
   afterEach(() => { cleanup() })
 
-  it('should render card title', () => {
+  it('should render all action items', () => {
     render(<DashboardQuickActions />)
-    expect(screen.getByText('Quick Actions')).toBeInTheDocument()
+    expect(screen.getByText('New workspace')).toBeInTheDocument()
+    expect(screen.getByText('Ask the agent')).toBeInTheDocument()
+    expect(screen.getByText('Create application')).toBeInTheDocument()
+    expect(screen.getByText('Request topic')).toBeInTheDocument()
+    expect(screen.getByText('Register schema')).toBeInTheDocument()
+    expect(screen.getByText('Invite member')).toBeInTheDocument()
   })
 
-  it('should render all 5 action items', () => {
+  it('should render keyboard shortcut hints', () => {
     render(<DashboardQuickActions />)
-    expect(screen.getByText('Create Application')).toBeInTheDocument()
-    expect(screen.getByText('Request Kafka Topic')).toBeInTheDocument()
-    expect(screen.getByText('Register API Schema')).toBeInTheDocument()
-    expect(screen.getByText('Write Documentation')).toBeInTheDocument()
-    expect(screen.getByText('Use Template')).toBeInTheDocument()
+    expect(screen.getByText('⌘ K')).toBeInTheDocument()
+    expect(screen.getByText('⌘ ⇧ N')).toBeInTheDocument()
   })
 
-  it('should render links for each action', () => {
+  it('should render a link for each action', () => {
     render(<DashboardQuickActions />)
     const links = screen.getAllByRole('link')
-    expect(links.length).toBeGreaterThanOrEqual(5)
+    expect(links).toHaveLength(6)
   })
 })

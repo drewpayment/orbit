@@ -1,0 +1,318 @@
+syntax = "proto3";
+
+package idp.agent.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/drewpayment/orbit/proto/gen/go/idp/agent/v1;agentv1";
+
+// AgentService drives the Infrastructure Agent — an LLM-driven Temporal
+// workflow that converses with a user, proposes deployment plans, executes
+// approved actions inside a sandboxed environment, and grows its own tool
+// library at runtime via human-approved registrations.
+service AgentService {
+  // Start a new agent run. Returns the workflow ID; events flow via
+  // StreamAgentEvents.
+  rpc StartInfrastructureAgent(StartInfrastructureAgentRequest) returns (StartInfrastructureAgentResponse);
+
+  // Send a chat-style message into a running agent. The workflow consumes it
+  // through a Temporal Update so the caller waits for acknowledgement.
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+
+  // Send a reviewer message into an open approval gate (commit β —
+  // conversational review). The workflow appends the message as a
+  // conversation turn under the gate, runs an LLM step with no tool
+  // catalog (so the agent can only respond with text), and surfaces
+  // the response as a regular ConversationTurn event. The gate stays
+  // open; resolution still requires a real Approve / Reject signal.
+  rpc SendReviewerMessage(SendReviewerMessageRequest) returns (SendReviewerMessageResponse);
+
+  // Approve a pending action (proposal, tool registration, destructive
+  // command). Backed by an `Approval` signal to the workflow.
+  rpc ApproveAction(ApproveActionRequest) returns (ApproveActionResponse);
+
+  // Reject a pending action. Backed by an `Approval` signal with approved=false.
+  rpc RejectAction(RejectActionRequest) returns (RejectActionResponse);
+
+  // Abort a running agent. Backed by an `Abort` signal; sandbox is torn down.
+  rpc AbortAgent(AbortAgentRequest) returns (AbortAgentResponse);
+
+  // Server-stream of conversation deltas, token partials, proposals, approval
+  // prompts, and tool output. The server polls workflow queries internally.
+  rpc StreamAgentEvents(StreamAgentEventsRequest) returns (stream AgentEvent);
+
+  // List historical agent runs for a workspace.
+  rpc ListAgentRuns(ListAgentRunsRequest) returns (ListAgentRunsResponse);
+
+  // Fetch the full conversation snapshot for a run (used by the chat UI on
+  // initial mount before subscribing to the event stream).
+  rpc GetAgentRun(GetAgentRunRequest) returns (GetAgentRunResponse);
+}
+
+// =====================================================================
+// Start
+// =====================================================================
+
+message StartInfrastructureAgentRequest {
+  string workspace_id = 1;
+  string repository_id = 2;
+  // The initial user prompt, e.g. "Deploy this Next.js app to Azure App Service."
+  string initial_prompt = 3;
+  // ID of the LLMProviders Payload doc the agent should use.
+  string llm_provider_id = 4;
+  // User who started the run (for audit).
+  string user_id = 5;
+}
+
+message StartInfrastructureAgentResponse {
+  string workflow_id = 1;
+  string run_id = 2;
+  // ID of the AgentRuns Payload doc that mirrors this workflow.
+  string agent_run_id = 3;
+  google.protobuf.Timestamp started_at = 4;
+}
+
+// =====================================================================
+// Conversation control
+// =====================================================================
+
+message SendMessageRequest {
+  string workflow_id = 1;
+  string user_id = 2;
+  string message = 3;
+}
+
+message SendMessageResponse {
+  // Identifier for the conversation turn the message was appended to.
+  string turn_id = 1;
+}
+
+// SendReviewerMessageRequest carries a message that targets an open
+// approval gate rather than the main conversation thread (commit β).
+message SendReviewerMessageRequest {
+  string workflow_id = 1;
+  string approval_id = 2;
+  string user_id     = 3;
+  string message     = 4;
+}
+
+message SendReviewerMessageResponse {
+  string turn_id = 1;
+}
+
+message ApproveActionRequest {
+  string workflow_id = 1;
+  // The pending approval id (from the AgentEvent.approval_request event).
+  string approval_id = 2;
+  string approved_by = 3;
+  // Optional reviewer notes shown back to the agent.
+  string notes = 4;
+  // Optional: reviewer-edited fields. Only meaningful for tool-registration
+  // approvals. When set, the workflow validates the edited template via
+  // the template engine before applying, persists an `agent_proposed` +
+  // `reviewer_edited` row pair to AgentToolVersions, and the resulting
+  // AgentTools row reflects the edited values. The agent's tool result
+  // includes both the originally-proposed and final templates so it can
+  // adapt from the correction.
+  optional ApprovalEdits edits = 5;
+}
+
+// ApprovalEdits carries reviewer modifications to a tool registration
+// or pattern registration. Empty fields mean "leave the agent's proposal
+// unchanged for this field." display_name + category are pattern-specific
+// (no analog in tool_registration); the workflow ignores them for
+// tool_registration gates.
+message ApprovalEdits {
+  string name              = 1;
+  string description       = 2;
+  string template_kind     = 3;
+  string template_json     = 4;
+  string input_schema_json = 5;
+  string display_name      = 6;
+  string category          = 7;
+}
+
+message ApproveActionResponse {
+  bool success = 1;
+}
+
+message RejectActionRequest {
+  string workflow_id = 1;
+  string approval_id = 2;
+  string rejected_by = 3;
+  // Required reason — fed back to the agent so it can adapt.
+  string reason = 4;
+}
+
+message RejectActionResponse {
+  bool success = 1;
+}
+
+message AbortAgentRequest {
+  string workflow_id = 1;
+  string requested_by = 2;
+  string reason = 3;
+}
+
+message AbortAgentResponse {
+  bool success = 1;
+}
+
+// =====================================================================
+// Streaming
+// =====================================================================
+
+message StreamAgentEventsRequest {
+  string workflow_id = 1;
+  // Resume cursor: server replays events emitted after this sequence number.
+  // Zero means "start from current state snapshot".
+  uint64 since_sequence = 2;
+}
+
+// AgentEvent is the union of everything the chat UI cares about.
+message AgentEvent {
+  uint64 sequence = 1;
+  google.protobuf.Timestamp emitted_at = 2;
+
+  oneof event {
+    ConversationTurn        conversation_turn        = 10;
+    TokenDelta              token_delta              = 11;
+    ProposalUpdate          proposal_update          = 12;
+    ApprovalRequest         approval_request         = 13;
+    ApprovalResolution      approval_resolution      = 14;
+    ToolCallStart           tool_call_start          = 15;
+    ToolCallOutputChunk     tool_call_output_chunk   = 16;
+    ToolCallEnd             tool_call_end            = 17;
+    AgentStatusUpdate       status_update            = 18;
+    ToolRegistrationRequest tool_registration_request = 19;
+  }
+}
+
+message ConversationTurn {
+  string turn_id = 1;
+  // user | assistant | tool | system
+  string role = 2;
+  string content = 3;
+}
+
+message TokenDelta {
+  string turn_id = 1;
+  string delta = 2;
+}
+
+message ProposalUpdate {
+  string proposal_id = 1;
+  string title = 2;
+  string summary = 3;
+  // Agent's proposed plan rendered as markdown; the UI renders this verbatim
+  // inside the proposal card.
+  string body_markdown = 4;
+  // Concrete primitive calls the agent will issue if approved (for human review).
+  repeated PrimitiveCallPreview steps = 5;
+}
+
+message PrimitiveCallPreview {
+  // shell_exec | http_request | file_write | …
+  string tool = 1;
+  // Human-readable rendering of the args; the actual args carried as JSON
+  // for full fidelity.
+  string display = 2;
+  google.protobuf.Struct args = 3;
+}
+
+message ApprovalRequest {
+  string approval_id = 1;
+  // proposal | tool_registration | destructive_command | custom
+  string kind = 2;
+  string title = 3;
+  string body_markdown = 4;
+  // Optional: concrete command/template the approval is about.
+  google.protobuf.Struct payload = 5;
+}
+
+message ApprovalResolution {
+  string approval_id = 1;
+  bool approved = 2;
+  string resolved_by = 3;
+  string notes = 4;
+}
+
+message ToolCallStart {
+  string call_id = 1;
+  string tool = 2;
+  google.protobuf.Struct args = 3;
+}
+
+message ToolCallOutputChunk {
+  string call_id = 1;
+  // stdout | stderr | other
+  string stream = 2;
+  string chunk = 3;
+}
+
+message ToolCallEnd {
+  string call_id = 1;
+  bool success = 2;
+  int32 exit_code = 3;
+  string error = 4;
+  google.protobuf.Struct result = 5;
+}
+
+message AgentStatusUpdate {
+  // running | awaiting_user | awaiting_approval | aborted | completed | failed
+  string status = 1;
+  string message = 2;
+}
+
+message ToolRegistrationRequest {
+  string approval_id = 1;
+  string tool_name = 2;
+  string description = 3;
+  // JSON Schema describing the tool's args.
+  string input_schema_json = 4;
+  // Template the tool compiles into. One of the kinds is set in `template_kind`.
+  string template_kind = 5; // shell | http | composite
+  string template_json = 6;
+  string reasoning = 7;
+}
+
+// =====================================================================
+// Run history
+// =====================================================================
+
+message ListAgentRunsRequest {
+  string workspace_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListAgentRunsResponse {
+  repeated AgentRunSummary runs = 1;
+  string next_page_token = 2;
+}
+
+message AgentRunSummary {
+  string agent_run_id = 1;
+  string workflow_id = 2;
+  string workspace_id = 3;
+  string repository_id = 4;
+  string status = 5;
+  string title = 6;
+  google.protobuf.Timestamp started_at = 7;
+  google.protobuf.Timestamp ended_at = 8;
+  string started_by = 9;
+}
+
+message GetAgentRunRequest {
+  string workflow_id = 1;
+}
+
+message GetAgentRunResponse {
+  AgentRunSummary summary = 1;
+  // Full conversation up to the latest persisted event sequence.
+  repeated ConversationTurn conversation = 2;
+  ProposalUpdate latest_proposal = 3;
+  repeated ApprovalRequest pending_approvals = 4;
+  uint64 latest_sequence = 5;
+}

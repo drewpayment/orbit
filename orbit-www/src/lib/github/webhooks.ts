@@ -17,8 +17,15 @@ export function verifyWebhookSignature(payload: string, signature: string): bool
   const hmac = crypto.createHmac('sha256', WEBHOOK_SECRET)
   const digest = 'sha256=' + hmac.update(payload).digest('hex')
 
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(digest)
-  )
+  const signatureBuffer = Buffer.from(signature)
+  const digestBuffer = Buffer.from(digest)
+
+  // timingSafeEqual throws if the buffers differ in length, so a malformed
+  // signature header would otherwise crash the webhook (→ 500 → GitHub retries).
+  // A length mismatch can only mean the signature is invalid.
+  if (signatureBuffer.length !== digestBuffer.length) {
+    return false
+  }
+
+  return crypto.timingSafeEqual(signatureBuffer, digestBuffer)
 }

@@ -299,6 +299,17 @@ services:
     container_name: orbit-minio-init
     image: minio/mc:latest
     entrypoint: /init-bucket.sh
+    # Clear proxy vars OrbStack auto-injects so `mc` reaches the in-network
+    # minio hostname directly. Without this, requests get routed through
+    # OrbStack's proxyproxy.orb.internal which 502s for compose service
+    # names and the init container loops forever, blocking orbit-registry.
+    environment:
+      - HTTP_PROXY=
+      - HTTPS_PROXY=
+      - http_proxy=
+      - https_proxy=
+      - ALL_PROXY=
+      - all_proxy=
     volumes:
       - ./infrastructure/registry/init-bucket.sh:/init-bucket.sh:ro
     depends_on:
@@ -311,6 +322,15 @@ services:
     image: registry:2
     ports:
       - "5050:5000"
+    # Same proxy override — the registry's S3 storage driver talks to
+    # minio:9000 which would otherwise be intercepted by OrbStack.
+    environment:
+      - HTTP_PROXY=
+      - HTTPS_PROXY=
+      - http_proxy=
+      - https_proxy=
+      - ALL_PROXY=
+      - all_proxy=
     volumes:
       - ./infrastructure/registry/config.yml:/etc/docker/registry/config.yml:ro
     depends_on:

@@ -1,0 +1,66 @@
+# RBAC for the temporal worker's K8s SandboxExecutor.
+#
+# The worker (deployed in the orbit-temporal namespace) needs to create,
+# exec into, and delete pods in orbit-agent-sandbox, and to create the
+# ExternalSecret referenced by each pod. It does not need any cluster-wide
+# permissions.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: orbit-agent-worker
+  namespace: orbit-temporal
+  labels:
+    app.kubernetes.io/part-of: orbit
+    app.kubernetes.io/component: infrastructure-agent
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: orbit-agent-sandbox-manager
+  namespace: orbit-agent-sandbox
+  labels:
+    app.kubernetes.io/part-of: orbit
+    app.kubernetes.io/component: infrastructure-agent
+rules:
+  # Pod CRUD plus exec.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  # ConfigMaps for per-run command bundles (optional, used when the agent
+  # writes large files prior to exec).
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "create", "delete", "patch"]
+  # NetworkPolicy: created/deleted per run from the template in the same
+  # directory.
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "create", "delete"]
+  # ExternalSecret: lets the worker project workspace cloud creds into each
+  # pod via the External Secrets Operator.
+  - apiGroups: ["external-secrets.io"]
+    resources: ["externalsecrets"]
+    verbs: ["get", "list", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: orbit-agent-sandbox-manager
+  namespace: orbit-agent-sandbox
+  labels:
+    app.kubernetes.io/part-of: orbit
+    app.kubernetes.io/component: infrastructure-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: orbit-agent-sandbox-manager
+subjects:
+  - kind: ServiceAccount
+    name: orbit-agent-worker
+    namespace: orbit-temporal

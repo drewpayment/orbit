@@ -2,20 +2,59 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log"
 	"log/slog"
 	"os"
+	"time"
 
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
 	"github.com/drewpayment/orbit/temporal-workflows/internal/activities"
+	agentactivity "github.com/drewpayment/orbit/temporal-workflows/internal/activities/agent"
+	_ "github.com/drewpayment/orbit/temporal-workflows/internal/agent/providers/anthropic"     // register provider
+	_ "github.com/drewpayment/orbit/temporal-workflows/internal/agent/providers/openai_compat" // register provider
+	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/sandbox"
+	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/sandbox/k8s"
+	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/sandbox/local"
 	internalClients "github.com/drewpayment/orbit/temporal-workflows/internal/clients"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/services"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/workflows"
+	"github.com/drewpayment/orbit/temporal-workflows/pkg/agentcontract"
 	"github.com/drewpayment/orbit/temporal-workflows/pkg/clients"
 	"github.com/drewpayment/orbit/temporal-workflows/pkg/types"
 )
+
+// buildSandboxExecutor returns the SandboxExecutor backing the agent's
+// shell_exec / file IO / repo_inspect tools. AGENT_SANDBOX_BACKEND selects:
+//
+//	local  — subprocess into a temp dir on the worker host (default; used
+//	         by `make dev` and CI). Reads AGENT_SANDBOX_ROOT.
+//	k8s    — kubectl shell-out into a per-run pod (production). Reads
+//	         AGENT_SANDBOX_NAMESPACE, AGENT_SANDBOX_IMAGE, AGENT_SANDBOX_KUBECTL.
+func buildSandboxExecutor(logger *slog.Logger) (sandbox.SandboxExecutor, error) {
+	backend := os.Getenv("AGENT_SANDBOX_BACKEND")
+	if backend == "" {
+		backend = "local"
+	}
+	switch backend {
+	case "local":
+		return local.NewExecutor(os.Getenv("AGENT_SANDBOX_ROOT"))
+	case "k8s":
+		runner := k8s.NewKubectlRunner(os.Getenv("AGENT_SANDBOX_KUBECTL"))
+		return k8s.NewExecutor(runner, k8s.Options{
+			Namespace:    os.Getenv("AGENT_SANDBOX_NAMESPACE"),
+			DefaultImage: os.Getenv("AGENT_SANDBOX_IMAGE"),
+			Logger:       logger,
+		}), nil
+	default:
+		return nil, fmt.Errorf("unknown AGENT_SANDBOX_BACKEND=%q (want \"local\" or \"k8s\")", backend)
+	}
+}
 
 // healthClientAdapter adapts services.PayloadHealthClientImpl to activities.PayloadHealthClient
 type healthClientAdapter struct {
@@ -33,6 +72,16 @@ func (a *healthClientAdapter) CreateHealthCheck(ctx context.Context, appID strin
 		StatusCode:   result.StatusCode,
 		ResponseTime: result.ResponseTime,
 		Error:        result.Error,
+	})
+}
+
+func (a *healthClientAdapter) UpdateAppHealthConfig(ctx context.Context, appID string, spec activities.HealthConfigSpec) error {
+	return a.impl.UpdateAppHealthConfig(ctx, appID, services.HealthConfigSpec{
+		URL:            spec.URL,
+		Method:         spec.Method,
+		ExpectedStatus: spec.ExpectedStatus,
+		Interval:       spec.Interval,
+		Timeout:        spec.Timeout,
 	})
 }
 
@@ -148,22 +197,25 @@ func main() {
 
 	// Register workflows
 	w.RegisterWorkflow(workflows.GitHubTokenRefreshWorkflow)
+	w.RegisterWorkflow(workflows.GitHubInstallationReconcileWorkflow)
 	w.RegisterWorkflow(workflows.TemplateInstantiationWorkflow)
 	w.RegisterWorkflow(workflows.DeploymentWorkflow)
 
-	// Initialize HTTP client for activities
-	activityClients := clients.NewHTTPActivityClients(orbitAPIURL)
+	// Initialize HTTP client for activities (with internal API key for
+	// /api/internal routes such as reconciliation).
+	activityClients := clients.NewHTTPActivityClientsWithAuth(orbitAPIURL, orbitInternalAPIKey)
 
 	// Register activities
 	w.RegisterActivity(activityClients.RefreshGitHubInstallationTokenActivity)
 	w.RegisterActivity(activityClients.UpdateInstallationStatusActivity)
+	w.RegisterActivity(activityClients.ReconcileGitHubInstallationsActivity)
 
 	// TODO: Implement PayloadClient, EncryptionService, and GitHubClient
 	// These will be created in later tasks
 	// For now, using nil to allow compilation
-	var payloadClient services.PayloadClient = nil       // TODO: Implement
+	var payloadClient services.PayloadClient = nil         // TODO: Implement
 	var encryptionService services.EncryptionService = nil // TODO: Implement
-	var githubClient services.GitHubClient = nil         // TODO: Implement
+	var githubClient services.GitHubClient = nil           // TODO: Implement
 
 	// Create GitHub service
 	githubService := services.NewGitHubService(payloadClient, encryptionService, githubClient)
@@ -217,6 +269,7 @@ func main() {
 	healthCheckActivities := activities.NewHealthCheckActivities(payloadHealthClient)
 	w.RegisterActivity(healthCheckActivities.PerformHealthCheckActivity)
 	w.RegisterActivity(healthCheckActivities.RecordHealthResultActivity)
+	w.RegisterActivity(healthCheckActivities.ConfigureAppHealthCheckActivity)
 
 	// Register health check workflow
 	w.RegisterWorkflow(workflows.HealthCheckWorkflow)
@@ -421,6 +474,102 @@ func main() {
 	w.RegisterActivity(specSyncActivities.RemoveOrphanedSpecs)
 	log.Println("API spec sync activities registered")
 
+	// =======================================================================
+	// Infrastructure Agent
+	// =======================================================================
+
+	w.RegisterWorkflow(workflows.InfrastructureAgentWorkflow)
+
+	llmProviderClient := services.NewPayloadLLMProviderClient(orbitAPIURL, orbitInternalAPIKey, logger)
+	tokenSigniller := services.NewTemporalTokenSigniller(c, logger)
+	agentActivities := agentactivity.NewAgentActivities(llmProviderClient, tokenSigniller, logger, agentactivity.AgentActivitiesOptions{})
+	w.RegisterActivityWithOptions(agentActivities.LLMNextStep, activity.RegisterOptions{
+		Name: agentcontract.ActivityLLMNextStep,
+	})
+
+	// Sandbox executor: AGENT_SANDBOX_BACKEND selects "local" (default,
+	// subprocess into a temp dir — used by `make dev` and CI) or "k8s"
+	// (kubectl shell-out into a per-run pod — used in production).
+	sandboxExec, err := buildSandboxExecutor(logger)
+	if err != nil {
+		log.Fatalf("Failed to construct sandbox executor: %v", err)
+	}
+	toolOutputSigniller := services.NewTemporalToolOutputSigniller(c, logger)
+	sandboxActivities := agentactivity.NewSandboxActivities(sandboxExec, toolOutputSigniller, logger)
+	w.RegisterActivityWithOptions(sandboxActivities.EnsureSandbox, activity.RegisterOptions{Name: agentcontract.ActivityEnsureSandbox})
+	w.RegisterActivityWithOptions(sandboxActivities.TeardownSandbox, activity.RegisterOptions{Name: agentcontract.ActivityTeardownSandbox})
+	w.RegisterActivityWithOptions(sandboxActivities.SandboxedShell, activity.RegisterOptions{Name: agentcontract.ActivitySandboxedShell})
+	w.RegisterActivityWithOptions(sandboxActivities.SandboxReadFile, activity.RegisterOptions{Name: agentcontract.ActivitySandboxReadFile})
+	w.RegisterActivityWithOptions(sandboxActivities.SandboxWriteFile, activity.RegisterOptions{Name: agentcontract.ActivitySandboxWriteFile})
+	w.RegisterActivityWithOptions(sandboxActivities.SandboxListDir, activity.RegisterOptions{Name: agentcontract.ActivitySandboxListDir})
+	w.RegisterActivityWithOptions(sandboxActivities.HTTPRequest, activity.RegisterOptions{Name: agentcontract.ActivityHTTPRequest})
+	w.RegisterActivityWithOptions(sandboxActivities.RepoInspect, activity.RegisterOptions{Name: agentcontract.ActivityRepoInspect})
+
+	// Tool registry activities back the register_tool flow and the per-step
+	// catalog merge that lets newly approved AgentTools become available
+	// mid-run.
+	agentToolsClient := services.NewPayloadAgentToolsClient(orbitAPIURL, orbitInternalAPIKey, logger)
+	registryActivities := agentactivity.NewToolRegistryActivities(agentToolsClient, logger)
+	w.RegisterActivityWithOptions(registryActivities.ListApprovedTools, activity.RegisterOptions{Name: agentcontract.ActivityListApprovedAgentTools})
+	w.RegisterActivityWithOptions(registryActivities.RegisterPendingTool, activity.RegisterOptions{Name: agentcontract.ActivityRegisterPendingAgentTool})
+	w.RegisterActivityWithOptions(registryActivities.ResolveAgentTool, activity.RegisterOptions{Name: agentcontract.ActivityResolveAgentTool})
+
+	// Pattern registry activities — platform-wide catalog counterpart to
+	// the tool registry. Backs propose_pattern + the catalog merge for
+	// instantiate_pattern. See plans/merry-strolling-bumblebee.md.
+	patternsClient := services.NewPayloadPatternClient(orbitAPIURL, orbitInternalAPIKey, logger)
+	patternActivities := agentactivity.NewPatternRegistryActivities(patternsClient, logger)
+	w.RegisterActivityWithOptions(patternActivities.ListApprovedPatterns, activity.RegisterOptions{Name: agentcontract.ActivityListApprovedPatterns})
+	w.RegisterActivityWithOptions(patternActivities.RegisterPendingPattern, activity.RegisterOptions{Name: agentcontract.ActivityRegisterPendingPattern})
+	w.RegisterActivityWithOptions(patternActivities.ResolvePattern, activity.RegisterOptions{Name: agentcontract.ActivityResolvePattern})
+
+	// Pattern instance activities — Phase 3 of the Patterns catalog
+	// spike. Back the agent's instantiate_pattern dispatch.
+	patternInstanceClient := services.NewPayloadPatternInstanceClient(orbitAPIURL, orbitInternalAPIKey, logger)
+	patternInstanceActivities := agentactivity.NewPatternInstanceActivities(patternInstanceClient, logger)
+	w.RegisterActivityWithOptions(patternInstanceActivities.GetPatternByID, activity.RegisterOptions{Name: agentcontract.ActivityGetPatternByID})
+	w.RegisterActivityWithOptions(patternInstanceActivities.CreatePatternInstance, activity.RegisterOptions{Name: agentcontract.ActivityCreatePatternInstance})
+	w.RegisterActivityWithOptions(patternInstanceActivities.UpdatePatternInstanceStatus, activity.RegisterOptions{Name: agentcontract.ActivityUpdatePatternInstanceStatus})
+
+	// Audit-trail activity keeps the AgentRuns Payload row in sync with
+	// live workflow state so the run-history page reflects current status,
+	// approvals, and final summary without a workflow query.
+	agentRunsClient := services.NewPayloadAgentRunsClient(orbitAPIURL, orbitInternalAPIKey, logger)
+	runActivities := agentactivity.NewAgentRunActivities(agentRunsClient, logger)
+	w.RegisterActivityWithOptions(runActivities.UpdateAgentRun, activity.RegisterOptions{Name: agentcontract.ActivityUpdateAgentRun})
+
+	// Aggregated pending-approvals queue (Spike 7 commit γ). Mirrors every
+	// open approval gate into the PendingApprovals collection so reviewers
+	// outside the chat thread can find work via /platform/approvals.
+	pendingApprovalsClient := services.NewPayloadPendingApprovalsClient(orbitAPIURL, orbitInternalAPIKey, logger)
+	pendingActivities := agentactivity.NewPendingApprovalsActivities(pendingApprovalsClient, logger)
+	w.RegisterActivityWithOptions(pendingActivities.OpenPendingApproval, activity.RegisterOptions{Name: agentcontract.ActivityOpenPendingApproval})
+	w.RegisterActivityWithOptions(pendingActivities.ResolvePendingApproval, activity.RegisterOptions{Name: agentcontract.ActivityResolvePendingApproval})
+
+	// Orbit-aware introspection: the orbit_list_apps / orbit_get_app /
+	// orbit_list_cloud_accounts tools call these activities to fetch
+	// sanitized workspace context (no credentials over the wire).
+	orbitContextClient := services.NewPayloadOrbitContextClient(orbitAPIURL, orbitInternalAPIKey, logger)
+	orbitActivities := agentactivity.NewOrbitContextActivities(orbitContextClient, logger)
+	w.RegisterActivityWithOptions(orbitActivities.OrbitListApps, activity.RegisterOptions{Name: agentcontract.ActivityOrbitListApps})
+	w.RegisterActivityWithOptions(orbitActivities.OrbitGetApp, activity.RegisterOptions{Name: agentcontract.ActivityOrbitGetApp})
+	w.RegisterActivityWithOptions(orbitActivities.OrbitListCloudAccounts, activity.RegisterOptions{Name: agentcontract.ActivityOrbitListCloudAccounts})
+
+	// orbit_repo_clone — mints a fresh installation token from the
+	// workspace's connected GitHub App and clones the repo inside the
+	// sandbox. Token never reaches LLM context.
+	githubTokenClient := services.NewPayloadGitHubClient(orbitAPIURL, orbitInternalAPIKey, logger)
+	repoCloneActivities := agentactivity.NewOrbitRepoCloneActivities(sandboxExec, githubTokenClient, orbitContextClient, logger)
+	w.RegisterActivityWithOptions(repoCloneActivities.OrbitRepoClone, activity.RegisterOptions{Name: agentcontract.ActivityOrbitRepoClone})
+
+	log.Printf("Infrastructure Agent workflow + activities registered (sandbox backend=%s)", sandboxExec.Backend())
+
+	// Ensure the GitHub installation reconciliation schedule exists. This is the
+	// backstop that (re)starts any active installation whose refresh workflow is
+	// not running — covering missed webhooks, worker restarts, and backfill of
+	// installations created before this system existed.
+	ensureGitHubReconcileSchedule(context.Background(), c)
+
 	log.Println("Starting Temporal worker...")
 	log.Printf("Temporal address: %s", temporalAddress)
 	log.Printf("Temporal namespace: %s", temporalNamespace)
@@ -435,4 +584,35 @@ func main() {
 	if err != nil {
 		log.Fatalln("Unable to start worker", err)
 	}
+}
+
+// ensureGitHubReconcileSchedule idempotently creates the 10-minute Temporal
+// Schedule that drives GitHub installation reconciliation. Safe to call on every
+// startup: an existing schedule is left in place.
+func ensureGitHubReconcileSchedule(ctx context.Context, c client.Client) {
+	const scheduleID = "github-installation-reconcile"
+
+	_, err := c.ScheduleClient().Create(ctx, client.ScheduleOptions{
+		ID: scheduleID,
+		Spec: client.ScheduleSpec{
+			Intervals: []client.ScheduleIntervalSpec{
+				{Every: 10 * time.Minute},
+			},
+		},
+		Action: &client.ScheduleWorkflowAction{
+			ID:        "github-installation-reconcile-wf",
+			Workflow:  "GitHubInstallationReconcileWorkflow",
+			TaskQueue: "orbit-workflows",
+		},
+	})
+	if err != nil {
+		var alreadyExists *serviceerror.AlreadyExists
+		if errors.As(err, &alreadyExists) {
+			log.Printf("GitHub reconcile schedule already exists: %s", scheduleID)
+			return
+		}
+		log.Printf("Warning: failed to create GitHub reconcile schedule: %v", err)
+		return
+	}
+	log.Printf("Created GitHub reconcile schedule: %s (every 10m)", scheduleID)
 }

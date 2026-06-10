@@ -1,0 +1,355 @@
+// Package agentcontract holds the wire constants and payload types shared
+// between the InfrastructureAgentWorkflow, the agent activities, the gRPC
+// AgentService server (in services/repository), and the temporal-side helper
+// services. Living under pkg/ rather than internal/ lets sibling Go modules
+// (the repository service) import the contract.
+package agentcontract
+
+import "time"
+
+// Signal names.
+const (
+	SignalUserMessage     = "AgentUserMessage"
+	SignalApproval        = "AgentApproval"
+	SignalAbort           = "AgentAbort"
+	SignalTokenStream     = "AgentTokenStream"
+	SignalToolOutput      = "AgentToolOutput"
+	SignalToolFinished    = "AgentToolFinished"
+	SignalReviewerMessage = "AgentReviewerMessage"
+)
+
+// Query names.
+const (
+	QuerySnapshot    = "AgentSnapshot"
+	QueryEventsSince = "AgentEventsSince"
+	QueryHasFinished = "AgentHasFinished"
+)
+
+// Activity names.
+const (
+	ActivityLLMNextStep = "LLMNextStep"
+)
+
+// Workflow names. These match the Go function name registered on the worker.
+const (
+	WorkflowInfrastructureAgent = "InfrastructureAgentWorkflow"
+)
+
+// Tool names exposed to the LLM. Spike 1 surface plus the Spike 2 sandbox
+// tools (shell_exec, http_request, file IO, repo_inspect). Spikes 3+ layer in
+// request_approval, register_tool, etc.
+const (
+	ToolProposeToUser = "propose_to_user"
+	ToolDone          = "done"
+
+	ToolShellExec       = "shell_exec"
+	ToolHTTPRequest     = "http_request"
+	ToolReadFile        = "read_file"
+	ToolWriteFile       = "write_file"
+	ToolListDir         = "list_dir"
+	ToolRepoInspect     = "repo_inspect"
+	ToolRequestApproval = "request_approval"
+	ToolRegisterTool    = "register_tool"
+	ToolStartHealthCheck = "start_child_health_check"
+
+	// ToolProposePattern is the platform-catalog counterpart to
+	// register_tool. The agent proposes a new reusable deployment recipe;
+	// a platform admin approves it once; thereafter it lives in the
+	// platform-wide Patterns catalog and any workspace can instantiate it.
+	// See plans/merry-strolling-bumblebee.md.
+	ToolProposePattern = "propose_pattern"
+
+	// ToolListPatterns returns the agent's view of the platform-wide
+	// Patterns catalog (approved patterns only). The agent should call
+	// this early in a run to discover whether an existing pattern already
+	// solves the user's request before re-deriving from shell.
+	ToolListPatterns = "list_patterns"
+
+	// ToolInstantiatePattern provisions an approved Pattern into a
+	// workspace. Creates a PatternInstance row, validates parameters
+	// against the pattern's input schema, expands the template via the
+	// same engine that runs register_tool templates, dispatches the
+	// expanded primitives, and writes outputs back. Phase 3 of the
+	// Patterns catalog spike.
+	ToolInstantiatePattern = "instantiate_pattern"
+
+	// Orbit-aware introspection tools. The agent uses these to discover what
+	// apps and cloud accounts exist in the current workspace without leaving
+	// the sandbox. None of these return secrets — credentials reach the
+	// sandbox only as env vars projected at run-start.
+	ToolOrbitListApps          = "orbit_list_apps"
+	ToolOrbitGetApp            = "orbit_get_app"
+	ToolOrbitListCloudAccounts = "orbit_list_cloud_accounts"
+
+	// Cloud authentication. Wraps the per-cloud CLI's device-code login
+	// flow (az login --use-device-code, aws sso login, gcloud auth login
+	// --no-launch-browser) so the user authenticates as themselves once
+	// per run. Tokens live in the sandbox pod and die with TeardownSandbox
+	// — Orbit never stores cloud credentials.
+	ToolOrbitCloudLogin = "orbit_cloud_login"
+
+	// Private-repo clone via the workspace's connected GitHub App. Orbit
+	// mints a fresh installation token from the workspace's
+	// github-installations record, projects it into the sandbox as a
+	// one-shot URL-injected git clone, then scrubs the token from the
+	// resulting .git/config. The agent never sees the token.
+	ToolOrbitRepoClone = "orbit_repo_clone"
+)
+
+// ApprovalKind classifies HITL gates the agent surfaces. The chat UI uses
+// this to pick the right card style; admin auditing groups by kind.
+const (
+	ApprovalKindCustom              = "custom"
+	ApprovalKindProposal            = "proposal"
+	ApprovalKindDestructiveCmd      = "destructive_command"
+	ApprovalKindToolRegistration    = "tool_registration"
+	ApprovalKindPatternRegistration = "pattern_registration"
+)
+
+// Activity names for Spike 2 sandbox + IO activities.
+const (
+	ActivityEnsureSandbox    = "EnsureSandbox"
+	ActivityTeardownSandbox  = "TeardownSandbox"
+	ActivitySandboxedShell   = "SandboxedShell"
+	ActivitySandboxReadFile  = "SandboxReadFile"
+	ActivitySandboxWriteFile = "SandboxWriteFile"
+	ActivitySandboxListDir   = "SandboxListDir"
+	ActivityHTTPRequest      = "HTTPRequest"
+	ActivityRepoInspect      = "RepoInspect"
+)
+
+// Activity names for Spike 4 tool registry.
+const (
+	ActivityListApprovedAgentTools  = "ListApprovedAgentTools"
+	ActivityRegisterPendingAgentTool = "RegisterPendingAgentTool"
+	ActivityResolveAgentTool         = "ResolveAgentTool"
+)
+
+// Activity names for the platform-wide Patterns catalog (one abstraction
+// up from AgentTools). See plans/merry-strolling-bumblebee.md.
+const (
+	ActivityListApprovedPatterns    = "ListApprovedPatterns"
+	ActivityRegisterPendingPattern  = "RegisterPendingPattern"
+	ActivityResolvePattern          = "ResolvePattern"
+
+	// Phase 3 — instantiation lifecycle.
+	ActivityGetPatternByID              = "GetPatternByID"
+	ActivityCreatePatternInstance       = "CreatePatternInstance"
+	ActivityUpdatePatternInstanceStatus = "UpdatePatternInstanceStatus"
+)
+
+// Activity names for Spike 5 audit trail.
+const (
+	ActivityUpdateAgentRun = "UpdateAgentRun"
+)
+
+// Activity names for Spike 7 commit γ — aggregated pending-approvals queue.
+// The workflow calls these on every gate open/close in addition to its
+// inline state mutations so a reviewer who isn't watching the chat can
+// still see and resolve gates from /platform/approvals.
+const (
+	ActivityOpenPendingApproval    = "OpenPendingApproval"
+	ActivityResolvePendingApproval = "ResolvePendingApproval"
+)
+
+// Activity names for Orbit introspection — back the orbit_* tools above.
+const (
+	ActivityOrbitListApps          = "OrbitListApps"
+	ActivityOrbitGetApp            = "OrbitGetApp"
+	ActivityOrbitListCloudAccounts = "OrbitListCloudAccounts"
+	ActivityOrbitRepoClone         = "OrbitRepoClone"
+	// ActivityConfigureAppHealthCheck is the canonical write-through path
+	// for the agent's start_child_health_check tool — sets app.healthConfig
+	// and lets the Apps.afterChange hook drive the workflow lifecycle.
+	// See GitHub issue #44.
+	ActivityConfigureAppHealthCheck = "ConfigureAppHealthCheckActivity"
+)
+
+// Event kinds emitted into the workflow's event log.
+const (
+	EventKindConversationTurn   = "conversation_turn"
+	EventKindTokenDelta         = "token_delta"
+	EventKindProposalUpdate     = "proposal_update"
+	EventKindApprovalRequest    = "approval_request"
+	EventKindApprovalResolved   = "approval_resolution"
+	EventKindStatusUpdate       = "status_update"
+	EventKindToolCallOutputChunk = "tool_call_output_chunk"
+)
+
+// InfrastructureAgentInput is the workflow input.
+type InfrastructureAgentInput struct {
+	AgentRunID    string
+	WorkspaceID   string
+	RepositoryID  string
+	UserID        string
+	LLMProviderID string
+	InitialPrompt string
+
+	SystemPrompt string
+
+	// HTTPAllowlist restricts the http_request tool to a host suffix list.
+	// Empty (the default) falls back to a conservative set of public hosts
+	// in the workflow itself.
+	HTTPAllowlist []string
+
+	// SandboxImage overrides the default sandbox image (k8s only). Empty
+	// uses the executor's default.
+	SandboxImage string
+
+	// SandboxEnv is the env to project into the sandbox (workspace cloud
+	// creds, etc.). The activity layer is responsible for not logging values.
+	SandboxEnv map[string]string
+
+	// GitHubToken is forwarded to the repo_inspect tool when fetching from
+	// the GitHub API. May be empty for public repos.
+	GitHubToken string
+
+	History         []ConversationTurn
+	Events          []AgentEvent
+	NextSequence    uint64
+	IterationsSoFar int
+}
+
+// ConversationTurn captures one message in the agent transcript.
+type ConversationTurn struct {
+	TurnID     string           `json:"turn_id"`
+	Role       string           `json:"role"`
+	Content    string           `json:"content"`
+	ToolCalls  []ToolCallRecord `json:"tool_calls,omitempty"`
+	ToolCallID string           `json:"tool_call_id,omitempty"`
+	ToolName   string           `json:"tool_name,omitempty"`
+	Timestamp  time.Time        `json:"timestamp"`
+}
+
+// ToolCallRecord is the serializable form of a tool call.
+type ToolCallRecord struct {
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	Arguments map[string]any `json:"arguments"`
+}
+
+// Proposal is the latest agent proposal (rendered in the chat).
+type Proposal struct {
+	ProposalID   string    `json:"proposal_id"`
+	Title        string    `json:"title"`
+	Summary      string    `json:"summary"`
+	BodyMarkdown string    `json:"body_markdown"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// AgentEvent is one item in the workflow's event log, surfaced via query.
+type AgentEvent struct {
+	Sequence  uint64         `json:"sequence"`
+	EmittedAt time.Time      `json:"emitted_at"`
+	Kind      string         `json:"kind"`
+	Payload   map[string]any `json:"payload"`
+}
+
+// AgentSnapshot is what the chat UI reads on initial mount.
+type AgentSnapshot struct {
+	Status           string             `json:"status"`
+	Conversation     []ConversationTurn `json:"conversation"`
+	StreamingPartial string             `json:"streaming_partial"`
+	StreamingTurnID  string             `json:"streaming_turn_id"`
+	Proposal         *Proposal          `json:"proposal,omitempty"`
+	PendingApprovals []PendingApproval  `json:"pending_approvals"`
+	LatestSequence   uint64             `json:"latest_sequence"`
+	Backend          string             `json:"backend"`
+	Model            string             `json:"model"`
+	// ReviewerRounds counts reviewer↔agent exchanges that happened
+	// during open approval gates (commit β). Surfaced for instrumentation
+	// and a small "X rounds discussed" badge in the chat UI.
+	ReviewerRounds int `json:"reviewer_rounds"`
+}
+
+// PendingApproval is exposed for HITL UI rendering.
+type PendingApproval struct {
+	ApprovalID   string         `json:"approval_id"`
+	Kind         string         `json:"kind"`
+	Title        string         `json:"title"`
+	BodyMarkdown string         `json:"body_markdown"`
+	Payload      map[string]any `json:"payload,omitempty"`
+	CreatedAt    time.Time      `json:"created_at"`
+}
+
+// ProviderConfigSummary is the non-sensitive subset of a workspace's LLM
+// provider config returned by the ProviderLoader. The activity uses it for
+// telemetry; the workflow uses it to surface the backend/model in the
+// snapshot query so the UI can label which model an answer came from.
+type ProviderConfigSummary struct {
+	Backend string `json:"backend"` // "anthropic" | "openai_compat"
+	Model   string `json:"model"`
+}
+
+// TokenStreamSignalPayload is the body of SignalTokenStream.
+type TokenStreamSignalPayload struct {
+	TurnID string `json:"turn_id"`
+	Delta  string `json:"delta"`
+}
+
+// ToolOutputSignalPayload is the body of SignalToolOutput. The sandbox
+// activity emits one per stdout / stderr line of a running shell command
+// so the workflow can fan it out to the chat UI in real time — required
+// for any interactive CLI (e.g. `az login --use-device-code` whose device
+// code is otherwise hidden until the command exits).
+type ToolOutputSignalPayload struct {
+	CallID string `json:"call_id"`
+	Stream string `json:"stream"` // "stdout" | "stderr"
+	Chunk  string `json:"chunk"`
+}
+
+// UserMessageSignalPayload is the body of SignalUserMessage.
+type UserMessageSignalPayload struct {
+	TurnID  string `json:"turn_id"`
+	UserID  string `json:"user_id"`
+	Message string `json:"message"`
+}
+
+// ApprovalSignalPayload is the body of SignalApproval.
+//
+// Edited* fields are populated when the reviewer approves with edits
+// (commit α). They are only meaningful when Approved=true and Edited=true,
+// and apply to approvals of kind ApprovalKindToolRegistration or
+// ApprovalKindPatternRegistration. Empty Edited* fields with Edited=true
+// mean "the reviewer touched the form but didn't actually change
+// anything" — the workflow treats that as an unedited approval. Adding
+// optional fields is wire-compatible with pre-α workflows in flight.
+//
+// EditedDisplayName and EditedCategory are pattern-specific (no analog
+// in tool_registration); the workflow ignores them for tool_registration
+// gates.
+type ApprovalSignalPayload struct {
+	ApprovalID string `json:"approval_id"`
+	Approved   bool   `json:"approved"`
+	ResolvedBy string `json:"resolved_by"`
+	Notes      string `json:"notes"`
+
+	Edited             bool   `json:"edited,omitempty"`
+	EditedName         string `json:"edited_name,omitempty"`
+	EditedDisplayName  string `json:"edited_display_name,omitempty"`
+	EditedDescription  string `json:"edited_description,omitempty"`
+	EditedCategory     string `json:"edited_category,omitempty"`
+	EditedTemplateKind string `json:"edited_template_kind,omitempty"`
+	EditedTemplateJSON string `json:"edited_template_json,omitempty"`
+	EditedSchemaJSON   string `json:"edited_schema_json,omitempty"`
+}
+
+// AbortSignalPayload is the body of SignalAbort.
+type AbortSignalPayload struct {
+	RequestedBy string `json:"requested_by"`
+	Reason      string `json:"reason"`
+}
+
+// ReviewerMessageSignalPayload is the body of SignalReviewerMessage —
+// commit β. Sent when a reviewer wants to chat with the agent during an
+// open approval gate (e.g. "why this command?", "what's the rollback?").
+// The workflow's reviewer-message goroutine appends the message as a
+// conversation turn, runs an LLM step with NO tools (so the agent can
+// only respond with text — it cannot take action while a gate is open),
+// and increments state.reviewerRounds for instrumentation. The gate
+// itself stays open; resolution still requires a real Approval signal.
+type ReviewerMessageSignalPayload struct {
+	ApprovalID string `json:"approval_id"`
+	UserID     string `json:"user_id"`
+	Message    string `json:"message"`
+}

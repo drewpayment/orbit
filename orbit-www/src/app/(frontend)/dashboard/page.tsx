@@ -191,7 +191,7 @@ export default async function DashboardPage() {
       <AppSidebar />
       <SidebarInset>
         <SiteHeader />
-        <div className="flex flex-1 flex-col gap-7 p-8 stagger-reveal">
+        <div className="flex w-full min-w-0 flex-1 flex-col gap-7 p-8 stagger-reveal">
           {/* Welcome Section */}
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between stagger-item">
             <div className="space-y-1">

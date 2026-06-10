@@ -15,10 +15,37 @@ interface Installation {
   accountAvatarUrl?: string
   repositorySelection: 'all' | 'selected'
   selectedRepositories?: Array<{ fullName: string }>
-  status: 'active' | 'suspended' | 'refresh_failed'
+  status: 'active' | 'suspended' | 'refresh_failed' | 'needs_reconnect'
   allowedWorkspaces?: any[]
   installedBy?: { email: string }
-  temporalWorkflowStatus?: 'running' | 'stopped' | 'failed'
+  suspensionReason?: string
+  lastFailureReason?: string
+}
+
+// Maps the internal status to a low-noise, user-facing connection state. No
+// engine vocabulary (Temporal/workflow) is ever surfaced here.
+function connectionState(status: Installation['status']): {
+  label: string
+  badgeClass: string
+  note: string
+  actionRequired: boolean
+} {
+  switch (status) {
+    case 'active':
+      return { label: 'Connected', badgeClass: 'bg-green-100 text-green-800', note: 'Access token refreshes automatically.', actionRequired: false }
+    case 'refresh_failed':
+      return { label: 'Reconnecting…', badgeClass: 'bg-blue-100 text-blue-800', note: 'Briefly re-establishing the connection. No action needed.', actionRequired: false }
+    case 'needs_reconnect':
+      return { label: 'Action required', badgeClass: 'bg-amber-100 text-amber-800', note: 'Orbit can no longer authenticate. Reconnect to restore repository access.', actionRequired: true }
+    case 'suspended':
+      return { label: 'Suspended', badgeClass: 'bg-red-100 text-red-800', note: 'This connection is suspended. Reconnect to restore access.', actionRequired: true }
+  }
+}
+
+function startReconnect() {
+  const state = crypto.randomUUID()
+  sessionStorage.setItem('github_install_state', state)
+  window.location.href = `https://github.com/apps/${GITHUB_APP_NAME}/installations/new?state=${state}`
 }
 
 export function GitHubSettingsClient() {
@@ -93,67 +120,7 @@ export function GitHubSettingsClient() {
 }
 
 function InstallationCard({ installation }: { installation: Installation }) {
-  const [retrying, setRetrying] = React.useState(false)
-  const [refreshing, setRefreshing] = useState(false)
-  const [lastRefreshResult, setLastRefreshResult] = useState<string | null>(null)
-
-  const statusColors = {
-    active: 'bg-green-100 text-green-800',
-    suspended: 'bg-red-100 text-red-800',
-    refresh_failed: 'bg-yellow-100 text-yellow-800',
-  }
-
-  async function handleRetryWorkflow() {
-    setRetrying(true)
-    try {
-      const res = await fetch(`/api/github/installations/${installation.id}/retry-workflow`, {
-        method: 'POST',
-      })
-      const data = await res.json()
-
-      if (res.ok) {
-        alert('Workflow started successfully! The page will reload.')
-        window.location.reload()
-      } else {
-        alert(`Failed to start workflow: ${data.error}`)
-      }
-    } catch (error) {
-      console.error('Failed to retry workflow:', error)
-      alert('Failed to start workflow')
-    } finally {
-      setRetrying(false)
-    }
-  }
-
-  async function handleManualRefresh() {
-    setRefreshing(true)
-    setLastRefreshResult(null)
-
-    try {
-      const res = await fetch(`/api/github/installations/${installation.id}/refresh`, {
-        method: 'POST',
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Refresh failed')
-      }
-
-      setLastRefreshResult('✅ Refresh triggered successfully. Check Temporal UI for results.')
-
-      // Refresh installation data after a few seconds
-      setTimeout(() => {
-        window.location.reload()
-      }, 3000)
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      setLastRefreshResult(`❌ Failed: ${errorMessage}`)
-    } finally {
-      setRefreshing(false)
-    }
-  }
+  const state = connectionState(installation.status)
 
   return (
     <Card className="p-6">
@@ -177,8 +144,8 @@ function InstallationCard({ installation }: { installation: Installation }) {
         </div>
 
         <div className="flex items-center gap-3">
-          <Badge className={statusColors[installation.status]}>
-            {installation.status}
+          <Badge className={state.badgeClass}>
+            {state.label}
           </Badge>
           <Button
             variant="secondary"
@@ -189,12 +156,15 @@ function InstallationCard({ installation }: { installation: Installation }) {
         </div>
       </div>
 
-      {installation.status === 'suspended' && (
+      {state.actionRequired && (
         <Alert variant="destructive" className="mt-4">
-          <p className="font-semibold">GitHub App Uninstalled</p>
+          <p className="font-semibold">Action required — reconnect GitHub</p>
           <p className="text-sm">
-            This GitHub App has been uninstalled. Repository operations will fail until reinstalled.
+            {installation.suspensionReason || installation.lastFailureReason || state.note}
           </p>
+          <Button className="mt-3" size="sm" onClick={startReconnect}>
+            Reconnect GitHub
+          </Button>
         </Alert>
       )}
 
@@ -208,42 +178,9 @@ function InstallationCard({ installation }: { installation: Installation }) {
           <p className="font-medium">{installation.installedBy?.email || 'Unknown'}</p>
         </div>
         <div>
-          <p className="text-gray-600">Token Status</p>
-          <div className="flex items-center gap-2">
-            <p className="font-medium">
-              {installation.temporalWorkflowStatus === 'running' ? '✓ Auto-refreshing' : '⚠ Not refreshing'}
-            </p>
-            {installation.temporalWorkflowStatus !== 'running' && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleRetryWorkflow}
-                disabled={retrying}
-              >
-                {retrying ? 'Starting...' : 'Retry'}
-              </Button>
-            )}
-          </div>
+          <p className="text-gray-600">Connection</p>
+          <p className="font-medium">{state.note}</p>
         </div>
-      </div>
-
-      <div className="mt-4 flex items-center gap-3">
-        <Button
-          onClick={handleManualRefresh}
-          disabled={refreshing || installation.temporalWorkflowStatus !== 'running'}
-          variant="secondary"
-          size="sm"
-        >
-          {refreshing ? (
-            <>⏳ Refreshing...</>
-          ) : (
-            <>🔄 Test Refresh Now</>
-          )}
-        </Button>
-
-        {lastRefreshResult && (
-          <span className="text-sm">{lastRefreshResult}</span>
-        )}
       </div>
     </Card>
   )

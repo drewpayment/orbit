@@ -3,6 +3,7 @@
 import * as React from "react"
 import {
   BookOpen,
+  Bot,
   Building2,
   Cloud,
   Command,
@@ -16,7 +17,9 @@ import {
   RadioTower,
   Rocket,
   Settings,
+  Sparkles,
   Shield,
+  ShieldCheck,
   Workflow,
 } from "lucide-react"
 import Link from "next/link"
@@ -42,7 +45,6 @@ const navMainData = [
       title: "Dashboard",
       url: "/dashboard",
       icon: LayoutDashboard,
-      isActive: true,
       items: [],
     },
     {
@@ -61,6 +63,14 @@ const navMainData = [
       title: "Applications",
       url: "/apps",
       icon: Layers,
+      items: [],
+    },
+    {
+      title: "Infra Agent",
+      url: "/agent",
+      icon: Sparkles,
+      // Active on the /agent hub and on any workspace-scoped agent run.
+      activeMatch: ["/agent", "/infra-agent"],
       items: [],
     },
     {
@@ -127,6 +137,16 @@ const navPlatformData: NavPlatformItem[] = [
         url: "/platform/kafka/pending-approvals",
       },
     ],
+  },
+  {
+    title: "LLM Providers",
+    url: "/platform/llm-providers",
+    icon: Bot,
+  },
+  {
+    title: "Approvals",
+    url: "/platform/approvals",
+    icon: ShieldCheck,
   },
   {
     title: "Workflows",

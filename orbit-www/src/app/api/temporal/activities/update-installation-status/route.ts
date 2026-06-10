@@ -14,13 +14,26 @@ export async function POST(request: NextRequest) {
 
     const payload = await getPayload({ config: configPromise })
 
-    const updates: any = { status }
+    const updates: Record<string, unknown> = { status }
 
-    if (reason) {
-      updates.suspensionReason = reason
-      if (status === 'suspended') {
-        updates.suspendedAt = new Date().toISOString()
+    if (status === 'active') {
+      // Successful refresh clears the failure streak.
+      updates.consecutiveFailureCount = 0
+    } else if (status === 'refresh_failed' || status === 'needs_reconnect') {
+      // Track failure telemetry so the UI/operators can see escalation pressure.
+      const existing = await payload.findByID({
+        collection: 'github-installations',
+        id: installationId,
+      })
+      const current = (existing?.consecutiveFailureCount as number | undefined) ?? 0
+      updates.consecutiveFailureCount = current + 1
+      updates.lastFailureReason = reason || 'Unknown error'
+      updates.lastFailureAt = new Date().toISOString()
+    } else if (status === 'suspended') {
+      if (reason) {
+        updates.suspensionReason = reason
       }
+      updates.suspendedAt = new Date().toISOString()
     }
 
     await payload.update({

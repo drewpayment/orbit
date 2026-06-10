@@ -1,4 +1,4 @@
-import { Client, Connection } from '@temporalio/client';
+import { Client, Connection, WorkflowExecutionAlreadyStartedError } from '@temporalio/client';
 
 let temporalClient: Client | null = null;
 
@@ -25,29 +25,72 @@ export async function closeTemporalClient(): Promise<void> {
   }
 }
 
+export function gitHubTokenRefreshWorkflowId(installationId: string): string {
+  return `github-token-refresh:${installationId}`
+}
+
 /**
- * Start GitHub token refresh workflow
+ * Ensure the GitHub token refresh workflow is running for an installation.
+ *
+ * Idempotent: the deterministic workflow id plus USE_EXISTING means concurrent
+ * callers (install hook, install callback, unsuspend webhook, reconciliation
+ * sweeper) all converge on a single running workflow. An already-running
+ * workflow is treated as success, not an error.
+ *
+ * @returns the workflow id on success, or null on a real failure (caller should
+ *          degrade gracefully; the reconciliation sweeper will recover it).
  */
-export async function startGitHubTokenRefreshWorkflow(installationId: string): Promise<string> {
+export async function ensureGitHubTokenRefreshWorkflow(installationId: string): Promise<string | null> {
+  const workflowId = gitHubTokenRefreshWorkflowId(installationId)
   try {
     const client = await getTemporalClient()
 
-    const workflowId = `github-token-refresh:${installationId}`
-
     const handle = await client.workflow.start('GitHubTokenRefreshWorkflow', {
       taskQueue: 'orbit-workflows',
-      args: [{
-        InstallationID: installationId,
-      }],
+      args: [{ InstallationID: installationId }],
       workflowId,
-      // Run indefinitely until cancelled
+      // Attach to the existing run instead of racing if one is already running.
+      workflowIdConflictPolicy: 'USE_EXISTING',
+      // Allow a fresh run to start after a previous one closed (uninstall → reinstall).
+      workflowIdReusePolicy: 'ALLOW_DUPLICATE',
     })
 
     return handle.workflowId
   } catch (error) {
-    // Reset cached client so next attempt gets a fresh connection
+    if (error instanceof WorkflowExecutionAlreadyStartedError) {
+      return workflowId
+    }
+    console.error('[GitHub] Failed to ensure token refresh workflow:', error)
+    return null
+  }
+}
+
+/**
+ * @deprecated Use {@link ensureGitHubTokenRefreshWorkflow}. Retained for callers
+ * that expect a throwing, string-returning contract.
+ */
+export async function startGitHubTokenRefreshWorkflow(installationId: string): Promise<string> {
+  const workflowId = await ensureGitHubTokenRefreshWorkflow(installationId)
+  if (!workflowId) {
+    // Reset cached client so the next attempt gets a fresh connection.
     temporalClient = null
-    throw error
+    throw new Error(`Failed to start GitHub token refresh workflow for ${installationId}`)
+  }
+  return workflowId
+}
+
+/**
+ * Nudge a running refresh workflow to refresh immediately (best-effort).
+ * Used when a consumer reads a near-expired/expired token so the next read
+ * self-heals. Never throws — a missing workflow is recovered by the sweeper.
+ */
+export async function signalGitHubTokenRefresh(installationId: string): Promise<void> {
+  try {
+    const client = await getTemporalClient()
+    const handle = client.workflow.getHandle(gitHubTokenRefreshWorkflowId(installationId))
+    await handle.signal('trigger-refresh')
+  } catch (error) {
+    console.warn('[GitHub] Failed to signal token refresh (sweeper will recover):', error)
   }
 }
 

@@ -204,90 +204,35 @@ The Temporal server runs on port 7233, with the UI on port 8080.
 - **Contract tests**: Validate gRPC service contracts (see `contract-tests-summary.md`)
 - **Integration tests**: Validate service interactions (see `integration-tests-summary.md`)
 
-## Mandatory Workflows (Constitutional Requirement)
+## Development Workflow
 
-**IMPORTANT**: This project enforces superpowers skills as constitutional requirements. These workflows are MANDATORY and must be followed for all work.
+These engineering practices are expected for all non-trivial work in this repo.
 
-### Pre-Implementation (MANDATORY)
+### Before implementing
+- **Brainstorm first.** Refine rough ideas — explore alternatives, and validate
+  requirements and assumptions through dialog — before committing to an approach.
+- **Write a plan.** For multi-step work, capture a plan in
+  `docs/plans/###-feature-name.md` with exact file paths and verification steps
+  (automated + manual) before touching code. Reference `.agent/SOPs/` and
+  `.agent/system/` docs for established procedures.
 
-#### brainstorming
-- **When**: Before ANY feature work, design decisions, or implementation planning
-- **How**: Run `/superpowers:brainstorm [feature description]` or use Skill tool: `superpowers:brainstorming`
-- **Purpose**:
-  - Refines rough ideas through Socratic questioning
-  - Explores alternatives before committing to approach
-  - Validates assumptions and requirements through iterative dialog
-- **Output**: Fully-formed design ready for implementation planning
-- **Rule**: NO IMPLEMENTATION without brainstorming first
+### While implementing
+- **Test-driven development.** Write the test FIRST, watch it FAIL, then write the
+  minimal code to pass, and refactor. A test you never saw fail isn't proven to
+  verify anything.
+- **Systematic debugging.** For any bug, test failure, or unexpected behavior, find
+  the root cause before proposing a fix: investigate (instrument if needed),
+  analyze whether it's systemic, test the hypothesis, then fix with confidence.
+  Understand before fixing.
 
-#### writing-plans
-- **When**: After brainstorming completes and design is validated
-- **How**: Run `/superpowers:write-plan` or use Skill tool: `superpowers:writing-plans`
-- **Purpose**:
-  - Creates comprehensive implementation plans in `docs/plans/[feature].md`
-  - Breaks down work into bite-sized tasks with exact file paths
-  - Defines verification steps (automated + manual) for each task
-  - References `.agent/SOPs/` and `.agent/system/` docs
-- **Output**: Implementation plan in `docs/plans/###-feature-name.md`
-- **Rule**: NO IMPLEMENTATION without written plan
+### Before calling work done
+- **Code review.** Review significant changes against the plan and project standards
+  — quality, security, performance — before considering them complete.
+- **Verify before claiming.** Run the actual verification commands and confirm the
+  output before asserting anything is done, fixed, or passing. Check authorship
+  before amending commits. Evidence before assertions, always.
 
-### During Implementation (MANDATORY)
-
-#### test-driven-development
-- **When**: For ALL code changes, no exceptions
-- **How**: Follow write-test-first → watch-fail → implement-to-pass cycle
-- **Purpose**:
-  - Ensures tests actually verify behavior (must see failure first)
-  - Constitutional requirement for code quality
-  - Prevents writing code without test coverage
-- **Process**:
-  1. Write test FIRST
-  2. Watch it FAIL (required - proves test works)
-  3. Write minimal code to pass
-  4. Refactor if needed
-  5. Repeat
-- **Rule**: Write test FIRST, watch it FAIL, then implement
-- **See**: `skills/test-driven-development/SKILL.md`
-
-#### systematic-debugging
-- **When**: For ANY bug, test failure, or unexpected behavior
-- **How**: Use Skill tool: `superpowers:systematic-debugging`
-- **Purpose**:
-  - Four-phase framework: root cause investigation, pattern analysis, hypothesis testing, implementation
-  - Ensures understanding before attempting solutions
-  - Prevents guess-and-check debugging
-- **Process**:
-  1. Root cause investigation (add instrumentation if needed)
-  2. Pattern analysis (is this systemic?)
-  3. Hypothesis testing (verify assumptions)
-  4. Implementation (fix with confidence)
-- **Rule**: Understand BEFORE fixing
-- **See**: `skills/systematic-debugging/SKILL.md`
-
-### Post-Implementation (MANDATORY)
-
-#### code-reviewer
-- **When**: After completing significant code changes, before considering work "done"
-- **How**: Use Skill tool: `superpowers:code-reviewer` (launches subagent)
-- **Purpose**:
-  - Reviews implementation against plan and coding standards
-  - Validates quality, security, performance, and project standards
-  - Must pass before work is considered complete
-- **Rule**: Must pass review before proceeding to next task
-- **See**: `skills/code-reviewer/SKILL.md`
-
-#### verification-before-completion
-- **When**: Before claiming any work is done/fixed/passing, before commits/PRs
-- **How**: Use Skill tool: `superpowers:verification-before-completion`
-- **Purpose**:
-  - Requires running actual verification commands
-  - Confirms output before making success claims
-  - Checks authorship before amending commits
-  - Prevents false "it works" claims
-- **Rule**: Evidence before assertions, always
-- **See**: `skills/verification-before-completion/SKILL.md`
-
-#### agent-browser UI verification
+### agent-browser UI verification
 - **When**: After ANY code change that impacts the UI/UX of the application
 - **How**: Use Skill tool: `agent-browser`
 - **Purpose**:
@@ -295,25 +240,19 @@ The Temporal server runs on port 7233, with the UI on port 8080.
   - Tests user flows end-to-end (navigation, form submission, data persistence)
   - Catches visual regressions and broken interactions that unit tests miss
 - **Process**:
-  1. Navigate to the affected page(s)
-  2. Take screenshots to verify visual state
-  3. Interact with changed UI elements (click, fill forms, submit)
-  4. Verify the expected outcome (data persisted, page updated, etc.)
+  1. **Pre-flight: check for orphaned sessions.** Before launching agent-browser, run `pgrep -fl "agent-browser-darwin-arm64|agent-browser-chrome-"`. If anything is returned, those are leftover headless Chrome instances from prior sessions — kill them with `pkill -f "agent-browser-darwin-arm64"; pkill -f "agent-browser-chrome-"` and verify with `pgrep` again before continuing. Orphaned sessions keep open EventSource/poll loops against `localhost` dev servers and silently hammer whatever now runs on that port (see incident: orbit-www `/api/agent/.../stream` retry loop hitting an unrelated Payload app on :3000).
+  2. Navigate to the affected page(s)
+  3. Take screenshots to verify visual state
+  4. Interact with changed UI elements (click, fill forms, submit)
+  5. Verify the expected outcome (data persisted, page updated, etc.)
+  6. **Post-flight: clean up.** Close the agent-browser session explicitly when verification is done. After exiting, re-run the `pgrep` check above to confirm no Chrome-for-Testing processes are left behind. Never leave headless Chrome running between Claude Code sessions.
 - **Rule**: If your changes touch UI, you MUST verify with agent-browser before considering the work done
-
-### Supporting Skills (Use When Applicable)
-
-- **dispatching-parallel-agents**: For 3+ independent failures/tasks
-- **root-cause-tracing**: For bugs deep in execution requiring systematic backtracing
-- **defense-in-depth**: For validation across multiple system layers
-- **finishing-a-development-branch**: When implementation complete and ready to integrate
-- **receiving-code-review**: When receiving external code review feedback
-- **condition-based-waiting**: For tests with race conditions or timing dependencies
+- **Rule**: ALWAYS run the pre-flight orphan check before launching agent-browser, and the post-flight cleanup check after — no exceptions
 
 ## Documentation Structure
 
 ### docs/plans/ (Active Implementation Plans)
-Implementation plans created by `/superpowers:write-plan`:
+Implementation plans:
 - Comprehensive feature plans with exact file paths
 - Bite-sized tasks with verification steps
 - Updated during implementation as work progresses
@@ -322,12 +261,12 @@ Implementation plans created by `/superpowers:write-plan`:
 ### .agent/ (Architectural Context)
 System architecture and established patterns:
 - **system/**: High-level architecture snapshots (project-structure.md, api-architecture.md)
-- **SOPs/**: Standard procedures that reference superpowers skills
+- **SOPs/**: Standard procedures and conventions
 - **tasks/**: Completed feature summaries for reference
 - **README.md**: Navigation guide and workflow integration
 
 ### specs/ (ARCHIVED)
-Historical planning artifacts from pre-superpowers workflow. See `specs/README.md` for details.
+Historical planning artifacts from an earlier planning workflow. See `specs/README.md` for details.
 **Current planning**: Use `docs/plans/` directory exclusively.
 
 ## Workflow Example
@@ -335,31 +274,24 @@ Historical planning artifacts from pre-superpowers workflow. See `specs/README.m
 ```
 1. User: "Add Temporal workflow for repository cloning"
 
-2. Claude: Runs /superpowers:brainstorm
-   - Clarifies requirements through Socratic dialog
-   - Explores design alternatives
-   - Validates assumptions
-   - Output: Refined design
+2. Brainstorm the design — clarify requirements, explore alternatives, and
+   validate assumptions until the approach is clear.
 
-3. Claude: Runs /superpowers:write-plan
-   - Creates docs/plans/002-repository-cloning-workflow.md
-   - Breaks down into tasks with file paths
-   - Defines verification steps
+3. Write a plan in docs/plans/002-repository-cloning-workflow.md — task
+   breakdown with exact file paths and verification steps.
 
 4. Implementation:
-   - Read plan from docs/plans/002-repository-cloning-workflow.md
-   - Reference .agent/SOPs/adding-grpc-services.md for procedures
-   - Follow superpowers:test-driven-development (tests first)
-   - Use TodoWrite to track active tasks
+   - Follow the plan; reference .agent/SOPs/adding-grpc-services.md for procedures
+   - Test-driven: write tests first, watch them fail, then implement
+   - Track active tasks as you go
 
-5. Review:
-   - Run superpowers:code-reviewer before completion
-   - Run superpowers:verification-before-completion
+5. Review and verify:
+   - Review the change against the plan and project standards
+   - Run the verification commands and confirm output before claiming done
 
 6. Documentation:
-   - Update docs/plans/002-*.md with actual implementation
-   - Create summary: /update doc save task repository-cloning
-   - Summary saved to .agent/tasks/feature-repository-cloning.md
+   - Update docs/plans/002-*.md with the actual implementation
+   - Add a summary under .agent/tasks/ if useful
 ```
 
 ## Common Patterns

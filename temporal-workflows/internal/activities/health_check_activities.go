@@ -33,6 +33,25 @@ type RecordHealthResultInput struct {
 type PayloadHealthClient interface {
 	UpdateAppStatus(ctx context.Context, appID, status string) error
 	CreateHealthCheck(ctx context.Context, appID string, result HealthCheckResult) error
+	UpdateAppHealthConfig(ctx context.Context, appID string, spec HealthConfigSpec) error
+}
+
+// HealthConfigSpec is the canonical health-check spec written to the Apps
+// collection. Mirrors services.HealthConfigSpec — duplicated here to avoid
+// activities → services circular imports.
+type HealthConfigSpec struct {
+	URL            string `json:"url"`
+	Method         string `json:"method"`
+	ExpectedStatus int    `json:"expectedStatus"`
+	Interval       int    `json:"interval"`
+	Timeout        int    `json:"timeout"`
+}
+
+// ConfigureAppHealthCheckInput is the input for the agent-driven
+// "set a periodic health check" activity. See GitHub issue #44.
+type ConfigureAppHealthCheckInput struct {
+	AppID string           `json:"appId"`
+	Spec  HealthConfigSpec `json:"spec"`
 }
 
 // HealthCheckActivities holds dependencies for health check activities
@@ -107,6 +126,25 @@ func (a *HealthCheckActivities) PerformHealthCheckActivity(ctx context.Context, 
 		StatusCode:   resp.StatusCode,
 		ResponseTime: responseTime,
 	}, nil
+}
+
+// ConfigureAppHealthCheckActivity writes the health-check spec to the App
+// document via Payload's internal API. The Apps afterChange hook then
+// drives the canonical HealthCheckWorkflow lifecycle via
+// healthClient.manageSchedule — there is no child workflow to manage
+// from here. This is what start_child_health_check resolves to under
+// the unification in GitHub issue #44.
+func (a *HealthCheckActivities) ConfigureAppHealthCheckActivity(ctx context.Context, input ConfigureAppHealthCheckInput) error {
+	if a.payloadClient == nil {
+		return fmt.Errorf("payload client not configured")
+	}
+	if input.AppID == "" {
+		return fmt.Errorf("appId is required")
+	}
+	if input.Spec.URL == "" {
+		return fmt.Errorf("spec.url is required")
+	}
+	return a.payloadClient.UpdateAppHealthConfig(ctx, input.AppID, input.Spec)
 }
 
 // RecordHealthResultActivity records the health check result in Payload

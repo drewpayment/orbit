@@ -1186,6 +1186,8 @@ export interface GitHubInstallationHealth {
   tokenValid: boolean
   tokenExpired: boolean
   refreshFailed: boolean
+  /** Terminal: the connection cannot self-heal and requires a human to reconnect. */
+  needsReconnect: boolean
   workspaceLinked: boolean
 }
 
@@ -1323,6 +1325,7 @@ export async function getGitHubHealth(workspaceIds: string | string[]): Promise<
       const tokenExpiresAt = inst.tokenExpiresAt ? new Date(inst.tokenExpiresAt) : null
       const tokenExpired = tokenExpiresAt !== null && tokenExpiresAt <= now
       const refreshFailed = inst.status === 'refresh_failed'
+      const needsReconnect = inst.status === 'needs_reconnect'
       const tokenValid = inst.status === 'active' && tokenExpiresAt !== null && tokenExpiresAt > now
 
       const allowedWorkspaceIds = (inst.allowedWorkspaces || []).map((w: any) =>
@@ -1339,13 +1342,16 @@ export async function getGitHubHealth(workspaceIds: string | string[]): Promise<
         tokenValid,
         tokenExpired,
         refreshFailed,
+        needsReconnect,
         workspaceLinked,
       }
     })
 
-    // Only check installations that are linked to any of the workspaces
+    // Only a terminal needs_reconnect raises an alarm. Transient refresh_failed
+    // / momentary expiry self-heals (workflow backoff + reconciliation sweeper)
+    // and must NOT mark the connection unhealthy — that's the alarm-fatigue fix.
     const hasInvalidToken = installations.some(
-      inst => inst.workspaceLinked && !inst.tokenValid
+      inst => inst.workspaceLinked && inst.needsReconnect
     )
 
     // Available orgs are only those with valid tokens AND linked to any workspace

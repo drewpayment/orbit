@@ -1,6 +1,7 @@
 import { render, screen, cleanup } from '@testing-library/react'
 import { describe, it, expect, afterEach } from 'vitest'
 import { DashboardWorkspacesCard } from './DashboardWorkspacesCard'
+import type { WorkspaceMember } from '@/payload-types'
 
 describe('DashboardWorkspacesCard', () => {
   afterEach(() => { cleanup() })
@@ -24,12 +25,7 @@ describe('DashboardWorkspacesCard', () => {
       workspace: { id: 'ws3', name: "Alice's Workspace", slug: 'dev1-workspace' },
       user: { id: 'u1' },
     },
-  ] as any[]
-
-  it('should render card title', () => {
-    render(<DashboardWorkspacesCard memberships={mockMemberships} />)
-    expect(screen.getByText('My Workspaces')).toBeInTheDocument()
-  })
+  ] as unknown as WorkspaceMember[]
 
   it('should render workspace names', () => {
     render(<DashboardWorkspacesCard memberships={mockMemberships} />)
@@ -38,27 +34,37 @@ describe('DashboardWorkspacesCard', () => {
     expect(screen.getByText("Alice's Workspace")).toBeInTheDocument()
   })
 
-  it('should render role badges', () => {
+  it('should render role labels', () => {
     render(<DashboardWorkspacesCard memberships={mockMemberships} />)
     expect(screen.getByText('owner')).toBeInTheDocument()
     expect(screen.getByText('admin')).toBeInTheDocument()
     expect(screen.getByText('member')).toBeInTheDocument()
   })
 
-  it('should render workspace links', () => {
+  it('should render one link per workspace', () => {
     render(<DashboardWorkspacesCard memberships={mockMemberships} />)
     const links = screen.getAllByRole('link')
-    const wsLinks = links.filter(l => l.getAttribute('href')?.startsWith('/workspaces/'))
+    const wsLinks = links.filter((l) => l.getAttribute('href')?.startsWith('/workspaces/'))
     expect(wsLinks).toHaveLength(3)
+  })
+
+  it('should render dense meta counts from metaById', () => {
+    render(
+      <DashboardWorkspacesCard
+        memberships={mockMemberships}
+        metaById={{
+          ws1: { apps: 3, topics: 2, schemas: 1, lastActive: '12m ago' },
+        }}
+      />,
+    )
+    expect(screen.getByText('3 apps')).toBeInTheDocument()
+    expect(screen.getByText('2 topics')).toBeInTheDocument()
+    expect(screen.getByText('1 schema')).toBeInTheDocument()
+    expect(screen.getByText('12m ago')).toBeInTheDocument()
   })
 
   it('should render empty state when no memberships', () => {
     render(<DashboardWorkspacesCard memberships={[]} />)
     expect(screen.getByText(/no workspaces/i)).toBeInTheDocument()
-  })
-
-  it('should render View all link', () => {
-    render(<DashboardWorkspacesCard memberships={mockMemberships} />)
-    expect(screen.getByText(/view all/i)).toBeInTheDocument()
   })
 })
