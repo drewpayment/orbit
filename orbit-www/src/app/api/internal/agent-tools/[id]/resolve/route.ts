@@ -78,7 +78,7 @@ export async function POST(
     }
 
     let agentToolVersionId: string | undefined
-    let editedFieldsList: string[] = []
+    const editedFieldsList: string[] = []
 
     // α — capture the agent's original proposal as v1 on every approval
     // so we have an audit baseline. Even runs that don't get edited

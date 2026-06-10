@@ -72,7 +72,7 @@ export default async function PlatformLLMProvidersPage() {
               <h1 className="text-2xl font-semibold">LLM Providers</h1>
               <p className="text-sm text-muted-foreground max-w-2xl">
                 Bring-your-own LLM credentials the Infrastructure Agent uses to drive its
-                conversation loop. API keys are encrypted at rest. The agent's runtime worker
+                conversation loop. API keys are encrypted at rest. The agent&apos;s runtime worker
                 fetches the decrypted credential through an internal-only API gated by a shared
                 secret — keys are never exposed to the browser.
               </p>

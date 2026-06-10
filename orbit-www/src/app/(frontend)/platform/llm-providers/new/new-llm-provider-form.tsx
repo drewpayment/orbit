@@ -156,7 +156,7 @@ export function NewLLMProviderForm({ workspaces }: Props) {
           placeholder="sk-…"
         />
         <p className="text-xs text-muted-foreground">
-          Encrypted at rest. Leave blank for self-hosted backends that don't require a key.
+          Encrypted at rest. Leave blank for self-hosted backends that don&apos;t require a key.
         </p>
       </div>
 

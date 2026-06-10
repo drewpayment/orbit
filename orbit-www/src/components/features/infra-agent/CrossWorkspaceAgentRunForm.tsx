@@ -149,8 +149,8 @@ export function CrossWorkspaceAgentRunForm({ apps, providers }: Props) {
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-muted-foreground">
           <p>
-            The Infra Agent deploys apps that are registered in a workspace. You're a member of
-            workspaces but none of them have apps yet — add an app from a workspace's Applications
+            The Infra Agent deploys apps that are registered in a workspace. You&apos;re a member of
+            workspaces but none of them have apps yet — add an app from a workspace&apos;s Applications
             page and come back.
           </p>
         </CardContent>

@@ -5,6 +5,9 @@ import config from '@payload-config'
 import { getPayloadUserFromSession } from '@/lib/auth/session'
 import { startDeploymentWorkflow, getDeploymentProgress } from '@/lib/clients/deployment-client'
 import type { JsonObject } from '@bufbuild/protobuf'
+import type { Deployment } from '@/payload-types'
+
+type DeployStrategy = NonNullable<Deployment['deployStrategy']>
 
 interface CreateDeploymentInput {
   appId: string
@@ -19,7 +22,7 @@ interface CreateDeploymentInput {
     hostUrl?: string
   }
   launchId?: string
-  deployStrategy?: string
+  deployStrategy?: DeployStrategy
 }
 
 export async function createDeployment(input: CreateDeploymentInput) {
@@ -64,7 +67,7 @@ export async function createDeployment(input: CreateDeploymentInput) {
   }
 
   // Resolve Launch if provided
-  let launchData: { launch: string; deployStrategy: string; launchOutputs: Record<string, unknown> } | null = null
+  let launchData: { launch: string; deployStrategy: DeployStrategy; launchOutputs: Record<string, unknown> } | null = null
   if (input.launchId) {
     const launch = await payload.findByID({
       collection: 'launches',
@@ -137,9 +140,10 @@ export async function createDeployment(input: CreateDeploymentInput) {
 
 export async function startDeployment(deploymentId: string) {
   const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  if (!payloadUser?.betterAuthId) {
     return { success: false, error: 'Unauthorized' }
   }
+  const userId = payloadUser.betterAuthId
 
   const payload = await getPayload({ config })
 
@@ -219,8 +223,8 @@ export async function startDeployment(deploymentId: string) {
       deploymentId,
       appId,
       workspaceId,
-      userId: payloadUser.betterAuthId,
-      generatorType: deployment.generator,
+      userId,
+      generatorType: deployment.generator ?? '',
       generatorSlug,
       config: deploymentConfig,
       target: deploymentTarget,

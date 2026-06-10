@@ -22,9 +22,10 @@ interface StartBuildInput {
 
 export async function startBuild(input: StartBuildInput) {
   const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  if (!payloadUser?.betterAuthId) {
     return { success: false, error: 'Unauthorized' }
   }
+  const userId = payloadUser.betterAuthId
 
   const payload = await getPayload({ config })
 
@@ -257,7 +258,7 @@ export async function startBuild(input: StartBuildInput) {
     const result = await startBuildWorkflow({
       appId: input.appId,
       workspaceId,
-      userId: payloadUser.betterAuthId,
+      userId,
       repoUrl,
       ref,
       registry: {
