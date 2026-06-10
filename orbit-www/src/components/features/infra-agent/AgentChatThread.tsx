@@ -933,7 +933,7 @@ function ApprovalCard({
             </div>
             {approval.reasoning && (
               <details className="text-muted-foreground">
-                <summary className="cursor-pointer">Agent's reasoning</summary>
+                <summary className="cursor-pointer">Agent&apos;s reasoning</summary>
                 <pre className="whitespace-pre-wrap pt-2">{approval.reasoning}</pre>
               </details>
             )}
