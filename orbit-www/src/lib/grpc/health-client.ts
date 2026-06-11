@@ -8,9 +8,11 @@
 import { createClient } from '@connectrpc/connect'
 import { createConnectTransport } from '@connectrpc/connect-web'
 import { HealthService } from '@/lib/proto/idp/health/v1/health_pb'
+import { authInterceptor } from './auth-interceptor'
 
 const transport = createConnectTransport({
   baseUrl: process.env.REPOSITORY_SERVICE_URL || 'http://localhost:50051',
+  interceptors: [authInterceptor],
 })
 
 export const healthClient = createClient(HealthService, transport)

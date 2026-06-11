@@ -15,6 +15,7 @@
 import { createClient } from '@connectrpc/connect'
 import { createGrpcTransport } from '@connectrpc/connect-node'
 import { KafkaService } from '@/lib/proto/idp/kafka/v1/kafka_pb'
+import { authInterceptor } from './auth-interceptor'
 
 /**
  * Transport configuration for the Kafka gRPC service.
@@ -24,6 +25,7 @@ import { KafkaService } from '@/lib/proto/idp/kafka/v1/kafka_pb'
  */
 const transport = createGrpcTransport({
   baseUrl: process.env.KAFKA_SERVICE_URL || 'http://localhost:50055',
+  interceptors: [authInterceptor],
 })
 
 /**

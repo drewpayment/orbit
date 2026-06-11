@@ -32,6 +32,13 @@ spec:
               value: temporal:7233
             - name: TEMPLATE_WORK_DIR
               value: /tmp/orbit-templates
+            - name: ORBIT_SVC_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: ORBIT_SVC_AUTH_SECRET
+            - name: ORBIT_SVC_AUTH_ENFORCE
+              value: "true"
           resources:
             requests:
               memory: 64Mi

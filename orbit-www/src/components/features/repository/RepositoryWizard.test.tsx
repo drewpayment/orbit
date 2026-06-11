@@ -2,13 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { RepositoryWizard } from './RepositoryWizard';
 
-// Mock the repository client to avoid proto import issues
-vi.mock('@/lib/grpc/repository-client', () => ({
-  repositoryClient: {
-    createRepository: vi.fn().mockResolvedValue({
-      repository: { id: 'repo-123', name: 'my-service' }
-    })
-  }
+// Mock the server action to avoid server-only module imports in the test environment
+vi.mock('@/app/actions/repository', () => ({
+  createRepositoryAction: vi.fn().mockResolvedValue({
+    success: true,
+    repositoryId: 'repo-123',
+  }),
 }));
 
 describe('RepositoryWizard', () => {

@@ -10,9 +10,12 @@ import (
 	"syscall"
 	"time"
 
+	"connectrpc.com/connect"
 	"go.temporal.io/sdk/client"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
+
+	"github.com/drewpayment/orbit/proto/pkg/svcauth"
 
 	"github.com/drewpayment/orbit/proto/gen/go/idp/agent/v1/agentv1connect"
 	"github.com/drewpayment/orbit/proto/gen/go/idp/build/v1/buildv1connect"
@@ -30,6 +33,8 @@ type Config struct {
 	GRPCPort     int
 	HTTPPort     int
 	TemporalHost string
+	AuthSecret   []byte
+	AuthEnforce  bool
 }
 
 func loadConfig() *Config {
@@ -48,10 +53,20 @@ func loadConfig() *Config {
 		temporalHost = "localhost:7233"
 	}
 
+	// Fail-fast on the service-auth secret: there is deliberately no default,
+	// so the server cannot start and accept unauthenticated Connect calls
+	// (GO-H1/H2).
+	authSecret, err := svcauth.LoadSecret(os.Getenv("ORBIT_SVC_AUTH_SECRET"))
+	if err != nil {
+		log.Fatalf("FATAL: %v (set ORBIT_SVC_AUTH_SECRET; generate with `openssl rand -base64 48`)", err)
+	}
+
 	return &Config{
 		GRPCPort:     grpcPort,
 		HTTPPort:     httpPort,
 		TemporalHost: temporalHost,
+		AuthSecret:   authSecret,
+		AuthEnforce:  os.Getenv("ORBIT_SVC_AUTH_ENFORCE") != "false",
 	}
 }
 
@@ -394,6 +409,13 @@ func main() {
 	// Create stub Payload client (TODO: implement real client)
 	payloadClient := &StubPayloadClient{}
 
+	// Service-auth interceptor applied to every Connect handler. It verifies the
+	// bearer token minted by orbit-www and injects the caller identity; exempt
+	// procedures (health) pass through. Default deny (GO-H1/H2).
+	authInterceptor := connect.WithInterceptors(
+		svcauth.NewConnectInterceptor(cfg.AuthSecret, cfg.AuthEnforce),
+	)
+
 	// Create HTTP mux for Connect handlers
 	mux := http.NewServeMux()
 
@@ -403,7 +425,7 @@ func main() {
 		templateTemporal = temporalClient
 	}
 	templateServer := grpcserver.NewTemplateServer(templateTemporal, payloadClient)
-	templatePath, templateHandler := templatev1connect.NewTemplateServiceHandler(templateServer)
+	templatePath, templateHandler := templatev1connect.NewTemplateServiceHandler(templateServer, authInterceptor)
 	mux.Handle(templatePath, templateHandler)
 	log.Println("TemplateService registered (Connect)")
 
@@ -411,7 +433,7 @@ func main() {
 	if temporalClient != nil {
 		var deploymentTemporal grpcserver.DeploymentClientInterface = temporalClient
 		deploymentServer := grpcserver.NewDeploymentServer(deploymentTemporal)
-		deploymentPath, deploymentHandler := deploymentv1connect.NewDeploymentServiceHandler(deploymentServer)
+		deploymentPath, deploymentHandler := deploymentv1connect.NewDeploymentServiceHandler(deploymentServer, authInterceptor)
 		mux.Handle(deploymentPath, deploymentHandler)
 		log.Println("DeploymentService registered (Connect)")
 	} else {
@@ -422,7 +444,7 @@ func main() {
 	if temporalClient != nil {
 		temporalWorkflowClient := grpcserver.NewTemporalWorkflowClient(temporalClient.client)
 		healthService := grpcserver.NewHealthService(temporalWorkflowClient)
-		healthPath, healthHandler := healthv1connect.NewHealthServiceHandler(healthService)
+		healthPath, healthHandler := healthv1connect.NewHealthServiceHandler(healthService, authInterceptor)
 		mux.Handle(healthPath, healthHandler)
 		log.Println("HealthService registered (Connect)")
 	} else {
@@ -433,7 +455,7 @@ func main() {
 	if temporalClient != nil {
 		var buildTemporal grpcserver.BuildClientInterface = temporalClient
 		buildServer := grpcserver.NewBuildServer(buildTemporal, nil)
-		buildPath, buildHandler := buildv1connect.NewBuildServiceHandler(buildServer)
+		buildPath, buildHandler := buildv1connect.NewBuildServiceHandler(buildServer, authInterceptor)
 		mux.Handle(buildPath, buildHandler)
 		log.Println("BuildService registered (Connect)")
 	} else {
@@ -444,7 +466,7 @@ func main() {
 	if temporalClient != nil {
 		var launchTemporal grpcserver.LaunchClientInterface = temporalClient
 		launchServer := grpcserver.NewLaunchServer(launchTemporal)
-		launchPath, launchHandler := launchv1connect.NewLaunchServiceHandler(launchServer)
+		launchPath, launchHandler := launchv1connect.NewLaunchServiceHandler(launchServer, authInterceptor)
 		mux.Handle(launchPath, launchHandler)
 		log.Println("LaunchService registered (Connect)")
 	} else {
@@ -455,7 +477,7 @@ func main() {
 	// server-streaming for chat events).
 	if temporalClient != nil {
 		agentServer := grpcserver.NewAgentServer(temporalClient.client, 0)
-		agentPath, agentHandler := agentv1connect.NewAgentServiceHandler(agentServer)
+		agentPath, agentHandler := agentv1connect.NewAgentServiceHandler(agentServer, authInterceptor)
 		mux.Handle(agentPath, agentHandler)
 		log.Println("AgentService registered (Connect)")
 	} else {

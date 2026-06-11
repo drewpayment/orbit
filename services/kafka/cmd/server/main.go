@@ -11,6 +11,7 @@ import (
 	"time"
 
 	kafkav1 "github.com/drewpayment/orbit/proto/gen/go/idp/kafka/v1"
+	"github.com/drewpayment/orbit/proto/pkg/svcauth"
 	"github.com/drewpayment/orbit/services/kafka/internal/adapters"
 	"github.com/drewpayment/orbit/services/kafka/internal/adapters/apache"
 	"github.com/drewpayment/orbit/services/kafka/internal/domain"
@@ -29,6 +30,8 @@ type Config struct {
 	GRPCPort    int
 	Environment string
 	DatabaseURL string
+	AuthSecret  []byte
+	AuthEnforce bool
 }
 
 func main() {
@@ -72,9 +75,17 @@ func main() {
 	schemaService := service.NewSchemaService(schemaRepo, registryRepo, topicService, adapterFactory)
 	shareService := service.NewShareService(shareRepo, sharePolicyRepo, serviceAccountRepo, topicService)
 
-	// Create gRPC server
+	// Create gRPC server. The auth interceptor runs after logging so requests
+	// are still logged, then verifies the service-auth token and injects the
+	// caller identity before any handler executes (GO-C1).
 	grpcServer := grpc.NewServer(
-		grpc.UnaryInterceptor(loggingInterceptor),
+		grpc.ChainUnaryInterceptor(
+			loggingInterceptor,
+			svcauth.UnaryServerInterceptor(cfg.AuthSecret, cfg.AuthEnforce),
+		),
+		grpc.ChainStreamInterceptor(
+			svcauth.StreamServerInterceptor(cfg.AuthSecret, cfg.AuthEnforce),
+		),
 	)
 
 	// Register services
@@ -138,11 +149,29 @@ func loadConfig() *Config {
 		dbURL = "postgres://orbit:orbit@localhost:5433/kafka_service?sslmode=disable"
 	}
 
+	// Fail-fast on the service-auth secret: no development default, unlike
+	// DATABASE_URL above. A missing/short secret must stop the server before it
+	// can accept a single unauthenticated request (GO-C1).
+	authSecret, err := svcauth.LoadSecret(os.Getenv("ORBIT_SVC_AUTH_SECRET"))
+	if err != nil {
+		log.Fatalf("FATAL: %v (set ORBIT_SVC_AUTH_SECRET; generate with `openssl rand -base64 48`)", err)
+	}
+
 	return &Config{
 		GRPCPort:    port,
 		Environment: env,
 		DatabaseURL: dbURL,
+		AuthSecret:  authSecret,
+		AuthEnforce: authEnforce(),
 	}
+}
+
+// authEnforce reads the ORBIT_SVC_AUTH_ENFORCE rollout gate. It defaults to
+// true (enforce); only an explicit "false" disables rejection of bad tokens.
+// This is a temporary bisect knob — remove it after the phase-0 deploy is
+// confirmed healthy.
+func authEnforce() bool {
+	return os.Getenv("ORBIT_SVC_AUTH_ENFORCE") != "false"
 }
 
 func loggingInterceptor(

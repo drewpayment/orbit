@@ -26,6 +26,13 @@ spec:
               value: "50055"
             - name: ENVIRONMENT
               value: production
+            - name: ORBIT_SVC_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: ORBIT_SVC_AUTH_SECRET
+            - name: ORBIT_SVC_AUTH_ENFORCE
+              value: "true"
           resources:
             requests:
               memory: 64Mi

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	kafkav1 "github.com/drewpayment/orbit/proto/gen/go/idp/kafka/v1"
+	"github.com/drewpayment/orbit/proto/pkg/svcauth"
 	"github.com/drewpayment/orbit/services/kafka/internal/domain"
 	"github.com/drewpayment/orbit/services/kafka/internal/service"
 	"github.com/google/uuid"
@@ -11,6 +12,23 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+// callerUserID returns the verified user UUID from the identity injected by the
+// auth interceptor. It replaces every trust of a request-body actor field
+// (CreatedBy/ApprovedBy/RequestedBy) — GO-H1/GO-H6. A missing or unparyseable
+// identity is an Unauthenticated error: a workspace-scoped write must have a
+// real actor.
+func callerUserID(ctx context.Context) (uuid.UUID, error) {
+	id, ok := svcauth.IdentityFromContext(ctx)
+	if !ok {
+		return uuid.Nil, status.Error(codes.Unauthenticated, "no verified identity in context")
+	}
+	userID, err := uuid.Parse(id.UserID)
+	if err != nil {
+		return uuid.Nil, status.Errorf(codes.Unauthenticated, "verified identity has invalid user id: %v", err)
+	}
+	return userID, nil
+}
 
 // ShareHandler handles share-related gRPC calls
 type ShareHandler struct {
@@ -36,10 +54,21 @@ func (h *ShareHandler) RequestTopicAccess(ctx context.Context, req *kafkav1.Requ
 		return nil, status.Errorf(codes.InvalidArgument, "invalid requesting workspace ID: %v", err)
 	}
 
+	// GO-H2: the requesting workspace must match the caller's authorized
+	// workspace; GO-H1: the requester is the verified caller, not a body field.
+	if err := svcauth.EnforceWorkspace(ctx, req.RequestingWorkspaceId); err != nil {
+		return nil, err
+	}
+	requestedBy, err := callerUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	share, err := h.shareService.RequestTopicAccess(ctx, service.RequestAccessRequest{
 		TopicID:           topicID,
 		TargetWorkspaceID: requestingWorkspaceID,
 		Permission:        sharePermissionFromProto(req.Permission),
+		RequestedBy:       requestedBy,
 		Reason:            req.Justification,
 	})
 
@@ -61,9 +90,11 @@ func (h *ShareHandler) ApproveTopicAccess(ctx context.Context, req *kafkav1.Appr
 		return nil, status.Errorf(codes.InvalidArgument, "invalid share ID: %v", err)
 	}
 
-	approverID, err := uuid.Parse(req.ApprovedBy)
+	// GO-H1: the approver is the verified caller. req.ApprovedBy is ignored — a
+	// caller must not be able to attribute an approval to an arbitrary user.
+	approverID, err := callerUserID(ctx)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid approver ID: %v", err)
+		return nil, err
 	}
 
 	share, err := h.shareService.ApproveTopicAccess(ctx, shareID, approverID)
@@ -83,6 +114,23 @@ func (h *ShareHandler) RevokeTopicAccess(ctx context.Context, req *kafkav1.Revok
 	shareID, err := uuid.Parse(req.ShareId)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid share ID: %v", err)
+	}
+
+	// GO-H2: enforce the share's workspace against the caller's wid before
+	// revoking. A share's tenant is the workspace it was shared with.
+	share, err := h.shareService.GetShare(ctx, shareID)
+	if err != nil {
+		if err == domain.ErrShareNotFound {
+			return nil, status.Errorf(codes.NotFound, "share not found")
+		}
+		return nil, status.Errorf(codes.Internal, "failed to load share: %v", err)
+	}
+	shareWorkspace := ""
+	if share.SharedWithWorkspaceID != nil {
+		shareWorkspace = share.SharedWithWorkspaceID.String()
+	}
+	if err := svcauth.EnforceWorkspace(ctx, shareWorkspace); err != nil {
+		return nil, err
 	}
 
 	_, err = h.shareService.RevokeTopicAccess(ctx, shareID)
@@ -110,13 +158,22 @@ func (h *ShareHandler) ListTopicShares(ctx context.Context, req *kafkav1.ListTop
 		filter.TopicID = &topicID
 	}
 
-	if req.WorkspaceId != "" {
-		workspaceID, err := uuid.Parse(req.WorkspaceId)
-		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "invalid workspace ID: %v", err)
-		}
-		filter.WorkspaceID = &workspaceID
+	// GO-H2: tenant isolation. A caller may only list shares for its own
+	// workspace. If a workspace filter is supplied it must match the authorized
+	// workspace; if omitted, we pin the filter to the caller's workspace so the
+	// listing can never span tenants.
+	if err := svcauth.EnforceWorkspace(ctx, req.WorkspaceId); err != nil {
+		return nil, err
 	}
+	id, ok := svcauth.IdentityFromContext(ctx)
+	if !ok || id.WorkspaceID == "" {
+		return nil, status.Error(codes.PermissionDenied, "no authorized workspace for listing shares")
+	}
+	callerWorkspaceID, err := uuid.Parse(id.WorkspaceID)
+	if err != nil {
+		return nil, status.Errorf(codes.PermissionDenied, "authorized workspace is not a valid id: %v", err)
+	}
+	filter.WorkspaceID = &callerWorkspaceID
 
 	if req.Status != kafkav1.ShareStatus_SHARE_STATUS_UNSPECIFIED {
 		status := shareStatusFromProto(req.Status)
@@ -143,6 +200,13 @@ func (h *ShareHandler) DiscoverTopics(ctx context.Context, req *kafkav1.Discover
 	workspaceID, err := uuid.Parse(req.RequestingWorkspaceId)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid workspace ID: %v", err)
+	}
+
+	// GO-H2: discovery runs from the caller's own workspace; the requesting
+	// workspace must match the authorized one. Target-workspace authorization
+	// for the discovered topics stays in the service layer.
+	if err := svcauth.EnforceWorkspace(ctx, req.RequestingWorkspaceId); err != nil {
+		return nil, err
 	}
 
 	topics, err := h.shareService.DiscoverTopics(ctx, service.DiscoverTopicsRequest{
@@ -174,12 +238,21 @@ func (h *ShareHandler) CreateServiceAccount(ctx context.Context, req *kafkav1.Cr
 		return nil, status.Errorf(codes.InvalidArgument, "invalid workspace ID: %v", err)
 	}
 
-	// TODO: Get createdBy from auth context
+	// GO-H2: workspace must match the caller's authorized workspace.
+	if err := svcauth.EnforceWorkspace(ctx, req.WorkspaceId); err != nil {
+		return nil, err
+	}
+	// GO-H6: CreatedBy comes from the verified identity, not uuid.Nil.
+	createdBy, err := callerUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	account, err := h.shareService.CreateServiceAccount(ctx, service.CreateServiceAccountRequest{
 		WorkspaceID: workspaceID,
 		Name:        req.Name,
 		Type:        serviceAccountTypeFromProto(req.Type),
-		CreatedBy:   uuid.Nil, // Would be set from auth context
+		CreatedBy:   createdBy,
 	})
 
 	if err != nil {
@@ -198,6 +271,11 @@ func (h *ShareHandler) ListServiceAccounts(ctx context.Context, req *kafkav1.Lis
 	workspaceID, err := uuid.Parse(req.WorkspaceId)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid workspace ID: %v", err)
+	}
+
+	// GO-H2: a caller may only list service accounts in its own workspace.
+	if err := svcauth.EnforceWorkspace(ctx, req.WorkspaceId); err != nil {
+		return nil, err
 	}
 
 	accounts, err := h.shareService.ListServiceAccounts(ctx, workspaceID)
@@ -220,6 +298,19 @@ func (h *ShareHandler) RevokeServiceAccount(ctx context.Context, req *kafkav1.Re
 	accountID, err := uuid.Parse(req.ServiceAccountId)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid service account ID: %v", err)
+	}
+
+	// GO-H2: enforce the service account's workspace against the caller's wid
+	// before revoking.
+	account, err := h.shareService.GetServiceAccount(ctx, accountID)
+	if err != nil {
+		if err == domain.ErrServiceAccountNotFound {
+			return nil, status.Errorf(codes.NotFound, "service account not found")
+		}
+		return nil, status.Errorf(codes.Internal, "failed to load service account: %v", err)
+	}
+	if err := svcauth.EnforceWorkspace(ctx, account.WorkspaceID.String()); err != nil {
+		return nil, err
 	}
 
 	_, err = h.shareService.RevokeServiceAccount(ctx, accountID)
