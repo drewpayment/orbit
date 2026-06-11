@@ -295,6 +295,210 @@ func TestAbortAtGate_PreemptsDuringOpenPendingApproval(t *testing.T) {
 	require.NoError(t, env.GetWorkflowError())
 }
 
+// SMOKING GUN (run agent-37de985a): a composer UserMessage and an Abort are
+// delivered together. The awaiting_user selector consumes the user message
+// and runs the LLM step, which returns a destructive shell_exec; previously
+// the workflow then opened a destructive_command gate and armed a 72h timer
+// AFTER the abort was already in history, because state.terminated wasn't
+// re-checked between the LLM step and tool dispatch. The run must instead
+// terminate aborted with NO gate opened and NO 72h timer left armed.
+func TestAbortAtGate_UserMessageTriggeredGateAfterAbort(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	registerSandboxStubs(env)
+
+	var openCalled bool
+	var openMu sync.Mutex
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.OpenPendingApprovalInput) (agentactivity.OpenPendingApprovalResult, error) {
+			openMu.Lock()
+			openCalled = true
+			openMu.Unlock()
+			return agentactivity.OpenPendingApprovalResult{ID: "row-x"}, nil
+		},
+		activity.RegisterOptions{Name: agentcontract.ActivityOpenPendingApproval},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.ResolvePendingApprovalInput) error { return nil },
+		activity.RegisterOptions{Name: agentcontract.ActivityResolvePendingApproval},
+	)
+	var shellRan bool
+	var shellMu sync.Mutex
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.SandboxedShellInput) (agentactivity.SandboxedShellResult, error) {
+			shellMu.Lock()
+			shellRan = true
+			shellMu.Unlock()
+			return agentactivity.SandboxedShellResult{ExitCode: 0}, nil
+		},
+		activity.RegisterOptions{Name: agentcontract.ActivitySandboxedShell},
+	)
+
+	llm := &scriptedLLM{
+		steps: []agentactivity.LLMNextStepResult{
+			// Step 1: propose_to_user → parks the run in awaiting_user.
+			{
+				ToolCalls: []providers.ToolCall{
+					{ID: "tc-prop", Name: ToolProposeToUser, Arguments: map[string]any{
+						"title": "Plan", "summary": "do x", "body_markdown": "## Plan",
+					}},
+				},
+				StopReason: "tool_use",
+			},
+			// Step 2 (after the user reply): a destructive command that WOULD
+			// open a gate — must never be dispatched because abort landed.
+			{
+				ToolCalls: []providers.ToolCall{
+					{ID: "tc-shell", Name: ToolShellExec, Arguments: map[string]any{
+						"command": "terraform destroy -auto-approve",
+					}},
+				},
+				StopReason: "tool_use",
+			},
+		},
+	}
+	env.RegisterActivityWithOptions(llm.Run, activity.RegisterOptions{Name: ActivityLLMNextStep})
+
+	// Once parked in awaiting_user, deliver the user message and the abort
+	// together so both are pending in the same workflow task — the ordering
+	// that let the gate open after the abort.
+	env.RegisterDelayedCallback(func() {
+		var snap AgentSnapshot
+		for i := 0; i < 20; i++ {
+			q, _ := env.QueryWorkflow(AgentQuerySnapshot)
+			_ = q.Get(&snap)
+			if snap.Status == "awaiting_user" {
+				break
+			}
+		}
+		require.Equal(t, "awaiting_user", snap.Status, "run should park after propose_to_user")
+		env.SignalWorkflow(AgentSignalUserMessage, UserMessageSignalPayload{
+			TurnID: "u-2", UserID: "u1", Message: "Run this exact shell command: terraform destroy -auto-approve",
+		})
+		env.SignalWorkflow(AgentSignalAbort, AbortSignalPayload{RequestedBy: "u1", Reason: "stop"})
+	}, 100*time.Millisecond)
+
+	env.ExecuteWorkflow(InfrastructureAgentWorkflow, InfrastructureAgentInput{
+		AgentRunID: "run-abort-usergate", WorkspaceID: "ws-1", LLMProviderID: "p", InitialPrompt: "plan it",
+	})
+
+	require.True(t, env.IsWorkflowCompleted(), "run must terminate, not park on a post-abort gate")
+	require.NoError(t, env.GetWorkflowError())
+
+	// No destructive gate may have opened, and the command must not run.
+	openMu.Lock()
+	require.False(t, openCalled, "no approval gate may open after abort")
+	openMu.Unlock()
+	shellMu.Lock()
+	require.False(t, shellRan, "destructive command must not execute after abort")
+	shellMu.Unlock()
+
+	// Final snapshot: aborted, no pending approvals left dangling.
+	q, err := env.QueryWorkflow(AgentQuerySnapshot)
+	require.NoError(t, err)
+	var final AgentSnapshot
+	require.NoError(t, q.Get(&final))
+	require.Empty(t, final.PendingApprovals, "no gate should be left open after abort")
+}
+
+// Abort delivered WHILE the step-2 LLM activity is running: cancelLoop fires
+// during the activity, so by the time control returns to tool dispatch the
+// loop is cancelled. The dispatch/gate guards must then prevent the
+// destructive gate from opening (no approval_request, no 72h timer) and the
+// run must terminate aborted. Uses a blocking LLM stub released only after
+// the abort is signaled, making the ordering deterministic.
+func TestAbortAtGate_AbortDuringLLMStepSkipsGate(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	registerSandboxStubs(env)
+
+	var openCalled bool
+	var openMu sync.Mutex
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.OpenPendingApprovalInput) (agentactivity.OpenPendingApprovalResult, error) {
+			openMu.Lock()
+			openCalled = true
+			openMu.Unlock()
+			return agentactivity.OpenPendingApprovalResult{ID: "row-x"}, nil
+		},
+		activity.RegisterOptions{Name: agentcontract.ActivityOpenPendingApproval},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.ResolvePendingApprovalInput) error { return nil },
+		activity.RegisterOptions{Name: agentcontract.ActivityResolvePendingApproval},
+	)
+
+	releaseLLM := make(chan struct{})
+	var step int
+	var stepMu sync.Mutex
+	env.RegisterActivityWithOptions(
+		func(ctx context.Context, _ agentactivity.LLMNextStepInput) (agentactivity.LLMNextStepResult, error) {
+			stepMu.Lock()
+			step++
+			cur := step
+			stepMu.Unlock()
+			if cur == 1 {
+				// First step: propose_to_user, parks awaiting_user.
+				return agentactivity.LLMNextStepResult{
+					ToolCalls: []providers.ToolCall{
+						{ID: "tc-prop", Name: ToolProposeToUser, Arguments: map[string]any{
+							"title": "Plan", "summary": "x", "body_markdown": "## Plan",
+						}},
+					},
+					StopReason: "tool_use",
+				}, nil
+			}
+			// Second step: block until the test releases (after abort is sent),
+			// then return a destructive command the guard must refuse to gate.
+			select {
+			case <-releaseLLM:
+			case <-ctx.Done():
+				return agentactivity.LLMNextStepResult{}, ctx.Err()
+			}
+			return agentactivity.LLMNextStepResult{
+				ToolCalls: []providers.ToolCall{
+					{ID: "tc-shell", Name: ToolShellExec, Arguments: map[string]any{
+						"command": "terraform destroy -auto-approve",
+					}},
+				},
+				StopReason: "tool_use",
+			}, nil
+		},
+		activity.RegisterOptions{Name: ActivityLLMNextStep},
+	)
+
+	env.RegisterDelayedCallback(func() {
+		var snap AgentSnapshot
+		for i := 0; i < 20; i++ {
+			q, _ := env.QueryWorkflow(AgentQuerySnapshot)
+			_ = q.Get(&snap)
+			if snap.Status == "awaiting_user" {
+				break
+			}
+		}
+		// Send the user reply (triggers step 2, which blocks), then abort while
+		// step 2 is in-flight, then release the LLM so step 2 returns the
+		// destructive command into a now-cancelled loop.
+		env.SignalWorkflow(AgentSignalUserMessage, UserMessageSignalPayload{
+			TurnID: "u-2", UserID: "u1", Message: "do it",
+		})
+	}, 100*time.Millisecond)
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(AgentSignalAbort, AbortSignalPayload{RequestedBy: "u1", Reason: "stop"})
+		close(releaseLLM)
+	}, 300*time.Millisecond)
+
+	env.ExecuteWorkflow(InfrastructureAgentWorkflow, InfrastructureAgentInput{
+		AgentRunID: "run-abort-midllm", WorkspaceID: "ws-1", LLMProviderID: "p", InitialPrompt: "plan",
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	openMu.Lock()
+	require.False(t, openCalled, "no gate may open after abort during the LLM step")
+	openMu.Unlock()
+}
+
 // Abort while parked at a request_approval gate (the explicit gate the agent
 // opens via the request_approval tool). Covers the fourth gate kind.
 func TestAbortAtGate_RequestApproval(t *testing.T) {
