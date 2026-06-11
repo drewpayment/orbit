@@ -7,16 +7,9 @@ import { ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
 import { TemplateSelect, TemplateType } from './steps/TemplateSelect';
 import { RepositoryConfig, RepositoryFormData } from './steps/RepositoryConfig';
 import { Review } from './steps/Review';
-import { repositoryClient } from '@/lib/grpc/repository-client';
-import { Visibility } from '@/lib/proto/common_pb';
+import { createRepositoryAction } from '@/app/actions/repository';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errors';
-
-const visibilityMap: Record<'private' | 'internal' | 'public', Visibility> = {
-  private: Visibility.PRIVATE,
-  internal: Visibility.INTERNAL,
-  public: Visibility.PUBLIC,
-};
 
 interface RepositoryWizardProps {
   workspaceId: string;
@@ -71,17 +64,21 @@ export function RepositoryWizard({ workspaceId, onComplete }: RepositoryWizardPr
 
     setIsCreating(true);
     try {
-      const response = await repositoryClient.createRepository({
+      const result = await createRepositoryAction({
         workspaceId,
         name: formData.name,
         slug: formData.slug,
         description: formData.description,
-        visibility: visibilityMap[formData.visibility],
+        visibility: formData.visibility,
         templateId: selectedTemplate || '',
       });
 
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
       toast.success('Repository created successfully');
-      onComplete(response.repository!.metadata!.id);
+      onComplete(result.repositoryId!);
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {

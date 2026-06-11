@@ -7,7 +7,7 @@ import type {
 describe("types", () => {
   it("ProvisionInfraInput matches Go workflow shape", () => {
     const input: ProvisionInfraInput = {
-      launchId: "launch-123", stackName: "orbit-ws1-launch-123",
+      launchId: "launch-123", workspaceId: "ws1", stackName: "orbit-ws1-launch-123",
       templatePath: "resources/blob-storage", cloudAccountId: "ca-456",
       provider: "azure", region: "eastus",
       parameters: { storageAccountName: "myaccount" },
@@ -27,7 +27,7 @@ describe("types", () => {
 
   it("DestroyInfraInput has no parameters field", () => {
     const input: DestroyInfraInput = {
-      launchId: "launch-123", stackName: "orbit-ws1-launch-123",
+      launchId: "launch-123", workspaceId: "ws1", stackName: "orbit-ws1-launch-123",
       templatePath: "resources/blob-storage", cloudAccountId: "ca-456",
       provider: "azure", region: "eastus",
     };

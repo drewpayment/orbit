@@ -43,6 +43,7 @@ export const getWorkspaceBySlug = cache(async (slug: string, depth: number = 1) 
     where: { slug: { equals: slug } },
     limit: 1,
     depth,
+    overrideAccess: true,
   })
   return result.docs[0] ?? null
 })

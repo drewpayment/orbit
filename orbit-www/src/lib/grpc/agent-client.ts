@@ -11,9 +11,11 @@
 import { createClient } from '@connectrpc/connect'
 import { createGrpcTransport } from '@connectrpc/connect-node'
 import { AgentService } from '@/lib/proto/idp/agent/v1/agent_pb'
+import { authInterceptor } from './auth-interceptor'
 
 const transport = createGrpcTransport({
   baseUrl: process.env.AGENT_SERVICE_URL || process.env.REPOSITORY_SERVICE_URL || 'http://localhost:50051',
+  interceptors: [authInterceptor],
 })
 
 export const agentClient = createClient(AgentService, transport)

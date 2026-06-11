@@ -252,6 +252,7 @@ export async function getCrossWorkspaceLineageAction(
       collection: 'workspaces',
       id: workspaceId,
       depth: 0,
+      overrideAccess: true,
     })
 
     if (!workspace) {

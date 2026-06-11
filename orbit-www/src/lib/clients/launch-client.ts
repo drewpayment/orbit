@@ -24,9 +24,11 @@ import {
   type DeployToLaunchResponse,
 } from '@/lib/proto/idp/launch/v1/launch_pb'
 import type { JsonObject } from '@bufbuild/protobuf'
+import { authInterceptor } from '../grpc/auth-interceptor'
 
 const transport = createConnectTransport({
   baseUrl: process.env.REPOSITORY_SERVICE_URL || 'http://localhost:50051',
+  interceptors: [authInterceptor],
 })
 
 export const launchClient = createClient(LaunchService, transport)

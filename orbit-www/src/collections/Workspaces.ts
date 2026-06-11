@@ -1,5 +1,5 @@
-import type { CollectionConfig } from 'payload'
-import { getAdminOrOwnerWorkspaceIds, getOwnerWorkspaceIds, isSuperAdmin } from '@/lib/access/workspace-access'
+import type { CollectionConfig, Where } from 'payload'
+import { getAdminOrOwnerWorkspaceIds, getOwnerWorkspaceIds, getMemberWorkspaceIds, isSuperAdmin } from '@/lib/access/workspace-access'
 
 export const Workspaces: CollectionConfig = {
   slug: 'workspaces',
@@ -8,8 +8,24 @@ export const Workspaces: CollectionConfig = {
     defaultColumns: ['name', 'slug', 'createdAt'],
   },
   access: {
-    // Public read — allows workspace discovery and join pages
-    read: () => true,
+    // Read: authenticated users may read any individual workspace document
+    // (needed for join-page discovery and slug-based page layouts), but
+    // list queries are scoped to workspaces the caller is a member of.
+    read: async ({ req, id }) => {
+      if (!req.user) return false
+      if (isSuperAdmin(req.user)) return true
+      const betterAuthId = req.user?.betterAuthId
+      // Single-document reads (id present): allow any authenticated user
+      // so join/invite flows can display workspace info.
+      if (id) return true
+      // List reads: restrict to the caller's member workspaces
+      if (!betterAuthId) return false
+      const ids = await getMemberWorkspaceIds(req.payload, betterAuthId)
+      if (ids.length === 0) {
+        return { id: { equals: 'nonexistent-id-no-results' } } as Where
+      }
+      return { id: { in: ids } } as Where
+    },
     // Any authenticated user can create workspaces
     create: ({ req: { user } }) => !!user,
     // Platform admins or workspace owners/admins

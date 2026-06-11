@@ -4,21 +4,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import { decrypt } from '@/lib/encryption'
+import { validateInternalApiKey } from '@/lib/auth/internal-api-auth'
 
-const INTERNAL_API_KEY = process.env.ORBIT_INTERNAL_API_KEY
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   // Validate API key
-  const apiKey = request.headers.get('X-API-Key')
-  if (!INTERNAL_API_KEY || apiKey !== INTERNAL_API_KEY) {
-    return NextResponse.json(
-      { error: 'Unauthorized', code: 'UNAUTHORIZED' },
-      { status: 401 }
-    )
-  }
+  const authError = validateInternalApiKey(request.headers.get('X-API-Key'))
+  if (authError) return authError
 
   try {
     const { id } = await params
@@ -83,11 +78,18 @@ export async function GET(
     }
 
     if (config.type === 'orbit') {
+      const orbitToken = process.env.ORBIT_REGISTRY_TOKEN
+      if (!orbitToken) {
+        return NextResponse.json(
+          { error: 'ORBIT_REGISTRY_TOKEN is not configured', code: 'MISCONFIGURED' },
+          { status: 500 }
+        )
+      }
       return NextResponse.json({
         type: 'orbit',
         url: process.env.ORBIT_REGISTRY_URL || 'localhost:5050',
         repository: '', // Determined by app slug at build time
-        token: process.env.ORBIT_REGISTRY_TOKEN || '',
+        token: orbitToken,
         username: 'orbit-service',
       })
     }

@@ -37,7 +37,7 @@ describe("provisionInfra", () => {
 
   it("sets azure-native:location and azure-native:subscriptionId config", async () => {
     const input: ProvisionInfraInput = {
-      launchId: "launch-1", stackName: "orbit-ws1-launch-1",
+      launchId: "launch-1", workspaceId: "ws1", stackName: "orbit-ws1-launch-1",
       templatePath: "resources/blob-storage", cloudAccountId: "ca-1",
       provider: "azure", region: "eastus",
       parameters: { storageAccountName: "myaccount", subscriptionId: "sub-123" },
@@ -49,7 +49,7 @@ describe("provisionInfra", () => {
 
   it("sets user parameters as Pulumi config", async () => {
     const input: ProvisionInfraInput = {
-      launchId: "launch-1", stackName: "orbit-ws1-launch-1",
+      launchId: "launch-1", workspaceId: "ws1", stackName: "orbit-ws1-launch-1",
       templatePath: "resources/blob-storage", cloudAccountId: "ca-1",
       provider: "azure", region: "eastus",
       parameters: { storageAccountName: "custom", subscriptionId: "sub-123" },
@@ -58,9 +58,9 @@ describe("provisionInfra", () => {
     expect(mockSetConfig).toHaveBeenCalledWith("storageAccountName", { value: "custom" });
   });
 
-  it("returns outputs from stack.up()", async () => {
+  it("returns outputs from stack.up(), omitting secret-flagged values", async () => {
     const input: ProvisionInfraInput = {
-      launchId: "launch-1", stackName: "orbit-ws1-launch-1",
+      launchId: "launch-1", workspaceId: "ws1", stackName: "orbit-ws1-launch-1",
       templatePath: "resources/blob-storage", cloudAccountId: "ca-1",
       provider: "azure", region: "eastus",
       parameters: { subscriptionId: "sub-123" },
@@ -73,9 +73,28 @@ describe("provisionInfra", () => {
     expect(result.summary).toBeInstanceOf(Array);
   });
 
+  it("redacts secret-flagged outputs (LW-H3)", async () => {
+    mockUp.mockResolvedValueOnce({
+      outputs: {
+        dbPassword: { value: "super-secret-pw", secret: true },
+        endpoint: { value: "https://example.azure.com", secret: false },
+      },
+      summary: { result: "succeeded" },
+    });
+    const input: ProvisionInfraInput = {
+      launchId: "launch-1", workspaceId: "ws1", stackName: "orbit-ws1-launch-1",
+      templatePath: "resources/blob-storage", cloudAccountId: "ca-1",
+      provider: "azure", region: "eastus",
+      parameters: { subscriptionId: "sub-123" },
+    };
+    const result = await provisionInfra(input);
+    expect(result.outputs["dbPassword"]).toBe("[REDACTED:secret]");
+    expect(result.outputs["endpoint"]).toBe("https://example.azure.com");
+  });
+
   it("does not pass subscriptionId or location as user config keys", async () => {
     const input: ProvisionInfraInput = {
-      launchId: "launch-1", stackName: "orbit-ws1-launch-1",
+      launchId: "launch-1", workspaceId: "ws1", stackName: "orbit-ws1-launch-1",
       templatePath: "resources/blob-storage", cloudAccountId: "ca-1",
       provider: "azure", region: "eastus",
       parameters: { subscriptionId: "sub-123", storageAccountName: "b" },
@@ -91,7 +110,7 @@ describe("provisionInfra", () => {
 
   it("throws if subscriptionId is not provided", async () => {
     const input: ProvisionInfraInput = {
-      launchId: "launch-1", stackName: "orbit-ws1-launch-1",
+      launchId: "launch-1", workspaceId: "ws1", stackName: "orbit-ws1-launch-1",
       templatePath: "resources/blob-storage", cloudAccountId: "ca-1",
       provider: "azure", region: "eastus", parameters: {},
     };
@@ -99,5 +118,25 @@ describe("provisionInfra", () => {
     delete process.env.AZURE_SUBSCRIPTION_ID;
     await expect(provisionInfra(input)).rejects.toThrow("Azure subscription ID is required");
     process.env.AZURE_SUBSCRIPTION_ID = origEnv;
+  });
+
+  it("rejects a stackName that does not match orbit-<workspaceId>-<launchId> (LW-H1)", async () => {
+    const input: ProvisionInfraInput = {
+      launchId: "launch-1", workspaceId: "ws1", stackName: "orbit-other-tenant-launch-1",
+      templatePath: "resources/blob-storage", cloudAccountId: "ca-1",
+      provider: "azure", region: "eastus",
+      parameters: { subscriptionId: "sub-123" },
+    };
+    await expect(provisionInfra(input)).rejects.toThrow("Stack name mismatch");
+  });
+
+  it("rejects path traversal in templatePath (LW-H2)", async () => {
+    const input: ProvisionInfraInput = {
+      launchId: "launch-1", workspaceId: "ws1", stackName: "orbit-ws1-launch-1",
+      templatePath: "../../etc/passwd", cloudAccountId: "ca-1",
+      provider: "azure", region: "eastus",
+      parameters: { subscriptionId: "sub-123" },
+    };
+    await expect(provisionInfra(input)).rejects.toThrow("Invalid templatePath");
   });
 });

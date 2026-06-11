@@ -213,6 +213,7 @@ export async function createWorkspace(data: {
       collection: 'workspaces',
       where: { slug: { equals: data.slug } },
       limit: 1,
+      overrideAccess: true,
     })
 
     if (existing.docs.length > 0) {

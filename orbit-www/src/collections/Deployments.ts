@@ -12,11 +12,14 @@ export const Deployments: CollectionConfig = {
     read: async ({ req: { user, payload } }) => {
       if (!user) return false
 
+      // workspace-members.user stores the Better Auth ID — fail closed if absent.
+      const userKey = user.betterAuthId
+      if (!userKey) return false
       // Get user's workspace memberships
       const memberships = await payload.find({
         collection: 'workspace-members',
         where: {
-          user: { equals: user.id },
+          user: { equals: userKey },
           status: { equals: 'active' },
         },
         limit: 1000,
@@ -70,12 +73,14 @@ export const Deployments: CollectionConfig = {
         ? app.workspace
         : app.workspace.id
 
+      const updateUserKey = user.betterAuthId
+      if (!updateUserKey) return false
       const members = await payload.find({
         collection: 'workspace-members',
         where: {
           and: [
             { workspace: { equals: workspaceId } },
-            { user: { equals: user.id } },
+            { user: { equals: updateUserKey } },
             { role: { in: ['owner', 'admin', 'member'] } },
             { status: { equals: 'active' } },
           ],
@@ -109,12 +114,14 @@ export const Deployments: CollectionConfig = {
         ? app.workspace
         : app.workspace.id
 
+      const deleteUserKey = user.betterAuthId
+      if (!deleteUserKey) return false
       const members = await payload.find({
         collection: 'workspace-members',
         where: {
           and: [
             { workspace: { equals: workspaceId } },
-            { user: { equals: user.id } },
+            { user: { equals: deleteUserKey } },
             { role: { in: ['owner', 'admin'] } },
             { status: { equals: 'active' } },
           ],

@@ -216,6 +216,7 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
   const workspace = await (payload.findByID as any)({
     collection: 'workspaces',
     id: input.workspaceId,
+    overrideAccess: true,
   })
 
   if (!workspace) {

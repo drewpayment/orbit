@@ -14,7 +14,8 @@ export const RegistryConfigs: CollectionConfig = {
   access: {
     read: async ({ req: { user, payload }, id }) => {
       if (!user) return false
-      const userId = user?.betterAuthId || user.id
+      const userId = user.betterAuthId
+      if (!userId) return false
       if (!id) {
         // List view - filter by workspace membership
         const workspaceIds = await getWorkspaceIdsForUser(payload, userId)
@@ -30,11 +31,22 @@ export const RegistryConfigs: CollectionConfig = {
           },
         } as Where
       }
-      return true
+      // Single-doc read: verify the caller belongs to the config's workspace
+      const cfg = await payload.findByID({
+        collection: 'registry-configs',
+        id,
+        overrideAccess: true,
+        depth: 0,
+      })
+      if (!cfg?.workspace) return false
+      const cfgWorkspaceId = typeof cfg.workspace === 'string' ? cfg.workspace : cfg.workspace.id
+      const workspaceIds = await getWorkspaceIdsForUser(payload, userId)
+      return workspaceIds.includes(cfgWorkspaceId)
     },
     create: async ({ req: { user, payload }, data }) => {
       if (!user || !data?.workspace) return false
-      const userId = user?.betterAuthId || user.id
+      const userId = user.betterAuthId
+      if (!userId) return false
 
       const workspaceId =
         typeof data.workspace === 'string' ? data.workspace : data.workspace.id
@@ -55,7 +67,8 @@ export const RegistryConfigs: CollectionConfig = {
     },
     update: async ({ req: { user, payload }, id }) => {
       if (!user || !id) return false
-      const userId = user?.betterAuthId || user.id
+      const userId = user.betterAuthId
+      if (!userId) return false
 
       const config = await payload.findByID({
         collection: 'registry-configs',
@@ -86,7 +99,8 @@ export const RegistryConfigs: CollectionConfig = {
     },
     delete: async ({ req: { user, payload }, id }) => {
       if (!user || !id) return false
-      const userId = user?.betterAuthId || user.id
+      const userId = user.betterAuthId
+      if (!userId) return false
 
       const config = await payload.findByID({
         collection: 'registry-configs',

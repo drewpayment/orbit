@@ -49,6 +49,7 @@ export async function getRegistryUsage(workspaceId: string): Promise<{
     const workspace = await payload.findByID({
       collection: 'workspaces',
       id: workspaceId,
+      overrideAccess: true,
     })
 
     if (!workspace) {

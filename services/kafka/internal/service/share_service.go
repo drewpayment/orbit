@@ -178,6 +178,33 @@ func (s *ShareService) ListTopicShares(ctx context.Context, filter ShareFilter) 
 	return s.shareRepo.List(ctx, filter)
 }
 
+// GetShare loads a single share by id, for handler-side tenant authorization
+// of ID-based RPCs. Returns domain.ErrShareNotFound when absent.
+func (s *ShareService) GetShare(ctx context.Context, shareID uuid.UUID) (*domain.KafkaTopicShare, error) {
+	share, err := s.shareRepo.GetByID(ctx, shareID)
+	if err != nil {
+		return nil, err
+	}
+	if share == nil {
+		return nil, domain.ErrShareNotFound
+	}
+	return share, nil
+}
+
+// GetServiceAccount loads a single service account by id, for handler-side
+// tenant authorization of ID-based RPCs. Returns
+// domain.ErrServiceAccountNotFound when absent.
+func (s *ShareService) GetServiceAccount(ctx context.Context, accountID uuid.UUID) (*domain.KafkaServiceAccount, error) {
+	account, err := s.serviceAccountRepo.GetByID(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+	if account == nil {
+		return nil, domain.ErrServiceAccountNotFound
+	}
+	return account, nil
+}
+
 // CreateServiceAccount creates a new service account
 func (s *ShareService) CreateServiceAccount(ctx context.Context, req CreateServiceAccountRequest) (*domain.KafkaServiceAccount, error) {
 	account := &domain.KafkaServiceAccount{

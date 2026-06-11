@@ -19,9 +19,11 @@ import type {
   StartBuildWorkflowResponse,
   GetBuildProgressResponse,
 } from '@/lib/proto/idp/build/v1/build_pb'
+import { authInterceptor } from '../grpc/auth-interceptor'
 
 const transport = createConnectTransport({
   baseUrl: process.env.REPOSITORY_SERVICE_URL || 'http://localhost:50051',
+  interceptors: [authInterceptor],
 })
 
 export const buildClient = createClient(BuildService, transport)

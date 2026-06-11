@@ -1,9 +1,9 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
 import { validateCluster } from '@/app/(frontend)/workspaces/[slug]/kafka/actions'
+import { getPayloadUserFromSession } from '@/lib/auth/session'
+import { isPlatformAdmin } from '@/lib/access/workspace-access'
 
 /**
  * POST /api/kafka/admin/clusters/[id]/validate
@@ -13,15 +13,13 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
-
-  if (!session?.user) {
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
-
-  // TODO: Verify platform admin role
+  if (!isPlatformAdmin(payloadUser)) {
+    return NextResponse.json({ error: 'Forbidden: platform admin required' }, { status: 403 })
+  }
 
   const { id } = await params
   const result = await validateCluster(id)

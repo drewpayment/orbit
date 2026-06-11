@@ -4,8 +4,8 @@ log:
   formatter: json
 storage:
   s3:
-    accesskey: orbit-admin
-    secretkey: orbit-secret-key
+    accesskey: ${MINIO_ROOT_USER}
+    secretkey: ${MINIO_ROOT_PASSWORD}
     region: us-east-1
     regionendpoint: http://minio:9000
     bucket: orbit-registry

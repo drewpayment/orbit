@@ -14,9 +14,17 @@ spec:
         app: launches-worker-azure
     spec:
       serviceAccountName: orbit
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
       containers:
         - name: launches-worker-azure
           image: ghcr.io/drewpayment/orbit/launches-worker-azure:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           env:
             - name: TEMPORAL_ADDRESS
               value: temporal:7233
@@ -26,6 +34,16 @@ spec:
               value: launches_azure
             - name: PULUMI_BACKEND_URL
               value: s3://pulumi-state?endpoint=minio:9000&s3ForcePathStyle=true
+            - name: PULUMI_CONFIG_PASSPHRASE
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: PULUMI_CONFIG_PASSPHRASE
+            - name: ORBIT_INTERNAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: ORBIT_INTERNAL_API_KEY
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:

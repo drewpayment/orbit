@@ -183,7 +183,7 @@ export async function startBuild(input: StartBuildInput) {
 
       registryUrl = ORBIT_REGISTRY_URL
       repositoryPath = `${workspaceSlug}/${app.name.toLowerCase().replace(/\s+/g, '-')}`
-      registryToken = process.env.ORBIT_REGISTRY_TOKEN || 'orbit-registry-token'
+      registryToken = process.env.ORBIT_REGISTRY_TOKEN ?? (() => { throw new Error('ORBIT_REGISTRY_TOKEN is not configured') })()
     } else if (registryType === 'ghcr') {
       // GHCR requires a PAT with write:packages scope - GitHub App installation tokens CANNOT push to GHCR
       if (!registryConfig?.ghcrPat) {
@@ -199,7 +199,7 @@ export async function startBuild(input: StartBuildInput) {
           const workspaceSlug = workspace?.slug || 'default'
           registryUrl = ORBIT_REGISTRY_URL
           repositoryPath = `${workspaceSlug}/${app.name.toLowerCase().replace(/\s+/g, '-')}`
-          registryToken = process.env.ORBIT_REGISTRY_TOKEN || 'orbit-registry-token'
+          registryToken = process.env.ORBIT_REGISTRY_TOKEN ?? (() => { throw new Error('ORBIT_REGISTRY_TOKEN is not configured') })()
           useOrbitRegistry = true
         } else {
           return {

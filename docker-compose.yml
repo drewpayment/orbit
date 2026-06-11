@@ -87,7 +87,7 @@ services:
       - TEMPORAL_ADDRESS=temporal-server:7233
       - TEMPORAL_NAMESPACE=default
       - ORBIT_API_URL=http://host.docker.internal:3000
-      - ORBIT_INTERNAL_API_KEY=${ORBIT_INTERNAL_API_KEY:-orbit-internal-dev-key}
+      - ORBIT_INTERNAL_API_KEY=${ORBIT_INTERNAL_API_KEY:?ORBIT_INTERNAL_API_KEY is required — see DEV_SETUP.md}
       - BIFROST_ADMIN_URL=bifrost:50060
       - BUILD_SERVICE_ADDRESS=build-service:50054
       - GIT_WORK_DIR=/tmp/orbit-repos
@@ -112,8 +112,10 @@ services:
       - TEMPORAL_NAMESPACE=default
       - TASK_QUEUE=launches_azure
       - PULUMI_BACKEND_URL=s3://pulumi-state?endpoint=minio:9000&disableSSL=true&s3ForcePathStyle=true
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-orbit-admin}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-orbit-secret-key}
+      - PULUMI_CONFIG_PASSPHRASE=${PULUMI_CONFIG_PASSPHRASE:?PULUMI_CONFIG_PASSPHRASE is required — see DEV_SETUP.md}
+      - ORBIT_INTERNAL_API_KEY=${ORBIT_INTERNAL_API_KEY:?ORBIT_INTERNAL_API_KEY is required — see DEV_SETUP.md}
+      - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER:?MINIO_ROOT_USER is required — see DEV_SETUP.md}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required — see DEV_SETUP.md}
       - AWS_REGION=us-east-1
       - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
       - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
@@ -140,9 +142,9 @@ services:
       - BUILDKIT_HOST=docker-container://orbit-buildkit
       - ORBIT_REGISTRY_URL=http://orbit-registry:5000
       - ORBIT_REGISTRY_USERNAME=orbit-service
-      - ORBIT_REGISTRY_PASSWORD=orbit-registry-token
+      - ORBIT_REGISTRY_PASSWORD=${ORBIT_REGISTRY_PASSWORD:?ORBIT_REGISTRY_PASSWORD is required — see DEV_SETUP.md}
       - ORBIT_API_URL=http://host.docker.internal:3000
-      - ORBIT_INTERNAL_API_KEY=${ORBIT_INTERNAL_API_KEY:-orbit-internal-dev-key}
+      - ORBIT_INTERNAL_API_KEY=${ORBIT_INTERNAL_API_KEY:?ORBIT_INTERNAL_API_KEY is required — see DEV_SETUP.md}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - build-workdir:/tmp/orbit-builds
@@ -166,10 +168,10 @@ services:
   #     - TEMPORAL_ADDRESS=temporal-server:7233
   #     - NEXT_PUBLIC_REPOSITORY_URL=http://repository-service:50051
   #     - REPOSITORY_SERVICE_URL=http://repository-service:50051
-  #     - ORBIT_INTERNAL_API_KEY=${ORBIT_INTERNAL_API_KEY:-orbit-internal-dev-key}
+  #     - ORBIT_INTERNAL_API_KEY=${ORBIT_INTERNAL_API_KEY:?see DEV_SETUP.md}
   #     - ORBIT_REGISTRY_URL=orbit-registry:5000
-  #     - ORBIT_REGISTRY_TOKEN=orbit-registry-token
-  #     - ORBIT_REGISTRY_JWT_SECRET=${ORBIT_REGISTRY_JWT_SECRET:-orbit-registry-jwt-secret-dev-only-32chars}
+  #     - ORBIT_REGISTRY_TOKEN=${ORBIT_REGISTRY_TOKEN:?see DEV_SETUP.md}
+  #     - ORBIT_REGISTRY_JWT_SECRET=${ORBIT_REGISTRY_JWT_SECRET:?see DEV_SETUP.md}
   #     - NEXT_PUBLIC_KAFKA_SERVICE_URL=http://kafka-service:50055
   #     - BIFROST_ADMIN_URL=http://bifrost:50060
   #   env_file:
@@ -238,8 +240,8 @@ services:
       - "9000:9000"
       - "9001:9001"
     environment:
-      - MINIO_ROOT_USER=orbit-admin
-      - MINIO_ROOT_PASSWORD=orbit-secret-key
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?MINIO_ROOT_USER is required — see DEV_SETUP.md}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required — see DEV_SETUP.md}
     volumes:
       - minio-data:/data
     restart: unless-stopped
@@ -258,6 +260,8 @@ services:
     # OrbStack's proxyproxy.orb.internal which 502s for compose service
     # names and the init container loops forever, blocking orbit-registry.
     environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?MINIO_ROOT_USER is required — see DEV_SETUP.md}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required — see DEV_SETUP.md}
       - HTTP_PROXY=
       - HTTPS_PROXY=
       - http_proxy=
@@ -401,6 +405,8 @@ services:
       - GRPC_PORT=50055
       - ENVIRONMENT=development
       - DATABASE_URL=postgres://orbit:orbit@postgres:5432/kafka_service?sslmode=disable
+      - ORBIT_SVC_AUTH_SECRET=${ORBIT_SVC_AUTH_SECRET:?ORBIT_SVC_AUTH_SECRET is required — see DEV_SETUP.md}
+      - ORBIT_SVC_AUTH_ENFORCE=${ORBIT_SVC_AUTH_ENFORCE:-true}
     depends_on:
       temporal-server:
         condition: service_healthy
@@ -423,6 +429,8 @@ services:
       - HTTP_PORT=8081
       - TEMPORAL_HOST=temporal-server:7233
       - TEMPLATE_WORK_DIR=/tmp/orbit-templates
+      - ORBIT_SVC_AUTH_SECRET=${ORBIT_SVC_AUTH_SECRET:?ORBIT_SVC_AUTH_SECRET is required — see DEV_SETUP.md}
+      - ORBIT_SVC_AUTH_ENFORCE=${ORBIT_SVC_AUTH_ENFORCE:-true}
     depends_on:
       temporal-server:
         condition: service_healthy

@@ -605,9 +605,45 @@ export async function listServiceAccounts(
 
     const payload = await getPayload({ config })
 
-    // Use overrideAccess since auth is verified above and the collection's
-    // read access control depends on workspace-members being populated.
-    // The virtualCluster filter already scopes results appropriately.
+    // Derive workspace from the virtual cluster and verify membership.
+    // The virtualCluster filter scopes results but does not prove the caller
+    // is authorised — a non-member could supply an arbitrary virtualClusterId.
+    const virtualCluster = await payload.findByID({
+      collection: 'kafka-virtual-clusters',
+      id: input.virtualClusterId,
+      depth: 0,
+      overrideAccess: true,
+    })
+
+    if (!virtualCluster) {
+      return { success: false, error: 'Virtual cluster not found' }
+    }
+
+    const vcWorkspaceId = typeof virtualCluster.workspace === 'string'
+      ? virtualCluster.workspace
+      : virtualCluster.workspace?.id
+
+    if (!vcWorkspaceId) {
+      return { success: false, error: 'Virtual cluster has no workspace' }
+    }
+
+    const vcMembership = await payload.find({
+      collection: 'workspace-members',
+      where: {
+        and: [
+          { workspace: { equals: vcWorkspaceId } },
+          { user: { equals: payloadUser.betterAuthId } },
+          { status: { equals: 'active' } },
+        ],
+      },
+      limit: 1,
+      overrideAccess: true,
+    })
+
+    if (vcMembership.docs.length === 0) {
+      return { success: false, error: 'Not a member of this workspace' }
+    }
+
     const accounts = await payload.find({
       collection: 'kafka-service-accounts',
       where: {

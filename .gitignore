@@ -14,3 +14,19 @@ services/*/server
 node_modules
 launches-worker-gcp/gcp-sa.json
 dogfood-*
+
+# Environment files — never commit real secrets
+.env
+.env.*
+!.env.example
+# orbit-www/test.env is tracked (contains only NODE_OPTIONS, no secrets).
+# Team lead should decide whether to untrack it.
+!orbit-www/test.env
+
+# Pulumi local state
+.pulumi/
+
+# Credential files
+*.pem
+credentials.json
+gcp-sa.json
