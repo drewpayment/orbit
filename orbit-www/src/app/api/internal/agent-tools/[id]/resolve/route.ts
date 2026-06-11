@@ -40,7 +40,19 @@ const isTemplateKind = (v: unknown): v is TemplateKind =>
  *
  * Returns: { id, status, agentToolVersionId? } where agentToolVersionId
  * is the reviewer_edited row id (only when edited=true).
+ *
+ * Workspace ownership: when `workspaceId` is present in the body it must
+ * match the tool's workspace, otherwise the call is rejected 409 and
+ * nothing is changed. When absent we proceed but log a warning — kept
+ * backward-compatible while the Go side rolls out the workspace_id field.
+ *
+ * Idempotency: if the tool is already `approved`/`rejected` the call
+ * short-circuits with 200 and the current state; it does not re-patch the
+ * row or create duplicate version rows.
  */
+const relId = (rel: unknown): string =>
+  typeof rel === 'string' ? rel : ((rel as { id?: string } | null)?.id ?? '')
+
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
@@ -65,6 +77,34 @@ export async function POST(
       overrideAccess: true,
     })
 
+    // Workspace ownership cross-check. The Go resolve activity includes
+    // workspace_id; reject any attempt to resolve a tool that belongs to a
+    // different workspace. Absent workspaceId is tolerated during rollout.
+    const bodyWorkspaceId =
+      typeof body.workspaceId === 'string' ? body.workspaceId : ''
+    if (bodyWorkspaceId) {
+      if (relId(existing.workspace) !== bodyWorkspaceId) {
+        return NextResponse.json(
+          { error: 'workspace mismatch', code: 'WORKSPACE_MISMATCH' },
+          { status: 409 },
+        )
+      }
+    } else {
+      console.warn(
+        `[agent-tools/resolve] tool ${id} resolved without workspaceId; skipping ownership check (rollout backward-compat)`,
+      )
+    }
+
+    // Idempotency: if the row is already resolved, return the current state
+    // without re-patching or creating duplicate version rows.
+    if (existing.status === 'approved' || existing.status === 'rejected') {
+      return NextResponse.json({
+        id: existing.id,
+        status: existing.status,
+        alreadyResolved: true,
+      })
+    }
+
     const data: Partial<AgentTool> = {
       status: approved ? 'approved' : 'rejected',
     }
@@ -83,20 +123,39 @@ export async function POST(
     // produce a one-row version history. v2 = reviewer_edited only
     // appears when at least one field actually changed.
     if (approved) {
-      const proposedVersion = await payload.create({
+      // Guard against double-fire on retry. A prior attempt can crash after
+      // writing v1 but before writing v2 / patching status, so we track each
+      // version number independently — guarding both creates on a single
+      // "any version exists" flag would skip v2 forever and leave the tool
+      // edited with no reviewer_edited audit snapshot.
+      const existingVersions = await payload.find({
         collection: 'agent-tool-versions',
-        data: {
-          tool: existing.id,
-          versionNumber: 1,
-          source: 'agent_proposed',
-          name: existing.name,
-          description: existing.description ?? '',
-          inputSchemaJson: existing.inputSchemaJson ?? '',
-          templateKind: existing.templateKind,
-          templateJson: existing.templateJson,
-        },
+        where: { tool: { equals: existing.id } },
+        limit: 10,
         overrideAccess: true,
       })
+      const versionByNumber = new Map<number, { id: string | number }>()
+      for (const v of existingVersions.docs) {
+        if (typeof v.versionNumber === 'number') versionByNumber.set(v.versionNumber, v)
+      }
+      const hasVersion = (n: number) => versionByNumber.has(n)
+
+      if (!hasVersion(1)) {
+        await payload.create({
+          collection: 'agent-tool-versions',
+          data: {
+            tool: existing.id,
+            versionNumber: 1,
+            source: 'agent_proposed',
+            name: existing.name,
+            description: existing.description ?? '',
+            inputSchemaJson: existing.inputSchemaJson ?? '',
+            templateKind: existing.templateKind,
+            templateJson: existing.templateJson,
+          },
+          overrideAccess: true,
+        })
+      }
 
       const edits = body.editedFields ?? {}
       const want = {
@@ -123,27 +182,35 @@ export async function POST(
           want.templateKind !== undefined && changedTemplateKind(existing.templateKind)
             ? want.templateKind
             : existing.templateKind
-        const editedVersion = await payload.create({
-          collection: 'agent-tool-versions',
-          data: {
-            tool: existing.id,
-            versionNumber: 2,
-            source: 'reviewer_edited',
-            name: changedString('name', existing.name) ? want.name : existing.name,
-            description: changedString('description', existing.description ?? '')
-              ? want.description
-              : (existing.description ?? ''),
-            inputSchemaJson: changedString('inputSchemaJson', existing.inputSchemaJson ?? '')
-              ? want.inputSchemaJson
-              : (existing.inputSchemaJson ?? ''),
-            templateKind: editedTemplateKind,
-            templateJson: changedString('templateJson', existing.templateJson) ? want.templateJson : existing.templateJson,
-            editedBy: body.resolvedBy || null,
-            editedFields: editedFieldsList.join(','),
-          },
-          overrideAccess: true,
-        })
-        agentToolVersionId = String(editedVersion.id)
+        // Create v2 only if it doesn't already exist; if a prior attempt
+        // wrote it, reuse that row's id so agentToolVersionId is still
+        // returned on retry.
+        const existingV2 = versionByNumber.get(2)
+        if (existingV2) {
+          agentToolVersionId = String(existingV2.id)
+        } else {
+          const editedVersion = await payload.create({
+            collection: 'agent-tool-versions',
+            data: {
+              tool: existing.id,
+              versionNumber: 2,
+              source: 'reviewer_edited',
+              name: changedString('name', existing.name) ? want.name : existing.name,
+              description: changedString('description', existing.description ?? '')
+                ? want.description
+                : (existing.description ?? ''),
+              inputSchemaJson: changedString('inputSchemaJson', existing.inputSchemaJson ?? '')
+                ? want.inputSchemaJson
+                : (existing.inputSchemaJson ?? ''),
+              templateKind: editedTemplateKind,
+              templateJson: changedString('templateJson', existing.templateJson) ? want.templateJson : existing.templateJson,
+              editedBy: body.resolvedBy || null,
+              editedFields: editedFieldsList.join(','),
+            },
+            overrideAccess: true,
+          })
+          agentToolVersionId = String(editedVersion.id)
+        }
 
         // Patch the AgentTools row to the edited values so the agent's
         // next invocation uses the human-curated version.
@@ -158,10 +225,6 @@ export async function POST(
       } else {
         data.currentVersion = 1
       }
-
-      // Reference the proposed version for audit lookups even when no
-      // edits happened.
-      void proposedVersion
     }
 
     const updated = await payload.update({

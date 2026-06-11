@@ -37,15 +37,21 @@ export async function startAgentRun(input: StartAgentRunInput) {
     input.initialPrompt,
   )
 
+  let resp: Awaited<ReturnType<typeof agentClient.startInfrastructureAgent>>
   try {
-    const resp = await agentClient.startInfrastructureAgent({
+    resp = await agentClient.startInfrastructureAgent({
       workspaceId: input.workspaceId,
       repositoryId: input.repositoryId ?? '',
       initialPrompt: promptWithContext,
       llmProviderId: input.llmProviderId,
       userId: user.id,
     })
+  } catch (err) {
+    // Workflow never started — nothing to compensate.
+    return { success: false as const, error: (err as Error).message }
+  }
 
+  try {
     // Persist a Payload run row for history.
     await payload.create({
       collection: 'agent-runs',
@@ -63,15 +69,30 @@ export async function startAgentRun(input: StartAgentRunInput) {
       },
       overrideAccess: true,
     })
-
-    return {
-      success: true as const,
-      workflowId: resp.workflowId,
-      runId: resp.runId,
-      agentRunId: resp.agentRunId,
-    }
   } catch (err) {
+    // The workflow already started but we couldn't record it. Abort the
+    // orphan so it doesn't run unattended without a backing run row. The
+    // abort is best-effort: surface the original create error regardless.
+    try {
+      await agentClient.abortAgent({
+        workflowId: resp.workflowId,
+        requestedBy: user.id,
+        reason: 'run record creation failed',
+      })
+    } catch (abortErr) {
+      console.error(
+        '[infra-agent] startAgentRun compensation: abort of orphan workflow failed:',
+        abortErr,
+      )
+    }
     return { success: false as const, error: (err as Error).message }
+  }
+
+  return {
+    success: true as const,
+    workflowId: resp.workflowId,
+    runId: resp.runId,
+    agentRunId: resp.agentRunId,
   }
 }
 
