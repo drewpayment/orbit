@@ -39,13 +39,13 @@ func stubDestroyInfra(_ context.Context, _ types.DestroyInfraInput) error {
 func newLaunchTestInput() types.LaunchWorkflowInput {
 	return types.LaunchWorkflowInput{
 		LaunchID:          "launch-001",
-		TemplateSlug:      "s3-bucket",
+		TemplateSlug:      "blob-storage",
 		CloudAccountID:    "cloud-acct-1",
-		Provider:          "aws",
-		Region:            "us-east-1",
+		Provider:          "azure",
+		Region:            "eastus",
 		Parameters:        map[string]interface{}{"bucketName": "my-bucket"},
 		ApprovalRequired:  false,
-		PulumiProjectPath: "templates/aws-s3-bucket",
+		PulumiProjectPath: "resources/blob-storage",
 		WorkspaceID:       "ws-001",
 	}
 }
@@ -291,7 +291,34 @@ func TestLaunchWorkflow_ProgressQuery(t *testing.T) {
 
 // Verify that taskQueueForProvider returns the correct queue name
 func TestTaskQueueForProvider(t *testing.T) {
-	require.Equal(t, "launches_aws", taskQueueForProvider("aws"))
-	require.Equal(t, "launches_gcp", taskQueueForProvider("gcp"))
 	require.Equal(t, "launches_azure", taskQueueForProvider("azure"))
+	require.Equal(t, "launches_digitalocean", taskQueueForProvider("digitalocean"))
+}
+
+// Providers without a deployed worker (aws/gcp were stripped 2026-06) must be
+// rejected before any activity is scheduled on a provider task queue.
+func TestLaunchWorkflow_UnsupportedProvider(t *testing.T) {
+	for _, provider := range []string{"aws", "gcp", "nonsense"} {
+		t.Run(provider, func(t *testing.T) {
+			testSuite := &testsuite.WorkflowTestSuite{}
+			env := testSuite.NewTestWorkflowEnvironment()
+			registerAllLaunchActivities(env)
+
+			input := newLaunchTestInput()
+			input.Provider = provider
+
+			// The failure status update is the only activity that should run.
+			env.OnActivity(stubUpdateLaunchStatus, mock.Anything, mock.MatchedBy(func(in types.UpdateLaunchStatusInput) bool {
+				return in.Status == "failed"
+			})).Return(nil)
+
+			env.ExecuteWorkflow(LaunchWorkflow, input)
+
+			require.True(t, env.IsWorkflowCompleted())
+			err := env.GetWorkflowError()
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "unsupported cloud provider")
+			env.AssertExpectations(t)
+		})
+	}
 }

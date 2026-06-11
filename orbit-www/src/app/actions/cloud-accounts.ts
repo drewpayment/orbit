@@ -11,7 +11,7 @@ import { getPayloadUserFromSession } from '@/lib/auth/session'
 export interface CloudAccountDoc {
   id: string
   name: string
-  provider: 'aws' | 'gcp' | 'azure' | 'digitalocean'
+  provider: 'azure' | 'digitalocean'
   credentials: Record<string, unknown>
   region?: string
   workspaces: Array<string | { id: string; name: string; slug: string }>
@@ -116,7 +116,7 @@ export async function getAllCloudAccounts(): Promise<{
  */
 export async function createCloudAccount(data: {
   name: string
-  provider: 'aws' | 'gcp' | 'azure' | 'digitalocean'
+  provider: 'azure' | 'digitalocean'
   credentials: Record<string, unknown>
   region?: string
   workspaces: string[]
@@ -162,7 +162,7 @@ export async function updateCloudAccount(
   id: string,
   data: {
     name?: string
-    provider?: 'aws' | 'gcp' | 'azure' | 'digitalocean'
+    provider?: 'azure' | 'digitalocean'
     credentials?: Record<string, unknown>
     region?: string
     workspaces?: string[]

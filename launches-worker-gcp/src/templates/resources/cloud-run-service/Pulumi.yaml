@@ -1,3 +1,0 @@
-name: orbit-cloud-run-service
-runtime: nodejs
-description: Provisions a Cloud Run service with IAM configuration

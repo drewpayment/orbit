@@ -1,3 +1,0 @@
-name: orbit-cloud-sql-postgresql
-runtime: nodejs
-description: Provisions a Cloud SQL PostgreSQL instance with database and user

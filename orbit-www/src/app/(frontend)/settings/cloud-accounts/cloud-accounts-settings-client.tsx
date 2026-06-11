@@ -15,7 +15,6 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
@@ -31,7 +30,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Cloud,
   Plus,
@@ -42,8 +40,6 @@ import {
   Pencil,
   Plug,
   ShieldCheck,
-  Upload,
-  FileText,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { ProviderIcon } from '@/components/features/launches/ProviderIcon'
@@ -70,12 +66,7 @@ const STATUS_BADGE: Record<string, { variant: 'default' | 'secondary' | 'destruc
 
 interface FormState {
   name: string
-  provider: 'aws' | 'gcp' | 'azure' | 'digitalocean'
-  // AWS
-  awsAccessKeyId: string
-  awsSecretAccessKey: string
-  // GCP
-  gcpServiceAccountJson: string
+  provider: 'azure' | 'digitalocean'
   // Azure
   azureTenantId: string
   azureClientId: string
@@ -91,10 +82,7 @@ interface FormState {
 
 const EMPTY_FORM: FormState = {
   name: '',
-  provider: 'aws',
-  awsAccessKeyId: '',
-  awsSecretAccessKey: '',
-  gcpServiceAccountJson: '',
+  provider: 'azure',
   azureTenantId: '',
   azureClientId: '',
   azureClientSecret: '',
@@ -107,10 +95,6 @@ const EMPTY_FORM: FormState = {
 
 function credentialsFromForm(form: FormState): Record<string, unknown> {
   switch (form.provider) {
-    case 'aws':
-      return { accessKeyId: form.awsAccessKeyId, secretAccessKey: form.awsSecretAccessKey }
-    case 'gcp':
-      return { serviceAccountJson: form.gcpServiceAccountJson }
     case 'azure':
       return { tenantId: form.azureTenantId, clientId: form.azureClientId, clientSecret: form.azureClientSecret }
     case 'digitalocean':
@@ -126,13 +110,6 @@ function formFromCredentials(
 ): Partial<FormState> {
   if (!credentials) return {}
   switch (provider) {
-    case 'aws':
-      return {
-        awsAccessKeyId: (credentials.accessKeyId as string) || '',
-        awsSecretAccessKey: '', // never pre-fill secrets
-      }
-    case 'gcp':
-      return { gcpServiceAccountJson: '' } // never pre-fill
     case 'azure':
       return {
         azureTenantId: (credentials.tenantId as string) || '',
@@ -409,8 +386,6 @@ export function CloudAccountsSettingsClient() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="aws">AWS</SelectItem>
-                    <SelectItem value="gcp">GCP</SelectItem>
                     <SelectItem value="azure">Azure</SelectItem>
                     <SelectItem value="digitalocean">DigitalOcean</SelectItem>
                   </SelectContent>
@@ -430,42 +405,6 @@ export function CloudAccountsSettingsClient() {
             </div>
 
             {/* Provider-specific credential fields */}
-            {form.provider === 'aws' && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="aws-key">
-                    Access Key ID {editing && '(leave blank to keep existing)'}
-                  </Label>
-                  <Input
-                    id="aws-key"
-                    placeholder={editing ? '********' : 'AKIA...'}
-                    value={form.awsAccessKeyId}
-                    onChange={(e) => setForm({ ...form, awsAccessKeyId: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="aws-secret">
-                    Secret Access Key {editing && '(leave blank to keep existing)'}
-                  </Label>
-                  <Input
-                    id="aws-secret"
-                    type="password"
-                    placeholder={editing ? '********' : 'Enter secret key'}
-                    value={form.awsSecretAccessKey}
-                    onChange={(e) => setForm({ ...form, awsSecretAccessKey: e.target.value })}
-                  />
-                </div>
-              </>
-            )}
-
-            {form.provider === 'gcp' && (
-              <GcpCredentialInput
-                value={form.gcpServiceAccountJson}
-                editing={!!editing}
-                onChange={(val) => setForm({ ...form, gcpServiceAccountJson: val })}
-              />
-            )}
-
             {form.provider === 'azure' && (
               <>
                 <div className="space-y-2">
@@ -598,102 +537,6 @@ export function CloudAccountsSettingsClient() {
         </DialogContent>
       </Dialog>
     </>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// GCP credential input (file upload or paste)
-// ---------------------------------------------------------------------------
-
-function GcpCredentialInput({
-  value,
-  editing,
-  onChange,
-}: {
-  value: string
-  editing: boolean
-  onChange: (val: string) => void
-}) {
-  const [fileName, setFileName] = useState<string | null>(null)
-  const fileInputRef = React.useRef<HTMLInputElement>(null)
-
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    const reader = new FileReader()
-    reader.onload = (evt) => {
-      const text = evt.target?.result as string
-      try {
-        // Validate it's valid JSON
-        JSON.parse(text)
-        onChange(text)
-        setFileName(file.name)
-      } catch {
-        toast.error('Invalid JSON file. Please select a valid service account key file.')
-      }
-    }
-    reader.readAsText(file)
-  }
-
-  return (
-    <div className="space-y-2">
-      <Label>
-        Service Account JSON {editing && '(leave blank to keep existing)'}
-      </Label>
-      <Tabs defaultValue="file" className="w-full">
-        <TabsList className="w-full">
-          <TabsTrigger value="file" className="flex-1 gap-1.5">
-            <Upload className="h-3.5 w-3.5" />
-            Upload File
-          </TabsTrigger>
-          <TabsTrigger value="paste" className="flex-1 gap-1.5">
-            <FileText className="h-3.5 w-3.5" />
-            Paste JSON
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="file" className="mt-3">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json,application/json"
-            className="hidden"
-            onChange={handleFileChange}
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="flex w-full flex-col items-center gap-2 rounded-md border border-dashed p-6 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary cursor-pointer"
-          >
-            <Upload className="h-8 w-8" />
-            {fileName ? (
-              <span className="font-medium text-foreground">{fileName}</span>
-            ) : (
-              <span>Click to select a service account JSON key file</span>
-            )}
-          </button>
-          {value && fileName && (
-            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-              <CheckCircle className="h-3 w-3 text-green-500" />
-              File loaded successfully
-            </p>
-          )}
-        </TabsContent>
-        <TabsContent value="paste" className="mt-3">
-          <Textarea
-            id="gcp-json"
-            rows={6}
-            className="font-mono text-xs"
-            placeholder={editing ? '(existing credentials hidden)' : '{ "type": "service_account", ... }'}
-            value={value}
-            onChange={(e) => {
-              onChange(e.target.value)
-              setFileName(null)
-            }}
-          />
-        </TabsContent>
-      </Tabs>
-    </div>
   )
 }
 

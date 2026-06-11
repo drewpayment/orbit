@@ -31,6 +31,16 @@ const (
 	ActivityDestroyInfra         = "destroyInfra"
 )
 
+// supportedProviders are the cloud providers with a deployed launches worker.
+// AWS and GCP workers were removed in the 2026-06 capability strip
+// (docs/plans/2026-06-10-strip-non-core-capabilities-implementation.md);
+// dispatching to their queues would hang forever, so unsupported providers
+// must be rejected before any activity is scheduled on a provider queue.
+var supportedProviders = map[string]bool{
+	"azure":        true,
+	"digitalocean": true,
+}
+
 // taskQueueForProvider returns the task queue name for a given cloud provider.
 func taskQueueForProvider(provider string) string {
 	return fmt.Sprintf("launches_%s", provider)
@@ -104,6 +114,15 @@ func LaunchWorkflow(ctx workflow.Context, input types.LaunchWorkflowInput) error
 			Error:    errMsg,
 		}
 		_ = workflow.ExecuteActivity(updateCtx, ActivityUpdateLaunchStatus, statusInput).Get(updateCtx, nil)
+	}
+
+	// Reject providers without a deployed worker before scheduling anything on
+	// a provider task queue — an activity on a workerless queue never completes.
+	if !supportedProviders[input.Provider] {
+		errMsg := fmt.Sprintf("unsupported cloud provider %q: no launches worker is deployed for this provider", input.Provider)
+		logger.Error("Unsupported provider", "provider", input.Provider)
+		updateStatusOnFailure(errMsg)
+		return temporal.NewNonRetryableApplicationError(errMsg, "UnsupportedProvider", nil)
 	}
 
 	// Cleanup on cancellation: destroy infra and set status to aborted

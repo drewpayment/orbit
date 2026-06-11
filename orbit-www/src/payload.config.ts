@@ -14,8 +14,6 @@ import { Workspaces } from './collections/Workspaces'
 import { WorkspaceMembers } from './collections/WorkspaceMembers'
 import { KnowledgeSpaces } from './collections/KnowledgeSpaces'
 import { KnowledgePages } from './collections/KnowledgePages'
-import { PluginRegistry } from './collections/PluginRegistry'
-import { PluginConfig } from './collections/PluginConfig'
 import { GitHubInstallations } from './collections/GitHubInstallations'
 import { Tenants } from './collections/Tenants'
 import { PageLinks } from './collections/PageLinks'
@@ -92,8 +90,6 @@ export default buildConfig({
     KnowledgeSpaces,
     KnowledgePages,
     PageLinks,
-    PluginRegistry,
-    PluginConfig,
     GitHubInstallations,
     Permissions,
     Roles,

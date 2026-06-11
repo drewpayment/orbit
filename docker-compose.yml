@@ -97,52 +97,6 @@ services:
       - temporal-worker-data:/tmp
     restart: unless-stopped
 
-  launches-worker-aws:
-    container_name: orbit-launches-worker-aws
-    build:
-      context: ./launches-worker-aws
-      dockerfile: Dockerfile
-    depends_on:
-      temporal-server:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    environment:
-      - TEMPORAL_ADDRESS=temporal-server:7233
-      - TEMPORAL_NAMESPACE=default
-      - TASK_QUEUE=launches_aws
-      - PULUMI_BACKEND_URL=s3://pulumi-state?endpoint=minio:9000&disableSSL=true&s3ForcePathStyle=true
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-orbit-admin}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-orbit-secret-key}
-      - AWS_REGION=us-east-1
-    restart: unless-stopped
-
-  launches-worker-gcp:
-    container_name: orbit-launches-worker-gcp
-    build:
-      context: ./launches-worker-gcp
-      dockerfile: Dockerfile
-    depends_on:
-      temporal-server:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    environment:
-      - TEMPORAL_ADDRESS=temporal-server:7233
-      - TEMPORAL_NAMESPACE=default
-      - TASK_QUEUE=launches_gcp
-      - PULUMI_BACKEND_URL=s3://pulumi-state?endpoint=minio:9000&disableSSL=true&s3ForcePathStyle=true
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-orbit-admin}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-orbit-secret-key}
-      - AWS_REGION=us-east-1
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/gcp-sa.json
-      - PULUMI_CONFIG_PASSPHRASE=${PULUMI_CONFIG_PASSPHRASE:-orbit-dev-passphrase}
-      - ORBIT_API_URL=http://host.docker.internal:3000
-      - ORBIT_INTERNAL_API_KEY=${ORBIT_INTERNAL_API_KEY:-orbit-internal-dev-key}
-    volumes:
-      - ./launches-worker-gcp/gcp-sa.json:/app/gcp-sa.json:ro
-    restart: unless-stopped
-
   launches-worker-azure:
     container_name: orbit-launches-worker-azure
     build:
@@ -336,54 +290,6 @@ services:
     depends_on:
       minio-init:
         condition: service_completed_successfully
-    restart: unless-stopped
-
-  # Backstage Backend (Plugin Integration)
-  # backstage-backend:
-  #   container_name: orbit-backstage
-  #   build:
-  #     context: ./services/backstage-backend
-  #     dockerfile: Dockerfile
-  #   ports:
-  #     - 7007:7007
-  #   environment:
-  #     - NODE_ENV=development
-  #     - POSTGRES_HOST=postgres
-  #     - POSTGRES_PORT=5432
-  #     - POSTGRES_USER=orbit
-  #     - POSTGRES_PASSWORD=orbit
-  #     - POSTGRES_DATABASE=backstage
-  #     - ORBIT_API_URL=http://orbit-www:3000
-  #     - CONFIG_POLL_INTERVAL=60000
-  #   depends_on:
-  #     - postgres
-  #     - redis
-  #   volumes:
-  #     - ./services/backstage-backend:/app
-  #     - /app/node_modules
-  #   restart: unless-stopped
-
-  # Go Plugins Service (Backstage proxy)
-  plugins-service:
-    container_name: orbit-plugins-service
-    build:
-      context: .
-      dockerfile: services/plugins/Dockerfile
-    ports:
-      - "50053:50053"  # gRPC
-      - "8082:8080"    # HTTP (health/metrics) - remapped to avoid conflict with temporal-ui
-    environment:
-      - GRPC_PORT=50053
-      - HTTP_PORT=8080
-      - BACKSTAGE_URL=http://backstage-backend:7007
-      - JWT_SECRET=${JWT_SECRET:-dev-secret-key}
-      - BACKSTAGE_TIMEOUT=10s
-      - GRPC_DEADLINE=15s
-      - CIRCUIT_BREAKER_TIMEOUT=30s
-      - REDIS_URL=redis://redis:6379
-    depends_on:
-      # - backstage-backend
-      - redis
     restart: unless-stopped
 
   # Kafka Runtime (Redpanda - Kafka-compatible, simpler for dev)

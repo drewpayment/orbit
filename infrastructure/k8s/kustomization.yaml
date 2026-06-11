@@ -28,10 +28,7 @@ resources:
   # - orbit-docs
   - repository-service
   - kafka-service
-  - plugins-service
   - bifrost
   - build-service
   - temporal-worker
-  - launches-worker-aws
-  - launches-worker-gcp
   - launches-worker-azure

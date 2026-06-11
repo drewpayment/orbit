@@ -1,3 +1,0 @@
-name: orbit-gcs-bucket
-runtime: nodejs
-description: Provisions a GCS bucket with configurable settings

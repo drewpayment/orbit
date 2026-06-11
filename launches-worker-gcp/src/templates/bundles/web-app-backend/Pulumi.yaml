@@ -1,3 +1,0 @@
-name: orbit-gcp-web-app-backend
-runtime: nodejs
-description: Web app backend with Cloud Run, Cloud SQL PostgreSQL, and VPC
