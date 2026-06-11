@@ -2,6 +2,7 @@ package workflows
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -161,6 +162,181 @@ func TestAbortAtGate_ToolRegistration(t *testing.T) {
 	toolMu.Lock()
 	require.False(t, toolResolved.Approved, "aborted tool gate must reject the tool row")
 	toolMu.Unlock()
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	require.GreaterOrEqual(t, len(rec.resolves), 1)
+	require.Equal(t, "aborted", rec.resolves[len(rec.resolves)-1].in.Status)
+}
+
+// Abort while parked at a destructive_command gate (the synthesized gate
+// that fires when shell_exec hits a destructive pattern). QA: abort here was
+// still a no-op (stuck awaiting_approval >25s) after the tool_registration
+// fix. The run must terminate aborted and the pending row resolved aborted.
+func TestAbortAtGate_DestructiveCommand(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	registerSandboxStubs(env)
+	rec := &pendingApprovalsRecorder{}
+	rec.Register(env, "row-destr")
+
+	// SandboxedShell must NOT run for a rejected/aborted destructive command.
+	var shellRan bool
+	var shellMu sync.Mutex
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.SandboxedShellInput) (agentactivity.SandboxedShellResult, error) {
+			shellMu.Lock()
+			shellRan = true
+			shellMu.Unlock()
+			return agentactivity.SandboxedShellResult{ExitCode: 0}, nil
+		},
+		activity.RegisterOptions{Name: agentcontract.ActivitySandboxedShell},
+	)
+
+	llm := &scriptedLLM{
+		steps: []agentactivity.LLMNextStepResult{
+			{
+				ToolCalls: []providers.ToolCall{
+					{ID: "tc-shell", Name: ToolShellExec, Arguments: map[string]any{
+						"command": "terraform destroy -auto-approve",
+					}},
+				},
+				StopReason: "tool_use",
+			},
+		},
+	}
+	env.RegisterActivityWithOptions(llm.Run, activity.RegisterOptions{Name: ActivityLLMNextStep})
+
+	env.RegisterDelayedCallback(func() {
+		var snap AgentSnapshot
+		for i := 0; i < 20; i++ {
+			q, _ := env.QueryWorkflow(AgentQuerySnapshot)
+			_ = q.Get(&snap)
+			if len(snap.PendingApprovals) == 1 {
+				break
+			}
+		}
+		require.Len(t, snap.PendingApprovals, 1, "destructive gate must be open")
+		require.Equal(t, agentcontract.ApprovalKindDestructiveCmd, snap.PendingApprovals[0].Kind)
+		env.SignalWorkflow(AgentSignalAbort, AbortSignalPayload{RequestedBy: "u", Reason: "stop"})
+	}, 100*time.Millisecond)
+
+	env.ExecuteWorkflow(InfrastructureAgentWorkflow, InfrastructureAgentInput{
+		AgentRunID: "run-abort-destr", WorkspaceID: "ws-1", LLMProviderID: "p", InitialPrompt: "destroy",
+	})
+
+	require.True(t, env.IsWorkflowCompleted(), "abort at destructive gate must terminate the run")
+	require.NoError(t, env.GetWorkflowError())
+
+	shellMu.Lock()
+	require.False(t, shellRan, "destructive command must not execute after abort")
+	shellMu.Unlock()
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	require.GreaterOrEqual(t, len(rec.resolves), 1)
+	require.Equal(t, "aborted", rec.resolves[len(rec.resolves)-1].in.Status)
+}
+
+// Reproduces the QA destructive-gate hang: OpenPendingApproval 500s and
+// retries (Investigation B's agentRun CastError), so the main coroutine is
+// blocked in openPendingApproval's .Get() — BEFORE it reaches awaitApproval —
+// when the abort arrives. The abort must still preempt this pre-gate activity
+// wait and terminate the run promptly, not hang ~25s for the retries.
+func TestAbortAtGate_PreemptsDuringOpenPendingApproval(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	registerSandboxStubs(env)
+
+	// OpenPendingApproval always errors (like the route's 500), forcing the
+	// activity into its retry loop where the main coroutine blocks.
+	var openAttempts int
+	var openMu sync.Mutex
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.OpenPendingApprovalInput) (agentactivity.OpenPendingApprovalResult, error) {
+			openMu.Lock()
+			openAttempts++
+			openMu.Unlock()
+			return agentactivity.OpenPendingApprovalResult{}, errors.New("pending-approvals open: HTTP 500: Cast to ObjectId failed")
+		},
+		activity.RegisterOptions{Name: agentcontract.ActivityOpenPendingApproval},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.ResolvePendingApprovalInput) error { return nil },
+		activity.RegisterOptions{Name: agentcontract.ActivityResolvePendingApproval},
+	)
+
+	llm := &scriptedLLM{
+		steps: []agentactivity.LLMNextStepResult{
+			{
+				ToolCalls: []providers.ToolCall{
+					{ID: "tc-shell", Name: ToolShellExec, Arguments: map[string]any{
+						"command": "terraform destroy -auto-approve",
+					}},
+				},
+				StopReason: "tool_use",
+			},
+		},
+	}
+	env.RegisterActivityWithOptions(llm.Run, activity.RegisterOptions{Name: ActivityLLMNextStep})
+
+	// Abort shortly after the gate status flips (which happens BEFORE
+	// openPendingApproval). The run must terminate promptly regardless of the
+	// failing open retries.
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(AgentSignalAbort, AbortSignalPayload{RequestedBy: "u", Reason: "stop"})
+	}, 200*time.Millisecond)
+
+	env.ExecuteWorkflow(InfrastructureAgentWorkflow, InfrastructureAgentInput{
+		AgentRunID: "run-abort-openfail", WorkspaceID: "ws-1", LLMProviderID: "p", InitialPrompt: "destroy",
+	})
+
+	require.True(t, env.IsWorkflowCompleted(), "abort must preempt a failing pre-gate openPendingApproval")
+	require.NoError(t, env.GetWorkflowError())
+}
+
+// Abort while parked at a request_approval gate (the explicit gate the agent
+// opens via the request_approval tool). Covers the fourth gate kind.
+func TestAbortAtGate_RequestApproval(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	registerSandboxStubs(env)
+	rec := &pendingApprovalsRecorder{}
+	rec.Register(env, "row-req")
+
+	llm := &scriptedLLM{
+		steps: []agentactivity.LLMNextStepResult{
+			{
+				ToolCalls: []providers.ToolCall{
+					{ID: "tc-req", Name: ToolRequestApproval, Arguments: map[string]any{
+						"title": "Confirm", "kind": "custom", "body_markdown": "?",
+					}},
+				},
+				StopReason: "tool_use",
+			},
+		},
+	}
+	env.RegisterActivityWithOptions(llm.Run, activity.RegisterOptions{Name: ActivityLLMNextStep})
+
+	env.RegisterDelayedCallback(func() {
+		var snap AgentSnapshot
+		for i := 0; i < 20; i++ {
+			q, _ := env.QueryWorkflow(AgentQuerySnapshot)
+			_ = q.Get(&snap)
+			if len(snap.PendingApprovals) == 1 {
+				break
+			}
+		}
+		require.Len(t, snap.PendingApprovals, 1)
+		env.SignalWorkflow(AgentSignalAbort, AbortSignalPayload{RequestedBy: "u", Reason: "stop"})
+	}, 100*time.Millisecond)
+
+	env.ExecuteWorkflow(InfrastructureAgentWorkflow, InfrastructureAgentInput{
+		AgentRunID: "run-abort-req", WorkspaceID: "ws-1", LLMProviderID: "p", InitialPrompt: "confirm something",
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
 
 	rec.mu.Lock()
 	defer rec.mu.Unlock()

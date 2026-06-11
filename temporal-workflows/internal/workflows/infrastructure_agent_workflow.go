@@ -719,6 +719,14 @@ func markRun(ctx workflow.Context, workflowID string, in agentactivity.UpdateAge
 // resolves correctly inside the chat thread, the queue page just won't
 // show that one row.
 func openPendingApproval(ctx workflow.Context, state *agentState, input *InfrastructureAgentInput, approvalID, kind, title, body string, payload map[string]any) {
+	// Best-effort and abort-aware: if the loop was already cancelled (abort
+	// in flight), skip the synchronous activity entirely so we don't sit in a
+	// retry loop against a slow/erroring pending-approvals endpoint while the
+	// user is trying to abort. The queue row is a convenience mirror; the gate
+	// still resolves correctly without it.
+	if ctx.Err() != nil {
+		return
+	}
 	in := agentactivity.OpenPendingApprovalInput{
 		WorkspaceID:  input.WorkspaceID,
 		WorkflowID:   workflow.GetInfo(ctx).WorkflowExecution.ID,
@@ -2344,6 +2352,13 @@ const approvalTimedOutReason = "approval timed out"
 // timer rather than relying on Receive returning more=false on cancellation,
 // because that contract isn't reliable across SDK versions.
 func awaitApproval(ctx workflow.Context, approvalCh workflow.ReceiveChannel, approvalID string, timeout time.Duration) (ApprovalSignalPayload, bool, bool) {
+	// Fast-path: if abort already cancelled the loop before we got here (e.g.
+	// it fired while the gate's pre-wait audit / openPendingApproval activity
+	// was still running), report aborted immediately instead of arming a
+	// timer and entering the select.
+	if ctx.Err() != nil {
+		return ApprovalSignalPayload{}, true, false
+	}
 	deadline := workflow.NewTimer(ctx, timeout)
 	for {
 		var resolved ApprovalSignalPayload
