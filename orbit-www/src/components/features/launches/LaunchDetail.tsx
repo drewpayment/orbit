@@ -36,7 +36,7 @@ import { toast } from 'sonner'
 interface LaunchDoc {
   id: string
   name: string
-  provider: 'aws' | 'gcp' | 'azure' | 'digitalocean'
+  provider: 'azure' | 'digitalocean'
   region: string
   status: string
   template?: { id: string; name?: string; slug?: string } | string

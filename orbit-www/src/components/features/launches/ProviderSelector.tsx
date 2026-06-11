@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { ProviderIcon } from './ProviderIcon'
 
-export type Provider = 'aws' | 'gcp' | 'azure' | 'digitalocean'
+export type Provider = 'azure' | 'digitalocean'
 
 interface ProviderInfo {
   id: Provider
@@ -14,8 +14,6 @@ interface ProviderInfo {
 }
 
 const PROVIDERS: ProviderInfo[] = [
-  { id: 'aws', name: 'AWS', description: 'Amazon Web Services' },
-  { id: 'gcp', name: 'GCP', description: 'Google Cloud Platform' },
   { id: 'azure', name: 'Azure', description: 'Microsoft Azure' },
   { id: 'digitalocean', name: 'DigitalOcean', description: 'DigitalOcean' },
 ]

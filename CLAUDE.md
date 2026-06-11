@@ -345,6 +345,11 @@ Historical planning artifacts from an earlier planning workflow. See `specs/READ
   - 19092: Kafka/Redpanda API
 - **Node version**: Requires Node.js 18.20.2+ or 20.9.0+
 - **Go version**: Requires Go 1.21+
+- **Frozen capabilities**: Container Registry (port 5050) and Health Monitoring are
+  functional but accept no new feature work — see the "Frozen Capabilities" section in
+  README.md and `docs/plans/2026-06-09-product-focus-strategy.md`. Cloud launches support
+  Azure and DigitalOcean only; the AWS/GCP workers, plugins service, and Backstage backend
+  were removed (last present at git tag `archive/pre-strip-2026-06-10`).
 
 ## License
 

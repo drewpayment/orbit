@@ -134,8 +134,6 @@ export const Launches: CollectionConfig = {
       type: 'select',
       required: true,
       options: [
-        { label: 'AWS', value: 'aws' },
-        { label: 'GCP', value: 'gcp' },
         { label: 'Azure', value: 'azure' },
         { label: 'DigitalOcean', value: 'digitalocean' },
       ],

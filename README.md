@@ -37,6 +37,19 @@ Durable execution for long-running operations via Temporal. Repository cloning, 
 ### 🔐 Multi-Tenant Architecture
 Workspace-level isolation with row-level security. Each workspace gets its own resources, permissions, and quotas. OAuth 2.0 integration with GitHub, Google, and Azure AD.
 
+### 🧊 Frozen Capabilities
+Per the product focus strategy (`docs/plans/2026-06-09-product-focus-strategy.md`), two
+capabilities remain functional but accept no new feature work:
+
+- **Container Registry** (port 5050, `/api/registry/token`, `RegistryConfigs`/`RegistryImages`
+  collections) — GHCR/ACR cover this; the built-in registry stays as-is.
+- **Health Monitoring** (`HealthChecks` collection, `health_check_workflow.go`, catalog
+  health badges) — SLO/alerting belongs to dedicated observability tooling; only the
+  catalog badge is maintained.
+
+Cloud launches are **Azure and DigitalOcean only** — the AWS and GCP workers were removed
+(last present at git tag `archive/pre-strip-2026-06-10`).
+
 ## 🏛️ Architecture
 
 ```

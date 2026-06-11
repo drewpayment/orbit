@@ -125,19 +125,6 @@ export const Workspaces: CollectionConfig = {
         },
       },
     },
-    {
-      name: 'plugins',
-      type: 'ui',
-      label: 'Plugins',
-      admin: {
-        components: {
-          Field: {
-            path: '/components/admin/fields/WorkspacePluginsField',
-            exportName: 'WorkspacePluginsField',
-          },
-        },
-      },
-    },
   ],
   hooks: {
     beforeValidate: [

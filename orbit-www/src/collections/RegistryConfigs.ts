@@ -1,3 +1,6 @@
+// FROZEN capability: functional but accepts no new feature work.
+// See README.md "Frozen Capabilities" and docs/plans/2026-06-09-product-focus-strategy.md.
+
 import type { CollectionConfig, Where } from 'payload'
 import { encrypt } from '@/lib/encryption'
 

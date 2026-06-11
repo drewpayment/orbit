@@ -1,3 +1,5 @@
+// FROZEN capability: health monitoring is functional but accepts no new feature work.
+// See README.md "Frozen Capabilities" and docs/plans/2026-06-09-product-focus-strategy.md.
 package workflows
 
 import (

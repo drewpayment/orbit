@@ -18,8 +18,8 @@ dev-local: ## Start infrastructure in Docker, run orbit-www locally
 		redpanda redpanda-console \
 		minio minio-init orbit-registry \
 		bifrost traefik \
-		repository-service kafka-service plugins-service build-service buildkit \
-		launches-worker-aws launches-worker-gcp launches-worker-azure \
+		repository-service kafka-service build-service buildkit \
+		launches-worker-azure \
 		prometheus
 	@echo ""
 	@echo "✅ All services started!"
@@ -45,7 +45,6 @@ test-go: ## Run Go tests with coverage
 	@cd services/build-service && go test -v -race -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
 	@cd services/kafka && go test -v -race -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
 	@cd services/bifrost && go test -v -race -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
-	@cd services/plugins && go test -v -race -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
 	@cd temporal-workflows && go test -v -race -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
 
 test-frontend: ## Run frontend tests
@@ -66,7 +65,6 @@ lint-go: ## Lint Go code
 	@cd services/build-service && golangci-lint run
 	@cd services/kafka && golangci-lint run
 	@cd services/bifrost && golangci-lint run
-	@cd services/plugins && golangci-lint run
 	@cd temporal-workflows && golangci-lint run
 
 lint-frontend: ## Lint frontend code
@@ -81,7 +79,6 @@ security: ## Run security scans
 	@cd services/build-service && gosec ./...
 	@cd services/kafka && gosec ./...
 	@cd services/bifrost && gosec ./...
-	@cd services/plugins && gosec ./...
 	@cd temporal-workflows && gosec ./...
 	@cd orbit-www && pnpm audit --audit-level moderate
 
@@ -93,7 +90,6 @@ build: ## Build all services
 	@cd services/build-service && go build -o bin/build-service ./cmd/server
 	@cd services/kafka && go build -o bin/kafka ./cmd/server
 	@cd services/bifrost && go build -o bin/bifrost ./cmd/bifrost
-	@cd services/plugins && go build -o bin/plugins ./cmd/server
 	@cd temporal-workflows && go build -o bin/worker ./cmd/worker
 	@cd orbit-www && pnpm build
 
@@ -123,28 +119,3 @@ install-deps: ## Install development dependencies
 	@go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
 	@echo "Installing frontend dependencies (includes buf CLI)..."
 	@cd orbit-www && pnpm install
-	@echo "Installing Backstage backend dependencies..."
-	@cd services/backstage-backend && yarn install
-
-backstage-dev: ## Start Backstage backend in development mode
-	@echo "Starting Backstage backend..."
-	@cd services/backstage-backend && yarn dev
-
-backstage-build: ## Build Backstage backend
-	@echo "Building Backstage backend..."
-	@cd services/backstage-backend && yarn build
-
-backstage-test: ## Test Backstage backend
-	@echo "Testing Backstage backend..."
-	@cd services/backstage-backend && yarn test
-
-backstage-lint: ## Lint Backstage backend
-	@echo "Linting Backstage backend..."
-	@cd services/backstage-backend && yarn lint
-
-backstage-audit: ## Run security audit on Backstage backend
-	@echo "Auditing Backstage backend..."
-	@cd services/backstage-backend && npm audit --audit-level=high
-
-dev-with-backstage: ## Start full development environment including Backstage
-	docker-compose up -d
