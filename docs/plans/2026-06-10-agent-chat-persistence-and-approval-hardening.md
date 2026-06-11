@@ -1,6 +1,10 @@
 # Agent Chat Persistence & Tool-Approval Hardening
 
-**Status:** In progress
+**Status:** Implemented — QA-verified 2026-06-11. All ACs pass in browser/server
+except AC-5/AC-8/AC-9/AC-10 which are covered by passing unit/workflow suites
+(live LLM provider unreachable during QA). One regression (terminal SSR status
+downgraded by backfilled status_update — "BUG-1") was found by QA and fixed in
+the same branch with a regression test.
 **Owner:** Chief architect (Claude) + agent engineering team
 **Branch:** `feat/agent-chat-persistence-and-approvals`
 **Date:** 2026-06-10
