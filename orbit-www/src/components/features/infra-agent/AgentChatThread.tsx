@@ -143,6 +143,11 @@ export function AgentChatThread({
   // The run was already finished when the page loaded: render the persisted
   // transcript without opening a live connection.
   const startedTerminal = initialStatus ? TERMINAL_STATUSES.includes(initialStatus) : false
+  // Read inside the stable ingest() callback so a replayed historical
+  // status_update can't downgrade a terminal SSR status (BUG-1). Kept in a
+  // ref so ingest stays referentially stable (empty dep array).
+  const startedTerminalRef = useRef(startedTerminal)
+  startedTerminalRef.current = startedTerminal
   // Set when the workflow signals a recoverable LLM error — see issue #42.
   // Cleared when any subsequent status_update arrives without the sentinel
   // prefix (e.g. status goes back to "running" after /retry).
@@ -277,6 +282,13 @@ export function AgentChatThread({
         setPendingApprovals((prev) => prev.filter((a) => a.approvalId !== ar.approvalId))
       }
       if (e.kind === 'status_update' && e.statusUpdate) {
+        // When the run was already terminal at SSR time, a replayed
+        // historical status_update (e.g. the last persisted "running") must
+        // not downgrade the effective state back to non-terminal — that would
+        // re-enable the composer and hide the ended treatment against a dead
+        // workflow (BUG-1). Ignore status/message mutations from backfill in
+        // that case; the SSR-provided terminal status stands.
+        if (startedTerminalRef.current) continue
         setStatus(e.statusUpdate.status)
         const msg = e.statusUpdate.message ?? ''
         if (msg.startsWith(RECOVERABLE_LLM_ERROR_PREFIX)) {

@@ -75,6 +75,35 @@ describe('AgentChatThread', () => {
     expect(FakeEventSource.instances[0].url).toContain('/api/agent/wf-1/stream?since=5')
   })
 
+  it('keeps a terminal SSR run terminal even when backfill ends in a non-terminal status_update (BUG-1)', () => {
+    // Repro of agent-qa-synthetic-2: Mongo status=failed, but the persisted
+    // transcript's last status_update says "running". The replayed status
+    // must NOT downgrade the effective terminal state.
+    render(
+      <AgentChatThread
+        workspaceId="ws1"
+        workflowId="wf-1"
+        initialStatus="failed"
+        initialEvents={[
+          turn('1', 't1', 'user', 'go'),
+          {
+            sequence: '2',
+            emittedAt: '2024-01-01T00:00:00.000Z',
+            kind: 'status_update',
+            statusUpdate: { status: 'running', message: '' },
+          },
+        ]}
+      />,
+    )
+
+    // No live connection for a terminal run.
+    expect(FakeEventSource.instances).toHaveLength(0)
+    // Composer reflects the ended state (not enabled/awaiting).
+    expect(screen.getByPlaceholderText(/Run finished/i)).toBeInTheDocument()
+    // No live/connecting/reconnecting badge.
+    expect(screen.queryByText(/connecting…|reconnecting…/i)).not.toBeInTheDocument()
+  })
+
   it('does not open SSE when the run is already terminal', () => {
     render(
       <AgentChatThread
