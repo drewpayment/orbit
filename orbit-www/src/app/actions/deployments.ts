@@ -434,7 +434,7 @@ export async function getGeneratedFiles(deploymentId: string) {
     const app = deployment.app
     const appDoc = typeof app === 'string'
       ? await payload.findByID({ collection: 'apps', id: app, depth: 0, overrideAccess: true })
-      : (app as any)
+      : app
     if (!appDoc) {
       return { success: false, error: 'App not found', files: [] }
     }
@@ -991,7 +991,7 @@ export async function startDeployToLaunch(deploymentId: string) {
   // Verify workspace membership before triggering a cloud deploy
   const deployApp = typeof deployment.app === 'string'
     ? await payload.findByID({ collection: 'apps', id: deployment.app, depth: 0, overrideAccess: true })
-    : (deployment.app as any)
+    : deployment.app
   if (!deployApp) {
     return { success: false, error: 'App not found' }
   }

@@ -77,7 +77,7 @@ export const EnvironmentVariables: CollectionConfig = {
       if (!user) return false
 
       // Platform admins can see all variables
-      if ((user as any).role === 'super_admin' || (user as any).role === 'admin') return true
+      if (user.role === 'super_admin' || user.role === 'admin') return true
 
       // workspace-members.user stores the Better Auth ID — fail closed if absent.
       const userKey = user.betterAuthId
@@ -108,7 +108,7 @@ export const EnvironmentVariables: CollectionConfig = {
       if (!user) return false
 
       // Platform admins can create all variables
-      if ((user as any).role === 'super_admin' || (user as any).role === 'admin') return true
+      if (user.role === 'super_admin' || user.role === 'admin') return true
 
       if (!data?.workspace) return false
 
@@ -138,7 +138,7 @@ export const EnvironmentVariables: CollectionConfig = {
       if (!user || !id) return false
 
       // Platform admins can update all variables
-      if ((user as any).role === 'super_admin' || (user as any).role === 'admin') return true
+      if (user.role === 'super_admin' || user.role === 'admin') return true
 
       const envVar = await payload.findByID({
         collection: 'environment-variables',
@@ -172,7 +172,7 @@ export const EnvironmentVariables: CollectionConfig = {
       if (!user || !id) return false
 
       // Platform admins can delete all variables
-      if ((user as any).role === 'super_admin' || (user as any).role === 'admin') return true
+      if (user.role === 'super_admin' || user.role === 'admin') return true
 
       const envVar = await payload.findByID({
         collection: 'environment-variables',

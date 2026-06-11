@@ -263,7 +263,7 @@ export async function retryLaunch(launchId: string) {
 
   // Explicit workspace membership check — defense-in-depth, consistent with
   // startLaunch/deleteLaunch siblings. session.user.id is the Better Auth ID.
-  const retryWsId = typeof launch.workspace === 'string' ? launch.workspace : (launch.workspace as any)?.id
+  const retryWsId = typeof launch.workspace === 'string' ? launch.workspace : launch.workspace.id
   if (!retryWsId) {
     return { success: false, error: 'Launch has no workspace' }
   }
@@ -322,7 +322,7 @@ export async function deleteLaunch(launchId: string) {
   }
 
   // Verify workspace membership before allowing delete
-  const delWsId = typeof launch.workspace === 'string' ? launch.workspace : (launch.workspace as any)?.id
+  const delWsId = typeof launch.workspace === 'string' ? launch.workspace : launch.workspace.id
   if (!delWsId) {
     return { success: false, error: 'Launch has no workspace' }
   }
@@ -375,7 +375,7 @@ export async function getLaunchStatus(launchId: string) {
     }
 
     // Verify workspace membership before returning launch data
-    const statusWsId = typeof launch.workspace === 'string' ? launch.workspace : (launch.workspace as any)?.id
+    const statusWsId = typeof launch.workspace === 'string' ? launch.workspace : launch.workspace.id
     if (!statusWsId) {
       return null
     }

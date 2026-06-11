@@ -39,7 +39,7 @@ export const RegistryConfigs: CollectionConfig = {
         depth: 0,
       })
       if (!cfg?.workspace) return false
-      const cfgWorkspaceId = typeof cfg.workspace === 'string' ? cfg.workspace : (cfg.workspace as any).id
+      const cfgWorkspaceId = typeof cfg.workspace === 'string' ? cfg.workspace : cfg.workspace.id
       const workspaceIds = await getWorkspaceIdsForUser(payload, userId)
       return workspaceIds.includes(cfgWorkspaceId)
     },

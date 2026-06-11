@@ -18,6 +18,13 @@ function makePayload(memberDocs: unknown[]) {
   } as unknown as import('payload').Payload
 }
 
+/** Shape of the payload.find arguments the helper is expected to build. */
+interface FindCallArgs {
+  where?: { and?: Array<Record<string, { equals?: unknown } | undefined>> }
+  limit?: number
+  overrideAccess?: boolean
+}
+
 // ---------------------------------------------------------------------------
 // requireWorkspaceMembership
 // ---------------------------------------------------------------------------
@@ -44,7 +51,7 @@ describe('requireWorkspaceMembership', () => {
     }
     const [callArgs] = vi.mocked(payload.find).mock.calls
     // The where clause must include user: { equals: 'bauth-xyz' }
-    const andClauses = (callArgs[0] as any).where?.and ?? []
+    const andClauses = (callArgs[0] as FindCallArgs).where?.and ?? []
     const userClause = andClauses.find((c: any) => c?.user?.equals !== undefined)
     expect(userClause?.user?.equals).toBe('bauth-xyz')
   })
@@ -57,9 +64,10 @@ describe('requireWorkspaceMembership', () => {
       // expected
     }
     const [callArgs] = vi.mocked(payload.find).mock.calls
-    expect((callArgs[0] as any).limit).toBe(1)
-    expect((callArgs[0] as any).overrideAccess).toBe(true)
-    const andClauses = (callArgs[0] as any).where?.and ?? []
+    const findArgs = callArgs[0] as FindCallArgs
+    expect(findArgs.limit).toBe(1)
+    expect(findArgs.overrideAccess).toBe(true)
+    const andClauses = findArgs.where?.and ?? []
     const wsClause = andClauses.find((c: any) => c?.workspace?.equals !== undefined)
     expect(wsClause?.workspace?.equals).toBe('ws-99')
     const statusClause = andClauses.find((c: any) => c?.status?.equals !== undefined)

@@ -621,7 +621,7 @@ export async function listServiceAccounts(
 
     const vcWorkspaceId = typeof virtualCluster.workspace === 'string'
       ? virtualCluster.workspace
-      : (virtualCluster.workspace as any)?.id
+      : virtualCluster.workspace?.id
 
     if (!vcWorkspaceId) {
       return { success: false, error: 'Virtual cluster has no workspace' }
