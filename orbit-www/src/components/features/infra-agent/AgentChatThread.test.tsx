@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, cleanup, act } from '@testing-library/react'
+import { render, screen, cleanup, act, fireEvent, waitFor } from '@testing-library/react'
 
 // The server actions are async server functions; stub them so the client
 // component imports cleanly under jsdom.
@@ -13,7 +13,14 @@ vi.mock('@/app/actions/infra-agent', () => ({
 }))
 
 import { AgentChatThread } from './AgentChatThread'
+import { abortAgentRun } from '@/app/actions/infra-agent'
 import type { AgentEventDTO } from './lib/agent-event-dto'
+
+const RUN_CONTEXT = {
+  title: 'Test run',
+  startedAtIso: '2024-01-01T00:00:00.000Z',
+  workspaceName: 'Engineering',
+}
 
 // ── EventSource test double ───────────────────────────────────────────────
 class FakeEventSource {
@@ -50,6 +57,16 @@ describe('AgentChatThread', () => {
     // jsdom doesn't implement Element.scrollTo; the auto-scroll effect calls it.
     if (!('scrollTo' in Element.prototype)) {
       ;(Element.prototype as any).scrollTo = () => {}
+    }
+    // jsdom has no IntersectionObserver; the header-visibility effect (active
+    // when a run `context` is rendered) constructs one.
+    ;(globalThis as any).IntersectionObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+      takeRecords() {
+        return []
+      }
     }
   })
   afterEach(() => {
@@ -160,5 +177,54 @@ describe('AgentChatThread', () => {
     })
 
     expect(screen.getAllByText('hello world')).toHaveLength(1)
+  })
+
+  it('surfaces an inline error when Abort fails (BUG-3)', async () => {
+    ;(abortAgentRun as any).mockResolvedValue({ success: false, error: 'workflow not found' })
+
+    render(
+      <AgentChatThread
+        workspaceId="ws1"
+        workflowId="wf-1"
+        initialStatus="running"
+        context={RUN_CONTEXT}
+        initialEvents={[turn('1', 't1', 'user', 'go')]}
+      />,
+    )
+
+    // Abort buttons live in the RunHeader and FloatingStatusBar; either click
+    // routes to the same onAbort handler.
+    const abortBtn = screen.getAllByRole('button', { name: /abort/i })[0]
+    fireEvent.click(abortBtn)
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/workflow not found/i)
+    })
+    expect(abortAgentRun).toHaveBeenCalledWith({
+      workspaceId: 'ws1',
+      workflowId: 'wf-1',
+      reason: 'user requested abort',
+    })
+  })
+
+  it('treats a clean stream close (`done`) as ended — composer disabled', () => {
+    render(
+      <AgentChatThread
+        workspaceId="ws1"
+        workflowId="wf-1"
+        initialStatus="running"
+        initialEvents={[turn('1', 't1', 'user', 'go')]}
+      />,
+    )
+
+    // Live initially: composer is enabled (not the ended placeholder).
+    expect(screen.queryByPlaceholderText(/Run finished/i)).not.toBeInTheDocument()
+
+    act(() => {
+      FakeEventSource.instances[0].emit('done')
+    })
+
+    // Stream ended without an explicit terminal status_update → ended state.
+    expect(screen.getByPlaceholderText(/Run finished/i)).toBeInTheDocument()
   })
 })

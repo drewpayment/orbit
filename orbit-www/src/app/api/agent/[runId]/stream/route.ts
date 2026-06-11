@@ -38,6 +38,8 @@ const TERMINAL_STATUSES = new Set(['completed', 'aborted', 'failed', 'timeout'])
 const GONE_SUMMARY =
   'Workflow history no longer available (Temporal retention expired or workflow terminated)'
 
+const DONE_SUMMARY = 'Workflow closed without recording a terminal status'
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ runId: string }> },
@@ -108,6 +110,15 @@ export async function GET(
             `data: ${JSON.stringify(dto)}\n\n`
           controller.enqueue(encoder.encode(lines))
         }
+        // The gRPC stream completed normally. This happens when the workflow
+        // finished AND when it was externally terminated while still
+        // queryable (so we never hit the NotFound path). If the workflow's own
+        // markRun didn't record a terminal status, the Mongo run is stranded
+        // looking live — reconcile it. Re-read fresh: markRun may have set a
+        // terminal status mid-stream, which we must not overwrite.
+        if (!abort.signal.aborted) {
+          await reconcileNonTerminalRun(payload, run.id, DONE_SUMMARY)
+        }
         controller.enqueue(encoder.encode('event: done\ndata: {}\n\n'))
       } catch (err) {
         if (abort.signal.aborted) {
@@ -117,7 +128,7 @@ export async function GET(
           // workflow was terminated). Degrade gracefully: tell the client to
           // stop reconnecting and keep its saved history, and reconcile the
           // Mongo run if it's stranded in a non-terminal status.
-          await reconcileGoneRun(payload, run.id, run.status as string)
+          await reconcileNonTerminalRun(payload, run.id, GONE_SUMMARY)
           controller.enqueue(encoder.encode('event: gone\ndata: {}\n\n'))
         } else {
           const errPayload = JSON.stringify({ error: (err as Error).message ?? 'stream error' })
@@ -149,24 +160,34 @@ export async function GET(
 }
 
 /**
- * When the Temporal workflow is gone but the Mongo run is still in a
- * non-terminal status, mark it `failed` so the run list and reopened views
- * stop presenting it as live. Best-effort: a failure here must not break the
- * SSE response.
+ * When the stream ends (workflow gone, or closed without a terminal status)
+ * but the Mongo run is still non-terminal, mark it `failed` so the run list
+ * and reopened views stop presenting it as live.
+ *
+ * Re-reads the run's CURRENT status rather than trusting the value captured
+ * at connect time: the workflow's own markRun may have set a terminal status
+ * mid-stream, and we must not overwrite it. Best-effort — a failure here must
+ * not break the SSE response.
  */
-async function reconcileGoneRun(
+async function reconcileNonTerminalRun(
   payload: Awaited<ReturnType<typeof getPayload>>,
   runId: string,
-  status: string,
+  summary: string,
 ): Promise<void> {
-  if (TERMINAL_STATUSES.has(status)) return
   try {
+    const fresh = await payload.findByID({
+      collection: 'agent-runs',
+      id: runId,
+      depth: 0,
+      overrideAccess: true,
+    })
+    if (!fresh || TERMINAL_STATUSES.has(fresh.status as string)) return
     await payload.update({
       collection: 'agent-runs',
       id: runId,
       data: {
         status: 'failed',
-        summary: GONE_SUMMARY,
+        summary,
         endedAt: new Date().toISOString(),
       },
       overrideAccess: true,

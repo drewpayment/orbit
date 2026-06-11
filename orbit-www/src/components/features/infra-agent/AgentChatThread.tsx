@@ -134,6 +134,11 @@ export function AgentChatThread({
   // Set when the stream reports the workflow is gone (Temporal history purged)
   // — we stop reconnecting and surface a "showing saved history" banner.
   const [liveUnavailable, setLiveUnavailable] = useState(false)
+  // Set when the SSE stream closes cleanly (`done`). The gRPC stream completes
+  // when the workflow finished OR was externally terminated; either way the
+  // live feed is over, so the run is ended even if a terminal status_update
+  // never arrived mid-stream (the route reconciles Mongo on its side).
+  const [streamEnded, setStreamEnded] = useState(false)
   // Highest sequence we've ingested. Tracked in a ref so the SSE effect reads
   // the post-backfill cursor without re-subscribing when it changes.
   const maxSeqRef = useRef(0n)
@@ -152,6 +157,9 @@ export function AgentChatThread({
   // Cleared when any subsequent status_update arrives without the sentinel
   // prefix (e.g. status goes back to "running" after /retry).
   const [recoveryError, setRecoveryError] = useState<string | null>(null)
+  // Surfaced when an Abort request fails so the click isn't a silent no-op
+  // (BUG-3). Cleared on the next abort attempt.
+  const [abortError, setAbortError] = useState<string | null>(null)
   const [connection, setConnection] = useState<'connecting' | 'live' | 'reconnecting' | 'closed'>('connecting')
   const [input, setInput] = useState('')
   const [pending, startTransition] = useTransition()
@@ -370,6 +378,7 @@ export function AgentChatThread({
       es.addEventListener('done', () => {
         cancelled = true
         setConnection('closed')
+        setStreamEnded(true)
         es?.close()
       })
 
@@ -463,15 +472,23 @@ export function AgentChatThread({
       await rejectAgentAction({ workspaceId, workflowId, approvalId, reason: 'rejected' })
     })
 
-  const onAbort = () =>
+  const onAbort = () => {
+    // Clear any prior failure before retrying; the button is disabled while
+    // `pending` is true (busy prop) so a second click can't race the first.
+    setAbortError(null)
     startTransition(async () => {
-      await abortAgentRun({ workspaceId, workflowId, reason: 'user requested abort' })
+      const result = await abortAgentRun({ workspaceId, workflowId, reason: 'user requested abort' })
+      if (!result.success) {
+        setAbortError(result.error || 'Failed to abort the run. Please try again.')
+      }
     })
+  }
 
-  // The run is "ended" for UI purposes when its status is terminal or when
-  // the live feed is gone (workflow purged) — either way there's nothing more
-  // to stream and the composer can't reach a live workflow.
-  const terminal = TERMINAL_STATUSES.includes(status) || liveUnavailable
+  // The run is "ended" for UI purposes when its status is terminal, the live
+  // feed is gone (workflow purged), or the stream closed cleanly (`done`) —
+  // in every case there's nothing more to stream and the composer can't reach
+  // a live workflow.
+  const terminal = TERMINAL_STATUSES.includes(status) || liveUnavailable || streamEnded
 
   // Live elapsed-time counter for the header. Tick once a second; pause
   // when the run is terminal so we don't keep re-rendering forever.
@@ -552,6 +569,15 @@ export function AgentChatThread({
           {statusMessage && (
             <span className="text-muted-foreground truncate">{statusMessage}</span>
           )}
+        </div>
+      )}
+
+      {abortError && (
+        <div
+          role="alert"
+          className="rounded-md border border-destructive/40 bg-destructive/[0.06] px-3 py-2 text-xs text-destructive"
+        >
+          Couldn&apos;t abort the run: {abortError}
         </div>
       )}
 
