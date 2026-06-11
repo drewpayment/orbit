@@ -4,8 +4,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import type { Where } from 'payload'
+import { validateInternalApiKey } from '@/lib/auth/internal-api-auth'
 
-const INTERNAL_API_KEY = process.env.ORBIT_INTERNAL_API_KEY
 
 /**
  * GET /api/internal/kafka-topics
@@ -14,13 +14,8 @@ const INTERNAL_API_KEY = process.env.ORBIT_INTERNAL_API_KEY
  */
 export async function GET(request: NextRequest) {
   // Validate API key
-  const apiKey = request.headers.get('X-API-Key')
-  if (!INTERNAL_API_KEY || apiKey !== INTERNAL_API_KEY) {
-    return NextResponse.json(
-      { error: 'Unauthorized', code: 'UNAUTHORIZED' },
-      { status: 401 }
-    )
-  }
+  const authError = validateInternalApiKey(request.headers.get('X-API-Key'))
+  if (authError) return authError
 
   try {
     const payload = await getPayload({ config: configPromise })

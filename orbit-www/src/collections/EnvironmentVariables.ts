@@ -76,14 +76,18 @@ export const EnvironmentVariables: CollectionConfig = {
     read: async ({ req: { user, payload } }) => {
       if (!user) return false
 
-      // Payload admin users can see all variables
-      if (user.collection === 'users') return true
+      // Platform admins can see all variables
+      if ((user as any).role === 'super_admin' || (user as any).role === 'admin') return true
+
+      // workspace-members.user stores the Better Auth ID — fail closed if absent.
+      const userKey = user.betterAuthId
+      if (!userKey) return false
 
       // Get user's workspace memberships
       const memberships = await payload.find({
         collection: 'workspace-members',
         where: {
-          user: { equals: user.id },
+          user: { equals: userKey },
           status: { equals: 'active' },
         },
         limit: 1000,
@@ -103,8 +107,8 @@ export const EnvironmentVariables: CollectionConfig = {
     create: async ({ req: { user, payload }, data }) => {
       if (!user) return false
 
-      // Payload admin users can create all variables
-      if (user.collection === 'users') return true
+      // Platform admins can create all variables
+      if ((user as any).role === 'super_admin' || (user as any).role === 'admin') return true
 
       if (!data?.workspace) return false
 
@@ -112,12 +116,14 @@ export const EnvironmentVariables: CollectionConfig = {
         ? data.workspace
         : data.workspace.id
 
+      const createUserKey = user.betterAuthId
+      if (!createUserKey) return false
       const members = await payload.find({
         collection: 'workspace-members',
         where: {
           and: [
             { workspace: { equals: workspaceId } },
-            { user: { equals: user.id } },
+            { user: { equals: createUserKey } },
             { role: { in: ['owner', 'admin'] } },
             { status: { equals: 'active' } },
           ],
@@ -131,8 +137,8 @@ export const EnvironmentVariables: CollectionConfig = {
     update: async ({ req: { user, payload }, id }) => {
       if (!user || !id) return false
 
-      // Payload admin users can update all variables
-      if (user.collection === 'users') return true
+      // Platform admins can update all variables
+      if ((user as any).role === 'super_admin' || (user as any).role === 'admin') return true
 
       const envVar = await payload.findByID({
         collection: 'environment-variables',
@@ -144,12 +150,14 @@ export const EnvironmentVariables: CollectionConfig = {
         ? envVar.workspace
         : envVar.workspace.id
 
+      const updateUserKey = user.betterAuthId
+      if (!updateUserKey) return false
       const members = await payload.find({
         collection: 'workspace-members',
         where: {
           and: [
             { workspace: { equals: workspaceId } },
-            { user: { equals: user.id } },
+            { user: { equals: updateUserKey } },
             { role: { in: ['owner', 'admin'] } },
             { status: { equals: 'active' } },
           ],
@@ -163,8 +171,8 @@ export const EnvironmentVariables: CollectionConfig = {
     delete: async ({ req: { user, payload }, id }) => {
       if (!user || !id) return false
 
-      // Payload admin users can delete all variables
-      if (user.collection === 'users') return true
+      // Platform admins can delete all variables
+      if ((user as any).role === 'super_admin' || (user as any).role === 'admin') return true
 
       const envVar = await payload.findByID({
         collection: 'environment-variables',
@@ -176,12 +184,14 @@ export const EnvironmentVariables: CollectionConfig = {
         ? envVar.workspace
         : envVar.workspace.id
 
+      const deleteUserKey = user.betterAuthId
+      if (!deleteUserKey) return false
       const members = await payload.find({
         collection: 'workspace-members',
         where: {
           and: [
             { workspace: { equals: workspaceId } },
-            { user: { equals: user.id } },
+            { user: { equals: deleteUserKey } },
             { role: { in: ['owner', 'admin'] } },
             { status: { equals: 'active' } },
           ],

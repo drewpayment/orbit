@@ -115,10 +115,32 @@ export async function startLaunch(launchId: string) {
     collection: 'launches',
     id: launchId,
     depth: 2,
+    overrideAccess: true,
   })
 
   if (!launch) {
     return { success: false, error: 'Launch not found' }
+  }
+
+  // Verify workspace membership before starting a launch workflow
+  const launchWsId = typeof launch.workspace === 'string' ? launch.workspace : launch.workspace?.id
+  if (!launchWsId) {
+    return { success: false, error: 'Launch has no workspace' }
+  }
+  const launchMembership = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { workspace: { equals: launchWsId } },
+        { user: { equals: session.user.id } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    limit: 1,
+    overrideAccess: true,
+  })
+  if (launchMembership.docs.length === 0) {
+    return { success: false, error: 'Not a member of this workspace' }
   }
 
   // Resolve template relationship
@@ -232,10 +254,33 @@ export async function retryLaunch(launchId: string) {
     collection: 'launches',
     id: launchId,
     depth: 0,
+    overrideAccess: true,
   })
 
   if (!launch) {
     return { success: false, error: 'Launch not found' }
+  }
+
+  // Explicit workspace membership check — defense-in-depth, consistent with
+  // startLaunch/deleteLaunch siblings. session.user.id is the Better Auth ID.
+  const retryWsId = typeof launch.workspace === 'string' ? launch.workspace : (launch.workspace as any)?.id
+  if (!retryWsId) {
+    return { success: false, error: 'Launch has no workspace' }
+  }
+  const retryMembership = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { workspace: { equals: retryWsId } },
+        { user: { equals: session.user.id } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    limit: 1,
+    overrideAccess: true,
+  })
+  if (retryMembership.docs.length === 0) {
+    return { success: false, error: 'Not a member of this workspace' }
   }
 
   if (!['failed', 'aborted', 'launching'].includes(launch.status)) {
@@ -269,10 +314,32 @@ export async function deleteLaunch(launchId: string) {
     collection: 'launches',
     id: launchId,
     depth: 0,
+    overrideAccess: true,
   })
 
   if (!launch) {
     return { success: false, error: 'Launch not found' }
+  }
+
+  // Verify workspace membership before allowing delete
+  const delWsId = typeof launch.workspace === 'string' ? launch.workspace : (launch.workspace as any)?.id
+  if (!delWsId) {
+    return { success: false, error: 'Launch has no workspace' }
+  }
+  const delMembership = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { workspace: { equals: delWsId } },
+        { user: { equals: session.user.id } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    limit: 1,
+    overrideAccess: true,
+  })
+  if (delMembership.docs.length === 0) {
+    return { success: false, error: 'Not a member of this workspace' }
   }
 
   if (['active', 'deorbiting', 'awaiting_approval'].includes(launch.status)) {
@@ -300,9 +367,31 @@ export async function getLaunchStatus(launchId: string) {
       collection: 'launches',
       id: launchId,
       depth: 2,
+      overrideAccess: true,
     })
 
     if (!launch) {
+      return null
+    }
+
+    // Verify workspace membership before returning launch data
+    const statusWsId = typeof launch.workspace === 'string' ? launch.workspace : (launch.workspace as any)?.id
+    if (!statusWsId) {
+      return null
+    }
+    const statusMembership = await payload.find({
+      collection: 'workspace-members',
+      where: {
+        and: [
+          { workspace: { equals: statusWsId } },
+          { user: { equals: session.user.id } },
+          { status: { equals: 'active' } },
+        ],
+      },
+      limit: 1,
+      overrideAccess: true,
+    })
+    if (statusMembership.docs.length === 0) {
       return null
     }
 
@@ -451,6 +540,23 @@ export async function getCloudAccounts(workspaceId: string) {
 
   const payload = await getPayload({ config })
 
+  // Verify workspace membership before returning cloud account data
+  const caCheck = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { workspace: { equals: workspaceId } },
+        { user: { equals: session.user.id } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    limit: 1,
+    overrideAccess: true,
+  })
+  if (caCheck.docs.length === 0) {
+    return { success: false, error: 'Not a member of this workspace', docs: [] }
+  }
+
   try {
     const accounts = await payload.find({
       collection: 'cloud-accounts',
@@ -478,6 +584,23 @@ export async function getLaunches(workspaceId: string) {
 
   const payload = await getPayload({ config })
 
+  // Verify workspace membership before enumerating launches
+  const glCheck = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { workspace: { equals: workspaceId } },
+        { user: { equals: session.user.id } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    limit: 1,
+    overrideAccess: true,
+  })
+  if (glCheck.docs.length === 0) {
+    return { success: false, error: 'Not a member of this workspace', docs: [] }
+  }
+
   try {
     const launches = await payload.find({
       collection: 'launches',
@@ -487,6 +610,7 @@ export async function getLaunches(workspaceId: string) {
       depth: 2,
       sort: '-updatedAt',
       limit: 100,
+      overrideAccess: true,
     })
 
     return { success: true, docs: launches.docs }

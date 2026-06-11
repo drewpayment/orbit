@@ -4,19 +4,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import { generatePullToken } from '@/lib/registry-auth'
+import { validateInternalApiKey } from '@/lib/auth/internal-api-auth'
 
-const INTERNAL_API_KEY = process.env.ORBIT_INTERNAL_API_KEY
 const REGISTRY_URL = process.env.ORBIT_REGISTRY_URL || 'localhost:5050'
 
 export async function POST(request: NextRequest) {
   // Validate API key
-  const apiKey = request.headers.get('X-API-Key')
-  if (!INTERNAL_API_KEY || apiKey !== INTERNAL_API_KEY) {
-    return NextResponse.json(
-      { error: 'Unauthorized', code: 'UNAUTHORIZED' },
-      { status: 401 }
-    )
-  }
+  const authError = validateInternalApiKey(request.headers.get('X-API-Key'))
+  if (authError) return authError
 
   try {
     const body = await request.json()

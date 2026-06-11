@@ -422,12 +422,40 @@ export async function getGeneratedFiles(deploymentId: string) {
     const deployment = await payload.findByID({
       collection: 'deployments',
       id: deploymentId,
-      depth: 0,
+      depth: 1,
       overrideAccess: true,
     })
 
     if (!deployment) {
       return { success: false, error: 'Deployment not found', files: [] }
+    }
+
+    // Verify workspace membership before returning sensitive generated manifests
+    const app = deployment.app
+    const appDoc = typeof app === 'string'
+      ? await payload.findByID({ collection: 'apps', id: app, depth: 0, overrideAccess: true })
+      : (app as any)
+    if (!appDoc) {
+      return { success: false, error: 'App not found', files: [] }
+    }
+    const wsId = typeof appDoc.workspace === 'string' ? appDoc.workspace : appDoc.workspace?.id
+    if (!wsId) {
+      return { success: false, error: 'App has no workspace', files: [] }
+    }
+    const members = await payload.find({
+      collection: 'workspace-members',
+      where: {
+        and: [
+          { workspace: { equals: wsId } },
+          { user: { equals: payloadUser.betterAuthId } },
+          { status: { equals: 'active' } },
+        ],
+      },
+      limit: 1,
+      overrideAccess: true,
+    })
+    if (members.docs.length === 0) {
+      return { success: false, error: 'Not a member of this workspace', files: [] }
     }
 
     const files = (deployment.generatedFiles as Array<{ path: string; content: string }>) || []
@@ -897,6 +925,23 @@ export async function getActiveLaunchesForWorkspace(workspaceId: string) {
 
   const payload = await getPayload({ config })
 
+  // Verify workspace membership
+  const memberCheck = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { workspace: { equals: workspaceId } },
+        { user: { equals: payloadUser.betterAuthId } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    limit: 1,
+    overrideAccess: true,
+  })
+  if (memberCheck.docs.length === 0) {
+    return { success: false as const, launches: [] }
+  }
+
   const launches = await payload.find({
     collection: 'launches',
     where: {
@@ -941,6 +986,33 @@ export async function startDeployToLaunch(deploymentId: string) {
 
   if (!deployment) {
     return { success: false, error: 'Deployment not found' }
+  }
+
+  // Verify workspace membership before triggering a cloud deploy
+  const deployApp = typeof deployment.app === 'string'
+    ? await payload.findByID({ collection: 'apps', id: deployment.app, depth: 0, overrideAccess: true })
+    : (deployment.app as any)
+  if (!deployApp) {
+    return { success: false, error: 'App not found' }
+  }
+  const deployWsId = typeof deployApp.workspace === 'string' ? deployApp.workspace : deployApp.workspace?.id
+  if (!deployWsId) {
+    return { success: false, error: 'App has no workspace' }
+  }
+  const deployMembers = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { workspace: { equals: deployWsId } },
+        { user: { equals: payloadUser.betterAuthId } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    limit: 1,
+    overrideAccess: true,
+  })
+  if (deployMembers.docs.length === 0) {
+    return { success: false, error: 'Not a member of this workspace' }
   }
 
   if (!deployment.launch) {

@@ -4,8 +4,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import { ensureGitHubTokenRefreshWorkflow, signalGitHubTokenRefresh } from '@/lib/temporal/client'
+import { validateInternalApiKey } from '@/lib/auth/internal-api-auth'
 
-const INTERNAL_API_KEY = process.env.ORBIT_INTERNAL_API_KEY
 
 // Refresh-soon window: signal a running workflow to refresh when the token is
 // within this of expiry, so reconciliation also rescues near-expiry tokens.
@@ -22,10 +22,8 @@ const REFRESH_SOON_MS = 10 * 60_000
  * `needs_reconnect` (terminal — requires a human).
  */
 export async function POST(request: NextRequest) {
-  const apiKey = request.headers.get('X-API-Key')
-  if (!INTERNAL_API_KEY || apiKey !== INTERNAL_API_KEY) {
-    return NextResponse.json({ error: 'Unauthorized', code: 'UNAUTHORIZED' }, { status: 401 })
-  }
+  const authError = validateInternalApiKey(request.headers.get('X-API-Key'))
+  if (authError) return authError
 
   try {
     const payload = await getPayload({ config: configPromise })

@@ -3,8 +3,8 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
+import { validateInternalApiKey } from '@/lib/auth/internal-api-auth'
 
-const INTERNAL_API_KEY = process.env.ORBIT_INTERNAL_API_KEY
 
 /**
  * POST /api/internal/pattern-instances
@@ -28,10 +28,8 @@ const INTERNAL_API_KEY = process.env.ORBIT_INTERNAL_API_KEY
  *   }
  */
 export async function POST(request: NextRequest) {
-  const apiKey = request.headers.get('X-API-Key')
-  if (!INTERNAL_API_KEY || apiKey !== INTERNAL_API_KEY) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const authError = validateInternalApiKey(request.headers.get('X-API-Key'))
+  if (authError) return authError
 
   try {
     const body = await request.json()

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import type { AgentRun } from '@/payload-types'
+import { validateInternalApiKey } from '@/lib/auth/internal-api-auth'
 
 type AgentRunStatus = AgentRun['status']
 const STATUSES: readonly AgentRunStatus[] = [
@@ -36,7 +37,6 @@ const isApprovalKind = (v: unknown): v is ApprovalKind =>
 const isApprovalResolution = (v: unknown): v is ApprovalResolution =>
   typeof v === 'string' && (APPROVAL_RESOLUTIONS as readonly string[]).includes(v)
 
-const INTERNAL_API_KEY = process.env.ORBIT_INTERNAL_API_KEY
 
 /**
  * PATCH /api/internal/agent-runs/[workflowId]
@@ -64,10 +64,8 @@ export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ workflowId: string }> },
 ) {
-  const apiKey = request.headers.get('X-API-Key')
-  if (!INTERNAL_API_KEY || apiKey !== INTERNAL_API_KEY) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const authError = validateInternalApiKey(request.headers.get('X-API-Key'))
+  if (authError) return authError
   const { workflowId } = await context.params
   if (!workflowId) {
     return NextResponse.json({ error: 'workflowId required' }, { status: 400 })

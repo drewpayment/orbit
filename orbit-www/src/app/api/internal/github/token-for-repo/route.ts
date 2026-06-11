@@ -5,8 +5,8 @@ import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import { decrypt } from '@/lib/encryption'
 import { signalGitHubTokenRefresh } from '@/lib/temporal/client'
+import { validateInternalApiKey } from '@/lib/auth/internal-api-auth'
 
-const INTERNAL_API_KEY = process.env.ORBIT_INTERNAL_API_KEY
 
 // Treat a token within this window of expiry as expired, to absorb clock skew.
 const TOKEN_EXPIRY_BUFFER_MS = 60_000
@@ -24,13 +24,8 @@ const TOKEN_EXPIRY_BUFFER_MS = 60_000
 // are installation-scoped, not repo-scoped) but callers pass it for
 // audit/log context.
 export async function POST(request: NextRequest) {
-  const apiKey = request.headers.get('X-API-Key')
-  if (!INTERNAL_API_KEY || apiKey !== INTERNAL_API_KEY) {
-    return NextResponse.json(
-      { error: 'Unauthorized', code: 'UNAUTHORIZED' },
-      { status: 401 },
-    )
-  }
+  const authError = validateInternalApiKey(request.headers.get('X-API-Key'))
+  if (authError) return authError
 
   let body: { workspaceId?: unknown; owner?: unknown; repo?: unknown }
   try {

@@ -222,6 +222,7 @@ describe('startLaunch', () => {
 
     const mockLaunch = {
       id: 'launch-1',
+      workspace: 'workspace-1',
       template: {
         id: 'template-1',
         slug: 's3-bucket',
@@ -237,6 +238,7 @@ describe('startLaunch', () => {
 
     const mockPayload = {
       findByID: vi.fn().mockResolvedValue(mockLaunch),
+      find: vi.fn().mockResolvedValue({ docs: [{ id: 'member-1' }] }),
       update: vi.fn().mockResolvedValue({}),
     }
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
@@ -257,6 +259,10 @@ describe('startLaunch', () => {
       'us-east-1',
       { bucketName: 'test' },
       false,
+      undefined,
+      'workspace-1',
+      false,
+      'user-1',
     )
     expect(mockPayload.update).toHaveBeenCalledWith({
       collection: 'launches',
@@ -273,6 +279,7 @@ describe('startLaunch', () => {
 
     const mockLaunch = {
       id: 'launch-1',
+      workspace: 'workspace-1',
       template: { id: 'template-1', slug: 's3-bucket' },
       cloudAccount: { id: 'cloud-1' },
       provider: 'aws',
@@ -283,6 +290,7 @@ describe('startLaunch', () => {
 
     const mockPayload = {
       findByID: vi.fn().mockResolvedValue(mockLaunch),
+      find: vi.fn().mockResolvedValue({ docs: [{ id: 'member-1' }] }),
       update: vi.fn().mockResolvedValue({}),
     }
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
@@ -306,6 +314,7 @@ describe('startLaunch', () => {
 
     const mockLaunch = {
       id: 'launch-1',
+      workspace: 'workspace-1',
       template: 'template-1', // string ID, not resolved
       cloudAccount: { id: 'cloud-1' },
       provider: 'aws',
@@ -318,6 +327,7 @@ describe('startLaunch', () => {
       findByID: vi.fn()
         .mockResolvedValueOnce(mockLaunch) // initial launch fetch
         .mockResolvedValueOnce({ id: 'template-1', slug: 'resolved-template' }), // template resolve
+      find: vi.fn().mockResolvedValue({ docs: [{ id: 'member-1' }] }),
       update: vi.fn().mockResolvedValue({}),
     }
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
@@ -338,6 +348,10 @@ describe('startLaunch', () => {
       'us-east-1',
       {},
       false,
+      undefined,
+      'workspace-1',
+      false,
+      'user-1',
     )
   })
 })
@@ -358,9 +372,10 @@ describe('getLaunchStatus', () => {
   it('should return launch details', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockSession)
 
-    const mockLaunch = { id: 'launch-1', status: 'running' }
+    const mockLaunch = { id: 'launch-1', status: 'running', workspace: 'workspace-1' }
     const mockPayload = {
       findByID: vi.fn().mockResolvedValue(mockLaunch),
+      find: vi.fn().mockResolvedValue({ docs: [{ id: 'member-1' }] }),
     }
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
 
@@ -592,20 +607,25 @@ describe('getLaunches', () => {
 
     const mockLaunches = [{ id: 'l1', status: 'running' }]
     const mockPayload = {
-      find: vi.fn().mockResolvedValue({ docs: mockLaunches }),
+      find: vi.fn()
+        .mockResolvedValueOnce({ docs: [{ id: 'member-1' }] }) // membership check
+        .mockResolvedValueOnce({ docs: mockLaunches }), // launches query
     }
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
 
     const result = await getLaunches('workspace-1')
 
     expect(result).toEqual({ success: true, docs: mockLaunches })
-    expect(mockPayload.find).toHaveBeenCalledWith({
-      collection: 'launches',
-      where: { workspace: { equals: 'workspace-1' } },
-      depth: 2,
-      sort: '-updatedAt',
-      limit: 100,
-    })
+    expect(mockPayload.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collection: 'launches',
+        where: { workspace: { equals: 'workspace-1' } },
+        depth: 2,
+        sort: '-updatedAt',
+        limit: 100,
+        overrideAccess: true,
+      }),
+    )
   })
 })
 

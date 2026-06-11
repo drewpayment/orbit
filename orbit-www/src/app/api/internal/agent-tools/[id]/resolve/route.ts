@@ -4,13 +4,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import type { AgentTool } from '@/payload-types'
+import { validateInternalApiKey } from '@/lib/auth/internal-api-auth'
 
 type TemplateKind = AgentTool['templateKind']
 const TEMPLATE_KINDS: readonly TemplateKind[] = ['shell', 'http', 'composite'] as const
 const isTemplateKind = (v: unknown): v is TemplateKind =>
   typeof v === 'string' && (TEMPLATE_KINDS as readonly string[]).includes(v)
 
-const INTERNAL_API_KEY = process.env.ORBIT_INTERNAL_API_KEY
 
 /**
  * POST /api/internal/agent-tools/[id]/resolve
@@ -45,10 +45,8 @@ export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
-  const apiKey = request.headers.get('X-API-Key')
-  if (!INTERNAL_API_KEY || apiKey !== INTERNAL_API_KEY) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const authError = validateInternalApiKey(request.headers.get('X-API-Key'))
+  if (authError) return authError
   const { id } = await context.params
   if (!id) {
     return NextResponse.json({ error: 'id required' }, { status: 400 })

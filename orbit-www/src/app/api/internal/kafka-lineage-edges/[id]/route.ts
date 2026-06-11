@@ -3,8 +3,8 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
+import { validateInternalApiKey } from '@/lib/auth/internal-api-auth'
 
-const INTERNAL_API_KEY = process.env.ORBIT_INTERNAL_API_KEY
 
 /**
  * PATCH /api/internal/kafka-lineage-edges/[id]
@@ -16,13 +16,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   // Validate API key
-  const apiKey = request.headers.get('X-API-Key')
-  if (!INTERNAL_API_KEY || apiKey !== INTERNAL_API_KEY) {
-    return NextResponse.json(
-      { error: 'Unauthorized', code: 'UNAUTHORIZED' },
-      { status: 401 }
-    )
-  }
+  const authError = validateInternalApiKey(request.headers.get('X-API-Key'))
+  if (authError) return authError
 
   try {
     const { id } = await params
@@ -100,13 +95,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   // Validate API key
-  const apiKey = request.headers.get('X-API-Key')
-  if (!INTERNAL_API_KEY || apiKey !== INTERNAL_API_KEY) {
-    return NextResponse.json(
-      { error: 'Unauthorized', code: 'UNAUTHORIZED' },
-      { status: 401 }
-    )
-  }
+  const authError = validateInternalApiKey(request.headers.get('X-API-Key'))
+  if (authError) return authError
 
   try {
     const { id } = await params

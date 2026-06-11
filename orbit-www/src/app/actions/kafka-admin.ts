@@ -547,6 +547,7 @@ export async function getWorkspaces(): Promise<{
       collection: 'workspaces',
       limit: 1000,
       sort: 'name',
+      overrideAccess: true,
     })
 
     const workspaces = result.docs.map((doc) => ({
@@ -1087,6 +1088,7 @@ export async function listWorkspaces(): Promise<{
       collection: 'workspaces',
       limit: 1000,
       sort: 'name',
+      overrideAccess: true,
     })
 
     const data = workspaces.docs.map((w: unknown) => {

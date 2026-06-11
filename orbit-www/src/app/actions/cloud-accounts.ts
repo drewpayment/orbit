@@ -84,6 +84,7 @@ export async function getAllCloudAccounts(): Promise<{
         collection: 'workspaces',
         limit: 500,
         depth: 0,
+        overrideAccess: true,
       }),
       payload.find({
         collection: 'users',
