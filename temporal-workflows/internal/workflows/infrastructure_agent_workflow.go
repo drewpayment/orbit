@@ -63,6 +63,10 @@ type (
 	AgentEvent               = agentcontract.AgentEvent
 	AgentSnapshot            = agentcontract.AgentSnapshot
 	PendingApproval          = agentcontract.PendingApproval
+
+	// AgentEventWire is the durable-event batch element the persistence
+	// activity consumes.
+	AgentEventWire = agentactivity.AgentEventWire
 )
 
 // Tool / event-kind names re-exported from the contract package.
@@ -96,6 +100,7 @@ const (
 	EventKindApprovalResolved = agentcontract.EventKindApprovalResolved
 	EventKindStatusUpdate        = agentcontract.EventKindStatusUpdate
 	EventKindToolCallOutputChunk = agentcontract.EventKindToolCallOutputChunk
+	EventKindToolCallOutput      = agentcontract.EventKindToolCallOutput
 )
 
 // Default behavioral knobs. Tunable via input.
@@ -105,9 +110,52 @@ const (
 	defaultUserWaitTimeout  = 24 * time.Hour
 )
 
+// DefaultApprovalTimeout bounds how long an approval gate may stay pending
+// before the workflow auto-rejects it. Process-wide default; the worker may
+// override it once at startup from AGENT_APPROVAL_TIMEOUT (see
+// SetDefaultApprovalTimeout). Per-run overrides come via
+// InfrastructureAgentInput.ApprovalTimeout. 72h per the hardening plan.
+var DefaultApprovalTimeout = 72 * time.Hour
+
+// SetDefaultApprovalTimeout overrides the process-wide approval-gate timeout.
+// Intended to be called exactly once by the worker before any workflow runs
+// (so it's a fixed constant from every workflow's deterministic view). A
+// non-positive value is ignored.
+func SetDefaultApprovalTimeout(d time.Duration) {
+	if d > 0 {
+		DefaultApprovalTimeout = d
+	}
+}
+
+// effectiveApprovalTimeout resolves the per-run override against the
+// process-wide default.
+func effectiveApprovalTimeout(input *InfrastructureAgentInput) time.Duration {
+	if input != nil && input.ApprovalTimeout > 0 {
+		return input.ApprovalTimeout
+	}
+	return DefaultApprovalTimeout
+}
+
 // agentState is the in-workflow mutable state.
 type agentState struct {
 	status               string
+	// workspaceID is the run's workspace, copied from input once at
+	// initState. Carried on state so helpers (event flush, pending-approval
+	// resolve) can stamp it without threading input through every call.
+	workspaceID          string
+	// unflushedDurable buffers durable-kind events emitted since the last
+	// successful PersistAgentEvents flush. Flushed in batches at every
+	// barrier and before continue-as-new / return. A failed flush keeps the
+	// buffer intact for the next attempt (sequence idempotency makes that
+	// safe). Carried across continue-as-new is NOT needed — flushes run
+	// before CAN — so this stays workflow-local.
+	unflushedDurable     []AgentEventWire
+	// toolOutputBuffers accumulates streamed tool output per callId so the
+	// workflow can persist one aggregated tool_call_output event when the
+	// call completes (the per-chunk events are ephemeral and not durable).
+	// Capped at toolOutputCap bytes per call: oldest output is dropped (keep
+	// tail) and the aggregate is marked truncated. Keyed by callId.
+	toolOutputBuffers    map[string]*toolOutputBuffer
 	history              []ConversationTurn
 	events               []AgentEvent
 	nextSeq              uint64
@@ -282,6 +330,12 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 				EndedAt: workflow.Now(ctx).UTC().Format(time.RFC3339),
 			})
 		}
+
+		// Catch-all durable flush on EVERY return path (complete, fail,
+		// abort, timeout, sandbox-init error, continue-as-new). Uses the
+		// disconnected context so a cancelled loopCtx (abort) can't skip it.
+		// No-op when the inline barriers already drained the buffer.
+		flushDurableEvents(dctx, &state)
 	}()
 
 	userMsgCh := workflow.GetSignalChannel(loopCtx, AgentSignalUserMessage)
@@ -325,6 +379,9 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 				"stream":  payload.Stream,
 				"chunk":   payload.Chunk,
 			})
+			// Accumulate for the aggregated, durable tool_call_output event
+			// emitted when the call completes (flushToolOutput).
+			recordToolOutput(&state, payload.CallID, payload.Stream, payload.Chunk)
 		}
 	})
 
@@ -514,6 +571,7 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 				"status":  "failed",
 				"message": err.Error(),
 			})
+			flushDurableEvents(ctx, &state)
 			return fmt.Errorf("llm step failed: %w", err)
 		}
 		state.backend = result.Backend
@@ -540,6 +598,11 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 		// observes abort-induced cancellation.
 		for _, tc := range result.ToolCalls {
 			toolResult, terminated := dispatchTool(loopCtx, sandboxCtx, &state, &input, tc, approvalCh)
+			// The call has completed; emit one aggregated, durable
+			// tool_call_output event for any streamed output before the
+			// tool-result turn so the transcript order reads
+			// output → result.
+			flushToolOutput(ctx, &state, tc.ID)
 			appendTurn(ctx, &state, ConversationTurn{
 				TurnID:     workflowUUID(ctx),
 				Role:       "tool",
@@ -560,8 +623,15 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 			// stay in loop; awaitingUser will gate next iteration
 		}
 
-		// Continue-as-new threshold.
+		// Flush the durable transcript at the end of every iteration so a
+		// crash/retention-expiry mid-run leaves at most one iteration's
+		// events unpersisted.
+		flushDurableEvents(ctx, &state)
+
+		// Continue-as-new threshold. Flush MUST happen before CAN so the
+		// compacted in-memory history isn't the only copy of older turns.
 		if shouldContinueAsNew(&state) {
+			flushDurableEvents(ctx, &state)
 			return continueAsNew(ctx, input, &state)
 		}
 	}
@@ -585,6 +655,10 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 		})
 		state.terminalAuditFlushed = true
 	}
+
+	// Final durable flush on the normal completion / max-iterations path.
+	// The defer below is the catch-all for all other return paths.
+	flushDurableEvents(ctx, &state)
 
 	return nil
 }
@@ -650,6 +724,7 @@ func resolvePendingApproval(ctx workflow.Context, state *agentState, approvalID,
 		Resolution:     resolution,
 		ResolvedBy:     resolvedBy,
 		Notes:          notes,
+		WorkspaceID:    state.workspaceID,
 		ReviewerRounds: state.reviewerRounds,
 	}
 	if err := workflow.ExecuteActivity(actCtx, agentcontract.ActivityResolvePendingApproval, in).Get(actCtx, nil); err != nil {
@@ -867,8 +942,10 @@ func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agen
 
 		// Block until a signal with this approval_id arrives. Other ids are
 		// dropped (they'll be re-issued when their parent approval prompts
-		// are reopened); abort short-circuits the wait.
-		resolution, aborted := awaitApproval(ctx, approvalCh, approvalID)
+		// are reopened); abort short-circuits the wait; the timeout
+		// auto-rejects (resolution carries "approval timed out" and flows
+		// through the normal rejection path below).
+		resolution, aborted, _ := awaitApproval(ctx, approvalCh, approvalID, effectiveApprovalTimeout(input))
 		delete(state.pendingApprovals, approvalID)
 		state.status = prevStatus
 		if aborted {
@@ -1199,14 +1276,18 @@ func dispatchRegisterTool(ctx workflow.Context, sandboxCtx workflow.Context, sta
 		"reasoning":         reasoning,
 	})
 
-	resolution, aborted := awaitApproval(ctx, approvalCh, approvalID)
+	// Timeout auto-rejects: the synthesized resolution (Approved=false,
+	// Notes="approval timed out") flows through the rejection path below —
+	// the tool row is resolved rejected, the pending-approval row closed,
+	// and an approval_resolution event emitted — so no special-casing here.
+	resolution, aborted, _ := awaitApproval(ctx, approvalCh, approvalID, effectiveApprovalTimeout(input))
 	delete(state.pendingApprovals, approvalID)
 	state.status = prevStatus
 	if aborted {
 		state.terminated = true
 		// Reject the pending row on abort so it doesn't linger as approvable.
 		_ = workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityResolveAgentTool, agentactivity.ResolveAgentToolInput{
-			ID: registered.ID, Approved: false, Reason: "agent run aborted",
+			ID: registered.ID, WorkspaceID: input.WorkspaceID, Approved: false, Reason: "agent run aborted",
 		}).Get(sandboxCtx, nil)
 		resolvePendingApproval(auditCtx, state, approvalID, "aborted", "", resolution.ResolvedBy, "agent run aborted")
 		return jsonResult(map[string]any{"approved": false, "reason": "agent run aborted"}), true
@@ -1248,6 +1329,7 @@ func dispatchRegisterTool(ctx workflow.Context, sandboxCtx workflow.Context, sta
 	var resolveResult agentactivity.ResolveAgentToolResult
 	if err := workflow.ExecuteActivity(sandboxCtx, agentcontract.ActivityResolveAgentTool, agentactivity.ResolveAgentToolInput{
 		ID:                 registered.ID,
+		WorkspaceID:        input.WorkspaceID,
 		Approved:           resolution.Approved,
 		ResolvedBy:         resolution.ResolvedBy,
 		Reason:             resolution.Notes,
@@ -1433,7 +1515,9 @@ func dispatchProposePattern(ctx workflow.Context, sandboxCtx workflow.Context, s
 		"reasoning":         reasoning,
 	})
 
-	resolution, aborted := awaitApproval(ctx, approvalCh, approvalID)
+	// Timeout auto-rejects via the rejection path below (resolve pattern row
+	// rejected, close pending row, emit approval_resolution).
+	resolution, aborted, _ := awaitApproval(ctx, approvalCh, approvalID, effectiveApprovalTimeout(input))
 	delete(state.pendingApprovals, approvalID)
 	state.status = prevStatus
 	if aborted {
@@ -1868,7 +1952,10 @@ func requireDestructiveApproval(ctx workflow.Context, auditCtx workflow.Context,
 		"patterns": classification.Patterns,
 	})
 
-	resolution, aborted := awaitApproval(ctx, approvalCh, approvalID)
+	// Timeout auto-rejects: the synthesized resolution carries
+	// "approval timed out" and runs the rejection path below (emit
+	// approval_resolution, close pending row, deny the command).
+	resolution, aborted, _ := awaitApproval(ctx, approvalCh, approvalID, effectiveApprovalTimeout(input))
 	delete(state.pendingApprovals, approvalID)
 	state.status = prevStatus
 	if aborted {
@@ -2198,18 +2285,29 @@ func reviewerModeSystemPrompt(input *InfrastructureAgentInput) string {
 	return base + "\n\n[REVIEW MODE] You are currently parked on an approval gate. The user reviewing your last action has asked a question. Respond with text only — DO NOT emit any tool calls. The gate stays open until the human explicitly approves or rejects via the chat UI. Use this turn to explain your reasoning, suggest alternatives, or answer questions; do not propose new actions until the gate resolves."
 }
 
+// approvalTimedOutReason is the canonical reason/notes string recorded when
+// an approval gate expires. The UI and audit trail key on this exact value.
+const approvalTimedOutReason = "approval timed out"
+
 // awaitApproval blocks until an ApprovalSignal with matching approvalID
-// arrives or the workflow context is cancelled (the abort goroutine calls
-// cancelLoop after surfacing an Abort signal). Mismatched signals are
-// dropped — callers re-emit the approval prompt when their gate reopens.
+// arrives, the workflow context is cancelled (the abort goroutine calls
+// cancelLoop after surfacing an Abort signal), or the timeout elapses.
+// Mismatched signals are dropped — callers re-emit the approval prompt when
+// their gate reopens.
 //
-// We use a Selector that watches both the approval channel and ctx.Done()
-// rather than relying on Receive returning more=false on cancellation,
+// Returns (resolution, aborted, timedOut). On timeout it synthesizes a
+// rejected resolution carrying approvalTimedOutReason so callers can flow it
+// through their normal rejection path (resolve rows, emit
+// approval_resolution) without special-casing every site.
+//
+// We use a Selector that watches the approval channel, ctx.Done(), and a
+// timer rather than relying on Receive returning more=false on cancellation,
 // because that contract isn't reliable across SDK versions.
-func awaitApproval(ctx workflow.Context, approvalCh workflow.ReceiveChannel, approvalID string) (ApprovalSignalPayload, bool) {
+func awaitApproval(ctx workflow.Context, approvalCh workflow.ReceiveChannel, approvalID string, timeout time.Duration) (ApprovalSignalPayload, bool, bool) {
+	deadline := workflow.NewTimer(ctx, timeout)
 	for {
 		var resolved ApprovalSignalPayload
-		var matched, aborted bool
+		var matched, aborted, timedOut bool
 
 		sel := workflow.NewSelector(ctx)
 		sel.AddReceive(approvalCh, func(c workflow.ReceiveChannel, _ bool) {
@@ -2224,13 +2322,29 @@ func awaitApproval(ctx workflow.Context, approvalCh workflow.ReceiveChannel, app
 		sel.AddReceive(ctx.Done(), func(c workflow.ReceiveChannel, _ bool) {
 			aborted = true
 		})
+		sel.AddFuture(deadline, func(workflow.Future) {
+			// ctx cancellation also fires the timer; the ctx.Done() branch
+			// takes precedence (aborted), so only treat this as a timeout
+			// when the context is still live.
+			if ctx.Err() == nil {
+				timedOut = true
+			}
+		})
 		sel.Select(ctx)
 
 		if aborted {
-			return ApprovalSignalPayload{}, true
+			return ApprovalSignalPayload{}, true, false
+		}
+		if timedOut {
+			return ApprovalSignalPayload{
+				ApprovalID: approvalID,
+				Approved:   false,
+				ResolvedBy: "system",
+				Notes:      approvalTimedOutReason,
+			}, false, true
 		}
 		if matched {
-			return resolved, false
+			return resolved, false, false
 		}
 	}
 }
@@ -2636,11 +2750,13 @@ Style: be concise. Prefer structured proposals over wall-of-text. When the user'
 func initState(ctx workflow.Context, input InfrastructureAgentInput) agentState {
 	state := agentState{
 		status:           "starting",
+		workspaceID:      input.WorkspaceID,
 		history:          append([]ConversationTurn(nil), input.History...),
 		events:           append([]AgentEvent(nil), input.Events...),
 		nextSeq:          input.NextSequence,
 		pendingApprovals:      map[string]PendingApproval{},
 		pendingApprovalRowIDs: map[string]string{},
+		toolOutputBuffers:     map[string]*toolOutputBuffer{},
 		iterations:            input.IterationsSoFar,
 	}
 	if state.nextSeq == 0 {
@@ -2651,13 +2767,218 @@ func initState(ctx workflow.Context, input InfrastructureAgentInput) agentState 
 }
 
 func emitEvent(ctx workflow.Context, state *agentState, kind string, payload map[string]any) {
-	state.events = append(state.events, AgentEvent{
+	now := workflow.Now(ctx)
+	ev := AgentEvent{
 		Sequence:  state.nextSeq,
-		EmittedAt: workflow.Now(ctx),
+		EmittedAt: now,
 		Kind:      kind,
 		Payload:   payload,
-	})
+	}
+	state.events = append(state.events, ev)
+	// Buffer durable-kind events for the next persistence flush. Ephemeral
+	// streaming kinds (token_delta, tool_call_output_chunk) are never
+	// persisted — they're reconstructed live and would balloon Mongo.
+	//
+	// The persisted payload is the camelCase per-kind DTO the read path's
+	// mapper consumes (the SAME mapper as the live SSE stream), NOT the
+	// workflow's internal snake_case event payload. toDurableDTO does the
+	// transform.
+	if isDurableKind(kind) {
+		state.unflushedDurable = append(state.unflushedDurable, AgentEventWire{
+			Sequence:  ev.Sequence,
+			Kind:      ev.Kind,
+			Payload:   toDurableDTO(ev.Kind, ev.Payload),
+			EmittedAt: now.UTC().Format(time.RFC3339Nano),
+		})
+	}
 	state.nextSeq++
+}
+
+// toDurableDTO converts a workflow event's internal snake_case payload into
+// the camelCase per-kind DTO the orbit-www read path maps (same shape the SSE
+// DTO mapper emits). Only DTO-relevant keys are carried; internal-only fields
+// (e.g. tool_calls, edited_fields) are dropped. Optional string fields are
+// omitted when empty so they stay genuinely optional on the wire.
+func toDurableDTO(kind string, p map[string]any) map[string]any {
+	out := map[string]any{}
+	put := func(dst, src string) {
+		if v, ok := p[src]; ok {
+			out[dst] = v
+		}
+	}
+	// putNonEmpty only sets dst when the source is a non-empty string (used
+	// for optional fields the route treats as absent when blank).
+	putNonEmpty := func(dst, src string) {
+		if v, ok := p[src].(string); ok && v != "" {
+			out[dst] = v
+		}
+	}
+	switch kind {
+	case EventKindConversationTurn:
+		put("turnId", "turn_id")
+		put("role", "role")
+		put("content", "content")
+		putNonEmpty("toolName", "tool_name")
+		putNonEmpty("toolCallId", "tool_call_id")
+	case EventKindProposalUpdate:
+		put("proposalId", "proposal_id")
+		put("title", "title")
+		put("summary", "summary")
+		put("bodyMarkdown", "body_markdown")
+	case EventKindApprovalRequest:
+		put("approvalId", "approval_id")
+		put("kind", "kind")
+		put("title", "title")
+		put("bodyMarkdown", "body_markdown")
+		putNonEmpty("name", "name")
+		putNonEmpty("displayName", "display_name")
+		putNonEmpty("description", "description")
+		putNonEmpty("category", "category")
+		putNonEmpty("templateKind", "template_kind")
+		putNonEmpty("templateJson", "template_json")
+		putNonEmpty("inputSchemaJson", "input_schema_json")
+		putNonEmpty("reasoning", "reasoning")
+		putNonEmpty("agentToolId", "agent_tool_id")
+		putNonEmpty("patternId", "pattern_id")
+	case EventKindApprovalResolved:
+		put("approvalId", "approval_id")
+		put("approved", "approved")
+		put("resolvedBy", "resolved_by")
+		put("notes", "notes")
+	case EventKindStatusUpdate:
+		put("status", "status")
+		put("message", "message")
+	case EventKindToolCallOutput:
+		put("callId", "call_id")
+		put("stream", "stream")
+		// Internal aggregate uses "output"; the DTO key is "text".
+		put("text", "output")
+	default:
+		// Unknown durable kind: pass through unchanged rather than silently
+		// dropping. isDurableKind gates this, so it shouldn't happen.
+		return p
+	}
+	return out
+}
+
+// toolOutputCap bounds the aggregated tool_call_output payload at 64KB. On
+// overflow we keep the tail (most-recent output, usually the relevant end of
+// a command) and mark the aggregate truncated.
+const toolOutputCap = 64 * 1024
+
+// toolOutputBuffer accumulates one tool call's streamed output, capping at
+// toolOutputCap bytes by dropping the oldest bytes (keep tail). stream
+// records the last stream label seen ("stdout"/"stderr") for the DTO; most
+// commands are stdout-dominant and the chat renders them in one pane.
+type toolOutputBuffer struct {
+	data      []byte
+	stream    string
+	truncated bool
+}
+
+func (b *toolOutputBuffer) append(chunk string) {
+	b.data = append(b.data, chunk...)
+	if len(b.data) > toolOutputCap {
+		over := len(b.data) - toolOutputCap
+		b.data = b.data[over:]
+		b.truncated = true
+	}
+}
+
+// recordToolOutput appends a streamed chunk to the per-call buffer. Called
+// from the drain goroutine for every tool_call_output_chunk signal.
+func recordToolOutput(state *agentState, callID, stream, chunk string) {
+	if callID == "" || chunk == "" {
+		return
+	}
+	buf := state.toolOutputBuffers[callID]
+	if buf == nil {
+		buf = &toolOutputBuffer{stream: "stdout"}
+		state.toolOutputBuffers[callID] = buf
+	}
+	if stream != "" {
+		buf.stream = stream
+	}
+	buf.append(chunk)
+}
+
+// flushToolOutput emits one aggregated, durable tool_call_output event for a
+// completed tool call (if any output was streamed) and drops the buffer. The
+// payload carries the (possibly truncated) combined output plus a truncated
+// flag the UI/persistence layer can surface.
+func flushToolOutput(ctx workflow.Context, state *agentState, callID string) {
+	buf := state.toolOutputBuffers[callID]
+	if buf == nil {
+		return
+	}
+	delete(state.toolOutputBuffers, callID)
+	if len(buf.data) == 0 {
+		return
+	}
+	output := string(buf.data)
+	if buf.truncated {
+		// Signal truncation inline (the DTO carries no separate flag); the
+		// kept tail is the most-recent, usually-relevant output.
+		output = "…[output truncated — showing tail]\n" + output
+	}
+	emitEvent(ctx, state, EventKindToolCallOutput, map[string]any{
+		"call_id": callID,
+		"stream":  buf.stream,
+		"output":  output,
+	})
+}
+
+// isDurableKind reports whether an event kind is part of the persistent
+// transcript (system-of-record replica in Mongo). Mirrors the plan's
+// "Durable kinds only" list.
+func isDurableKind(kind string) bool {
+	switch kind {
+	case EventKindConversationTurn,
+		EventKindProposalUpdate,
+		EventKindApprovalRequest,
+		EventKindApprovalResolved,
+		EventKindStatusUpdate,
+		EventKindToolCallOutput:
+		return true
+	default:
+		return false
+	}
+}
+
+// flushDurableEvents persists the buffered durable events via the
+// PersistAgentEvents activity. On success the buffer is cleared; on failure
+// it is retained for the next flush attempt (idempotent upsert on
+// (workflowId, sequence) makes retries safe). Activity failures never fail
+// the run — they're logged and swallowed. Pass a disconnected ctx on
+// terminal/abort paths so a cancelled loopCtx can't skip the final flush.
+func flushDurableEvents(ctx workflow.Context, state *agentState) {
+	if len(state.unflushedDurable) == 0 {
+		return
+	}
+	// Snapshot the batch so concurrently-appended events (from drain
+	// goroutines) aren't lost if this flush fails: we only clear exactly
+	// what we attempted to send.
+	batch := append([]AgentEventWire(nil), state.unflushedDurable...)
+	flushCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 10 * time.Second,
+		// One attempt per barrier: a failure keeps the buffer for the next
+		// barrier rather than burning retry budget inline. The terminal
+		// flush in the defer is the backstop.
+		RetryPolicy: &temporal.RetryPolicy{MaximumAttempts: 1},
+	})
+	err := workflow.ExecuteActivity(flushCtx, agentcontract.ActivityPersistAgentEvents, agentactivity.PersistAgentEventsInput{
+		WorkflowID:  workflow.GetInfo(ctx).WorkflowExecution.ID,
+		WorkspaceID: state.workspaceID,
+		Events:      batch,
+	}).Get(flushCtx, nil)
+	if err != nil {
+		workflow.GetLogger(ctx).Warn("persist agent events failed (non-fatal); keeping buffer for next flush",
+			"err", err, "buffered", len(state.unflushedDurable))
+		return
+	}
+	// Drop exactly the flushed prefix; anything appended during the flush
+	// survives for the next barrier.
+	state.unflushedDurable = state.unflushedDurable[len(batch):]
 }
 
 func appendTurn(ctx workflow.Context, state *agentState, turn ConversationTurn) {

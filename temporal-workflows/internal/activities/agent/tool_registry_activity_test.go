@@ -17,6 +17,7 @@ type fakeToolsClient struct {
 	resolved      bool
 	resolveErr    error
 	resolvedEdits *services.AgentToolEdits
+	resolvedWorkspaceID string
 }
 
 func (f *fakeToolsClient) ListApproved(_ context.Context, _ string) ([]services.AgentToolDoc, error) {
@@ -26,9 +27,10 @@ func (f *fakeToolsClient) RegisterPending(_ context.Context, in services.Registe
 	f.registered = in
 	return f.registerID, f.registerErr
 }
-func (f *fakeToolsClient) Resolve(_ context.Context, id string, _ bool, _, _ string, edits *services.AgentToolEdits) (services.ResolveResult, error) {
+func (f *fakeToolsClient) Resolve(_ context.Context, id, workspaceID string, _ bool, _, _ string, edits *services.AgentToolEdits) (services.ResolveResult, error) {
 	f.resolved = true
 	f.resolvedEdits = edits
+	f.resolvedWorkspaceID = workspaceID
 	if f.resolveErr != nil {
 		return services.ResolveResult{}, f.resolveErr
 	}
@@ -120,5 +122,18 @@ func TestResolveAgentTool_RequiresID(t *testing.T) {
 	a := NewToolRegistryActivities(&fakeToolsClient{}, nil)
 	if _, err := a.ResolveAgentTool(context.Background(), ResolveAgentToolInput{}); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestResolveAgentTool_PassesWorkspaceID(t *testing.T) {
+	fc := &fakeToolsClient{}
+	a := NewToolRegistryActivities(fc, nil)
+	if _, err := a.ResolveAgentTool(context.Background(), ResolveAgentToolInput{
+		ID: "row-1", WorkspaceID: "ws-42", Approved: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if fc.resolvedWorkspaceID != "ws-42" {
+		t.Errorf("workspaceID passed to client = %q, want ws-42", fc.resolvedWorkspaceID)
 	}
 }

@@ -143,6 +143,11 @@ const (
 	ActivityUpdateAgentRun = "UpdateAgentRun"
 )
 
+// ActivityPersistAgentEvents writes durable transcript events into the
+// orbit-www agent-events collection (Mongo system-of-record replica) so the
+// chat history survives Temporal retention expiry and continue-as-new.
+const ActivityPersistAgentEvents = "PersistAgentEvents"
+
 // Activity names for Spike 7 commit γ — aggregated pending-approvals queue.
 // The workflow calls these on every gate open/close in addition to its
 // inline state mutations so a reviewer who isn't watching the chat can
@@ -174,6 +179,10 @@ const (
 	EventKindApprovalResolved   = "approval_resolution"
 	EventKindStatusUpdate       = "status_update"
 	EventKindToolCallOutputChunk = "tool_call_output_chunk"
+	// EventKindToolCallOutput is the aggregated, persisted counterpart to the
+	// ephemeral tool_call_output_chunk stream: one durable event per callId,
+	// emitted when a tool's output streaming completes (capped + truncated).
+	EventKindToolCallOutput = "tool_call_output"
 )
 
 // InfrastructureAgentInput is the workflow input.
@@ -203,6 +212,12 @@ type InfrastructureAgentInput struct {
 	// GitHubToken is forwarded to the repo_inspect tool when fetching from
 	// the GitHub API. May be empty for public repos.
 	GitHubToken string
+
+	// ApprovalTimeout bounds how long an approval gate may stay pending
+	// before the workflow auto-rejects it ("approval timed out"). Zero
+	// means "use the worker default" (see workflows.DefaultApprovalTimeout,
+	// overridable via AGENT_APPROVAL_TIMEOUT).
+	ApprovalTimeout time.Duration
 
 	History         []ConversationTurn
 	Events          []AgentEvent
