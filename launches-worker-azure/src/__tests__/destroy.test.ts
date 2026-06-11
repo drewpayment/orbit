@@ -32,7 +32,7 @@ describe("destroyInfra", () => {
 
   it("selects the existing stack and destroys it", async () => {
     const input: DestroyInfraInput = {
-      launchId: "launch-1", stackName: "orbit-ws1-launch-1",
+      launchId: "launch-1", workspaceId: "ws1", stackName: "orbit-ws1-launch-1",
       templatePath: "resources/blob-storage", cloudAccountId: "ca-1",
       provider: "azure", region: "eastus",
     };
@@ -45,7 +45,7 @@ describe("destroyInfra", () => {
 
   it("removes the stack after destruction", async () => {
     const input: DestroyInfraInput = {
-      launchId: "launch-1", stackName: "orbit-ws1-launch-1",
+      launchId: "launch-1", workspaceId: "ws1", stackName: "orbit-ws1-launch-1",
       templatePath: "resources/blob-storage", cloudAccountId: "ca-1",
       provider: "azure", region: "eastus",
     };
@@ -55,11 +55,29 @@ describe("destroyInfra", () => {
 
   it("returns void", async () => {
     const input: DestroyInfraInput = {
-      launchId: "launch-1", stackName: "orbit-ws1-launch-1",
+      launchId: "launch-1", workspaceId: "ws1", stackName: "orbit-ws1-launch-1",
       templatePath: "resources/blob-storage", cloudAccountId: "ca-1",
       provider: "azure", region: "eastus",
     };
     const result = await destroyInfra(input);
     expect(result).toBeUndefined();
+  });
+
+  it("rejects a stackName that does not match orbit-<workspaceId>-<launchId> (LW-H1)", async () => {
+    const input: DestroyInfraInput = {
+      launchId: "launch-1", workspaceId: "ws1", stackName: "orbit-other-tenant-launch-99",
+      templatePath: "resources/blob-storage", cloudAccountId: "ca-1",
+      provider: "azure", region: "eastus",
+    };
+    await expect(destroyInfra(input)).rejects.toThrow("Stack name mismatch");
+  });
+
+  it("rejects path traversal in templatePath (LW-H2)", async () => {
+    const input: DestroyInfraInput = {
+      launchId: "launch-1", workspaceId: "ws1", stackName: "orbit-ws1-launch-1",
+      templatePath: "../../etc/passwd", cloudAccountId: "ca-1",
+      provider: "azure", region: "eastus",
+    };
+    await expect(destroyInfra(input)).rejects.toThrow("Invalid templatePath");
   });
 });

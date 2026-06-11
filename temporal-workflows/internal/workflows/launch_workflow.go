@@ -136,6 +136,7 @@ func LaunchWorkflow(ctx workflow.Context, input types.LaunchWorkflowInput) error
 			stackName := fmt.Sprintf("orbit-%s-%s", input.WorkspaceID, input.LaunchID)
 			destroyInput := types.DestroyInfraInput{
 				LaunchID:       input.LaunchID,
+				WorkspaceID:    input.WorkspaceID,
 				StackName:      stackName,
 				TemplatePath:   input.PulumiProjectPath,
 				CloudAccountID: input.CloudAccountID,
@@ -273,6 +274,7 @@ func LaunchWorkflow(ctx workflow.Context, input types.LaunchWorkflowInput) error
 	stackName := fmt.Sprintf("orbit-%s-%s", input.WorkspaceID, input.LaunchID)
 	provisionInput := types.ProvisionInfraInput{
 		LaunchID:       input.LaunchID,
+		WorkspaceID:    input.WorkspaceID,
 		StackName:      stackName,
 		TemplatePath:   input.PulumiProjectPath,
 		CloudAccountID: input.CloudAccountID,
@@ -373,6 +375,7 @@ func LaunchWorkflow(ctx workflow.Context, input types.LaunchWorkflowInput) error
 
 	destroyInput := types.DestroyInfraInput{
 		LaunchID:       input.LaunchID,
+		WorkspaceID:    input.WorkspaceID,
 		StackName:      stackName,
 		TemplatePath:   input.PulumiProjectPath,
 		CloudAccountID: input.CloudAccountID,

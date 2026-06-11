@@ -46,6 +46,7 @@ type AbortSignalInput struct {
 // ProvisionInfraInput contains all parameters needed to provision infrastructure
 type ProvisionInfraInput struct {
 	LaunchID       string                 `json:"launchId"`
+	WorkspaceID    string                 `json:"workspaceId"`
 	StackName      string                 `json:"stackName"`
 	TemplatePath   string                 `json:"templatePath"`
 	CloudAccountID string                 `json:"cloudAccountId"`
@@ -63,6 +64,7 @@ type ProvisionInfraResult struct {
 // DestroyInfraInput contains all parameters needed to destroy infrastructure
 type DestroyInfraInput struct {
 	LaunchID       string `json:"launchId"`
+	WorkspaceID    string `json:"workspaceId"`
 	StackName      string `json:"stackName"`
 	TemplatePath   string `json:"templatePath"`
 	CloudAccountID string `json:"cloudAccountId"`

@@ -4,6 +4,7 @@
  */
 export interface ProvisionInfraInput {
   launchId: string;
+  workspaceId: string;
   stackName: string;
   templatePath: string;
   cloudAccountId: string;
@@ -19,6 +20,7 @@ export interface ProvisionInfraResult {
 
 export interface DestroyInfraInput {
   launchId: string;
+  workspaceId: string;
   stackName: string;
   templatePath: string;
   cloudAccountId: string;

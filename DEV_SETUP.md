@@ -2,6 +2,22 @@
 
 This guide explains how to set up and run the Orbit development environment using Docker.
 
+## First-Time Setup: Create Your .env
+
+The Orbit compose stack requires several secret values that are NOT shipped with
+the repository. Before running `make dev` for the first time, copy the example
+file and fill in values:
+
+```bash
+cp .env.example .env
+# Edit .env — replace every <generate: ...> placeholder with a real value.
+# For most secrets you can use: openssl rand -hex 32
+```
+
+The required variables are documented in `.env.example`. The compose stack will
+fail fast with a clear error message for any missing required variable rather
+than starting with insecure defaults.
+
 ## Quick Start
 
 ### Option 1: Hybrid Setup (Infrastructure in Docker, orbit-www locally - RECOMMENDED)
@@ -20,11 +36,12 @@ bun run dev
 **Important:** When using the hybrid setup, ensure your `orbit-www/.env` includes:
 
 ```bash
-# Required for Temporal activities to authenticate with GitHub
-ORBIT_INTERNAL_API_KEY=orbit-internal-dev-key
+# Required for Temporal activities to authenticate with GitHub.
+# Must match the ORBIT_INTERNAL_API_KEY value in your root .env.
+ORBIT_INTERNAL_API_KEY=<your value from .env>
 ```
 
-This key must match the one used by the temporal-worker in Docker (default: `orbit-internal-dev-key`).
+This key must match the `ORBIT_INTERNAL_API_KEY` set in your root `.env`.
 
 ### Option 2: Full Docker Setup
 
