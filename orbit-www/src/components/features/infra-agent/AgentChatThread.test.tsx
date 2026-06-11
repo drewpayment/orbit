@@ -13,8 +13,31 @@ vi.mock('@/app/actions/infra-agent', () => ({
 }))
 
 import { AgentChatThread } from './AgentChatThread'
-import { abortAgentRun } from '@/app/actions/infra-agent'
+import {
+  abortAgentRun,
+  approveAgentAction,
+  rejectAgentAction,
+  sendAgentMessage,
+} from '@/app/actions/infra-agent'
 import type { AgentEventDTO } from './lib/agent-event-dto'
+
+function proposalEvent(sequence: string, proposalId: string, title: string): AgentEventDTO {
+  return {
+    sequence,
+    emittedAt: '2024-01-01T00:00:00.000Z',
+    kind: 'proposal_update',
+    proposalUpdate: { proposalId, title, summary: 'a summary', bodyMarkdown: 'do the thing' },
+  }
+}
+
+function approvalEvent(sequence: string, approvalId: string, title: string): AgentEventDTO {
+  return {
+    sequence,
+    emittedAt: '2024-01-01T00:00:00.000Z',
+    kind: 'approval_request',
+    approvalRequest: { approvalId, kind: 'destructive_command', title, bodyMarkdown: 'rm -rf' },
+  }
+}
 
 const RUN_CONTEXT = {
   title: 'Test run',
@@ -226,5 +249,68 @@ describe('AgentChatThread', () => {
 
     // Stream ended without an explicit terminal status_update → ended state.
     expect(screen.getByPlaceholderText(/Run finished/i)).toBeInTheDocument()
+  })
+
+  it('resolves a PROPOSAL (no matching gate) via sendAgentMessage, not the approval actions', async () => {
+    ;(sendAgentMessage as any).mockResolvedValue({ success: true })
+
+    render(
+      <AgentChatThread
+        workspaceId="ws1"
+        workflowId="wf-1"
+        initialStatus="awaiting_user"
+        context={RUN_CONTEXT}
+        initialEvents={[proposalEvent('1', 'prop-1', 'Provision a bucket')]}
+      />,
+    )
+
+    // The proposal card exposes Approve / Reject; these must NOT hit the gate path.
+    const approve = screen.getByRole('button', { name: /^approve/i })
+    fireEvent.click(approve)
+    await waitFor(() => expect(sendAgentMessage).toHaveBeenCalledTimes(1))
+    expect(sendAgentMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: 'ws1', workflowId: 'wf-1' }),
+    )
+    // The user message must clearly signal approval.
+    expect((sendAgentMessage as any).mock.calls[0][0].message).toMatch(/approve/i)
+
+    const reject = screen.getByRole('button', { name: /^reject/i })
+    fireEvent.click(reject)
+    await waitFor(() => expect(sendAgentMessage).toHaveBeenCalledTimes(2))
+    expect((sendAgentMessage as any).mock.calls[1][0].message).toMatch(/reject|do not proceed/i)
+
+    // Crucially, the gate actions were never called.
+    expect(approveAgentAction).not.toHaveBeenCalled()
+    expect(rejectAgentAction).not.toHaveBeenCalled()
+  })
+
+  it('resolves a real approval GATE via the approval actions, not sendAgentMessage', async () => {
+    ;(approveAgentAction as any).mockResolvedValue({ success: true })
+    ;(rejectAgentAction as any).mockResolvedValue({ success: true })
+
+    render(
+      <AgentChatThread
+        workspaceId="ws1"
+        workflowId="wf-1"
+        initialStatus="awaiting_approval"
+        context={RUN_CONTEXT}
+        initialEvents={[approvalEvent('1', 'gate-1', 'Run destructive command')]}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /approve as proposed/i }))
+    await waitFor(() => expect(approveAgentAction).toHaveBeenCalledTimes(1))
+    expect(approveAgentAction).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: 'ws1', workflowId: 'wf-1', approvalId: 'gate-1' }),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /^reject$/i }))
+    await waitFor(() => expect(rejectAgentAction).toHaveBeenCalledTimes(1))
+    expect(rejectAgentAction).toHaveBeenCalledWith(
+      expect.objectContaining({ approvalId: 'gate-1' }),
+    )
+
+    // The gate path must not leak into the user-message path.
+    expect(sendAgentMessage).not.toHaveBeenCalled()
   })
 })

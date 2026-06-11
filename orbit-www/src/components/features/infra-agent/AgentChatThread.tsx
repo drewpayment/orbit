@@ -462,15 +462,42 @@ export function AgentChatThread({
   const onRetryLastTurn = () => sendControl('/retry')
   const onMarkDone = () => sendControl('/done')
 
-  const onApprove = (approvalId: string) =>
+  // ── Real approval GATES ───────────────────────────────────────────────
+  // Entries in `pendingApprovals` come from approval_request events
+  // (request_approval / register_tool / propose_pattern /
+  // destructive_command). The workflow parks them on SignalApproval, so they
+  // MUST be resolved via approve/rejectAgentAction (→ SignalApproval). Never
+  // route a gate through a user message.
+  const onApproveGate = (approvalId: string) =>
     startTransition(async () => {
       await approveAgentAction({ workspaceId, workflowId, approvalId })
     })
 
-  const onReject = (approvalId: string) =>
+  const onRejectGate = (approvalId: string) =>
     startTransition(async () => {
       await rejectAgentAction({ workspaceId, workflowId, approvalId, reason: 'rejected' })
     })
+
+  // ── PROPOSALS (propose_to_user) ───────────────────────────────────────
+  // A proposal_update is NOT an approval gate: the workflow emits it and
+  // parks in awaitingUser, resumed only by a user message (SignalUserMessage).
+  // It never enters pendingApprovals. Resolving it via SignalApproval would
+  // buffer the signal forever (no matching awaitApproval), so these MUST go
+  // through sendAgentMessage. See the proposal-vs-gate bug fix.
+  const resolveProposal = (message: string) =>
+    startTransition(async () => {
+      const result = await sendAgentMessage({ workspaceId, workflowId, message })
+      if (!result.success) setStatusMessage(result.error)
+    })
+  const onApproveProposal = () => resolveProposal('Approved — proceed with the proposal.')
+  const onRejectProposal = (notes?: string) =>
+    resolveProposal(
+      notes?.trim()
+        ? `Rejected — do not proceed. ${notes.trim()}`
+        : 'Rejected — do not proceed.',
+    )
+  const onModifyProposal = (notes: string) =>
+    resolveProposal(notes.trim() || 'Please modify the proposal.')
 
   const onAbort = () => {
     // Clear any prior failure before retrying; the button is disabled while
@@ -483,6 +510,12 @@ export function AgentChatThread({
       }
     })
   }
+
+  // True when a real approval gate exists for the current proposal's id. In
+  // that case the gate's ApprovalCard (SignalApproval) owns resolution; the
+  // proposal's user-message buttons are suppressed so we never fire both.
+  const proposalHasGate =
+    proposal != null && pendingApprovals.some((a) => a.approvalId === proposal.proposalId)
 
   // The run is "ended" for UI purposes when its status is terminal, the live
   // feed is gone (workflow purged), or the stream closed cleanly (`done`) —
@@ -625,7 +658,18 @@ export function AgentChatThread({
 
           {proposal && (
             <ActivityRailItem variant="accent">
-              <ProposalBlock proposal={proposal} />
+              <ProposalBlock
+                proposal={proposal}
+                // A proposal is resolved by a user message — UNLESS a real
+                // approval gate exists for the same id (then the gate's
+                // ApprovalCard owns resolution and we hide the proposal's
+                // message buttons so the two paths can't both fire).
+                actionable={!terminal && !proposalHasGate}
+                busy={pending}
+                onApprove={onApproveProposal}
+                onReject={onRejectProposal}
+                onModify={onModifyProposal}
+              />
             </ActivityRailItem>
           )}
 
@@ -636,8 +680,8 @@ export function AgentChatThread({
                 workspaceId={workspaceId}
                 workflowId={workflowId}
                 disabled={pending}
-                onApprove={() => onApprove(a.approvalId)}
-                onReject={() => onReject(a.approvalId)}
+                onApprove={() => onApproveGate(a.approvalId)}
+                onReject={() => onRejectGate(a.approvalId)}
               />
             </ActivityRailItem>
           ))}
@@ -755,8 +799,39 @@ function buildContextChips(ctx?: RunContext) {
   return chips
 }
 
-function ProposalBlock({ proposal }: { proposal: Proposal }) {
+/**
+ * ProposalBlock renders a `propose_to_user` proposal. A proposal is NOT an
+ * approval gate — it is resolved by sending the agent a user message, so the
+ * Approve / Reject / Modify buttons call the message-based handlers passed in
+ * (never the SignalApproval approve/reject actions). The buttons are shown
+ * only when `actionable` (run live and no overriding approval gate).
+ */
+function ProposalBlock({
+  proposal,
+  actionable = false,
+  busy = false,
+  onApprove,
+  onReject,
+  onModify,
+}: {
+  proposal: Proposal
+  actionable?: boolean
+  busy?: boolean
+  onApprove?: () => void
+  onReject?: (notes?: string) => void
+  onModify?: (notes: string) => void
+}) {
   const [open, setOpen] = useState(true)
+  const [modifying, setModifying] = useState(false)
+  const [notes, setNotes] = useState('')
+
+  const submitModify = () => {
+    if (!notes.trim()) return
+    onModify?.(notes)
+    setNotes('')
+    setModifying(false)
+  }
+
   return (
     <Card className="border-orange-500/30 bg-orange-500/[0.04]">
       <CardContent className="space-y-2 py-3">
@@ -782,6 +857,54 @@ function ProposalBlock({ proposal }: { proposal: Proposal }) {
           <pre className="whitespace-pre-wrap pt-1 pl-6 text-sm font-sans">
             {proposal.bodyMarkdown}
           </pre>
+        )}
+
+        {actionable && (
+          <div className="space-y-2 pl-6">
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={onApprove} disabled={busy}>
+                Approve &amp; proceed
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onReject?.()}
+                disabled={busy}
+              >
+                Reject
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setModifying((m) => !m)}
+                disabled={busy}
+              >
+                {modifying ? 'Cancel' : 'Request changes'}
+              </Button>
+            </div>
+            {modifying && (
+              <div className="space-y-2">
+                <Textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Describe the change you want (e.g. use the ohio region instead)…"
+                  rows={2}
+                  disabled={busy}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault()
+                      submitModify()
+                    }
+                  }}
+                />
+                <div className="flex justify-end">
+                  <Button size="sm" onClick={submitModify} disabled={busy || !notes.trim()}>
+                    Send changes
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>
