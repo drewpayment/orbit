@@ -19,6 +19,11 @@ import { validateInternalApiKey } from '@/lib/auth/internal-api-auth'
  *     kind, title, bodyMarkdown?, payload?
  *   }
  *
+ *   `agentRunId` is the run UUID the worker knows, NOT the agent-runs Mongo
+ *   ObjectId. The route resolves it to the real document id by looking up
+ *   agent-runs by workflowId; if no row is found (or the lookup errors) the
+ *   relationship is omitted so the queue row is still created.
+ *
  *   Idempotent on (workflowId, approvalId): if a row already exists the
  *   route returns 200 with the existing id rather than 409. This lets a
  *   continue-as-new workflow re-emit OpenPendingApproval safely.
@@ -97,13 +102,40 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ id: existing.docs[0].id, alreadyExisted: true })
     }
 
+    // Resolve the agent-runs relationship. The worker sends `agentRunId` as
+    // the run UUID, NOT the agent-runs Mongo ObjectId — passing it straight
+    // into the relationship field made Payload's cast throw (CastError),
+    // 500ing the create so the gate never got a queue row. Look the run up
+    // by workflowId (always present) and use its real document id. If the
+    // lookup misses or errors, omit the relationship rather than fail the
+    // create — the gate must still get its queue row.
+    let agentRunRef: string | undefined
+    if (body.agentRunId) {
+      try {
+        const runLookup = await payload.find({
+          collection: 'agent-runs',
+          where: { workflowId: { equals: body.workflowId } },
+          limit: 1,
+          overrideAccess: true,
+        })
+        if (runLookup.docs.length > 0) {
+          agentRunRef = String(runLookup.docs[0].id)
+        }
+      } catch (lookupErr) {
+        console.warn(
+          `[pending-approvals] agent-runs lookup for workflowId ${body.workflowId} failed; omitting relationship:`,
+          (lookupErr as Error).message,
+        )
+      }
+    }
+
     const created = await payload.create({
       collection: 'pending-approvals',
       data: {
         workspace: body.workspaceId,
         workflowId: body.workflowId,
         runId: body.runId ?? '',
-        agentRun: body.agentRunId || undefined,
+        agentRun: agentRunRef,
         approvalId: body.approvalId,
         kind: body.kind,
         title: body.title,
