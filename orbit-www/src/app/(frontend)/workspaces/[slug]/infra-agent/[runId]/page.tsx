@@ -10,6 +10,10 @@ import { SiteHeader } from '@/components/site-header'
 
 import { AgentChatThread } from '@/components/features/infra-agent/AgentChatThread'
 import { SetAgentBreadcrumbs } from '@/components/features/infra-agent/SetAgentBreadcrumbs'
+import {
+  mapPersistedEvent,
+  type PersistedAgentEvent,
+} from '@/components/features/infra-agent/lib/agent-event-dto'
 
 interface Props {
   params: Promise<{ slug: string; runId: string }>
@@ -61,6 +65,23 @@ export default async function AgentRunPage({ params }: Props) {
   })
   const cloudDoc = cloudAccountsResult.docs[0] ?? null
 
+  // Backfill the durable transcript so reopening a run (even one whose
+  // Temporal workflow has been purged) renders its full history. These map
+  // through the same DTO mapper the live SSE stream uses, so persisted events
+  // render identically to streamed ones.
+  const persistedEventsResult = await payload.find({
+    collection: 'agent-events',
+    where: { workflowId: { equals: workflowId } },
+    sort: 'sequence',
+    limit: 1000,
+    pagination: false,
+    depth: 0,
+    overrideAccess: true,
+  })
+  const initialEvents = persistedEventsResult.docs.map((doc) =>
+    mapPersistedEvent(doc as unknown as PersistedAgentEvent),
+  )
+
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -76,6 +97,8 @@ export default async function AgentRunPage({ params }: Props) {
             <AgentChatThread
               workspaceId={workspace.id}
               workflowId={workflowId}
+              initialEvents={initialEvents}
+              initialStatus={run.status}
               context={{
                 title: run.title ?? run.initialPrompt ?? 'Agent run',
                 startedAtIso: run.startedAt ?? new Date().toISOString(),

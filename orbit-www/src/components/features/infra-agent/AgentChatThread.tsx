@@ -26,60 +26,16 @@ import { AgentThought } from './parts/AgentThought'
 import { Composer } from './parts/Composer'
 import { RecoveryBanner } from './parts/RecoveryBanner'
 import { FloatingStatusBar } from './parts/FloatingStatusBar'
+import { LiveUnavailableBanner } from './parts/LiveUnavailableBanner'
 import { parseToolTurn } from './lib/tool-parsing'
 import { derivePhases } from './lib/phases'
+import { type AgentEventDTO } from './lib/agent-event-dto'
 
 // Matches the workflow's recoverableErrorPrefix constant — stays in sync
 // with temporal-workflows/internal/workflows/infrastructure_agent_workflow.go.
 // When the AgentStatusUpdate proto gains a structured payload field this
 // sentinel goes away in favor of a typed flag.
 const RECOVERABLE_LLM_ERROR_PREFIX = '[recoverable_llm_error] '
-
-/**
- * Wire shape emitted by /api/agent/[runId]/stream. Mirrors AgentEvent in the
- * proto with bigints stringified for JSON.
- */
-interface AgentEventDTO {
-  sequence: string
-  emittedAt: string
-  kind:
-    | 'conversation_turn'
-    | 'token_delta'
-    | 'proposal_update'
-    | 'approval_request'
-    | 'approval_resolution'
-    | 'status_update'
-    | 'tool_call_output_chunk'
-    | 'unknown'
-  conversationTurn?: {
-    turnId: string
-    role: string
-    content: string
-    toolName?: string
-    toolCallId?: string
-  }
-  tokenDelta?: { turnId: string; delta: string }
-  proposalUpdate?: { proposalId: string; title: string; summary: string; bodyMarkdown: string }
-  approvalRequest?: {
-    approvalId: string
-    kind: string
-    title: string
-    bodyMarkdown: string
-    name?: string
-    displayName?: string
-    description?: string
-    category?: string
-    templateKind?: string
-    templateJson?: string
-    inputSchemaJson?: string
-    reasoning?: string
-    agentToolId?: string
-    patternId?: string
-  }
-  approvalResolution?: { approvalId: string; approved: boolean; resolvedBy: string; notes: string }
-  statusUpdate?: { status: string; message: string }
-  toolCallOutputChunk?: { callId: string; stream: string; chunk: string }
-}
 
 interface RunContext {
   title: string
@@ -96,6 +52,17 @@ interface RunContext {
 interface Props {
   workspaceId: string
   workflowId: string
+  /**
+   * Persisted transcript loaded by the SSR page. Ingested on mount before the
+   * SSE connects so reopening a run renders immediately; the live stream then
+   * resumes from the max persisted sequence so nothing duplicates.
+   */
+  initialEvents?: AgentEventDTO[]
+  /**
+   * The run's Mongo status at SSR time. When terminal, history renders without
+   * opening an SSE connection.
+   */
+  initialStatus?: string
   /** Optional run/workspace context used by RunHeader + ContextStrip. */
   context?: RunContext
 }
@@ -135,6 +102,10 @@ interface Proposal {
 
 // Reconnect backoff: 0.5s → 1s → 2s → 4s, capped.
 const RECONNECT_BACKOFF_MS = [500, 1000, 2000, 4000]
+// After this many consecutive failed reconnects (no successful open in
+// between), give up and degrade to saved-history mode instead of looping
+// forever — covers a workflow that vanished without a clean `gone` signal.
+const MAX_RECONNECT_ATTEMPTS = RECONNECT_BACKOFF_MS.length
 
 interface ToolOutputBuffer {
   callId: string
@@ -144,14 +115,34 @@ interface ToolOutputBuffer {
   text: string
 }
 
-export function AgentChatThread({ workspaceId, workflowId, context }: Props) {
+const TERMINAL_STATUSES = ['completed', 'aborted', 'failed', 'timeout']
+
+export function AgentChatThread({
+  workspaceId,
+  workflowId,
+  initialEvents,
+  initialStatus,
+  context,
+}: Props) {
   const [turns, setTurns] = useState<ChatTurn[]>([])
   const [streamingTurns, setStreamingTurns] = useState<Record<string, string>>({})
   const [toolOutputs, setToolOutputs] = useState<Record<string, ToolOutputBuffer>>({})
   const [proposal, setProposal] = useState<Proposal | null>(null)
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([])
-  const [status, setStatus] = useState('starting')
+  const [status, setStatus] = useState(initialStatus ?? 'starting')
   const [statusMessage, setStatusMessage] = useState('')
+  // Set when the stream reports the workflow is gone (Temporal history purged)
+  // — we stop reconnecting and surface a "showing saved history" banner.
+  const [liveUnavailable, setLiveUnavailable] = useState(false)
+  // Highest sequence we've ingested. Tracked in a ref so the SSE effect reads
+  // the post-backfill cursor without re-subscribing when it changes.
+  const maxSeqRef = useRef(0n)
+  // Guard so the initial-events backfill runs exactly once.
+  const backfilledRef = useRef(false)
+
+  // The run was already finished when the page loaded: render the persisted
+  // transcript without opening a live connection.
+  const startedTerminal = initialStatus ? TERMINAL_STATUSES.includes(initialStatus) : false
   // Set when the workflow signals a recoverable LLM error — see issue #42.
   // Cleared when any subsequent status_update arrives without the sentinel
   // prefix (e.g. status goes back to "running" after /retry).
@@ -166,7 +157,30 @@ export function AgentChatThread({ workspaceId, workflowId, context }: Props) {
   // without a scroll back to the top.
   const [headerVisible, setHeaderVisible] = useState(true)
 
-  const ingest = useCallback((events: AgentEventDTO[]) => {
+  // Sequences already ingested, so a replayed batch (initial backfill overlap
+  // with the first SSE frames, or an EventSource reconnect) is a no-op.
+  const seenSequencesRef = useRef<Set<string>>(new Set())
+
+  const ingest = useCallback((incoming: AgentEventDTO[]) => {
+    // Belt-and-suspenders idempotency: drop any event whose sequence we've
+    // already applied. token_delta events share a turn's sequence space but
+    // are additive and ephemeral, so we never want to replay them either.
+    const events: AgentEventDTO[] = []
+    for (const e of incoming) {
+      if (e.sequence && e.sequence !== '0') {
+        if (seenSequencesRef.current.has(e.sequence)) continue
+        seenSequencesRef.current.add(e.sequence)
+        try {
+          const s = BigInt(e.sequence)
+          if (s > maxSeqRef.current) maxSeqRef.current = s
+        } catch {
+          // non-numeric sequence — ignore for cursor tracking
+        }
+      }
+      events.push(e)
+    }
+    if (events.length === 0) return
+
     setTurns((prev) => {
       const next = [...prev]
       const indexByTurnId = new Map(next.map((t, i) => [t.turnId, i]))
@@ -277,23 +291,54 @@ export function AgentChatThread({ workspaceId, workflowId, context }: Props) {
     }
   }, [])
 
+  // Backfill the persisted transcript on mount, before SSE connects. Runs
+  // once; the seenSequences guard inside ingest makes the subsequent SSE
+  // resume idempotent even if the stream replays an overlapping frame.
+  useEffect(() => {
+    if (backfilledRef.current) return
+    backfilledRef.current = true
+    if (initialEvents && initialEvents.length > 0) {
+      ingest(initialEvents)
+    }
+  }, [initialEvents, ingest])
+
   // SSE subscription. EventSource auto-reconnects with Last-Event-ID; we
   // also handle our own reconnect-on-error path with exponential backoff
   // (capped) since EventSource's built-in retry doesn't surface auth or
   // server-side close events to us cleanly. The `done` event from the
   // proxy means the workflow finished — we treat that as a clean close
-  // and do not reconnect.
+  // and do not reconnect. The `gone` event means the Temporal workflow no
+  // longer exists: we stop reconnecting and show the saved-history banner.
+  //
+  // Skipped entirely when the run was already terminal at SSR time — there's
+  // nothing live to stream, so we render the persisted history only.
   useEffect(() => {
+    if (startedTerminal) {
+      setConnection('closed')
+      return
+    }
+
     let cancelled = false
     let attempt = 0
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
     let es: EventSource | null = null
 
+    const stopForGone = () => {
+      cancelled = true
+      setConnection('closed')
+      setLiveUnavailable(true)
+      es?.close()
+    }
+
     const connect = () => {
       if (cancelled) return
       setConnection(attempt === 0 ? 'connecting' : 'reconnecting')
 
-      const url = `/api/agent/${encodeURIComponent(workflowId)}/stream`
+      // Resume from the highest sequence we've already ingested (initial
+      // backfill + any prior stream frames) so the server doesn't resend the
+      // persisted history.
+      const since = maxSeqRef.current.toString()
+      const url = `/api/agent/${encodeURIComponent(workflowId)}/stream?since=${since}`
       es = new EventSource(url)
 
       es.onopen = () => {
@@ -316,13 +361,24 @@ export function AgentChatThread({ workspaceId, workflowId, context }: Props) {
         es?.close()
       })
 
+      // The workflow history is gone (Temporal retention expired / workflow
+      // terminated). The server already reconciled the run status; stop
+      // reconnecting and keep the rendered history with a notice.
+      es.addEventListener('gone', stopForGone)
+
       es.addEventListener('error', () => {
         // EventSource will retry on its own, but we want to disambiguate
         // "transient network blip" from "server gave up". Close + reopen
         // ourselves with a backoff so reconnects don't hammer the server
-        // when the workflow is genuinely gone.
+        // when the workflow is genuinely gone. After a capped number of
+        // failed attempts with no successful open, treat the connection as
+        // unavailable instead of looping forever on an empty thread.
         es?.close()
         if (cancelled) return
+        if (attempt >= MAX_RECONNECT_ATTEMPTS) {
+          stopForGone()
+          return
+        }
         const delay = RECONNECT_BACKOFF_MS[Math.min(attempt, RECONNECT_BACKOFF_MS.length - 1)]
         attempt += 1
         setConnection('reconnecting')
@@ -338,7 +394,7 @@ export function AgentChatThread({ workspaceId, workflowId, context }: Props) {
       es?.close()
       setConnection('closed')
     }
-  }, [workflowId, ingest])
+  }, [workflowId, ingest, startedTerminal])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -400,7 +456,10 @@ export function AgentChatThread({ workspaceId, workflowId, context }: Props) {
       await abortAgentRun({ workspaceId, workflowId, reason: 'user requested abort' })
     })
 
-  const terminal = ['completed', 'aborted', 'failed', 'timeout'].includes(status)
+  // The run is "ended" for UI purposes when its status is terminal or when
+  // the live feed is gone (workflow purged) — either way there's nothing more
+  // to stream and the composer can't reach a live workflow.
+  const terminal = TERMINAL_STATUSES.includes(status) || liveUnavailable
 
   // Live elapsed-time counter for the header. Tick once a second; pause
   // when the run is terminal so we don't keep re-rendering forever.
@@ -468,6 +527,8 @@ export function AgentChatThread({ workspaceId, workflowId, context }: Props) {
       <PhaseTimeline phases={phases} />
 
       {contextChips.length > 0 && <ContextStrip chips={contextChips} />}
+
+      {liveUnavailable && <LiveUnavailableBanner />}
 
       {(connection !== 'live' || statusMessage) && (
         <div className="flex flex-wrap items-center gap-2 text-xs">

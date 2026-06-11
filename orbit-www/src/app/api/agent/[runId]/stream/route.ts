@@ -21,64 +21,22 @@
 import { NextRequest } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@payload-config'
+import { ConnectError, Code } from '@connectrpc/connect'
 
 import { agentClient } from '@/lib/grpc/agent-client'
 import { getPayloadUserFromSession } from '@/lib/auth/session'
 import { isWorkspaceMember } from '@/lib/access/workspace-access'
+import { mapGrpcEvent } from '@/components/features/infra-agent/lib/agent-event-dto'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 // Allow long-lived connections.
 export const maxDuration = 3600
 
-interface ServerEventDTO {
-  sequence: string
-  emittedAt: string
-  kind:
-    | 'conversation_turn'
-    | 'token_delta'
-    | 'proposal_update'
-    | 'approval_request'
-    | 'approval_resolution'
-    | 'status_update'
-    | 'tool_call_output_chunk'
-    | 'unknown'
-  conversationTurn?: {
-    turnId: string
-    role: string
-    content: string
-    // toolName / toolCallId are surfaced when the proto adds them on
-    // the wire. Until then the UI categorizes tool turns from the JSON
-    // content shape.
-    toolName?: string
-    toolCallId?: string
-  }
-  tokenDelta?: { turnId: string; delta: string }
-  proposalUpdate?: { proposalId: string; title: string; summary: string; bodyMarkdown: string }
-  approvalRequest?: {
-    approvalId: string
-    kind: string
-    title: string
-    bodyMarkdown: string
-    // Structured fields for tool_registration / pattern_registration
-    // approvals so the chat UI can render an editable form. Empty for
-    // other kinds. displayName + category + patternId are
-    // pattern-specific; the rest are shared.
-    name?: string
-    displayName?: string
-    description?: string
-    category?: string
-    templateKind?: string
-    templateJson?: string
-    inputSchemaJson?: string
-    reasoning?: string
-    agentToolId?: string
-    patternId?: string
-  }
-  approvalResolution?: { approvalId: string; approved: boolean; resolvedBy: string; notes: string }
-  statusUpdate?: { status: string; message: string }
-  toolCallOutputChunk?: { callId: string; stream: string; chunk: string }
-}
+const TERMINAL_STATUSES = new Set(['completed', 'aborted', 'failed', 'timeout'])
+
+const GONE_SUMMARY =
+  'Workflow history no longer available (Temporal retention expired or workflow terminated)'
 
 export async function GET(
   request: NextRequest,
@@ -144,7 +102,7 @@ export async function GET(
         )
         for await (const evt of grpc) {
           if (abort.signal.aborted) break
-          const dto = mapEvent(evt)
+          const dto = mapGrpcEvent(evt)
           const lines =
             `id: ${dto.sequence}\n` +
             `data: ${JSON.stringify(dto)}\n\n`
@@ -152,9 +110,18 @@ export async function GET(
         }
         controller.enqueue(encoder.encode('event: done\ndata: {}\n\n'))
       } catch (err) {
-        if (!abort.signal.aborted) {
-          const payload = JSON.stringify({ error: (err as Error).message ?? 'stream error' })
-          controller.enqueue(encoder.encode(`event: error\ndata: ${payload}\n\n`))
+        if (abort.signal.aborted) {
+          // Client navigated away — nothing to emit.
+        } else if (ConnectError.from(err).code === Code.NotFound) {
+          // The Temporal workflow no longer exists (retention expired or the
+          // workflow was terminated). Degrade gracefully: tell the client to
+          // stop reconnecting and keep its saved history, and reconcile the
+          // Mongo run if it's stranded in a non-terminal status.
+          await reconcileGoneRun(payload, run.id, run.status as string)
+          controller.enqueue(encoder.encode('event: gone\ndata: {}\n\n'))
+        } else {
+          const errPayload = JSON.stringify({ error: (err as Error).message ?? 'stream error' })
+          controller.enqueue(encoder.encode(`event: error\ndata: ${errPayload}\n\n`))
         }
       } finally {
         clearInterval(heartbeat)
@@ -181,79 +148,30 @@ export async function GET(
   })
 }
 
-function mapEvent(evt: any): ServerEventDTO {
-  const sequence = String(evt.sequence ?? 0n)
-  const emittedAt = evt.emittedAt?.seconds
-    ? new Date(Number(evt.emittedAt.seconds) * 1000).toISOString()
-    : new Date().toISOString()
-  const base: ServerEventDTO = { sequence, emittedAt, kind: 'unknown' }
-  const e = evt.event
-  if (!e) return base
-  switch (e.case) {
-    case 'conversationTurn': {
-      // The proto ConversationTurn currently carries only {turn_id, role,
-      // content}. tool_name / tool_call_id / tool_calls live on the Go
-      // workflow's internal struct but aren't on the wire (yet). The UI
-      // categorizes tool turns from the JSON content shape. When the
-      // proto is extended (Phase 2), populate these fields here and the
-      // UI will switch from heuristic to explicit categorization.
-      const v = e.value as {
-        turnId: string
-        role: string
-        content: string
-        toolCallId?: string
-        toolName?: string
-      }
-      return {
-        ...base,
-        kind: 'conversation_turn',
-        conversationTurn: {
-          turnId: v.turnId,
-          role: v.role,
-          content: v.content,
-          toolName: v.toolName || undefined,
-          toolCallId: v.toolCallId || undefined,
-        },
-      }
-    }
-    case 'tokenDelta':
-      return { ...base, kind: 'token_delta', tokenDelta: e.value }
-    case 'proposalUpdate':
-      return { ...base, kind: 'proposal_update', proposalUpdate: e.value }
-    case 'approvalRequest': {
-      // Hoist Struct payload fields into the DTO so the chat UI can
-      // populate an editable form without parsing body_markdown.
-      const v = e.value as { approvalId: string; kind: string; title: string; bodyMarkdown: string; payload?: { fields?: Record<string, { stringValue?: string }> } }
-      const fields = v.payload?.fields ?? {}
-      const fieldStr = (k: string) => (typeof fields[k]?.stringValue === 'string' ? fields[k].stringValue! : undefined)
-      return {
-        ...base,
-        kind: 'approval_request',
-        approvalRequest: {
-          approvalId: v.approvalId,
-          kind: v.kind,
-          title: v.title,
-          bodyMarkdown: v.bodyMarkdown,
-          name: fieldStr('name'),
-          displayName: fieldStr('display_name'),
-          description: fieldStr('description'),
-          category: fieldStr('category'),
-          templateKind: fieldStr('template_kind'),
-          templateJson: fieldStr('template_json'),
-          inputSchemaJson: fieldStr('input_schema_json'),
-          reasoning: fieldStr('reasoning'),
-          agentToolId: fieldStr('agent_tool_id'),
-          patternId: fieldStr('pattern_id'),
-        },
-      }
-    }
-    case 'approvalResolution':
-      return { ...base, kind: 'approval_resolution', approvalResolution: e.value }
-    case 'statusUpdate':
-      return { ...base, kind: 'status_update', statusUpdate: e.value }
-    case 'toolCallOutputChunk':
-      return { ...base, kind: 'tool_call_output_chunk', toolCallOutputChunk: e.value }
-    default:
-      return base
+/**
+ * When the Temporal workflow is gone but the Mongo run is still in a
+ * non-terminal status, mark it `failed` so the run list and reopened views
+ * stop presenting it as live. Best-effort: a failure here must not break the
+ * SSE response.
+ */
+async function reconcileGoneRun(
+  payload: Awaited<ReturnType<typeof getPayload>>,
+  runId: string,
+  status: string,
+): Promise<void> {
+  if (TERMINAL_STATUSES.has(status)) return
+  try {
+    await payload.update({
+      collection: 'agent-runs',
+      id: runId,
+      data: {
+        status: 'failed',
+        summary: GONE_SUMMARY,
+        endedAt: new Date().toISOString(),
+      },
+      overrideAccess: true,
+    })
+  } catch {
+    // Reconciliation is best-effort; the next open will retry.
   }
 }
