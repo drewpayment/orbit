@@ -313,4 +313,26 @@ describe('AgentChatThread', () => {
     // The gate path must not leak into the user-message path.
     expect(sendAgentMessage).not.toHaveBeenCalled()
   })
+
+  it('disables an approval gate card on a terminal run (no signals at a closed workflow)', () => {
+    render(
+      <AgentChatThread
+        workspaceId="ws1"
+        workflowId="wf-1"
+        // Terminal at SSR time → no SSE, terminal derivation true.
+        initialStatus="failed"
+        context={RUN_CONTEXT}
+        initialEvents={[approvalEvent('1', 'gate-1', 'Run destructive command')]}
+      />,
+    )
+
+    // The gate still renders (history), but its actions must be disabled —
+    // consistent with the composer's ended treatment.
+    const approve = screen.getByRole('button', { name: /approve as proposed/i })
+    const reject = screen.getByRole('button', { name: /^reject$/i })
+    const reply = screen.getByRole('button', { name: /reply to agent/i })
+    expect(approve).toBeDisabled()
+    expect(reject).toBeDisabled()
+    expect(reply).toBeDisabled()
+  })
 })

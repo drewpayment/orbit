@@ -679,7 +679,10 @@ export function AgentChatThread({
                 approval={a}
                 workspaceId={workspaceId}
                 workflowId={workflowId}
-                disabled={pending}
+                // Disable while a request is in flight OR once the run is
+                // terminal — a closed workflow can't receive the SignalApproval
+                // these buttons (and the reviewer-reply input) would fire.
+                disabled={pending || terminal}
                 onApprove={() => onApproveGate(a.approvalId)}
                 onReject={() => onRejectGate(a.approvalId)}
               />
