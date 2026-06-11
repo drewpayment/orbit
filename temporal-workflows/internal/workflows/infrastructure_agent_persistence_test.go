@@ -1,6 +1,7 @@
 package workflows
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -109,6 +110,44 @@ func TestPersistence_FlushesDurableTranscript(t *testing.T) {
 		require.NotEqual(t, agentcontract.EventKindTokenDelta, e.Kind)
 		require.NotEqual(t, agentcontract.EventKindToolCallOutputChunk, e.Kind)
 	}
+}
+
+// BUG-2b: a non-retryable LLM failure must persist a user-visible status
+// update carrying the recoverable-error sentinel so the UI renders the
+// banner + /retry//done affordance instead of leaving the user in silence.
+func TestPersistence_NonRetryableLLMErrorPersistsSentinelStatus(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	registerSandboxStubs(env)
+	rec := &eventRecorder{}
+	registerEventRecorder(env, rec)
+
+	llm := &scriptedLLMWithErrors{
+		errorOnCall: map[int]error{1: nonRetryableLLMErr("openai_compat: HTTP 400: bad content")},
+	}
+	env.RegisterActivityWithOptions(llm.Run, activity.RegisterOptions{Name: ActivityLLMNextStep})
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(AgentSignalUserMessage, UserMessageSignalPayload{
+			TurnID: "u-done", UserID: "u1", Message: "/done",
+		})
+	}, 100*time.Millisecond)
+
+	env.ExecuteWorkflow(InfrastructureAgentWorkflow, InfrastructureAgentInput{
+		AgentRunID: "run-2b", WorkspaceID: "ws-1", LLMProviderID: "p", InitialPrompt: "x",
+	})
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+
+	var sawSentinel bool
+	for _, e := range rec.allEvents() {
+		if e.Kind == agentcontract.EventKindStatusUpdate {
+			if msg, _ := e.Payload["message"].(string); strings.HasPrefix(msg, recoverableErrorPrefix) {
+				sawSentinel = true
+				require.Contains(t, msg, "HTTP 400")
+			}
+		}
+	}
+	require.True(t, sawSentinel, "recoverable-error sentinel status_update was not persisted")
 }
 
 func TestPersistence_FlushFailureDoesNotFailRun(t *testing.T) {

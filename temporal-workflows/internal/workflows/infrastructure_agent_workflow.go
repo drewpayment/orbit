@@ -211,6 +211,18 @@ const recoverableErrorPrefix = "[recoverable_llm_error] "
 // to the conversation history. Used to gate the LLM-recovery path —
 // errors on the first LLM call (before any tool has run) still fail the
 // run because there is no meaningful work to preserve.
+// isNonRetryableActivityError reports whether an activity error wraps a
+// non-retryable temporal.ApplicationError (e.g. the LLM activity's
+// "LLMNonRetryable" / "InvalidInput" types). Used to surface hard LLM
+// failures in chat (BUG-2b) rather than failing the run silently.
+func isNonRetryableActivityError(err error) bool {
+	var appErr *temporal.ApplicationError
+	if errors.As(err, &appErr) {
+		return appErr.NonRetryable()
+	}
+	return false
+}
+
 func hasExecutedAnyTools(state *agentState) bool {
 	for _, t := range state.history {
 		if t.Role == "tool" {
@@ -247,8 +259,12 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 	loopCtx, cancelLoop := workflow.WithCancel(ctx)
 	defer cancelLoop()
 
-	// Activity options for the LLM step.
-	llmCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+	// Activity options for the LLM step. Derived from loopCtx (NOT ctx) so an
+	// abort — which calls cancelLoop() — preempts an LLM activity that is
+	// mid-call or grinding through its retry backoff. Otherwise an abort
+	// during a retry loop is ignored and the run wedges until retries exhaust
+	// (QA-reported hang).
+	llmCtx := workflow.WithActivityOptions(loopCtx, workflow.ActivityOptions{
 		StartToCloseTimeout: 5 * time.Minute,
 		HeartbeatTimeout:    30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
@@ -549,13 +565,27 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 
 		var result agentactivity.LLMNextStepResult
 		if err := workflow.ExecuteActivity(llmCtx, ActivityLLMNextStep, llmInput).Get(llmCtx, &result); err != nil {
-			// Interim mitigation for issue #42: if the run has already
-			// executed at least one tool, the deployment work-product is
-			// real and shouldn't be thrown away because Anthropic 400'd on
-			// a wrap-up turn. Park in awaiting_user with the error visible
-			// in chat; the user finalizes via /retry, /done, or a normal
-			// follow-up message. First-turn errors still fail the run.
-			if hasExecutedAnyTools(&state) {
+			// Abort cancels loopCtx, which cancels this activity. Don't treat
+			// the resulting cancellation as an LLM failure — the abort
+			// goroutine has already set the terminal aborted state and
+			// flushed audit; just let the loop unwind so the run terminates
+			// promptly (QA-reported abort-during-retry hang).
+			if loopCtx.Err() != nil || temporal.IsCanceledError(err) {
+				state.terminated = true
+				continue
+			}
+			// Park-in-chat instead of silently failing the run when EITHER:
+			//   - the run has already executed a tool (issue #42: the
+			//     deployment work-product is real and shouldn't be discarded
+			//     because the LLM 400'd on a wrap-up turn), OR
+			//   - the error is non-retryable (BUG-2b: a hard provider error
+			//     like the Ollama "invalid message content" 400 would
+			//     otherwise leave the user staring at a stuck awaiting_user
+			//     run with no banner; surface it so they can /done).
+			// In both cases we emit the recoverable-error sentinel so the UI
+			// renders the banner with /retry + /done. /retry may fail again
+			// for a hard error, but /done lets the user close out.
+			if hasExecutedAnyTools(&state) || isNonRetryableActivityError(err) {
 				state.awaitingLLMRecovery = true
 				state.lastLLMError = err.Error()
 				state.status = "awaiting_user"
@@ -564,6 +594,7 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 					"message": recoverableErrorPrefix + err.Error(),
 				})
 				markRun(auditCtx, wfID, agentactivity.UpdateAgentRunInput{Status: "awaiting_user"})
+				flushDurableEvents(ctx, &state)
 				continue
 			}
 			state.status = "failed"
