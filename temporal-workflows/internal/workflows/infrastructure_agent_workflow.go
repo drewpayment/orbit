@@ -190,6 +190,15 @@ type agentState struct {
 	// whether to /retry, /done, or type a follow-up. See GitHub issue #42.
 	awaitingLLMRecovery bool
 	lastLLMError        string
+
+	// consecutiveEmptyLLM counts back-to-back LLM responses with neither
+	// text nor tool calls. Such turns are not appended to history (the
+	// provider layer would drop them from the payload anyway), so each
+	// re-prompt is identical; the budget in maxConsecutiveEmptyLLMResponses
+	// caps the re-prompts before parking in the recoverable-error wait.
+	// Reset on any non-empty response. Not carried across continue-as-new:
+	// a fresh run segment gets a fresh budget.
+	consecutiveEmptyLLM int
 }
 
 // User-control sentinels that the workflow recognizes during an
@@ -206,6 +215,14 @@ const (
 // Encoded on the message field because the AgentStatusUpdate proto
 // doesn't carry structured payload (yet).
 const recoverableErrorPrefix = "[recoverable_llm_error] "
+
+// maxConsecutiveEmptyLLMResponses bounds re-prompts when the model returns
+// neither text nor tool calls. Empty turns are dropped from the wire payload
+// (BUG-2 fix in openai_compat), so each re-prompt is byte-identical — a
+// deterministic model will return the same empty response forever (runaway
+// run agent-4d50c96e: 49 empty turns at ~0.4s intervals until abort). After
+// this many consecutive empties the run parks in the recoverable-error wait.
+const maxConsecutiveEmptyLLMResponses = 3
 
 // hasExecutedAnyTools returns true if any tool result has been appended
 // to the conversation history. Used to gate the LLM-recovery path —
@@ -649,6 +666,31 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 		state.backend = result.Backend
 		state.model = result.Model
 
+		// An empty response — no text, no tool calls — can't advance the
+		// conversation. Don't append it to history (it would persist as a
+		// blank transcript bubble, and the provider layer strips it from the
+		// wire payload anyway); re-prompt within a small budget, then park
+		// in the recoverable-error wait so the user gets the /retry//done
+		// banner instead of a runaway loop.
+		if len(result.ToolCalls) == 0 && strings.TrimSpace(result.Text) == "" {
+			state.streamingPartial = ""
+			state.consecutiveEmptyLLM++
+			if state.consecutiveEmptyLLM >= maxConsecutiveEmptyLLMResponses {
+				state.consecutiveEmptyLLM = 0
+				state.awaitingLLMRecovery = true
+				state.lastLLMError = fmt.Sprintf("model returned %d consecutive empty responses", maxConsecutiveEmptyLLMResponses)
+				state.status = "awaiting_user"
+				emitEvent(ctx, &state, EventKindStatusUpdate, map[string]any{
+					"status":  "awaiting_user",
+					"message": recoverableErrorPrefix + state.lastLLMError,
+				})
+				markRun(auditCtx, wfID, agentactivity.UpdateAgentRunInput{Status: "awaiting_user"})
+				flushDurableEvents(ctx, &state)
+			}
+			continue
+		}
+		state.consecutiveEmptyLLM = 0
+
 		// Append assistant turn, including any tool calls.
 		assistantTurn := ConversationTurn{
 			TurnID:    state.streamingTurnID,
@@ -703,11 +745,9 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 			}
 		}
 
-		// If the LLM finished its turn without calling any tool, surface the
-		// transcript and wait for the user.
-		if len(result.ToolCalls) == 0 {
-			// stay in loop; awaitingUser will gate next iteration
-		}
+		// A text-only response (no tool calls) ends the agent's turn: the
+		// trailing assistant turn makes awaitingUser gate the next iteration,
+		// parking the run until the user replies.
 
 		// Flush the durable transcript at the end of every iteration so a
 		// crash/retention-expiry mid-run leaves at most one iteration's
@@ -2514,6 +2554,13 @@ func awaitingUser(state *agentState) bool {
 		return false
 	}
 	last := state.history[len(state.history)-1]
+	// A text-only assistant reply (no tool calls) ends the agent's turn:
+	// there is nothing to execute, and re-prompting with unchanged history
+	// cannot advance the run — the model is waiting for the user (runaway
+	// regression, run agent-4d50c96e).
+	if last.Role == "assistant" && len(last.ToolCalls) == 0 {
+		return true
+	}
 	if last.Role != "tool" {
 		return false
 	}

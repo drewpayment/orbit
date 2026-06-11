@@ -272,11 +272,14 @@ func TestHasExecutedAnyTools(t *testing.T) {
 func TestAwaitingUser_RecoveryFlagShortCircuits(t *testing.T) {
 	// awaitingLLMRecovery should park awaitingUser=true even when the
 	// history shape doesn't otherwise indicate we're waiting on a reply.
+	// History ends on a user turn — a shape that never gates on its own —
+	// so the assertion isolates the flag. (A trailing text-only assistant
+	// turn now gates by itself; see TestAwaitingUser_TextOnlyAssistantTurnParks.)
 	s := &agentState{
 		awaitingLLMRecovery: true,
 		history: []ConversationTurn{
-			{Role: "user", Content: "go"},
 			{Role: "assistant", Content: "ok"},
+			{Role: "user", Content: "go"},
 		},
 	}
 	require.True(t, awaitingUser(s))
