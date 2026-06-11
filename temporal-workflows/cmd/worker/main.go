@@ -480,6 +480,19 @@ func main() {
 
 	w.RegisterWorkflow(workflows.InfrastructureAgentWorkflow)
 
+	// Approval-gate timeout: process-wide default (72h) overridable via
+	// AGENT_APPROVAL_TIMEOUT (Go duration, e.g. "48h"). Set once before any
+	// workflow runs so it's a deterministic constant from the workflow's
+	// view. Per-run overrides still come via InfrastructureAgentInput.
+	if raw := os.Getenv("AGENT_APPROVAL_TIMEOUT"); raw != "" {
+		if d, err := time.ParseDuration(raw); err != nil {
+			log.Printf("WARN: ignoring invalid AGENT_APPROVAL_TIMEOUT %q: %v", raw, err)
+		} else {
+			workflows.SetDefaultApprovalTimeout(d)
+			log.Printf("Agent approval-gate timeout set to %s", d)
+		}
+	}
+
 	llmProviderClient := services.NewPayloadLLMProviderClient(orbitAPIURL, orbitInternalAPIKey, logger)
 	tokenSigniller := services.NewTemporalTokenSigniller(c, logger)
 	agentActivities := agentactivity.NewAgentActivities(llmProviderClient, tokenSigniller, logger, agentactivity.AgentActivitiesOptions{})
@@ -537,6 +550,14 @@ func main() {
 	agentRunsClient := services.NewPayloadAgentRunsClient(orbitAPIURL, orbitInternalAPIKey, logger)
 	runActivities := agentactivity.NewAgentRunActivities(agentRunsClient, logger)
 	w.RegisterActivityWithOptions(runActivities.UpdateAgentRun, activity.RegisterOptions{Name: agentcontract.ActivityUpdateAgentRun})
+
+	// Durable transcript persistence: the workflow flushes batches of durable
+	// events into the agent-events collection so the chat history survives
+	// Temporal retention expiry and continue-as-new (Mongo is the
+	// system-of-record replica).
+	agentEventsClient := services.NewPayloadAgentEventsClient(orbitAPIURL, orbitInternalAPIKey, logger)
+	eventsActivities := agentactivity.NewAgentEventsActivities(agentEventsClient, logger)
+	w.RegisterActivityWithOptions(eventsActivities.PersistAgentEvents, activity.RegisterOptions{Name: agentcontract.ActivityPersistAgentEvents})
 
 	// Aggregated pending-approvals queue (Spike 7 commit γ). Mirrors every
 	// open approval gate into the PendingApprovals collection so reviewers

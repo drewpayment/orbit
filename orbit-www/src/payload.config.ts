@@ -34,6 +34,7 @@ import { LaunchTemplates } from './collections/LaunchTemplates'
 import { Launches } from './collections/Launches'
 import { LLMProviders } from './collections/LLMProviders'
 import { AgentRuns } from './collections/AgentRuns'
+import { AgentEvents } from './collections/AgentEvents'
 import { AgentTools } from './collections/AgentTools'
 import { AgentToolVersions } from './collections/AgentToolVersions'
 import { Patterns } from './collections/Patterns'
@@ -109,6 +110,7 @@ export default buildConfig({
     // Infrastructure Agent
     LLMProviders,
     AgentRuns,
+    AgentEvents,
     AgentTools,
     AgentToolVersions,
     Patterns,

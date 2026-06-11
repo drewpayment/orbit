@@ -3,6 +3,7 @@ package workflows
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -83,6 +84,50 @@ func registerSandboxStubs(env *testsuite.TestWorkflowEnvironment) {
 		func(_ context.Context, _ agentactivity.ResolvePendingApprovalInput) error { return nil },
 		activity.RegisterOptions{Name: agentcontract.ActivityResolvePendingApproval},
 	)
+	// Durable transcript persistence — the workflow flushes batches at every
+	// barrier and before continue-as-new / return. No-op stub unless a test
+	// installs a capturing recorder via registerEventRecorder.
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.PersistAgentEventsInput) error { return nil },
+		activity.RegisterOptions{Name: agentcontract.ActivityPersistAgentEvents},
+	)
+}
+
+// eventRecorder captures every PersistAgentEvents batch the workflow flushes,
+// so flush-barrier tests can assert the durable transcript is complete and
+// monotonic. Safe for concurrent activity invocations.
+type eventRecorder struct {
+	mu       sync.Mutex
+	batches  [][]agentactivity.AgentEventWire
+	failNext atomic.Int32 // when >0, the next N calls return an error (decremented)
+}
+
+func (r *eventRecorder) persist(_ context.Context, in agentactivity.PersistAgentEventsInput) error {
+	if r.failNext.Load() > 0 {
+		r.failNext.Add(-1)
+		return fmt.Errorf("simulated transient persist failure")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.batches = append(r.batches, in.Events)
+	return nil
+}
+
+// allEvents flattens the captured batches in flush order.
+func (r *eventRecorder) allEvents() []agentactivity.AgentEventWire {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []agentactivity.AgentEventWire
+	for _, b := range r.batches {
+		out = append(out, b...)
+	}
+	return out
+}
+
+// registerEventRecorder overrides the no-op PersistAgentEvents stub with the
+// capturing recorder. Must be called AFTER registerSandboxStubs.
+func registerEventRecorder(env *testsuite.TestWorkflowEnvironment, r *eventRecorder) {
+	env.RegisterActivityWithOptions(r.persist, activity.RegisterOptions{Name: agentcontract.ActivityPersistAgentEvents})
 }
 
 type scriptedLLM struct {

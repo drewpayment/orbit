@@ -77,12 +77,21 @@ type wireToolCall struct {
 }
 
 type wireMessage struct {
-	Role       string         `json:"role"`
-	Content    string         `json:"content,omitempty"`
+	Role string `json:"role"`
+	// Content is a pointer so we can distinguish "omit entirely" (nil) from
+	// "emit an explicit empty string" (&""). OpenAI-compatible backends —
+	// notably Ollama — reject a message that has neither content nor
+	// tool_calls (`invalid message content type: <nil>`), so assistant
+	// messages without tool calls and all tool messages MUST carry an
+	// explicit content key even when empty. See BUG-2.
+	Content    *string        `json:"content,omitempty"`
 	ToolCalls  []wireToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string         `json:"tool_call_id,omitempty"`
 	Name       string         `json:"name,omitempty"`
 }
+
+// strPtr returns a pointer to s. Used to force an explicit content key.
+func strPtr(s string) *string { return &s }
 
 type wireRequest struct {
 	Model         string        `json:"model"`
@@ -173,16 +182,22 @@ func buildRequest(model string, req providers.CompletionRequest) ([]byte, error)
 func toWireMessages(system string, msgs []providers.Message) []wireMessage {
 	out := make([]wireMessage, 0, len(msgs)+1)
 	if system != "" {
-		out = append(out, wireMessage{Role: "system", Content: system})
+		out = append(out, wireMessage{Role: "system", Content: strPtr(system)})
 	}
 	for _, m := range msgs {
 		switch m.Role {
 		case providers.RoleSystem:
-			out = append(out, wireMessage{Role: "system", Content: m.Content})
+			out = append(out, wireMessage{Role: "system", Content: strPtr(m.Content)})
 		case providers.RoleUser:
-			out = append(out, wireMessage{Role: "user", Content: m.Content})
+			out = append(out, wireMessage{Role: "user", Content: strPtr(m.Content)})
 		case providers.RoleAssistant:
-			wm := wireMessage{Role: "assistant", Content: m.Content}
+			// Drop assistant turns that carry neither text nor tool calls:
+			// they convey nothing to the model and previously serialized to a
+			// bare {"role":"assistant"} that Ollama rejects (BUG-2).
+			if m.Content == "" && len(m.ToolCalls) == 0 {
+				continue
+			}
+			wm := wireMessage{Role: "assistant"}
 			for _, tc := range m.ToolCalls {
 				args, _ := json.Marshal(tc.Arguments)
 				wm.ToolCalls = append(wm.ToolCalls, wireToolCall{
@@ -194,13 +209,21 @@ func toWireMessages(system string, msgs []providers.Message) []wireMessage {
 					},
 				})
 			}
+			// When the assistant has no tool calls, always carry an explicit
+			// content key (even ""). With tool calls present, OpenAI permits
+			// absent/null content, so we only set it when non-empty.
+			if len(wm.ToolCalls) == 0 || m.Content != "" {
+				wm.Content = strPtr(m.Content)
+			}
 			out = append(out, wm)
 		case providers.RoleTool:
+			// Tool messages must always carry content (empty string at worst);
+			// omitting it triggers the same Ollama 400.
 			out = append(out, wireMessage{
 				Role:       "tool",
 				ToolCallID: m.ToolCallID,
 				Name:       m.Name,
-				Content:    m.Content,
+				Content:    strPtr(m.Content),
 			})
 		}
 	}

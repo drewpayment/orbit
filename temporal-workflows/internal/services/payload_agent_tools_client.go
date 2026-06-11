@@ -156,11 +156,16 @@ type ResolveResult struct {
 // non-nil the route writes an agent_proposed (v1) baseline plus, if any
 // field actually changed, a reviewer_edited (v2) row, then patches the
 // AgentTools row to the edited values.
-func (c *PayloadAgentToolsClient) Resolve(ctx context.Context, id string, approved bool, resolvedBy, reason string, edits *AgentToolEdits) (ResolveResult, error) {
+func (c *PayloadAgentToolsClient) Resolve(ctx context.Context, id, workspaceID string, approved bool, resolvedBy, reason string, edits *AgentToolEdits) (ResolveResult, error) {
 	payload := map[string]any{
 		"approved":   approved,
 		"resolvedBy": resolvedBy,
 		"reason":     reason,
+	}
+	if workspaceID != "" {
+		// The route cross-checks this against the tool's owning workspace
+		// and returns 409 on mismatch (tenant isolation on resolve).
+		payload["workspaceId"] = workspaceID
 	}
 	if edits != nil {
 		payload["edited"] = true

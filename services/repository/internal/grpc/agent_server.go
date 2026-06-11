@@ -18,11 +18,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	enums "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/converter"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -35,10 +40,38 @@ import (
 // worker registers on "orbit-workflows" today; we keep that here for clarity.
 const AgentTaskQueue = "orbit-workflows"
 
+// workflowQuerier is the narrow slice of client.Client used by the
+// read/stream paths. Extracted so tests can inject a fake without standing
+// up a full Temporal client; the production server uses the real client.
+type workflowQuerier interface {
+	QueryWorkflow(ctx context.Context, workflowID, runID, queryType string, args ...interface{}) (converter.EncodedValue, error)
+	DescribeWorkflowExecution(ctx context.Context, workflowID, runID string) (*workflowservice.DescribeWorkflowExecutionResponse, error)
+}
+
+// isClosedExecutionStatus reports whether a workflow execution status is a
+// closed (no-longer-running) state. CONTINUED_AS_NEW is NOT closed for our
+// purposes — the logical run continues under a new execution. UNSPECIFIED is
+// treated as not-closed (we can't conclude the run ended).
+func isClosedExecutionStatus(status enums.WorkflowExecutionStatus) bool {
+	switch status {
+	case enums.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		enums.WORKFLOW_EXECUTION_STATUS_FAILED,
+		enums.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		enums.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		enums.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+		return true
+	default:
+		return false
+	}
+}
+
 // AgentServer implements agentv1connect.AgentServiceHandler.
 type AgentServer struct {
 	agentv1connect.UnimplementedAgentServiceHandler
 	temporal client.Client
+	// querier handles workflow queries. Defaults to temporal in
+	// NewAgentServer; tests set it directly to a fake.
+	querier   workflowQuerier
 	pollEvery time.Duration
 }
 
@@ -49,7 +82,22 @@ func NewAgentServer(temporal client.Client, pollEvery time.Duration) *AgentServe
 	if pollEvery <= 0 {
 		pollEvery = 50 * time.Millisecond
 	}
-	return &AgentServer{temporal: temporal, pollEvery: pollEvery}
+	return &AgentServer{temporal: temporal, querier: temporal, pollEvery: pollEvery}
+}
+
+// isWorkflowNotFound reports whether err indicates the queried workflow no
+// longer exists in Temporal (retention expired or workflow terminated and
+// purged). We match both the typed serviceerror.NotFound and the literal
+// "workflow not found" substring some server/SDK versions surface.
+func isWorkflowNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	var nf *serviceerror.NotFound
+	if errors.As(err, &nf) {
+		return true
+	}
+	return strings.Contains(err.Error(), "workflow not found")
 }
 
 // StartInfrastructureAgent begins a new agent run.
@@ -243,6 +291,12 @@ func (s *AgentServer) StreamAgentEvents(
 	for {
 		newEvents, finished, err := s.fetchNewEvents(ctx, msg.WorkflowId, since)
 		if err != nil {
+			if isWorkflowNotFound(err) {
+				// Workflow history is gone (retention expired or terminated +
+				// purged). Surface NotFound so the SSE route can emit a clean
+				// `gone` event instead of reconnect-looping on a 500.
+				return connect.NewError(connect.CodeNotFound, err)
+			}
 			return connect.NewError(connect.CodeInternal, err)
 		}
 		for _, e := range newEvents {
@@ -271,7 +325,7 @@ func (s *AgentServer) StreamAgentEvents(
 // fetchNewEvents queries the workflow for events with Sequence > since and
 // also reports whether the workflow has terminated.
 func (s *AgentServer) fetchNewEvents(ctx context.Context, workflowID string, since uint64) ([]agentcontract.AgentEvent, bool, error) {
-	resp, err := s.temporal.QueryWorkflow(ctx, workflowID, "", agentcontract.QueryEventsSince, since)
+	resp, err := s.querier.QueryWorkflow(ctx, workflowID, "", agentcontract.QueryEventsSince, since)
 	if err != nil {
 		return nil, false, fmt.Errorf("query events: %w", err)
 	}
@@ -280,13 +334,31 @@ func (s *AgentServer) fetchNewEvents(ctx context.Context, workflowID string, sin
 		return nil, false, fmt.Errorf("decode events: %w", err)
 	}
 
-	finishedResp, err := s.temporal.QueryWorkflow(ctx, workflowID, "", agentcontract.QueryHasFinished)
+	finishedResp, err := s.querier.QueryWorkflow(ctx, workflowID, "", agentcontract.QueryHasFinished)
 	if err != nil {
 		return events, false, nil // non-fatal; keep streaming
 	}
 	var finished bool
 	_ = finishedResp.Get(&finished)
-	return events, finished, nil
+	if finished {
+		return events, true, nil
+	}
+
+	// QueryHasFinished only reflects the workflow's INTERNAL terminated flag,
+	// which an external `temporal workflow terminate` (or an uncaught failure)
+	// never sets. Cross-check the actual execution status so the stream can
+	// finish cleanly instead of polling a dead run forever. Best-effort: a
+	// describe error keeps us streaming (the next NotFound/terminal will close
+	// it). We deliberately treat closed-but-still-queryable as finished AFTER
+	// draining this batch's events.
+	desc, derr := s.querier.DescribeWorkflowExecution(ctx, workflowID, "")
+	if derr != nil {
+		return events, false, nil
+	}
+	if info := desc.GetWorkflowExecutionInfo(); info != nil && isClosedExecutionStatus(info.GetStatus()) {
+		return events, true, nil
+	}
+	return events, false, nil
 }
 
 // ListAgentRuns is a Spike-1 stub. Real impl will hit Payload's
@@ -309,8 +381,13 @@ func (s *AgentServer) GetAgentRun(
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("workflow_id is required"))
 	}
 
-	snapResp, err := s.temporal.QueryWorkflow(ctx, msg.WorkflowId, "", agentcontract.QuerySnapshot)
+	snapResp, err := s.querier.QueryWorkflow(ctx, msg.WorkflowId, "", agentcontract.QuerySnapshot)
 	if err != nil {
+		if isWorkflowNotFound(err) {
+			// Same degradation as the stream path: the frontend turns
+			// NotFound into a saved-history-only view and reconciles status.
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("query snapshot: %w", err))
+		}
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("query snapshot: %w", err))
 	}
 	var snapshot agentcontract.AgentSnapshot

@@ -96,10 +96,13 @@ func (c *PayloadPendingApprovalsClient) Open(ctx context.Context, in OpenInput) 
 
 // ResolveInput is the body of POST /api/internal/pending-approvals/[id]/resolve.
 type ResolveInput struct {
-	Status         string `json:"status"`               // "resolved" | "aborted"
-	Resolution     string `json:"resolution,omitempty"` // "approved" | "rejected"
-	ResolvedBy     string `json:"resolvedBy,omitempty"`
-	Notes          string `json:"notes,omitempty"`
+	Status     string `json:"status"`               // "resolved" | "aborted"
+	Resolution string `json:"resolution,omitempty"` // "approved" | "rejected"
+	ResolvedBy string `json:"resolvedBy,omitempty"`
+	Notes      string `json:"notes,omitempty"`
+	// WorkspaceID lets the route verify the resolving workflow owns the
+	// pending-approval row (tenant isolation on resolve).
+	WorkspaceID    string `json:"workspaceId,omitempty"`
 	ReviewerRounds int    `json:"reviewerRounds,omitempty"`
 }
 
