@@ -435,6 +435,17 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 			"status":  "aborted",
 			"message": fmt.Sprintf("aborted by %s: %s", payload.RequestedBy, payload.Reason),
 		})
+		// Cancel the loop FIRST so a gate wait / awaiting-user select / LLM
+		// activity is preempted immediately (BUG-3: aborting a run parked at
+		// an approval gate did nothing for >21s because cancelLoop ran AFTER
+		// the blocking markRun audit write — a slow agent-runs API kept the
+		// gate parked). The audit write happens after; it must not gate
+		// termination.
+		cancelLoop()
+		// Mark the terminal audit as owned by this goroutine BEFORE the
+		// (possibly slow) write, so the main loop's deferred catch-all audit
+		// doesn't also fire once cancelLoop lets it return.
+		state.terminalAuditFlushed = true
 		gAuditCtx := workflow.WithActivityOptions(gctx, workflow.ActivityOptions{
 			StartToCloseTimeout: 5 * time.Second,
 			RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 2},
@@ -443,8 +454,6 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 			Status:  "aborted",
 			EndedAt: workflow.Now(gctx).UTC().Format(time.RFC3339),
 		})
-		state.terminalAuditFlushed = true
-		cancelLoop()
 	})
 
 	// Seed the conversation with the initial user prompt if this is a fresh run.
