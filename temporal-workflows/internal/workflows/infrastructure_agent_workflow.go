@@ -67,6 +67,11 @@ type (
 	// AgentEventWire is the durable-event batch element the persistence
 	// activity consumes.
 	AgentEventWire = agentactivity.AgentEventWire
+
+	// DurableEventWire is the contract-level carry shape for unflushed durable
+	// events that cross a continue-as-new boundary. It mirrors AgentEventWire
+	// field-for-field; the workflow converts between the two at the CAN seam.
+	DurableEventWire = agentcontract.DurableEventWire
 )
 
 // Tool / event-kind names re-exported from the contract package.
@@ -550,6 +555,23 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 
 			selector := workflow.NewSelector(loopCtx)
 			receivedUserMessage := false
+			// Honor abort INTRINSICALLY at the awaiting_user wait, mirroring
+			// gateWaiter.await (BUG-A). A fresh Abort arriving while the run is
+			// parked here must terminate the wait regardless of coroutine
+			// scheduling. Previously the selector watched only userMsgCh + the
+			// timer and relied on the abort goroutine winning a turn to cancel
+			// loopCtx — the same race the gate wait was rebuilt to eliminate.
+			// drainPendingAbort above only catches a BUFFERED abort before the
+			// select arms; this branch catches one that arrives while parked.
+			// applyAbort runs on a disconnected context so the terminal audit
+			// write survives the cancelLoop() it triggers, and is idempotent on
+			// state.terminated so whichever consumer of abortCh runs first wins.
+			selector.AddReceive(abortCh, func(c workflow.ReceiveChannel, _ bool) {
+				var payload AbortSignalPayload
+				c.Receive(loopCtx, &payload)
+				dctx, _ := workflow.NewDisconnectedContext(ctx)
+				applyAbort(dctx, payload)
+			})
 			selector.AddReceive(userMsgCh, func(c workflow.ReceiveChannel, _ bool) {
 				var msg UserMessageSignalPayload
 				c.Receive(loopCtx, &msg)
@@ -611,6 +633,12 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 				})
 				state.terminalAuditFlushed = true
 			})
+			// loopCtx.Done() backstop: if the abort goroutine (or inline drain)
+			// consumed abortCh and cancelled loopCtx before our AddReceive
+			// branch was scheduled, wake the wait so it doesn't block on a
+			// drained channel. applyAbort already ran (idempotent), so this
+			// branch just lets the select return; state.terminated is set.
+			selector.AddReceive(loopCtx.Done(), func(workflow.ReceiveChannel, bool) {})
 			selector.Select(loopCtx)
 			if state.terminated || !receivedUserMessage {
 				continue
@@ -3020,6 +3048,21 @@ func initState(ctx workflow.Context, input InfrastructureAgentInput) agentState 
 	if state.nextSeq == 0 {
 		state.nextSeq = 1
 	}
+	// Seed the flush buffer with durable events a prior run segment buffered
+	// but never persisted before continue-as-new (Fix #1 / GH issue #43).
+	// These are flushed at this run's first barrier (or the terminal defer).
+	// Idempotent on (workflowId, sequence): since they were never persisted,
+	// re-flushing here cannot double-write. Done BEFORE the "starting"
+	// status_update is emitted so the carried events keep their original
+	// (lower) sequences and the buffer stays monotonic.
+	for _, e := range input.UnflushedDurable {
+		state.unflushedDurable = append(state.unflushedDurable, AgentEventWire{
+			Sequence:  e.Sequence,
+			Kind:      e.Kind,
+			Payload:   e.Payload,
+			EmittedAt: e.EmittedAt,
+		})
+	}
 	emitEvent(ctx, &state, EventKindStatusUpdate, map[string]any{"status": "starting"})
 	return state
 }
@@ -3330,17 +3373,35 @@ func continueAsNew(ctx workflow.Context, input InfrastructureAgentInput, state *
 	if len(keep) > 30 {
 		keep = keep[len(keep)-30:]
 	}
+	// Carry any durable events still unpersisted at this instant so they
+	// survive the CAN boundary (Fix #1 / GH issue #43). This covers BOTH a
+	// pre-CAN flush that failed (the whole batch is still buffered) AND an
+	// event a drain goroutine appended while the flush activity was awaiting
+	// (flushDurableEvents only drops the exact prefix it sent). The continued
+	// run seeds its buffer from this in initState and flushes at its first
+	// barrier. Converting AgentEventWire → DurableEventWire keeps the carry on
+	// the contract type. Nil when the buffer is empty (the common case).
+	var carryDurable []DurableEventWire
+	for _, e := range state.unflushedDurable {
+		carryDurable = append(carryDurable, DurableEventWire{
+			Sequence:  e.Sequence,
+			Kind:      e.Kind,
+			Payload:   e.Payload,
+			EmittedAt: e.EmittedAt,
+		})
+	}
 	carry := InfrastructureAgentInput{
-		AgentRunID:      input.AgentRunID,
-		WorkspaceID:     input.WorkspaceID,
-		RepositoryID:    input.RepositoryID,
-		UserID:          input.UserID,
-		LLMProviderID:   input.LLMProviderID,
-		SystemPrompt:    input.SystemPrompt,
-		History:         keep,
-		Events:          nil,
-		NextSequence:    state.nextSeq,
-		IterationsSoFar: 0,
+		AgentRunID:       input.AgentRunID,
+		WorkspaceID:      input.WorkspaceID,
+		RepositoryID:     input.RepositoryID,
+		UserID:           input.UserID,
+		LLMProviderID:    input.LLMProviderID,
+		SystemPrompt:     input.SystemPrompt,
+		History:          keep,
+		Events:           nil,
+		NextSequence:     state.nextSeq,
+		IterationsSoFar:  0,
+		UnflushedDurable: carryDurable,
 	}
 	return workflow.NewContinueAsNewError(ctx, InfrastructureAgentWorkflow, carry)
 }

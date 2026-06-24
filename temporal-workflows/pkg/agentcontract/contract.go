@@ -223,6 +223,31 @@ type InfrastructureAgentInput struct {
 	Events          []AgentEvent
 	NextSequence    uint64
 	IterationsSoFar int
+
+	// UnflushedDurable carries durable transcript events that a run buffered
+	// but never successfully persisted before continue-as-new (e.g. the
+	// pre-CAN flush activity errored, or an event was appended during the
+	// flush await). The continued run seeds its own flush buffer from this so
+	// the events are persisted at its first barrier — they would otherwise be
+	// lost across the CAN boundary (GH issue #43). Idempotent on
+	// (workflowId, sequence); since these were never persisted, carrying them
+	// cannot double-write. Backward-compatible: a nil value (older carry
+	// inputs / fresh runs) simply seeds an empty buffer. The element type
+	// mirrors the activity-layer AgentEventWire so the contract package keeps
+	// no dependency on internal/activities.
+	UnflushedDurable []DurableEventWire
+}
+
+// DurableEventWire is the contract-level shape of one buffered durable event
+// carried across continue-as-new. It mirrors the activity-layer AgentEventWire
+// field-for-field (including JSON tags) so the workflow can convert between the
+// two at the CAN boundary without coupling pkg/agentcontract to
+// internal/activities.
+type DurableEventWire struct {
+	Sequence  uint64         `json:"sequence"`
+	Kind      string         `json:"kind"`
+	Payload   map[string]any `json:"payload"`
+	EmittedAt string         `json:"emitted_at"` // RFC3339
 }
 
 // ConversationTurn captures one message in the agent transcript.

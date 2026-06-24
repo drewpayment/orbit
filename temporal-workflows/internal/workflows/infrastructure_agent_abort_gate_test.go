@@ -746,3 +746,88 @@ func TestAbortAtGate_ProposePattern(t *testing.T) {
 	require.GreaterOrEqual(t, len(rec.resolves), 1)
 	require.Equal(t, "aborted", rec.resolves[len(rec.resolves)-1].in.Status)
 }
+
+// AC2.5 (Fix #2): an abort delivered as its OWN workflow task while the run is
+// parked in awaiting_user must terminate the run aborted intrinsically — the
+// awaiting_user selector consumes the abort directly (mirroring
+// gateWaiter.await) rather than depending on the abort goroutine winning a
+// coroutine-scheduling turn to cancel loopCtx. We first confirm the run
+// reached awaiting_user, THEN signal abort alone (no user message, separate
+// task). The run must end aborted with NO further LLM step and NO gate opened.
+func TestAbortAtAwaitingUser_AbortAsOwnTaskTerminates(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	registerSandboxStubs(env)
+
+	// Fail the test if any approval gate is ever opened.
+	var openCalled bool
+	var openMu sync.Mutex
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.OpenPendingApprovalInput) (agentactivity.OpenPendingApprovalResult, error) {
+			openMu.Lock()
+			openCalled = true
+			openMu.Unlock()
+			return agentactivity.OpenPendingApprovalResult{ID: "row-x"}, nil
+		},
+		activity.RegisterOptions{Name: agentcontract.ActivityOpenPendingApproval},
+	)
+
+	llm := &scriptedLLM{
+		steps: []agentactivity.LLMNextStepResult{
+			// Step 1: propose_to_user → parks the run in awaiting_user.
+			{
+				ToolCalls: []providers.ToolCall{
+					{ID: "tc-prop", Name: ToolProposeToUser, Arguments: map[string]any{
+						"title": "Plan", "summary": "do x", "body_markdown": "## Plan",
+					}},
+				},
+				StopReason: "tool_use",
+			},
+			// Step 2 must never run: the run is aborted while parked, before any
+			// user message could resume it.
+			{
+				ToolCalls: []providers.ToolCall{
+					{ID: "tc-2", Name: ToolDone, Arguments: map[string]any{"summary": "should not happen"}},
+				},
+				StopReason: "tool_use",
+			},
+		},
+	}
+	env.RegisterActivityWithOptions(llm.Run, activity.RegisterOptions{Name: ActivityLLMNextStep})
+
+	// Confirm awaiting_user, THEN deliver the abort alone as its own task.
+	env.RegisterDelayedCallback(func() {
+		var snap AgentSnapshot
+		for i := 0; i < 20; i++ {
+			q, _ := env.QueryWorkflow(AgentQuerySnapshot)
+			_ = q.Get(&snap)
+			if snap.Status == "awaiting_user" {
+				break
+			}
+		}
+		require.Equal(t, "awaiting_user", snap.Status, "run should park after propose_to_user")
+		env.SignalWorkflow(AgentSignalAbort, AbortSignalPayload{RequestedBy: "u1", Reason: "stop"})
+	}, 100*time.Millisecond)
+
+	env.ExecuteWorkflow(InfrastructureAgentWorkflow, InfrastructureAgentInput{
+		AgentRunID: "run-abort-awaituser", WorkspaceID: "ws-1", LLMProviderID: "p", InitialPrompt: "plan it",
+	})
+
+	require.True(t, env.IsWorkflowCompleted(), "abort while parked in awaiting_user must terminate the run")
+	require.NoError(t, env.GetWorkflowError())
+
+	// Exactly one LLM step ran (the propose); the abort preempted before any
+	// second step.
+	require.Equal(t, int32(1), llm.calls.Load(), "no further LLM step may run after the parked abort")
+
+	openMu.Lock()
+	require.False(t, openCalled, "no approval gate may open on the abort path")
+	openMu.Unlock()
+
+	q, err := env.QueryWorkflow(AgentQuerySnapshot)
+	require.NoError(t, err)
+	var final AgentSnapshot
+	require.NoError(t, q.Get(&final))
+	require.Equal(t, "aborted", final.Status, "terminal status must be aborted")
+	require.Empty(t, final.PendingApprovals, "no gate should be left open after abort")
+}
