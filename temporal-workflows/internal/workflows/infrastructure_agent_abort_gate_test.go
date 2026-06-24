@@ -401,6 +401,132 @@ func TestAbortAtGate_UserMessageTriggeredGateAfterAbort(t *testing.T) {
 	require.Empty(t, final.PendingApprovals, "no gate should be left open after abort")
 }
 
+// BUG-A (live race, runs agent-f17cd47f / agent-e9b4f3c3 / agent-37de985a):
+// a gate opened via the awaiting_user → user-message → LLM → tool path
+// genuinely PARKS at awaiting_approval, and only THEN does the abort arrive
+// (its own workflow task, AFTER the gate is open). The pre-gate inline drains
+// (drainPendingAbort at loop-top / post-LLM) cannot help here because there
+// was no buffered abort when they ran — the gate is already open and the run
+// is sitting inside gateWaiter.await. The fix makes await select on the abort
+// channel directly, so the gate terminates without depending on the abort
+// goroutine winning a coroutine-scheduling turn to cancel loopCtx. The run
+// must terminate aborted, the destructive command must not run, and no gate
+// may be left open with a 72h timer armed.
+func TestAbortAtGate_MessageTriggeredGateOpenThenAbort(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	registerSandboxStubs(env)
+
+	var openCalled bool
+	var openMu sync.Mutex
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.OpenPendingApprovalInput) (agentactivity.OpenPendingApprovalResult, error) {
+			openMu.Lock()
+			openCalled = true
+			openMu.Unlock()
+			return agentactivity.OpenPendingApprovalResult{ID: "row-x"}, nil
+		},
+		activity.RegisterOptions{Name: agentcontract.ActivityOpenPendingApproval},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.ResolvePendingApprovalInput) error { return nil },
+		activity.RegisterOptions{Name: agentcontract.ActivityResolvePendingApproval},
+	)
+	var shellRan bool
+	var shellMu sync.Mutex
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ agentactivity.SandboxedShellInput) (agentactivity.SandboxedShellResult, error) {
+			shellMu.Lock()
+			shellRan = true
+			shellMu.Unlock()
+			return agentactivity.SandboxedShellResult{ExitCode: 0}, nil
+		},
+		activity.RegisterOptions{Name: agentcontract.ActivitySandboxedShell},
+	)
+
+	llm := &scriptedLLM{
+		steps: []agentactivity.LLMNextStepResult{
+			// Step 1: propose_to_user → parks the run in awaiting_user.
+			{
+				ToolCalls: []providers.ToolCall{
+					{ID: "tc-prop", Name: ToolProposeToUser, Arguments: map[string]any{
+						"title": "Plan", "summary": "do x", "body_markdown": "## Plan",
+					}},
+				},
+				StopReason: "tool_use",
+			},
+			// Step 2 (after the user reply): a destructive command that opens
+			// the gate. The abort lands only AFTER the gate is open.
+			{
+				ToolCalls: []providers.ToolCall{
+					{ID: "tc-shell", Name: ToolShellExec, Arguments: map[string]any{
+						"command": "terraform destroy -auto-approve",
+					}},
+				},
+				StopReason: "tool_use",
+			},
+		},
+	}
+	env.RegisterActivityWithOptions(llm.Run, activity.RegisterOptions{Name: ActivityLLMNextStep})
+
+	// 1) Once parked in awaiting_user, deliver the user message alone. The LLM
+	//    step runs and opens the destructive gate; the run parks in await.
+	env.RegisterDelayedCallback(func() {
+		var snap AgentSnapshot
+		for i := 0; i < 20; i++ {
+			q, _ := env.QueryWorkflow(AgentQuerySnapshot)
+			_ = q.Get(&snap)
+			if snap.Status == "awaiting_user" {
+				break
+			}
+		}
+		require.Equal(t, "awaiting_user", snap.Status, "run should park after propose_to_user")
+		env.SignalWorkflow(AgentSignalUserMessage, UserMessageSignalPayload{
+			TurnID: "u-2", UserID: "u1", Message: "Run this exact shell command: terraform destroy -auto-approve",
+		})
+	}, 100*time.Millisecond)
+
+	// 2) After the gate is confirmed OPEN (status awaiting_approval, pending
+	//    row present), deliver the abort as its own task. Only await's direct
+	//    abort branch can terminate the run from here.
+	env.RegisterDelayedCallback(func() {
+		var snap AgentSnapshot
+		for i := 0; i < 20; i++ {
+			q, _ := env.QueryWorkflow(AgentQuerySnapshot)
+			_ = q.Get(&snap)
+			if snap.Status == "awaiting_approval" && len(snap.PendingApprovals) == 1 {
+				break
+			}
+		}
+		require.Equal(t, "awaiting_approval", snap.Status, "destructive gate must be open before abort")
+		require.Len(t, snap.PendingApprovals, 1, "destructive gate must be open before abort")
+		env.SignalWorkflow(AgentSignalAbort, AbortSignalPayload{RequestedBy: "u1", Reason: "stop"})
+	}, 300*time.Millisecond)
+
+	env.ExecuteWorkflow(InfrastructureAgentWorkflow, InfrastructureAgentInput{
+		AgentRunID: "run-abort-msggate-open", WorkspaceID: "ws-1", LLMProviderID: "p", InitialPrompt: "plan it",
+	})
+
+	require.True(t, env.IsWorkflowCompleted(), "abort at an open message-triggered gate must terminate the run")
+	require.NoError(t, env.GetWorkflowError())
+
+	// The gate did open (this is the open-then-abort path), but the command
+	// must never have executed, and no gate may be left dangling.
+	openMu.Lock()
+	require.True(t, openCalled, "gate should have opened in this scenario")
+	openMu.Unlock()
+	shellMu.Lock()
+	require.False(t, shellRan, "destructive command must not execute after abort")
+	shellMu.Unlock()
+
+	q, err := env.QueryWorkflow(AgentQuerySnapshot)
+	require.NoError(t, err)
+	var final AgentSnapshot
+	require.NoError(t, q.Get(&final))
+	require.Equal(t, "aborted", final.Status, "run must end aborted")
+	require.Empty(t, final.PendingApprovals, "no gate should be left open after abort")
+}
+
 // Abort delivered WHILE the step-2 LLM activity is running: cancelLoop fires
 // during the activity, so by the time control returns to tool dispatch the
 // loop is cancelled. The dispatch/gate guards must then prevent the

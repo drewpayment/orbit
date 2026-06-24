@@ -498,6 +498,28 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 		applyAbort(gctx, payload)
 	})
 
+	// gateWaiter bundles the channels an approval gate waits on so awaitApproval
+	// can honor an abort INTRINSICALLY — by selecting on the abort channel
+	// itself — instead of depending on a separate goroutine winning a
+	// coroutine-scheduling turn to translate Abort → cancelLoop → loopCtx.Done()
+	// (BUG-A live race, runs agent-f17cd47f / agent-e9b4f3c3 / agent-37de985a).
+	// The abort branch applies the terminal abort via applyAbort (idempotent on
+	// state.terminated), so whichever consumer of abortCh runs first wins and
+	// the gate wait never wedges. abortCh is on the OUTER ctx; signal channels
+	// are keyed by name, not by the context passed to Select, so awaitApproval
+	// can drain it while running on loopCtx.
+	gw := gateWaiter{
+		approvalCh: approvalCh,
+		abortCh:    abortCh,
+		applyAbort: func(payload AbortSignalPayload) {
+			// Disconnected context: the terminal audit write inside applyAbort
+			// must survive the cancelLoop() it triggers (same reasoning as
+			// drainPendingAbort).
+			dctx, _ := workflow.NewDisconnectedContext(ctx)
+			applyAbort(dctx, payload)
+		},
+	}
+
 	// Seed the conversation with the initial user prompt if this is a fresh run.
 	if len(state.history) == 0 && input.InitialPrompt != "" {
 		appendTurn(ctx, &state, ConversationTurn{
@@ -725,7 +747,7 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 		// Dispatch tool calls. Use loopCtx so awaitApproval inside dispatch
 		// observes abort-induced cancellation.
 		for _, tc := range result.ToolCalls {
-			toolResult, terminated := dispatchTool(loopCtx, sandboxCtx, &state, &input, tc, approvalCh)
+			toolResult, terminated := dispatchTool(loopCtx, sandboxCtx, &state, &input, tc, gw)
 			// The call has completed; emit one aggregated, durable
 			// tool_call_output event for any streamed output before the
 			// tool-result turn so the transcript order reads
@@ -869,7 +891,7 @@ func resolvePendingApproval(ctx workflow.Context, state *agentState, approvalID,
 // dispatchTool routes a single tool call to its handler. Returns the textual
 // result (fed back to the model as a tool-result message) and a flag telling
 // the caller whether the loop should terminate.
-func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agentState, input *InfrastructureAgentInput, tc providers.ToolCall, approvalCh workflow.ReceiveChannel) (string, bool) {
+func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agentState, input *InfrastructureAgentInput, tc providers.ToolCall, gw gateWaiter) (string, bool) {
 	workflowID := workflow.GetInfo(ctx).WorkflowExecution.ID
 	auditCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 5 * time.Second,
@@ -924,7 +946,7 @@ func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agen
 		// where the agent forgets or is talched into skipping by prompt
 		// injection.
 		if classification := safety.ClassifyShell(command); classification.Destructive {
-			ok, reason := requireDestructiveApproval(ctx, auditCtx, state, input, approvalCh, workflowID, command, classification)
+			ok, reason := requireDestructiveApproval(ctx, auditCtx, state, input, gw, workflowID, command, classification)
 			if !ok {
 				return jsonResult(map[string]any{
 					"approved":  false,
@@ -1083,9 +1105,16 @@ func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agen
 		// are reopened); abort short-circuits the wait; the timeout
 		// auto-rejects (resolution carries "approval timed out" and flows
 		// through the normal rejection path below).
-		resolution, aborted, _ := awaitApproval(ctx, approvalCh, approvalID, effectiveApprovalTimeout(input))
+		resolution, aborted, _ := gw.await(ctx, approvalID, effectiveApprovalTimeout(input))
 		delete(state.pendingApprovals, approvalID)
-		state.status = prevStatus
+		// Restore the pre-gate status ONLY when not aborted: on abort,
+		// gw.await already ran applyAbort, which set status="aborted" — and
+		// prevStatus is the pre-gate "running", so restoring it here would
+		// clobber the terminal status back to running and the loop-exit
+		// fallthrough would then mark the run "completed" (BUG-A tail).
+		if !aborted {
+			state.status = prevStatus
+		}
 		if aborted {
 			state.terminated = true
 			resolvePendingApproval(auditCtx, state, approvalID, "aborted", "", resolution.ResolvedBy, "agent run aborted")
@@ -1122,16 +1151,16 @@ func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agen
 		return dispatchStartHealthCheck(ctx, state, tc)
 
 	case ToolRegisterTool:
-		return dispatchRegisterTool(ctx, sandboxCtx, state, tc, approvalCh, input)
+		return dispatchRegisterTool(ctx, sandboxCtx, state, tc, gw, input)
 
 	case ToolProposePattern:
-		return dispatchProposePattern(ctx, sandboxCtx, state, tc, approvalCh, input)
+		return dispatchProposePattern(ctx, sandboxCtx, state, tc, gw, input)
 
 	case ToolListPatterns:
 		return dispatchListPatterns(state, tc)
 
 	case ToolInstantiatePattern:
-		return dispatchInstantiatePattern(ctx, sandboxCtx, state, input, tc, approvalCh)
+		return dispatchInstantiatePattern(ctx, sandboxCtx, state, input, tc, gw)
 
 	case ToolOrbitListApps:
 		var res agentactivity.OrbitListAppsResult
@@ -1192,7 +1221,7 @@ func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agen
 	default:
 		// Registered tool? Expand its template and dispatch as primitive(s).
 		if reg, ok := state.registeredTools[tc.Name]; ok {
-			return dispatchRegisteredTool(ctx, sandboxCtx, state, input, tc, reg, approvalCh)
+			return dispatchRegisteredTool(ctx, sandboxCtx, state, input, tc, reg, gw)
 		}
 		return fmt.Sprintf("ERROR: unknown tool %q.", tc.Name), false
 	}
@@ -1276,7 +1305,7 @@ func buildToolCatalog(state *agentState) []providers.ToolSchema {
 // more primitive calls and runs each via the standard primitive dispatch.
 // Composite templates aggregate results into a JSON array; single-call
 // templates return their primitive's result directly.
-func dispatchRegisteredTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agentState, input *InfrastructureAgentInput, tc providers.ToolCall, reg agentactivity.ApprovedAgentTool, approvalCh workflow.ReceiveChannel) (string, bool) {
+func dispatchRegisteredTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agentState, input *InfrastructureAgentInput, tc providers.ToolCall, reg agentactivity.ApprovedAgentTool, gw gateWaiter) (string, bool) {
 	calls, err := tooltemplate.Expand(tooltemplate.Kind(reg.TemplateKind), reg.TemplateJSON, tc.Arguments)
 	if err != nil {
 		return jsonError(reg.Name, err), false
@@ -1294,7 +1323,7 @@ func dispatchRegisteredTool(ctx workflow.Context, sandboxCtx workflow.Context, s
 			Name:      call.Tool,
 			Arguments: call.Args,
 		}
-		out, terminated := dispatchTool(ctx, sandboxCtx, state, input, synthetic, approvalCh)
+		out, terminated := dispatchTool(ctx, sandboxCtx, state, input, synthetic, gw)
 		var parsed any
 		if jerr := json.Unmarshal([]byte(out), &parsed); jerr == nil {
 			results = append(results, parsed)
@@ -1317,7 +1346,7 @@ func dispatchRegisteredTool(ctx workflow.Context, sandboxCtx workflow.Context, s
 // pending row, surfaces a tool_registration approval prompt, and on
 // approval flips the row to approved. The agent's next turn sees
 // {approved, name, id, reason?} and can then invoke the tool by name.
-func dispatchRegisterTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agentState, tc providers.ToolCall, approvalCh workflow.ReceiveChannel, input *InfrastructureAgentInput) (string, bool) {
+func dispatchRegisterTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agentState, tc providers.ToolCall, gw gateWaiter, input *InfrastructureAgentInput) (string, bool) {
 	// Don't open a gate post-abort (see requireDestructiveApproval).
 	if ctx.Err() != nil {
 		return jsonResult(map[string]any{"approved": false, "reason": "agent run aborted"}), true
@@ -1422,9 +1451,13 @@ func dispatchRegisterTool(ctx workflow.Context, sandboxCtx workflow.Context, sta
 	// Notes="approval timed out") flows through the rejection path below —
 	// the tool row is resolved rejected, the pending-approval row closed,
 	// and an approval_resolution event emitted — so no special-casing here.
-	resolution, aborted, _ := awaitApproval(ctx, approvalCh, approvalID, effectiveApprovalTimeout(input))
+	resolution, aborted, _ := gw.await(ctx, approvalID, effectiveApprovalTimeout(input))
 	delete(state.pendingApprovals, approvalID)
-	state.status = prevStatus
+	// Restore pre-gate status only when not aborted (see request_approval
+	// gate: on abort gw.await already set status="aborted").
+	if !aborted {
+		state.status = prevStatus
+	}
 	if aborted {
 		state.terminated = true
 		// Reject the pending row on abort so it doesn't linger as approvable.
@@ -1554,7 +1587,7 @@ func dispatchRegisterTool(ctx workflow.Context, sandboxCtx workflow.Context, sta
 // run's workspace so admins can see the source.
 //
 // See plans/merry-strolling-bumblebee.md (Patterns Catalog spike).
-func dispatchProposePattern(ctx workflow.Context, sandboxCtx workflow.Context, state *agentState, tc providers.ToolCall, approvalCh workflow.ReceiveChannel, input *InfrastructureAgentInput) (string, bool) {
+func dispatchProposePattern(ctx workflow.Context, sandboxCtx workflow.Context, state *agentState, tc providers.ToolCall, gw gateWaiter, input *InfrastructureAgentInput) (string, bool) {
 	// Don't open a gate post-abort (see requireDestructiveApproval).
 	if ctx.Err() != nil {
 		return jsonResult(map[string]any{"approved": false, "reason": "agent run aborted"}), true
@@ -1663,9 +1696,13 @@ func dispatchProposePattern(ctx workflow.Context, sandboxCtx workflow.Context, s
 
 	// Timeout auto-rejects via the rejection path below (resolve pattern row
 	// rejected, close pending row, emit approval_resolution).
-	resolution, aborted, _ := awaitApproval(ctx, approvalCh, approvalID, effectiveApprovalTimeout(input))
+	resolution, aborted, _ := gw.await(ctx, approvalID, effectiveApprovalTimeout(input))
 	delete(state.pendingApprovals, approvalID)
-	state.status = prevStatus
+	// Restore pre-gate status only when not aborted (see request_approval
+	// gate: on abort gw.await already set status="aborted").
+	if !aborted {
+		state.status = prevStatus
+	}
 	if aborted {
 		state.terminated = true
 		// Reject on abort so the row doesn't linger as approvable.
@@ -1844,7 +1881,7 @@ func dispatchListPatterns(state *agentState, tc providers.ToolCall) (string, boo
 // execution lives inside the agent run. A future iteration moves
 // long-running instances into a dedicated PatternInstantiationWorkflow
 // without changing this schema.
-func dispatchInstantiatePattern(ctx workflow.Context, sandboxCtx workflow.Context, state *agentState, input *InfrastructureAgentInput, tc providers.ToolCall, approvalCh workflow.ReceiveChannel) (string, bool) {
+func dispatchInstantiatePattern(ctx workflow.Context, sandboxCtx workflow.Context, state *agentState, input *InfrastructureAgentInput, tc providers.ToolCall, gw gateWaiter) (string, bool) {
 	patternID, _ := tc.Arguments["pattern_id"].(string)
 	workspaceID, _ := tc.Arguments["workspace_id"].(string)
 	if workspaceID == "" {
@@ -1945,7 +1982,7 @@ func dispatchInstantiatePattern(ctx workflow.Context, sandboxCtx workflow.Contex
 			Name:      call.Tool,
 			Arguments: call.Args,
 		}
-		out, terminated := dispatchTool(ctx, sandboxCtx, state, input, synthetic, approvalCh)
+		out, terminated := dispatchTool(ctx, sandboxCtx, state, input, synthetic, gw)
 		var parsed any
 		if jerr := json.Unmarshal([]byte(out), &parsed); jerr == nil {
 			results = append(results, parsed)
@@ -2061,7 +2098,7 @@ func exampleArgsFromSchema(schemaJSON string) map[string]any {
 // on approve and (false, reason) on reject or abort. The audit row gets
 // the resolution appended either way so the run-history page records the
 // gate even when the action was rejected.
-func requireDestructiveApproval(ctx workflow.Context, auditCtx workflow.Context, state *agentState, input *InfrastructureAgentInput, approvalCh workflow.ReceiveChannel, workflowID, command string, classification safety.Classification) (bool, string) {
+func requireDestructiveApproval(ctx workflow.Context, auditCtx workflow.Context, state *agentState, input *InfrastructureAgentInput, gw gateWaiter, workflowID, command string, classification safety.Classification) (bool, string) {
 	// Don't open a gate if the run was already aborted (ctx/loopCtx cancelled).
 	// Opening here would emit an approval_request, mirror a pending-approvals
 	// row, and arm a 72h approval timer AFTER termination. Bail as rejected.
@@ -2107,9 +2144,13 @@ func requireDestructiveApproval(ctx workflow.Context, auditCtx workflow.Context,
 	// Timeout auto-rejects: the synthesized resolution carries
 	// "approval timed out" and runs the rejection path below (emit
 	// approval_resolution, close pending row, deny the command).
-	resolution, aborted, _ := awaitApproval(ctx, approvalCh, approvalID, effectiveApprovalTimeout(input))
+	resolution, aborted, _ := gw.await(ctx, approvalID, effectiveApprovalTimeout(input))
 	delete(state.pendingApprovals, approvalID)
-	state.status = prevStatus
+	// Restore pre-gate status only when not aborted (see request_approval
+	// gate: on abort gw.await already set status="aborted").
+	if !aborted {
+		state.status = prevStatus
+	}
 	if aborted {
 		state.terminated = true
 		resolvePendingApproval(auditCtx, state, approvalID, "aborted", "", resolution.ResolvedBy, "agent run aborted")
@@ -2441,21 +2482,50 @@ func reviewerModeSystemPrompt(input *InfrastructureAgentInput) string {
 // an approval gate expires. The UI and audit trail key on this exact value.
 const approvalTimedOutReason = "approval timed out"
 
-// awaitApproval blocks until an ApprovalSignal with matching approvalID
-// arrives, the workflow context is cancelled (the abort goroutine calls
-// cancelLoop after surfacing an Abort signal), or the timeout elapses.
-// Mismatched signals are dropped — callers re-emit the approval prompt when
-// their gate reopens.
+// gateWaiter carries everything an approval gate needs to wait robustly: the
+// approval channel it resolves on, the abort channel it must honor, and the
+// idempotent terminal-abort handler to run if an abort arrives mid-wait. It
+// replaces the bare approvalCh that used to be threaded through dispatchTool
+// and the four gate dispatchers.
+type gateWaiter struct {
+	approvalCh workflow.ReceiveChannel
+	abortCh    workflow.ReceiveChannel
+	// applyAbort performs the terminal abort (cancelLoop, terminal audit,
+	// state.terminated) exactly once. await invokes it when it consumes the
+	// abort signal itself, so the gate never depends on a separate goroutine
+	// winning a scheduling turn to translate Abort → cancelLoop.
+	applyAbort func(AbortSignalPayload)
+}
+
+// await blocks until an ApprovalSignal with matching approvalID arrives, an
+// Abort signal arrives (or already cancelled the loop), or the timeout
+// elapses. Mismatched approval signals are dropped — callers re-emit the
+// approval prompt when their gate reopens.
 //
 // Returns (resolution, aborted, timedOut). On timeout it synthesizes a
 // rejected resolution carrying approvalTimedOutReason so callers can flow it
 // through their normal rejection path (resolve rows, emit
 // approval_resolution) without special-casing every site.
 //
-// We use a Selector that watches the approval channel, ctx.Done(), and a
-// timer rather than relying on Receive returning more=false on cancellation,
-// because that contract isn't reliable across SDK versions.
-func awaitApproval(ctx workflow.Context, approvalCh workflow.ReceiveChannel, approvalID string, timeout time.Duration) (ApprovalSignalPayload, bool, bool) {
+// BUG-A robustness: await selects on the abort channel DIRECTLY (not just on
+// ctx.Done()). Previously the gate wait only woke on loopCtx.Done(), which
+// depends on the abort GOROUTINE — or the inline drainPendingAbort — having
+// already consumed the Abort and called cancelLoop(). When a UserMessage and
+// an Abort land in the same workflow task and the gate opens via the
+// awaiting_user path, that translation can lose a coroutine-scheduling race
+// in the live worker (the deterministic test scheduler masked it), leaving
+// the run parked at awaiting_approval until force-terminated. By draining
+// abortCh here and applying the abort inline, await terminates the gate wait
+// regardless of interleaving: whichever consumer of abortCh runs first wins,
+// and applyAbort is idempotent on state.terminated. The destructive/gated
+// command still never executes — await returns aborted=true and the caller's
+// rejection path resolves the row.
+//
+// We use a Selector that watches the approval channel, the abort channel,
+// ctx.Done(), and a timer rather than relying on Receive returning
+// more=false on cancellation, because that contract isn't reliable across SDK
+// versions.
+func (gw gateWaiter) await(ctx workflow.Context, approvalID string, timeout time.Duration) (ApprovalSignalPayload, bool, bool) {
 	// Fast-path: if abort already cancelled the loop before we got here (e.g.
 	// it fired while the gate's pre-wait audit / openPendingApproval activity
 	// was still running), report aborted immediately instead of arming a
@@ -2463,13 +2533,22 @@ func awaitApproval(ctx workflow.Context, approvalCh workflow.ReceiveChannel, app
 	if ctx.Err() != nil {
 		return ApprovalSignalPayload{}, true, false
 	}
+	// Also drain a buffered abort synchronously before entering the select:
+	// it may already be sitting in the channel from the same task that opened
+	// this gate, in which case we want to terminate without arming a timer.
+	var early AbortSignalPayload
+	if gw.abortCh.ReceiveAsync(&early) {
+		gw.applyAbort(early)
+		return ApprovalSignalPayload{}, true, false
+	}
 	deadline := workflow.NewTimer(ctx, timeout)
 	for {
 		var resolved ApprovalSignalPayload
-		var matched, aborted, timedOut bool
+		var abortPayload AbortSignalPayload
+		var matched, aborted, abortReceived, timedOut bool
 
 		sel := workflow.NewSelector(ctx)
-		sel.AddReceive(approvalCh, func(c workflow.ReceiveChannel, _ bool) {
+		sel.AddReceive(gw.approvalCh, func(c workflow.ReceiveChannel, _ bool) {
 			var p ApprovalSignalPayload
 			c.Receive(ctx, &p)
 			if p.ApprovalID == approvalID {
@@ -2478,7 +2557,14 @@ func awaitApproval(ctx workflow.Context, approvalCh workflow.ReceiveChannel, app
 			}
 			// Else: mismatched id; drop and the outer loop reselects.
 		})
+		sel.AddReceive(gw.abortCh, func(c workflow.ReceiveChannel, _ bool) {
+			// Consume the abort here so the gate wait honors it intrinsically,
+			// independent of the abort goroutine's scheduling.
+			c.Receive(ctx, &abortPayload)
+			abortReceived = true
+		})
 		sel.AddReceive(ctx.Done(), func(c workflow.ReceiveChannel, _ bool) {
+			// The abort goroutine (or inline drain) cancelled loopCtx first.
 			aborted = true
 		})
 		sel.AddFuture(deadline, func(workflow.Future) {
@@ -2491,6 +2577,12 @@ func awaitApproval(ctx workflow.Context, approvalCh workflow.ReceiveChannel, app
 		})
 		sel.Select(ctx)
 
+		if abortReceived {
+			// We won the race to the abort signal; run the terminal handler so
+			// the loop is cancelled and the run terminates aborted.
+			gw.applyAbort(abortPayload)
+			return ApprovalSignalPayload{}, true, false
+		}
 		if aborted {
 			return ApprovalSignalPayload{}, true, false
 		}
