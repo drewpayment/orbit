@@ -13,6 +13,7 @@ vi.mock('@payload-config', () => ({
 
 vi.stubEnv('ORBIT_INTERNAL_API_KEY', 'test-api-key')
 
+import type { NextRequest } from 'next/server'
 import { getPayload } from 'payload'
 const { POST } = await import('./route')
 
@@ -21,7 +22,7 @@ const makeRequest = (body: unknown, apiKey: string | null = 'test-api-key') =>
     method: 'POST',
     headers: apiKey ? { 'X-API-Key': apiKey } : {},
     body: JSON.stringify(body),
-  }) as any
+  }) as unknown as NextRequest
 
 // Worker-shaped body: agentRunId is the run UUID, NOT the Mongo ObjectId.
 const workerBody = {
@@ -42,7 +43,7 @@ describe('POST /api/internal/pending-approvals', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    ;(getPayload as any).mockResolvedValue(mockPayload)
+    vi.mocked(getPayload).mockResolvedValue(mockPayload)
     mockPayload.create.mockImplementation(async ({ data }: any) => ({
       id: 'pa-new',
       agentRun: data.agentRun,

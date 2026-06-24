@@ -76,25 +76,29 @@ function turn(sequence: string, turnId: string, role: string, content: string): 
 describe('AgentChatThread', () => {
   beforeEach(() => {
     FakeEventSource.instances = []
-    ;(globalThis as any).EventSource = FakeEventSource as any
+    vi.stubGlobal('EventSource', FakeEventSource)
     // jsdom doesn't implement Element.scrollTo; the auto-scroll effect calls it.
     if (!('scrollTo' in Element.prototype)) {
-      ;(Element.prototype as any).scrollTo = () => {}
+      Object.defineProperty(Element.prototype, 'scrollTo', { value: () => {}, configurable: true })
     }
     // jsdom has no IntersectionObserver; the header-visibility effect (active
     // when a run `context` is rendered) constructs one.
-    ;(globalThis as any).IntersectionObserver = class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-      takeRecords() {
-        return []
-      }
-    }
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+        takeRecords() {
+          return []
+        }
+      },
+    )
   })
   afterEach(() => {
     cleanup()
     vi.clearAllMocks()
+    vi.unstubAllGlobals()
   })
 
   it('renders initial events and opens SSE resuming from the max sequence', () => {
@@ -203,7 +207,7 @@ describe('AgentChatThread', () => {
   })
 
   it('surfaces an inline error when Abort fails (BUG-3)', async () => {
-    ;(abortAgentRun as any).mockResolvedValue({ success: false, error: 'workflow not found' })
+    vi.mocked(abortAgentRun).mockResolvedValue({ success: false, error: 'workflow not found' })
 
     render(
       <AgentChatThread
@@ -252,7 +256,7 @@ describe('AgentChatThread', () => {
   })
 
   it('resolves a PROPOSAL (no matching gate) via sendAgentMessage, not the approval actions', async () => {
-    ;(sendAgentMessage as any).mockResolvedValue({ success: true })
+    vi.mocked(sendAgentMessage).mockResolvedValue({ success: true })
 
     render(
       <AgentChatThread
@@ -272,12 +276,12 @@ describe('AgentChatThread', () => {
       expect.objectContaining({ workspaceId: 'ws1', workflowId: 'wf-1' }),
     )
     // The user message must clearly signal approval.
-    expect((sendAgentMessage as any).mock.calls[0][0].message).toMatch(/approve/i)
+    expect(vi.mocked(sendAgentMessage).mock.calls[0][0].message).toMatch(/approve/i)
 
     const reject = screen.getByRole('button', { name: /^reject/i })
     fireEvent.click(reject)
     await waitFor(() => expect(sendAgentMessage).toHaveBeenCalledTimes(2))
-    expect((sendAgentMessage as any).mock.calls[1][0].message).toMatch(/reject|do not proceed/i)
+    expect(vi.mocked(sendAgentMessage).mock.calls[1][0].message).toMatch(/reject|do not proceed/i)
 
     // Crucially, the gate actions were never called.
     expect(approveAgentAction).not.toHaveBeenCalled()
@@ -285,8 +289,8 @@ describe('AgentChatThread', () => {
   })
 
   it('resolves a real approval GATE via the approval actions, not sendAgentMessage', async () => {
-    ;(approveAgentAction as any).mockResolvedValue({ success: true })
-    ;(rejectAgentAction as any).mockResolvedValue({ success: true })
+    vi.mocked(approveAgentAction).mockResolvedValue({ success: true })
+    vi.mocked(rejectAgentAction).mockResolvedValue({ success: true })
 
     render(
       <AgentChatThread

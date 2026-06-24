@@ -27,7 +27,7 @@ describe('POST /api/internal/agent-events', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    ;(getPayload as any).mockResolvedValue(mockPayload)
+    vi.mocked(getPayload).mockResolvedValue(mockPayload)
   })
 
   it('rejects a missing/invalid API key with 401', async () => {

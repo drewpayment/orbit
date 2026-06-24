@@ -13,6 +13,7 @@ vi.mock('@payload-config', () => ({
 
 vi.stubEnv('ORBIT_INTERNAL_API_KEY', 'test-api-key')
 
+import type { NextRequest } from 'next/server'
 import { getPayload } from 'payload'
 const { POST } = await import('./route')
 
@@ -23,7 +24,7 @@ const makeRequest = (id: string, body: unknown, apiKey: string | null = 'test-ap
     method: 'POST',
     headers: apiKey ? { 'X-API-Key': apiKey } : {},
     body: JSON.stringify(body),
-  }) as any
+  }) as unknown as NextRequest
 
 describe('POST /api/internal/pending-approvals/[id]/resolve', () => {
   const mockPayload = {
@@ -39,7 +40,7 @@ describe('POST /api/internal/pending-approvals/[id]/resolve', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    ;(getPayload as any).mockResolvedValue(mockPayload)
+    vi.mocked(getPayload).mockResolvedValue(mockPayload)
     mockPayload.update.mockImplementation(async ({ data }: any) => ({
       id: 'pa-1',
       status: data.status,

@@ -49,13 +49,13 @@ describe('startAgentRun compensation', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    ;(getPayload as any).mockResolvedValue(mockPayload)
-    ;(getPayloadUserFromSession as any).mockResolvedValue({ id: 'user-1' })
-    ;(isWorkspaceMember as any).mockResolvedValue(true)
+    vi.mocked(getPayload).mockResolvedValue(mockPayload)
+    vi.mocked(getPayloadUserFromSession).mockResolvedValue({ id: 'user-1' })
+    vi.mocked(isWorkspaceMember).mockResolvedValue(true)
     // buildPromptWithWorkspaceContext does payload.findByID + payload.find; keep them benign.
     mockPayload.findByID.mockResolvedValue({ id: 'ws-1', name: 'WS', slug: 'ws' })
     mockPayload.find.mockResolvedValue({ docs: [] })
-    ;(agentClient.startInfrastructureAgent as any).mockResolvedValue({
+    vi.mocked(agentClient.startInfrastructureAgent).mockResolvedValue({
       workflowId: 'wf-123',
       runId: 'run-123',
       agentRunId: 'ar-123',
@@ -64,7 +64,7 @@ describe('startAgentRun compensation', () => {
 
   it('aborts the started workflow if the run-row create fails', async () => {
     mockPayload.create.mockRejectedValue(new Error('mongo down'))
-    ;(agentClient.abortAgent as any).mockResolvedValue({})
+    vi.mocked(agentClient.abortAgent).mockResolvedValue({})
 
     const result = await startAgentRun(input)
 
@@ -76,7 +76,7 @@ describe('startAgentRun compensation', () => {
   })
 
   it('does not abort when the workflow itself failed to start', async () => {
-    ;(agentClient.startInfrastructureAgent as any).mockRejectedValue(new Error('grpc unavailable'))
+    vi.mocked(agentClient.startInfrastructureAgent).mockRejectedValue(new Error('grpc unavailable'))
 
     const result = await startAgentRun(input)
 
@@ -87,7 +87,7 @@ describe('startAgentRun compensation', () => {
 
   it('still returns failure even if the compensating abort throws', async () => {
     mockPayload.create.mockRejectedValue(new Error('mongo down'))
-    ;(agentClient.abortAgent as any).mockRejectedValue(new Error('abort failed too'))
+    vi.mocked(agentClient.abortAgent).mockRejectedValue(new Error('abort failed too'))
 
     const result = await startAgentRun(input)
 

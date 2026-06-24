@@ -64,16 +64,16 @@ function throwingStream(code: Code): AsyncIterable<unknown> {
 describe('GET /api/agent/[runId]/stream', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    ;(getPayload as any).mockResolvedValue(mockPayload)
-    ;(getPayloadUserFromSession as any).mockResolvedValue({ id: 'user-1' })
-    ;(isWorkspaceMember as any).mockResolvedValue(true)
+    vi.mocked(getPayload).mockResolvedValue(mockPayload)
+    vi.mocked(getPayloadUserFromSession).mockResolvedValue({ id: 'user-1' })
+    vi.mocked(isWorkspaceMember).mockResolvedValue(true)
     // agent-runs lookup at connect time
     mockPayload.find.mockResolvedValue({ docs: [{ id: 'run-1', workspace: 'ws-1', status: 'running' }] })
     mockPayload.update.mockResolvedValue({ id: 'run-1' })
   })
 
   it('reconciles a still-non-terminal run to failed on clean stream end, then emits done', async () => {
-    ;(agentClient.streamAgentEvents as any).mockReturnValue(emptyStream())
+    vi.mocked(agentClient.streamAgentEvents).mockReturnValue(emptyStream())
     // Fresh re-read still shows non-terminal.
     mockPayload.findByID.mockResolvedValue({ id: 'run-1', status: 'running' })
 
@@ -97,7 +97,7 @@ describe('GET /api/agent/[runId]/stream', () => {
   })
 
   it('does NOT overwrite a run that reached a terminal status mid-stream', async () => {
-    ;(agentClient.streamAgentEvents as any).mockReturnValue(emptyStream())
+    vi.mocked(agentClient.streamAgentEvents).mockReturnValue(emptyStream())
     // markRun set it to completed during the stream — fresh read reflects that.
     mockPayload.findByID.mockResolvedValue({ id: 'run-1', status: 'completed' })
 
@@ -109,7 +109,7 @@ describe('GET /api/agent/[runId]/stream', () => {
   })
 
   it('emits gone (not error) and reconciles on gRPC NotFound', async () => {
-    ;(agentClient.streamAgentEvents as any).mockReturnValue(throwingStream(Code.NotFound))
+    vi.mocked(agentClient.streamAgentEvents).mockReturnValue(throwingStream(Code.NotFound))
     mockPayload.findByID.mockResolvedValue({ id: 'run-1', status: 'awaiting_user' })
 
     const res = await GET(makeRequest(), ctx)
@@ -128,7 +128,7 @@ describe('GET /api/agent/[runId]/stream', () => {
   })
 
   it('emits error (not gone) on a non-NotFound gRPC failure and does not reconcile', async () => {
-    ;(agentClient.streamAgentEvents as any).mockReturnValue(throwingStream(Code.Internal))
+    vi.mocked(agentClient.streamAgentEvents).mockReturnValue(throwingStream(Code.Internal))
 
     const res = await GET(makeRequest(), ctx)
     const body = await readStream(res)
@@ -139,7 +139,7 @@ describe('GET /api/agent/[runId]/stream', () => {
   })
 
   it('returns 403 for a non-member', async () => {
-    ;(isWorkspaceMember as any).mockResolvedValue(false)
+    vi.mocked(isWorkspaceMember).mockResolvedValue(false)
     const res = await GET(makeRequest(), ctx)
     expect(res.status).toBe(403)
   })
