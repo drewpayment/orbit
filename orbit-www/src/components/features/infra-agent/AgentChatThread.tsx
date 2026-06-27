@@ -26,60 +26,16 @@ import { AgentThought } from './parts/AgentThought'
 import { Composer } from './parts/Composer'
 import { RecoveryBanner } from './parts/RecoveryBanner'
 import { FloatingStatusBar } from './parts/FloatingStatusBar'
+import { LiveUnavailableBanner } from './parts/LiveUnavailableBanner'
 import { parseToolTurn } from './lib/tool-parsing'
 import { derivePhases } from './lib/phases'
+import { type AgentEventDTO } from './lib/agent-event-dto'
 
 // Matches the workflow's recoverableErrorPrefix constant — stays in sync
 // with temporal-workflows/internal/workflows/infrastructure_agent_workflow.go.
 // When the AgentStatusUpdate proto gains a structured payload field this
 // sentinel goes away in favor of a typed flag.
 const RECOVERABLE_LLM_ERROR_PREFIX = '[recoverable_llm_error] '
-
-/**
- * Wire shape emitted by /api/agent/[runId]/stream. Mirrors AgentEvent in the
- * proto with bigints stringified for JSON.
- */
-interface AgentEventDTO {
-  sequence: string
-  emittedAt: string
-  kind:
-    | 'conversation_turn'
-    | 'token_delta'
-    | 'proposal_update'
-    | 'approval_request'
-    | 'approval_resolution'
-    | 'status_update'
-    | 'tool_call_output_chunk'
-    | 'unknown'
-  conversationTurn?: {
-    turnId: string
-    role: string
-    content: string
-    toolName?: string
-    toolCallId?: string
-  }
-  tokenDelta?: { turnId: string; delta: string }
-  proposalUpdate?: { proposalId: string; title: string; summary: string; bodyMarkdown: string }
-  approvalRequest?: {
-    approvalId: string
-    kind: string
-    title: string
-    bodyMarkdown: string
-    name?: string
-    displayName?: string
-    description?: string
-    category?: string
-    templateKind?: string
-    templateJson?: string
-    inputSchemaJson?: string
-    reasoning?: string
-    agentToolId?: string
-    patternId?: string
-  }
-  approvalResolution?: { approvalId: string; approved: boolean; resolvedBy: string; notes: string }
-  statusUpdate?: { status: string; message: string }
-  toolCallOutputChunk?: { callId: string; stream: string; chunk: string }
-}
 
 interface RunContext {
   title: string
@@ -96,6 +52,17 @@ interface RunContext {
 interface Props {
   workspaceId: string
   workflowId: string
+  /**
+   * Persisted transcript loaded by the SSR page. Ingested on mount before the
+   * SSE connects so reopening a run renders immediately; the live stream then
+   * resumes from the max persisted sequence so nothing duplicates.
+   */
+  initialEvents?: AgentEventDTO[]
+  /**
+   * The run's Mongo status at SSR time. When terminal, history renders without
+   * opening an SSE connection.
+   */
+  initialStatus?: string
   /** Optional run/workspace context used by RunHeader + ContextStrip. */
   context?: RunContext
 }
@@ -135,6 +102,10 @@ interface Proposal {
 
 // Reconnect backoff: 0.5s → 1s → 2s → 4s, capped.
 const RECONNECT_BACKOFF_MS = [500, 1000, 2000, 4000]
+// After this many consecutive failed reconnects (no successful open in
+// between), give up and degrade to saved-history mode instead of looping
+// forever — covers a workflow that vanished without a clean `gone` signal.
+const MAX_RECONNECT_ATTEMPTS = RECONNECT_BACKOFF_MS.length
 
 interface ToolOutputBuffer {
   callId: string
@@ -144,18 +115,51 @@ interface ToolOutputBuffer {
   text: string
 }
 
-export function AgentChatThread({ workspaceId, workflowId, context }: Props) {
+const TERMINAL_STATUSES = ['completed', 'aborted', 'failed', 'timeout']
+
+export function AgentChatThread({
+  workspaceId,
+  workflowId,
+  initialEvents,
+  initialStatus,
+  context,
+}: Props) {
   const [turns, setTurns] = useState<ChatTurn[]>([])
   const [streamingTurns, setStreamingTurns] = useState<Record<string, string>>({})
   const [toolOutputs, setToolOutputs] = useState<Record<string, ToolOutputBuffer>>({})
   const [proposal, setProposal] = useState<Proposal | null>(null)
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([])
-  const [status, setStatus] = useState('starting')
+  const [status, setStatus] = useState(initialStatus ?? 'starting')
   const [statusMessage, setStatusMessage] = useState('')
+  // Set when the stream reports the workflow is gone (Temporal history purged)
+  // — we stop reconnecting and surface a "showing saved history" banner.
+  const [liveUnavailable, setLiveUnavailable] = useState(false)
+  // Set when the SSE stream closes cleanly (`done`). The gRPC stream completes
+  // when the workflow finished OR was externally terminated; either way the
+  // live feed is over, so the run is ended even if a terminal status_update
+  // never arrived mid-stream (the route reconciles Mongo on its side).
+  const [streamEnded, setStreamEnded] = useState(false)
+  // Highest sequence we've ingested. Tracked in a ref so the SSE effect reads
+  // the post-backfill cursor without re-subscribing when it changes.
+  const maxSeqRef = useRef(0n)
+  // Guard so the initial-events backfill runs exactly once.
+  const backfilledRef = useRef(false)
+
+  // The run was already finished when the page loaded: render the persisted
+  // transcript without opening a live connection.
+  const startedTerminal = initialStatus ? TERMINAL_STATUSES.includes(initialStatus) : false
+  // Read inside the stable ingest() callback so a replayed historical
+  // status_update can't downgrade a terminal SSR status (BUG-1). Kept in a
+  // ref so ingest stays referentially stable (empty dep array).
+  const startedTerminalRef = useRef(startedTerminal)
+  startedTerminalRef.current = startedTerminal
   // Set when the workflow signals a recoverable LLM error — see issue #42.
   // Cleared when any subsequent status_update arrives without the sentinel
   // prefix (e.g. status goes back to "running" after /retry).
   const [recoveryError, setRecoveryError] = useState<string | null>(null)
+  // Surfaced when an Abort request fails so the click isn't a silent no-op
+  // (BUG-3). Cleared on the next abort attempt.
+  const [abortError, setAbortError] = useState<string | null>(null)
   const [connection, setConnection] = useState<'connecting' | 'live' | 'reconnecting' | 'closed'>('connecting')
   const [input, setInput] = useState('')
   const [pending, startTransition] = useTransition()
@@ -166,7 +170,30 @@ export function AgentChatThread({ workspaceId, workflowId, context }: Props) {
   // without a scroll back to the top.
   const [headerVisible, setHeaderVisible] = useState(true)
 
-  const ingest = useCallback((events: AgentEventDTO[]) => {
+  // Sequences already ingested, so a replayed batch (initial backfill overlap
+  // with the first SSE frames, or an EventSource reconnect) is a no-op.
+  const seenSequencesRef = useRef<Set<string>>(new Set())
+
+  const ingest = useCallback((incoming: AgentEventDTO[]) => {
+    // Belt-and-suspenders idempotency: drop any event whose sequence we've
+    // already applied. token_delta events share a turn's sequence space but
+    // are additive and ephemeral, so we never want to replay them either.
+    const events: AgentEventDTO[] = []
+    for (const e of incoming) {
+      if (e.sequence && e.sequence !== '0') {
+        if (seenSequencesRef.current.has(e.sequence)) continue
+        seenSequencesRef.current.add(e.sequence)
+        try {
+          const s = BigInt(e.sequence)
+          if (s > maxSeqRef.current) maxSeqRef.current = s
+        } catch {
+          // non-numeric sequence — ignore for cursor tracking
+        }
+      }
+      events.push(e)
+    }
+    if (events.length === 0) return
+
     setTurns((prev) => {
       const next = [...prev]
       const indexByTurnId = new Map(next.map((t, i) => [t.turnId, i]))
@@ -263,6 +290,13 @@ export function AgentChatThread({ workspaceId, workflowId, context }: Props) {
         setPendingApprovals((prev) => prev.filter((a) => a.approvalId !== ar.approvalId))
       }
       if (e.kind === 'status_update' && e.statusUpdate) {
+        // When the run was already terminal at SSR time, a replayed
+        // historical status_update (e.g. the last persisted "running") must
+        // not downgrade the effective state back to non-terminal — that would
+        // re-enable the composer and hide the ended treatment against a dead
+        // workflow (BUG-1). Ignore status/message mutations from backfill in
+        // that case; the SSR-provided terminal status stands.
+        if (startedTerminalRef.current) continue
         setStatus(e.statusUpdate.status)
         const msg = e.statusUpdate.message ?? ''
         if (msg.startsWith(RECOVERABLE_LLM_ERROR_PREFIX)) {
@@ -277,23 +311,54 @@ export function AgentChatThread({ workspaceId, workflowId, context }: Props) {
     }
   }, [])
 
+  // Backfill the persisted transcript on mount, before SSE connects. Runs
+  // once; the seenSequences guard inside ingest makes the subsequent SSE
+  // resume idempotent even if the stream replays an overlapping frame.
+  useEffect(() => {
+    if (backfilledRef.current) return
+    backfilledRef.current = true
+    if (initialEvents && initialEvents.length > 0) {
+      ingest(initialEvents)
+    }
+  }, [initialEvents, ingest])
+
   // SSE subscription. EventSource auto-reconnects with Last-Event-ID; we
   // also handle our own reconnect-on-error path with exponential backoff
   // (capped) since EventSource's built-in retry doesn't surface auth or
   // server-side close events to us cleanly. The `done` event from the
   // proxy means the workflow finished — we treat that as a clean close
-  // and do not reconnect.
+  // and do not reconnect. The `gone` event means the Temporal workflow no
+  // longer exists: we stop reconnecting and show the saved-history banner.
+  //
+  // Skipped entirely when the run was already terminal at SSR time — there's
+  // nothing live to stream, so we render the persisted history only.
   useEffect(() => {
+    if (startedTerminal) {
+      setConnection('closed')
+      return
+    }
+
     let cancelled = false
     let attempt = 0
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
     let es: EventSource | null = null
 
+    const stopForGone = () => {
+      cancelled = true
+      setConnection('closed')
+      setLiveUnavailable(true)
+      es?.close()
+    }
+
     const connect = () => {
       if (cancelled) return
       setConnection(attempt === 0 ? 'connecting' : 'reconnecting')
 
-      const url = `/api/agent/${encodeURIComponent(workflowId)}/stream`
+      // Resume from the highest sequence we've already ingested (initial
+      // backfill + any prior stream frames) so the server doesn't resend the
+      // persisted history.
+      const since = maxSeqRef.current.toString()
+      const url = `/api/agent/${encodeURIComponent(workflowId)}/stream?since=${since}`
       es = new EventSource(url)
 
       es.onopen = () => {
@@ -313,16 +378,28 @@ export function AgentChatThread({ workspaceId, workflowId, context }: Props) {
       es.addEventListener('done', () => {
         cancelled = true
         setConnection('closed')
+        setStreamEnded(true)
         es?.close()
       })
+
+      // The workflow history is gone (Temporal retention expired / workflow
+      // terminated). The server already reconciled the run status; stop
+      // reconnecting and keep the rendered history with a notice.
+      es.addEventListener('gone', stopForGone)
 
       es.addEventListener('error', () => {
         // EventSource will retry on its own, but we want to disambiguate
         // "transient network blip" from "server gave up". Close + reopen
         // ourselves with a backoff so reconnects don't hammer the server
-        // when the workflow is genuinely gone.
+        // when the workflow is genuinely gone. After a capped number of
+        // failed attempts with no successful open, treat the connection as
+        // unavailable instead of looping forever on an empty thread.
         es?.close()
         if (cancelled) return
+        if (attempt >= MAX_RECONNECT_ATTEMPTS) {
+          stopForGone()
+          return
+        }
         const delay = RECONNECT_BACKOFF_MS[Math.min(attempt, RECONNECT_BACKOFF_MS.length - 1)]
         attempt += 1
         setConnection('reconnecting')
@@ -338,7 +415,7 @@ export function AgentChatThread({ workspaceId, workflowId, context }: Props) {
       es?.close()
       setConnection('closed')
     }
-  }, [workflowId, ingest])
+  }, [workflowId, ingest, startedTerminal])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -385,22 +462,66 @@ export function AgentChatThread({ workspaceId, workflowId, context }: Props) {
   const onRetryLastTurn = () => sendControl('/retry')
   const onMarkDone = () => sendControl('/done')
 
-  const onApprove = (approvalId: string) =>
+  // ── Real approval GATES ───────────────────────────────────────────────
+  // Entries in `pendingApprovals` come from approval_request events
+  // (request_approval / register_tool / propose_pattern /
+  // destructive_command). The workflow parks them on SignalApproval, so they
+  // MUST be resolved via approve/rejectAgentAction (→ SignalApproval). Never
+  // route a gate through a user message.
+  const onApproveGate = (approvalId: string) =>
     startTransition(async () => {
       await approveAgentAction({ workspaceId, workflowId, approvalId })
     })
 
-  const onReject = (approvalId: string) =>
+  const onRejectGate = (approvalId: string) =>
     startTransition(async () => {
       await rejectAgentAction({ workspaceId, workflowId, approvalId, reason: 'rejected' })
     })
 
-  const onAbort = () =>
+  // ── PROPOSALS (propose_to_user) ───────────────────────────────────────
+  // A proposal_update is NOT an approval gate: the workflow emits it and
+  // parks in awaitingUser, resumed only by a user message (SignalUserMessage).
+  // It never enters pendingApprovals. Resolving it via SignalApproval would
+  // buffer the signal forever (no matching awaitApproval), so these MUST go
+  // through sendAgentMessage. See the proposal-vs-gate bug fix.
+  const resolveProposal = (message: string) =>
     startTransition(async () => {
-      await abortAgentRun({ workspaceId, workflowId, reason: 'user requested abort' })
+      const result = await sendAgentMessage({ workspaceId, workflowId, message })
+      if (!result.success) setStatusMessage(result.error)
     })
+  const onApproveProposal = () => resolveProposal('Approved — proceed with the proposal.')
+  const onRejectProposal = (notes?: string) =>
+    resolveProposal(
+      notes?.trim()
+        ? `Rejected — do not proceed. ${notes.trim()}`
+        : 'Rejected — do not proceed.',
+    )
+  const onModifyProposal = (notes: string) =>
+    resolveProposal(notes.trim() || 'Please modify the proposal.')
 
-  const terminal = ['completed', 'aborted', 'failed', 'timeout'].includes(status)
+  const onAbort = () => {
+    // Clear any prior failure before retrying; the button is disabled while
+    // `pending` is true (busy prop) so a second click can't race the first.
+    setAbortError(null)
+    startTransition(async () => {
+      const result = await abortAgentRun({ workspaceId, workflowId, reason: 'user requested abort' })
+      if (!result.success) {
+        setAbortError(result.error || 'Failed to abort the run. Please try again.')
+      }
+    })
+  }
+
+  // True when a real approval gate exists for the current proposal's id. In
+  // that case the gate's ApprovalCard (SignalApproval) owns resolution; the
+  // proposal's user-message buttons are suppressed so we never fire both.
+  const proposalHasGate =
+    proposal != null && pendingApprovals.some((a) => a.approvalId === proposal.proposalId)
+
+  // The run is "ended" for UI purposes when its status is terminal, the live
+  // feed is gone (workflow purged), or the stream closed cleanly (`done`) —
+  // in every case there's nothing more to stream and the composer can't reach
+  // a live workflow.
+  const terminal = TERMINAL_STATUSES.includes(status) || liveUnavailable || streamEnded
 
   // Live elapsed-time counter for the header. Tick once a second; pause
   // when the run is terminal so we don't keep re-rendering forever.
@@ -469,6 +590,8 @@ export function AgentChatThread({ workspaceId, workflowId, context }: Props) {
 
       {contextChips.length > 0 && <ContextStrip chips={contextChips} />}
 
+      {liveUnavailable && <LiveUnavailableBanner />}
+
       {(connection !== 'live' || statusMessage) && (
         <div className="flex flex-wrap items-center gap-2 text-xs">
           {connection !== 'live' && connection !== 'closed' && (
@@ -479,6 +602,15 @@ export function AgentChatThread({ workspaceId, workflowId, context }: Props) {
           {statusMessage && (
             <span className="text-muted-foreground truncate">{statusMessage}</span>
           )}
+        </div>
+      )}
+
+      {abortError && (
+        <div
+          role="alert"
+          className="rounded-md border border-destructive/40 bg-destructive/[0.06] px-3 py-2 text-xs text-destructive"
+        >
+          Couldn&apos;t abort the run: {abortError}
         </div>
       )}
 
@@ -526,7 +658,18 @@ export function AgentChatThread({ workspaceId, workflowId, context }: Props) {
 
           {proposal && (
             <ActivityRailItem variant="accent">
-              <ProposalBlock proposal={proposal} />
+              <ProposalBlock
+                proposal={proposal}
+                // A proposal is resolved by a user message — UNLESS a real
+                // approval gate exists for the same id (then the gate's
+                // ApprovalCard owns resolution and we hide the proposal's
+                // message buttons so the two paths can't both fire).
+                actionable={!terminal && !proposalHasGate}
+                busy={pending}
+                onApprove={onApproveProposal}
+                onReject={onRejectProposal}
+                onModify={onModifyProposal}
+              />
             </ActivityRailItem>
           )}
 
@@ -536,9 +679,12 @@ export function AgentChatThread({ workspaceId, workflowId, context }: Props) {
                 approval={a}
                 workspaceId={workspaceId}
                 workflowId={workflowId}
-                disabled={pending}
-                onApprove={() => onApprove(a.approvalId)}
-                onReject={() => onReject(a.approvalId)}
+                // Disable while a request is in flight OR once the run is
+                // terminal — a closed workflow can't receive the SignalApproval
+                // these buttons (and the reviewer-reply input) would fire.
+                disabled={pending || terminal}
+                onApprove={() => onApproveGate(a.approvalId)}
+                onReject={() => onRejectGate(a.approvalId)}
               />
             </ActivityRailItem>
           ))}
@@ -656,8 +802,39 @@ function buildContextChips(ctx?: RunContext) {
   return chips
 }
 
-function ProposalBlock({ proposal }: { proposal: Proposal }) {
+/**
+ * ProposalBlock renders a `propose_to_user` proposal. A proposal is NOT an
+ * approval gate — it is resolved by sending the agent a user message, so the
+ * Approve / Reject / Modify buttons call the message-based handlers passed in
+ * (never the SignalApproval approve/reject actions). The buttons are shown
+ * only when `actionable` (run live and no overriding approval gate).
+ */
+function ProposalBlock({
+  proposal,
+  actionable = false,
+  busy = false,
+  onApprove,
+  onReject,
+  onModify,
+}: {
+  proposal: Proposal
+  actionable?: boolean
+  busy?: boolean
+  onApprove?: () => void
+  onReject?: (notes?: string) => void
+  onModify?: (notes: string) => void
+}) {
   const [open, setOpen] = useState(true)
+  const [modifying, setModifying] = useState(false)
+  const [notes, setNotes] = useState('')
+
+  const submitModify = () => {
+    if (!notes.trim()) return
+    onModify?.(notes)
+    setNotes('')
+    setModifying(false)
+  }
+
   return (
     <Card className="border-orange-500/30 bg-orange-500/[0.04]">
       <CardContent className="space-y-2 py-3">
@@ -683,6 +860,54 @@ function ProposalBlock({ proposal }: { proposal: Proposal }) {
           <pre className="whitespace-pre-wrap pt-1 pl-6 text-sm font-sans">
             {proposal.bodyMarkdown}
           </pre>
+        )}
+
+        {actionable && (
+          <div className="space-y-2 pl-6">
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={onApprove} disabled={busy}>
+                Approve &amp; proceed
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onReject?.()}
+                disabled={busy}
+              >
+                Reject
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setModifying((m) => !m)}
+                disabled={busy}
+              >
+                {modifying ? 'Cancel' : 'Request changes'}
+              </Button>
+            </div>
+            {modifying && (
+              <div className="space-y-2">
+                <Textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Describe the change you want (e.g. use the ohio region instead)…"
+                  rows={2}
+                  disabled={busy}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault()
+                      submitModify()
+                    }
+                  }}
+                />
+                <div className="flex justify-end">
+                  <Button size="sm" onClick={submitModify} disabled={busy || !notes.trim()}>
+                    Send changes
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>

@@ -21,7 +21,15 @@ import { validateInternalApiKey } from '@/lib/auth/internal-api-auth'
  * Idempotent: re-posting on an already-resolved row updates the timestamp
  * but preserves the original resolver. The workflow-side activity treats
  * any 2xx as success.
+ *
+ * Workspace ownership: when `workspaceId` is present in the body it must
+ * match the row's workspace, otherwise the call is rejected 409 and
+ * nothing is changed. Absent workspaceId is tolerated (logs a warning)
+ * while the Go side rolls out the field.
  */
+const relId = (rel: unknown): string =>
+  typeof rel === 'string' ? rel : ((rel as { id?: string } | null)?.id ?? '')
+
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
@@ -50,6 +58,29 @@ export async function POST(
     }
 
     const payload = await getPayload({ config: configPromise })
+
+    // Workspace ownership cross-check, mirroring the agent-tools resolve
+    // route. Reject resolves targeting a row in a different workspace.
+    const existing = await payload.findByID({
+      collection: 'pending-approvals',
+      id,
+      overrideAccess: true,
+    })
+    const bodyWorkspaceId =
+      typeof body.workspaceId === 'string' ? body.workspaceId : ''
+    if (bodyWorkspaceId) {
+      if (relId(existing.workspace) !== bodyWorkspaceId) {
+        return NextResponse.json(
+          { error: 'workspace mismatch', code: 'WORKSPACE_MISMATCH' },
+          { status: 409 },
+        )
+      }
+    } else {
+      console.warn(
+        `[pending-approvals/resolve] row ${id} resolved without workspaceId; skipping ownership check (rollout backward-compat)`,
+      )
+    }
+
     const updated = await payload.update({
       collection: 'pending-approvals',
       id,

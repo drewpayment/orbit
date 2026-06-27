@@ -34,6 +34,7 @@ import { LaunchTemplates } from './collections/LaunchTemplates'
 import { Launches } from './collections/Launches'
 import { LLMProviders } from './collections/LLMProviders'
 import { AgentRuns } from './collections/AgentRuns'
+import { AgentEvents } from './collections/AgentEvents'
 import { AgentTools } from './collections/AgentTools'
 import { AgentToolVersions } from './collections/AgentToolVersions'
 import { Patterns } from './collections/Patterns'
@@ -109,6 +110,7 @@ export default buildConfig({
     // Infrastructure Agent
     LLMProviders,
     AgentRuns,
+    AgentEvents,
     AgentTools,
     AgentToolVersions,
     Patterns,
@@ -150,6 +152,16 @@ export default buildConfig({
   },
   db: mongooseAdapter({
     url: process.env.DOCKER_BUILD ? false : (process.env.DATABASE_URI || ''),
+    connectOptions: {
+      // Fail fast on transient connection resets (common with Docker Desktop on
+      // macOS forwarding long-lived sockets) instead of hanging 30s on the
+      // default serverSelectionTimeoutMS, then let the driver rebuild its pool.
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      // Sidestep Node >=20 Happy-Eyeballs (autoSelectFamily) racing IPv4/IPv6
+      // against Docker's loopback proxy, which surfaces as `read ECONNRESET`.
+      autoSelectFamily: false,
+    },
   }),
   sharp,
   plugins: [

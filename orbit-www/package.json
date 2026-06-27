@@ -18,7 +18,9 @@
     "start": "cross-env NODE_OPTIONS=--no-deprecation next start",
     "test": "bun run test:int && bun run test:e2e",
     "test:e2e": "cross-env NODE_OPTIONS=\"--no-deprecation --no-experimental-strip-types\" bun exec playwright test",
-    "test:int": "cross-env NODE_OPTIONS=--no-deprecation vitest run --config ./vitest.config.mts"
+    "test:int": "cross-env NODE_OPTIONS=--no-deprecation vitest run --config ./vitest.config.mts",
+    "typecheck": "node_modules/typescript/bin/tsc --noEmit",
+    "typecheck:7": "node_modules/typescript-7/bin/tsc --noEmit"
   },
   "dependencies": {
     "@better-auth/core": "1.4.20",
@@ -126,7 +128,8 @@
     "postcss": "^8.5.6",
     "prettier": "^3.4.2",
     "tailwindcss": "^4.1.14",
-    "typescript": "5.7.3",
+    "typescript": "6.0.3",
+    "typescript-7": "npm:typescript@rc",
     "vite-tsconfig-paths": "5.1.4",
     "vitest": "3.2.3",
     "vitest-dom": "^0.1.1"

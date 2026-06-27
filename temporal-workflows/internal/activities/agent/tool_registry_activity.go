@@ -17,7 +17,7 @@ import (
 type AgentToolsClient interface {
 	ListApproved(ctx context.Context, workspaceID string) ([]services.AgentToolDoc, error)
 	RegisterPending(ctx context.Context, in services.RegisterPendingInput) (string, error)
-	Resolve(ctx context.Context, id string, approved bool, resolvedBy, reason string, edits *services.AgentToolEdits) (services.ResolveResult, error)
+	Resolve(ctx context.Context, id, workspaceID string, approved bool, resolvedBy, reason string, edits *services.AgentToolEdits) (services.ResolveResult, error)
 }
 
 // ToolRegistryActivities owns the activities backing the AgentTools
@@ -74,6 +74,11 @@ type RegisterPendingToolResult struct {
 
 type ResolveAgentToolInput struct {
 	ID         string
+	// WorkspaceID is the resolving workflow's workspace. The orbit-www
+	// resolve route uses it to reject (409) resolutions whose workspace
+	// doesn't match the tool's owning workspace, so a signal can't be
+	// replayed against a tool in another tenant.
+	WorkspaceID string
 	Approved   bool
 	ResolvedBy string
 	Reason     string
@@ -169,7 +174,7 @@ func (a *ToolRegistryActivities) ResolveAgentTool(ctx context.Context, in Resolv
 			InputSchemaJSON: in.EditedSchemaJSON,
 		}
 	}
-	res, err := a.client.Resolve(ctx, in.ID, in.Approved, in.ResolvedBy, in.Reason, edits)
+	res, err := a.client.Resolve(ctx, in.ID, in.WorkspaceID, in.Approved, in.ResolvedBy, in.Reason, edits)
 	if err != nil {
 		return ResolveAgentToolResult{}, err
 	}

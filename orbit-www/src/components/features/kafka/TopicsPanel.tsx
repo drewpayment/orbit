@@ -36,6 +36,7 @@ import {
   deleteTopic,
   approveTopic,
 } from '@/app/actions/kafka-topics'
+import Link from 'next/link'
 import { VirtualClusterCreateTopicDialog } from './VirtualClusterCreateTopicDialog'
 import { ConnectionDetailsPanel } from './ConnectionDetailsPanel'
 import { formatDuration } from '@/lib/utils/format'
@@ -215,7 +216,12 @@ export function TopicsPanel({
                     <TableCell>
                       <div>
                         <div className="font-medium flex items-center gap-1">
-                          {topic.name}
+                          <Link
+                            href={`/workspaces/${workspaceSlug}/kafka/${topic.id}`}
+                            className="hover:underline text-primary"
+                          >
+                            {topic.name}
+                          </Link>
                           {topic.fullTopicName && (
                             <Button
                               variant="ghost"

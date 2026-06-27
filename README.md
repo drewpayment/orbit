@@ -25,8 +25,15 @@ Create new services from organization-approved templates with automated configur
 ### 📦 Application Lifecycle Catalog
 End-to-end tracking from template instantiation through deployment to production. The catalog provides card grid and visual graph views showing application lineage, deployment status, and live health monitoring. Pluggable deployment generators support Terraform, Helm, and Docker Compose.
 
-### 🔄 Kafka Self-Service (Project Bifrost)
-Self-service Kafka access with virtual clusters per application/environment. Teams get autonomous topic creation, schema management, and consumer group tracking while platform admins maintain governance through quotas and approval workflows. The Bifrost gateway handles multi-tenant routing, authentication, and policy enforcement.
+### 🔄 Kafka & Infrastructure Self-Service (Project Bifrost)
+Multi-tenant Kafka access with virtual clusters per application/environment. Teams get autonomous topic creation, schema management, and consumer group tracking while platform admins maintain governance through quotas, RBAC, approval workflows, billing hooks, and observability annotations.
+
+Bifrost also manages infrastructure self-service: cert-manager deployment and multi-cloud ingress controllers (AWS L7/L4 NLBs, GCP LBs) deployed via Kubernetes CustomResourceDefinitions.
+
+### ☁️ Cloud Launches
+One-click cloud environments in three lines of YAML — Terraform, Kubernetes, Docker Compose. Launch a GitOps-ready namespace from templates with CI/CD and health monitoring configured.
+
+Automated workflow pipelines manage environment and cluster lifecycle (CAPI for Kubernetes clusters; custom for compute services).
 
 ### 📚 Knowledge Management
 Collaborative documentation with hierarchical knowledge spaces per workspace. Real-time editing, full-text search via MeiliSearch, and fine-grained access control. Organize runbooks, architecture docs, and team knowledge in one place.
