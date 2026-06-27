@@ -195,5 +195,35 @@ export const KafkaLineageEdge: CollectionConfig = {
       },
     },
   ],
+  hooks: {
+    // Catalog projection: lineage edges become produces-topic / consumes-topic
+    // relations in the unified catalog graph (the IDP differentiator).
+    afterChange: [
+      async ({ doc, req }) => {
+        // Fire and forget — projection failure must never block the save.
+        ;(async () => {
+          try {
+            const { projectKafkaLineageRelation } = await import('@/lib/catalog/projection')
+            await projectKafkaLineageRelation(req.payload, doc)
+          } catch (err) {
+            console.error('[KafkaLineageEdge Hook] catalog projection failed:', err)
+          }
+        })()
+        return doc
+      },
+    ],
+    afterDelete: [
+      async ({ doc, req }) => {
+        ;(async () => {
+          try {
+            const { removeProjectedRelationsForSource } = await import('@/lib/catalog/projection')
+            await removeProjectedRelationsForSource(req.payload, 'kafka-lineage', String(doc.id))
+          } catch (err) {
+            console.error('[KafkaLineageEdge Hook] catalog projection removal failed:', err)
+          }
+        })()
+      },
+    ],
+  },
   timestamps: true,
 }

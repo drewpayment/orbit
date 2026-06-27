@@ -124,6 +124,8 @@ export interface Config {
     'kafka-offset-checkpoints': KafkaOffsetCheckpoint;
     'api-schemas': ApiSchema;
     'api-schema-versions': ApiSchemaVersion;
+    'catalog-entities': CatalogEntity;
+    'catalog-relations': CatalogRelation;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -187,6 +189,8 @@ export interface Config {
     'kafka-offset-checkpoints': KafkaOffsetCheckpointsSelect<false> | KafkaOffsetCheckpointsSelect<true>;
     'api-schemas': ApiSchemasSelect<false> | ApiSchemasSelect<true>;
     'api-schema-versions': ApiSchemaVersionsSelect<false> | ApiSchemaVersionsSelect<true>;
+    'catalog-entities': CatalogEntitiesSelect<false> | CatalogEntitiesSelect<true>;
+    'catalog-relations': CatalogRelationsSelect<false> | CatalogRelationsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -3386,6 +3390,117 @@ export interface ApiSchemaVersion {
   createdAt: string;
 }
 /**
+ * Unified catalog graph — projected from apps, APIs, topics and more.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "catalog-entities".
+ */
+export interface CatalogEntity {
+  id: string;
+  name: string;
+  /**
+   * URL-safe identifier, unique within a workspace.
+   */
+  slug?: string | null;
+  description?: string | null;
+  kind: 'service' | 'api' | 'resource' | 'datastore' | 'kafka-topic' | 'domain' | 'system' | 'team' | 'environment';
+  /**
+   * Security enclave the entity belongs to.
+   */
+  workspace: string | Workspace;
+  /**
+   * Owning team (a catalog-entities row of kind "team").
+   */
+  owner?: (string | null) | CatalogEntity;
+  lifecycle?: ('experimental' | 'production' | 'deprecated') | null;
+  /**
+   * Criticality — drives scorecard expectations in P2.
+   */
+  tier?: ('tier-1' | 'tier-2' | 'tier-3') | null;
+  /**
+   * Docs, dashboards, runbooks.
+   */
+  links?:
+    | {
+        label: string;
+        url: string;
+        type?: ('docs' | 'dashboard' | 'runbook' | 'repository' | 'other') | null;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * Provenance back to the backing collection this row projects from.
+   */
+  source: {
+    type: 'manual' | 'apps' | 'api-schemas' | 'kafka' | 'sync';
+    /**
+     * ID of the backing row in the source collection.
+     */
+    sourceId?: string | null;
+  };
+  /**
+   * Freeform, queryable by scorecard rules (P2).
+   */
+  metadata?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Folded-in health badge (projected from the source app).
+   */
+  health?: ('healthy' | 'degraded' | 'down' | 'unknown') | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Typed edges between catalog entities (dependencies, ownership, lineage).
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "catalog-relations".
+ */
+export interface CatalogRelation {
+  id: string;
+  /**
+   * Security enclave the relation belongs to.
+   */
+  workspace: string | Workspace;
+  from: string | CatalogEntity;
+  to: string | CatalogEntity;
+  type:
+    | 'owns'
+    | 'depends-on'
+    | 'exposes-api'
+    | 'consumes-api'
+    | 'produces-topic'
+    | 'consumes-topic'
+    | 'runs-in'
+    | 'built-from'
+    | 'part-of';
+  /**
+   * Provenance back to the backing collection this edge projects from.
+   */
+  source: {
+    type: 'manual' | 'apps' | 'api-schemas' | 'kafka-lineage' | 'sync';
+    sourceId?: string | null;
+  };
+  metadata?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
@@ -3619,6 +3734,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'api-schema-versions';
         value: string | ApiSchemaVersion;
+      } | null)
+    | ({
+        relationTo: 'catalog-entities';
+        value: string | CatalogEntity;
+      } | null)
+    | ({
+        relationTo: 'catalog-relations';
+        value: string | CatalogRelation;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -4984,6 +5107,57 @@ export interface ApiSchemaVersionsSelect<T extends boolean = true> {
   contentHash?: T;
   releaseNotes?: T;
   createdBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "catalog-entities_select".
+ */
+export interface CatalogEntitiesSelect<T extends boolean = true> {
+  name?: T;
+  slug?: T;
+  description?: T;
+  kind?: T;
+  workspace?: T;
+  owner?: T;
+  lifecycle?: T;
+  tier?: T;
+  links?:
+    | T
+    | {
+        label?: T;
+        url?: T;
+        type?: T;
+        id?: T;
+      };
+  source?:
+    | T
+    | {
+        type?: T;
+        sourceId?: T;
+      };
+  metadata?: T;
+  health?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "catalog-relations_select".
+ */
+export interface CatalogRelationsSelect<T extends boolean = true> {
+  workspace?: T;
+  from?: T;
+  to?: T;
+  type?: T;
+  source?:
+    | T
+    | {
+        type?: T;
+        sourceId?: T;
+      };
+  metadata?: T;
   updatedAt?: T;
   createdAt?: T;
 }

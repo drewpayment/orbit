@@ -71,6 +71,9 @@ import {
 // API Catalog collections
 import { APISchemas, APISchemaVersions } from './collections/api-catalog'
 
+// Unified catalog graph (IDP refocus P1)
+import { CatalogEntities, CatalogRelations } from './collections/catalog'
+
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
@@ -142,6 +145,9 @@ export default buildConfig({
     // API Catalog collections
     APISchemas,
     APISchemaVersions,
+    // Unified catalog graph (IDP refocus P1)
+    CatalogEntities,
+    CatalogRelations,
   ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
