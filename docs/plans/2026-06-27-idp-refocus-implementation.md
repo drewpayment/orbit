@@ -363,7 +363,18 @@ it produced/targeted), `inputs` (json), `status` (`pending|awaiting-approval|run
   is a follow-up.
 - **`entity-changed` noise** — projection churn (every app/api/kafka save) emits entity-changed;
   fine since automations are opt-in, but a debounce/throttle is a possible follow-up.
-- **Browser QA (agent-browser)** not run in this container (no MongoDB/dev server) — run before merge.
+
+**Browser QA (agent-browser) — PASSED 2026-06-27** against local dev (`drew.payment@gmail.com`,
+"Dogfood Test" workspace): Automations in main nav; list empty-state; create form (workspace
+picker, trigger default, `transition=drift` prefilled filter, action picker with 3 enabled
+actions, key/value mapping editor); create persists the exact doc shape; list card renders with
+trigger badge + action; **drift loop end-to-end** — synthetic `rule-result-changed` drift →
+`matched:1 dispatched:1`, action-run created with `trigger:automation`/`triggeredBy:null`,
+inputMapping `{{entity.name}}` resolved to the real entity name, run executed → `succeeded`,
+`lastTriggeredAt` stamped + shown on card; edit page round-trips all values; update + delete
+(confirm dialog) persist. One robustness gap noted: a non-ObjectId entity id on an event makes
+run-create throw — only reachable via synthetic events (the hook path always passes a real
+catalog-entities id), but a defensive guard in `createAndDispatchRun` is a cheap follow-up.
 
 ---
 

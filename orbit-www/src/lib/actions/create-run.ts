@@ -62,6 +62,13 @@ export async function createAndDispatchRun(
   const validation = validateInputs(schema, input.inputs ?? {})
   if (!validation.ok) throw new Error(validation.error)
 
+  // `entity` is a relationship → catalog-entities; a non-ObjectId value would
+  // make the create throw and drop the whole run. The in-process hook path
+  // always passes a real id, but guard defensively: link only a well-formed id,
+  // otherwise still create the run (the run record is the remediation task).
+  const entityId =
+    input.entityId && /^[a-f0-9]{24}$/i.test(input.entityId) ? input.entityId : undefined
+
   const policy = action.approvalPolicy ?? 'none'
   const needsApproval = policy !== 'none'
 
@@ -89,7 +96,7 @@ export async function createAndDispatchRun(
       logs: [initialLog],
       triggeredBy: input.triggeredBy ?? null,
       trigger: input.trigger,
-      ...(input.entityId ? { entity: input.entityId } : {}),
+      ...(entityId ? { entity: entityId } : {}),
     },
     overrideAccess: true,
   })

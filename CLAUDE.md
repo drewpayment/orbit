@@ -249,6 +249,16 @@ These engineering practices are expected for all non-trivial work in this repo.
 - **Rule**: If your changes touch UI, you MUST verify with agent-browser before considering the work done
 - **Rule**: ALWAYS run the pre-flight orphan check before launching agent-browser, and the post-flight cleanup check after — no exceptions
 
+#### Local test login (dev only)
+The local dev server uses Better-Auth (email/password). For UI verification, sign in
+at `/login` with the seeded dev account — this is throwaway dev data, safe to use:
+- **Email**: `drew.payment@gmail.com`
+- **Password**: `Password1234`
+
+This user is a platform admin and workspace owner/admin, so it can exercise the
+RBAC-gated authoring flows (scorecards, actions, automations). Never use these
+credentials outside local development.
+
 ## Documentation Structure
 
 ### docs/plans/ (Active Implementation Plans)
