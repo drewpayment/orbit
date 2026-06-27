@@ -131,6 +131,8 @@ export interface Config {
     'scorecard-rule-results': ScorecardRuleResult;
     initiatives: Initiative;
     'initiative-action-items': InitiativeActionItem;
+    actions: Action;
+    'action-runs': ActionRun;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -201,6 +203,8 @@ export interface Config {
     'scorecard-rule-results': ScorecardRuleResultsSelect<false> | ScorecardRuleResultsSelect<true>;
     initiatives: InitiativesSelect<false> | InitiativesSelect<true>;
     'initiative-action-items': InitiativeActionItemsSelect<false> | InitiativeActionItemsSelect<true>;
+    actions: ActionsSelect<false> | ActionsSelect<true>;
+    'action-runs': ActionRunsSelect<false> | ActionRunsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -3666,6 +3670,119 @@ export interface InitiativeActionItem {
   createdAt: string;
 }
 /**
+ * Self-service actions developers can run (templates, provisioning, agent, …).
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "actions".
+ */
+export interface Action {
+  id: string;
+  name: string;
+  description?: string | null;
+  workspace: string | Workspace;
+  /**
+   * Optional lucide icon name for the catalog card.
+   */
+  icon?: string | null;
+  /**
+   * JSON Schema for the run form (reuses the Patterns inputSchemaJson convention). Drives the inputs collected before a run.
+   */
+  inputSchema?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  approvalPolicy?: ('none' | 'workspace-admin' | 'platform-admin') | null;
+  /**
+   * How this action executes.
+   */
+  backend: {
+    type:
+      | 'builtin'
+      | 'webhook'
+      | 'temporal-template'
+      | 'temporal-pattern'
+      | 'temporal-launch'
+      | 'kafka-provision'
+      | 'agent';
+    /**
+     * Backend target: builtin handler id, webhook URL, template/pattern/launch id, topic config, or agent prompt ref — interpreted per type.
+     */
+    ref?: string | null;
+  };
+  enabled?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Execution records for self-service actions.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "action-runs".
+ */
+export interface ActionRun {
+  id: string;
+  action: string | Action;
+  workspace: string | Workspace;
+  /**
+   * What this run produced or targeted, if anything.
+   */
+  entity?: (string | null) | CatalogEntity;
+  /**
+   * Validated against the Action inputSchema.
+   */
+  inputs?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  status: 'pending' | 'awaiting-approval' | 'running' | 'succeeded' | 'failed';
+  /**
+   * Temporal dispatch workflow id (Temporal backends).
+   */
+  workflowId?: string | null;
+  /**
+   * Append-only array of { ts, level, message } entries.
+   */
+  logs?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Produced urls/ids/etc.
+   */
+  outputs?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  error?: string | null;
+  triggeredBy?: (string | null) | User;
+  /**
+   * P4 automations create runs with trigger=automation.
+   */
+  trigger?: ('manual' | 'automation') | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
@@ -3927,6 +4044,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'initiative-action-items';
         value: string | InitiativeActionItem;
+      } | null)
+    | ({
+        relationTo: 'actions';
+        value: string | Action;
+      } | null)
+    | ({
+        relationTo: 'action-runs';
+        value: string | ActionRun;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -5431,6 +5556,46 @@ export interface InitiativeActionItemsSelect<T extends boolean = true> {
   assignee?: T;
   status?: T;
   notes?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "actions_select".
+ */
+export interface ActionsSelect<T extends boolean = true> {
+  name?: T;
+  description?: T;
+  workspace?: T;
+  icon?: T;
+  inputSchema?: T;
+  approvalPolicy?: T;
+  backend?:
+    | T
+    | {
+        type?: T;
+        ref?: T;
+      };
+  enabled?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "action-runs_select".
+ */
+export interface ActionRunsSelect<T extends boolean = true> {
+  action?: T;
+  workspace?: T;
+  entity?: T;
+  inputs?: T;
+  status?: T;
+  workflowId?: T;
+  logs?: T;
+  outputs?: T;
+  error?: T;
+  triggeredBy?: T;
+  trigger?: T;
   updatedAt?: T;
   createdAt?: T;
 }

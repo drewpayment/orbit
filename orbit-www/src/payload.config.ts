@@ -83,6 +83,9 @@ import {
   InitiativeActionItems,
 } from './collections/scorecards'
 
+// Self-Service actions (IDP refocus P3)
+import { Actions, ActionRuns } from './collections/actions'
+
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
@@ -163,6 +166,9 @@ export default buildConfig({
     ScorecardRuleResults,
     Initiatives,
     InitiativeActionItems,
+    // Self-Service actions (IDP refocus P3)
+    Actions,
+    ActionRuns,
   ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
