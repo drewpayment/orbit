@@ -78,6 +78,24 @@
             "command": "mink post-write"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "mink post-tool"
+          }
+        ]
+      },
+      {
+        "matcher": "Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "mink post-tool"
+          }
+        ]
       }
     ]
   }
