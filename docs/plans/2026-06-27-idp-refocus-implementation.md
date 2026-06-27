@@ -214,6 +214,35 @@ actions have approval records" = field-presence/threshold over existing
   on entities, rollup shows distribution; create an Initiative → action items generated
   for failing entities.
 
+### P2 status & follow-ups (REVISIT — captured 2026-06-27)
+**Shipped & verified** (commits `18237f6`, `beac08a`, `cfb9eae`): the 5 collections;
+the TypeScript evaluation engine (`lib/scorecards/evaluate.ts`) + on-demand "Evaluate
+now" + internal `/api/internal/scorecards/evaluate` (X-API-Key); `/scorecards` list +
+org rollup; `/scorecards/[id]` results matrix + level chips; catalog score chips
+(entity list + detail Scorecards tab); RBAC-gated authoring (workspace owner/admin via
+`lib/scorecards/authz.ts → canManageScorecards`, P2 Option A) — New Scorecard flow,
+level editor, and a schema-aware Rule Builder (autocomplete `FieldCombobox` over known
+entity fields + free-entry custom `metadata.*` paths; enum value dropdowns / checkbox
+"in (one of)"). Fixed a latent app-wide cmdk bug: `ui/command.tsx` used the presence
+selector `data-[disabled]` (cmdk v1 emits `data-disabled="false"`), making every
+combobox item unclickable — now `data-[disabled=true]`; and `FieldCombobox`'s Popover is
+`modal` so it's interactive inside the rule Dialog.
+
+**Deferred / open (the user has more questions on the authoring UX — revisit):**
+- **Go/Temporal scheduled evaluation** — only on-demand + internal API exist; nightly +
+  on-change signal workflow (`scorecard_evaluation_workflow.go`) is not built.
+- **Initiatives have NO UI yet** — `initiatives` + `initiative-action-items` collections
+  exist but there's no create/manage screen and no auto-generation of action items for
+  failing entities. This is the biggest functional gap in P2.
+- **Rule-authoring UX questions** (revisit): metadata-key discoverability (suggest keys
+  seen on real entities rather than free text); clearer per-field/op guidance; possibly
+  prebuilt scorecard templates (production-readiness, security) to import; bulk rule
+  editing; validation/preview ("which entities would pass?") before save.
+- **AI-governance rules** (plan §"AI-governance rules ride this engine") not yet wired.
+- **RBAC** is workspace owner/admin only (Option A); revisit Option B (granular
+  `scorecards:manage` permission) when the Permissions/Roles system is activated — the
+  single switch point is `canManageScorecards`.
+
 ---
 
 ## P3 — Self-Service Actions + Action Runs
