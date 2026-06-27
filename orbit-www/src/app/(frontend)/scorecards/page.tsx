@@ -1,11 +1,13 @@
 import { Suspense } from 'react'
-import { Loader2, ShieldCheck } from 'lucide-react'
+import Link from 'next/link'
+import { Loader2, Plus, ShieldCheck } from 'lucide-react'
 import { getCurrentUser } from '@/lib/auth/session'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
+import { Button } from '@/components/ui/button'
 import { ScorecardCard } from '@/components/features/scorecards/ScorecardCard'
-import { listScorecards } from './actions'
+import { listScorecards, getManageableWorkspaces } from './actions'
 
 /**
  * Scorecards landing (IDP refocus P2, issue #45).
@@ -42,6 +44,26 @@ async function ScorecardsContent() {
   )
 }
 
+/**
+ * "New scorecard" CTA — rendered only when the user is owner/admin of at least
+ * one workspace (matches the createScorecard RBAC gate). Streams in its own
+ * Suspense boundary so resolving the manageable workspaces never blocks the
+ * page header.
+ */
+async function NewScorecardButton() {
+  const user = await getCurrentUser()
+  const workspaces = await getManageableWorkspaces(user?.id)
+  if (workspaces.length === 0) return null
+  return (
+    <Button asChild size="sm">
+      <Link href="/scorecards/new">
+        <Plus className="h-4 w-4" />
+        New scorecard
+      </Link>
+    </Button>
+  )
+}
+
 export default function ScorecardsPage() {
   return (
     <SidebarProvider>
@@ -49,11 +71,16 @@ export default function ScorecardsPage() {
       <SidebarInset>
         <SiteHeader />
         <div className="flex-1 space-y-4 p-8 pt-6">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold">Scorecards</h1>
-            <p className="mt-2 text-muted-foreground">
-              Standards enforcement and operational-excellence maturity across every catalog entity.
-            </p>
+          <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold">Scorecards</h1>
+              <p className="mt-2 text-muted-foreground">
+                Standards enforcement and operational-excellence maturity across every catalog entity.
+              </p>
+            </div>
+            <Suspense fallback={null}>
+              <NewScorecardButton />
+            </Suspense>
           </div>
 
           <Suspense

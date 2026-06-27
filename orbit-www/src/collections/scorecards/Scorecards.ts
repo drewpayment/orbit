@@ -1,6 +1,6 @@
 import type { CollectionConfig } from 'payload'
 import { ENTITY_KINDS } from '../catalog'
-import { workspaceScopedRead, workspaceScopedCreate, workspaceScopedMutate } from './access'
+import { workspaceScopedRead, workspaceScopedManageCreate, workspaceScopedMutate } from './access'
 
 /**
  * Scorecards — operational-excellence standards applied to catalog entities
@@ -21,10 +21,12 @@ export const Scorecards: CollectionConfig = {
     defaultColumns: ['name', 'workspace', 'enabled', 'updatedAt'],
     description: 'Standards + maturity ladders scored against catalog entities.',
   },
+  // Authoring (create/update/delete) is gated on workspace owner/admin (P2
+  // Option A); members read-only. See lib/scorecards/authz.ts.
   access: {
     read: workspaceScopedRead,
-    create: workspaceScopedCreate,
-    update: workspaceScopedMutate('scorecards', ['owner', 'admin', 'member']),
+    create: workspaceScopedManageCreate,
+    update: workspaceScopedMutate('scorecards', ['owner', 'admin']),
     delete: workspaceScopedMutate('scorecards', ['owner', 'admin']),
   },
   fields: [

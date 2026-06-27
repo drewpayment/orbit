@@ -28,6 +28,34 @@ export const workspaceScopedRead: Access = async ({ req: { user, payload } }) =>
 export const workspaceScopedCreate: Access = ({ req: { user } }) => !!user
 
 /**
+ * Create access for standards-authoring collections (scorecards, rules): the
+ * caller must be an active owner/admin of the workspace named in the incoming
+ * `data.workspace`. Payload admins and overrideAccess (eval runner / seed)
+ * bypass. Mirrors the `canManageScorecards` policy at the collection layer.
+ */
+export const workspaceScopedManageCreate: Access = async ({ req: { user, payload }, data }) => {
+  if (!user) return false
+  if (user.collection === 'users') return true
+  const workspaceId =
+    typeof data?.workspace === 'string' ? data.workspace : data?.workspace?.id
+  if (!workspaceId) return false
+  const members = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [
+        { workspace: { equals: workspaceId } },
+        { user: { equals: user.id } },
+        { role: { in: ['owner', 'admin'] } },
+        { status: { equals: 'active' } },
+      ],
+    },
+    limit: 1,
+    overrideAccess: true,
+  })
+  return members.docs.length > 0
+}
+
+/**
  * Factory for update/delete: caller must be an active member of the doc's
  * workspace with one of `roles`.
  */

@@ -11,6 +11,8 @@ import { RollupSummary } from '@/components/features/scorecards/RollupSummary'
 import { RuleResultsTable } from '@/components/features/scorecards/RuleResultsTable'
 import { EvaluateButton } from '@/components/features/scorecards/EvaluateButton'
 import { ScoreChip } from '@/components/features/scorecards/ScoreChip'
+import { ManageScorecardActions } from '@/components/features/scorecards/ManageScorecardActions'
+import { AddRuleButton, RuleActions } from '@/components/features/scorecards/RuleActions'
 import { ruleTypeLabel } from '@/components/features/scorecards/scorecard-ui'
 import { getScorecardDetail } from '../actions'
 
@@ -28,7 +30,8 @@ export default async function ScorecardDetailPage({ params }: PageProps) {
   const detail = await getScorecardDetail(user?.id, id)
   if (!detail) notFound()
 
-  const { scorecard, levels, rules, rows, summary } = detail
+  const { scorecard, levels, rules, rows, summary, canManage } = detail
+  const levelNames = levels.map((l) => l.name)
 
   return (
     <SidebarProvider>
@@ -64,7 +67,21 @@ export default async function ScorecardDetailPage({ params }: PageProps) {
                   ))}
                 </div>
               </div>
-              <EvaluateButton scorecardId={scorecard.id} />
+              <div className="flex flex-wrap items-center gap-2">
+                {canManage && (
+                  <ManageScorecardActions
+                    scorecardId={scorecard.id}
+                    scorecardName={scorecard.name}
+                    initial={{
+                      name: scorecard.name,
+                      description: scorecard.description,
+                      appliesToKind: scorecard.appliesTo?.kind ?? null,
+                      levels: levels.map((l) => ({ name: l.name, rank: l.rank, color: l.color })),
+                    }}
+                  />
+                )}
+                <EvaluateButton scorecardId={scorecard.id} />
+              </div>
             </div>
           </div>
 
@@ -84,7 +101,10 @@ export default async function ScorecardDetailPage({ params }: PageProps) {
           </Card>
 
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold">Rules ({rules.length})</h2>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-lg font-semibold">Rules ({rules.length})</h2>
+              {canManage && <AddRuleButton scorecardId={scorecard.id} levelNames={levelNames} />}
+            </div>
             {rules.length === 0 ? (
               <p className="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground">
                 This scorecard has no rules yet.
@@ -96,9 +116,18 @@ export default async function ScorecardDetailPage({ params }: PageProps) {
                     <CardHeader className="space-y-1 pb-2">
                       <div className="flex items-start justify-between gap-2">
                         <CardTitle className="text-sm">{rule.title}</CardTitle>
-                        <Badge variant="outline" className="shrink-0 font-normal">
-                          {ruleTypeLabel(rule.type)}
-                        </Badge>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <Badge variant="outline" className="font-normal">
+                            {ruleTypeLabel(rule.type)}
+                          </Badge>
+                          {canManage && (
+                            <RuleActions
+                              rule={rule}
+                              scorecardId={scorecard.id}
+                              levelNames={levelNames}
+                            />
+                          )}
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-1 text-xs text-muted-foreground">

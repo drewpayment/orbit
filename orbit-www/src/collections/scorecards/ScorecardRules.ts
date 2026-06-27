@@ -1,5 +1,5 @@
 import type { CollectionConfig } from 'payload'
-import { workspaceScopedRead, workspaceScopedCreate, workspaceScopedMutate } from './access'
+import { workspaceScopedRead, workspaceScopedManageCreate, workspaceScopedMutate } from './access'
 
 /**
  * ScorecardRules — individual checks belonging to a scorecard (IDP refocus P2).
@@ -25,10 +25,12 @@ export const ScorecardRules: CollectionConfig = {
     defaultColumns: ['title', 'scorecard', 'type', 'level', 'updatedAt'],
     description: 'Individual pass/fail checks within a scorecard.',
   },
+  // Authoring is gated on workspace owner/admin (P2 Option A); members
+  // read-only. See lib/scorecards/authz.ts.
   access: {
     read: workspaceScopedRead,
-    create: workspaceScopedCreate,
-    update: workspaceScopedMutate('scorecard-rules', ['owner', 'admin', 'member']),
+    create: workspaceScopedManageCreate,
+    update: workspaceScopedMutate('scorecard-rules', ['owner', 'admin']),
     delete: workspaceScopedMutate('scorecard-rules', ['owner', 'admin']),
   },
   fields: [
