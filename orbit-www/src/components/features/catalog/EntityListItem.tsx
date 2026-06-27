@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import type { CatalogEntity } from '@/payload-types'
 import { EntityKindBadge } from './EntityKindBadge'
+import { EntityScoreInlineChip } from '@/components/features/scorecards/EntityScoreInlineChip'
 
 /** Tailwind dot colour per folded-in health state. */
 const HEALTH_DOT: Record<NonNullable<CatalogEntity['health']>, string> = {
@@ -62,6 +63,7 @@ export function EntityListItem({ entity }: { entity: CatalogEntity }) {
                 {entity.tier.replace('-', ' ')}
               </Badge>
             )}
+            <EntityScoreInlineChip entityId={entity.id} />
           </div>
         </CardHeader>
         <CardContent className="space-y-2">

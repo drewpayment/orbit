@@ -74,6 +74,15 @@ import { APISchemas, APISchemaVersions } from './collections/api-catalog'
 // Unified catalog graph (IDP refocus P1)
 import { CatalogEntities, CatalogRelations } from './collections/catalog'
 
+// Scorecards + initiatives (IDP refocus P2)
+import {
+  Scorecards,
+  ScorecardRules,
+  ScorecardRuleResults,
+  Initiatives,
+  InitiativeActionItems,
+} from './collections/scorecards'
+
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
@@ -148,6 +157,12 @@ export default buildConfig({
     // Unified catalog graph (IDP refocus P1)
     CatalogEntities,
     CatalogRelations,
+    // Scorecards + initiatives (IDP refocus P2)
+    Scorecards,
+    ScorecardRules,
+    ScorecardRuleResults,
+    Initiatives,
+    InitiativeActionItems,
   ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
