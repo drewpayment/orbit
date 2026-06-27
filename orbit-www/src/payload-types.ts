@@ -133,6 +133,7 @@ export interface Config {
     'initiative-action-items': InitiativeActionItem;
     actions: Action;
     'action-runs': ActionRun;
+    automations: Automation;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -205,6 +206,7 @@ export interface Config {
     'initiative-action-items': InitiativeActionItemsSelect<false> | InitiativeActionItemsSelect<true>;
     actions: ActionsSelect<false> | ActionsSelect<true>;
     'action-runs': ActionRunsSelect<false> | ActionRunsSelect<true>;
+    automations: AutomationsSelect<false> | AutomationsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -3783,6 +3785,63 @@ export interface ActionRun {
   createdAt: string;
 }
 /**
+ * Event-driven rules that run self-service actions when catalog or scorecard state changes.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "automations".
+ */
+export interface Automation {
+  id: string;
+  name: string;
+  description?: string | null;
+  workspace: string | Workspace;
+  /**
+   * What event this automation reacts to.
+   */
+  trigger: {
+    event: 'rule-result-changed' | 'entity-changed' | 'schedule';
+    /**
+     * Optional JSON predicate narrowing the event (e.g. { "transition": "drift" } or { "kind": "service" }). Evaluated in-process; AND of all keys.
+     */
+    filter?:
+      | {
+          [k: string]: unknown;
+        }
+      | unknown[]
+      | string
+      | number
+      | boolean
+      | null;
+    /**
+     * Cron expression — only used when event is "schedule" (swept by the deferred Temporal worker).
+     */
+    schedule?: string | null;
+  };
+  /**
+   * The self-service Action to run when this automation fires.
+   */
+  action: string | Action;
+  /**
+   * Maps event fields → action inputs. Values may be templates referencing the event, e.g. { "service": "{{entity.slug}}", "reason": "Rule {{rule.title}} failing" }.
+   */
+  inputMapping?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  enabled?: boolean | null;
+  /**
+   * When this automation last created a run.
+   */
+  lastTriggeredAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
@@ -4052,6 +4111,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'action-runs';
         value: string | ActionRun;
+      } | null)
+    | ({
+        relationTo: 'automations';
+        value: string | Automation;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -5596,6 +5659,28 @@ export interface ActionRunsSelect<T extends boolean = true> {
   error?: T;
   triggeredBy?: T;
   trigger?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "automations_select".
+ */
+export interface AutomationsSelect<T extends boolean = true> {
+  name?: T;
+  description?: T;
+  workspace?: T;
+  trigger?:
+    | T
+    | {
+        event?: T;
+        filter?: T;
+        schedule?: T;
+      };
+  action?: T;
+  inputMapping?: T;
+  enabled?: T;
+  lastTriggeredAt?: T;
   updatedAt?: T;
   createdAt?: T;
 }

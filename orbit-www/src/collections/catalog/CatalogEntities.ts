@@ -109,6 +109,26 @@ export const CatalogEntities: CollectionConfig = {
       return members.docs.length > 0
     },
   },
+  hooks: {
+    // Automation event source (IDP refocus P4): emit `entity-changed`.
+    // Fire-and-forget; loop guard — writes tagged `context.skipAutomationEmit`
+    // (e.g. an automation-run's builtin creating an entity) do NOT re-emit, so
+    // an entity-changed automation cannot recurse through its own action.
+    afterChange: [
+      ({ doc, operation, req }) => {
+        if (req.context?.skipAutomationEmit) return doc
+        ;(async () => {
+          try {
+            const { emitEntityChanged } = await import('@/lib/automations/emit')
+            await emitEntityChanged(req.payload, { doc, operation })
+          } catch (err) {
+            console.error('[CatalogEntities Hook] automation emit failed:', err)
+          }
+        })()
+        return doc
+      },
+    ],
+  },
   fields: [
     {
       name: 'name',

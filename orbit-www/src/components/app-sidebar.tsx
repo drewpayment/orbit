@@ -74,6 +74,15 @@ const navMainData = [
       items: [],
     },
     {
+      // Automations bridge Scorecards (triggers) and Self-Service (actions).
+      // Visible to all members (read-only); authoring is gated to workspace
+      // owner/admin inside the page + server actions (P4).
+      title: "Automations",
+      url: "/automations",
+      icon: Zap,
+      items: [],
+    },
+    {
       title: "Workspaces",
       url: "/workspaces",
       icon: Building2,
@@ -140,11 +149,6 @@ const navPlatformData: NavPlatformItem[] = [
     title: "Workflows",
     url: "/platform/workflows",
     icon: Workflow,
-  },
-  {
-    title: "Automations",
-    url: "/automations",
-    icon: Zap,
   },
 ]
 

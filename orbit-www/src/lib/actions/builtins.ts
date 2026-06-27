@@ -70,11 +70,66 @@ const registerService: BuiltinHandler = async ({ payload, workspaceId, inputs, l
       source: { type: 'manual' },
     },
     overrideAccess: true,
+    // Loop guard (P4): an automation-run that creates an entity must NOT re-emit
+    // an entity-changed event, or an entity-changed automation could recurse.
+    context: { skipAutomationEmit: true },
   })
 
   log('info', `Created catalog entity ${created.id}.`)
 
   return { outputs: { entityId: created.id, slug: created.slug ?? slugify(name) }, entityId: created.id }
+}
+
+/**
+ * `notify-owner` — record a notification about a catalog entity (IDP refocus P4).
+ *
+ * The default remediation handler for drift automations: when a scorecard rule
+ * flips to failing, an automation runs this with the drifted entity + a reason,
+ * and the resulting action-run is the durable, visible remediation task. If an
+ * `entity` (catalog-entities id) is supplied, the owning team is resolved and
+ * recorded so the notification has an addressee. No external delivery in v1 —
+ * the run record IS the notification surface (a channel sink is a follow-up).
+ *
+ * Inputs: `{ entity?: string, message?: string }`.
+ */
+const notifyOwner: BuiltinHandler = async ({ payload, workspaceId, inputs, log }) => {
+  const message = stringInput(inputs, 'message') ?? 'Attention required.'
+  const entityId = stringInput(inputs, 'entity')
+
+  let owner: string | null = null
+  let entityName: string | null = null
+  if (entityId) {
+    try {
+      const entity = await payload.findByID({
+        collection: 'catalog-entities',
+        id: entityId,
+        depth: 1,
+        overrideAccess: true,
+      })
+      // Stay inside the run's tenant boundary.
+      const entityWs =
+        typeof entity.workspace === 'string' ? entity.workspace : entity.workspace?.id
+      if (entityWs && String(entityWs) !== workspaceId) {
+        throw new Error('Entity is outside this run’s workspace.')
+      }
+      entityName = entity.name ?? null
+      const ownerRef = entity.owner
+      if (ownerRef && typeof ownerRef === 'object') owner = ownerRef.name ?? ownerRef.id ?? null
+      else if (typeof ownerRef === 'string') owner = ownerRef
+    } catch (err) {
+      log('warn', `Could not resolve entity ${entityId}: ${(err as Error).message}`)
+    }
+  }
+
+  log(
+    'info',
+    `Notification${entityName ? ` for "${entityName}"` : ''}${owner ? ` (owner: ${owner})` : ''}: ${message}`,
+  )
+
+  return {
+    outputs: { notified: true, entity: entityId ?? null, owner, message },
+    ...(entityId ? { entityId } : {}),
+  }
 }
 
 /**
@@ -89,6 +144,7 @@ const echo: BuiltinHandler = async ({ inputs, log }) => {
 /** Registry of builtin handlers, keyed by `Action.backend.ref`. */
 export const BUILTIN_HANDLERS: Record<string, BuiltinHandler> = {
   'register-service': registerService,
+  'notify-owner': notifyOwner,
   echo,
   noop: echo,
 }

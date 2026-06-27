@@ -86,6 +86,9 @@ import {
 // Self-Service actions (IDP refocus P3)
 import { Actions, ActionRuns } from './collections/actions'
 
+// Event automation + drift detection (IDP refocus P4)
+import { Automations } from './collections/automations'
+
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
@@ -169,6 +172,8 @@ export default buildConfig({
     // Self-Service actions (IDP refocus P3)
     Actions,
     ActionRuns,
+    // Event automation + drift detection (IDP refocus P4)
+    Automations,
   ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',

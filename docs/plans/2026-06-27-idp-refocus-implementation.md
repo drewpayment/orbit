@@ -313,6 +313,58 @@ it produced/targeted), `inputs` (json), `status` (`pending|awaiting-approval|run
 - agent-browser: flip a rule to failing → automation fires → remediation Action Run
   created and visible; owner notified.
 
+### P4 status & follow-ups (shipped 2026-06-27)
+**Shipped & verified** (TypeScript/Payload layer, same ship-now/defer-Temporal split as P2/P3):
+- **Collection** `automations` (`src/collections/automations/`): `name`, `description`,
+  `workspace`, `trigger {event, filter (json), schedule}`, `action` (rel), `inputMapping`
+  (json), `enabled`, `lastTriggeredAt`. Workspace-scoped read; authoring gated owner/admin
+  (`access.ts` + `lib/automations/authz.ts → canManageAutomations`). Registered in
+  `payload.config.ts`; types regenerated.
+- **Pure engine** (`lib/automations/`, fully unit-tested — 23 tests):
+  - `match.ts` — `eventMatchesAutomation` (enabled + event-type + `matchesFilter`). Filter is
+    a flat `dotted.path → expected` predicate, AND-ed, scalar=equality / array=membership,
+    evaluated in-process (no Mongo round-trip on the hot path).
+  - `input-mapping.ts` — `resolveInputMapping`: whole-value templates (`"{{passed}}"`)
+    preserve type; mixed text interpolates; missing → '' (text) / undefined (whole).
+  - `events.ts` — normalized nested event shapes so filters + templates share dotted paths.
+- **Dispatcher** `lib/automations/dispatch.ts` — loads enabled+matching automations, resolves
+  inputs, creates an `action-runs` row via the shared `createAndDispatchRun` with
+  `trigger: 'automation'`, stamps `lastTriggeredAt`. Per-automation try/catch isolation.
+- **Shared run helper** `lib/actions/create-run.ts` — extracted the validate+approval-gate+
+  create+execute core out of P3's `runAction` so manual and automation runs share ONE path
+  (runAction now delegates to it; 42 P3 tests still green).
+- **Event emission** (`lib/automations/emit.ts`) wired as fire-and-forget `afterChange` hooks:
+  - `scorecard-rule-results` → `rule-result-changed`. **Drift = transition** (pass→fail);
+    `unchanged` is skipped so a re-eval sweep doesn't re-fire. `initial`/`recovery` also emitted.
+  - `catalog-entities` → `entity-changed`, with a **loop guard**: writes tagged
+    `context.skipAutomationEmit` (e.g. an automation-run's builtin creating an entity) don't
+    re-emit. The `register-service` builtin sets that flag.
+- **`notify-owner` builtin** (`lib/actions/builtins.ts`) — default drift remediation: records a
+  notification (resolves the owning team) on the run; the run record IS the remediation task.
+- **Internal route** `POST /api/internal/automations/dispatch` (X-API-Key) — thin wrapper over
+  the dispatcher for the deferred schedule worker / external producers.
+- **Authoring UI**: `/automations` list (read for members; New/Edit gated), `/automations/new`,
+  `/automations/[id]/edit`, `AutomationForm` (key/value row editors for filter + inputMapping —
+  no raw JSON; filter values lightly coerced), `DeleteAutomationButton`. Nav: **Automations moved
+  out of platform-admin into the main surfaces** (consistent with Scorecards/Self-Service —
+  visible to members, authoring gated).
+
+**Divergences from the original P4 spec (driven by the shipped P1–P3 code):**
+- Hooks dispatch **in-process** via a lib (like the P1 projection hooks), not over HTTP to the
+  internal route; the route remains for out-of-process callers. Avoids a self-HTTP+re-auth hop.
+- Added the shared `createAndDispatchRun` refactor so validation/approval live in one place.
+- Drift is **transition-based, not state-based**, to avoid re-fire storms on re-evaluation.
+
+**Deferred / open:**
+- **Schedule trigger execution** — the collection + cron field + internal route exist, but the
+  Temporal Schedule worker that sweeps schedule-type automations is NOT built (no worker runs
+  locally; consistent with P2/P3 deferral).
+- **Notification delivery** — `notify-owner` records on the run only; a channel sink (email/Slack)
+  is a follow-up.
+- **`entity-changed` noise** — projection churn (every app/api/kafka save) emits entity-changed;
+  fine since automations are opt-in, but a debounce/throttle is a possible follow-up.
+- **Browser QA (agent-browser)** not run in this container (no MongoDB/dev server) — run before merge.
+
 ---
 
 ## Cross-cutting

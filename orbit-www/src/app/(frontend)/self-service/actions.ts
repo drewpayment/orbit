@@ -6,8 +6,9 @@ import { getCurrentUser } from '@/lib/auth/session'
 import type { Where } from 'payload'
 import type { Action, ActionRun } from '@/payload-types'
 import { canRunActions, canApproveActionRun } from '@/lib/actions/authz'
-import { normalizeInputSchema, validateInputs, type ActionInputSchema } from '@/lib/actions/input-schema'
-import { executeRun, readLogs, type RunLogEntry } from '@/lib/actions/run'
+import { normalizeInputSchema, type ActionInputSchema } from '@/lib/actions/input-schema'
+import { executeRun, readLogs } from '@/lib/actions/run'
+import { createAndDispatchRun } from '@/lib/actions/create-run'
 
 /**
  * Self-service RUN + QUERY server actions (IDP refocus P3).
@@ -190,47 +191,14 @@ export async function runAction(input: {
     throw new Error('You do not have permission to run actions in this workspace.')
   }
 
-  // Validate inputs against the action's schema.
-  const schema = normalizeInputSchema(action.inputSchema)
-  const validation = validateInputs(schema, input.inputs ?? {})
-  if (!validation.ok) throw new Error(validation.error)
-
-  const policy = action.approvalPolicy ?? 'none'
-  const needsApproval = policy !== 'none'
-  const initialLog: RunLogEntry = {
-    ts: new Date().toISOString(),
-    level: 'info',
-    message: needsApproval
-      ? `Run created; awaiting ${policy} approval.`
-      : 'Run created.',
-  }
-
-  const run = await payload.create({
-    collection: 'action-runs',
-    data: {
-      action: action.id,
-      workspace: workspaceId as string,
-      inputs: validation.values,
-      status: needsApproval ? 'awaiting-approval' : 'pending',
-      logs: [initialLog],
-      triggeredBy: uid,
-      trigger: 'manual',
-    },
-    overrideAccess: true,
+  // Validation + approval-gating + create + execute is shared with the P4
+  // automation dispatcher (createAndDispatchRun).
+  return createAndDispatchRun(payload, {
+    action,
+    inputs: input.inputs ?? {},
+    trigger: 'manual',
+    triggeredBy: uid,
   })
-
-  if (!needsApproval) {
-    await executeRun(payload, run.id)
-  }
-
-  // Re-read for the post-execution status (executeRun mutated it).
-  const fresh = await payload.findByID({
-    collection: 'action-runs',
-    id: run.id,
-    depth: 0,
-    overrideAccess: true,
-  })
-  return { runId: run.id, status: fresh.status }
 }
 
 // ---------------------------------------------------------------------------

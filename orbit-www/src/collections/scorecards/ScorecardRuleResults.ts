@@ -26,6 +26,24 @@ export const ScorecardRuleResults: CollectionConfig = {
     update: () => false,
     delete: () => false,
   },
+  hooks: {
+    // Automation event source (IDP refocus P4): a pass→fail transition is the
+    // drift signal. Fire-and-forget — a dispatch failure must never block the
+    // evaluation write.
+    afterChange: [
+      ({ doc, previousDoc, operation, req }) => {
+        ;(async () => {
+          try {
+            const { emitRuleResultChanged } = await import('@/lib/automations/emit')
+            await emitRuleResultChanged(req.payload, { doc, previousDoc, operation })
+          } catch (err) {
+            console.error('[ScorecardRuleResults Hook] automation emit failed:', err)
+          }
+        })()
+        return doc
+      },
+    ],
+  },
   fields: [
     {
       name: 'workspace',
