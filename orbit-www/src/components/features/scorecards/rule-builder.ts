@@ -62,6 +62,88 @@ export const ENTITY_KIND_OPTIONS = ENTITY_KINDS as readonly string[]
 const THRESHOLD_OP_VALUES = THRESHOLD_OPS.map((o) => o.value)
 const NUMERIC_OPS: ThresholdOp[] = ['gt', 'gte', 'lt', 'lte']
 
+// --- scoreable entity fields (drive the schema-aware field pickers) ---------
+
+export type ScoreableValueType = 'text' | 'enum' | 'number' | 'relationship' | 'array'
+
+export interface ScoreableField {
+  path: string
+  label: string
+  valueType: ScoreableValueType
+  enumOptions?: readonly string[]
+  help?: string
+}
+
+/** Conventional prefix for custom/freeform fields (e.g. metadata.costCenter). */
+export const METADATA_PREFIX = 'metadata.'
+
+/**
+ * The CatalogEntity fields a rule can target — mirrored from
+ * collections/catalog/CatalogEntities.ts. `valueType` drives the threshold value
+ * control; `enumOptions` lists the allowed values for select fields. Any field
+ * not listed here is reachable by typing a custom path into the field combobox.
+ */
+export const SCOREABLE_FIELDS: ScoreableField[] = [
+  { path: 'name', label: 'Name', valueType: 'text' },
+  { path: 'slug', label: 'Slug', valueType: 'text' },
+  { path: 'description', label: 'Description', valueType: 'text' },
+  {
+    path: 'owner',
+    label: 'Owning team',
+    valueType: 'relationship',
+    help: 'The team that owns this entity.',
+  },
+  { path: 'kind', label: 'Kind', valueType: 'enum', enumOptions: ENTITY_KIND_OPTIONS },
+  {
+    path: 'lifecycle',
+    label: 'Lifecycle',
+    valueType: 'enum',
+    enumOptions: ['experimental', 'production', 'deprecated'],
+  },
+  { path: 'tier', label: 'Tier', valueType: 'enum', enumOptions: ['tier-1', 'tier-2', 'tier-3'] },
+  {
+    path: 'health',
+    label: 'Health',
+    valueType: 'enum',
+    enumOptions: ['healthy', 'degraded', 'down', 'unknown'],
+  },
+  { path: 'links', label: 'Links', valueType: 'array', help: 'Docs, dashboards, runbooks.' },
+]
+
+/** Look up a known scoreable field by its path. */
+export function fieldByPath(path: string): ScoreableField | undefined {
+  return SCOREABLE_FIELDS.find((f) => f.path === path)
+}
+
+/**
+ * The value-input kind for a threshold's value control given the chosen field:
+ * enum field → 'enum' (pick from its options), number field → 'number', and
+ * everything else (text, relationship, array, custom metadata, unknown) → 'text'.
+ * `op` is accepted for future per-operator narrowing; the kind is field-driven.
+ */
+export function valueInputType(path: string, _op?: ThresholdOp): 'enum' | 'number' | 'text' {
+  const field = fieldByPath(path)
+  if (field?.valueType === 'enum') return 'enum'
+  if (field?.valueType === 'number') return 'number'
+  return 'text'
+}
+
+/** Threshold operators valid for a field — enum fields narrow to eq/neq/in. */
+export function thresholdOpsForPath(path: string): { value: ThresholdOp; label: string }[] {
+  const field = fieldByPath(path)
+  if (field?.valueType === 'enum') {
+    return THRESHOLD_OPS.filter((o) => o.value === 'eq' || o.value === 'neq' || o.value === 'in')
+  }
+  return THRESHOLD_OPS
+}
+
+/** One-line explanation of what each rule type checks, shown under the selector. */
+export const RULE_TYPE_HELP: Record<RuleType, string> = {
+  'field-presence': 'Passes when the chosen field is set / non-empty on the entity.',
+  'relation-check': 'Passes when the entity has at least N relations of the chosen type.',
+  threshold: 'Passes when the chosen field compares to the value.',
+}
+
 // --- form shapes (the controlled state the builder edits) -------------------
 
 export interface FieldPresenceForm {

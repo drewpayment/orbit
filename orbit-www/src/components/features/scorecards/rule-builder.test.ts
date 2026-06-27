@@ -5,6 +5,10 @@ import {
   parseExpression,
   coerceScalar,
   defaultForm,
+  fieldByPath,
+  valueInputType,
+  thresholdOpsForPath,
+  SCOREABLE_FIELDS,
   type RuleForm,
 } from './rule-builder'
 
@@ -146,5 +150,67 @@ describe('parseExpression hydrates builder state for editing', () => {
     const form = parseExpression('relation-check', null)
     expect(form.type).toBe('relation-check')
     expect(validateExpression('relation-check', buildExpression(form))).toBeNull()
+  })
+})
+
+describe('scoreable-field catalog', () => {
+  it('fieldByPath resolves known fields and ignores unknown ones', () => {
+    expect(fieldByPath('lifecycle')?.valueType).toBe('enum')
+    expect(fieldByPath('lifecycle')?.enumOptions).toContain('production')
+    expect(fieldByPath('owner')?.valueType).toBe('relationship')
+    expect(fieldByPath('name')?.valueType).toBe('text')
+    expect(fieldByPath('metadata.costCenter')).toBeUndefined()
+  })
+
+  it('every scoreable field has a label and (for enums) options', () => {
+    for (const field of SCOREABLE_FIELDS) {
+      expect(field.label.length).toBeGreaterThan(0)
+      if (field.valueType === 'enum') {
+        expect(field.enumOptions && field.enumOptions.length).toBeTruthy()
+      }
+    }
+  })
+
+  it('valueInputType maps field types to the right value control', () => {
+    expect(valueInputType('lifecycle')).toBe('enum')
+    expect(valueInputType('kind')).toBe('enum')
+    expect(valueInputType('name')).toBe('text')
+    expect(valueInputType('owner')).toBe('text') // relationship → free text id
+    expect(valueInputType('metadata.replicas')).toBe('text') // custom → text
+  })
+
+  it('thresholdOpsForPath narrows enum fields to eq/neq/in', () => {
+    const enumOps = thresholdOpsForPath('lifecycle').map((o) => o.value)
+    expect(enumOps).toEqual(['eq', 'neq', 'in'])
+    const textOps = thresholdOpsForPath('name').map((o) => o.value)
+    expect(textOps).toContain('gt')
+    expect(textOps.length).toBeGreaterThan(3)
+  })
+})
+
+describe('custom / free-entered field paths (combobox)', () => {
+  it('a known field path is stored verbatim and resolves its metadata', () => {
+    expect(fieldByPath('lifecycle')).toBeDefined()
+    const form: RuleForm = { type: 'field-presence', path: 'lifecycle', op: 'exists' }
+    const expr = buildExpression(form)
+    expect(expr).toEqual({ path: 'lifecycle', op: 'exists' })
+    expect(validateExpression('field-presence', expr)).toBeNull()
+  })
+
+  it('a free-entered metadata path is accepted verbatim and validates', () => {
+    const form: RuleForm = { type: 'field-presence', path: 'metadata.costCenter', op: 'not-empty' }
+    const expr = buildExpression(form)
+    expect(expr).toEqual({ path: 'metadata.costCenter', op: 'not-empty' })
+    expect(validateExpression('field-presence', expr)).toBeNull()
+    // unknown path → text value type (no enum dropdown), all threshold ops available
+    expect(valueInputType('metadata.costCenter')).toBe('text')
+    expect(thresholdOpsForPath('metadata.costCenter').length).toBeGreaterThan(3)
+  })
+
+  it('a nested custom path round-trips unchanged through the builder', () => {
+    const form: RuleForm = { type: 'threshold', path: 'metadata.sla.uptime', op: 'gte', value: '99' }
+    const expr = buildExpression(form)
+    expect(expr).toEqual({ path: 'metadata.sla.uptime', op: 'gte', value: 99 })
+    expect(validateExpression('threshold', expr)).toBeNull()
   })
 })
