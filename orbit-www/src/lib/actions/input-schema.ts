@@ -12,6 +12,23 @@
  * Keep the field/schema shapes here stable — Engineers B & C import them.
  */
 
+/**
+ * Thrown when a run's inputs fail validation against an Action's inputSchema.
+ *
+ * This is a TERMINAL failure: the same inputs can never validate on retry, so
+ * callers (the internal dispatch route, the Temporal activity) map it to a
+ * non-retryable outcome (HTTP 422 → non-retryable ApplicationFailure) rather
+ * than letting it retry-storm. The `code` discriminator lets server boundaries
+ * recognize it without a structural `instanceof` across module/bundle seams.
+ */
+export class InputValidationError extends Error {
+  readonly code = 'INPUT_VALIDATION' as const
+  constructor(message: string) {
+    super(message)
+    this.name = 'InputValidationError'
+  }
+}
+
 /** One field in an Action's run form. */
 export interface ActionInputField {
   name: string

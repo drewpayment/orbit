@@ -49,6 +49,14 @@ export async function dispatchAutomationEvent(
   payload: Payload,
   event: AutomationEvent,
 ): Promise<DispatchResult> {
+  // Schedule short-circuit (P4.2): a `schedule` event targets exactly ONE
+  // automation (Temporal owns the cron and fires `automation:<id>`). Fanning out
+  // here would fire EVERY schedule automation in the workspace, so handle just
+  // `event.automationId` and return before the candidate query below.
+  if (event.type === 'schedule') {
+    return dispatchScheduleEvent(payload, event)
+  }
+
   // Candidate automations: enabled, same workspace, same trigger event. The
   // fine-grained filter is applied in-process (we don't push JSON predicates to
   // Mongo).
@@ -115,4 +123,76 @@ export async function dispatchAutomationEvent(
   }
 
   return { matched: matched.length, dispatched }
+}
+
+/**
+ * Single-automation schedule dispatch (P4.2).
+ *
+ * Unlike the event fan-out, a `schedule` event names exactly one automation
+ * (`event.automationId`). This loads that one automation, applies the terminal
+ * guards (not-found / wrong-workspace / disabled / not-a-schedule / disabled
+ * action), and — when it clears — resolves its inputMapping and creates a run.
+ *
+ * Terminal vs. transient failures are deliberately distinct: not-found and the
+ * guard cases return cleanly (Temporal MUST NOT retry a structurally-invalid
+ * fire), whereas a `createAndDispatchRun` failure is allowed to PROPAGATE so the
+ * internal route 500s and Temporal retries the schedule activity. `trigger.filter`
+ * is ignored here (filters narrow events, not schedules), and there is no
+ * entity/rule context so `{{entity.*}}`/`{{rule.*}}` templates resolve to ''.
+ */
+async function dispatchScheduleEvent(
+  payload: Payload,
+  event: Extract<AutomationEvent, { type: 'schedule' }>,
+): Promise<DispatchResult> {
+  let automation: Automation
+  try {
+    automation = (await payload.findByID({
+      collection: 'automations',
+      id: event.automationId,
+      depth: 0,
+      overrideAccess: true,
+    })) as Automation
+  } catch {
+    // Not found (or unreadable): nothing to fire, and no point retrying.
+    return { matched: 0, dispatched: 0 }
+  }
+
+  // Terminal guards — return cleanly (do NOT throw: these must not trigger a
+  // Temporal retry).
+  if (relId(automation.workspace) !== event.workspace) return { matched: 0, dispatched: 0 }
+  if (automation.enabled === false) return { matched: 0, dispatched: 0 }
+  if (automation.trigger?.event !== 'schedule') return { matched: 0, dispatched: 0 }
+
+  const actionId = relId(automation.action)
+  if (!actionId) return { matched: 1, dispatched: 0 }
+
+  const action = (await payload.findByID({
+    collection: 'actions',
+    id: actionId,
+    depth: 0,
+    overrideAccess: true,
+  })) as Action
+  if (action.enabled === false) return { matched: 1, dispatched: 0 }
+
+  // Below here, failures are TRANSIENT and intentionally propagate.
+  const inputs = resolveInputMapping(automation.inputMapping, event)
+
+  await createAndDispatchRun(payload, {
+    action,
+    inputs,
+    trigger: 'automation',
+    triggeredBy: null,
+    entityId: undefined,
+    sourceAutomationId: automation.id,
+    origin: automation.name,
+  })
+
+  await payload.update({
+    collection: 'automations',
+    id: automation.id,
+    data: { lastTriggeredAt: new Date().toISOString() },
+    overrideAccess: true,
+  })
+
+  return { matched: 1, dispatched: 1 }
 }

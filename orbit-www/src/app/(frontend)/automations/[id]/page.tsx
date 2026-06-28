@@ -46,21 +46,25 @@ function NextRun({ nextRun, enabled }: { nextRun: AutomationNextRun; enabled: bo
       </p>
     )
   }
-  // schedule
+  // schedule — the next time is read from Temporal (the authoritative owner).
   return (
     <div className="text-sm">
-      {nextRun.at ? (
+      {nextRun.unavailable ? (
+        <span className="text-muted-foreground">
+          Next run unavailable (scheduling service unreachable).
+        </span>
+      ) : nextRun.at ? (
         <span className="font-medium">{new Date(nextRun.at).toLocaleString()}</span>
       ) : (
         <span className="text-muted-foreground">
-          Could not compute a next time — check the cron expression.
+          No upcoming run — check the cron expression.
         </span>
       )}
       <span className="ml-2 text-muted-foreground">
         (<code>{nextRun.cron}</code>)
       </span>
       <p className="mt-1 text-xs text-muted-foreground">
-        Scheduled execution is handled by the (deferred) Temporal worker.
+        Scheduled execution is handled by the Temporal automation worker.
       </p>
     </div>
   )

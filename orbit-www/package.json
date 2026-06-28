@@ -4,9 +4,13 @@
   "description": "A blank template to get started with Payload 3.0",
   "license": "MIT",
   "type": "module",
+  "workspaces": [
+    "services/*"
+  ],
   "scripts": {
     "build": "cross-env NODE_OPTIONS=\"--no-deprecation --max-old-space-size=8000\" next build",
     "dev": "cross-env NODE_OPTIONS=--no-deprecation next dev",
+    "worker:automations": "tsx services/automation-worker/src/worker.ts",
     "devsafe": "rm -rf .next && cross-env NODE_OPTIONS=--no-deprecation next dev",
     "generate:importmap": "cross-env NODE_OPTIONS=\"--no-deprecation --conditions=react-server\" payload generate:importmap",
     "generate:types": "cross-env NODE_OPTIONS=\"--no-deprecation --conditions=react-server\" payload generate:types",
@@ -33,6 +37,7 @@
     "@monaco-editor/react": "^4.7.0",
     "@octokit/app": "^16.1.2",
     "@octokit/rest": "^22.0.1",
+    "@orbit/automation-worker": "workspace:*",
     "@payloadcms/db-mongodb": "3.57.0",
     "@payloadcms/email-resend": "3.57.0",
     "@payloadcms/next": "3.57.0",

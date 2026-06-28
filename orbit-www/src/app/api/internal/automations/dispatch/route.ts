@@ -5,6 +5,7 @@ import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import { validateInternalApiKey } from '@/lib/auth/internal-api-auth'
 import { dispatchAutomationEvent } from '@/lib/automations/dispatch'
+import { InputValidationError } from '@/lib/actions/input-schema'
 import type { AutomationEvent, AutomationEventType } from '@/lib/automations/events'
 
 /**
@@ -47,12 +48,27 @@ export async function POST(request: NextRequest) {
   if (typeof body.workspace !== 'string' || !body.workspace) {
     return NextResponse.json({ error: 'workspace (string) is required' }, { status: 400 })
   }
+  // A schedule event targets exactly one automation by id (the dispatcher fires
+  // only that one — see dispatchAutomationEvent's schedule short-circuit).
+  if (body.type === 'schedule' && (typeof body.automationId !== 'string' || !body.automationId)) {
+    return NextResponse.json(
+      { error: "automationId (string) is required when type is 'schedule'" },
+      { status: 400 },
+    )
+  }
 
   try {
     const payload = await getPayload({ config: configPromise })
     const result = await dispatchAutomationEvent(payload, body as unknown as AutomationEvent)
     return NextResponse.json(result)
   } catch (err) {
+    // A terminal input-validation failure can never succeed on retry (the same
+    // inputs will fail again). Surface it as 422 with `terminal: true` so the
+    // Temporal activity throws it non-retryable and stops the retry storm.
+    // Everything else stays a (retryable) 500.
+    if (err instanceof InputValidationError || (err as { code?: unknown })?.code === 'INPUT_VALIDATION') {
+      return NextResponse.json({ error: (err as Error).message, terminal: true }, { status: 422 })
+    }
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })
   }
 }

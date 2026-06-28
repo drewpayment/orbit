@@ -1,7 +1,7 @@
 import 'server-only'
 import type { Payload } from 'payload'
 import type { Action } from '@/payload-types'
-import { normalizeInputSchema, validateInputs } from './input-schema'
+import { InputValidationError, normalizeInputSchema, validateInputs } from './input-schema'
 import { executeRun, type RunLogEntry } from './run'
 
 /**
@@ -62,7 +62,7 @@ export async function createAndDispatchRun(
 
   const schema = normalizeInputSchema(action.inputSchema)
   const validation = validateInputs(schema, input.inputs ?? {})
-  if (!validation.ok) throw new Error(validation.error)
+  if (!validation.ok) throw new InputValidationError(validation.error)
 
   // `entity` is a relationship → catalog-entities; a non-ObjectId value would
   // make the create throw and drop the whole run. The in-process hook path

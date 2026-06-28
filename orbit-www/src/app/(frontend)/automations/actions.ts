@@ -5,9 +5,14 @@ import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
 import { getCurrentUser } from '@/lib/auth/session'
 import { canManageAutomations } from '@/lib/automations/authz'
-import { nextCronRun } from '@/lib/automations/next-run'
+import {
+  ensureAutomationSchedule,
+  deleteAutomationSchedule,
+  getScheduleNextRun,
+} from '@/lib/temporal/automation-schedules'
 import { AUTOMATION_EVENTS } from '@/collections/automations'
-import type { Automation, ActionRun } from '@/payload-types'
+import { normalizeInputSchema } from '@/lib/actions/input-schema'
+import type { Automation, ActionRun, Action } from '@/payload-types'
 
 /**
  * Automation authoring + query server actions (IDP refocus P4).
@@ -140,10 +145,29 @@ export async function getManageableAutomationWorkspaces(
   return wsResult.docs.map((w) => ({ id: w.id, name: w.name }))
 }
 
+/** An action option for the automation picker, with its required-input contract. */
+export interface AutomationActionOption {
+  id: string
+  name: string
+  /**
+   * Required action inputs (name for mapping lookup, label for display) — the
+   * form uses these to surface and demand a mapping for each, mirroring the
+   * server-side {@link findUnmappedRequiredInputs} guard.
+   */
+  requiredInputs: { name: string; label: string }[]
+}
+
+/** The required inputs of an action, derived from its normalized input schema. */
+function requiredInputsOf(inputSchema: unknown): { name: string; label: string }[] {
+  return normalizeInputSchema(inputSchema)
+    .fields.filter((f) => f.required)
+    .map((f) => ({ name: f.name, label: f.label || f.name }))
+}
+
 /** Enabled actions per workspace — the automation's action picker source. */
 export async function getActionsByWorkspace(
   workspaceIds: string[],
-): Promise<Record<string, { id: string; name: string }[]>> {
+): Promise<Record<string, AutomationActionOption[]>> {
   const payload = await getPayload({ config })
   if (workspaceIds.length === 0) return {}
 
@@ -156,11 +180,11 @@ export async function getActionsByWorkspace(
     overrideAccess: true,
   })
 
-  const byWs: Record<string, { id: string; name: string }[]> = {}
+  const byWs: Record<string, AutomationActionOption[]> = {}
   for (const a of result.docs) {
     const ws = relId(a.workspace)
     if (!ws) continue
-    ;(byWs[ws] ??= []).push({ id: a.id, name: a.name })
+    ;(byWs[ws] ??= []).push({ id: a.id, name: a.name, requiredInputs: requiredInputsOf(a.inputSchema) })
   }
   return byWs
 }
@@ -177,7 +201,7 @@ export interface AutomationEditData {
   inputMapping: Record<string, unknown> | null
   enabled: boolean
   /** Enabled actions in this automation's workspace, for the picker. */
-  actions: { id: string; name: string }[]
+  actions: AutomationActionOption[]
 }
 
 function asRecord(v: unknown): Record<string, unknown> | null {
@@ -235,10 +259,15 @@ export interface AutomationRunSummary {
   createdAt: string | null
 }
 
-/** "When it runs next": a real time for cron, a descriptive label for events. */
+/**
+ * "When it runs next": a real time for cron, a descriptive label for events.
+ * For schedules the time is read from Temporal (the authoritative owner of the
+ * cron timing); `unavailable` flags a read-time soft failure (Temporal
+ * unreachable) so the UI can degrade that line without erroring the page.
+ */
 export type AutomationNextRun =
   | { kind: 'event'; event: AutomationEventValue }
-  | { kind: 'schedule'; cron: string; at: string | null }
+  | { kind: 'schedule'; cron: string; at: string | null; unavailable?: boolean }
 
 export interface AutomationDetail {
   id: string
@@ -318,8 +347,17 @@ export async function getAutomationDetail(
   const schedule = automation.trigger?.schedule ?? null
   let nextRun: AutomationNextRun
   if (event === 'schedule' && schedule) {
-    const at = nextCronRun(schedule, new Date())
-    nextRun = { kind: 'schedule', cron: schedule, at: at ? at.toISOString() : null }
+    // Read the authoritative next-run from Temporal. Degrade gracefully if the
+    // scheduling service is unreachable at view time (read-time soft failure,
+    // distinct from the write-time fail-closed authoring path).
+    let at: string | null = null
+    let unavailable = false
+    try {
+      at = await getScheduleNextRun(automationId)
+    } catch {
+      unavailable = true
+    }
+    nextRun = { kind: 'schedule', cron: schedule, at, unavailable }
   } else {
     nextRun = { kind: 'event', event }
   }
@@ -378,14 +416,18 @@ async function assertCanManage(
   }
 }
 
-/** Assert `actionId` is an action in `workspaceId` (no cross-tenant linking). */
+/**
+ * Assert `actionId` is an action in `workspaceId` (no cross-tenant linking) and
+ * RETURN the loaded action so callers can validate its input contract without a
+ * second fetch.
+ */
 async function assertActionInWorkspace(
   payload: PayloadClient,
   actionId: string,
   workspaceId: string,
-): Promise<void> {
+): Promise<Action> {
   if (!actionId) throw new Error('Select an action to run.')
-  let action
+  let action: Action
   try {
     action = await payload.findByID({ collection: 'actions', id: actionId, depth: 0, overrideAccess: true })
   } catch {
@@ -394,6 +436,30 @@ async function assertActionInWorkspace(
   if (relId(action.workspace) !== workspaceId) {
     throw new Error('The selected action belongs to a different workspace.')
   }
+  return action
+}
+
+/**
+ * The required action inputs (by label) left unmapped by `inputMapping` — the
+ * authoring-time guard against saving an automation that would silently fail
+ * every dispatch on {@link validateInputs} ("…is required."). A required field
+ * counts as mapped only when its mapping value is a non-blank literal or
+ * `{{template}}`; null/absent/whitespace are unmapped.
+ *
+ * NOTE: this file is `'use server'`, so the export must be async (mirrors
+ * {@link scheduleOpFor}) even though the computation is synchronous.
+ */
+export async function findUnmappedRequiredInputs(
+  inputSchema: unknown,
+  inputMapping: Record<string, unknown> | null | undefined,
+): Promise<string[]> {
+  return normalizeInputSchema(inputSchema)
+    .fields.filter((f) => f.required)
+    .filter((f) => {
+      const v = inputMapping?.[f.name]
+      return v == null || (typeof v === 'string' && v.trim() === '')
+    })
+    .map((f) => f.label || f.name)
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -424,18 +490,82 @@ function buildTriggerAndRest(values: AutomationFormValues) {
   }
 }
 
+/**
+ * Which Temporal Schedule operation a save implies, from the trigger event
+ * before/after the change. Pure (no Temporal) so the decision table is unit-
+ * testable in isolation; the `schedule` path is the only one that touches
+ * Temporal, so event→event transitions are always `'none'`.
+ *
+ * NOTE: this file is `'use server'`, so every export must be async — hence the
+ * `Promise<ScheduleOp>` return on an otherwise-synchronous decision.
+ */
+export type ScheduleOp = 'ensure' | 'delete' | 'none'
+export async function scheduleOpFor(
+  prevEvent: string | null | undefined,
+  nextEvent: string,
+): Promise<ScheduleOp> {
+  if (nextEvent === 'schedule') return 'ensure' // other→schedule AND schedule→schedule
+  if (prevEvent === 'schedule') return 'delete' // schedule→other
+  return 'none'
+}
+
+const SCHEDULING_UNAVAILABLE_CREATE =
+  'The scheduling service is unavailable. The automation was not created — please try again once it is reachable.'
+const SCHEDULING_UNAVAILABLE_SAVE =
+  'The scheduling service is unavailable. Your changes were not saved — please try again once it is reachable.'
+const SCHEDULING_UNAVAILABLE_DELETE =
+  'The scheduling service is unavailable. Please try again once it is reachable.'
+const SCHEDULE_CRON_REQUIRED = 'A cron schedule is required for schedule-triggered automations.'
+
 export async function createAutomation(input: CreateAutomationInput): Promise<{ id: string }> {
   const payload = await getPayload({ config })
   const uid = await requireUserId()
   await assertCanManage(payload, uid, input.workspace)
-  await assertActionInWorkspace(payload, input.actionId, input.workspace)
+  const action = await assertActionInWorkspace(payload, input.actionId, input.workspace)
 
   const data = buildTriggerAndRest(input)
+
+  // Every required action input must be mapped BEFORE any write — an unmapped
+  // required input saves cleanly but fails `validateInputs` on every dispatch
+  // (a silent automation). Runs first so nothing is created/scheduled.
+  const missingInputs = await findUnmappedRequiredInputs(action.inputSchema, data.inputMapping)
+  if (missingInputs.length > 0) {
+    throw new Error(`Map a value for every required input on this action: ${missingInputs.join(', ')}.`)
+  }
+
+  // Validate the cron BEFORE inserting so a missing-cron mistake never creates a
+  // record we then have to roll back (that rollback path is for Temporal failures).
+  const isSchedule = input.event === 'schedule'
+  const cron = data.trigger.schedule
+  if (isSchedule && !cron) throw new Error(SCHEDULE_CRON_REQUIRED)
+
   const created = await payload.create({
     collection: 'automations',
     data: { ...data, workspace: input.workspace, action: input.actionId },
     overrideAccess: true,
   })
+
+  // Fail-closed: the record only survives if its Temporal Schedule is created.
+  if (isSchedule) {
+    try {
+      await ensureAutomationSchedule({
+        id: created.id,
+        workspaceId: input.workspace,
+        cron: cron as string,
+        enabled: data.enabled,
+      })
+    } catch {
+      // Roll back the just-created record so we never leave a schedule
+      // automation without its Schedule. A best-effort rollback failure must not
+      // mask the user-facing scheduling error.
+      try {
+        await payload.delete({ collection: 'automations', id: created.id, overrideAccess: true })
+      } catch {
+        /* surface the scheduling error regardless */
+      }
+      throw new Error(SCHEDULING_UNAVAILABLE_CREATE)
+    }
+  }
 
   revalidatePath('/automations')
   return { id: created.id }
@@ -461,15 +591,58 @@ export async function updateAutomation(
   }
   const workspaceId = relId(automation.workspace)
   await assertCanManage(payload, uid, workspaceId)
-  await assertActionInWorkspace(payload, input.actionId, workspaceId as string)
+  const action = await assertActionInWorkspace(payload, input.actionId, workspaceId as string)
 
   const data = buildTriggerAndRest(input)
-  const updated = await payload.update({
-    collection: 'automations',
-    id: automationId,
-    data: { ...data, action: input.actionId },
-    overrideAccess: true,
-  })
+
+  // Same authoring-time guard as create: reject before any write/Temporal call so
+  // an unmapped required input can never become a silently-failing automation.
+  const missingInputs = await findUnmappedRequiredInputs(action.inputSchema, data.inputMapping)
+  if (missingInputs.length > 0) {
+    throw new Error(`Map a value for every required input on this action: ${missingInputs.join(', ')}.`)
+  }
+
+  const op = await scheduleOpFor(automation.trigger?.event, input.event)
+
+  const persist = async () =>
+    payload.update({
+      collection: 'automations',
+      id: automationId,
+      data: { ...data, action: input.actionId },
+      overrideAccess: true,
+    })
+
+  let updated: Automation
+  if (op === 'ensure') {
+    // schedule (new or unchanged): the Schedule must converge BEFORE we persist,
+    // so a Temporal failure leaves the record untouched (fail-closed).
+    const cron = data.trigger.schedule
+    if (!cron) throw new Error(SCHEDULE_CRON_REQUIRED)
+    try {
+      await ensureAutomationSchedule({
+        id: automationId,
+        workspaceId: workspaceId as string,
+        cron,
+        enabled: data.enabled,
+      })
+    } catch {
+      throw new Error(SCHEDULING_UNAVAILABLE_SAVE)
+    }
+    updated = await persist()
+  } else if (op === 'delete') {
+    // schedule→other: persist the new (non-schedule) record, then tear down the
+    // now-orphaned Schedule. A delete failure throws; the dispatch path re-checks
+    // `trigger.event === 'schedule'`, so a transient orphan never mis-fires.
+    updated = await persist()
+    try {
+      await deleteAutomationSchedule(automationId)
+    } catch {
+      throw new Error(SCHEDULING_UNAVAILABLE_DELETE)
+    }
+  } else {
+    // event→event: never touches Temporal.
+    updated = await persist()
+  }
 
   revalidatePath('/automations')
   revalidatePath(`/automations/${automationId}/edit`)
@@ -492,6 +665,17 @@ export async function deleteAutomation(automationId: string): Promise<{ id: stri
     throw new Error('Automation not found')
   }
   await assertCanManage(payload, uid, relId(automation.workspace))
+
+  // Schedule automations: tear down the Temporal Schedule first so we never leave
+  // an orphaned Schedule firing for a deleted record (fail-closed). Event
+  // automations delete directly.
+  if (automation.trigger?.event === 'schedule') {
+    try {
+      await deleteAutomationSchedule(automationId)
+    } catch {
+      throw new Error(SCHEDULING_UNAVAILABLE_DELETE)
+    }
+  }
 
   await payload.delete({ collection: 'automations', id: automationId, overrideAccess: true })
   revalidatePath('/automations')

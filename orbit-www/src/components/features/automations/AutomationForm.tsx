@@ -50,6 +50,8 @@ interface WorkspaceOption {
 interface ActionOption {
   id: string
   name: string
+  /** Required inputs on this action; each must be mapped before saving. */
+  requiredInputs?: { name: string; label: string }[]
 }
 
 interface Row {
@@ -204,11 +206,29 @@ export function AutomationForm(props: Props) {
 
   const eventHint = EVENT_OPTIONS.find((o) => o.value === event)?.hint
 
+  // Required inputs on the selected action — surfaced as a hint and enforced
+  // client-side before submit (the server is the authoritative guard).
+  const requiredInputs = useMemo(
+    () => actionOptions.find((a) => a.id === actionId)?.requiredInputs ?? [],
+    [actionOptions, actionId],
+  )
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!name.trim()) return toast.error('An automation name is required.')
     if (props.mode === 'create' && !workspace) return toast.error('Select a workspace.')
     if (!actionId) return toast.error('Select an action to run.')
+
+    const inputMapping = rowsToMapping(mappingRows)
+    const unmappedRequired = requiredInputs
+      .filter((f) => {
+        const v = inputMapping[f.name]
+        return v == null || (typeof v === 'string' && v.trim() === '')
+      })
+      .map((f) => f.label)
+    if (unmappedRequired.length > 0) {
+      return toast.error(`Map a value for every required input: ${unmappedRequired.join(', ')}.`)
+    }
 
     const values: AutomationFormValues = {
       name,
@@ -217,7 +237,7 @@ export function AutomationForm(props: Props) {
       filter: rowsToFilter(filterRows),
       schedule: event === 'schedule' ? schedule : null,
       actionId,
-      inputMapping: rowsToMapping(mappingRows),
+      inputMapping,
       enabled,
     }
 
@@ -358,11 +378,17 @@ export function AutomationForm(props: Props) {
       </div>
 
       <div className="space-y-1.5">
-        <Label>Input mapping (optional)</Label>
+        <Label>Input mapping{requiredInputs.length === 0 ? ' (optional)' : ''}</Label>
         <p className="text-xs text-muted-foreground">
           Map event fields into the action&rsquo;s inputs. Values may use{' '}
           <code>{'{{entity.slug}}'}</code>, <code>{'{{rule.title}}'}</code>, etc.
         </p>
+        {requiredInputs.length > 0 && (
+          <p className="text-xs font-medium text-muted-foreground">
+            Required inputs (must be mapped):{' '}
+            {requiredInputs.map((f) => f.label).join(', ')}
+          </p>
+        )}
         <RowEditor
           rows={mappingRows}
           setRows={setMappingRows}

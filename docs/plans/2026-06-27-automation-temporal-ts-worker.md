@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-27
 **Branch:** claude/idp-refactor-service-catalog-g7ch9h
-**Status:** DESIGN — reviewed; decisions locked (see "Review decisions"). Ready to build.
+**Status:** IMPLEMENTED (Phase 1) — built and live-verified against real Temporal on 2026-06-28. See "Implementation status (Phase 1)". Phase 2 (compose/k8s deployment) is the remaining work.
 
 ## Goal
 
@@ -197,9 +197,50 @@ Additive: new task queue + worker; Go worker and event automations unchanged. If
 absent, schedule automations don't fire (and, with fail-closed authoring, can't be created while
 Temporal is down) — no silent wrong state.
 
+## Implementation status (Phase 1)
+Built as designed, plus two hardening fixes that the live e2e surfaced. All file paths relative to `orbit-www/`.
+
+**Shipped:**
+- **Worker package** `services/automation-worker/` (`@orbit/automation-worker`): client-safe `./shared`
+  contract, `./worker` runtime (thin `AutomationDispatchWorkflow` → `dispatchScheduledAutomation`
+  activity POSTing the internal route), ESM `workflowsPath`. Wired as a bun workspace; Next's
+  `transpilePackages: ['@orbit/automation-worker']` (next.config.mjs) consumes the raw-TS `./shared`.
+- **Schedule lifecycle** `src/lib/temporal/automation-schedules.ts`: `ensureAutomationSchedule` /
+  `deleteAutomationSchedule` / `getScheduleNextRun`, all fail-closed (errors propagate).
+- **Fail-closed authoring** in `src/app/(frontend)/automations/actions.ts` per the §3 ordering table
+  (pure `scheduleOpFor` + atomic create/update/delete with rollback). Detail page reads the
+  authoritative next-run from Temporal (`[id]/page.tsx` degrades to "unavailable" at view time).
+- **Single-automation schedule dispatch** in `src/lib/automations/dispatch.ts` (+ route `automationId`
+  guard): a `schedule` event fires exactly its one automation; terminal guards return cleanly,
+  transient errors propagate so Temporal retries.
+
+**Hardening fixes (from live QA, 2026-06-28):**
+- **Authoring requires required-input mappings.** The form previously let you save a schedule
+  automation whose action had required inputs unmapped — it looked healthy but every dispatch failed
+  `validateInputs` and no run was ever created (silent failure). Now `findUnmappedRequiredInputs`
+  blocks the save server-side (create + update) and the form pre-checks + surfaces required inputs.
+- **Terminal dispatch errors are non-retryable.** `createAndDispatchRun` throws a typed
+  `InputValidationError`; the internal route maps it to **422 `{terminal:true}`**; the activity throws
+  `ApplicationFailure.nonRetryable` on any 4xx — so a doomed dispatch fails once instead of
+  retry-storming 5×/minute. (5xx/network stay retryable.)
+
+**Verification:** 48 unit tests green (worker activity, schedule lifecycle, `scheduleOpFor`,
+fail-closed create/update/delete + rollback, single-automation dispatch, authoring guard, 422/
+non-retryable mapping). `output:'standalone'` build compiles and `@temporalio/worker` is provably
+absent from the Next bundle (only `@temporalio/client` is bundled). Live agent-browser e2e against
+real Temporal: schedule fires → run created; "Next run" from Temporal; fail-closed save when Temporal
+down while event automations still save; authoring guard blocks the unmapped case; terminal dispatch
+fails non-retryable with zero retries (Temporal workflow history confirmed).
+
 ## Open questions / follow-ups
-1. Per-workspace timezone vs. global UTC (v1: UTC).
-2. Dispatch idempotency key for exactly-once on activity retries.
-3. *(Optional, defensive only)* a reconciler for out-of-band Schedule drift (someone deleting a
+1. **Phase 2 — deployment.** Dockerfile for `@orbit/automation-worker` + a compose service
+   (`orbit-automations-worker`, `depends_on temporal-server healthy`) added to `make dev`, + a
+   1-replica k8s Deployment. (The worker is currently run by hand: `bun run worker:automations`.)
+2. Per-workspace timezone vs. global UTC (v1: UTC).
+3. Dispatch idempotency key for exactly-once on activity retries.
+4. *(UX, minor)* warn at authoring time when a schedule automation maps a required input to an
+   entity/rule template (`{{entity.*}}`/`{{rule.*}}`) that resolves empty for schedule events — today
+   that passes the (presence) guard and fails non-retryably at dispatch (correct, but late feedback).
+5. *(Optional, defensive only)* a reconciler for out-of-band Schedule drift (someone deleting a
    Schedule directly in Temporal). Not required by the fail-closed invariant; nice-to-have.
-4. Eventually port select Go workflows to TS to collapse the language split (out of scope).
+6. Eventually port select Go workflows to TS to collapse the language split (out of scope).
