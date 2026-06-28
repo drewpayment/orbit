@@ -1,5 +1,5 @@
 import type { CollectionConfig } from 'payload'
-import { ENTITY_KINDS } from '../catalog'
+import { ENTITY_KINDS } from '../catalog/constants'
 import { workspaceScopedRead, workspaceScopedManageCreate, workspaceScopedMutate } from './access'
 
 /**

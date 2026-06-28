@@ -17,8 +17,11 @@
  * and the round-trip stays unit-testable (see rule-builder.test.ts).
  */
 
-import { ENTITY_KINDS } from '@/collections/catalog'
-import { RELATION_TYPES } from '@/collections/catalog'
+// Import the vocabularies from the framework-light constants module, NOT the
+// `@/collections/catalog` barrel: this module is reachable from the client
+// RuleBuilder, and the barrel would drag the collection configs (and their
+// server-only automation hooks) into the browser bundle.
+import { ENTITY_KINDS, RELATION_TYPES } from '@/collections/catalog/constants'
 
 // --- option vocabularies (drive the builder dropdowns) ----------------------
 

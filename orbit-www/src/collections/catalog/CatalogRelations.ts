@@ -1,4 +1,5 @@
 import type { CollectionConfig, Where } from 'payload'
+import { RELATION_TYPES } from './constants'
 
 /**
  * CatalogRelations — typed edges in the catalog graph (IDP refocus P1).
@@ -14,17 +15,9 @@ import type { CollectionConfig, Where } from 'payload'
  * See docs/plans/2026-06-27-idp-refocus-implementation.md (P1).
  */
 
-export const RELATION_TYPES = [
-  'owns',
-  'depends-on',
-  'exposes-api',
-  'consumes-api',
-  'produces-topic',
-  'consumes-topic',
-  'runs-in',
-  'built-from',
-  'part-of',
-] as const
+// RELATION_TYPES lives in ./constants (framework-light) — see the note in
+// CatalogEntities.ts. Re-exported for back-compat.
+export { RELATION_TYPES } from './constants'
 
 export const CatalogRelations: CollectionConfig = {
   slug: 'catalog-relations',

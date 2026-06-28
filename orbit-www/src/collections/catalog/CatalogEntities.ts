@@ -1,4 +1,5 @@
 import type { CollectionConfig, Where } from 'payload'
+import { ENTITY_KINDS } from './constants'
 
 /**
  * CatalogEntities — the unified software-catalog read model (IDP refocus P1).
@@ -18,17 +19,11 @@ import type { CollectionConfig, Where } from 'payload'
  * See docs/plans/2026-06-27-idp-refocus-implementation.md (P1).
  */
 
-export const ENTITY_KINDS = [
-  'service',
-  'api',
-  'resource',
-  'datastore',
-  'kafka-topic',
-  'domain',
-  'system',
-  'team',
-  'environment',
-] as const
+// ENTITY_KINDS lives in ./constants (framework-light) so client-reachable code
+// can import the vocabulary without pulling this collection config — and its
+// server-only automation hook — into the browser bundle. Re-exported for
+// back-compat with existing `@/collections/catalog` imports.
+export { ENTITY_KINDS } from './constants'
 
 export const CatalogEntities: CollectionConfig = {
   slug: 'catalog-entities',
