@@ -123,6 +123,26 @@ services:
       - AZURE_SUBSCRIPTION_ID=${AZURE_SUBSCRIPTION_ID:-}
     restart: unless-stopped
 
+  # TypeScript Temporal worker that fires schedule-type automations (P4.2).
+  # Polls the dedicated `orbit-automations` task queue; when a schedule is due it
+  # POSTs the existing internal dispatch route on orbit-www. Mirrors the
+  # launches-worker-azure Node/TS worker pattern.
+  orbit-automations-worker:
+    container_name: orbit-automations-worker
+    build:
+      context: ./orbit-www/services/automation-worker
+      dockerfile: Dockerfile
+    depends_on:
+      temporal-server:
+        condition: service_healthy
+    environment:
+      - TEMPORAL_ADDRESS=temporal-server:7233
+      - TEMPORAL_NAMESPACE=default
+      - ORBIT_API_URL=http://host.docker.internal:3000
+      - ORBIT_INTERNAL_API_KEY=${ORBIT_INTERNAL_API_KEY:?ORBIT_INTERNAL_API_KEY is required — see DEV_SETUP.md}
+      - AUTOMATION_SCHEDULE_TZ=UTC
+    restart: unless-stopped
+
   buildkit:
     container_name: orbit-buildkit
     image: moby/buildkit:latest

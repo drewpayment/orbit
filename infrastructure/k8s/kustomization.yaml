@@ -32,3 +32,4 @@ resources:
   - build-service
   - temporal-worker
   - launches-worker-azure
+  - automations-worker

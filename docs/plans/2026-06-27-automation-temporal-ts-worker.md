@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-27
 **Branch:** claude/idp-refactor-service-catalog-g7ch9h
-**Status:** IMPLEMENTED (Phase 1) — built and live-verified against real Temporal on 2026-06-28. See "Implementation status (Phase 1)". Phase 2 (compose/k8s deployment) is the remaining work.
+**Status:** IMPLEMENTED (Phase 1 + Phase 2) — built and live-verified against real Temporal on 2026-06-28; the worker is containerized and wired into `make dev` + k8s. See "Implementation status".
 
 ## Goal
 
@@ -155,15 +155,24 @@ The Schedule still needs a `spec.timeZone`; v1 ships a single `AUTOMATION_SCHEDU
 `'UTC'`). Because the detail page reads next-run from Temporal, the displayed time always matches
 reality regardless of tz. Per-workspace tz is a follow-up.
 
-## Deployment (Phase 2)
-Mirror existing worker services (`temporal-worker`, `launches-worker-azure`):
-- **Dockerfile** building `@orbit/automation-worker` and running its `./worker` entry.
-- **docker-compose** service `orbit-automations-worker`: `depends_on temporal-server (healthy)`;
-  env `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, `ORBIT_API_URL=http://host.docker.internal:3000`,
-  `ORBIT_INTERNAL_API_KEY`, `AUTOMATION_SCHEDULE_TZ=UTC`; `restart: unless-stopped`. Added to
-  `make dev` so the worker boots with the stack.
-- **k8s**: a 1-replica Deployment under `infrastructure/k8s` (Temporal dedupes fires; worker is
-  stateless/idempotent).
+## Deployment (Phase 2) — DONE
+Mirrors `launches-worker-azure` (the existing Node/TS Temporal worker). The `@orbit/automation-worker`
+package is fully self-contained (only `@temporalio/*` + relative imports), so it builds standalone.
+- **Dockerfile** `orbit-www/services/automation-worker/Dockerfile` (+ `.dockerignore`): `node:20-slim`,
+  non-root uid 10001, `npm install` (the package's `tsx` is a runtime dep), runs `npm start` →
+  `tsx src/worker.ts`. The Temporal worker bundles the workflow from `src/workflows` at startup.
+- **docker-compose** service `orbit-automations-worker`: `depends_on temporal-server (healthy)`; env
+  `TEMPORAL_ADDRESS=temporal-server:7233`, `TEMPORAL_NAMESPACE`, `ORBIT_API_URL=http://host.docker.internal:3000`,
+  `ORBIT_INTERNAL_API_KEY`, `AUTOMATION_SCHEDULE_TZ=UTC`; `restart: unless-stopped`. Wired into
+  `make dev` (`scripts/dev-start.sh` build+up lists) and `make dev-local` (Makefile), so the worker
+  boots with the stack.
+- **k8s** `infrastructure/k8s/automations-worker/` (deployment + kustomization, added to the root
+  kustomization): 1-replica Deployment, `image: ghcr.io/drewpayment/orbit/automations-worker:latest`,
+  non-root, `ORBIT_INTERNAL_API_KEY` from the `orbit-secrets` secret, `ORBIT_API_URL=http://orbit-www:3000`.
+  Temporal dedupes fires; the worker is stateless/idempotent.
+- **Verified:** image builds; `docker compose config` + `kubectl kustomize` validate; the containerized
+  worker connects to `temporal-server:7233`, builds its workflow bundle in-image, polls `orbit-automations`,
+  and on a triggered schedule its activity reaches the host app (`POST /api/internal/automations/dispatch 200`).
 
 ## Failure modes & idempotency
 - **Temporal down at author time (schedule path)** → **fail-closed**: save fails atomically with
@@ -233,11 +242,11 @@ down while event automations still save; authoring guard blocks the unmapped cas
 fails non-retryable with zero retries (Temporal workflow history confirmed).
 
 ## Open questions / follow-ups
-1. **Phase 2 — deployment.** Dockerfile for `@orbit/automation-worker` + a compose service
-   (`orbit-automations-worker`, `depends_on temporal-server healthy`) added to `make dev`, + a
-   1-replica k8s Deployment. (The worker is currently run by hand: `bun run worker:automations`.)
-2. Per-workspace timezone vs. global UTC (v1: UTC).
-3. Dispatch idempotency key for exactly-once on activity retries.
+1. Per-workspace timezone vs. global UTC (v1: UTC).
+2. Dispatch idempotency key for exactly-once on activity retries.
+3. *(Build reproducibility, minor)* the worker image runs `npm install` without a lockfile (the package
+   lives in the orbit-www bun workspace). Pin with a committed lockfile or a multi-stage build if
+   reproducible image builds become a requirement.
 4. *(UX, minor)* warn at authoring time when a schedule automation maps a required input to an
    entity/rule template (`{{entity.*}}`/`{{rule.*}}`) that resolves empty for schedule events — today
    that passes the (presence) guard and fails non-retryably at dispatch (correct, but late feedback).

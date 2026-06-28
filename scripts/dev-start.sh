@@ -11,11 +11,11 @@ docker-compose down
 
 # Build core services only (excluding Backstage services)
 echo "🔨 Building Docker images..."
-docker-compose build temporal-worker orbit-www
+docker-compose build temporal-worker orbit-automations-worker orbit-www
 
 # Start core services
 echo "▶️  Starting all services..."
-docker-compose up -d mongo temporal-postgresql temporal-elasticsearch temporal-server temporal-ui temporal-worker orbit-www postgres redis
+docker-compose up -d mongo temporal-postgresql temporal-elasticsearch temporal-server temporal-ui temporal-worker orbit-automations-worker orbit-www postgres redis
 
 echo ""
 echo "✅ All services started!"
