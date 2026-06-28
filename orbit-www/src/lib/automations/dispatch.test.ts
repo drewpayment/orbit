@@ -74,6 +74,7 @@ describe('dispatchAutomationEvent', () => {
       trigger: 'automation',
       triggeredBy: null,
       entityId: 'e1',
+      sourceAutomationId: 'a1',
       origin: 'Open remediation on drift',
       inputs: { entity: 'e1', message: 'Rule Has owner failing' },
     })

@@ -93,6 +93,7 @@ export async function dispatchAutomationEvent(
         trigger: 'automation',
         triggeredBy: null,
         entityId,
+        sourceAutomationId: automation.id,
         origin: automation.name,
       })
 

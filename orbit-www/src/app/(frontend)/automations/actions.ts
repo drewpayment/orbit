@@ -5,8 +5,9 @@ import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
 import { getCurrentUser } from '@/lib/auth/session'
 import { canManageAutomations } from '@/lib/automations/authz'
+import { nextCronRun } from '@/lib/automations/next-run'
 import { AUTOMATION_EVENTS } from '@/collections/automations'
-import type { Automation } from '@/payload-types'
+import type { Automation, ActionRun } from '@/payload-types'
 
 /**
  * Automation authoring + query server actions (IDP refocus P4).
@@ -220,6 +221,130 @@ export async function getAutomationForEdit(
     inputMapping: asRecord(automation.inputMapping),
     enabled: automation.enabled !== false,
     actions: byWs[workspaceId] ?? [],
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Detail view (read-only observability) — workspace-scoped read
+// ---------------------------------------------------------------------------
+
+export interface AutomationRunSummary {
+  id: string
+  status: string
+  trigger: string
+  createdAt: string | null
+}
+
+/** "When it runs next": a real time for cron, a descriptive label for events. */
+export type AutomationNextRun =
+  | { kind: 'event'; event: AutomationEventValue }
+  | { kind: 'schedule'; cron: string; at: string | null }
+
+export interface AutomationDetail {
+  id: string
+  workspace: string
+  workspaceName: string | null
+  name: string
+  description: string | null
+  enabled: boolean
+  event: AutomationEventValue
+  filter: Record<string, unknown> | null
+  schedule: string | null
+  actionId: string | null
+  actionName: string | null
+  inputMapping: Record<string, unknown> | null
+  lastTriggeredAt: string | null
+  canManage: boolean
+  /** Most recent run this automation produced (by sourceAutomation), if any. */
+  lastRun: AutomationRunSummary | null
+  /** Up to 10 most recent runs, newest first. */
+  recentRuns: AutomationRunSummary[]
+  nextRun: AutomationNextRun
+}
+
+function toRunSummary(r: ActionRun): AutomationRunSummary {
+  return {
+    id: r.id,
+    status: r.status,
+    trigger: r.trigger ?? 'automation',
+    createdAt: r.createdAt ?? null,
+  }
+}
+
+/**
+ * Load an automation for the read-only detail page. Workspace-scoped: any active
+ * member of the automation's workspace may view it; `canManage` (owner/admin)
+ * gates the Edit affordance. Returns null when not found or not a member.
+ */
+export async function getAutomationDetail(
+  userId: string | undefined,
+  automationId: string,
+): Promise<AutomationDetail | null> {
+  const payload = await getPayload({ config })
+  const uid = userId ?? (await getCurrentUser())?.id
+  if (!uid) return null
+
+  let automation: Automation
+  try {
+    automation = await payload.findByID({
+      collection: 'automations',
+      id: automationId,
+      depth: 1, // populate workspace + action for their names
+      overrideAccess: true,
+    })
+  } catch {
+    return null
+  }
+
+  const workspaceId = relId(automation.workspace)
+  if (!workspaceId) return null
+  // Tenant boundary: the viewer must be an active member of this workspace.
+  const memberWorkspaceIds = await getMemberWorkspaceIds(payload, uid)
+  if (!memberWorkspaceIds.includes(workspaceId)) return null
+
+  const canManage = await canManageAutomations(payload, uid, workspaceId)
+
+  const runsResult = await payload.find({
+    collection: 'action-runs',
+    where: { sourceAutomation: { equals: automationId } },
+    sort: '-createdAt',
+    limit: 10,
+    depth: 0,
+    overrideAccess: true,
+  })
+  const recentRuns = (runsResult.docs as ActionRun[]).map(toRunSummary)
+
+  const event = automation.trigger?.event
+  const schedule = automation.trigger?.schedule ?? null
+  let nextRun: AutomationNextRun
+  if (event === 'schedule' && schedule) {
+    const at = nextCronRun(schedule, new Date())
+    nextRun = { kind: 'schedule', cron: schedule, at: at ? at.toISOString() : null }
+  } else {
+    nextRun = { kind: 'event', event }
+  }
+
+  const workspace = automation.workspace
+  const action = automation.action
+
+  return {
+    id: automation.id,
+    workspace: workspaceId,
+    workspaceName: workspace && typeof workspace === 'object' ? workspace.name : null,
+    name: automation.name,
+    description: automation.description ?? null,
+    enabled: automation.enabled !== false,
+    event,
+    filter: asRecord(automation.trigger?.filter),
+    schedule,
+    actionId: relId(action),
+    actionName: action && typeof action === 'object' ? action.name : null,
+    inputMapping: asRecord(automation.inputMapping),
+    lastTriggeredAt: automation.lastTriggeredAt ?? null,
+    canManage,
+    lastRun: recentRuns[0] ?? null,
+    recentRuns,
+    nextRun,
   }
 }
 

@@ -42,6 +42,8 @@ export interface CreateAndDispatchRunInput {
   triggeredBy?: string | null
   /** A catalog-entities id this run targets (e.g. the entity that drifted). */
   entityId?: string | null
+  /** The automation that created this run (P4.1 back-reference; automation runs). */
+  sourceAutomationId?: string | null
   /** Extra context for the run's first log line (e.g. the automation name). */
   origin?: string
 }
@@ -97,6 +99,7 @@ export async function createAndDispatchRun(
       triggeredBy: input.triggeredBy ?? null,
       trigger: input.trigger,
       ...(entityId ? { entity: entityId } : {}),
+      ...(input.sourceAutomationId ? { sourceAutomation: input.sourceAutomationId } : {}),
     },
     overrideAccess: true,
   })

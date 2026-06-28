@@ -3781,6 +3781,10 @@ export interface ActionRun {
    * P4 automations create runs with trigger=automation.
    */
   trigger?: ('manual' | 'automation') | null;
+  /**
+   * The automation that created this run (P4.1; set when trigger=automation).
+   */
+  sourceAutomation?: (string | null) | Automation;
   updatedAt: string;
   createdAt: string;
 }
@@ -5659,6 +5663,7 @@ export interface ActionRunsSelect<T extends boolean = true> {
   error?: T;
   triggeredBy?: T;
   trigger?: T;
+  sourceAutomation?: T;
   updatedAt?: T;
   createdAt?: T;
 }

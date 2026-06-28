@@ -73,11 +73,18 @@ export default async function AutomationsPage() {
               {automations.map((a) => {
                 const editable = manageableIds.has(a.workspace)
                 return (
-                  <Card key={a.id} className="h-full">
+                  <Card key={a.id} className="relative h-full transition-colors hover:border-foreground/20">
+                    {/* Full-card overlay link to the detail view. The edit pencil
+                        sits above it (relative z-10) so it stays separately clickable. */}
+                    <Link
+                      href={`/automations/${a.id}`}
+                      className="absolute inset-0 z-0 rounded-xl"
+                      aria-label={`View ${a.name}`}
+                    />
                     <CardHeader>
                       <div className="flex items-center justify-between gap-2">
                         <Zap className="h-5 w-5 text-muted-foreground" />
-                        <div className="flex items-center gap-2">
+                        <div className="relative z-10 flex items-center gap-2">
                           {!a.enabled && <Badge variant="outline">Disabled</Badge>}
                           {editable && (
                             <Link

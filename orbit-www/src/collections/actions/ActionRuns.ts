@@ -87,10 +87,22 @@ export const ActionRuns: CollectionConfig = {
       ],
       admin: { description: 'P4 automations create runs with trigger=automation.' },
     },
+    {
+      name: 'sourceAutomation',
+      type: 'relationship',
+      relationTo: 'automations',
+      index: true,
+      admin: {
+        readOnly: true,
+        description: 'The automation that created this run (P4.1; set when trigger=automation).',
+      },
+    },
   ],
   indexes: [
     { fields: ['workspace', 'status'] },
     { fields: ['action', 'status'] },
+    // Recent runs for an automation's detail view (newest first).
+    { fields: ['sourceAutomation', 'createdAt'] },
   ],
   timestamps: true,
 }
