@@ -145,23 +145,41 @@ export async function getManageableAutomationWorkspaces(
   return wsResult.docs.map((w) => ({ id: w.id, name: w.name }))
 }
 
-/** An action option for the automation picker, with its required-input contract. */
+/** One declared input on an action, projected for the authoring form. */
+export interface AutomationActionInput {
+  name: string
+  label: string
+  type: 'text' | 'textarea' | 'number' | 'boolean' | 'select'
+  required: boolean
+  options?: string[]
+  help?: string
+  placeholder?: string
+}
+
+/** An action option for the automation picker, with its full input contract. */
 export interface AutomationActionOption {
   id: string
   name: string
   /**
-   * Required action inputs (name for mapping lookup, label for display) — the
-   * form uses these to surface and demand a mapping for each, mirroring the
-   * server-side {@link findUnmappedRequiredInputs} guard.
+   * The action's declared inputs, in schema order. The form renders one labeled
+   * field per input (required ones marked) so authors fill in values directly
+   * instead of guessing internal field names. Required coverage is enforced
+   * server-side by {@link findUnmappedRequiredInputs}.
    */
-  requiredInputs: { name: string; label: string }[]
+  inputs: AutomationActionInput[]
 }
 
-/** The required inputs of an action, derived from its normalized input schema. */
-function requiredInputsOf(inputSchema: unknown): { name: string; label: string }[] {
-  return normalizeInputSchema(inputSchema)
-    .fields.filter((f) => f.required)
-    .map((f) => ({ name: f.name, label: f.label || f.name }))
+/** The declared inputs of an action, derived from its normalized input schema. */
+function inputsOf(inputSchema: unknown): AutomationActionInput[] {
+  return normalizeInputSchema(inputSchema).fields.map((f) => ({
+    name: f.name,
+    label: f.label || f.name,
+    type: f.type,
+    required: !!f.required,
+    options: f.options,
+    help: f.help,
+    placeholder: f.placeholder,
+  }))
 }
 
 /** Enabled actions per workspace — the automation's action picker source. */
@@ -184,7 +202,7 @@ export async function getActionsByWorkspace(
   for (const a of result.docs) {
     const ws = relId(a.workspace)
     if (!ws) continue
-    ;(byWs[ws] ??= []).push({ id: a.id, name: a.name, requiredInputs: requiredInputsOf(a.inputSchema) })
+    ;(byWs[ws] ??= []).push({ id: a.id, name: a.name, inputs: inputsOf(a.inputSchema) })
   }
   return byWs
 }
@@ -480,6 +498,22 @@ function buildTriggerAndRest(values: AutomationFormValues) {
       ? values.inputMapping
       : undefined
   const schedule = values.event === 'schedule' ? values.schedule?.trim() || undefined : undefined
+
+  // Defense-in-depth (P4.2): a schedule has no triggering event, so any
+  // `{{template}}` in its input mapping resolves to empty at dispatch and fails
+  // non-retryably forever. Reject template values here so neither create nor
+  // update can persist one — the form blocks this client-side too. Event
+  // automations keep allowing templates (they have an event to interpolate).
+  if (values.event === 'schedule' && inputMapping) {
+    const hasTemplate = Object.values(inputMapping).some(
+      (v) => typeof v === 'string' && v.includes('{{'),
+    )
+    if (hasTemplate) {
+      throw new Error(
+        'Schedule automations can’t use {{variables}} in action inputs — they resolve to nothing at run time. Use literal values.',
+      )
+    }
+  }
 
   return {
     name,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveInputMapping } from './input-mapping'
+import { resolveInputMapping, extractTemplatePaths } from './input-mapping'
 import type { RuleResultChangedEvent } from './events'
 
 const event: RuleResultChangedEvent = {
@@ -61,5 +61,35 @@ describe('resolveInputMapping', () => {
   it('tolerates surrounding whitespace inside the braces', () => {
     const out = resolveInputMapping({ service: '{{ entity.slug }}' }, event)
     expect(out.service).toBe('billing')
+  })
+})
+
+describe('extractTemplatePaths', () => {
+  it('returns each template path in order', () => {
+    expect(extractTemplatePaths('hi {{entity.slug}} {{rule.title}}')).toEqual([
+      'entity.slug',
+      'rule.title',
+    ])
+  })
+
+  it('trims whitespace inside the braces', () => {
+    expect(extractTemplatePaths('{{  entity.name  }}')).toEqual(['entity.name'])
+  })
+
+  it('returns [] when there are no templates', () => {
+    expect(extractTemplatePaths('just a literal value')).toEqual([])
+  })
+
+  it('ignores a stray, unclosed {{ that is not a full token', () => {
+    expect(extractTemplatePaths('cost is {{ but no close')).toEqual([])
+  })
+
+  it('returns [] for a non-string value', () => {
+    expect(extractTemplatePaths(undefined as unknown as string)).toEqual([])
+    expect(extractTemplatePaths(42 as unknown as string)).toEqual([])
+  })
+
+  it('captures repeated and adjacent tokens', () => {
+    expect(extractTemplatePaths('{{a}}{{a}}{{b}}')).toEqual(['a', 'a', 'b'])
   })
 })

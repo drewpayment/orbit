@@ -20,6 +20,22 @@ import { getEventPath } from './match'
 /** Matches a single template token, capturing the inner (trimmed) path. */
 const TEMPLATE = /\{\{\s*([^}]+?)\s*\}\}/g
 
+/**
+ * Every `{{ path }}` template path in `value`, in order, trimmed of surrounding
+ * whitespace. Returns `[]` when there are no templates (or `value` isn't a
+ * string). Used by the authoring form to flag stale/cross-trigger variables
+ * (e.g. a `{{rule.title}}` left behind after switching to an entity trigger).
+ */
+export function extractTemplatePaths(value: string): string[] {
+  if (typeof value !== 'string') return []
+  const out: string[] = []
+  // Fresh regex per call — the shared TEMPLATE is stateful (global flag).
+  const re = /\{\{\s*([^}]+?)\s*\}\}/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(value)) !== null) out.push(m[1].trim())
+  return out
+}
+
 /** True if the whole string is exactly one template token. */
 function isWholeTemplate(s: string): boolean {
   const m = s.match(/^\{\{\s*([^}]+?)\s*\}\}$/)

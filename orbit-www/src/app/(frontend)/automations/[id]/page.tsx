@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { RunStatusBadge } from '@/components/features/actions/RunStatusBadge'
 import { formatRelativeTime } from '@/components/features/actions/action-ui'
+import { SetAutomationBreadcrumb } from '@/components/features/automations/SetAutomationBreadcrumb'
 import { getAutomationDetail, type AutomationNextRun } from '../actions'
 
 /**
@@ -114,6 +115,7 @@ export default async function AutomationDetailPage({
       <AppSidebar />
       <SidebarInset>
         <SiteHeader />
+        <SetAutomationBreadcrumb automationId={a.id} automationName={a.name} />
         <div className="flex-1 space-y-6 p-8 pt-6">
           <div>
             <Link

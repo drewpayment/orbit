@@ -22,7 +22,12 @@ import { getPayload } from 'payload'
 import { getCurrentUser } from '@/lib/auth/session'
 import { canManageAutomations } from '@/lib/automations/authz'
 import { ensureAutomationSchedule } from '@/lib/temporal/automation-schedules'
-import { scheduleOpFor, createAutomation, findUnmappedRequiredInputs } from './actions'
+import {
+  scheduleOpFor,
+  createAutomation,
+  updateAutomation,
+  findUnmappedRequiredInputs,
+} from './actions'
 
 // ---------------------------------------------------------------------------
 // findUnmappedRequiredInputs — authoring-time required-input guard (pure)
@@ -250,5 +255,99 @@ describe('createAutomation — event path never touches Temporal', () => {
     expect(res).toEqual({ id: 'new1' })
     expect(ensureAutomationSchedule).not.toHaveBeenCalled()
     expect(payload.delete).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Schedule automations reject {{template}} action inputs (server guard)
+//
+// A schedule has no triggering event, so any {{template}} in its input mapping
+// resolves to empty at dispatch and fails non-retryably forever. Reject it at
+// authoring time on BOTH create and update; event-triggered automations keep
+// allowing templates.
+// ---------------------------------------------------------------------------
+
+describe('schedule automations reject {{template}} action inputs', () => {
+  it('createAutomation rejects a schedule mapping containing a {{…}} value (no create)', async () => {
+    const payload = makePayload()
+    ;(getPayload as Mock).mockResolvedValue(payload)
+
+    await expect(
+      createAutomation({
+        workspace: 'ws1',
+        name: 'weekly sweep',
+        event: 'schedule',
+        schedule: '*/5 * * * *',
+        actionId: 'act1',
+        inputMapping: { message: 'Drift in {{entity.slug}}' },
+        enabled: true,
+      }),
+    ).rejects.toThrow(/can’t use \{\{variables\}\}/i)
+
+    expect(payload.create).not.toHaveBeenCalled()
+    expect(ensureAutomationSchedule).not.toHaveBeenCalled()
+  })
+
+  it('createAutomation allows a schedule with only literal mapping values', async () => {
+    const payload = makePayload()
+    ;(getPayload as Mock).mockResolvedValue(payload)
+    ;(ensureAutomationSchedule as Mock).mockResolvedValue(undefined)
+
+    const res = await createAutomation({
+      workspace: 'ws1',
+      name: 'weekly sweep',
+      event: 'schedule',
+      schedule: '*/5 * * * *',
+      actionId: 'act1',
+      inputMapping: { message: 'Weekly maintenance run' },
+      enabled: true,
+    })
+
+    expect(res).toEqual({ id: 'new1' })
+    expect(payload.create).toHaveBeenCalledTimes(1)
+    expect(ensureAutomationSchedule).toHaveBeenCalledTimes(1)
+  })
+
+  it('updateAutomation rejects a schedule automation gaining a {{…}} mapping (no update)', async () => {
+    const payload = makePayload()
+    payload.findByID = vi.fn(async ({ collection }: { collection: string }) => {
+      if (collection === 'automations') {
+        return { id: 'auto1', workspace: 'ws1', trigger: { event: 'schedule' } }
+      }
+      if (collection === 'actions') return { id: 'act1', workspace: 'ws1', enabled: true }
+      throw new Error(`unexpected findByID ${collection}`)
+    })
+    ;(getPayload as Mock).mockResolvedValue(payload)
+
+    await expect(
+      updateAutomation('auto1', {
+        name: 'weekly sweep',
+        event: 'schedule',
+        schedule: '*/5 * * * *',
+        actionId: 'act1',
+        inputMapping: { message: '{{entity.slug}}' },
+        enabled: true,
+      }),
+    ).rejects.toThrow(/can’t use \{\{variables\}\}/i)
+
+    expect(payload.update).not.toHaveBeenCalled()
+    expect(ensureAutomationSchedule).not.toHaveBeenCalled()
+  })
+
+  it('allows an event automation with a {{…}} mapping (guard is schedule-only)', async () => {
+    const payload = makePayload()
+    ;(getPayload as Mock).mockResolvedValue(payload)
+
+    const res = await createAutomation({
+      workspace: 'ws1',
+      name: 'drift watcher',
+      event: 'entity-changed',
+      actionId: 'act1',
+      inputMapping: { message: 'Drift in {{entity.slug}}' },
+      enabled: true,
+    })
+
+    expect(res).toEqual({ id: 'new1' })
+    expect(payload.create).toHaveBeenCalledTimes(1)
   })
 })
