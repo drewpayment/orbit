@@ -252,4 +252,13 @@ fails non-retryable with zero retries (Temporal workflow history confirmed).
    that passes the (presence) guard and fails non-retryably at dispatch (correct, but late feedback).
 5. *(Optional, defensive only)* a reconciler for out-of-band Schedule drift (someone deleting a
    Schedule directly in Temporal). Not required by the fail-closed invariant; nice-to-have.
-6. Eventually port select Go workflows to TS to collapse the language split (out of scope).
+6. **Worker-runtime placement (not a migration).** Adding the TS automation worker created a
+   deliberate *polyglot* setup alongside the ~33 Go workflows (~41k LOC in `temporal-workflows/`,
+   coupled to Go gRPC clients, the Kafka adapters, the build service, git/kafka-admin libs). Do
+   **not** port those to TS — it's a large, high-regression-risk rewrite of working, service-coupled
+   code for zero functional gain. The rule going forward is *placement by coupling*: write a new
+   workflow in **TS** when it's coupled to the web app / Payload / TS types and its deps are HTTP/JS
+   (like this automation worker), and in **Go** when it's coupled to Go services, proto gRPC clients,
+   or Kafka/git libraries. Port an existing Go workflow only opportunistically if it's genuinely thin
+   and its Go deps are incidental — today essentially none qualify. Accept the two runtimes as a
+   conscious tradeoff (a second toolchain/deploy unit) rather than chasing language consolidation.
