@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: automations-worker
+  namespace: orbit
+spec:
+  # Single replica is sufficient: Temporal dedupes schedule fires and the worker
+  # is stateless/idempotent. Scale out only for throughput.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: automations-worker
+  template:
+    metadata:
+      labels:
+        app: automations-worker
+    spec:
+      serviceAccountName: orbit
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+      containers:
+        - name: automations-worker
+          image: ghcr.io/drewpayment/orbit/automations-worker:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: TEMPORAL_ADDRESS
+              value: temporal:7233
+            - name: TEMPORAL_NAMESPACE
+              value: default
+            # The internal dispatch route lives in the orbit-www app service.
+            - name: ORBIT_API_URL
+              value: http://orbit-www:3000
+            - name: ORBIT_INTERNAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: ORBIT_INTERNAL_API_KEY
+            - name: AUTOMATION_SCHEDULE_TZ
+              value: UTC
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 100m
+            limits:
+              memory: 512Mi
+              cpu: 500m
+          livenessProbe:
+            exec:
+              command: ["ls", "/tmp"]
+            initialDelaySeconds: 10
+            periodSeconds: 30

@@ -19,7 +19,7 @@ dev-local: ## Start infrastructure in Docker, run orbit-www locally
 		minio minio-init orbit-registry \
 		bifrost traefik \
 		repository-service kafka-service build-service buildkit \
-		launches-worker-azure \
+		launches-worker-azure orbit-automations-worker \
 		prometheus
 	@echo ""
 	@echo "✅ All services started!"

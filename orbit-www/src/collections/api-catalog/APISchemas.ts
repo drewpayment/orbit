@@ -431,6 +431,33 @@ export const APISchemas: CollectionConfig = {
         return data
       },
     ],
+    // Catalog projection: keep the unified catalog graph in sync.
+    afterChange: [
+      async ({ doc, req }) => {
+        // Fire and forget — projection failure must never block the save.
+        ;(async () => {
+          try {
+            const { projectApiSchemaEntity } = await import('@/lib/catalog/projection')
+            await projectApiSchemaEntity(req.payload, doc)
+          } catch (err) {
+            console.error('[APISchemas Hook] catalog projection failed:', err)
+          }
+        })()
+        return doc
+      },
+    ],
+    afterDelete: [
+      async ({ doc, req }) => {
+        ;(async () => {
+          try {
+            const { removeProjectedEntity } = await import('@/lib/catalog/projection')
+            await removeProjectedEntity(req.payload, 'api-schemas', String(doc.id))
+          } catch (err) {
+            console.error('[APISchemas Hook] catalog projection removal failed:', err)
+          }
+        })()
+      },
+    ],
   },
   timestamps: true,
 }

@@ -133,12 +133,35 @@ export const Apps: CollectionConfig = {
 
         return doc
       },
+      // Catalog projection: keep the unified catalog graph in sync.
+      async ({ doc, req }) => {
+        // Fire and forget — projection failure must never block the save.
+        ;(async () => {
+          try {
+            const { projectAppEntity } = await import('@/lib/catalog/projection')
+            await projectAppEntity(req.payload, doc)
+          } catch (err) {
+            console.error('[Apps Hook] catalog projection failed:', err)
+          }
+        })()
+        return doc
+      },
     ],
     afterDelete: [
-      async ({ doc }) => {
+      async ({ doc, req }) => {
         // Fire and forget - don't block the delete
         healthClient.deleteSchedule({ appId: doc.id })
           .catch(err => console.error('Failed to delete health schedule:', err))
+
+        // Catalog projection: remove the projected entity + its relations.
+        ;(async () => {
+          try {
+            const { removeProjectedEntity } = await import('@/lib/catalog/projection')
+            await removeProjectedEntity(req.payload, 'apps', String(doc.id))
+          } catch (err) {
+            console.error('[Apps Hook] catalog projection removal failed:', err)
+          }
+        })()
 
         // Clean up GitHub webhook if sync was enabled
         if (doc.webhookId && doc.repository?.url && doc.repository?.installationId) {

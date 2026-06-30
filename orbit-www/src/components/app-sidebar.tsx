@@ -8,19 +8,18 @@ import {
   Cloud,
   Command,
   Container,
-  FileCode,
   GitBranch,
   LayoutDashboard,
   LayoutTemplate,
   Layers,
   MessageSquare,
   RadioTower,
-  Rocket,
   Settings,
   Sparkles,
   Shield,
   ShieldCheck,
   Workflow,
+  Zap,
 } from "lucide-react"
 import Link from "next/link"
 import { useSession } from "@/lib/auth-client"
@@ -40,55 +39,53 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 
+// Primary IDP surfaces (IDP refocus P0 — see docs/plans/2026-06-27-idp-refocus-*).
+// The old per-feature rows (Applications, API Catalog, Templates, Launches,
+// Infra Agent, Knowledge) now live as entry points *under* these surfaces:
+// Catalog unifies Apps/APIs/Topics/Docs; Self-Service unifies Templates/
+// Launches/Agent. Deep links to the old routes still resolve.
 const navMainData = [
     {
-      title: "Dashboard",
+      title: "Home",
       url: "/dashboard",
       icon: LayoutDashboard,
+      items: [],
+    },
+    {
+      title: "Catalog",
+      url: "/catalog",
+      icon: Layers,
+      // Highlight on the unified catalog and the folded-in catalog surfaces.
+      activeMatch: ["/catalog", "/apps", "/knowledge"],
+      items: [],
+    },
+    {
+      title: "Scorecards",
+      url: "/scorecards",
+      icon: ShieldCheck,
+      items: [],
+    },
+    {
+      title: "Self-Service",
+      url: "/self-service",
+      icon: Sparkles,
+      // Highlight on the hub and the folded-in self-service surfaces.
+      activeMatch: ["/self-service", "/templates", "/launches", "/agent", "/infra-agent"],
+      items: [],
+    },
+    {
+      // Automations bridge Scorecards (triggers) and Self-Service (actions).
+      // Visible to all members (read-only); authoring is gated to workspace
+      // owner/admin inside the page + server actions (P4).
+      title: "Automations",
+      url: "/automations",
+      icon: Zap,
       items: [],
     },
     {
       title: "Workspaces",
       url: "/workspaces",
       icon: Building2,
-      items: [],
-    },
-    {
-      title: "Templates",
-      url: "/templates",
-      icon: LayoutTemplate,
-      items: [],
-    },
-    {
-      title: "Applications",
-      url: "/apps",
-      icon: Layers,
-      items: [],
-    },
-    {
-      title: "Infra Agent",
-      url: "/agent",
-      icon: Sparkles,
-      // Active on the /agent hub and on any workspace-scoped agent run.
-      activeMatch: ["/agent", "/infra-agent"],
-      items: [],
-    },
-    {
-      title: "Launches",
-      url: "/launches",
-      icon: Rocket,
-      items: [],
-    },
-    {
-      title: "API Catalog",
-      url: "/catalog/apis",
-      icon: FileCode,
-      items: [],
-    },
-    {
-      title: "Knowledge",
-      url: "/knowledge",
-      icon: BookOpen,
       items: [],
     },
 ]
