@@ -14,6 +14,10 @@ FROM base AS deps
 WORKDIR /app
 
 COPY package.json bun.lock ./
+# The @orbit/automation-worker workspace package (services/*) must be present for
+# bun to resolve the `workspace:*` dependency under --frozen-lockfile. Copy its
+# manifest before install; its source is brought in by the builder stage's COPY.
+COPY services/automation-worker/package.json ./services/automation-worker/package.json
 RUN bun install --frozen-lockfile
 
 # Rebuild the source code only when needed
