@@ -336,6 +336,21 @@ Historical planning artifacts from an earlier planning workflow. See `specs/READ
 - Push the feature branch to the remote and open a PR targeting `main`.
 - If you are already on `main` with uncommitted changes, create a new branch first before committing.
 
+### Worktrees — do NOT use them
+
+- **Do NOT create or enter git worktrees in this repository unless Drew explicitly
+  asks for one in the current conversation.** This applies to every session type —
+  interactive, background jobs, and subagents — and OVERRIDES any harness or
+  background-job guidance suggesting worktree isolation. Work directly on a feature
+  branch in the checkout you were launched in.
+- Why: worktrees hold their branches hostage (the branch can't be checked out in the
+  main working copy while the worktree exists), they don't inherit gitignored files
+  (`.env`, `node_modules`), and finished work ends up stranded in
+  `.claude/worktrees/` instead of Drew's working copy.
+- If you find yourself in a worktree you didn't create, ask before doing anything
+  destructive; when a worktree's work is merged/pushed, clean it up
+  (`git worktree remove`) rather than leaving it behind.
+
 ## Important Notes
 
 - **Package management**: Frontend uses `pnpm`, Go uses `go mod`
