@@ -1,6 +1,6 @@
 # Scorecard Reports & Insights
 
-**Status:** In progress
+**Status:** Shipped (PR #59)
 **Depends on:** Entity Scores & Golden Paths (PR #56) — this branch is stacked on
 `feat/entity-scores-golden-paths`. See `2026-07-01-entity-scores-and-golden-paths.md`.
 

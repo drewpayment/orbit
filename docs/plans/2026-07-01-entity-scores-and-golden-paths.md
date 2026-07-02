@@ -1,6 +1,6 @@
 # Entity Scores & Golden Paths (Scorecards v2)
 
-**Status:** In progress
+**Status:** Shipped (PR #56)
 **Depends on:** IDP refocus P1 (catalog graph) + P2 (scorecards) — see
 `docs/plans/2026-06-27-idp-refocus-implementation.md`.
 
