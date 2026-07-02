@@ -1,7 +1,7 @@
 # Scheduled Scorecard Evaluation
 
 **Date:** 2026-07-02
-**Status:** In progress
+**Status:** Shipped (PR #60)
 **Roadmap:** `2026-07-02-scorecards-roadmap.md` item 1.
 **Depends on:** P4.2 automation Temporal worker (`docs/plans/2026-06-27-automation-temporal-ts-worker.md`),
 scorecard internal routes (P2 / PR #56 / PR #59).

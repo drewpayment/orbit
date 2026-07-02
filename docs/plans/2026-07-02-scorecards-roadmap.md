@@ -23,7 +23,7 @@ Authoring and measurement are essentially complete on `main`:
 
 ## Gaps, in priority order
 
-### 1. Scheduled evaluation (NOW — see `2026-07-02-scheduled-scorecard-evaluation.md`)
+### 1. Scheduled evaluation — SHIPPED (PR #60, `2026-07-02-scheduled-scorecard-evaluation.md`)
 
 Everything today is on-demand ("Evaluate now", catalog save-time seeding, internal
 routes). Nothing runs nightly, so scores go stale and the reports trend chart only
@@ -32,7 +32,7 @@ accrues history if a human clicks Evaluate. The Temporal automations worker
 P4.2 — wire a scorecard-evaluation sweep into them. This makes everything already
 shipped trustworthy; it ships first.
 
-### 2. Initiatives — data model with no product
+### 2. Initiatives — SHIPPED (PR #61, `2026-07-02-initiatives-ui.md`)
 
 `initiatives` + `initiative-action-items` exist and are registered but have **zero
 UI** and no auto-generation of action items for failing entities. This is the
@@ -67,7 +67,7 @@ per-team drill-down pages.
 
 ## Delivery sequence
 
-1. **Scheduled evaluation** — small, makes shipped value real. ← current
-2. **Initiatives UI + auto action items** — completes measure→improve loop.
+1. **Scheduled evaluation** — SHIPPED (PR #60).
+2. **Initiatives UI + auto action items** — SHIPPED (PR #61).
 3. **Rule preview + templates** — drives authoring adoption.
 4. Notifications, reports follow-ups, governance rules.
