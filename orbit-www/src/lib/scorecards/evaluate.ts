@@ -762,6 +762,21 @@ export async function recomputeWorkspaceScores(
     if (!entitiesRes.hasNextPage) break
   }
 
+  // Fire-and-forget score-history snapshot capture (Scorecard Reports &
+  // Insights, docs/plans/2026-07-01-scorecard-reports.md WP1) — internally
+  // throttled to once per 30 minutes per workspace; a capture failure must
+  // never fail this recompute. Dynamic import mirrors the automation-emit
+  // hooks (e.g. CatalogEntities, ScorecardRuleResults) — keeps the module
+  // boundary loose and the happy path's import graph unchanged.
+  ;(async () => {
+    try {
+      const { captureScoreSnapshots } = await import('./snapshots')
+      await captureScoreSnapshots(payload, workspaceId)
+    } catch (err) {
+      console.error('[recomputeWorkspaceScores] score-snapshot capture failed:', err)
+    }
+  })()
+
   return { entitiesScored }
 }
 
@@ -1004,6 +1019,18 @@ export async function runScorecardEvaluation(
 
     await recomputeWorkspaceScores(payload, workspaceId)
   }
+
+  // Fire-and-forget score-history snapshot capture — see recomputeWorkspaceScores
+  // above (this call is throttle-deduped against any snapshot the phase B/D
+  // recomputeWorkspaceScores calls already captured for this run).
+  ;(async () => {
+    try {
+      const { captureScoreSnapshots } = await import('./snapshots')
+      await captureScoreSnapshots(payload, workspaceId)
+    } catch (err) {
+      console.error('[runScorecardEvaluation] score-snapshot capture failed:', err)
+    }
+  })()
 
   return { scorecardId, entitiesEvaluated, rulesEvaluated, resultsWritten }
 }
