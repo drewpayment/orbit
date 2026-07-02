@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import {
   ArrowLeft,
   ExternalLink,
@@ -20,7 +21,12 @@ import { EntityGraph } from './EntityGraph'
 import { EntityRelations } from './EntityRelations'
 import { EntityDocsTab } from './EntityDocsTab'
 import { EntityScorecardsTab } from './EntityScorecardsTab'
-import type { LinkedDoc } from '@/app/(frontend)/catalog/[id]/actions'
+import { ScoreNumberChip } from '@/components/features/scorecards/ScoreChip'
+import {
+  getEntityScoreBreakdown,
+  type EntityScoreBreakdown,
+  type LinkedDoc,
+} from '@/app/(frontend)/catalog/[id]/actions'
 
 interface EntityDetailProps {
   entity: CatalogEntity
@@ -67,6 +73,35 @@ export function EntityDetail({ entity, relations, docs }: EntityDetailProps) {
   const owner = entity.owner && typeof entity.owner === 'object' ? entity.owner : null
   const links = entity.links ?? []
 
+  // Overall entity score (Entity Scores & Golden Paths) — fetched once here
+  // so it can be surfaced prominently in the header, and handed down to the
+  // Scorecards tab rather than fetched a second time there. `null` means
+  // "still loading"; once resolved this always holds a real breakdown, even
+  // an empty one (`overall: null`), so header vs "no score" states are
+  // distinguishable (see ScoreNumberChip).
+  const [scoreBreakdown, setScoreBreakdown] = useState<EntityScoreBreakdown | null>(null)
+
+  useEffect(() => {
+    let active = true
+    getEntityScoreBreakdown(entity.id)
+      .then((data) => {
+        if (active) setScoreBreakdown(data)
+      })
+      .catch(() => {
+        if (active) {
+          setScoreBreakdown({
+            overall: null,
+            byScorecard: {},
+            baselineOnly: true,
+            goldenPathSummary: null,
+          })
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [entity.id])
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -109,6 +144,9 @@ export function EntityDetail({ entity, relations, docs }: EntityDetailProps) {
             >
               {healthConfig[health].label}
             </span>
+            <ScoreNumberChip
+              score={scoreBreakdown === null ? undefined : (scoreBreakdown.overall?.score ?? null)}
+            />
           </div>
         </div>
       </div>
@@ -209,9 +247,9 @@ export function EntityDetail({ entity, relations, docs }: EntityDetailProps) {
           <EntityDocsTab docs={docs} entitySlug={entity.slug} />
         </TabsContent>
 
-        {/* Scorecards (P2 placeholder) */}
+        {/* Scorecards */}
         <TabsContent value="scorecards">
-          <EntityScorecardsTab />
+          <EntityScorecardsTab entityId={entity.id} breakdown={scoreBreakdown} />
         </TabsContent>
       </Tabs>
     </div>

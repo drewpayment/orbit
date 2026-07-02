@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import { formatPct, levelPresentation, passRatio, type LevelDef } from './scorecard-ui'
+import { formatPct, levelPresentation, passRatio, passRatioTone, type LevelDef } from './scorecard-ui'
 
 /**
  * A compact level badge with an optional pass-ratio suffix. Server-safe (no
@@ -42,6 +42,54 @@ export function ScoreChip({
       {hasRatio && (
         <span className="font-normal opacity-80">{formatPct(passRatio(passed!, total!))}</span>
       )}
+    </span>
+  )
+}
+
+/**
+ * A compact 0-100 numeric score chip, coloured with the same pass-ratio scale
+ * as {@link passRatioTone} (RollupSummary's progress labels). Used wherever an
+ * entity's persisted `entity-scores` value is surfaced directly — the catalog
+ * list and the per-scorecard rows on the entity detail scorecards tab (Entity
+ * Scores & Golden Paths, docs/plans/2026-07-01-entity-scores-and-golden-paths.md).
+ *
+ * `score` has three states: a number renders the coloured chip; `null` means
+ * the caller has confirmed there is no entity-scores row yet ("No score");
+ * `undefined` means that hasn't been determined yet (still loading) and
+ * renders nothing, so callers don't have to flash "No score" before a batched
+ * fetch resolves.
+ */
+export function ScoreNumberChip({
+  score,
+  className,
+}: {
+  score: number | null | undefined
+  className?: string
+}) {
+  if (score === undefined) return null
+
+  if (score === null) {
+    return (
+      <span
+        className={cn(
+          'inline-flex items-center rounded-md border border-transparent bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground',
+          className,
+        )}
+      >
+        No score
+      </span>
+    )
+  }
+
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded-md border border-border bg-background px-2 py-0.5 text-xs font-semibold tabular-nums',
+        passRatioTone(score / 100),
+        className,
+      )}
+    >
+      {Math.round(score)}
     </span>
   )
 }

@@ -4,7 +4,7 @@ import { workspaceScopedRead, workspaceScopedManageCreate, workspaceScopedMutate
 /**
  * ScorecardRules — individual checks belonging to a scorecard (IDP refocus P2).
  *
- * Three rule `type`s, each driven by a JSON `expression` (kept as JSON so rules
+ * Four rule `type`s, each driven by a JSON `expression` (kept as JSON so rules
  * are data, not code — Port's model). The evaluator (lib/scorecards/evaluate)
  * interprets `expression` per type:
  *   - field-presence: { path: string, op: 'exists' | 'not-empty' }
@@ -12,6 +12,20 @@ import { workspaceScopedRead, workspaceScopedManageCreate, workspaceScopedMutate
  *                       targetKind?: string, min?: number }
  *   - threshold:      { path: string, op: 'eq'|'neq'|'gt'|'gte'|'lt'|'lte'|'in',
  *                       value: unknown }
+ *   - entity-score:   { target: 'self' | 'related', scoreScope?: 'overall' |
+ *                       'scorecard' (default 'overall'), scorecardId?: string
+ *                       (when scoreScope='scorecard'), relationType?: string,
+ *                       direction?: 'from'|'to'|'either', targetKind?: string
+ *                       (target='related' selectors), aggregate?: 'min'|'avg'|
+ *                       'max' (default 'min' — weakest-link), op: 'gte'|'gt'|
+ *                       'lte'|'lt'|'eq', value: number } — compiles the
+ *                       entity's own or related entities' stored entity-scores
+ *                       (see docs/plans/2026-07-01-entity-scores-and-golden-paths.md).
+ *                       Reads the LATEST stored scores, not a live recompute:
+ *                       evaluation order is non-score rules first (which feed
+ *                       score recomputation), then entity-score rules in the
+ *                       same pass, so cross-scorecard chains converge on the
+ *                       next evaluation run.
  *
  * `level` names the ladder rung (matches a Scorecards.levels[].name) this rule
  * contributes to. `workspace` is denormalised from the parent scorecard for
@@ -64,6 +78,7 @@ export const ScorecardRules: CollectionConfig = {
         { label: 'Field presence', value: 'field-presence' },
         { label: 'Relation check', value: 'relation-check' },
         { label: 'Threshold', value: 'threshold' },
+        { label: 'Entity score', value: 'entity-score' },
       ],
     },
     {

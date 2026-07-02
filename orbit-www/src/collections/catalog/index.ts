@@ -1,5 +1,6 @@
 export { CatalogEntities } from './CatalogEntities'
 export { CatalogRelations } from './CatalogRelations'
+export { EntityTypes } from './EntityTypes'
 // Vocabularies come from the framework-light constants module. Client-reachable
 // code should import these from '@/collections/catalog/constants' directly to
 // avoid pulling the collection configs (and their server-only hooks) into the
