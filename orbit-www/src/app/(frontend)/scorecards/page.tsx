@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
-import { BarChart3, Loader2, Plus, ShieldCheck } from 'lucide-react'
+import { BarChart3, Loader2, Plus, ShieldCheck, Target } from 'lucide-react'
 import { getCurrentUser } from '@/lib/auth/session'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
@@ -79,6 +79,12 @@ export default function ScorecardsPage() {
               </p>
             </div>
             <div className="flex items-center gap-2">
+              <Button asChild variant="outline" size="sm">
+                <Link href="/scorecards/initiatives">
+                  <Target className="h-4 w-4" />
+                  Initiatives
+                </Link>
+              </Button>
               <Button asChild variant="outline" size="sm">
                 <Link href="/scorecards/reports">
                   <BarChart3 className="h-4 w-4" />
