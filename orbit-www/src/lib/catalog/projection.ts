@@ -6,6 +6,7 @@ import type {
   KafkaLineageEdge,
   KafkaTopic,
 } from '@/payload-types'
+import { slugify } from './entity-crud'
 
 /**
  * Catalog projection layer (IDP refocus P1).
@@ -38,18 +39,9 @@ function relId<T extends { id: string }>(ref: Ref<T>): string | undefined {
   return ref.id
 }
 
-/**
- * URL-safe slug from a display name. Lowercase, non-alphanumerics collapsed to
- * single hyphens, trimmed. Always produces a deterministic value for a name.
- */
-export function slugify(name: string | null | undefined): string {
-  return String(name ?? '')
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-}
+// slugify is defined canonically in ./entity-crud (client-safe) and re-exported
+// here for back-compat with `import { slugify } from './projection'`.
+export { slugify }
 
 /** Provenance values used by entity projections. */
 type EntitySource = { type: 'apps' | 'api-schemas' | 'kafka'; sourceId: string }
@@ -68,6 +60,55 @@ interface EntityData {
   lifecycle?: 'experimental' | 'production' | 'deprecated'
   links?: { label: string; url: string; type?: 'repository' | 'docs' | 'other' }[]
   metadata?: Record<string, unknown>
+}
+
+/**
+ * Merge incoming projected data onto an existing catalog-entities row for the
+ * UPDATE path, honouring the field-ownership policy (PM decision 3): identity
+ * fields the projection owns (name, slug, kind, workspace, health) are always
+ * written; curation fields (description, lifecycle, links, metadata) are
+ * SET-IF-ABSENT — written only when the existing row has no human-entered value
+ * — so re-projecting a source never clobbers manual edits. `source`, `tier` and
+ * `owner` are never written by the projection. Pure + unit-tested.
+ */
+export function mergeProjectionUpdate(
+  existing: {
+    description?: string | null
+    lifecycle?: string | null
+    links?: unknown[] | null
+    metadata?: unknown
+  },
+  data: EntityData,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    name: data.name,
+    slug: data.slug,
+    kind: data.kind,
+    workspace: data.workspace,
+  }
+  if (data.health) out.health = data.health
+
+  if (isBlank(existing.description)) out.description = data.description ?? null
+  if (data.lifecycle && isBlank(existing.lifecycle)) out.lifecycle = data.lifecycle
+  if (data.links && isEmptyArray(existing.links)) out.links = data.links
+  if (data.metadata && isEmptyMetadata(existing.metadata)) out.metadata = data.metadata
+
+  return out
+}
+
+function isBlank(v: unknown): boolean {
+  return v == null || (typeof v === 'string' && v.trim() === '')
+}
+
+function isEmptyArray(v: unknown): boolean {
+  return !Array.isArray(v) || v.length === 0
+}
+
+function isEmptyMetadata(v: unknown): boolean {
+  if (v == null) return true
+  if (Array.isArray(v)) return v.length === 0
+  if (typeof v === 'object') return Object.keys(v as object).length === 0
+  return false
 }
 
 /**
@@ -107,7 +148,8 @@ async function upsertEntity(
     const updated = await payload.update({
       collection: 'catalog-entities',
       id: existing.docs[0].id,
-      data: fields,
+      // set-if-absent for curation fields so a re-sync never clobbers manual edits.
+      data: mergeProjectionUpdate(existing.docs[0], data),
       overrideAccess: true,
     })
     return updated.id

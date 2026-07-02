@@ -1,12 +1,14 @@
 'use server'
 
 import { getPayload } from 'payload'
+import type { Where } from 'payload'
 import config from '@payload-config'
 import type { CatalogEntity, EntityScore, EntityType } from '@/payload-types'
-import { getCurrentUser } from '@/lib/auth/session'
+import { getCurrentUser, getPayloadUserFromSession } from '@/lib/auth/session'
 import { DEFAULT_ENTITY_TYPE } from '@/lib/catalog/entity-types'
+import { isPlatformAdmin } from '@/lib/access/workspace-access'
+import { getManageableWorkspaceIds } from '@/lib/catalog/entity-authz'
 import {
-  buildCatalogWhere,
   ENTITY_KIND_VALUES,
   isEntityKind,
   type EntityKind,
@@ -37,35 +39,103 @@ async function getMemberWorkspaceIds(
   )
 }
 
+export type CatalogScope = 'all' | 'mine'
+
 export interface SearchCatalogInput {
+  /** Legacy — identity is resolved from the session; kept for call-site stability. */
   userId?: string
   kind?: string
   query?: string
   limit?: number
   page?: number
+  /** 'all' (default) is org-wide; 'mine' restricts to the caller's active workspaces. */
+  scope?: CatalogScope
+  /** Optional: restrict results to a single workspace (AND-ed with kind/query/scope). */
+  workspaceId?: string
 }
 
+/**
+ * A catalog entity plus the server-computed `canManage` flag for the caller.
+ * Extends CatalogEntity (all existing fields preserved), so existing consumers
+ * that read `docs` as CatalogEntity keep working.
+ */
+export type CatalogEntityWithAccess = CatalogEntity & { canManage: boolean }
+
 export interface SearchCatalogResult {
-  docs: CatalogEntity[]
+  docs: CatalogEntityWithAccess[]
   totalDocs: number
   totalPages: number
   page: number
   hasNextPage: boolean
   hasPrevPage: boolean
+  /** True when the caller can create at least one entity (platform admin or a member somewhere). */
+  canCreate: boolean
+  scope: CatalogScope
+  /** Echoes the applied single-workspace filter (undefined when unfiltered) for the UI filter chip. */
+  workspaceId?: string
 }
 
 /**
- * Search catalog entities scoped to the current user's workspaces.
+ * Build the catalog `Where` clause. Unlike the workspace-scoped
+ * `buildCatalogWhere`, an absent `workspaceIds` yields NO workspace constraint
+ * (org-wide) — the catalog is now the org discovery surface. Passing an explicit
+ * (possibly empty) list scopes to those workspaces ('mine').
+ */
+function buildOrgCatalogWhere(opts: {
+  workspaceIds?: string[]
+  workspaceId?: string
+  kind?: EntityKind
+  query?: string
+}): Where {
+  const conditions: Where[] = []
+  if (opts.workspaceIds) {
+    conditions.push({
+      workspace: { in: opts.workspaceIds.length > 0 ? opts.workspaceIds : ['__none__'] },
+    })
+  }
+  if (opts.workspaceId) conditions.push({ workspace: { equals: opts.workspaceId } })
+  if (opts.kind) conditions.push({ kind: { equals: opts.kind } })
+  const trimmed = opts.query?.trim()
+  if (trimmed) {
+    conditions.push({ or: [{ name: { contains: trimmed } }, { description: { contains: trimmed } }] })
+  }
+  if (conditions.length === 0) return {}
+  return conditions.length > 1 ? { and: conditions } : conditions[0]
+}
+
+/** Resolve an entity's workspace id (populated or raw), or null for a global entity. */
+function entityWorkspaceId(entity: CatalogEntity): string | null {
+  const ws = entity.workspace
+  if (!ws) return null
+  return typeof ws === 'string' ? ws : ws.id
+}
+
+/** Can the caller manage this entity? Pure — no query, uses the precomputed manageable set. */
+function computeCanManage(
+  entity: CatalogEntity,
+  isAdmin: boolean,
+  manageableWorkspaceIds: Set<string>,
+): boolean {
+  if (isAdmin) return true
+  const wsId = entityWorkspaceId(entity)
+  if (!wsId) return false
+  return manageableWorkspaceIds.has(wsId)
+}
+
+/**
+ * Search catalog entities ORG-WIDE for any authenticated user (the catalog is
+ * the discovery surface). `scope: 'mine'` restores the workspace-scoped view.
  *
- * We query with `overrideAccess: true` and supply the workspace `in` filter
- * ourselves (via {@link buildCatalogWhere}) so the result set is the tenant
- * boundary regardless of the collection's own access rules.
+ * Reads run with `overrideAccess: true`; the where clause is the boundary. Each
+ * returned doc carries a `canManage` flag computed from a single manageable-ids
+ * set (no per-row query). Identity is resolved from the session — the client
+ * `userId` is not trusted for authorization.
  */
 export async function searchCatalogEntities(
   input: SearchCatalogInput = {},
 ): Promise<SearchCatalogResult> {
   const payload = await getPayload({ config })
-  const { userId, kind, query, limit = 24, page = 1 } = input
+  const { kind, query, limit = 24, page = 1, scope = 'all', workspaceId } = input
 
   const empty: SearchCatalogResult = {
     docs: [],
@@ -74,15 +144,29 @@ export async function searchCatalogEntities(
     page: 1,
     hasNextPage: false,
     hasPrevPage: false,
+    canCreate: false,
+    scope,
+    workspaceId,
   }
 
-  if (!userId) return empty
+  const sessionUser = await getPayloadUserFromSession()
+  if (!sessionUser) return empty
 
-  const workspaceIds = await getMemberWorkspaceIds(payload, userId)
-  if (workspaceIds.length === 0) return empty
+  const isAdmin = isPlatformAdmin(sessionUser)
+  const betterAuthId = sessionUser.betterAuthId ?? undefined
+  const manageableIds = betterAuthId ? await getManageableWorkspaceIds(payload, betterAuthId) : []
+  const manageableSet = new Set(manageableIds)
+  const canCreate = isAdmin || manageableIds.length > 0
 
-  const where = buildCatalogWhere({
-    workspaceIds,
+  let workspaceFilter: string[] | undefined
+  if (scope === 'mine') {
+    if (manageableIds.length === 0) return { ...empty, canCreate }
+    workspaceFilter = manageableIds
+  }
+
+  const where = buildOrgCatalogWhere({
+    workspaceIds: workspaceFilter,
+    workspaceId,
     kind: isEntityKind(kind) ? kind : undefined,
     query,
   })
@@ -97,13 +181,21 @@ export async function searchCatalogEntities(
     overrideAccess: true,
   })
 
+  const docs: CatalogEntityWithAccess[] = (result.docs as CatalogEntity[]).map((entity) => ({
+    ...entity,
+    canManage: computeCanManage(entity, isAdmin, manageableSet),
+  }))
+
   return {
-    docs: result.docs,
+    docs,
     totalDocs: result.totalDocs,
     totalPages: result.totalPages,
     page: result.page ?? 1,
     hasNextPage: result.hasNextPage ?? false,
     hasPrevPage: result.hasPrevPage ?? false,
+    canCreate,
+    scope,
+    workspaceId,
   }
 }
 
@@ -113,32 +205,39 @@ export type CatalogKindCounts = {
 }
 
 /**
- * Per-kind entity counts for the current user's workspaces, used to drive the
- * kind tabs (which tabs to surface, and their count badges). Respects the
- * active text `query` so counts track the visible result set.
+ * Per-kind entity counts for the kind tabs. Org-wide by default; `scope: 'mine'`
+ * restricts to the caller's active workspaces. Respects the active text `query`.
  */
 export async function getCatalogKindCounts(
-  input: { userId?: string; query?: string } = {},
+  input: { userId?: string; query?: string; scope?: CatalogScope; workspaceId?: string } = {},
 ): Promise<CatalogKindCounts> {
   const payload = await getPayload({ config })
-  const { userId, query } = input
+  const { query, scope = 'all', workspaceId } = input
 
   const zero = ENTITY_KIND_VALUES.reduce(
     (acc, k) => ({ ...acc, [k]: 0 }),
     {} as Record<EntityKind, number>,
   )
 
-  if (!userId) return { all: 0, byKind: zero }
+  const sessionUser = await getPayloadUserFromSession()
+  if (!sessionUser) return { all: 0, byKind: zero }
 
-  const workspaceIds = await getMemberWorkspaceIds(payload, userId)
-  if (workspaceIds.length === 0) return { all: 0, byKind: zero }
+  let workspaceFilter: string[] | undefined
+  if (scope === 'mine') {
+    const betterAuthId = sessionUser.betterAuthId ?? undefined
+    const manageableIds = betterAuthId
+      ? await getManageableWorkspaceIds(payload, betterAuthId)
+      : []
+    if (manageableIds.length === 0) return { all: 0, byKind: zero }
+    workspaceFilter = manageableIds
+  }
 
   const counts = await Promise.all(
     ENTITY_KIND_VALUES.map((kind) =>
       payload
         .count({
           collection: 'catalog-entities',
-          where: buildCatalogWhere({ workspaceIds, kind, query }),
+          where: buildOrgCatalogWhere({ workspaceIds: workspaceFilter, workspaceId, kind, query }),
           overrideAccess: true,
         })
         .then((r) => [kind, r.totalDocs] as const),
@@ -233,7 +332,8 @@ export async function getOverallEntityScores(
   })
   if (missingEntities.docs.length === 0) return map
 
-  const wsOf = (v: string | { id: string }) => (typeof v === 'string' ? v : v.id)
+  const wsOf = (v: string | { id: string } | null | undefined) =>
+    v == null ? '' : typeof v === 'string' ? v : v.id
   const missingWorkspaceIds = [
     ...new Set(missingEntities.docs.map((e) => wsOf((e as CatalogEntity).workspace))),
   ]

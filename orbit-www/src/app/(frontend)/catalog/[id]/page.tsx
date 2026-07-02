@@ -23,7 +23,12 @@ export default async function CatalogEntityDetailPage({ params }: PageProps) {
       <SidebarInset>
         <SiteHeader />
         <div className="flex-1 space-y-4 p-8 pt-6">
-          <EntityDetail entity={data.entity} relations={data.relations} docs={data.docs} />
+          <EntityDetail
+            entity={data.entity}
+            relations={data.relations}
+            docs={data.docs}
+            canManage={data.canManage}
+          />
         </div>
       </SidebarInset>
     </SidebarProvider>

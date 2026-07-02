@@ -78,7 +78,8 @@ async function seed() {
   }
   const firstEntity = entitiesRes.docs[0]
   const workspaceId =
-    typeof firstEntity.workspace === 'string' ? firstEntity.workspace : firstEntity.workspace.id
+    (typeof firstEntity.workspace === 'string' ? firstEntity.workspace : firstEntity.workspace?.id) ??
+    ''
   console.log(`Using workspace ${workspaceId} (from catalog-entity ${firstEntity.id}).`)
 
   // --- upsert the scorecard (keyed on name + workspace) --------------------

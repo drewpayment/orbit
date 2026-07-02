@@ -21,10 +21,13 @@ export function EntityList({
   entities,
   emptyTitle = 'No entities found',
   emptyHint,
+  canManageIds,
 }: {
   entities: CatalogEntity[]
   emptyTitle?: string
   emptyHint?: string
+  /** Ids of entities the caller can manage — drives the per-card "Managed" badge. */
+  canManageIds?: Set<string>
 }) {
   const [scores, setScores] = useState<Record<string, EntityOverallScore> | null>(null)
 
@@ -63,6 +66,7 @@ export function EntityList({
           entity={entity}
           score={scores ? (scores[entity.id]?.score ?? null) : undefined}
           scoreIsBaseline={scores ? (scores[entity.id]?.baseline ?? false) : false}
+          canManage={canManageIds?.has(entity.id) ?? false}
         />
       ))}
     </div>

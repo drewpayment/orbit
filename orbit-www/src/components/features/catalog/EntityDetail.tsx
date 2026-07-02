@@ -10,15 +10,17 @@ import {
   BookOpen,
   GitBranch,
   Link2,
+  Pencil,
   Users,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { CatalogEntity, CatalogRelation } from '@/payload-types'
 import { entityKindMeta } from './entity-kind-meta'
 import { EntityGraph } from './EntityGraph'
-import { EntityRelations } from './EntityRelations'
+import { RelationEditor } from './RelationEditor'
 import { EntityDocsTab } from './EntityDocsTab'
 import { EntityScorecardsTab } from './EntityScorecardsTab'
 import { ScoreNumberChip } from '@/components/features/scorecards/ScoreChip'
@@ -32,6 +34,8 @@ interface EntityDetailProps {
   entity: CatalogEntity
   relations: CatalogRelation[]
   docs: LinkedDoc[]
+  /** Whether the caller can manage this entity (edit + add/remove relations). */
+  canManage: boolean
 }
 
 const lifecycleVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
@@ -64,7 +68,7 @@ function MetaRow({ label, children }: { label: string; children: React.ReactNode
   )
 }
 
-export function EntityDetail({ entity, relations, docs }: EntityDetailProps) {
+export function EntityDetail({ entity, relations, docs, canManage }: EntityDetailProps) {
   const meta = entityKindMeta(entity.kind)
   const KindIcon = meta.icon
 
@@ -147,6 +151,14 @@ export function EntityDetail({ entity, relations, docs }: EntityDetailProps) {
             <ScoreNumberChip
               score={scoreBreakdown === null ? undefined : (scoreBreakdown.overall?.score ?? null)}
             />
+            {canManage && (
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/catalog/${entity.id}/edit`}>
+                  <Pencil className="h-4 w-4" />
+                  Edit
+                </Link>
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -239,7 +251,11 @@ export function EntityDetail({ entity, relations, docs }: EntityDetailProps) {
 
         {/* Relations */}
         <TabsContent value="relations">
-          <EntityRelations focalId={entity.id} relations={relations} />
+          <RelationEditor
+            focalEntity={{ id: entity.id, name: entity.name, kind: entity.kind }}
+            relations={relations}
+            canManage={canManage}
+          />
         </TabsContent>
 
         {/* Docs */}
