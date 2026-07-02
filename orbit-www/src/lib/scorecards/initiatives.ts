@@ -1,4 +1,4 @@
-import type { Payload } from 'payload'
+import type { CollectionSlug, Payload, Where } from 'payload'
 import type {
   CatalogEntity,
   Initiative,
@@ -336,14 +336,12 @@ export function toActionItemLite(row: InitiativeActionItem): ActionItemLite {
 const PAGE_SIZE = 100
 
 /** Page-loop read of every doc matching `where` (evaluate.ts convention). */
-async function loadAll<T>(payload: Payload, collection: string, where: unknown): Promise<T[]> {
+async function loadAll<T>(payload: Payload, collection: CollectionSlug, where: Where): Promise<T[]> {
   const docs: T[] = []
   for (let page = 1; ; page++) {
     const res = await payload.find({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      collection: collection as any,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      where: where as any,
+      collection,
+      where,
       limit: PAGE_SIZE,
       page,
       depth: 0,

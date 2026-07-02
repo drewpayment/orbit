@@ -2,6 +2,8 @@
  * @vitest-environment node
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { NextRequest } from 'next/server'
+import type { Payload } from 'payload'
 
 vi.mock('payload', () => ({
   getPayload: vi.fn(),
@@ -20,7 +22,7 @@ const { GET } = await import('./route')
 function req(apiKey?: string | null) {
   const headers: Record<string, string> = {}
   if (apiKey) headers['X-API-Key'] = apiKey
-  return new Request('http://localhost/api/internal/scorecards/due', {
+  return new NextRequest('http://localhost/api/internal/scorecards/due', {
     method: 'GET',
     headers,
   })
@@ -33,17 +35,17 @@ describe('GET /api/internal/scorecards/due', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    ;(getPayload as any).mockResolvedValue(mockPayload)
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as unknown as Payload)
   })
 
   it('returns 401 without an API key', async () => {
-    const response = await GET(req(null) as any)
+    const response = await GET(req(null))
     expect(response.status).toBe(401)
     expect(mockPayload.find).not.toHaveBeenCalled()
   })
 
   it('returns 401 with the wrong API key', async () => {
-    const response = await GET(req('wrong-key') as any)
+    const response = await GET(req('wrong-key'))
     expect(response.status).toBe(401)
     expect(mockPayload.find).not.toHaveBeenCalled()
   })
@@ -57,7 +59,7 @@ describe('GET /api/internal/scorecards/due', () => {
       hasNextPage: false,
     })
 
-    const response = await GET(req('test-api-key') as any)
+    const response = await GET(req('test-api-key'))
     expect(response.status).toBe(200)
 
     const data = await response.json()
@@ -86,7 +88,7 @@ describe('GET /api/internal/scorecards/due', () => {
       hasNextPage: false,
     })
 
-    const response = await GET(req('test-api-key') as any)
+    const response = await GET(req('test-api-key'))
     const data = await response.json()
     expect(data.scorecards).toEqual([{ id: 'sc-1', workspaceId: 'ws-1' }])
   })
@@ -102,7 +104,7 @@ describe('GET /api/internal/scorecards/due', () => {
         hasNextPage: false,
       })
 
-    const response = await GET(req('test-api-key') as any)
+    const response = await GET(req('test-api-key'))
     const data = await response.json()
     expect(data.scorecards).toEqual([
       { id: 'sc-1', workspaceId: 'ws-1' },
@@ -116,7 +118,7 @@ describe('GET /api/internal/scorecards/due', () => {
   it('returns 500 when payload throws', async () => {
     mockPayload.find.mockRejectedValueOnce(new Error('db exploded'))
 
-    const response = await GET(req('test-api-key') as any)
+    const response = await GET(req('test-api-key'))
     expect(response.status).toBe(500)
     const data = await response.json()
     expect(data.error).toBe('db exploded')

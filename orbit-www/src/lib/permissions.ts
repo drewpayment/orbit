@@ -65,7 +65,7 @@ export function hasPermission(
 }
 
 /**
- * Check if user has any of the specified permissions
+ * Check if user holds at least one of the specified permissions
  */
 export function hasAnyPermission(
   workspaceId: string,
