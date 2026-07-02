@@ -27,8 +27,7 @@ declare global {
  * the bundler from recognizing the process.env pattern.
  */
 function readServerEnv(key: string): string {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const env = (globalThis as any)['process']?.['env']
+  const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
   return env?.[key] ?? ''
 }
 

@@ -24,7 +24,23 @@ interface PageProps {
     q?: string
     kind?: string
     page?: string
+    scope?: string
+    workspace?: string
   }>
+}
+
+/** Best-effort workspace name from a page of results (populated at depth 1). */
+function resolveWorkspaceName(
+  docs: { workspace?: unknown }[],
+  workspaceId: string,
+): string {
+  for (const doc of docs) {
+    const ws = doc.workspace
+    if (ws && typeof ws === 'object' && 'id' in ws && (ws as { id: string }).id === workspaceId) {
+      return (ws as { name?: string }).name ?? 'this workspace'
+    }
+  }
+  return 'this workspace'
 }
 
 async function CatalogContent({ searchParams }: PageProps) {
@@ -33,6 +49,8 @@ async function CatalogContent({ searchParams }: PageProps) {
 
   const activeKind: EntityKind | 'all' = isEntityKind(params.kind) ? params.kind : 'all'
   const page = params.page ? Math.max(1, parseInt(params.page, 10) || 1) : 1
+  const scope: 'all' | 'mine' = params.scope === 'mine' ? 'mine' : 'all'
+  const workspaceId = params.workspace?.trim() || undefined
 
   const [result, counts] = await Promise.all([
     searchCatalogEntities({
@@ -40,9 +58,18 @@ async function CatalogContent({ searchParams }: PageProps) {
       kind: activeKind === 'all' ? undefined : activeKind,
       query: params.q,
       page,
+      scope,
+      workspaceId,
     }),
-    getCatalogKindCounts({ userId: user?.id, query: params.q }),
+    getCatalogKindCounts({ userId: user?.id, query: params.q, scope, workspaceId }),
   ])
+
+  // Resolve the filtered workspace's display name from a returned doc's
+  // populated (depth-1) workspace — no extra query. Falls back to a generic
+  // label when the filter yields no rows (e.g. an empty workspace).
+  const workspaceFilter = workspaceId
+    ? { id: workspaceId, name: resolveWorkspaceName(result.docs, workspaceId) }
+    : undefined
 
   return (
     <CatalogListClient
@@ -52,6 +79,9 @@ async function CatalogContent({ searchParams }: PageProps) {
       counts={counts}
       initialQuery={params.q}
       activeKind={activeKind}
+      scope={scope}
+      canCreate={result.canCreate}
+      workspaceFilter={workspaceFilter}
     />
   )
 }

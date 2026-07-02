@@ -1,7 +1,7 @@
 # Initiatives UI + Auto-Generated Action Items
 
 **Date:** 2026-07-02
-**Status:** In progress
+**Status:** Shipped (PR #61)
 **Roadmap:** `2026-07-02-scorecards-roadmap.md` item 2.
 **Depends on:** P2 collections (`initiatives`, `initiative-action-items` — already
 registered, no schema changes), scorecard evaluation pipeline

@@ -3427,9 +3427,9 @@ export interface CatalogEntity {
   description?: string | null;
   kind: 'service' | 'api' | 'resource' | 'datastore' | 'kafka-topic' | 'domain' | 'system' | 'team' | 'environment';
   /**
-   * Security enclave the entity belongs to.
+   * Security enclave the entity belongs to (absent = global).
    */
-  workspace: string | Workspace;
+  workspace?: (string | null) | Workspace;
   /**
    * Owning team (a catalog-entities row of kind "team").
    */
@@ -3488,9 +3488,9 @@ export interface CatalogEntity {
 export interface CatalogRelation {
   id: string;
   /**
-   * Security enclave the relation belongs to.
+   * Security enclave the relation belongs to (absent = global).
    */
-  workspace: string | Workspace;
+  workspace?: (string | null) | Workspace;
   from: string | CatalogEntity;
   to: string | CatalogEntity;
   type:

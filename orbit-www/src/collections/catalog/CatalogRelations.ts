@@ -1,5 +1,7 @@
-import type { CollectionConfig, Where } from 'payload'
+import type { CollectionConfig } from 'payload'
 import { RELATION_TYPES } from './constants'
+import { canCreateEntity, canManageEntity } from '@/lib/catalog/entity-authz'
+import { isPlatformAdmin } from '@/lib/access/workspace-access'
 
 /**
  * CatalogRelations — typed edges in the catalog graph (IDP refocus P1).
@@ -28,71 +30,45 @@ export const CatalogRelations: CollectionConfig = {
     description: 'Typed edges between catalog entities (dependencies, ownership, lineage).',
   },
   access: {
-    read: async ({ req: { user, payload } }) => {
+    // Org-wide read for any authenticated user; a relation is visible wherever
+    // its endpoints are (Catalog Entity CRUD). Server actions/projections use
+    // overrideAccess — these rules are defense-in-depth for direct API access.
+    read: ({ req: { user } }) => !!user,
+    // Create/update: platform admin, or an active member of the relation's
+    // workspace (derived from its `from` entity). Better-Auth id via
+    // req.user.betterAuthId — never req.user.id. Null workspace ⇒ admin only.
+    create: async ({ req: { user, payload }, data }) => {
       if (!user) return false
-      if (user.collection === 'users') return true
-      const memberships = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          user: { equals: user.id },
-          status: { equals: 'active' },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-      const workspaceIds = memberships.docs.map((m) =>
-        String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id),
-      )
-      return { workspace: { in: workspaceIds } } as Where
+      const ws = (data as { workspace?: string | { id: string } } | undefined)?.workspace
+      const workspaceId = ws ? (typeof ws === 'string' ? ws : ws.id) : null
+      return canCreateEntity(payload, user.betterAuthId, isPlatformAdmin(user), workspaceId)
     },
-    create: ({ req: { user } }) => !!user,
     update: async ({ req: { user, payload }, id }) => {
       if (!user || !id) return false
-      if (user.collection === 'users') return true
       const rel = await payload.findByID({
         collection: 'catalog-relations',
         id,
+        depth: 0,
         overrideAccess: true,
       })
-      const workspaceId =
-        typeof rel.workspace === 'string' ? rel.workspace : rel.workspace.id
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: user.id } },
-            { role: { in: ['owner', 'admin'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
-      return members.docs.length > 0
+      const ws = rel.workspace
+      const workspaceId = ws ? (typeof ws === 'string' ? ws : ws.id) : null
+      return canManageEntity(payload, user.betterAuthId, isPlatformAdmin(user), { workspaceId })
     },
+    // Delete: manual relations only (projected edges belong to their projector),
+    // by anyone with manage rights on the relation's workspace.
     delete: async ({ req: { user, payload }, id }) => {
       if (!user || !id) return false
-      if (user.collection === 'users') return true
       const rel = await payload.findByID({
         collection: 'catalog-relations',
         id,
+        depth: 0,
         overrideAccess: true,
       })
-      const workspaceId =
-        typeof rel.workspace === 'string' ? rel.workspace : rel.workspace.id
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: user.id } },
-            { role: { in: ['owner', 'admin'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
-      return members.docs.length > 0
+      if ((rel.source?.type ?? 'manual') !== 'manual') return false
+      const ws = rel.workspace
+      const workspaceId = ws ? (typeof ws === 'string' ? ws : ws.id) : null
+      return canManageEntity(payload, user.betterAuthId, isPlatformAdmin(user), { workspaceId })
     },
   },
   fields: [
@@ -100,9 +76,11 @@ export const CatalogRelations: CollectionConfig = {
       name: 'workspace',
       type: 'relationship',
       relationTo: 'workspaces',
-      required: true,
+      // Optional: derived from the `from` entity's workspace at write time;
+      // absent for a global-from-global relation (Catalog Entity CRUD).
+      required: false,
       index: true,
-      admin: { description: 'Security enclave the relation belongs to.' },
+      admin: { description: 'Security enclave the relation belongs to (absent = global).' },
     },
     {
       name: 'from',

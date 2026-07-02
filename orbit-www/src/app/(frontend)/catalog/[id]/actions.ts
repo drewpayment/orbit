@@ -6,6 +6,8 @@ import { getPayloadUserFromSession } from '@/lib/auth/session'
 import type { CatalogEntity, CatalogRelation, EntityScore } from '@/payload-types'
 import { resolveEntityType } from '@/lib/catalog/entity-types'
 import type { EntityKind } from '@/collections/catalog/constants'
+import { isPlatformAdmin } from '@/lib/access/workspace-access'
+import { canManageEntity, canDeleteEntity } from '@/lib/catalog/entity-authz'
 
 /** A knowledge page best-effort linked to a catalog entity (via tag == slug). */
 export interface LinkedDoc {
@@ -19,6 +21,12 @@ export interface EntityDetailData {
   entity: CatalogEntity
   relations: CatalogRelation[]
   docs: LinkedDoc[]
+  /** Whether the caller may edit this entity (workspace member or platform admin). */
+  canManage: boolean
+  /** Whether the caller may delete this entity (manual + workspace owner/admin or admin). */
+  canDelete: boolean
+  /** Provenance source type ('manual' = human-authored; anything else = projected). */
+  sourceType: string
 }
 
 /**
@@ -33,6 +41,9 @@ export async function getCatalogEntityDetail(id: string): Promise<EntityDetailDa
 
   const payload = await getPayload({ config })
 
+  // Explicit ORG-WIDE read: any authenticated user can view any entity (the
+  // catalog is the discovery surface). We gate on the session above and read
+  // with overrideAccess rather than leaning on collection access to filter.
   let entity: CatalogEntity
   try {
     entity = (await payload.findByID({
@@ -40,17 +51,18 @@ export async function getCatalogEntityDetail(id: string): Promise<EntityDetailDa
       id,
       // depth 2 populates `owner` (a team entity) and `workspace`.
       depth: 2,
-      user,
+      overrideAccess: true,
     })) as CatalogEntity
   } catch {
-    // findByID throws when the row is missing or filtered out by access control.
+    // findByID throws when the row is missing.
     return null
   }
 
   if (!entity) return null
 
   // Relations touching this entity in either direction. depth 1 populates the
-  // `from`/`to` entities so the UI can render neighbour names and links.
+  // `from`/`to` entities so the UI can render neighbour names and links. Each
+  // row carries its id + `source.type`, so the UI can offer removal on manual ones.
   const relationsRes = await payload.find({
     collection: 'catalog-relations',
     where: {
@@ -58,15 +70,29 @@ export async function getCatalogEntityDetail(id: string): Promise<EntityDetailDa
     },
     depth: 1,
     limit: 200,
-    user,
+    overrideAccess: true,
   })
 
   const docs = await findLinkedDocs(payload, entity, user)
+
+  const isAdmin = isPlatformAdmin(user)
+  const betterAuthId = user.betterAuthId ?? undefined
+  const workspaceId =
+    entity.workspace ? (typeof entity.workspace === 'string' ? entity.workspace : entity.workspace.id) : null
+  const sourceType = entity.source?.type ?? 'manual'
+
+  const [canManage, canDelete] = await Promise.all([
+    canManageEntity(payload, betterAuthId, isAdmin, { workspaceId }),
+    canDeleteEntity(payload, betterAuthId, isAdmin, { workspaceId, sourceType }),
+  ])
 
   return {
     entity,
     relations: relationsRes.docs as CatalogRelation[],
     docs,
+    canManage,
+    canDelete,
+    sourceType,
   }
 }
 
@@ -163,7 +189,8 @@ export async function getEntityScoreBreakdown(entityId: string): Promise<EntityS
   }
   if (!entity) return EMPTY_SCORE_BREAKDOWN
 
-  const workspaceId = typeof entity.workspace === 'string' ? entity.workspace : entity.workspace.id
+  const workspaceId =
+    typeof entity.workspace === 'string' ? entity.workspace : (entity.workspace?.id ?? '')
 
   const [scoresResult, entityType] = await Promise.all([
     payload.find({

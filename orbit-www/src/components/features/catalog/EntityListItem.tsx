@@ -29,6 +29,12 @@ function ownerName(owner: CatalogEntity['owner']): string | null {
   return owner.name ?? null
 }
 
+/** Populated workspace name, or null for a global (no-workspace) entity. */
+function workspaceName(workspace: CatalogEntity['workspace']): string | null {
+  if (workspace == null || typeof workspace === 'string') return null
+  return workspace.name ?? null
+}
+
 /**
  * One catalog entity rendered as a card linking to its detail page
  * (`/catalog/{id}`, owned by the detail agent). No client hooks itself — the
@@ -41,14 +47,18 @@ export function EntityListItem({
   entity,
   score,
   scoreIsBaseline = false,
+  canManage = false,
 }: {
   entity: CatalogEntity
   score?: number | null
   /** True when `score` is the type's inherited base value, not an evaluated score. */
   scoreIsBaseline?: boolean
+  /** True when the caller can manage this entity — surfaces a subtle badge. */
+  canManage?: boolean
 }) {
   const health = entity.health ?? 'unknown'
   const owner = ownerName(entity.owner)
+  const workspace = workspaceName(entity.workspace)
 
   return (
     <Link href={`/catalog/${entity.id}`} className="block focus:outline-none">
@@ -76,6 +86,14 @@ export function EntityListItem({
               </Badge>
             )}
             <EntityScoreInlineChip score={score} baseline={scoreIsBaseline} />
+            <Badge variant="outline" className="font-normal text-muted-foreground">
+              {workspace ?? 'Global'}
+            </Badge>
+            {canManage && (
+              <Badge variant="secondary" className="font-normal">
+                Managed
+              </Badge>
+            )}
           </div>
         </CardHeader>
         <CardContent className="space-y-2">

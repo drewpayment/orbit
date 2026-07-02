@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { Payload } from 'payload'
 import {
   slugify,
+  mergeProjectionUpdate,
   projectAppEntity,
   projectApiSchemaEntity,
   projectKafkaTopicEntity,
@@ -357,5 +358,61 @@ describe('removeProjectedRelationsForSource', () => {
         { 'source.sourceId': { equals: 'edge-1' } },
       ],
     })
+  })
+})
+
+
+describe('mergeProjectionUpdate (field-ownership / set-if-absent)', () => {
+  const incoming = {
+    name: 'Payments Service',
+    slug: 'payments-service',
+    kind: 'service' as const,
+    workspace: 'ws-1',
+    description: 'Auto description from source',
+    health: 'healthy' as const,
+    lifecycle: 'production' as const,
+    links: [{ label: 'Repository', url: 'https://github.com/acme/payments' }],
+    metadata: { build: { language: 'go' } },
+  }
+
+  it('always writes projection-owned identity fields (name/slug/kind/workspace/health)', () => {
+    const out = mergeProjectionUpdate({ description: 'Human edited' }, incoming)
+    expect(out).toMatchObject({
+      name: 'Payments Service',
+      slug: 'payments-service',
+      kind: 'service',
+      workspace: 'ws-1',
+      health: 'healthy',
+    })
+  })
+
+  it('preserves a human-entered description/links/metadata (does not write them)', () => {
+    const out = mergeProjectionUpdate(
+      {
+        description: 'Human edited',
+        links: [{ label: 'Runbook', url: 'https://rb' }],
+        metadata: { note: 'kept' },
+      },
+      incoming,
+    )
+    expect(out.description).toBeUndefined()
+    expect(out.links).toBeUndefined()
+    expect(out.metadata).toBeUndefined()
+  })
+
+  it('fills curation fields when the existing value is empty/absent', () => {
+    const out = mergeProjectionUpdate(
+      { description: '', links: [], metadata: {} },
+      incoming,
+    )
+    expect(out.description).toBe('Auto description from source')
+    expect(out.lifecycle).toBe('production')
+    expect(out.links).toEqual(incoming.links)
+    expect(out.metadata).toEqual(incoming.metadata)
+  })
+
+  it('never emits a source key (provenance is create-only)', () => {
+    const out = mergeProjectionUpdate({}, incoming)
+    expect('source' in out).toBe(false)
   })
 })

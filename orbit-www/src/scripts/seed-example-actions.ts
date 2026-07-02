@@ -102,7 +102,8 @@ async function main() {
     )
     process.exit(1)
   }
-  const workspaceId = typeof first.workspace === 'string' ? first.workspace : first.workspace.id
+  const workspaceId =
+    (typeof first.workspace === 'string' ? first.workspace : first.workspace?.id) ?? ''
   console.log(`[seed-actions] Seeding Actions into workspace ${workspaceId}.`)
 
   for (const seed of ACTIONS) {

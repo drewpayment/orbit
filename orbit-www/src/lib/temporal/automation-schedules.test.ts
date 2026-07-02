@@ -80,7 +80,7 @@ describe('ensureAutomationSchedule', () => {
 
     await ensureAutomationSchedule({ id: 'a1', workspaceId: 'ws1', cron: '0 * * * *', enabled: false })
 
-    expect((create.mock.calls[0][0] as any).state.paused).toBe(true)
+    expect((create.mock.calls[0][0] as { state: { paused: boolean } }).state.paused).toBe(true)
   })
 
   it('falls back to update when the schedule already exists, converging spec/action/paused', async () => {
