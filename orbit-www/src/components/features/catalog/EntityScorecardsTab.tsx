@@ -132,9 +132,10 @@ export function EntityScorecardsTab({
 /**
  * Overall score + golden-path alignment card, shown above the per-scorecard
  * rows. `breakdown === null` covers both "still loading" (parent shows its
- * own spinner first) and "fetch failed"; `breakdown.overall === null` is the
- * real empty state — the entity hasn't been through `recomputeWorkspaceScores`
- * yet (e.g. no catalog entities have been evaluated in this workspace).
+ * own spinner first) and "fetch failed". `breakdown.overall` is always set on
+ * a successful fetch — `getEntityScoreBreakdown` materializes the entity
+ * type's inherited baseline when no entity-scores row exists yet — so the
+ * null-overall branch below is defensive only.
  */
 function OverallScoreCard({ breakdown }: { breakdown: EntityScoreBreakdown | null }) {
   if (!breakdown || !breakdown.overall) {

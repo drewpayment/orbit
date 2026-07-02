@@ -565,11 +565,11 @@ function EntityScoreFields({
             <div className="space-y-1.5">
               <Label htmlFor="es-relation">Relation type</Label>
               <Select
-                value={form.relationType}
+                value={form.relationType || undefined}
                 onValueChange={(v) => onChange({ ...form, relationType: v })}
               >
                 <SelectTrigger id="es-relation">
-                  <SelectValue />
+                  <SelectValue placeholder="Select relation type…" />
                 </SelectTrigger>
                 <SelectContent>
                   {RELATION_TYPE_OPTIONS.map((t) => (

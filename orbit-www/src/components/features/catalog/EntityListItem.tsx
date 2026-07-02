@@ -40,9 +40,12 @@ function ownerName(owner: CatalogEntity['owner']): string | null {
 export function EntityListItem({
   entity,
   score,
+  scoreIsBaseline = false,
 }: {
   entity: CatalogEntity
   score?: number | null
+  /** True when `score` is the type's inherited base value, not an evaluated score. */
+  scoreIsBaseline?: boolean
 }) {
   const health = entity.health ?? 'unknown'
   const owner = ownerName(entity.owner)
@@ -72,7 +75,7 @@ export function EntityListItem({
                 {entity.tier.replace('-', ' ')}
               </Badge>
             )}
-            <EntityScoreInlineChip score={score} />
+            <EntityScoreInlineChip score={score} baseline={scoreIsBaseline} />
           </div>
         </CardHeader>
         <CardContent className="space-y-2">

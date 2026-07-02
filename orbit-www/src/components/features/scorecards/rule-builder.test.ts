@@ -258,6 +258,19 @@ describe('validateExpression rejects malformed expressions', () => {
     ).toMatch(/scorecard is required/i)
   })
 
+  it('entity-score default form forces an explicit relation choice for related targets', () => {
+    const form = defaultForm('entity-score')
+    if (form.type !== 'entity-score') throw new Error('expected entity-score form')
+    // relationType starts empty (no silent 'owns' default)…
+    expect(form.relationType).toBe('')
+    // …the default self-targeted form is still valid-by-construction…
+    expect(validateExpression('entity-score', buildExpression(form))).toBeNull()
+    // …but flipping to related without picking a relation surfaces the error.
+    expect(
+      validateExpression('entity-score', buildExpression({ ...form, target: 'related' })),
+    ).toMatch(/relation type is required/i)
+  })
+
   it('entity-score: target "related" requires a known relationType', () => {
     expect(
       validateExpression('entity-score', {

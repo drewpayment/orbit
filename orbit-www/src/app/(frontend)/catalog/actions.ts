@@ -2,8 +2,9 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import type { CatalogEntity, EntityScore } from '@/payload-types'
+import type { CatalogEntity, EntityScore, EntityType } from '@/payload-types'
 import { getCurrentUser } from '@/lib/auth/session'
+import { DEFAULT_ENTITY_TYPE } from '@/lib/catalog/entity-types'
 import {
   buildCatalogWhere,
   ENTITY_KIND_VALUES,
@@ -160,6 +161,12 @@ export async function getCatalogKindCounts(
 export interface EntityOverallScore {
   score: number
   goldenPathAlignment: number | null
+  /**
+   * True when no entity-scores row exists yet and `score` is the entity
+   * type's inherited base value, materialized on the fly (the persisted row
+   * appears after the workspace's first evaluation/recompute).
+   */
+  baseline?: boolean
 }
 
 /**
@@ -204,6 +211,55 @@ export async function getOverallEntityScores(
   for (const row of result.docs as EntityScore[]) {
     const entityId = typeof row.entity === 'string' ? row.entity : row.entity.id
     map[entityId] = { score: row.score, goldenPathAlignment: row.goldenPathAlignment ?? null }
+  }
+
+  // Entities with no persisted overall row yet (their workspace has never run
+  // a recompute) fall back to the entity type's inherited base value — the
+  // same seed `recomputeWorkspaceScores` would write — so the catalog never
+  // shows "No score" for an entity the user can see. Two batched queries:
+  // the missing entities (for kind/workspace), then every entity-types row in
+  // those workspaces.
+  const missing = entityIds.filter((id) => !(id in map))
+  if (missing.length === 0) return map
+
+  const missingEntities = await payload.find({
+    collection: 'catalog-entities',
+    where: {
+      and: [{ id: { in: missing } }, { workspace: { in: workspaceIds } }],
+    },
+    limit: missing.length,
+    depth: 0,
+    overrideAccess: true,
+  })
+  if (missingEntities.docs.length === 0) return map
+
+  const wsOf = (v: string | { id: string }) => (typeof v === 'string' ? v : v.id)
+  const missingWorkspaceIds = [
+    ...new Set(missingEntities.docs.map((e) => wsOf((e as CatalogEntity).workspace))),
+  ]
+  const typeRows = await payload.find({
+    collection: 'entity-types',
+    where: { workspace: { in: missingWorkspaceIds } },
+    limit: 1000,
+    depth: 0,
+    overrideAccess: true,
+  })
+  const baseValueByWsKind = new Map<string, number>()
+  for (const t of typeRows.docs as EntityType[]) {
+    baseValueByWsKind.set(
+      `${wsOf(t.workspace)}:${t.kind}`,
+      t.baseValue ?? DEFAULT_ENTITY_TYPE.baseValue,
+    )
+  }
+
+  for (const doc of missingEntities.docs as CatalogEntity[]) {
+    map[doc.id] = {
+      score:
+        baseValueByWsKind.get(`${wsOf(doc.workspace)}:${doc.kind}`) ??
+        DEFAULT_ENTITY_TYPE.baseValue,
+      goldenPathAlignment: null,
+      baseline: true,
+    }
   }
   return map
 }

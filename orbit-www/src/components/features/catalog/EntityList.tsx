@@ -62,6 +62,7 @@ export function EntityList({
           key={entity.id}
           entity={entity}
           score={scores ? (scores[entity.id]?.score ?? null) : undefined}
+          scoreIsBaseline={scores ? (scores[entity.id]?.baseline ?? false) : false}
         />
       ))}
     </div>

@@ -456,7 +456,11 @@ const DEFAULT_FORMS: Record<RuleType, RuleForm> = {
     target: 'self',
     scoreScope: 'overall',
     scorecardId: '',
-    relationType: RELATION_TYPE_OPTIONS[0],
+    // Deliberately empty (unlike relation-check): the field only becomes
+    // relevant when the user switches target to 'related', and they must then
+    // pick a relation explicitly — otherwise validateExpression surfaces the
+    // missing-relationType error instead of silently scoring over 'owns'.
+    relationType: '',
     direction: 'either',
     targetKind: '',
     aggregate: 'min',
@@ -514,8 +518,10 @@ export function parseExpression(type: RuleType, expression: unknown): RuleForm {
         target: expr.target === 'related' ? 'related' : 'self',
         scoreScope: expr.scoreScope === 'scorecard' ? 'scorecard' : 'overall',
         scorecardId: typeof expr.scorecardId === 'string' ? expr.scorecardId : '',
-        relationType:
-          typeof expr.relationType === 'string' ? expr.relationType : RELATION_TYPE_OPTIONS[0],
+        // Empty (not RELATION_TYPE_OPTIONS[0]) so a stored related-rule that
+        // somehow lost its relationType re-surfaces the validation error on
+        // edit rather than silently rebinding to 'owns'.
+        relationType: typeof expr.relationType === 'string' ? expr.relationType : '',
         direction:
           expr.direction === 'from' || expr.direction === 'to' ? expr.direction : 'either',
         targetKind: typeof expr.targetKind === 'string' ? expr.targetKind : '',

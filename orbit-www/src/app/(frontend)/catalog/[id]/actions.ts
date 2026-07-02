@@ -191,6 +191,18 @@ export async function getEntityScoreBreakdown(entityId: string): Promise<EntityS
     }
   }
 
+  // No persisted overall row yet (this workspace has never run a recompute):
+  // materialize the entity type's inherited baseline on the fly so the score
+  // the UI promises ("every entity has a score") exists before the first
+  // evaluation, exactly as `recomputeWorkspaceScores` would seed it.
+  if (!overall) {
+    overall = {
+      score: entityType.baseValue,
+      baseValue: entityType.baseValue,
+      goldenPathAlignment: null,
+    }
+  }
+
   return {
     overall,
     byScorecard,
