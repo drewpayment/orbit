@@ -42,6 +42,12 @@ spec:
                   key: ORBIT_INTERNAL_API_KEY
             - name: AUTOMATION_SCHEDULE_TZ
               value: UTC
+            # Nightly scorecard-evaluation sweep cadence (default matches the
+            # worker's built-in default; override to change the schedule).
+            - name: SCORECARD_EVAL_CRON
+              value: "0 5 * * *"
+            # SCORECARD_EVAL_DISABLED: unset by default (sweep schedule enabled).
+            # Set to "1" to converge the schedule to paused.
           resources:
             requests:
               memory: 256Mi
