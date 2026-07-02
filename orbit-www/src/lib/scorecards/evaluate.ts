@@ -1032,5 +1032,32 @@ export async function runScorecardEvaluation(
     }
   })()
 
+  // Fire-and-forget: reconcile every ACTIVE initiative on this scorecard with
+  // the fresh results (auto-complete fixed items, reopen regressions) — the
+  // Initiatives auto-sync (docs/plans/2026-07-02-initiatives-ui.md). Mirrors
+  // the snapshot capture above: a per-initiative sync failure must NEVER fail
+  // an evaluation, and the dynamic import keeps the module boundary loose.
+  ;(async () => {
+    try {
+      const { syncInitiativeActionItems } = await import('./initiatives')
+      const initiativesRes = await payload.find({
+        collection: 'initiatives',
+        where: { and: [{ scorecard: { equals: scorecardId } }, { status: { equals: 'active' } }] },
+        limit: 1000,
+        depth: 0,
+        overrideAccess: true,
+      })
+      for (const initiative of initiativesRes.docs as { id: string }[]) {
+        try {
+          await syncInitiativeActionItems(payload, initiative.id)
+        } catch (err) {
+          console.error(`[runScorecardEvaluation] initiative sync failed for ${initiative.id}:`, err)
+        }
+      }
+    } catch (err) {
+      console.error('[runScorecardEvaluation] initiative sync failed:', err)
+    }
+  })()
+
   return { scorecardId, entitiesEvaluated, rulesEvaluated, resultsWritten }
 }
