@@ -18,6 +18,7 @@ import {
   Sparkles,
   Shield,
   ShieldCheck,
+  TrendingUp,
   Workflow,
   Zap,
 } from "lucide-react"
@@ -63,7 +64,11 @@ const navMainData = [
       title: "Scorecards",
       url: "/scorecards",
       icon: ShieldCheck,
-      items: [],
+      items: [
+        // Reporting rollups for leaders/execs (Scorecard Reports & Insights,
+        // docs/plans/2026-07-01-scorecard-reports.md).
+        { title: "Reports", url: "/scorecards/reports", icon: TrendingUp },
+      ],
     },
     {
       title: "Self-Service",
