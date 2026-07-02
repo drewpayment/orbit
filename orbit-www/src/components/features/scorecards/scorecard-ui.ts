@@ -98,11 +98,12 @@ export function formatPct(ratio: number): string {
   return `${Math.round(ratio * 100)}%`
 }
 
-/** Human labels for the three rule kinds. */
+/** Human labels for the four rule kinds. */
 export const RULE_TYPE_LABEL: Record<string, string> = {
   'field-presence': 'Field presence',
   'relation-check': 'Relation check',
   threshold: 'Threshold',
+  'entity-score': 'Entity score',
 }
 
 export function ruleTypeLabel(type: string): string {

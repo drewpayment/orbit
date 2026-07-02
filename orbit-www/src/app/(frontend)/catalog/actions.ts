@@ -2,7 +2,8 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import type { CatalogEntity } from '@/payload-types'
+import type { CatalogEntity, EntityScore } from '@/payload-types'
+import { getCurrentUser } from '@/lib/auth/session'
 import {
   buildCatalogWhere,
   ENTITY_KIND_VALUES,
@@ -150,4 +151,59 @@ export async function getCatalogKindCounts(
   const all = counts.reduce((sum, [, total]) => sum + total, 0)
 
   return { all, byKind }
+}
+
+// ---------------------------------------------------------------------------
+// getOverallEntityScores — batched catalog-list score chips
+// ---------------------------------------------------------------------------
+
+export interface EntityOverallScore {
+  score: number
+  goldenPathAlignment: number | null
+}
+
+/**
+ * Overall entity-scores rows (scope='overall') for a batch of catalog
+ * entities, keyed by entity id — the single-round-trip source for the
+ * catalog list's numeric score chip (`EntityList`/`EntityListItem`, Entity
+ * Scores & Golden Paths, docs/plans/2026-07-01-entity-scores-and-golden-paths.md).
+ * One query for the whole visible page instead of one per rendered card.
+ *
+ * Resolves the session user itself (mirrors `getEntityScoreSummary` in
+ * scorecards/actions.ts): this is invoked from a client component, so a
+ * client-supplied identity can't be trusted for the workspace boundary.
+ */
+export async function getOverallEntityScores(
+  entityIds: string[],
+): Promise<Record<string, EntityOverallScore>> {
+  const empty: Record<string, EntityOverallScore> = {}
+  if (entityIds.length === 0) return empty
+
+  const payload = await getPayload({ config })
+  const uid = (await getCurrentUser())?.id
+  if (!uid) return empty
+
+  const workspaceIds = await getMemberWorkspaceIds(payload, uid)
+  if (workspaceIds.length === 0) return empty
+
+  const result = await payload.find({
+    collection: 'entity-scores',
+    where: {
+      and: [
+        { entity: { in: entityIds } },
+        { scope: { equals: 'overall' } },
+        { workspace: { in: workspaceIds } },
+      ],
+    },
+    limit: entityIds.length,
+    depth: 0,
+    overrideAccess: true,
+  })
+
+  const map: Record<string, EntityOverallScore> = {}
+  for (const row of result.docs as EntityScore[]) {
+    const entityId = typeof row.entity === 'string' ? row.entity : row.entity.id
+    map[entityId] = { score: row.score, goldenPathAlignment: row.goldenPathAlignment ?? null }
+  }
+  return map
 }

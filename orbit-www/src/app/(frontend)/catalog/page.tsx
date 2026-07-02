@@ -1,9 +1,11 @@
 import { Suspense } from 'react'
-import { Loader2 } from 'lucide-react'
+import Link from 'next/link'
+import { Compass, Loader2 } from 'lucide-react'
 import { getCurrentUser } from '@/lib/auth/session'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
+import { Button } from '@/components/ui/button'
 import { CatalogListClient } from '@/components/features/catalog/CatalogListClient'
 import { isEntityKind, type EntityKind } from '@/components/features/catalog/catalog-query'
 import { searchCatalogEntities, getCatalogKindCounts } from './actions'
@@ -61,11 +63,19 @@ export default function CatalogPage(props: PageProps) {
       <SidebarInset>
         <SiteHeader />
         <div className="flex-1 space-y-4 p-8 pt-6">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold">Catalog</h1>
-            <p className="mt-2 text-muted-foreground">
-              Browse every service, API, topic and resource across your organization.
-            </p>
+          <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold">Catalog</h1>
+              <p className="mt-2 text-muted-foreground">
+                Browse every service, API, topic and resource across your organization.
+              </p>
+            </div>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/catalog/types">
+                <Compass className="h-4 w-4" />
+                Entity types
+              </Link>
+            </Button>
           </div>
 
           <Suspense

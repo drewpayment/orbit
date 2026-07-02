@@ -72,13 +72,14 @@ import {
 import { APISchemas, APISchemaVersions } from './collections/api-catalog'
 
 // Unified catalog graph (IDP refocus P1)
-import { CatalogEntities, CatalogRelations } from './collections/catalog'
+import { CatalogEntities, CatalogRelations, EntityTypes } from './collections/catalog'
 
 // Scorecards + initiatives (IDP refocus P2)
 import {
   Scorecards,
   ScorecardRules,
   ScorecardRuleResults,
+  EntityScores,
   Initiatives,
   InitiativeActionItems,
 } from './collections/scorecards'
@@ -163,10 +164,12 @@ export default buildConfig({
     // Unified catalog graph (IDP refocus P1)
     CatalogEntities,
     CatalogRelations,
+    EntityTypes,
     // Scorecards + initiatives (IDP refocus P2)
     Scorecards,
     ScorecardRules,
     ScorecardRuleResults,
+    EntityScores,
     Initiatives,
     InitiativeActionItems,
     // Self-Service actions (IDP refocus P3)

@@ -38,9 +38,14 @@ import {
   RELATION_DIRECTIONS,
   RULE_TYPES,
   RULE_TYPE_HELP,
+  SCORE_TARGETS,
+  SCORE_SCOPES,
+  SCORE_AGGREGATES,
+  ENTITY_SCORE_OPS,
   type RuleForm,
   type RuleType,
   type ThresholdOp,
+  type EntityScoreOp,
 } from './rule-builder'
 import { FieldCombobox } from './FieldCombobox'
 import { createRule, updateRule } from '@/app/(frontend)/scorecards/actions'
@@ -373,6 +378,10 @@ function RuleTypeFields({ form, onChange, onPathChange }: RuleTypeFieldsProps) {
     )
   }
 
+  if (form.type === 'entity-score') {
+    return <EntityScoreFields form={form} onChange={onChange} />
+  }
+
   // threshold
   const ops = thresholdOpsForPath(form.path)
   return (
@@ -477,6 +486,187 @@ function ThresholdValueField({
         onChange={(e) => onChange({ ...form, value: e.target.value })}
         placeholder={form.op === 'in' ? 'production, staging' : '3'}
       />
+    </div>
+  )
+}
+
+/**
+ * Entity-score fields — compiles the entity's own (`target: 'self'`) or related
+ * entities' (`target: 'related'`) persisted `entity-scores` rows. The
+ * scope/scorecard controls choose WHICH score to read; the relation controls
+ * (shown only for `related`) choose WHICH entities to read it from, mirroring
+ * the relation-check builder above. `scorecardId` is a free-entered id, same
+ * convention as the relationship-typed threshold value control — no scorecard
+ * list is fetched into this framework-light module.
+ */
+function EntityScoreFields({
+  form,
+  onChange,
+}: {
+  form: Extract<RuleForm, { type: 'entity-score' }>
+  onChange: (form: RuleForm) => void
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="es-target">Score of</Label>
+          <Select
+            value={form.target}
+            onValueChange={(v) => onChange({ ...form, target: v as typeof form.target })}
+          >
+            <SelectTrigger id="es-target">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SCORE_TARGETS.map((t) => (
+                <SelectItem key={t.value} value={t.value}>
+                  {t.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="es-scope">Which score</Label>
+          <Select
+            value={form.scoreScope}
+            onValueChange={(v) => onChange({ ...form, scoreScope: v as typeof form.scoreScope })}
+          >
+            <SelectTrigger id="es-scope">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SCORE_SCOPES.map((s) => (
+                <SelectItem key={s.value} value={s.value}>
+                  {s.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {form.scoreScope === 'scorecard' && (
+        <div className="space-y-1.5">
+          <Label htmlFor="es-scorecard">Scorecard id</Label>
+          <Input
+            id="es-scorecard"
+            value={form.scorecardId}
+            onChange={(e) => onChange({ ...form, scorecardId: e.target.value })}
+            placeholder="Scorecard id"
+          />
+        </div>
+      )}
+
+      {form.target === 'related' && (
+        <div className="space-y-3 rounded-md border bg-background p-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="es-relation">Relation type</Label>
+              <Select
+                value={form.relationType}
+                onValueChange={(v) => onChange({ ...form, relationType: v })}
+              >
+                <SelectTrigger id="es-relation">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RELATION_TYPE_OPTIONS.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="es-direction">Direction</Label>
+              <Select
+                value={form.direction}
+                onValueChange={(v) => onChange({ ...form, direction: v as typeof form.direction })}
+              >
+                <SelectTrigger id="es-direction">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RELATION_DIRECTIONS.map((d) => (
+                    <SelectItem key={d.value} value={d.value}>
+                      {d.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="es-target-kind">Target kind</Label>
+            <Select
+              value={form.targetKind || NO_TARGET}
+              onValueChange={(v) => onChange({ ...form, targetKind: v === NO_TARGET ? '' : v })}
+            >
+              <SelectTrigger id="es-target-kind">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_TARGET}>Any kind</SelectItem>
+                {ENTITY_KIND_OPTIONS.map((k) => (
+                  <SelectItem key={k} value={k} className="capitalize">
+                    {k}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="es-aggregate">Aggregate</Label>
+          <Select
+            value={form.aggregate}
+            onValueChange={(v) => onChange({ ...form, aggregate: v as typeof form.aggregate })}
+          >
+            <SelectTrigger id="es-aggregate">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SCORE_AGGREGATES.map((a) => (
+                <SelectItem key={a.value} value={a.value}>
+                  {a.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="es-op">Operator</Label>
+          <Select value={form.op} onValueChange={(v) => onChange({ ...form, op: v as EntityScoreOp })}>
+            <SelectTrigger id="es-op">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ENTITY_SCORE_OPS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="es-value">Value (0-100)</Label>
+          <Input
+            id="es-value"
+            type="number"
+            min={0}
+            max={100}
+            value={form.value}
+            onChange={(e) => onChange({ ...form, value: e.target.value })}
+          />
+        </div>
+      </div>
     </div>
   )
 }

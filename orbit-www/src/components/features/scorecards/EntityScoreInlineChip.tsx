@@ -1,58 +1,15 @@
-'use client'
-
-import { useEffect, useState } from 'react'
-import { ScoreChip } from './ScoreChip'
-import type { LevelDef } from './scorecard-ui'
-import { getEntityScoreSummary } from '@/app/(frontend)/scorecards/actions'
+import { ScoreNumberChip } from './ScoreChip'
 
 /**
- * A self-fetching, fail-silent score chip for the catalog list (IDP refocus P2).
+ * Overall-score chip for the catalog list (Entity Scores & Golden Paths,
+ * docs/plans/2026-07-01-entity-scores-and-golden-paths.md).
  *
- * Renders nothing until/unless the entity has scorecard results, so it never
- * breaks the list for unscored entities. When an entity is on multiple
- * scorecards it surfaces the *lowest* achieved level (the actionable signal),
- * with a +N suffix indicating how many scorecards apply.
+ * Presentational only: `score` is supplied by the parent `EntityList`, which
+ * fetches every listed entity's overall score in a single batched round-trip
+ * (`getOverallEntityScores`) instead of each card self-fetching (the previous
+ * per-scorecard-level design here was an N+1 — one `getEntityScoreSummary`
+ * call per rendered card).
  */
-export function EntityScoreInlineChip({ entityId }: { entityId: string }) {
-  const [state, setState] = useState<{ level: LevelDef | null; count: number } | null>(null)
-
-  useEffect(() => {
-    let active = true
-    getEntityScoreSummary(undefined, entityId)
-      .then((summary) => {
-        if (!active) return
-        if (summary.scorecards.length === 0) {
-          setState(null)
-          return
-        }
-        // Lowest level wins: unranked (null) is worst, else min rank.
-        let lowest: LevelDef | null = summary.scorecards[0].level
-        let sawUnranked = lowest === null
-        for (const sc of summary.scorecards.slice(1)) {
-          if (sc.level === null) {
-            sawUnranked = true
-          } else if (lowest && sc.level.rank < lowest.rank) {
-            lowest = sc.level
-          }
-        }
-        setState({ level: sawUnranked ? null : lowest, count: summary.scorecards.length })
-      })
-      .catch(() => {
-        if (active) setState(null)
-      })
-    return () => {
-      active = false
-    }
-  }, [entityId])
-
-  if (!state) return null
-
-  return (
-    <span className="inline-flex items-center gap-1">
-      <ScoreChip level={state.level} showRatio={false} />
-      {state.count > 1 && (
-        <span className="text-[10px] text-muted-foreground">+{state.count - 1}</span>
-      )}
-    </span>
-  )
+export function EntityScoreInlineChip({ score }: { score: number | null | undefined }) {
+  return <ScoreNumberChip score={score} />
 }

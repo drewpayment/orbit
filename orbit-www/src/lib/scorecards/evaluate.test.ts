@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest'
+import type { Payload } from 'payload'
 import type { CatalogEntity, CatalogRelation, ScorecardRule } from '@/payload-types'
-import { evaluateRule, computeEntityLevel, type EvalContext } from './evaluate'
+import {
+  evaluateRule,
+  computeEntityLevel,
+  runScorecardEvaluation,
+  recomputeWorkspaceScores,
+  type EvalContext,
+} from './evaluate'
 
 // --- fixtures ---------------------------------------------------------------
 
@@ -52,9 +59,14 @@ function rule(
   } as ScorecardRule
 }
 
-const ctx = (e: CatalogEntity, relations: CatalogRelation[] = []): EvalContext => ({
+const ctx = (
+  e: CatalogEntity,
+  relations: CatalogRelation[] = [],
+  extra: Partial<Pick<EvalContext, 'scores' | 'weights'>> = {},
+): EvalContext => ({
   entity: e,
   relations,
+  ...extra,
 })
 
 // --- evaluateRule: field-presence -------------------------------------------
@@ -375,6 +387,296 @@ describe('evaluateRule — malformed expression', () => {
   })
 })
 
+// --- evaluateRule: entity-score ----------------------------------------------
+
+describe('evaluateRule — entity-score', () => {
+  const e1 = entity({ id: 'e1', kind: 'service' })
+
+  // --- target: self ----------------------------------------------------------
+
+  describe('target: self', () => {
+    it('overall scope (default): compares the entity\'s own overall score', () => {
+      const scores = { e1: { overall: 80, byScorecard: {} } }
+      const res = evaluateRule(
+        rule('entity-score', { target: 'self', op: 'gte', value: 70 }),
+        ctx(e1, [], { scores }),
+      )
+      expect(res.passed).toBe(true)
+      expect(res.detail).toContain('80')
+    })
+
+    it('overall scope: fails when below the threshold', () => {
+      const scores = { e1: { overall: 60, byScorecard: {} } }
+      const res = evaluateRule(
+        rule('entity-score', { target: 'self', op: 'gte', value: 70 }),
+        ctx(e1, [], { scores }),
+      )
+      expect(res.passed).toBe(false)
+    })
+
+    it('scorecard scope: reads the named scorecard\'s stored score', () => {
+      const scores = { e1: { overall: 80, byScorecard: { sc1: 55 } } }
+      const res = evaluateRule(
+        rule('entity-score', { target: 'self', scoreScope: 'scorecard', scorecardId: 'sc1', op: 'eq', value: 55 }),
+        ctx(e1, [], { scores }),
+      )
+      expect(res.passed).toBe(true)
+    })
+
+    it('scorecard scope without `scorecardId` -> fail with clear detail', () => {
+      const res = evaluateRule(
+        rule('entity-score', { target: 'self', scoreScope: 'scorecard', op: 'gte', value: 50 }),
+        ctx(e1, [], { scores: { e1: { overall: 80, byScorecard: {} } } }),
+      )
+      expect(res.passed).toBe(false)
+      expect(res.detail).toContain('scorecardId')
+    })
+
+    it('no `ctx.scores` at all -> fail with clear "no stored score" detail', () => {
+      const res = evaluateRule(rule('entity-score', { target: 'self', op: 'gte', value: 50 }), ctx(e1))
+      expect(res.passed).toBe(false)
+      expect(res.detail).toMatch(/no stored .* score/i)
+    })
+
+    it('ctx.scores present for other entities but not this one -> fail', () => {
+      const scores = { other: { overall: 100, byScorecard: {} } }
+      const res = evaluateRule(
+        rule('entity-score', { target: 'self', op: 'gte', value: 50 }),
+        ctx(e1, [], { scores }),
+      )
+      expect(res.passed).toBe(false)
+      expect(res.detail).toMatch(/no stored .* score/i)
+    })
+
+    it('scorecard scope: this entity has an overall score but not the requested scorecard -> fail', () => {
+      const scores = { e1: { overall: 80, byScorecard: { other: 90 } } }
+      const res = evaluateRule(
+        rule('entity-score', { target: 'self', scoreScope: 'scorecard', scorecardId: 'sc1', op: 'gte', value: 50 }),
+        ctx(e1, [], { scores }),
+      )
+      expect(res.passed).toBe(false)
+    })
+  })
+
+  // --- target: related, per aggregate -----------------------------------------
+
+  describe('target: related', () => {
+    const rels = [
+      relation({ id: 'r1', from: 'e1', to: 'a', type: 'depends-on' }),
+      relation({ id: 'r2', from: 'e1', to: 'b', type: 'depends-on' }),
+      relation({ id: 'r3', from: 'e1', to: 'c', type: 'depends-on' }),
+    ]
+
+    it('aggregate "min" (default): the weakest related score decides pass/fail', () => {
+      const scores = {
+        a: { overall: 90, byScorecard: {} },
+        b: { overall: 40, byScorecard: {} },
+        c: { overall: 100, byScorecard: {} },
+      }
+      const res = evaluateRule(
+        rule('entity-score', { target: 'related', relationType: 'depends-on', direction: 'from', op: 'gte', value: 70 }),
+        ctx(e1, rels, { scores }),
+      )
+      expect(res.passed).toBe(false) // min is 40
+      expect(res.detail).toContain('40')
+    })
+
+    it('aggregate "max": the strongest related score decides pass/fail', () => {
+      const scores = {
+        a: { overall: 90, byScorecard: {} },
+        b: { overall: 40, byScorecard: {} },
+        c: { overall: 100, byScorecard: {} },
+      }
+      const res = evaluateRule(
+        rule('entity-score', {
+          target: 'related',
+          relationType: 'depends-on',
+          direction: 'from',
+          aggregate: 'max',
+          op: 'gte',
+          value: 70,
+        }),
+        ctx(e1, rels, { scores }),
+      )
+      expect(res.passed).toBe(true) // max is 100
+    })
+
+    it('aggregate "avg": equal weights -> plain mean', () => {
+      const scores = {
+        a: { overall: 100, byScorecard: {} },
+        b: { overall: 0, byScorecard: {} },
+        c: { overall: 50, byScorecard: {} },
+      }
+      const res = evaluateRule(
+        rule('entity-score', {
+          target: 'related',
+          relationType: 'depends-on',
+          direction: 'from',
+          aggregate: 'avg',
+          op: 'eq',
+          value: 50,
+        }),
+        ctx(e1, rels, { scores }),
+      )
+      expect(res.passed).toBe(true) // (100+0+50)/3 = 50
+    })
+
+    it('aggregate "avg": weighted by each related entity\'s type scoringWeight', () => {
+      // a=100 weight 3, b=0 weight 1, c not related here -> weighted mean = (300+0)/4 = 75
+      const rels2 = [
+        relation({ id: 'r1', from: 'e1', to: 'a', type: 'depends-on' }),
+        relation({ id: 'r2', from: 'e1', to: 'b', type: 'depends-on' }),
+      ]
+      const scores = { a: { overall: 100, byScorecard: {} }, b: { overall: 0, byScorecard: {} } }
+      const weights = { a: 3, b: 1 }
+      const res = evaluateRule(
+        rule('entity-score', {
+          target: 'related',
+          relationType: 'depends-on',
+          direction: 'from',
+          aggregate: 'avg',
+          op: 'eq',
+          value: 75,
+        }),
+        ctx(e1, rels2, { scores, weights }),
+      )
+      expect(res.passed).toBe(true)
+    })
+
+    it('related entity with no `ctx.weights` entry defaults to weight 1', () => {
+      const rels2 = [
+        relation({ id: 'r1', from: 'e1', to: 'a', type: 'depends-on' }),
+        relation({ id: 'r2', from: 'e1', to: 'b', type: 'depends-on' }),
+      ]
+      const scores = { a: { overall: 100, byScorecard: {} }, b: { overall: 0, byScorecard: {} } }
+      const res = evaluateRule(
+        rule('entity-score', {
+          target: 'related',
+          relationType: 'depends-on',
+          direction: 'from',
+          aggregate: 'avg',
+          op: 'eq',
+          value: 50,
+        }),
+        ctx(e1, rels2, { scores }), // no weights -> both default to 1 -> plain mean
+      )
+      expect(res.passed).toBe(true)
+    })
+
+    it('targetKind filters which related entities are compiled', () => {
+      const topic = entity({ id: 'topic-1', kind: 'kafka-topic' })
+      const svc = entity({ id: 'svc-2', kind: 'service' })
+      const relsMixed = [
+        relation({ id: 'r1', from: 'e1', to: topic, type: 'produces-topic' }),
+        relation({ id: 'r2', from: 'e1', to: svc, type: 'produces-topic' }),
+      ]
+      const scores = { 'topic-1': { overall: 10, byScorecard: {} }, 'svc-2': { overall: 90, byScorecard: {} } }
+      const res = evaluateRule(
+        rule('entity-score', {
+          target: 'related',
+          relationType: 'produces-topic',
+          direction: 'from',
+          targetKind: 'kafka-topic',
+          aggregate: 'min',
+          op: 'gte',
+          value: 5,
+        }),
+        ctx(e1, relsMixed, { scores }),
+      )
+      // Only topic-1 (score 10) is compiled — svc-2 is filtered out by targetKind.
+      expect(res.passed).toBe(true)
+      expect(res.detail).toContain('10')
+    })
+
+    it('missing `relationType` -> fail with clear detail', () => {
+      const res = evaluateRule(
+        rule('entity-score', { target: 'related', op: 'gte', value: 50 }),
+        ctx(e1, rels, { scores: {} }),
+      )
+      expect(res.passed).toBe(false)
+      expect(res.detail).toContain('relationType')
+    })
+
+    it('no matching relations at all -> fail with clear detail', () => {
+      const res = evaluateRule(
+        rule('entity-score', { target: 'related', relationType: 'owns', direction: 'from', op: 'gte', value: 50 }),
+        ctx(e1, rels, { scores: {} }),
+      )
+      expect(res.passed).toBe(false)
+      expect(res.detail).toMatch(/no related entities/i)
+    })
+
+    it('relations exist but none of the related entities have a stored score -> fail with clear detail', () => {
+      const res = evaluateRule(
+        rule('entity-score', { target: 'related', relationType: 'depends-on', direction: 'from', op: 'gte', value: 50 }),
+        ctx(e1, rels, { scores: {} }), // no scores recorded for a/b/c
+      )
+      expect(res.passed).toBe(false)
+      expect(res.detail).toMatch(/have a stored .* score/i)
+    })
+
+    it('some related entities missing scores: aggregates over the ones found, notes the rest as excluded', () => {
+      const scores = { a: { overall: 90, byScorecard: {} } } // b, c have no stored score
+      const res = evaluateRule(
+        rule('entity-score', { target: 'related', relationType: 'depends-on', direction: 'from', op: 'gte', value: 80 }),
+        ctx(e1, rels, { scores }),
+      )
+      expect(res.passed).toBe(true) // only 'a' (90) counted -> min is 90
+      expect(res.detail).toMatch(/missing/i)
+    })
+
+    it('related entities deduplicated: two relations to the same target count it once', () => {
+      const dupeRels = [
+        relation({ id: 'r1', from: 'e1', to: 'a', type: 'depends-on' }),
+        relation({ id: 'r2', from: 'e1', to: 'a', type: 'depends-on' }),
+      ]
+      const scores = { a: { overall: 50, byScorecard: {} } }
+      const res = evaluateRule(
+        rule('entity-score', {
+          target: 'related',
+          relationType: 'depends-on',
+          direction: 'from',
+          aggregate: 'avg',
+          op: 'eq',
+          value: 50,
+        }),
+        ctx(e1, dupeRels, { scores }),
+      )
+      expect(res.passed).toBe(true) // avg of a single 50, not double-counted
+      expect(res.detail).toContain('1 related')
+    })
+  })
+
+  // --- malformed / edge cases --------------------------------------------------
+
+  describe('malformed expressions', () => {
+    it('unknown target -> fail with clear detail', () => {
+      const res = evaluateRule(
+        rule('entity-score', { target: 'nowhere', op: 'gte', value: 50 }),
+        ctx(e1, [], { scores: {} }),
+      )
+      expect(res.passed).toBe(false)
+      expect(res.detail).toContain('target')
+    })
+
+    it('unknown op -> fail', () => {
+      const res = evaluateRule(
+        rule('entity-score', { target: 'self', op: 'weird', value: 50 }),
+        ctx(e1, [], { scores: { e1: { overall: 80, byScorecard: {} } } }),
+      )
+      expect(res.passed).toBe(false)
+    })
+
+    it('non-numeric `value` -> fail', () => {
+      const res = evaluateRule(
+        rule('entity-score', { target: 'self', op: 'gte', value: 'high' }),
+        ctx(e1, [], { scores: { e1: { overall: 80, byScorecard: {} } } }),
+      )
+      expect(res.passed).toBe(false)
+    })
+  })
+})
+
 // --- computeEntityLevel -----------------------------------------------------
 
 describe('computeEntityLevel', () => {
@@ -447,5 +749,381 @@ describe('computeEntityLevel', () => {
       // no Silver/Gold rules tagged
     ])
     expect(res).toEqual({ levelName: 'Gold', rank: 3 })
+  })
+})
+
+// --- orchestration: recomputeWorkspaceScores / runScorecardEvaluation -------
+//
+// These exercise the full recompute pipeline against a hand-rolled in-memory
+// fake of the Payload local API (find/findByID/create/update over plain
+// arrays) rather than mocking each call individually — the pipeline touches
+// six collections across multiple phases, so a tiny fake DB is far more
+// legible than a wall of `vi.fn()` return-value wiring. It supports exactly
+// the `where` shapes evaluate.ts issues: `and`/`or`, and per-field
+// `equals`/`in`/`exists`.
+
+type Doc = Record<string, unknown> & { id: string }
+
+/** A minimal in-memory stand-in for the Payload local API. */
+class FakePayload {
+  collections: Record<string, Doc[]> = {
+    'catalog-entities': [],
+    'catalog-relations': [],
+    scorecards: [],
+    'scorecard-rules': [],
+    'scorecard-rule-results': [],
+    'entity-scores': [],
+    'entity-types': [],
+  }
+  private counter = 1
+
+  private nextId(collection: string): string {
+    return `${collection}-${this.counter++}`
+  }
+
+  async find({
+    collection,
+    where,
+    limit = 100,
+    page = 1,
+    depth = 0,
+  }: {
+    collection: string
+    where?: unknown
+    limit?: number
+    page?: number
+    depth?: number
+  }) {
+    const all = (this.collections[collection] ?? []).filter((d) => matchesWhere(d, where))
+    const start = (page - 1) * limit
+    let docs = all.slice(start, start + limit)
+    const hasNextPage = start + limit < all.length
+
+    // Depth-1 population for catalog-relations: resolve `from`/`to` ids to
+    // their catalog-entities docs so target-kind checks can read `.kind`.
+    if (depth >= 1 && collection === 'catalog-relations') {
+      docs = docs.map((d) => ({ ...d, from: this.populate(d.from), to: this.populate(d.to) }))
+    }
+    return { docs, hasNextPage }
+  }
+
+  private populate(idOrDoc: unknown): unknown {
+    if (typeof idOrDoc !== 'string') return idOrDoc
+    return this.collections['catalog-entities'].find((e) => e.id === idOrDoc) ?? idOrDoc
+  }
+
+  async findByID({ collection, id }: { collection: string; id: string }) {
+    const doc = (this.collections[collection] ?? []).find((d) => d.id === id)
+    if (!doc) throw new Error(`${collection}/${id} not found`)
+    return doc
+  }
+
+  async create({ collection, data }: { collection: string; data: Record<string, unknown> }) {
+    const doc = { id: this.nextId(collection), ...data } as Doc
+    this.collections[collection] = this.collections[collection] ?? []
+    this.collections[collection].push(doc)
+    return doc
+  }
+
+  async update({ collection, id, data }: { collection: string; id: string; data: Record<string, unknown> }) {
+    const list = this.collections[collection] ?? []
+    const idx = list.findIndex((d) => d.id === id)
+    if (idx === -1) throw new Error(`${collection}/${id} not found`)
+    list[idx] = { ...list[idx], ...data }
+    return list[idx]
+  }
+}
+
+/** Match a doc against the subset of Payload `Where` shapes evaluate.ts uses. */
+function matchesWhere(doc: Doc, where: unknown): boolean {
+  if (!where || typeof where !== 'object') return true
+  const w = where as Record<string, unknown>
+  if (Array.isArray(w.and)) return (w.and as unknown[]).every((clause) => matchesWhere(doc, clause))
+  if (Array.isArray(w.or)) return (w.or as unknown[]).some((clause) => matchesWhere(doc, clause))
+
+  for (const [field, condRaw] of Object.entries(w)) {
+    const cond = condRaw as Record<string, unknown>
+    const raw = doc[field]
+    const actualId = raw && typeof raw === 'object' ? (raw as Doc).id : raw
+    if ('equals' in cond) {
+      if (actualId !== cond.equals) return false
+    } else if ('in' in cond) {
+      if (!(cond.in as unknown[]).includes(actualId)) return false
+    } else if ('exists' in cond) {
+      const exists = raw !== undefined && raw !== null
+      if (exists !== cond.exists) return false
+    }
+  }
+  return true
+}
+
+/** Find every `scope: 'overall'` entity-scores row for an entity. */
+function overallRowFor(fp: FakePayload, entityId: string) {
+  return fp.collections['entity-scores'].find((r) => r.scope === 'overall' && r.entity === entityId)
+}
+
+/** Find a `scope: 'scorecard'` entity-scores row for (entity, scorecard). */
+function scorecardRowFor(fp: FakePayload, entityId: string, scorecardId: string) {
+  return fp.collections['entity-scores'].find(
+    (r) => r.scope === 'scorecard' && r.entity === entityId && r.scorecard === scorecardId,
+  )
+}
+
+describe('recomputeWorkspaceScores — coverage invariant', () => {
+  it('upserts an overall row (base-value fallback) for EVERY catalog entity, even with no scorecards at all', async () => {
+    const fp = new FakePayload()
+    fp.collections['catalog-entities'] = [
+      { id: 'e1', kind: 'service', workspace: 'ws1' },
+      { id: 'e2', kind: 'service', workspace: 'ws1' },
+      { id: 'e3', kind: 'kafka-topic', workspace: 'ws1' },
+    ]
+
+    const result = await recomputeWorkspaceScores(fp as unknown as Payload, 'ws1')
+
+    expect(result.entitiesScored).toBe(3)
+    const overallRows = fp.collections['entity-scores'].filter((r) => r.scope === 'overall')
+    expect(overallRows).toHaveLength(3)
+    for (const row of overallRows) {
+      // No entity-types row exists for either kind -> the built-in default
+      // baseValue (50) is the fallback, and golden-path alignment is 100
+      // (nothing was expected of it).
+      expect(row.score).toBe(50)
+      expect(row.baseValue).toBe(50)
+      expect(row.goldenPathAlignment).toBe(100)
+    }
+  })
+
+  it('falls back to each kind\'s own entity-types baseValue, not a shared default', async () => {
+    const fp = new FakePayload()
+    fp.collections['catalog-entities'] = [
+      { id: 'svc1', kind: 'service', workspace: 'ws1' },
+      { id: 'topic1', kind: 'kafka-topic', workspace: 'ws1' },
+    ]
+    fp.collections['entity-types'] = [
+      { id: 'et1', workspace: 'ws1', kind: 'service', baseValue: 70, scoringWeight: 1 },
+    ]
+
+    await recomputeWorkspaceScores(fp as unknown as Payload, 'ws1')
+
+    expect(overallRowFor(fp, 'svc1')?.score).toBe(70) // customized
+    expect(overallRowFor(fp, 'topic1')?.score).toBe(50) // built-in default (no row)
+  })
+
+  it('is idempotent: re-running produces the same rows, not duplicates', async () => {
+    const fp = new FakePayload()
+    fp.collections['catalog-entities'] = [{ id: 'e1', kind: 'service', workspace: 'ws1' }]
+
+    await recomputeWorkspaceScores(fp as unknown as Payload, 'ws1')
+    await recomputeWorkspaceScores(fp as unknown as Payload, 'ws1')
+
+    expect(fp.collections['entity-scores'].filter((r) => r.scope === 'overall')).toHaveLength(1)
+  })
+})
+
+describe('recomputeWorkspaceScores — per-scorecard score math', () => {
+  it('a scorecard score matches computeScorecardScore over its stored rule results, and REPLACES the baseline in overall', async () => {
+    const fp = new FakePayload()
+    fp.collections['catalog-entities'] = [{ id: 'e1', kind: 'service', workspace: 'ws1' }]
+    // A non-default baseValue proves overall doesn't blend it in once a
+    // scorecard applies — it should equal the scorecard score exactly.
+    fp.collections['entity-types'] = [
+      { id: 'et1', workspace: 'ws1', kind: 'service', baseValue: 90, scoringWeight: 1 },
+    ]
+    fp.collections['scorecards'] = [{ id: 'sc1', workspace: 'ws1', levels: [{ name: 'Bronze', rank: 1 }] }]
+    fp.collections['scorecard-rules'] = [
+      { id: 'r1', scorecard: 'sc1', weight: 1, level: null },
+      { id: 'r2', scorecard: 'sc1', weight: 1, level: null },
+    ]
+    fp.collections['scorecard-rule-results'] = [
+      { id: 'res1', workspace: 'ws1', scorecard: 'sc1', rule: 'r1', entity: 'e1', passed: true },
+      { id: 'res2', workspace: 'ws1', scorecard: 'sc1', rule: 'r2', entity: 'e1', passed: false },
+    ]
+
+    await recomputeWorkspaceScores(fp as unknown as Payload, 'ws1')
+
+    const scRow = scorecardRowFor(fp, 'e1', 'sc1')
+    expect(scRow?.score).toBe(50) // 1 of 2 equal-weight rules passed
+    expect(scRow?.passedRules).toBe(1)
+    expect(scRow?.totalRules).toBe(2)
+    // Base rule (r2, untagged) failed -> no ladder level achieved.
+    expect(scRow?.levelName).toBeNull()
+
+    const overall = overallRowFor(fp, 'e1')
+    expect(overall?.score).toBe(50) // == the one applicable scorecard's score, not blended with baseValue 90
+    expect(overall?.baseValue).toBe(90) // still carried for transparency
+  })
+
+  it('weighted rules: a heavier passed rule dominates the scorecard score', async () => {
+    const fp = new FakePayload()
+    fp.collections['catalog-entities'] = [{ id: 'e1', kind: 'service', workspace: 'ws1' }]
+    fp.collections['scorecards'] = [{ id: 'sc1', workspace: 'ws1', levels: [] }]
+    fp.collections['scorecard-rules'] = [
+      { id: 'r1', scorecard: 'sc1', weight: 9 },
+      { id: 'r2', scorecard: 'sc1', weight: 1 },
+    ]
+    fp.collections['scorecard-rule-results'] = [
+      { id: 'res1', workspace: 'ws1', scorecard: 'sc1', rule: 'r1', entity: 'e1', passed: true },
+      { id: 'res2', workspace: 'ws1', scorecard: 'sc1', rule: 'r2', entity: 'e1', passed: false },
+    ]
+
+    await recomputeWorkspaceScores(fp as unknown as Payload, 'ws1')
+
+    expect(scorecardRowFor(fp, 'e1', 'sc1')?.score).toBe(90)
+  })
+
+  it('golden-path alignment counts requiredRelations + requiredMetadata expectations met', async () => {
+    const fp = new FakePayload()
+    fp.collections['catalog-entities'] = [
+      { id: 'e1', kind: 'service', workspace: 'ws1', metadata: { costCenter: 'CC-1' } },
+      { id: 'team1', kind: 'team', workspace: 'ws1' },
+    ]
+    fp.collections['catalog-relations'] = [{ id: 'rel1', workspace: 'ws1', from: 'e1', to: 'team1', type: 'owns' }]
+    fp.collections['entity-types'] = [
+      {
+        id: 'et1',
+        workspace: 'ws1',
+        kind: 'service',
+        baseValue: 50,
+        scoringWeight: 1,
+        goldenPath: {
+          requiredRelations: [{ relationType: 'owns', direction: 'from', targetKind: 'team', min: 1 }],
+          requiredMetadata: [{ path: 'metadata.costCenter' }],
+        },
+      },
+    ]
+
+    await recomputeWorkspaceScores(fp as unknown as Payload, 'ws1')
+
+    expect(overallRowFor(fp, 'e1')?.goldenPathAlignment).toBe(100) // both expectations met
+  })
+
+  it('golden-path alignment: partial compliance rounds like computeGoldenPathAlignment', async () => {
+    const fp = new FakePayload()
+    fp.collections['catalog-entities'] = [{ id: 'e1', kind: 'service', workspace: 'ws1' }] // no metadata, no relations
+    fp.collections['entity-types'] = [
+      {
+        id: 'et1',
+        workspace: 'ws1',
+        kind: 'service',
+        baseValue: 50,
+        scoringWeight: 1,
+        goldenPath: {
+          requiredRelations: [{ relationType: 'owns', direction: 'from', min: 1 }],
+          requiredMetadata: [{ path: 'metadata.costCenter' }],
+        },
+      },
+    ]
+
+    await recomputeWorkspaceScores(fp as unknown as Payload, 'ws1')
+
+    expect(overallRowFor(fp, 'e1')?.goldenPathAlignment).toBe(0) // neither expectation met
+  })
+})
+
+describe('runScorecardEvaluation — entity-score rule integration', () => {
+  it('an entity-score rule (target=related) compiles a related entity\'s already-scored overall value', async () => {
+    const fp = new FakePayload()
+    fp.collections['catalog-entities'] = [
+      { id: 'svcY', kind: 'service', workspace: 'ws1' },
+      { id: 'svcX', kind: 'service', workspace: 'ws1' },
+    ]
+    fp.collections['catalog-relations'] = [
+      { id: 'rel1', workspace: 'ws1', from: 'svcX', to: 'svcY', type: 'depends-on' },
+    ]
+    fp.collections['scorecards'] = [
+      { id: 'scY', workspace: 'ws1', appliesTo: { filter: { id: { equals: 'svcY' } } }, levels: [] },
+      { id: 'scX', workspace: 'ws1', appliesTo: { filter: { id: { equals: 'svcX' } } }, levels: [] },
+    ]
+    fp.collections['scorecard-rules'] = [
+      // Always-true threshold rule so svcY scores 100 on its own scorecard.
+      { id: 'ruleY1', scorecard: 'scY', type: 'threshold', weight: 1, expression: { path: 'kind', op: 'eq', value: 'service' } },
+      // svcX's own scorecard is entirely an entity-score rule over its
+      // depends-on target's overall score.
+      {
+        id: 'ruleXscore',
+        scorecard: 'scX',
+        type: 'entity-score',
+        weight: 1,
+        expression: {
+          target: 'related',
+          relationType: 'depends-on',
+          direction: 'from',
+          aggregate: 'min',
+          scoreScope: 'overall',
+          op: 'gte',
+          value: 70,
+        },
+      },
+    ]
+
+    // Score svcY first so svcX's entity-score rule has a real (non-fallback) value to read.
+    await runScorecardEvaluation(fp as unknown as Payload, 'scY')
+    expect(overallRowFor(fp, 'svcY')?.score).toBe(100)
+
+    await runScorecardEvaluation(fp as unknown as Payload, 'scX')
+
+    const ruleResult = fp.collections['scorecard-rule-results'].find(
+      (r) => r.entity === 'svcX' && r.rule === 'ruleXscore',
+    )
+    expect(ruleResult?.passed).toBe(true) // min([100]) >= 70
+
+    const scXRow = scorecardRowFor(fp, 'svcX', 'scX')
+    expect(scXRow?.score).toBe(100) // the entity-score rule itself is the only rule -> all-or-nothing
+    expect(overallRowFor(fp, 'svcX')?.score).toBe(100) // folded into svcX's own overall
+  })
+
+  it('single-pass semantics: when the related entity has not been scored yet, entity-score reads its coverage-invariant baseline (not a live recompute)', async () => {
+    const fp = new FakePayload()
+    fp.collections['catalog-entities'] = [
+      { id: 'svcY', kind: 'service', workspace: 'ws1' }, // never scored by any scorecard
+      { id: 'svcX', kind: 'service', workspace: 'ws1' },
+    ]
+    fp.collections['catalog-relations'] = [
+      { id: 'rel1', workspace: 'ws1', from: 'svcX', to: 'svcY', type: 'depends-on' },
+    ]
+    fp.collections['scorecards'] = [{ id: 'scX', workspace: 'ws1', appliesTo: { filter: { id: { equals: 'svcX' } } }, levels: [] }]
+    fp.collections['scorecard-rules'] = [
+      {
+        id: 'ruleXscore',
+        scorecard: 'scX',
+        type: 'entity-score',
+        weight: 1,
+        expression: {
+          target: 'related',
+          relationType: 'depends-on',
+          direction: 'from',
+          aggregate: 'min',
+          scoreScope: 'overall',
+          op: 'gte',
+          value: 70,
+        },
+      },
+    ]
+
+    await runScorecardEvaluation(fp as unknown as Payload, 'scX')
+
+    // svcY was never explicitly scored, but the coverage invariant seeds its
+    // overall row at the built-in baseValue (50) as a side effect of scX's
+    // own run — which is below the rule's threshold of 70.
+    expect(overallRowFor(fp, 'svcY')?.score).toBe(50)
+    const ruleResult = fp.collections['scorecard-rule-results'].find(
+      (r) => r.entity === 'svcX' && r.rule === 'ruleXscore',
+    )
+    expect(ruleResult?.passed).toBe(false)
+  })
+
+  it('a scorecard made only of non-score rules still recomputes entity-scores (no entity-score rules -> phases C/D skipped)', async () => {
+    const fp = new FakePayload()
+    fp.collections['catalog-entities'] = [{ id: 'e1', kind: 'service', workspace: 'ws1' }]
+    fp.collections['scorecards'] = [{ id: 'sc1', workspace: 'ws1', levels: [] }]
+    fp.collections['scorecard-rules'] = [
+      { id: 'r1', scorecard: 'sc1', type: 'field-presence', weight: 1, expression: { path: 'kind', op: 'exists' } },
+    ]
+
+    const summary = await runScorecardEvaluation(fp as unknown as Payload, 'sc1')
+
+    expect(summary.entitiesEvaluated).toBe(1)
+    expect(summary.rulesEvaluated).toBe(1)
+    expect(overallRowFor(fp, 'e1')?.score).toBe(100) // one rule, passed
   })
 })

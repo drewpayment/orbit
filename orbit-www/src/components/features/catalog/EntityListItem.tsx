@@ -31,10 +31,19 @@ function ownerName(owner: CatalogEntity['owner']): string | null {
 
 /**
  * One catalog entity rendered as a card linking to its detail page
- * (`/catalog/{id}`, owned by the detail agent). No client hooks — safe to
- * render from either a server or client parent.
+ * (`/catalog/{id}`, owned by the detail agent). No client hooks itself — the
+ * overall `score` (entity-scores scope='overall') is fetched once, batched,
+ * by the parent `EntityList` and handed down as a prop; see
+ * `EntityScoreInlineChip` for the `undefined` (loading) vs `null` (no score
+ * yet) distinction.
  */
-export function EntityListItem({ entity }: { entity: CatalogEntity }) {
+export function EntityListItem({
+  entity,
+  score,
+}: {
+  entity: CatalogEntity
+  score?: number | null
+}) {
   const health = entity.health ?? 'unknown'
   const owner = ownerName(entity.owner)
 
@@ -63,7 +72,7 @@ export function EntityListItem({ entity }: { entity: CatalogEntity }) {
                 {entity.tier.replace('-', ' ')}
               </Badge>
             )}
-            <EntityScoreInlineChip entityId={entity.id} />
+            <EntityScoreInlineChip score={score} />
           </div>
         </CardHeader>
         <CardContent className="space-y-2">

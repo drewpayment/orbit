@@ -89,7 +89,7 @@ describe('buildExpression → validateExpression round-trip', () => {
   })
 
   it('every defaultForm produces a valid expression', () => {
-    for (const type of ['field-presence', 'relation-check', 'threshold'] as const) {
+    for (const type of ['field-presence', 'relation-check', 'threshold', 'entity-score'] as const) {
       const form = defaultForm(type)
       // field-presence/threshold defaults need a path to be valid; supply one.
       const filled: RuleForm =
@@ -100,6 +100,96 @@ describe('buildExpression → validateExpression round-trip', () => {
             : form
       expect(validateExpression(type, buildExpression(filled))).toBeNull()
     }
+  })
+
+  it('entity-score (self/overall) builds the minimal shape and validates', () => {
+    const form: RuleForm = {
+      type: 'entity-score',
+      target: 'self',
+      scoreScope: 'overall',
+      scorecardId: '',
+      relationType: 'owns',
+      direction: 'either',
+      targetKind: '',
+      aggregate: 'min',
+      op: 'gte',
+      value: '70',
+    }
+    const expr = buildExpression(form)
+    expect(expr).toEqual({ target: 'self', scoreScope: 'overall', aggregate: 'min', op: 'gte', value: 70 })
+    expect(expr).not.toHaveProperty('scorecardId')
+    expect(expr).not.toHaveProperty('relationType')
+    expect(validateExpression('entity-score', expr)).toBeNull()
+  })
+
+  it('entity-score (scorecard scope) includes the trimmed scorecardId', () => {
+    const form: RuleForm = {
+      type: 'entity-score',
+      target: 'self',
+      scoreScope: 'scorecard',
+      scorecardId: ' sc-123 ',
+      relationType: 'owns',
+      direction: 'either',
+      targetKind: '',
+      aggregate: 'avg',
+      op: 'eq',
+      value: '100',
+    }
+    const expr = buildExpression(form)
+    expect(expr).toEqual({
+      target: 'self',
+      scoreScope: 'scorecard',
+      scorecardId: 'sc-123',
+      aggregate: 'avg',
+      op: 'eq',
+      value: 100,
+    })
+    expect(validateExpression('entity-score', expr)).toBeNull()
+  })
+
+  it('entity-score (related) includes relation fields and omits a blank targetKind', () => {
+    const form: RuleForm = {
+      type: 'entity-score',
+      target: 'related',
+      scoreScope: 'overall',
+      scorecardId: '',
+      relationType: 'depends-on',
+      direction: 'from',
+      targetKind: '',
+      aggregate: 'min',
+      op: 'gte',
+      value: '80',
+    }
+    const expr = buildExpression(form)
+    expect(expr).toEqual({
+      target: 'related',
+      scoreScope: 'overall',
+      relationType: 'depends-on',
+      direction: 'from',
+      aggregate: 'min',
+      op: 'gte',
+      value: 80,
+    })
+    expect(expr).not.toHaveProperty('targetKind')
+    expect(validateExpression('entity-score', expr)).toBeNull()
+  })
+
+  it('entity-score (related) keeps a provided targetKind', () => {
+    const form: RuleForm = {
+      type: 'entity-score',
+      target: 'related',
+      scoreScope: 'overall',
+      scorecardId: '',
+      relationType: 'depends-on',
+      direction: 'either',
+      targetKind: 'service',
+      aggregate: 'max',
+      op: 'lt',
+      value: '50',
+    }
+    const expr = buildExpression(form)
+    expect(expr).toMatchObject({ targetKind: 'service' })
+    expect(validateExpression('entity-score', expr)).toBeNull()
   })
 })
 
@@ -136,6 +226,144 @@ describe('validateExpression rejects malformed expressions', () => {
   it('rejects an unknown rule type', () => {
     expect(validateExpression('mystery', { foo: 1 })).toMatch(/unknown rule type/i)
   })
+
+  it('entity-score: bad target and bad scoreScope', () => {
+    expect(
+      validateExpression('entity-score', { target: 'nope', scoreScope: 'overall', aggregate: 'min', op: 'gte', value: 50 }),
+    ).toMatch(/target/i)
+    expect(
+      validateExpression('entity-score', { target: 'self', scoreScope: 'nope', aggregate: 'min', op: 'gte', value: 50 }),
+    ).toMatch(/scoreScope/i)
+  })
+
+  it('entity-score: scoreScope "scorecard" requires a scorecardId', () => {
+    expect(
+      validateExpression('entity-score', {
+        target: 'self',
+        scoreScope: 'scorecard',
+        aggregate: 'min',
+        op: 'gte',
+        value: 50,
+      }),
+    ).toMatch(/scorecard is required/i)
+    expect(
+      validateExpression('entity-score', {
+        target: 'self',
+        scoreScope: 'scorecard',
+        scorecardId: '  ',
+        aggregate: 'min',
+        op: 'gte',
+        value: 50,
+      }),
+    ).toMatch(/scorecard is required/i)
+  })
+
+  it('entity-score: target "related" requires a known relationType', () => {
+    expect(
+      validateExpression('entity-score', {
+        target: 'related',
+        scoreScope: 'overall',
+        aggregate: 'min',
+        op: 'gte',
+        value: 50,
+      }),
+    ).toMatch(/relation type is required/i)
+    expect(
+      validateExpression('entity-score', {
+        target: 'related',
+        scoreScope: 'overall',
+        relationType: 'not-a-rel',
+        aggregate: 'min',
+        op: 'gte',
+        value: 50,
+      }),
+    ).toMatch(/unknown relation type/i)
+  })
+
+  it('entity-score: unknown targetKind and bad direction are rejected', () => {
+    expect(
+      validateExpression('entity-score', {
+        target: 'related',
+        scoreScope: 'overall',
+        relationType: 'owns',
+        targetKind: 'goblin',
+        aggregate: 'min',
+        op: 'gte',
+        value: 50,
+      }),
+    ).toMatch(/target kind/i)
+    expect(
+      validateExpression('entity-score', {
+        target: 'related',
+        scoreScope: 'overall',
+        relationType: 'owns',
+        direction: 'sideways',
+        aggregate: 'min',
+        op: 'gte',
+        value: 50,
+      }),
+    ).toMatch(/direction/i)
+  })
+
+  it('entity-score: bad aggregate and bad op are rejected', () => {
+    expect(
+      validateExpression('entity-score', {
+        target: 'self',
+        scoreScope: 'overall',
+        aggregate: 'median',
+        op: 'gte',
+        value: 50,
+      }),
+    ).toMatch(/aggregate/i)
+    expect(
+      validateExpression('entity-score', {
+        target: 'self',
+        scoreScope: 'overall',
+        aggregate: 'min',
+        op: 'bogus',
+        value: 50,
+      }),
+    ).toMatch(/op must be/i)
+  })
+
+  it('entity-score: value must be numeric and within 0-100', () => {
+    expect(
+      validateExpression('entity-score', {
+        target: 'self',
+        scoreScope: 'overall',
+        aggregate: 'min',
+        op: 'gte',
+        value: 'abc',
+      }),
+    ).toMatch(/0 and 100/i)
+    expect(
+      validateExpression('entity-score', {
+        target: 'self',
+        scoreScope: 'overall',
+        aggregate: 'min',
+        op: 'gte',
+        value: -1,
+      }),
+    ).toMatch(/0 and 100/i)
+    expect(
+      validateExpression('entity-score', {
+        target: 'self',
+        scoreScope: 'overall',
+        aggregate: 'min',
+        op: 'gte',
+        value: 101,
+      }),
+    ).toMatch(/0 and 100/i)
+    expect(
+      validateExpression('entity-score', {
+        target: 'self',
+        scoreScope: 'overall',
+        aggregate: 'min',
+        op: 'gte',
+        value: '',
+      }),
+    ).toMatch(/0 and 100/i)
+  })
 })
 
 describe('parseExpression hydrates builder state for editing', () => {
@@ -150,6 +378,40 @@ describe('parseExpression hydrates builder state for editing', () => {
     const form = parseExpression('relation-check', null)
     expect(form.type).toBe('relation-check')
     expect(validateExpression('relation-check', buildExpression(form))).toBeNull()
+  })
+
+  it('round-trips an entity-score expression back to builder state', () => {
+    const stored = {
+      target: 'related',
+      scoreScope: 'scorecard',
+      scorecardId: 'sc-9',
+      relationType: 'depends-on',
+      direction: 'to',
+      targetKind: 'api',
+      aggregate: 'avg',
+      op: 'lte',
+      value: 65,
+    }
+    const form = parseExpression('entity-score', stored)
+    expect(form).toEqual({
+      type: 'entity-score',
+      target: 'related',
+      scoreScope: 'scorecard',
+      scorecardId: 'sc-9',
+      relationType: 'depends-on',
+      direction: 'to',
+      targetKind: 'api',
+      aggregate: 'avg',
+      op: 'lte',
+      value: '65',
+    })
+    expect(validateExpression('entity-score', buildExpression(form))).toBeNull()
+  })
+
+  it('entity-score falls back to safe defaults for a missing expression', () => {
+    const form = parseExpression('entity-score', null)
+    expect(form.type).toBe('entity-score')
+    expect(validateExpression('entity-score', buildExpression(form))).toBeNull()
   })
 })
 
