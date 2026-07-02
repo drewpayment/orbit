@@ -80,6 +80,7 @@ import {
   ScorecardRules,
   ScorecardRuleResults,
   EntityScores,
+  ScoreSnapshots,
   Initiatives,
   InitiativeActionItems,
 } from './collections/scorecards'
@@ -170,6 +171,7 @@ export default buildConfig({
     ScorecardRules,
     ScorecardRuleResults,
     EntityScores,
+    ScoreSnapshots,
     Initiatives,
     InitiativeActionItems,
     // Self-Service actions (IDP refocus P3)
