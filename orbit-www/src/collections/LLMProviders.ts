@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { getMemberWorkspaceIds, isWorkspaceAdminOrOwner, getWorkspaceMembership, isPlatformAdmin } from '@/lib/access/workspace-access'
 
 /**
  * LLMProviders Collection
@@ -23,33 +24,20 @@ export const LLMProviders: CollectionConfig = {
   access: {
     read: async ({ req: { user, payload } }) => {
       if (!user) return false
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [{ user: { equals: user.id } }, { status: { equals: 'active' } }],
-        },
-        limit: 100,
-      })
-      const workspaceIds = members.docs.map((m) =>
-        typeof m.workspace === 'string' ? m.workspace : m.workspace.id,
-      )
+      const betterAuthId = user.betterAuthId
+      const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
       return { workspace: { in: workspaceIds } }
     },
     create: async ({ req: { user, payload }, data }) => {
       if (!user) return false
-      if (!data?.workspace) return true
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: data.workspace } },
-            { user: { equals: user.id } },
-            { role: { in: ['owner', 'admin'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-      })
-      return members.docs.length > 0
+      // A null workspace means global/platform-level provider config —
+      // restricted to platform admins, not every authenticated user.
+      if (!data?.workspace) return isPlatformAdmin(user)
+      const betterAuthId = user.betterAuthId
+      if (!betterAuthId) return false
+      const workspaceId = typeof data.workspace === 'string' ? data.workspace : data.workspace?.id
+      if (!workspaceId) return false
+      return isWorkspaceAdminOrOwner(payload, betterAuthId, workspaceId)
     },
     update: async ({ req: { user, payload }, id }) => {
       if (!user || !id) return false
@@ -57,19 +45,13 @@ export const LLMProviders: CollectionConfig = {
         const doc = await payload.findByID({
           collection: 'llm-providers',
           id: id as string,
+          overrideAccess: true,
         })
-        const members = await payload.find({
-          collection: 'workspace-members',
-          where: {
-            and: [
-              { workspace: { equals: doc.workspace } },
-              { user: { equals: user.id } },
-              { role: { in: ['owner', 'admin'] } },
-              { status: { equals: 'active' } },
-            ],
-          },
-        })
-        return members.docs.length > 0
+        const betterAuthId = user.betterAuthId
+        if (!betterAuthId) return false
+        const workspaceId = typeof doc.workspace === 'string' ? doc.workspace : doc.workspace?.id
+        if (!workspaceId) return false
+        return isWorkspaceAdminOrOwner(payload, betterAuthId, workspaceId)
       } catch {
         return false
       }
@@ -80,19 +62,14 @@ export const LLMProviders: CollectionConfig = {
         const doc = await payload.findByID({
           collection: 'llm-providers',
           id: id as string,
+          overrideAccess: true,
         })
-        const members = await payload.find({
-          collection: 'workspace-members',
-          where: {
-            and: [
-              { workspace: { equals: doc.workspace } },
-              { user: { equals: user.id } },
-              { role: { equals: 'owner' } },
-              { status: { equals: 'active' } },
-            ],
-          },
-        })
-        return members.docs.length > 0
+        const betterAuthId = user.betterAuthId
+        if (!betterAuthId) return false
+        const workspaceId = typeof doc.workspace === 'string' ? doc.workspace : doc.workspace?.id
+        if (!workspaceId) return false
+        const membership = await getWorkspaceMembership(payload, betterAuthId, workspaceId)
+        return membership?.role === 'owner'
       } catch {
         return false
       }

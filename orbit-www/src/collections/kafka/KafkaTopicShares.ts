@@ -1,4 +1,5 @@
-import type { CollectionConfig, Where } from 'payload'
+import type { CollectionConfig } from 'payload'
+import { docWorkspaceMutate, manageCreate, workspaceScopedRead } from '@/lib/access/collection-access'
 
 export const KafkaTopicShares: CollectionConfig = {
   slug: 'kafka-topic-shares',
@@ -10,108 +11,12 @@ export const KafkaTopicShares: CollectionConfig = {
   },
   access: {
     // Read: Users can see shares involving their workspaces (as owner or target)
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-      if (user.collection === 'users') return true
-
-      const memberships = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          user: { equals: user.id },
-          status: { equals: 'active' },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-
-      const workspaceIds = memberships.docs.map(m =>
-        String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
-      )
-
-      return {
-        or: [
-          { ownerWorkspace: { in: workspaceIds } },
-          { targetWorkspace: { in: workspaceIds } },
-        ],
-      } as Where
-    },
-    // Create: Only workspace admins can create shares (from owner workspace)
-    create: async ({ req: { user, payload }, data }) => {
-      if (!user) return false
-      if (user.collection === 'users') return true
-
-      if (!data?.ownerWorkspace) return false
-
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: data.ownerWorkspace } },
-            { user: { equals: user.id } },
-            { role: { in: ['owner', 'admin'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
-
-      return members.docs.length > 0
-    },
-    // Update: Only owner workspace admins can update shares
-    update: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-      if (user.collection === 'users') return true
-
-      const share = await payload.findByID({
-        collection: 'kafka-topic-shares',
-        id,
-        overrideAccess: true,
-      })
-
-      const workspaceId = typeof share.ownerWorkspace === 'string' ? share.ownerWorkspace : share.ownerWorkspace.id
-
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: user.id } },
-            { role: { in: ['owner', 'admin'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
-
-      return members.docs.length > 0
-    },
-    delete: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-      if (user.collection === 'users') return true
-
-      const share = await payload.findByID({
-        collection: 'kafka-topic-shares',
-        id,
-        overrideAccess: true,
-      })
-
-      const workspaceId = typeof share.ownerWorkspace === 'string' ? share.ownerWorkspace : share.ownerWorkspace.id
-
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: user.id } },
-            { role: { in: ['owner', 'admin'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
-
-      return members.docs.length > 0
-    },
+    read: workspaceScopedRead({ fields: ['ownerWorkspace', 'targetWorkspace'] }),
+    // Create: Only owner-workspace admins can create shares (from owner workspace)
+    create: manageCreate(['owner', 'admin'], { field: 'ownerWorkspace' }),
+    // Update: Only owner-workspace admins can update shares
+    update: docWorkspaceMutate('kafka-topic-shares', ['owner', 'admin'], { field: 'ownerWorkspace' }),
+    delete: docWorkspaceMutate('kafka-topic-shares', ['owner', 'admin'], { field: 'ownerWorkspace' }),
   },
   fields: [
     {

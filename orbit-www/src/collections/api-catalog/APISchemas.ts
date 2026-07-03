@@ -1,4 +1,11 @@
 import type { CollectionConfig, Where } from 'payload'
+import { memberCreate } from '@/lib/access/collection-access'
+import {
+  isPlatformAdmin,
+  isWorkspaceMember,
+  isWorkspaceAdminOrOwner,
+  getMemberWorkspaceIds,
+} from '@/lib/access/workspace-access'
 
 export const APISchemas: CollectionConfig = {
   slug: 'api-schemas',
@@ -18,25 +25,17 @@ export const APISchemas: CollectionConfig = {
         } as Where
       }
 
-      // Payload admin users can see all
-      if (user.collection === 'users') return true
+      // Platform admin can see all
+      if (isPlatformAdmin(user)) return true
 
-      // Get user's workspace memberships
-      const memberships = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          user: { equals: user.id },
-          status: { equals: 'active' },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
+      // Get user's workspace memberships (keyed on the Better-Auth id)
+      const betterAuthId = user.betterAuthId
+      const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
 
-      const workspaceIds = memberships.docs.map(m =>
-        String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
-      )
-
-      // Can see: public APIs, workspace APIs in their workspaces, private APIs they created
+      // Can see: public APIs, workspace APIs in their workspaces, private APIs
+      // they created. `createdBy` is a relationship to `users`, so comparing
+      // against the Payload `user.id` here is correct (unlike workspace-members
+      // lookups, which store the Better-Auth id).
       return {
         or: [
           { visibility: { equals: 'public' } },
@@ -55,18 +54,21 @@ export const APISchemas: CollectionConfig = {
         ],
       } as Where
     },
-    create: ({ req: { user } }) => !!user,
+    // Create: any active member of the target `data.workspace`.
+    create: memberCreate(),
     update: async ({ req: { user, payload }, id }) => {
       if (!user || !id) return false
-      if (user.collection === 'users') return true
+      if (isPlatformAdmin(user)) return true
 
       const schema = await payload.findByID({
         collection: 'api-schemas',
         id,
+        depth: 0,
         overrideAccess: true,
       })
 
-      // Creator can always edit
+      // Creator can always edit (createdBy is a relationship to `users`, so
+      // user.id is the correct comparison here).
       const createdById = typeof schema.createdBy === 'string'
         ? schema.createdBy
         : schema.createdBy?.id
@@ -74,35 +76,27 @@ export const APISchemas: CollectionConfig = {
 
       const workspaceId = typeof schema.workspace === 'string'
         ? schema.workspace
-        : schema.workspace.id
+        : schema.workspace?.id
+      if (!workspaceId) return false
 
       // Workspace owners/admins/members can edit
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: user.id } },
-            { role: { in: ['owner', 'admin', 'member'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
-
-      return members.docs.length > 0
+      const betterAuthId = user.betterAuthId
+      if (!betterAuthId) return false
+      return isWorkspaceMember(payload, betterAuthId, workspaceId)
     },
     delete: async ({ req: { user, payload }, id }) => {
       if (!user || !id) return false
-      if (user.collection === 'users') return true
+      if (isPlatformAdmin(user)) return true
 
       const schema = await payload.findByID({
         collection: 'api-schemas',
         id,
+        depth: 0,
         overrideAccess: true,
       })
 
-      // Creator can delete
+      // Creator can delete (createdBy is a relationship to `users`, so user.id
+      // is the correct comparison here).
       const createdById = typeof schema.createdBy === 'string'
         ? schema.createdBy
         : schema.createdBy?.id
@@ -110,23 +104,13 @@ export const APISchemas: CollectionConfig = {
 
       const workspaceId = typeof schema.workspace === 'string'
         ? schema.workspace
-        : schema.workspace.id
+        : schema.workspace?.id
+      if (!workspaceId) return false
 
       // Only workspace owners/admins can delete
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: user.id } },
-            { role: { in: ['owner', 'admin'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
-
-      return members.docs.length > 0
+      const betterAuthId = user.betterAuthId
+      if (!betterAuthId) return false
+      return isWorkspaceAdminOrOwner(payload, betterAuthId, workspaceId)
     },
   },
   fields: [

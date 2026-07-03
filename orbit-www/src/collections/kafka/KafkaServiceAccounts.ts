@@ -1,5 +1,63 @@
-import type { CollectionConfig, Where } from 'payload'
+import type { Access, CollectionConfig, Where } from 'payload'
 import crypto from 'crypto'
+import { docWorkspaceMutate, manageCreate } from '@/lib/access/collection-access'
+import { getMemberWorkspaceIds, isPlatformAdmin } from '@/lib/access/workspace-access'
+
+/** Normalize a relationship value (`string` id or populated `{ id }`) to its id. */
+function relationId(value: unknown): string | null {
+  if (!value) return null
+  if (typeof value === 'string') return value
+  if (typeof value === 'object' && 'id' in (value as Record<string, unknown>)) {
+    const id = (value as { id?: unknown }).id
+    return typeof id === 'string' ? id : null
+  }
+  return null
+}
+
+// Read: no direct workspace relation — resolved indirectly via the parent
+// `application`. Users see service accounts belonging to applications in
+// their member workspaces.
+const readServiceAccountsForMemberWorkspaces: Access = async ({ req: { user, payload } }) => {
+  if (!user) return false
+  if (isPlatformAdmin(user)) return true
+
+  const betterAuthId = typeof user.betterAuthId === 'string' ? user.betterAuthId : null
+  const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
+
+  // Find applications in user's workspaces
+  const apps = await payload.find({
+    collection: 'kafka-applications',
+    where: {
+      workspace: { in: workspaceIds },
+    },
+    limit: 1000,
+    overrideAccess: true,
+  })
+
+  const appIds = apps.docs.map((a) => a.id)
+
+  return {
+    application: { in: appIds },
+  } as Where
+}
+
+// Resolves the workspace owning the `application` (or `virtualCluster`)
+// referenced on the incoming data/doc, for create/update gating.
+async function resolveServiceAccountWorkspace(
+  payload: import('payload').Payload,
+  appOrClusterRef: unknown,
+): Promise<string | null> {
+  const appId = relationId(appOrClusterRef)
+  if (!appId) return null
+  const app = await payload.findByID({
+    collection: 'kafka-applications',
+    id: appId,
+    depth: 0,
+    overrideAccess: true,
+  })
+  if (!app) return null
+  return relationId(app.workspace)
+}
 
 export const KafkaServiceAccounts: CollectionConfig = {
   slug: 'kafka-service-accounts',
@@ -10,87 +68,21 @@ export const KafkaServiceAccounts: CollectionConfig = {
     description: 'Service accounts for Kafka authentication',
   },
   access: {
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-      if (user.collection !== 'users') return false
-
-      const memberships = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          user: { equals: user.id },
-          status: { equals: 'active' },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-
-      const workspaceIds = memberships.docs.map((m) =>
-        String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
-      )
-
-      // Find applications in user's workspaces
-      const apps = await payload.find({
-        collection: 'kafka-applications',
-        where: {
-          workspace: { in: workspaceIds },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-
-      const appIds = apps.docs.map((a) => a.id)
-
-      return {
-        application: { in: appIds },
-      } as Where
-    },
-    create: ({ req: { user } }) => !!user && user.collection === 'users',
-    update: async ({ req: { user, payload }, id }) => {
-      if (!user || !id || user.collection !== 'users') return false
-
-      const serviceAccount = await payload.findByID({
-        collection: 'kafka-service-accounts',
-        id: id as string,
-        overrideAccess: true,
-      })
-
-      if (!serviceAccount) return false
-
-      const appId = typeof serviceAccount.application === 'string'
-        ? serviceAccount.application
-        : serviceAccount.application.id
-
-      const app = await payload.findByID({
-        collection: 'kafka-applications',
-        id: appId,
-        overrideAccess: true,
-      })
-
-      if (!app) return false
-
-      const workspaceId = typeof app.workspace === 'string' ? app.workspace : app.workspace.id
-
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: user.id } },
-            { role: { in: ['owner', 'admin'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        limit: 1,
-        overrideAccess: true,
-      })
-
-      return members.docs.length > 0
-    },
-    delete: async ({ req: { user } }) => {
-      // Soft delete via revoke instead of hard delete
-      if (!user || user.collection !== 'users') return false
-      return false
-    },
+    read: readServiceAccountsForMemberWorkspaces,
+    // Owner/admin of the workspace that owns the referenced application
+    create: manageCreate(['owner', 'admin'], {
+      field: 'application',
+      resolveWorkspace: ({ data, payload }) =>
+        resolveServiceAccountWorkspace(payload, (data as Record<string, unknown> | undefined)?.application),
+    }),
+    // Owner/admin of the workspace that owns the service account's application
+    update: docWorkspaceMutate('kafka-service-accounts', ['owner', 'admin'], {
+      field: 'application',
+      resolveWorkspace: ({ doc, payload }) =>
+        resolveServiceAccountWorkspace(payload, (doc as Record<string, unknown> | undefined)?.application),
+    }),
+    // Soft delete via revoke instead of hard delete
+    delete: () => false,
   },
   fields: [
     {

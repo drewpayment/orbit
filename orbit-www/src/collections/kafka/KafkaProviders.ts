@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { adminOnly } from '@/lib/access/collection-access'
 
 export const KafkaProviders: CollectionConfig = {
   slug: 'kafka-providers',
@@ -9,12 +10,15 @@ export const KafkaProviders: CollectionConfig = {
     description: 'System-managed Kafka provider definitions',
   },
   access: {
-    // Everyone can read provider definitions
-    read: () => true,
-    // Only admins can manage providers
-    create: ({ req: { user } }) => user?.collection === 'users',
-    update: ({ req: { user } }) => user?.collection === 'users',
-    delete: ({ req: { user } }) => user?.collection === 'users',
+    // Any authenticated user can read provider definitions — non-sensitive,
+    // enum-like reference data (adapter names/capabilities), not
+    // workspace-scoped, so no membership check is needed. Not public: an
+    // internal IDP has no legitimate anonymous consumer (UAC-4).
+    read: ({ req: { user } }) => !!user,
+    // Only platform admins can manage providers
+    create: adminOnly,
+    update: adminOnly,
+    delete: adminOnly,
   },
   fields: [
     {

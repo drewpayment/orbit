@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { adminOnly } from '@/lib/access/collection-access'
 
 export const KafkaTopicSharePolicies: CollectionConfig = {
   slug: 'kafka-topic-share-policies',
@@ -9,23 +10,12 @@ export const KafkaTopicSharePolicies: CollectionConfig = {
     description: 'Policies controlling topic sharing behavior',
   },
   access: {
-    // Platform admins manage policies (can be expanded for workspace-level)
-    read: ({ req: { user } }) => {
-      if (!user) return false
-      return user.collection === 'users'
-    },
-    create: ({ req: { user } }) => {
-      if (!user) return false
-      return user.collection === 'users'
-    },
-    update: ({ req: { user } }) => {
-      if (!user) return false
-      return user.collection === 'users'
-    },
-    delete: ({ req: { user } }) => {
-      if (!user) return false
-      return user.collection === 'users'
-    },
+    // Platform admins manage policies. The `workspace` field is not yet used
+    // to scope access — workspace-scoping these policies is a follow-up.
+    read: adminOnly,
+    create: adminOnly,
+    update: adminOnly,
+    delete: adminOnly,
   },
   fields: [
     {

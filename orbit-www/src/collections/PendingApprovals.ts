@@ -1,4 +1,5 @@
 import type { CollectionConfig, Where } from 'payload'
+import { getMemberWorkspaceIds } from '@/lib/access/workspace-access'
 
 /**
  * PendingApprovals Collection (Spike 7 commit γ)
@@ -37,17 +38,8 @@ export const PendingApprovals: CollectionConfig = {
       if (!user) return false
       // Platform admins see everything (they own the queue page).
       if (user.role === 'super_admin' || user.role === 'admin') return true
-      const memberships = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [{ user: { equals: user.id } }, { status: { equals: 'active' } }],
-        },
-        limit: 100,
-        overrideAccess: true,
-      })
-      const workspaceIds = memberships.docs.map((m) =>
-        typeof m.workspace === 'string' ? m.workspace : m.workspace.id,
-      )
+      const betterAuthId = user.betterAuthId
+      const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
       if (workspaceIds.length === 0) {
         const denyAll: Where = { id: { equals: '__none__' } }
         return denyAll

@@ -1,4 +1,6 @@
 import type { CollectionConfig, Where } from 'payload'
+import { getMemberWorkspaceIds, isWorkspaceMember, isWorkspaceAdminOrOwner } from '@/lib/access/workspace-access'
+import { memberCreate } from '@/lib/access/collection-access'
 
 export const Launches: CollectionConfig = {
   slug: 'launches',
@@ -17,27 +19,16 @@ export const Launches: CollectionConfig = {
       if (role === 'super_admin' || role === 'admin') return true
 
       // Get user's workspace memberships
-      const memberships = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          user: { equals: user.id },
-          status: { equals: 'active' },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-
-      const workspaceIds = memberships.docs.map(m =>
-        String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
-      )
+      const betterAuthId = user.betterAuthId
+      const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
 
       // Return query constraint: launches in user's workspaces
       return {
         workspace: { in: workspaceIds },
       } as Where
     },
-    // Create: Any authenticated user
-    create: ({ req: { user } }) => !!user,
+    // Create: active member of the target `data.workspace` (was `!!user` — gap closed)
+    create: memberCreate(),
     // Update: Workspace members with owner, admin, or member role
     update: async ({ req: { user, payload }, id }) => {
       if (!user || !id) return false
@@ -52,20 +43,11 @@ export const Launches: CollectionConfig = {
         ? launch.workspace
         : launch.workspace.id
 
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: user.id } },
-            { role: { in: ['owner', 'admin', 'member'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
+      const betterAuthId = user.betterAuthId
+      if (!betterAuthId) return false
 
-      return members.docs.length > 0
+      // owner/admin/member is every active role, i.e. any active member
+      return isWorkspaceMember(payload, betterAuthId, workspaceId)
     },
     // Delete: Workspace owners and admins only
     delete: async ({ req: { user, payload }, id }) => {
@@ -81,20 +63,10 @@ export const Launches: CollectionConfig = {
         ? launch.workspace
         : launch.workspace.id
 
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: user.id } },
-            { role: { in: ['owner', 'admin'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
+      const betterAuthId = user.betterAuthId
+      if (!betterAuthId) return false
 
-      return members.docs.length > 0
+      return isWorkspaceAdminOrOwner(payload, betterAuthId, workspaceId)
     },
   },
   fields: [

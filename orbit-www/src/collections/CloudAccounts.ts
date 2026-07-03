@@ -1,5 +1,6 @@
 import type { CollectionConfig, Where } from 'payload'
 import { isAdmin } from '../access/isAdmin'
+import { getMemberWorkspaceIds } from '@/lib/access/workspace-access'
 
 export const CloudAccounts: CollectionConfig = {
   slug: 'cloud-accounts',
@@ -18,19 +19,8 @@ export const CloudAccounts: CollectionConfig = {
       if (role === 'super_admin' || role === 'admin') return true
 
       // Get user's workspace memberships
-      const memberships = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          user: { equals: user.id },
-          status: { equals: 'active' },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-
-      const workspaceIds = memberships.docs.map(m =>
-        String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
-      )
+      const betterAuthId = user.betterAuthId
+      const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
 
       // Return query constraint: cloud accounts linked to user's workspaces
       return {

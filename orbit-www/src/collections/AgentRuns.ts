@@ -1,4 +1,6 @@
 import type { CollectionConfig } from 'payload'
+import { getMemberWorkspaceIds } from '@/lib/access/workspace-access'
+import { memberCreate, docWorkspaceMutate } from '@/lib/access/collection-access'
 
 /**
  * AgentRuns Collection
@@ -22,22 +24,16 @@ export const AgentRuns: CollectionConfig = {
   access: {
     read: async ({ req: { user, payload } }) => {
       if (!user) return false
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [{ user: { equals: user.id } }, { status: { equals: 'active' } }],
-        },
-        limit: 100,
-      })
-      const workspaceIds = members.docs.map((m) =>
-        typeof m.workspace === 'string' ? m.workspace : m.workspace.id,
-      )
+      const betterAuthId = user.betterAuthId
+      const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
       return { workspace: { in: workspaceIds } }
     },
-    // Runs are created/updated by the gRPC AgentService (server-side). End
-    // users may not directly mutate runs.
-    create: ({ req: { user } }) => Boolean(user),
-    update: ({ req: { user } }) => Boolean(user),
+    // Runs are created/updated server-side (infra-agent server action, the
+    // internal agent-runs API route) with overrideAccess: true — verified by
+    // grepping every `collection: 'agent-runs'` write site. These rules only
+    // gate direct end-user access via Payload's REST/GraphQL API.
+    create: memberCreate(),
+    update: docWorkspaceMutate('agent-runs', ['owner', 'admin', 'member']),
     delete: () => false,
   },
   fields: [

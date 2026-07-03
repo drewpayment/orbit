@@ -1,5 +1,6 @@
-import type { CollectionConfig, Where } from 'payload'
+import type { CollectionConfig } from 'payload'
 import { createHash } from 'crypto'
+import { workspaceScopedRead, memberCreate, adminOnly } from '@/lib/access/collection-access'
 
 export const APISchemaVersions: CollectionConfig = {
   slug: 'api-schema-versions',
@@ -10,33 +11,16 @@ export const APISchemaVersions: CollectionConfig = {
     description: 'Version history for API schemas',
   },
   access: {
-    // Read: Inherit from parent schema (via workspace)
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-      if (user.collection === 'users') return true
-
-      const memberships = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          user: { equals: user.id },
-          status: { equals: 'active' },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-
-      const workspaceIds = memberships.docs.map(m =>
-        String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
-      )
-
-      return {
-        workspace: { in: workspaceIds },
-      } as Where
-    },
-    // Only allow create/update/delete for authenticated users (managed via schema hooks)
-    create: ({ req: { user } }) => !!user,
-    update: ({ req: { user } }) => user?.collection === 'users',
-    delete: ({ req: { user } }) => user?.collection === 'users',
+    // Read: denormalized `workspace` field — platform admin sees all, others
+    // scoped to their active workspace memberships.
+    read: workspaceScopedRead(),
+    // Create: any active member of the target `data.workspace`.
+    create: memberCreate(),
+    // Update/delete: versions are immutable snapshots — platform admin only
+    // (the prior "Payload auth collection" check was intended as a
+    // system-only gate, not a universal bypass for every logged-in user).
+    update: adminOnly,
+    delete: adminOnly,
   },
   fields: [
     {

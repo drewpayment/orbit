@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { adminOnly } from '@/lib/access/collection-access'
 
 export const KafkaEnvironmentMappings: CollectionConfig = {
   slug: 'kafka-environment-mappings',
@@ -9,11 +10,11 @@ export const KafkaEnvironmentMappings: CollectionConfig = {
     description: 'Maps environments to Kafka clusters',
   },
   access: {
-    // Only admins can manage environment mappings
-    read: ({ req: { user } }) => user?.collection === 'users',
-    create: ({ req: { user } }) => user?.collection === 'users',
-    update: ({ req: { user } }) => user?.collection === 'users',
-    delete: ({ req: { user } }) => user?.collection === 'users',
+    // Only platform admins can manage environment mappings
+    read: adminOnly,
+    create: adminOnly,
+    update: adminOnly,
+    delete: adminOnly,
   },
   fields: [
     {

@@ -1,4 +1,5 @@
-import type { CollectionConfig, Where } from 'payload'
+import type { CollectionConfig } from 'payload'
+import { adminOnly, workspaceScopedRead } from '@/lib/access/collection-access'
 
 export const KafkaLineageSnapshot: CollectionConfig = {
   slug: 'kafka-lineage-snapshots',
@@ -10,32 +11,11 @@ export const KafkaLineageSnapshot: CollectionConfig = {
   },
   access: {
     // Read: Users can see snapshots for topics in their workspaces
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-      if (user.collection === 'users') return true
-
-      const memberships = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          user: { equals: user.id },
-          status: { equals: 'active' },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-
-      const workspaceIds = memberships.docs.map(m =>
-        String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
-      )
-
-      return {
-        workspace: { in: workspaceIds },
-      } as Where
-    },
+    read: workspaceScopedRead(),
     // Snapshots are system-generated only
-    create: ({ req: { user } }) => user?.collection === 'users',
-    update: ({ req: { user } }) => user?.collection === 'users',
-    delete: ({ req: { user } }) => user?.collection === 'users',
+    create: adminOnly,
+    update: adminOnly,
+    delete: adminOnly,
   },
   fields: [
     {

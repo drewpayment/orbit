@@ -1,4 +1,5 @@
-import type { CollectionConfig, Where } from 'payload'
+import type { CollectionConfig } from 'payload'
+import { adminOnly, workspaceScopedRead } from '@/lib/access/collection-access'
 
 export const KafkaLineageEdge: CollectionConfig = {
   slug: 'kafka-lineage-edges',
@@ -9,38 +10,13 @@ export const KafkaLineageEdge: CollectionConfig = {
     description: 'Aggregated data flow relationships between applications and topics',
   },
   access: {
-    // Read: Users can see edges for topics in their workspaces
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-      if (user.collection === 'users') return true
-
-      const memberships = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          user: { equals: user.id },
-          status: { equals: 'active' },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-
-      const workspaceIds = memberships.docs.map(m =>
-        String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
-      )
-
-      // User can see edges where they own the topic (targetWorkspace)
-      // or where their application is the source (sourceWorkspace)
-      return {
-        or: [
-          { targetWorkspace: { in: workspaceIds } },
-          { sourceWorkspace: { in: workspaceIds } },
-        ],
-      } as Where
-    },
+    // Read: Users can see edges where they own the topic (targetWorkspace)
+    // or where their application is the source (sourceWorkspace)
+    read: workspaceScopedRead({ fields: ['sourceWorkspace', 'targetWorkspace'] }),
     // Lineage edges are system-generated only
-    create: ({ req: { user } }) => user?.collection === 'users',
-    update: ({ req: { user } }) => user?.collection === 'users',
-    delete: ({ req: { user } }) => user?.collection === 'users',
+    create: adminOnly,
+    update: adminOnly,
+    delete: adminOnly,
   },
   fields: [
     // Source fields (who is producing/consuming)
