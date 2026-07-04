@@ -1,6 +1,6 @@
 # Orbit Development Makefile
 
-.PHONY: help dev dev-docker dev-local test test-go test-frontend lint lint-go lint-frontend build clean
+.PHONY: help dev dev-docker dev-local dev-local-full test test-go test-frontend lint lint-go lint-frontend build clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
@@ -10,19 +10,17 @@ dev: dev-docker ## Start complete development environment in Docker
 dev-docker: ## Start all services in Docker (recommended)
 	@./scripts/dev-start.sh
 
-dev-local: ## Start infrastructure in Docker, run orbit-www locally
-	@echo "🚀 Starting infrastructure and application services..."
+dev-local: ## Start core infrastructure in Docker, run orbit-www locally
+	@echo "🚀 Starting core infrastructure and application services..."
 	docker compose up -d \
 		mongo postgres redis \
 		temporal-postgresql temporal-elasticsearch temporal-server temporal-ui temporal-worker \
 		redpanda redpanda-console \
-		minio minio-init orbit-registry \
 		bifrost traefik \
-		repository-service kafka-service build-service buildkit \
-		launches-worker-azure orbit-automations-worker \
-		prometheus
+		repository-service kafka-service \
+		orbit-automations-worker
 	@echo ""
-	@echo "✅ All services started!"
+	@echo "✅ Core services started!"
 	@echo ""
 	@echo "📝 To start orbit-www locally:"
 	@echo "  cd orbit-www && bun run dev"
@@ -31,6 +29,20 @@ dev-local: ## Start infrastructure in Docker, run orbit-www locally
 	@echo "  Frontend:          http://localhost:3000  (run locally)"
 	@echo "  Temporal UI:       http://localhost:8080"
 	@echo "  Redpanda Console:  http://localhost:8083"
+	@echo ""
+	@echo "ℹ️  Launches/build stack (MinIO, registry, BuildKit, build-service,"
+	@echo "   launches-worker-azure) and Prometheus are not started."
+	@echo "   Testing launches or image builds? Run: make dev-local-full"
+	@echo ""
+
+dev-local-full: dev-local ## dev-local plus the launches/build stack and Prometheus
+	@echo "🚀 Starting launches/build stack..."
+	docker compose up -d \
+		minio minio-init orbit-registry \
+		buildkit build-service launches-worker-azure \
+		prometheus
+	@echo ""
+	@echo "✅ Launches/build stack started!"
 	@echo "  MinIO Console:     http://localhost:9001"
 	@echo "  Prometheus:        http://localhost:9090"
 	@echo ""
