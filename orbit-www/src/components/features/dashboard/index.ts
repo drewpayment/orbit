@@ -2,6 +2,12 @@ export { DashboardGreeting } from './DashboardGreeting'
 export { DashboardHero } from './DashboardHero'
 export { DashboardSection } from './DashboardSection'
 export { DashboardStatsRow } from './DashboardStatsRow'
+export { DashboardScorecardsCard } from './DashboardScorecardsCard'
+export type {
+  DashboardScorecardsCardReport,
+  ScorecardsTrendPoint,
+  ScorecardsWorstGroup,
+} from './DashboardScorecardsCard'
 export { DashboardWorkspacesCard } from './DashboardWorkspacesCard'
 export type { WorkspaceRowMeta } from './DashboardWorkspacesCard'
 export { DashboardAppHealthCard } from './DashboardAppHealthCard'

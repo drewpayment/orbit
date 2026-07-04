@@ -8,12 +8,13 @@ import { getPayloadClient, getSession, getUserWorkspaceMemberships } from '@/lib
 import {
   DashboardGreeting,
   DashboardStatsRow,
+  DashboardScorecardsCard,
   DashboardWorkspacesCard,
-  DashboardAppHealthCard,
   DashboardActivityFeed,
   DashboardQuickActions,
 } from '@/components/features/dashboard'
 import type { Activity } from '@/components/features/dashboard'
+import { getScorecardReport } from '@/app/(frontend)/scorecards/reports/actions'
 
 export default async function DashboardPage() {
   // Phase 1: Get payload client + user session
@@ -35,18 +36,24 @@ export default async function DashboardPage() {
   const hasWorkspaces = workspaceIds.length > 0
   const workspaceFilter = { workspace: { in: workspaceIds } }
 
+  // Standards posture report — self-scopes to the session user's memberships and
+  // returns an empty report for a workspace-less user, so it runs unconditionally
+  // in parallel with the payload queries below.
+  const scorecardReportPromise = getScorecardReport(30)
+
   const [
     appsResult,
     kafkaTopicCount,
     virtualClusterCount,
-    apiSchemaCount,
-    publishedApiCount,
+    openActionItemCount,
+    activeInitiativeCount,
+    pendingApprovalCount,
     recentTopics,
     recentSchemas,
     knowledgeSpacesResult,
   ] = hasWorkspaces
     ? await Promise.all([
-        // Apps with status (used for stats + health card + activity)
+        // Apps with status (used for activity feed + workspaces card)
         payload.find({
           collection: 'apps',
           where: workspaceFilter,
@@ -66,15 +73,23 @@ export default async function DashboardPage() {
           where: workspaceFilter,
           overrideAccess: true,
         }),
-        // API schema count
+        // Open (unresolved) action items across the user's workspaces
         payload.count({
-          collection: 'api-schemas',
-          where: workspaceFilter,
+          collection: 'initiative-action-items',
+          where: { ...workspaceFilter, status: { in: ['open', 'in-progress'] } },
+          overrideAccess: true,
         }),
-        // Published API schema count
+        // Active remediation initiatives
         payload.count({
-          collection: 'api-schemas',
-          where: { ...workspaceFilter, status: { equals: 'published' } },
+          collection: 'initiatives',
+          where: { ...workspaceFilter, status: { equals: 'active' } },
+          overrideAccess: true,
+        }),
+        // Pending HITL approvals awaiting review
+        payload.count({
+          collection: 'pending-approvals',
+          where: { ...workspaceFilter, status: { equals: 'pending' } },
+          overrideAccess: true,
         }),
         // Recent Kafka topics (for activity; overrideAccess: server component has no user session for Kafka ACLs)
         payload.find({
@@ -106,10 +121,13 @@ export default async function DashboardPage() {
         { totalDocs: 0 },
         { totalDocs: 0 },
         { totalDocs: 0 },
+        { totalDocs: 0 },
         { docs: [] },
         { docs: [] },
         { docs: [] },
       ]
+
+  const scorecardReport = await scorecardReportPromise
 
   // Phase 4: Recent docs (depends on knowledge spaces)
   const spaceIds = Array.isArray(knowledgeSpacesResult)
@@ -130,9 +148,28 @@ export default async function DashboardPage() {
 
   // Compute stats
   const apps = 'docs' in appsResult ? appsResult.docs : []
-  const appCount = 'totalDocs' in appsResult ? appsResult.totalDocs : 0
-  const healthyCount = apps.filter((a) => a.status === 'healthy').length
-  const degradedCount = apps.filter((a) => a.status === 'degraded' || a.status === 'down').length
+
+  // Standards posture — reshape the report into the presentational card/stat-row
+  // contract. avgScore is null (em-dash) until something is actually scored, so a
+  // real average of 0 stays distinguishable from "no data yet".
+  const complianceScore = scorecardReport.kpis.scoredCount > 0 ? scorecardReport.kpis.avgScore : null
+  const worstGroupsSource =
+    scorecardReport.byTeam.length > 0 ? scorecardReport.byTeam : scorecardReport.byKind
+  const scorecardsCardReport = {
+    avgScore: complianceScore,
+    scoredCount: scorecardReport.kpis.scoredCount,
+    entityTotal: scorecardReport.kpis.entityTotal,
+    trend: scorecardReport.trend.map((p) => ({ capturedAt: p.t, avgScore: p.v })),
+    worstGroups: worstGroupsSource.map((g) => ({
+      name: g.group,
+      avgScore: g.avgScore,
+      entityCount: g.count,
+    })),
+  }
+  const hasScorecards = scorecardReport.scorecards.length > 0
+  const openActionItems = openActionItemCount.totalDocs
+  const activeInitiatives = activeInitiativeCount.totalDocs
+  const pendingApprovals = pendingApprovalCount.totalDocs
 
   // Build activity feed from recent items
   const activities: Activity[] = []
@@ -219,14 +256,13 @@ export default async function DashboardPage() {
           {/* Stats Row */}
           <div className="stagger-item">
             <DashboardStatsRow
-              workspaceCount={workspaceIds.length}
-              appCount={appCount}
-              healthyCount={healthyCount}
-              degradedCount={degradedCount}
+              complianceScore={complianceScore}
+              scoredCount={scorecardReport.kpis.scoredCount}
+              entityTotal={scorecardReport.kpis.entityTotal}
+              openActionItems={openActionItems}
+              pendingApprovals={pendingApprovals}
               kafkaTopicCount={kafkaTopicCount.totalDocs}
               virtualClusterCount={virtualClusterCount.totalDocs}
-              apiSchemaCount={apiSchemaCount.totalDocs}
-              publishedApiCount={publishedApiCount.totalDocs}
             />
           </div>
 
@@ -234,8 +270,13 @@ export default async function DashboardPage() {
           <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
             {/* Left Column */}
             <div className="space-y-5 stagger-item">
+              <DashboardScorecardsCard
+                report={scorecardsCardReport}
+                openActionItems={openActionItems}
+                activeInitiatives={activeInitiatives}
+                hasScorecards={hasScorecards}
+              />
               <DashboardWorkspacesCard memberships={memberships} />
-              <DashboardAppHealthCard apps={apps.slice(0, 5)} />
             </div>
 
             {/* Right Column */}
