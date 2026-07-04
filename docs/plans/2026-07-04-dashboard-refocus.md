@@ -1,7 +1,7 @@
 # Dashboard Refocus — align home dashboard with the product-focus strategy
 
 **Date:** 2026-07-04
-**Status:** In progress on `feat/dashboard-refocus`
+**Status:** Implemented on `feat/dashboard-refocus` — QA validated in-browser (all checklist items PASS, populated-hero path verified against /scorecards/reports; verdict: ship)
 **Owner:** PM session (Claude) directing engineer + QA agents
 **Strategy reference:** `docs/plans/2026-06-09-product-focus-strategy.md`
 
