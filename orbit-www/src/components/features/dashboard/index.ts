@@ -10,7 +10,6 @@ export type {
 } from './DashboardScorecardsCard'
 export { DashboardWorkspacesCard } from './DashboardWorkspacesCard'
 export type { WorkspaceRowMeta } from './DashboardWorkspacesCard'
-export { DashboardAppHealthCard } from './DashboardAppHealthCard'
 export { DashboardActivityFeed } from './DashboardActivityFeed'
 export type { Activity, ActivityKind } from './DashboardActivityFeed'
 export { DashboardQuickActions } from './DashboardQuickActions'
