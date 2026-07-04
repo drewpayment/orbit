@@ -11,7 +11,7 @@ describe('DashboardQuickActions', () => {
     expect(screen.getByText('Ask the agent')).toBeInTheDocument()
     expect(screen.getByText('Create application')).toBeInTheDocument()
     expect(screen.getByText('Request topic')).toBeInTheDocument()
-    expect(screen.getByText('Register schema')).toBeInTheDocument()
+    expect(screen.getByText('Scorecard reports')).toBeInTheDocument()
     expect(screen.getByText('Invite member')).toBeInTheDocument()
   })
 

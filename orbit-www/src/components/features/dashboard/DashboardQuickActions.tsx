@@ -4,7 +4,7 @@ import {
   Sparkles,
   Layers,
   Radio,
-  FileCode,
+  ClipboardCheck,
   ShieldCheck,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -22,7 +22,7 @@ const actions: QuickAction[] = [
   { label: 'Ask the agent', href: '/agent', icon: Sparkles, tone: 'info', shortcut: '⌘ K' },
   { label: 'Create application', href: '/apps/new', icon: Layers, tone: 'ok', shortcut: '⌘ ⇧ A' },
   { label: 'Request topic', href: '/platform/kafka', icon: Radio, tone: 'pend', shortcut: '⌘ ⇧ T' },
-  { label: 'Register schema', href: '/catalog/apis', icon: FileCode, tone: 'warn', shortcut: '⌘ ⇧ R' },
+  { label: 'Scorecard reports', href: '/scorecards/reports', icon: ClipboardCheck, tone: 'warn', shortcut: '⌘ ⇧ R' },
   { label: 'Invite member', href: '/admin/workspaces', icon: ShieldCheck, tone: 'muted', shortcut: '⌘ ⇧ I' },
 ]
 

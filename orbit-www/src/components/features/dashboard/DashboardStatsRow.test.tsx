@@ -6,51 +6,55 @@ describe('DashboardStatsRow', () => {
   afterEach(() => { cleanup() })
 
   const defaultProps = {
-    workspaceCount: 6,
-    appCount: 23,
-    healthyCount: 19,
-    degradedCount: 4,
-    unknownCount: 0,
+    complianceScore: 72,
+    scoredCount: 18,
+    entityTotal: 24,
+    openActionItems: 7,
+    pendingApprovals: 3,
     kafkaTopicCount: 47,
     virtualClusterCount: 8,
-    apiSchemaCount: 12,
-    publishedApiCount: 9,
   }
 
-  it('should render all four stat cards', () => {
+  it('should render all four stat tiles', () => {
     render(<DashboardStatsRow {...defaultProps} />)
-    expect(screen.getByText('Workspaces')).toBeInTheDocument()
-    expect(screen.getByText('Applications')).toBeInTheDocument()
-    expect(screen.getByText('Kafka Topics')).toBeInTheDocument()
-    expect(screen.getByText('API Schemas')).toBeInTheDocument()
+    expect(screen.getByText('Compliance')).toBeInTheDocument()
+    expect(screen.getByText('Action items')).toBeInTheDocument()
+    expect(screen.getByText('Pending approvals')).toBeInTheDocument()
+    expect(screen.getByText('Kafka topics')).toBeInTheDocument()
   })
 
   it('should render stat values', () => {
     render(<DashboardStatsRow {...defaultProps} />)
-    expect(screen.getByText('6')).toBeInTheDocument()
-    expect(screen.getByText('23')).toBeInTheDocument()
+    expect(screen.getByText('72')).toBeInTheDocument()
+    expect(screen.getByText('7')).toBeInTheDocument()
+    expect(screen.getByText('3')).toBeInTheDocument()
     expect(screen.getByText('47')).toBeInTheDocument()
-    expect(screen.getByText('12')).toBeInTheDocument()
   })
 
-  it('should render health breakdown labels for apps', () => {
+  it('should render the scored-entity subtitle on the compliance tile', () => {
     render(<DashboardStatsRow {...defaultProps} />)
-    expect(screen.getByText('healthy')).toBeInTheDocument()
-    expect(screen.getByText('degraded')).toBeInTheDocument()
+    expect(screen.getByText(/18/)).toBeInTheDocument()
+    expect(screen.getByText(/24/)).toBeInTheDocument()
   })
 
-  it('should render virtual cluster summary', () => {
+  it('should render the virtual cluster summary on the Kafka tile', () => {
     render(<DashboardStatsRow {...defaultProps} />)
     expect(screen.getByText(/virtual cluster/i)).toBeInTheDocument()
   })
 
-  it('should render published API summary', () => {
-    render(<DashboardStatsRow {...defaultProps} />)
-    expect(screen.getByText('published')).toBeInTheDocument()
+  it('should render an em-dash and a no-scorecards subtitle when compliance is null', () => {
+    render(<DashboardStatsRow {...defaultProps} complianceScore={null} scoredCount={0} entityTotal={0} />)
+    expect(screen.getByText('—')).toBeInTheDocument()
+    expect(screen.getByText(/no scorecards yet/i)).toBeInTheDocument()
   })
 
-  it('should render an empty-state CTA when API schema count is zero', () => {
-    render(<DashboardStatsRow {...defaultProps} apiSchemaCount={0} publishedApiCount={0} />)
-    expect(screen.getByText(/register your first schema/i)).toBeInTheDocument()
+  it('should link the compliance tile to reports and the action-items tile to initiatives', () => {
+    render(<DashboardStatsRow {...defaultProps} />)
+    const links = screen.getAllByRole('link')
+    const hrefs = links.map((l) => l.getAttribute('href'))
+    expect(hrefs).toContain('/scorecards/reports')
+    expect(hrefs).toContain('/scorecards/initiatives')
+    expect(hrefs).toContain('/platform/approvals')
+    expect(hrefs).toContain('/platform/kafka')
   })
 })
