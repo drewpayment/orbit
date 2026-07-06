@@ -15,6 +15,10 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false, // Handled manually in databaseHooks for gated users only
+    // Signups start as status:pending, and the session.create gate rejects
+    // pending users — creating a session at signup would make registration
+    // itself fail with FORBIDDEN. New users sign in after approval instead.
+    autoSignIn: false,
   },
   emailVerification: {
     sendVerificationEmail: async ({ user, url }) => {

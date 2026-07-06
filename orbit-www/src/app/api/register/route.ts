@@ -15,13 +15,25 @@ export async function POST(request: NextRequest) {
     }
 
     // 1. Create Better Auth user with status: pending (set by defaultValue)
-    const signUpResponse = await auth.api.signUpEmail({
-      body: {
-        email,
-        password,
-        name: name || '',
-      },
-    })
+    let signUpResponse
+    try {
+      signUpResponse = await auth.api.signUpEmail({
+        body: {
+          email,
+          password,
+          name: name || '',
+        },
+      })
+    } catch (signUpError: any) {
+      // The session.create gate rejects pending users. With autoSignIn: false
+      // this shouldn't fire at signup anymore, but if it does the user WAS
+      // created and only the session was denied — registration succeeded.
+      if (signUpError?.message?.includes('pending admin approval')) {
+        signUpResponse = true
+      } else {
+        throw signUpError
+      }
+    }
 
     if (!signUpResponse) {
       return NextResponse.json(
