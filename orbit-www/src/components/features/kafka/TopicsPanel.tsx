@@ -143,7 +143,7 @@ export function TopicsPanel({
     if (!selectedTopic || !userId) return
 
     startTransition(async () => {
-      const result = await approveTopic(selectedTopic.id, userId)
+      const result = await approveTopic(selectedTopic.id)
       if (result.success) {
         toast.success('Topic approved and provisioning started')
         loadTopics()

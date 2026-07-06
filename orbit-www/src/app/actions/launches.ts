@@ -1,6 +1,6 @@
 'use server'
 
-import { getPayload } from 'payload'
+import { getPayload, type Where } from 'payload'
 import config from '@payload-config'
 import { headers } from 'next/headers'
 import { auth } from '@/lib/auth'
@@ -80,7 +80,9 @@ export async function createLaunch(data: CreateLaunchInput) {
         workspace: data.workspaceId,
         template: data.templateId,
         cloudAccount: data.cloudAccountId,
-        provider: data.provider,
+        // provider is constrained to the launches collection's supported set by the
+        // UI/ProviderSelector; the input type stays a broad string for callers/tests.
+        provider: data.provider as 'azure' | 'digitalocean',
         region: data.region,
         parameters: data.parameters,
         status: 'pending',
@@ -283,7 +285,7 @@ export async function retryLaunch(launchId: string) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 
-  if (!['failed', 'aborted', 'launching'].includes(launch.status)) {
+  if (!['failed', 'aborted', 'launching'].includes(launch.status ?? '')) {
     return { success: false, error: `Cannot retry a launch with status "${launch.status}"` }
   }
 
@@ -342,7 +344,7 @@ export async function deleteLaunch(launchId: string) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 
-  if (['active', 'deorbiting', 'awaiting_approval'].includes(launch.status)) {
+  if (['active', 'deorbiting', 'awaiting_approval'].includes(launch.status ?? '')) {
     return { success: false, error: `Cannot delete a launch with status "${launch.status}". Abort or deorbit first.` }
   }
 
@@ -515,7 +517,7 @@ export async function getLaunchTemplates(provider?: string) {
   const payload = await getPayload({ config })
 
   try {
-    const where = provider
+    const where: Where = provider
       ? { provider: { equals: provider } }
       : {}
 

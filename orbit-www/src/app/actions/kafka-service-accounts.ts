@@ -133,7 +133,7 @@ async function triggerCredentialRevokeWorkflow(
  */
 async function verifyServiceAccountAccess(
   payload: Awaited<ReturnType<typeof getPayload>>,
-  userId: string,
+  userId: string | null | undefined,
   serviceAccountId: string
 ): Promise<{
   allowed: boolean

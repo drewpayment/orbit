@@ -63,7 +63,7 @@ export function CreateWorkspaceDialog({ open, onOpenChange }: CreateWorkspaceDia
   const [isSubmitting, setIsSubmitting] = useState(false)
   const router = useRouter()
 
-  const form = useForm<WorkspaceFormData>({
+  const form = useForm<z.input<typeof workspaceSchema>, unknown, WorkspaceFormData>({
     resolver: zodResolver(workspaceSchema),
     defaultValues: {
       name: '',

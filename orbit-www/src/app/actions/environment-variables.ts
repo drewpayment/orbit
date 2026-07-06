@@ -50,7 +50,7 @@ export interface EnvironmentVariableDisplay {
 // ============================================================================
 
 async function checkWorkspaceAdminAccess(
-  userId: string,
+  userId: string | null | undefined,
   workspaceId: string
 ): Promise<boolean> {
   const payload = await getPayload({ config })
@@ -73,7 +73,7 @@ async function checkWorkspaceAdminAccess(
 }
 
 async function checkWorkspaceMemberAccess(
-  userId: string,
+  userId: string | null | undefined,
   workspaceId: string
 ): Promise<boolean> {
   const payload = await getPayload({ config })
@@ -152,7 +152,7 @@ export async function createEnvironmentVariable(
         useInBuilds: input.useInBuilds ?? true,
         useInDeployments: input.useInDeployments ?? true,
         description: input.description,
-        createdBy: payloadUser.betterAuthId,
+        createdBy: payloadUser.betterAuthId || payloadUser.id,
       },
       user: payloadUser,
       overrideAccess: false,
@@ -317,7 +317,7 @@ export async function bulkImportEnvironmentVariables(
           app: input.appId || undefined,
           useInBuilds: input.useInBuilds ?? true,
           useInDeployments: input.useInDeployments ?? true,
-          createdBy: payloadUser.betterAuthId,
+          createdBy: payloadUser.betterAuthId || payloadUser.id,
         },
         user: payloadUser,
         overrideAccess: false,
@@ -644,7 +644,7 @@ export async function createAppOverride(
         useInBuilds: workspaceVar.useInBuilds,
         useInDeployments: workspaceVar.useInDeployments,
         description: workspaceVar.description,
-        createdBy: payloadUser.betterAuthId,
+        createdBy: payloadUser.betterAuthId || payloadUser.id,
       },
       user: payloadUser,
       overrideAccess: false,

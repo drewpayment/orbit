@@ -52,7 +52,7 @@ export function CommitToRepoForm({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSkipping, setIsSkipping] = useState(false)
 
-  const form = useForm<FormData>({
+  const form = useForm<z.input<typeof formSchema>, unknown, FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       branch: defaultBranch,
