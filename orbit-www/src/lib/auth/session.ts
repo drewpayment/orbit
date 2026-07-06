@@ -2,6 +2,7 @@ import { headers } from 'next/headers'
 import { auth } from '@/lib/auth'
 import { getPayload } from 'payload'
 import config from '@payload-config'
+import { ensurePayloadUser } from '@/lib/auth/ensure-payload-user'
 
 /**
  * Get the current user from the session on the server side.
@@ -25,6 +26,7 @@ export async function getSession() {
 /**
  * Get the authenticated Payload user from the current Better Auth session.
  * Returns the Payload user document with betterAuthId populated, or null.
+ * A missing Payload doc is self-healed from the session (see ensurePayloadUser).
  * Use this in server actions to pass `user` to Payload local API calls.
  */
 export async function getPayloadUserFromSession() {
@@ -35,31 +37,8 @@ export async function getPayloadUserFromSession() {
 
   const payload = await getPayload({ config })
 
-  const result = await payload.find({
-    collection: 'users',
-    where: { email: { equals: session.user.email } },
-    limit: 1,
-    overrideAccess: true,
-  })
-
-  let payloadUser = result.docs[0]
+  const payloadUser = await ensurePayloadUser(payload, session.user)
   if (!payloadUser) return null
-
-  // Lazy-populate betterAuthId if missing (mirrors strategy behavior)
-  const betterAuthId = session.user.id
-  if (!payloadUser.betterAuthId && betterAuthId) {
-    try {
-      payloadUser = await payload.update({
-        collection: 'users',
-        id: payloadUser.id,
-        data: { betterAuthId },
-        overrideAccess: true,
-        context: { skipApprovalHook: true },
-      })
-    } catch {
-      // Non-fatal — betterAuthId will be populated on next call
-    }
-  }
 
   return {
     ...payloadUser,
