@@ -1,7 +1,7 @@
 # Email verification flow fix
 
 **Date:** 2026-07-06
-**Status:** In progress on `fix/email-verification-flow`
+**Status:** Implemented on `fix/email-verification-flow` — QA validated live across two passes (full verify journey with a real Better-Auth token, resend→verify→login, retroactive skip, register-500 fix with auto-created Payload user, error classification, admin-gate exemption). Scope grew: + register-route 500 fix (autoSignIn:false), + first-setup-user is super_admin in all three role stores.
 **Owner:** PM session (Claude) directing engineer + QA agents
 **Context:** Drew locked out of the deployed site — "verify your email" on a
 6-month-old approved account, no email ever delivered.
