@@ -27,35 +27,6 @@ describe('T019 - Workspace Creation Integration', () => {
     console.log('TDD Phase: Cleanup placeholder - will implement when workspace collection exists')
   })
 
-/**
- * T019 - Integration Test: Workspace Creation Flow
- * 
- * This test covers the complete user journey for creating a workspace:
- * 1. User authenticates with Payload CMS
- * 2. User creates a workspace through the frontend
- * 3. Backend services process the workspace creation
- * 4. Data is persisted and retrievable
- * 
- * Status: Will fail initially (TDD requirement) until backend services are implemented
- */
-
-import { getPayload, Payload } from 'payload'
-import config from '@/payload.config'
-import { describe, it, beforeAll, afterAll, expect } from 'vitest'
-
-let payload: Payload
-
-describe('T019 - Workspace Creation Integration', () => {
-  beforeAll(async () => {
-    const payloadConfig = await config
-    payload = await getPayload({ config: payloadConfig })
-  })
-
-  afterAll(async () => {
-    // TDD Phase: Cleanup will be implemented when collections exist
-    console.log('TDD Phase: Cleanup placeholder - will implement when workspace collection exists')
-  })
-
   it('should create workspace through full integration flow', async () => {
     // This test MUST fail initially (TDD requirement)
     // It tests the complete integration from frontend to backend
@@ -108,9 +79,7 @@ describe('T019 - Workspace Creation Integration', () => {
       slug: 'test-workspace-integration',
       description: 'A workspace created through integration testing',
       settings: {
-        defaultVisibility: 'internal',
-        requireApprovalForRepos: false,
-        enableCodeGeneration: true
+        allowOrbitRegistry: true
       }
     }
 
@@ -119,7 +88,6 @@ describe('T019 - Workspace Creation Integration', () => {
     try {
       // This will fail because 'workspaces' collection doesn't exist yet (TDD)
       const workspace = await payload.create({
-        // @ts-expect-error - Collection doesn't exist yet (TDD phase)
         collection: 'workspaces',
         data: workspaceData
       })
@@ -130,7 +98,6 @@ describe('T019 - Workspace Creation Integration', () => {
 
       // Step 4: Test retrieval
       const retrieved = await payload.findByID({
-        // @ts-expect-error - Collection doesn't exist yet (TDD phase)
         collection: 'workspaces',
         id: workspace.id
       })
@@ -170,7 +137,6 @@ describe('T019 - Workspace Creation Integration', () => {
 
     try {
       await payload.create({
-        // @ts-expect-error - Collection doesn't exist yet (TDD phase)
         collection: 'workspaces',
         data: invalidData
       })
@@ -197,7 +163,6 @@ describe('T019 - Workspace Creation Integration', () => {
       }
 
       const result = await payload.create({
-        // @ts-expect-error - Collection doesn't exist yet (TDD phase)
         collection: 'workspaces',
         data: unauthorizedWorkspace
       })
@@ -215,5 +180,4 @@ describe('T019 - Workspace Creation Integration', () => {
 
     console.log('🎯 Authentication integration test completed')
   })
-})
 })

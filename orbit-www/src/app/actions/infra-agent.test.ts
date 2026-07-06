@@ -27,7 +27,13 @@ vi.mock('@/lib/grpc/agent-client', () => ({
   },
 }))
 
+import type { BasePayload } from 'payload'
 import { getPayload } from 'payload'
+import { create } from '@bufbuild/protobuf'
+import {
+  StartInfrastructureAgentResponseSchema,
+  AbortAgentResponseSchema,
+} from '@/lib/proto/idp/agent/v1/agent_pb'
 import { getPayloadUserFromSession } from '@/lib/auth/session'
 import { isWorkspaceMember } from '@/lib/access/workspace-access'
 import { agentClient } from '@/lib/grpc/agent-client'
@@ -49,22 +55,26 @@ describe('startAgentRun compensation', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(getPayload).mockResolvedValue(mockPayload)
-    vi.mocked(getPayloadUserFromSession).mockResolvedValue({ id: 'user-1' })
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as unknown as BasePayload)
+    vi.mocked(getPayloadUserFromSession).mockResolvedValue({
+      id: 'user-1',
+    } as unknown as Awaited<ReturnType<typeof getPayloadUserFromSession>>)
     vi.mocked(isWorkspaceMember).mockResolvedValue(true)
     // buildPromptWithWorkspaceContext does payload.findByID + payload.find; keep them benign.
     mockPayload.findByID.mockResolvedValue({ id: 'ws-1', name: 'WS', slug: 'ws' })
     mockPayload.find.mockResolvedValue({ docs: [] })
-    vi.mocked(agentClient.startInfrastructureAgent).mockResolvedValue({
-      workflowId: 'wf-123',
-      runId: 'run-123',
-      agentRunId: 'ar-123',
-    })
+    vi.mocked(agentClient.startInfrastructureAgent).mockResolvedValue(
+      create(StartInfrastructureAgentResponseSchema, {
+        workflowId: 'wf-123',
+        runId: 'run-123',
+        agentRunId: 'ar-123',
+      }),
+    )
   })
 
   it('aborts the started workflow if the run-row create fails', async () => {
     mockPayload.create.mockRejectedValue(new Error('mongo down'))
-    vi.mocked(agentClient.abortAgent).mockResolvedValue({})
+    vi.mocked(agentClient.abortAgent).mockResolvedValue(create(AbortAgentResponseSchema, {}))
 
     const result = await startAgentRun(input)
 

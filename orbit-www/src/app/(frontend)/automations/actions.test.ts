@@ -105,10 +105,12 @@ function makePayload() {
     delete: vi.fn(async () => ({})),
     update: vi.fn(async () => ({ id: 'new1' })),
     find: vi.fn(async () => ({ docs: [] })),
-    findByID: vi.fn(async ({ collection }: { collection: string }) => {
-      if (collection === 'actions') return { id: 'act1', workspace: 'ws1', enabled: true }
-      throw new Error(`unexpected findByID ${collection}`)
-    }),
+    findByID: vi.fn(
+      async ({ collection }: { collection: string }): Promise<Record<string, unknown>> => {
+        if (collection === 'actions') return { id: 'act1', workspace: 'ws1', enabled: true }
+        throw new Error(`unexpected findByID ${collection}`)
+      },
+    ),
   }
 }
 

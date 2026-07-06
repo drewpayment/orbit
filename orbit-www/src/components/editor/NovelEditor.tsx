@@ -62,12 +62,18 @@ export function NovelEditor({
         },
         showOnlyWhenEditable: true,
       }),
+      // SlashCommand infers a narrow `suggestion` option type from its addOptions()
+      // default ({ char, startOfLine, command }). `items`/`render` are valid tiptap
+      // Suggestion options at runtime but absent from that inferred type, so the
+      // config is cast to configure()'s own parameter type. Runtime is unchanged.
+      // Root fix would type the extension in slash-command.ts as
+      // Extension.create<{ suggestion: Omit<SuggestionOptions, 'editor'> }>.
       SlashCommand.configure({
         suggestion: {
           items: getSuggestionItems,
           render: renderItems,
         },
-      }),
+      } as unknown as Parameters<typeof SlashCommand.configure>[0]),
     ],
     content: initialContent,
     editable: !readOnly,

@@ -190,7 +190,8 @@ describe('T021 - API Catalog Integration', () => {
       const documentation = await payload.create({
         // @ts-expect-error - Collection doesn't exist yet (TDD phase)
         collection: 'api-documentation',
-        data: documentationData
+        // Collection doesn't exist yet (TDD phase), so this placeholder shape can't satisfy the real union type
+        data: documentationData as unknown as Parameters<Payload['create']>[0]['data']
       })
 
       console.log('✅ API documentation generated successfully')
@@ -239,7 +240,8 @@ describe('T021 - API Catalog Integration', () => {
       const usage = await payload.create({
         // @ts-expect-error - Collection doesn't exist yet (TDD phase)
         collection: 'api-usage',
-        data: usageData
+        // Collection doesn't exist yet (TDD phase), so this placeholder shape can't satisfy the real union type
+        data: usageData as unknown as Parameters<Payload['create']>[0]['data']
       })
 
       console.log('✅ API usage tracked successfully')
@@ -316,7 +318,8 @@ describe('T021 - API Catalog Integration', () => {
       const contract = await payload.create({
         // @ts-expect-error - Collection doesn't exist yet (TDD phase)
         collection: 'api-contracts',
-        data: contractData
+        // Collection doesn't exist yet (TDD phase), so this placeholder shape can't satisfy the real union type
+        data: contractData as unknown as Parameters<Payload['create']>[0]['data']
       })
 
       console.log('✅ API contract created successfully')
@@ -369,7 +372,8 @@ describe('T021 - API Catalog Integration', () => {
       const lifecycle = await payload.create({
         // @ts-expect-error - Collection doesn't exist yet (TDD phase)
         collection: 'api-lifecycle',
-        data: lifecycleData
+        // Collection doesn't exist yet (TDD phase), so this placeholder shape can't satisfy the real union type
+        data: lifecycleData as unknown as Parameters<Payload['create']>[0]['data']
       })
 
       console.log('✅ API lifecycle event recorded successfully')

@@ -45,7 +45,6 @@ describe('T020 - Repository Management Integration', () => {
     
     try {
       const workspace = await payload.create({
-        // @ts-expect-error - Collection doesn't exist yet (TDD phase)
         collection: 'workspaces',
         data: workspaceData
       })
@@ -203,7 +202,8 @@ describe('T020 - Repository Management Integration', () => {
       const analysis = await payload.create({
         // @ts-expect-error - Collection doesn't exist yet (TDD phase)
         collection: 'repository-analyses',
-        data: analysisData
+        // Collection doesn't exist yet (TDD phase), so this placeholder shape can't satisfy the real union type
+        data: analysisData as unknown as Parameters<Payload['create']>[0]['data']
       })
 
       console.log('✅ Repository analysis stored successfully')
@@ -272,7 +272,8 @@ describe('T020 - Repository Management Integration', () => {
           payload: webhookPayload,
           processed: false,
           receivedAt: new Date().toISOString()
-        }
+          // Collection doesn't exist yet (TDD phase), so this placeholder shape can't satisfy the real union type
+        } as unknown as Parameters<Payload['create']>[0]['data']
       })
 
       console.log('✅ Webhook event stored successfully')

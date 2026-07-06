@@ -76,7 +76,8 @@ describe('T022 - Knowledge Base Integration', () => {
       const article = await payload.create({
         // @ts-expect-error - Collection doesn't exist yet (TDD phase)
         collection: 'knowledge-articles',
-        data: articleData
+        // Collection doesn't exist yet (TDD phase), so this placeholder shape can't satisfy the real union type
+        data: articleData as unknown as Parameters<Payload['create']>[0]['data']
       })
 
       // If this succeeds (future implementation), validate the response
@@ -182,7 +183,8 @@ describe('T022 - Knowledge Base Integration', () => {
       const version = await payload.create({
         // @ts-expect-error - Collection doesn't exist yet (TDD phase)
         collection: 'article-versions',
-        data: versionedArticleData
+        // Collection doesn't exist yet (TDD phase), so this placeholder shape can't satisfy the real union type
+        data: versionedArticleData as unknown as Parameters<Payload['create']>[0]['data']
       })
 
       console.log('✅ Article version created successfully')
@@ -239,7 +241,8 @@ describe('T022 - Knowledge Base Integration', () => {
       const repoDoc = await payload.create({
         // @ts-expect-error - Collection doesn't exist yet (TDD phase)
         collection: 'repository-documentation',
-        data: repoDocData
+        // Collection doesn't exist yet (TDD phase), so this placeholder shape can't satisfy the real union type
+        data: repoDocData as unknown as Parameters<Payload['create']>[0]['data']
       })
 
       console.log('✅ Repository documentation synced successfully')
@@ -303,7 +306,8 @@ describe('T022 - Knowledge Base Integration', () => {
       const searchLog = await payload.create({
         // @ts-expect-error - Collection doesn't exist yet (TDD phase)
         collection: 'knowledge-searches',
-        data: searchQueryData
+        // Collection doesn't exist yet (TDD phase), so this placeholder shape can't satisfy the real union type
+        data: searchQueryData as unknown as Parameters<Payload['create']>[0]['data']
       })
 
       console.log('✅ Knowledge search logged successfully')
@@ -375,7 +379,8 @@ describe('T022 - Knowledge Base Integration', () => {
       const analytics = await payload.create({
         // @ts-expect-error - Collection doesn't exist yet (TDD phase)
         collection: 'knowledge-analytics',
-        data: analyticsData
+        // Collection doesn't exist yet (TDD phase), so this placeholder shape can't satisfy the real union type
+        data: analyticsData as unknown as Parameters<Payload['create']>[0]['data']
       })
 
       console.log('✅ Knowledge analytics recorded successfully')

@@ -314,7 +314,7 @@ export function LaunchWizard({ templates, cloudAccounts, workspaceId }: LaunchWi
             </div>
 
             {/* Dynamic Parameters */}
-            {selectedTemplate.parameterSchema && (
+            {Boolean(selectedTemplate.parameterSchema) && (
               <div className="space-y-3">
                 <div>
                   <h3 className="font-medium">Template Parameters</h3>

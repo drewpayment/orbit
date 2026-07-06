@@ -79,9 +79,7 @@ describe('T019 - Workspace Creation Integration', () => {
       slug: 'test-workspace-integration',
       description: 'A workspace created through integration testing',
       settings: {
-        defaultVisibility: 'internal',
-        requireApprovalForRepos: false,
-        enableCodeGeneration: true
+        allowOrbitRegistry: true
       }
     }
 
@@ -90,7 +88,6 @@ describe('T019 - Workspace Creation Integration', () => {
     try {
       // This will fail because 'workspaces' collection doesn't exist yet (TDD)
       const workspace = await payload.create({
-        // @ts-expect-error - Collection doesn't exist yet (TDD phase)
         collection: 'workspaces',
         data: workspaceData
       })
@@ -101,7 +98,6 @@ describe('T019 - Workspace Creation Integration', () => {
 
       // Step 4: Test retrieval
       const retrieved = await payload.findByID({
-        // @ts-expect-error - Collection doesn't exist yet (TDD phase)
         collection: 'workspaces',
         id: workspace.id
       })
@@ -141,7 +137,6 @@ describe('T019 - Workspace Creation Integration', () => {
 
     try {
       await payload.create({
-        // @ts-expect-error - Collection doesn't exist yet (TDD phase)
         collection: 'workspaces',
         data: invalidData
       })
@@ -168,7 +163,6 @@ describe('T019 - Workspace Creation Integration', () => {
       }
 
       const result = await payload.create({
-        // @ts-expect-error - Collection doesn't exist yet (TDD phase)
         collection: 'workspaces',
         data: unauthorizedWorkspace
       })

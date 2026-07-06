@@ -16,6 +16,7 @@ vi.stubEnv('ORBIT_REGISTRY_JWT_SECRET', 'test-secret-key-for-jwt-signing-min-32-
 vi.stubEnv('ORBIT_REGISTRY_URL', 'registry.orbit.local:5050')
 
 // Import after mocking env
+import { NextRequest } from 'next/server'
 import { getPayload } from 'payload'
 const { POST } = await import('./route')
 
@@ -30,7 +31,7 @@ describe('POST /api/internal/registry/pull-token', () => {
   })
 
   it('returns 401 without API key', async () => {
-    const request = new Request('http://localhost/api/internal/registry/pull-token', {
+    const request = new NextRequest('http://localhost/api/internal/registry/pull-token', {
       method: 'POST',
       body: JSON.stringify({ appId: 'test-app' }),
     })
@@ -40,7 +41,7 @@ describe('POST /api/internal/registry/pull-token', () => {
   })
 
   it('returns 401 with wrong API key', async () => {
-    const request = new Request('http://localhost/api/internal/registry/pull-token', {
+    const request = new NextRequest('http://localhost/api/internal/registry/pull-token', {
       method: 'POST',
       headers: { 'X-API-Key': 'wrong-key' },
       body: JSON.stringify({ appId: 'test-app' }),
@@ -51,7 +52,7 @@ describe('POST /api/internal/registry/pull-token', () => {
   })
 
   it('returns 400 without appId', async () => {
-    const request = new Request('http://localhost/api/internal/registry/pull-token', {
+    const request = new NextRequest('http://localhost/api/internal/registry/pull-token', {
       method: 'POST',
       headers: { 'X-API-Key': 'test-api-key' },
       body: JSON.stringify({}),
@@ -64,7 +65,7 @@ describe('POST /api/internal/registry/pull-token', () => {
   it('returns 404 if app not found', async () => {
     mockPayload.findByID.mockResolvedValue(null)
 
-    const request = new Request('http://localhost/api/internal/registry/pull-token', {
+    const request = new NextRequest('http://localhost/api/internal/registry/pull-token', {
       method: 'POST',
       headers: { 'X-API-Key': 'test-api-key' },
       body: JSON.stringify({ appId: 'nonexistent-app' }),
@@ -84,7 +85,7 @@ describe('POST /api/internal/registry/pull-token', () => {
       },
     })
 
-    const request = new Request('http://localhost/api/internal/registry/pull-token', {
+    const request = new NextRequest('http://localhost/api/internal/registry/pull-token', {
       method: 'POST',
       headers: { 'X-API-Key': 'test-api-key' },
       body: JSON.stringify({ appId: 'test-app' }),

@@ -7,6 +7,7 @@ vi.mock('@payload-config', () => ({ default: {} }))
 // X-API-Key passes and a wrong one fails.
 process.env.ORBIT_INTERNAL_API_KEY = 'test-internal-key'
 
+import type { BasePayload } from 'payload'
 import { getPayload } from 'payload'
 import { POST } from './route'
 
@@ -27,7 +28,7 @@ describe('POST /api/internal/agent-events', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(getPayload).mockResolvedValue(mockPayload)
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as unknown as BasePayload)
   })
 
   it('rejects a missing/invalid API key with 401', async () => {
