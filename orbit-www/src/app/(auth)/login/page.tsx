@@ -3,10 +3,17 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { signIn } from '@/lib/auth-client'
+import { signIn, authClient } from '@/lib/auth-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+
+// The session gate throws a FORBIDDEN whose message contains this phrase when an
+// approved-but-unverified user tries to sign in. Match on the specific phrase so
+// unrelated errors that merely mention "email" don't offer a resend action.
+function isVerificationError(error: { message?: string } | null | undefined): boolean {
+  return (error?.message || '').includes('verify your email')
+}
 
 function getErrorDisplay(error: any): { message: string; type: 'error' | 'info' | 'warning' } {
   const message = error?.message || ''
@@ -23,7 +30,7 @@ function getErrorDisplay(error: any): { message: string; type: 'error' | 'info' 
       type: 'error',
     }
   }
-  if (message.includes('verify your email') || message.includes('email')) {
+  if (message.includes('verify your email')) {
     return {
       message: 'Please verify your email before logging in. Check your inbox for a verification link.',
       type: 'warning',
@@ -48,10 +55,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [errorDisplay, setErrorDisplay] = useState<{ message: string; type: 'error' | 'info' | 'warning' } | null>(null)
   const [loading, setLoading] = useState(false)
+  const [showResend, setShowResend] = useState(false)
+  const [resendStatus, setResendStatus] = useState<'idle' | 'pending' | 'sent' | 'error'>('idle')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setErrorDisplay(null)
+    setShowResend(false)
+    setResendStatus('idle')
     setLoading(true)
 
     try {
@@ -62,6 +73,7 @@ export default function LoginPage() {
 
       if (result.error) {
         setErrorDisplay(getErrorDisplay(result.error))
+        setShowResend(isVerificationError(result.error))
       } else {
         router.push('/dashboard')
       }
@@ -70,6 +82,20 @@ export default function LoginPage() {
       console.error(err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleResend = async () => {
+    setResendStatus('pending')
+    try {
+      const result = await authClient.sendVerificationEmail({
+        email,
+        callbackURL: '/login',
+      })
+      setResendStatus(result?.error ? 'error' : 'sent')
+    } catch (err) {
+      console.error(err)
+      setResendStatus('error')
     }
   }
 
@@ -94,6 +120,30 @@ export default function LoginPage() {
         {errorDisplay && (
           <div className={`border px-4 py-3 rounded ${alertStyles[errorDisplay.type]}`}>
             {errorDisplay.message}
+          </div>
+        )}
+
+        {showResend && (
+          <div className="space-y-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={handleResend}
+              disabled={resendStatus === 'pending'}
+            >
+              {resendStatus === 'pending' ? 'Sending...' : 'Resend verification email'}
+            </Button>
+            {resendStatus === 'sent' && (
+              <p className="text-sm text-green-600 dark:text-green-400">
+                Verification email sent. Check your inbox for the link.
+              </p>
+            )}
+            {resendStatus === 'error' && (
+              <p className="text-sm text-red-600 dark:text-red-400">
+                Could not send the verification email. Please try again.
+              </p>
+            )}
           </div>
         )}
 
