@@ -1,7 +1,7 @@
 # Password reset (forgot password) flow
 
 **Date:** 2026-07-06
-**Status:** In progress on `feat/password-reset`
+**Status:** Implemented on `feat/password-reset` — QA validated live (full reset journey incl. old-password-rejected/new-accepted, no-enumeration, bad/missing/expired token states, inline validation, #75 regression check). Verdict: ship.
 **Owner:** PM session (Claude) directing engineer + QA agents
 **Context:** Prod lockout incident — Drew's password stopped working and the only
 recovery was a manual scrypt-hash injection into the prod Mongo. There is no
