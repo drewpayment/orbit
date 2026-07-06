@@ -38,7 +38,7 @@ describe('T023 - End-to-End User Scenarios Integration', () => {
     const newDeveloper = {
       email: 'jane.developer@company.com',
       name: 'Jane Developer',
-      role: 'software-engineer',
+      title: 'software-engineer',
       department: 'engineering',
       manager: 'tech-lead@company.com',
       startDate: new Date().toISOString(),
@@ -65,19 +65,12 @@ describe('T023 - End-to-End User Scenarios Integration', () => {
         name: 'Frontend Team Workspace',
         slug: 'frontend-team',
         description: 'Workspace for the frontend development team',
-        owner: developer.id,
-        members: [
-          { userId: developer.id, role: 'member', joinedAt: new Date().toISOString() }
-        ],
         settings: {
-          defaultVisibility: 'internal',
-          requireApprovalForRepos: false,
-          enableCodeGeneration: true
+          allowOrbitRegistry: true
         }
       }
 
       const workspace = await payload.create({
-        // @ts-expect-error - Collection doesn't exist yet (TDD phase)
         collection: 'workspaces',
         data: teamWorkspace
       })
@@ -119,7 +112,8 @@ describe('T023 - End-to-End User Scenarios Integration', () => {
           data: repoData
         })
         addedRepos.push(repo)
-        console.log('✅ Repository added:', repo.name)
+        // 'repositories' collection doesn't exist yet (TDD phase); repo's shape falls back to a union
+        console.log('✅ Repository added:', (repo as unknown as { name: string }).name)
       }
 
       expect(addedRepos.length).toBe(2)
@@ -211,7 +205,8 @@ describe('T023 - End-to-End User Scenarios Integration', () => {
       const progressRecord = await payload.create({
         // @ts-expect-error - Collection doesn't exist yet (TDD phase)
         collection: 'onboarding-progress',
-        data: onboardingProgress
+        // Collection doesn't exist yet (TDD phase), so this placeholder shape can't satisfy the real union type
+        data: onboardingProgress as unknown as Parameters<Payload['create']>[0]['data']
       })
 
       console.log('✅ Onboarding progress tracked')
@@ -254,12 +249,13 @@ describe('T023 - End-to-End User Scenarios Integration', () => {
       const docSync = await payload.create({
         // @ts-expect-error - Collection doesn't exist yet (TDD phase)
         collection: 'doc-sync-events',
+        // Collection doesn't exist yet (TDD phase), so this placeholder shape can't satisfy the real union type
         data: {
           repositoryId: repositoryUpdate.repositoryId,
           syncType: 'readme-update',
           triggeredBy: 'repository-webhook',
           status: 'pending'
-        }
+        } as unknown as Parameters<Payload['create']>[0]['data']
       })
 
       console.log('✅ Documentation sync triggered')
@@ -269,12 +265,13 @@ describe('T023 - End-to-End User Scenarios Integration', () => {
         const apiUpdate = await payload.create({
           // @ts-expect-error - Collection doesn't exist yet (TDD phase)
           collection: 'api-sync-events',
+          // Collection doesn't exist yet (TDD phase), so this placeholder shape can't satisfy the real union type
           data: {
             repositoryId: repositoryUpdate.repositoryId,
             syncType: 'spec-update',
             triggeredBy: 'package-change',
             status: 'pending'
-          }
+          } as unknown as Parameters<Payload['create']>[0]['data']
         })
 
         console.log('✅ API catalog sync triggered')
@@ -324,24 +321,23 @@ describe('T023 - End-to-End User Scenarios Integration', () => {
         switch (user.action) {
           case 'creating-workspace':
             return await payload.create({
-              // @ts-expect-error - Collection doesn't exist yet (TDD phase)
               collection: 'workspaces',
               data: {
                 name: `${user.name}'s Workspace`,
-                slug: `${user.id}-workspace`,
-                owner: user.id
+                slug: `${user.id}-workspace`
               }
             })
-          
+
           case 'adding-repository':
             return await payload.create({
               // @ts-expect-error - Collection doesn't exist yet (TDD phase)
               collection: 'repositories',
+              // Collection doesn't exist yet (TDD phase), so this placeholder shape can't satisfy the real union type
               data: {
                 name: `${user.id}-repo`,
                 fullName: `org/${user.id}-repo`,
                 description: `Repository for ${user.name}`
-              }
+              } as unknown as Parameters<Payload['create']>[0]['data']
             })
           
           case 'searching-apis':
@@ -357,11 +353,12 @@ describe('T023 - End-to-End User Scenarios Integration', () => {
             return await payload.create({
               // @ts-expect-error - Collection doesn't exist yet (TDD phase)
               collection: 'knowledge-articles',
+              // Collection doesn't exist yet (TDD phase), so this placeholder shape can't satisfy the real union type
               data: {
                 title: `${user.name}'s Guide`,
                 content: 'Updated documentation content',
                 author: user.id
-              }
+              } as unknown as Parameters<Payload['create']>[0]['data']
             })
         }
       })
@@ -418,7 +415,8 @@ describe('T023 - End-to-End User Scenarios Integration', () => {
       const healthCheck = await payload.create({
         // @ts-expect-error - Collection doesn't exist yet (TDD phase)
         collection: 'system-health',
-        data: systemMetrics
+        // Collection doesn't exist yet (TDD phase), so this placeholder shape can't satisfy the real union type
+        data: systemMetrics as unknown as Parameters<Payload['create']>[0]['data']
       })
 
       console.log('✅ System health metrics recorded')

@@ -43,7 +43,7 @@ describe('T023 - Knowledge Space Navigation Integration', () => {
         data: {
           email: 'test-nav@example.com',
           password: 'test123456',
-          roles: ['user'],
+          role: 'user',
         },
       })
     }
@@ -54,8 +54,6 @@ describe('T023 - Knowledge Space Navigation Integration', () => {
       data: {
         name: 'Navigation Test Workspace',
         slug: 'nav-test-workspace',
-        owner: testUser.id,
-        members: [testUser.id],
       },
     })
 
@@ -68,6 +66,7 @@ describe('T023 - Knowledge Space Navigation Integration', () => {
         workspace: testWorkspace.id,
         icon: '📚',
         description: 'Testing knowledge space navigation',
+        visibility: 'internal',
       },
     })
   })
@@ -613,7 +612,7 @@ describe('T023 - Knowledge Space Navigation Integration', () => {
     it('should maintain proper sort order for pages', async () => {
       console.log('📝 Test: Page sort order')
 
-      const pages = []
+      const pages: KnowledgePage[] = []
       for (let i = 0; i < 3; i++) {
         const page = await payload.create({
           collection: 'knowledge-pages',
