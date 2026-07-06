@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { adminOnly } from '@/lib/access/collection-access'
 
 export const BifrostConfig: CollectionConfig = {
   slug: 'bifrost-config',
@@ -8,20 +9,10 @@ export const BifrostConfig: CollectionConfig = {
     description: 'Bifrost gateway connection settings for Kafka clients',
   },
   access: {
-    // Only admins can read/write this singleton
-    read: ({ req: { user } }) => {
-      if (!user) return false
-      // System users (admins) have full access
-      return user.collection === 'users'
-    },
-    create: ({ req: { user } }) => {
-      if (!user) return false
-      return user.collection === 'users'
-    },
-    update: ({ req: { user } }) => {
-      if (!user) return false
-      return user.collection === 'users'
-    },
+    // Only platform admins can read/write this singleton
+    read: adminOnly,
+    create: adminOnly,
+    update: adminOnly,
     delete: () => false, // Prevent deletion of singleton
   },
   fields: [

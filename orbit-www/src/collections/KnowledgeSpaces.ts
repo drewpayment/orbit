@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { memberCreate } from '@/lib/access/collection-access'
 
 export const KnowledgeSpaces: CollectionConfig = {
   slug: 'knowledge-spaces',
@@ -37,8 +38,8 @@ export const KnowledgeSpaces: CollectionConfig = {
         workspace: { in: workspaceIds }
       }
     },
-    // Create: Any authenticated user
-    create: ({ req: { user } }) => !!user,
+    // Create: active member of the target `data.workspace` (was `!!user` — gap closed)
+    create: memberCreate(),
     // Update: Platform admins or workspace admins/owners
     update: async ({ req: { user, payload }, id }) => {
       if (!user || !id) return false

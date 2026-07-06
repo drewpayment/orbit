@@ -1,4 +1,46 @@
-import type { CollectionConfig, Where } from 'payload'
+import type { Access, CollectionConfig, Where } from 'payload'
+import { adminOnly } from '@/lib/access/collection-access'
+import { getMemberWorkspaceIds, isPlatformAdmin } from '@/lib/access/workspace-access'
+
+// No direct `workspace` relation on this collection — the workspace is
+// resolved indirectly via virtualCluster → application → workspace. The
+// shared `workspaceScopedRead()` factory only supports direct/OR fields, so
+// this two-hop resolution is hand-rolled here (flagged in the WP2 report).
+const readCheckpointsForMemberWorkspaces: Access = async ({ req: { user, payload } }) => {
+  if (!user) return false
+  if (isPlatformAdmin(user)) return true
+
+  const betterAuthId = typeof user.betterAuthId === 'string' ? user.betterAuthId : null
+  const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
+
+  // Find applications in user's workspaces
+  const apps = await payload.find({
+    collection: 'kafka-applications',
+    where: {
+      workspace: { in: workspaceIds },
+    },
+    limit: 1000,
+    overrideAccess: true,
+  })
+
+  const appIds = apps.docs.map((a) => a.id)
+
+  // Find virtual clusters for those applications
+  const virtualClusters = await payload.find({
+    collection: 'kafka-virtual-clusters',
+    where: {
+      application: { in: appIds },
+    },
+    limit: 1000,
+    overrideAccess: true,
+  })
+
+  const virtualClusterIds = virtualClusters.docs.map((vc) => vc.id)
+
+  return {
+    virtualCluster: { in: virtualClusterIds },
+  } as Where
+}
 
 export const KafkaOffsetCheckpoints: CollectionConfig = {
   slug: 'kafka-offset-checkpoints',
@@ -10,59 +52,11 @@ export const KafkaOffsetCheckpoints: CollectionConfig = {
   },
   access: {
     // Read: Users can see checkpoints for consumer groups in their workspace's virtual clusters
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-
-      // Admin users can see all
-      if (user.collection === 'users') return true
-
-      // Regular users see only checkpoints for consumer groups in their workspace's virtual clusters
-      const memberships = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          user: { equals: user.id },
-          status: { equals: 'active' },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-
-      const workspaceIds = memberships.docs.map((m) =>
-        String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
-      )
-
-      // Find applications in user's workspaces
-      const apps = await payload.find({
-        collection: 'kafka-applications',
-        where: {
-          workspace: { in: workspaceIds },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-
-      const appIds = apps.docs.map((a) => a.id)
-
-      // Find virtual clusters for those applications
-      const virtualClusters = await payload.find({
-        collection: 'kafka-virtual-clusters',
-        where: {
-          application: { in: appIds },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-
-      const virtualClusterIds = virtualClusters.docs.map((vc) => vc.id)
-
-      return {
-        virtualCluster: { in: virtualClusterIds },
-      } as Where
-    },
+    read: readCheckpointsForMemberWorkspaces,
     // Offset checkpoints are system/workflow-driven only
-    create: ({ req: { user } }) => user?.collection === 'users',
-    update: ({ req: { user } }) => user?.collection === 'users',
-    delete: ({ req: { user } }) => user?.collection === 'users',
+    create: adminOnly,
+    update: adminOnly,
+    delete: adminOnly,
   },
   fields: [
     {

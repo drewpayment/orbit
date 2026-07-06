@@ -1,5 +1,7 @@
 // orbit-www/src/collections/Roles.ts
 import type { CollectionConfig } from 'payload'
+import { adminOnly } from '@/lib/access/collection-access'
+import { isPlatformAdmin } from '@/lib/access/workspace-access'
 
 export const Roles: CollectionConfig = {
   slug: 'roles',
@@ -9,15 +11,21 @@ export const Roles: CollectionConfig = {
     group: 'Access Control',
   },
   access: {
-    read: () => true,
-    create: ({ req: { user } }) => !!user,
-    update: ({ req: { user } }) => !!user,
-    // Prevent deletion of system roles
+    // Role definitions are internal config; UI pickers run logged-in.
+    read: ({ req: { user } }) => !!user,
+    // Role definitions are platform-admin config (was `!!user` — part of the
+    // issue #63 privilege-escalation chain: an authenticated caller could
+    // define a platform-scoped role with arbitrary permissions).
+    create: adminOnly,
+    update: adminOnly,
+    // Admin-only, and even a platform admin must not delete system roles.
     delete: async ({ req: { user, payload }, id }) => {
       if (!user || !id) return false
+      if (!isPlatformAdmin(user)) return false
       const role = await payload.findByID({
         collection: 'roles',
         id,
+        overrideAccess: true,
       })
       return !role.isSystem
     },

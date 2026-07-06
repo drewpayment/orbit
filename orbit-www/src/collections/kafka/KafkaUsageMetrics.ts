@@ -1,4 +1,5 @@
-import type { CollectionConfig, Where } from 'payload'
+import type { CollectionConfig } from 'payload'
+import { adminOnly, workspaceScopedRead } from '@/lib/access/collection-access'
 
 export const KafkaUsageMetrics: CollectionConfig = {
   slug: 'kafka-usage-metrics',
@@ -10,32 +11,11 @@ export const KafkaUsageMetrics: CollectionConfig = {
   },
   access: {
     // Read: Users can see metrics for topics in their workspaces
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-      if (user.collection === 'users') return true
-
-      const memberships = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          user: { equals: user.id },
-          status: { equals: 'active' },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-
-      const workspaceIds = memberships.docs.map(m =>
-        String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
-      )
-
-      return {
-        workspace: { in: workspaceIds },
-      } as Where
-    },
+    read: workspaceScopedRead(),
     // Metrics are system-generated
-    create: ({ req: { user } }) => user?.collection === 'users',
+    create: adminOnly,
     update: () => false, // Metrics are immutable
-    delete: ({ req: { user } }) => user?.collection === 'users',
+    delete: adminOnly,
   },
   fields: [
     {

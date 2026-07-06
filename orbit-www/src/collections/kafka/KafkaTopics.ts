@@ -1,4 +1,5 @@
-import type { CollectionConfig, Where } from 'payload'
+import type { CollectionConfig } from 'payload'
+import { docWorkspaceMutate, memberCreate, workspaceScopedRead } from '@/lib/access/collection-access'
 
 export const KafkaTopics: CollectionConfig = {
   slug: 'kafka-topics',
@@ -10,83 +11,11 @@ export const KafkaTopics: CollectionConfig = {
   },
   access: {
     // Read: Users can see topics in their workspaces
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-      if (user.collection === 'users') return true
-
-      const memberships = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          user: { equals: user.id },
-          status: { equals: 'active' },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-
-      const workspaceIds = memberships.docs.map(m =>
-        String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
-      )
-
-      return {
-        workspace: { in: workspaceIds },
-      } as Where
-    },
-    create: ({ req: { user } }) => !!user,
-    update: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-      if (user.collection === 'users') return true
-
-      const topic = await payload.findByID({
-        collection: 'kafka-topics',
-        id,
-        overrideAccess: true,
-      })
-
-      const workspaceId = typeof topic.workspace === 'string' ? topic.workspace : topic.workspace.id
-
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: user.id } },
-            { role: { in: ['owner', 'admin', 'member'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
-
-      return members.docs.length > 0
-    },
-    delete: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-      if (user.collection === 'users') return true
-
-      const topic = await payload.findByID({
-        collection: 'kafka-topics',
-        id,
-        overrideAccess: true,
-      })
-
-      const workspaceId = typeof topic.workspace === 'string' ? topic.workspace : topic.workspace.id
-
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: user.id } },
-            { role: { in: ['owner', 'admin'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
-
-      return members.docs.length > 0
-    },
+    read: workspaceScopedRead(),
+    // Any active member of the target workspace may create a topic
+    create: memberCreate(),
+    update: docWorkspaceMutate('kafka-topics', ['owner', 'admin', 'member']),
+    delete: docWorkspaceMutate('kafka-topics', ['owner', 'admin']),
   },
   fields: [
     {

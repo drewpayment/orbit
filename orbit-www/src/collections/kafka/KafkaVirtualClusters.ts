@@ -1,4 +1,40 @@
-import type { CollectionConfig, Where } from 'payload'
+import type { Access, CollectionConfig, Where } from 'payload'
+import { adminOnly } from '@/lib/access/collection-access'
+import { getMemberWorkspaceIds, isPlatformAdmin } from '@/lib/access/workspace-access'
+
+// Read: direct workspace ownership, OR (legacy) an application owned by one
+// of the caller's workspaces. Some older virtual-cluster docs only set
+// `application`, not `workspace` — preserved via a 2-hop lookup so those
+// stay visible to their workspace members (identity fixed to betterAuthId).
+const readOwnedOrLegacyApplicationClusters: Access = async ({ req: { user, payload } }) => {
+  if (!user) return false
+  if (isPlatformAdmin(user)) return true
+
+  const betterAuthId = typeof user.betterAuthId === 'string' ? user.betterAuthId : null
+  const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
+
+  // Find applications in user's workspaces (for backward compat)
+  const apps = await payload.find({
+    collection: 'kafka-applications',
+    where: {
+      workspace: { in: workspaceIds },
+    },
+    limit: 1000,
+    overrideAccess: true,
+  })
+
+  const appIds = apps.docs.map((a) => a.id)
+
+  // Return clusters that either:
+  // 1. Have direct workspace ownership, OR
+  // 2. Belong to an application in user's workspaces (legacy)
+  return {
+    or: [
+      { workspace: { in: workspaceIds } },
+      { application: { in: appIds } },
+    ],
+  } as Where
+}
 
 export const KafkaVirtualClusters: CollectionConfig = {
   slug: 'kafka-virtual-clusters',
@@ -9,59 +45,11 @@ export const KafkaVirtualClusters: CollectionConfig = {
     description: 'Virtual clusters for Kafka applications (one per environment)',
   },
   access: {
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-
-      // Admins can see all
-      if (user.collection === 'users') return true
-
-      // Regular users see only virtual clusters for their workspaces
-      const memberships = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          user: { equals: user.id },
-          status: { equals: 'active' },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-
-      const workspaceIds = memberships.docs.map((m) =>
-        String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
-      )
-
-      // Find applications in user's workspaces (for backward compat)
-      const apps = await payload.find({
-        collection: 'kafka-applications',
-        where: {
-          workspace: { in: workspaceIds },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-
-      const appIds = apps.docs.map((a) => a.id)
-
-      // Return clusters that either:
-      // 1. Have direct workspace ownership, OR
-      // 2. Belong to an application in user's workspaces (legacy)
-      return {
-        or: [
-          { workspace: { in: workspaceIds } },
-          { application: { in: appIds } },
-        ],
-      } as Where
-    },
-    create: ({ req: { user } }) => {
-      // Only system/workflows can create virtual clusters
-      return user?.collection === 'users'
-    },
-    update: ({ req: { user } }) => {
-      return user?.collection === 'users'
-    },
-    delete: ({ req: { user } }) => {
-      return user?.collection === 'users'
-    },
+    read: readOwnedOrLegacyApplicationClusters,
+    // Only system/workflows can create virtual clusters
+    create: adminOnly,
+    update: adminOnly,
+    delete: adminOnly,
   },
   fields: [
     {

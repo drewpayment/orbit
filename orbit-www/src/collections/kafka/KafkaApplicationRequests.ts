@@ -1,5 +1,93 @@
-import type { CollectionConfig, Where } from 'payload'
+import type { Access, CollectionConfig, Where } from 'payload'
 import { afterChangeHook } from './hooks/applicationRequestHooks'
+import { memberCreate } from '@/lib/access/collection-access'
+import {
+  getAdminOrOwnerWorkspaceIds,
+  getMemberWorkspaceIds,
+  isPlatformAdmin,
+  isWorkspaceAdminOrOwner,
+} from '@/lib/access/workspace-access'
+
+// Read: users see (1) their own requests regardless of status, (2) requests
+// awaiting workspace-tier approval in workspaces they admin, and (3) all
+// requests (any status) in workspaces they're a member of, for audit.
+// `requestedBy` is a relationship to `users` (set from `req.user.id` in the
+// beforeChange hook below), so comparing against the Payload id is correct —
+// only the workspace-membership lookups needed the Better-Auth id fix.
+const readOwnOrWorkspaceRequests: Access = async ({ req: { user, payload } }) => {
+  if (!user) return false
+  if (isPlatformAdmin(user)) return true
+
+  const betterAuthId = typeof user.betterAuthId === 'string' ? user.betterAuthId : null
+  const [workspaceIds, adminWorkspaceIds] = betterAuthId
+    ? await Promise.all([
+        getMemberWorkspaceIds(payload, betterAuthId),
+        getAdminOrOwnerWorkspaceIds(payload, betterAuthId),
+      ])
+    : [[], []]
+
+  return {
+    or: [
+      { requestedBy: { equals: user.id } },
+      {
+        and: [
+          { workspace: { in: adminWorkspaceIds } },
+          { status: { equals: 'pending_workspace' } },
+        ],
+      },
+      { workspace: { in: workspaceIds } },
+    ],
+  } as Where
+}
+
+// Update: workspace owner/admin can act on a request only while it's still
+// awaiting workspace-tier approval; platform tier + terminal states are
+// handled elsewhere (server actions / hooks running with overrideAccess).
+const updateWhilePendingWorkspace: Access = async ({ req: { user, payload }, id }) => {
+  if (!user || !id) return false
+  if (isPlatformAdmin(user)) return true
+
+  const betterAuthId = typeof user.betterAuthId === 'string' ? user.betterAuthId : null
+  if (!betterAuthId) return false
+
+  const request = await payload.findByID({
+    collection: 'kafka-application-requests',
+    id: id as string,
+    depth: 0,
+    overrideAccess: true,
+  })
+  if (!request || request.status !== 'pending_workspace') return false
+
+  const workspaceId =
+    typeof request.workspace === 'string' ? request.workspace : (request.workspace as { id: string })?.id
+  if (!workspaceId) return false
+
+  return isWorkspaceAdminOrOwner(payload, betterAuthId, workspaceId)
+}
+
+// Delete: only the requester can cancel their own still-pending request.
+const deleteOwnPendingRequest: Access = async ({ req: { user, payload }, id }) => {
+  if (!user || !id) return false
+  if (isPlatformAdmin(user)) return true
+
+  const request = await payload.findByID({
+    collection: 'kafka-application-requests',
+    id: id as string,
+    depth: 0,
+    overrideAccess: true,
+  })
+  if (!request) return false
+
+  const requesterId =
+    typeof request.requestedBy === 'string'
+      ? request.requestedBy
+      : (request.requestedBy as { id: string })?.id
+
+  return (
+    requesterId === user.id &&
+    (request.status === 'pending_workspace' || request.status === 'pending_platform')
+  )
+}
 
 /**
  * KafkaApplicationRequests - Pending approval requests for Kafka applications
@@ -23,119 +111,13 @@ export const KafkaApplicationRequests: CollectionConfig = {
     // Users can see their own requests
     // Workspace admins can see workspace requests in pending_workspace
     // Platform admins can see all pending_platform requests
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-
-      // Platform admins can see all
-      if (user.collection === 'users') return true
-
-      // Get user's workspace memberships
-      const memberships = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          user: { equals: user.id },
-          status: { equals: 'active' },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-
-      const workspaceIds = memberships.docs.map((m) =>
-        String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
-      )
-
-      const adminWorkspaceIds = memberships.docs
-        .filter((m) => m.role === 'owner' || m.role === 'admin')
-        .map((m) => String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id))
-
-      // User can see:
-      // 1. Their own requests (any status)
-      // 2. Requests in workspaces they admin (pending_workspace status)
-      return {
-        or: [
-          { requestedBy: { equals: user.id } },
-          {
-            and: [
-              { workspace: { in: adminWorkspaceIds } },
-              { status: { equals: 'pending_workspace' } },
-            ],
-          },
-          // Also allow workspace admins to see approved/rejected for audit
-          {
-            and: [{ workspace: { in: workspaceIds } }],
-          },
-        ],
-      } as Where
-    },
-    // Any authenticated user can create a request
-    create: ({ req: { user } }) => !!user,
+    read: readOwnOrWorkspaceRequests,
+    // Any active member of the target workspace can create a request
+    create: memberCreate(),
     // Updates controlled by server actions - only allow through hooks
-    update: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-
-      // Platform admins can update any
-      if (user.collection === 'users') return true
-
-      const request = await payload.findByID({
-        collection: 'kafka-application-requests',
-        id: id as string,
-        overrideAccess: true,
-      })
-
-      if (!request) return false
-
-      const workspaceId =
-        typeof request.workspace === 'string'
-          ? request.workspace
-          : (request.workspace as { id: string }).id
-
-      // Workspace admins can update requests in pending_workspace
-      if (request.status === 'pending_workspace') {
-        const members = await payload.find({
-          collection: 'workspace-members',
-          where: {
-            and: [
-              { workspace: { equals: workspaceId } },
-              { user: { equals: user.id } },
-              { role: { in: ['owner', 'admin'] } },
-              { status: { equals: 'active' } },
-            ],
-          },
-          limit: 1,
-          overrideAccess: true,
-        })
-
-        return members.docs.length > 0
-      }
-
-      return false
-    },
+    update: updateWhilePendingWorkspace,
     // Only requester can delete (cancel) their own pending request
-    delete: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-
-      // Platform admins can delete any
-      if (user.collection === 'users') return true
-
-      const request = await payload.findByID({
-        collection: 'kafka-application-requests',
-        id: id as string,
-        overrideAccess: true,
-      })
-
-      if (!request) return false
-
-      // Only requester can cancel, and only if still pending
-      const requesterId =
-        typeof request.requestedBy === 'string'
-          ? request.requestedBy
-          : (request.requestedBy as { id: string }).id
-
-      return (
-        requesterId === user.id &&
-        (request.status === 'pending_workspace' || request.status === 'pending_platform')
-      )
-    },
+    delete: deleteOwnPendingRequest,
   },
   fields: [
     // Application details (same as normal creation)
