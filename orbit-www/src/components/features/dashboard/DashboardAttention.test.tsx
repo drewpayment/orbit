@@ -1,5 +1,6 @@
-import { render, screen, cleanup } from '@testing-library/react'
-import { describe, it, expect, afterEach } from 'vitest'
+import { render, screen, cleanup, waitFor } from '@testing-library/react'
+import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import userEvent from '@testing-library/user-event'
 import { DashboardAttention } from './DashboardAttention'
 import type { AttentionRun } from './DashboardAttention'
 
@@ -137,5 +138,158 @@ describe('DashboardAttention', () => {
       render(<DashboardAttention runs={[minimalRun]} />)
       expect(screen.getByText(/Started 1m ago/)).toBeInTheDocument()
     })
+  })
+})
+
+describe('DashboardAttention — hub (2+ items)', () => {
+  const awaitingRun: AttentionRun = {
+    id: 'run-await',
+    kind: 'awaiting',
+    title: 'Awaiting deploy',
+    workspace: 'Dogfood Test',
+    startedRel: '2m ago',
+    href: '/agent',
+  }
+  const approvalRun: AttentionRun = {
+    id: 'appr-1',
+    kind: 'approval',
+    title: 'Approve topic pattern',
+    workspace: 'Dogfood Test',
+    startedRel: '5m ago',
+    href: '/platform/approvals',
+  }
+  const runningRun: AttentionRun = {
+    id: 'run-going',
+    kind: 'running',
+    title: 'Running sync job',
+    workspace: 'Dogfood Test',
+    startedRel: '1m ago',
+    href: '/agent',
+  }
+
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+  afterEach(() => {
+    cleanup()
+    window.localStorage.clear()
+  })
+
+  it('should render a single rich card (no hub chrome) for exactly one item', () => {
+    render(<DashboardAttention runs={[approvalRun]} />)
+    expect(screen.queryByText('Needs your attention')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /attention panel/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /promote to spotlight/i })).not.toBeInTheDocument()
+  })
+
+  it('should consolidate 2+ items into one hub panel with a header', () => {
+    render(<DashboardAttention runs={[approvalRun, runningRun]} />)
+    expect(screen.getByText('Needs your attention')).toBeInTheDocument()
+  })
+
+  it('should pick the highest-priority item as the spotlight (awaiting > approval > running)', () => {
+    render(<DashboardAttention runs={[runningRun, approvalRun, awaitingRun]} />)
+    // Non-spotlight items are promote buttons; the awaiting spotlight is not.
+    const promotes = screen.getAllByRole('button', { name: /promote to spotlight/i })
+    expect(promotes).toHaveLength(2)
+    expect(screen.getByRole('button', { name: /Approve topic pattern.*promote to spotlight/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Running sync job.*promote to spotlight/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Awaiting deploy.*promote to spotlight/i })).not.toBeInTheDocument()
+  })
+
+  it('should show a per-kind count summary joined by ·, omitting zero kinds', () => {
+    render(<DashboardAttention runs={[runningRun, approvalRun, awaitingRun]} />)
+    expect(screen.getByText('1 approval · 1 awaiting input · 1 running')).toBeInTheDocument()
+  })
+
+  it('should swap the spotlight when a queue row is clicked', async () => {
+    const user = userEvent.setup()
+    render(<DashboardAttention runs={[approvalRun, awaitingRun, runningRun]} />)
+    // awaiting is spotlight; approval + running are queue rows.
+    await user.click(screen.getByRole('button', { name: /Approve topic pattern.*promote to spotlight/i }))
+    // approval is now spotlight (no longer a promote button); awaiting drops into the queue.
+    expect(screen.queryByRole('button', { name: /Approve topic pattern.*promote to spotlight/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Awaiting deploy.*promote to spotlight/i })).toBeInTheDocument()
+  })
+
+  it('should toggle collapse, reflecting aria-expanded and hiding the queue', async () => {
+    const user = userEvent.setup()
+    render(<DashboardAttention runs={[approvalRun, runningRun]} />)
+    const toggle = screen.getByRole('button', { name: /collapse attention panel/i })
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await user.click(toggle)
+    const expandToggle = screen.getByRole('button', { name: /expand attention panel/i })
+    expect(expandToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('button', { name: /promote to spotlight/i })).not.toBeInTheDocument()
+  })
+
+  it('should restore the persisted collapsed state from localStorage', async () => {
+    window.localStorage.setItem('orbit.attentionHub.collapsed', 'true')
+    window.localStorage.setItem('orbit.attentionHub.seenIds', JSON.stringify(['appr-1', 'run-going']))
+    render(<DashboardAttention runs={[approvalRun, runningRun]} />)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /expand attention panel/i })).toHaveAttribute('aria-expanded', 'false'),
+    )
+  })
+
+  it('should auto-expand when a new (unseen) item id appears even if persisted collapsed', async () => {
+    window.localStorage.setItem('orbit.attentionHub.collapsed', 'true')
+    window.localStorage.setItem('orbit.attentionHub.seenIds', JSON.stringify(['some-old-id']))
+    render(<DashboardAttention runs={[approvalRun, runningRun]} />)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /collapse attention panel/i })).toHaveAttribute('aria-expanded', 'true'),
+    )
+  })
+
+  it('should persist the collapse state to localStorage when toggled', async () => {
+    const user = userEvent.setup()
+    render(<DashboardAttention runs={[approvalRun, runningRun]} />)
+    await user.click(screen.getByRole('button', { name: /collapse attention panel/i }))
+    await waitFor(() => expect(window.localStorage.getItem('orbit.attentionHub.collapsed')).toBe('true'))
+  })
+
+  it('should cap the queue at 4 rows and reveal the rest via "Show N more"', async () => {
+    const user = userEvent.setup()
+    const many: AttentionRun[] = [
+      awaitingRun,
+      approvalRun,
+      runningRun,
+      { ...runningRun, id: 'r2', title: 'Run two' },
+      { ...runningRun, id: 'r3', title: 'Run three' },
+      { ...runningRun, id: 'r4', title: 'Run four' },
+    ]
+    render(<DashboardAttention runs={many} />)
+    // 6 items → 1 spotlight + 5 queue → 4 visible, 1 hidden.
+    expect(screen.getAllByRole('button', { name: /promote to spotlight/i })).toHaveLength(4)
+    await user.click(screen.getByRole('button', { name: /show 1 more/i }))
+    expect(screen.getAllByRole('button', { name: /promote to spotlight/i })).toHaveLength(5)
+  })
+
+  it('should show overflow footer links only when totals exceed fetched counts', () => {
+    render(<DashboardAttention runs={[approvalRun, runningRun]} approvalsTotal={5} runsTotal={5} />)
+    expect(screen.getByRole('link', { name: /view all approvals/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /view all runs/i })).toBeInTheDocument()
+  })
+
+  it('should not show overflow footer links when totals equal fetched counts', () => {
+    render(<DashboardAttention runs={[approvalRun, runningRun]} approvalsTotal={1} runsTotal={1} />)
+    expect(screen.queryByRole('link', { name: /view all approvals/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /view all runs/i })).not.toBeInTheDocument()
+  })
+
+  it('should expose an accessible deep-link affordance per queue row', () => {
+    render(<DashboardAttention runs={[awaitingRun, approvalRun, runningRun]} />)
+    expect(screen.getByRole('link', { name: /open Approve topic pattern/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /open Running sync job/i })).toBeInTheDocument()
+  })
+
+  it('should keep queue rows keyboard-operable for promotion', async () => {
+    const user = userEvent.setup()
+    render(<DashboardAttention runs={[awaitingRun, approvalRun, runningRun]} />)
+    const approvalRow = screen.getByRole('button', { name: /Approve topic pattern.*promote to spotlight/i })
+    approvalRow.focus()
+    await user.keyboard('{Enter}')
+    // approval is promoted to spotlight, so its promote button is gone.
+    expect(screen.queryByRole('button', { name: /Approve topic pattern.*promote to spotlight/i })).not.toBeInTheDocument()
   })
 })
