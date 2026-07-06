@@ -83,7 +83,7 @@ export async function POST(request: Request) {
       await setupClient.connect()
       await setupClient.db().collection('user').updateOne(
         { _id: new ObjectId(authUserId) },
-        { $set: { status: 'approved', role: 'admin', emailVerified: true } }
+        { $set: { status: 'approved', role: 'super_admin', emailVerified: true } }
       )
     } finally {
       await setupClient.close()
@@ -99,7 +99,7 @@ export async function POST(request: Request) {
 
     const payloadUser = await payload.create({
       collection: 'users',
-      data: { email, name, password, status: 'approved' },
+      data: { email, name, password, status: 'approved', role: 'super_admin' },
       overrideAccess: true,
       context: { skipApprovalHook: true },
     })

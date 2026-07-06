@@ -15,6 +15,10 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false, // Handled manually in databaseHooks for gated users only
+    // Signups start as status:pending, and the session.create gate rejects
+    // pending users — creating a session at signup would make registration
+    // itself fail with FORBIDDEN. New users sign in after approval instead.
+    autoSignIn: false,
   },
   emailVerification: {
     sendVerificationEmail: async ({ user, url }) => {
@@ -29,6 +33,10 @@ export const auth = betterAuth({
       if (!process.env.RESEND_API_KEY) {
         if (process.env.NODE_ENV === "development") {
           console.log(`   (No RESEND_API_KEY — skipping email send in dev mode)`)
+        } else if (process.env.NODE_ENV === "production") {
+          console.error(
+            `[email-verification] RESEND_API_KEY not configured — verification email NOT sent to ${user.email}`,
+          )
         }
         return
       }
@@ -114,7 +122,12 @@ export const auth = betterAuth({
               message: "Your registration was not approved. Contact an administrator.",
             })
           }
-          if (status === "approved" && !user.emailVerified && user.role !== "super_admin") {
+          if (
+            status === "approved" &&
+            !user.emailVerified &&
+            user.role !== "super_admin" &&
+            user.role !== "admin"
+          ) {
             throw new APIError("FORBIDDEN", {
               message: "Please verify your email before logging in. Check your inbox.",
             })

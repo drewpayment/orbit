@@ -5,9 +5,13 @@ import { getMongoClient } from '@/lib/mongodb'
  * Syncs user approval status changes from Payload admin to Better Auth.
  *
  * When an admin changes a user's status in Payload:
- * - approved: Updates Better Auth user status, optionally sets emailVerified
- *   and triggers verification email via Resend
- * - rejected: Updates Better Auth user status
+ * - approved (skip unchecked): marks the Better Auth user approved and asks
+ *   Better Auth's server API to mint + send a valid verification email
+ * - approved (skip checked): marks the Better Auth user approved and verified,
+ *   no email
+ * - skip checked on an already-approved user (status unchanged): retroactively
+ *   marks the Better Auth user verified, no email
+ * - rejected: marks the Better Auth user rejected
  */
 export const userApprovalAfterChangeHook: CollectionAfterChangeHook = async ({
   operation,
@@ -20,9 +24,19 @@ export const userApprovalAfterChangeHook: CollectionAfterChangeHook = async ({
 
   const previousStatus = previousDoc?.status
   const newStatus = doc.status
+  const statusChanged = previousStatus !== newStatus
 
-  // Only act when status actually changed
-  if (previousStatus === newStatus) return doc
+  // Retroactive skip: the checkbox flipped true on an already-approved user
+  // whose status did not otherwise change. The hook normally only fires on a
+  // status change, so this branch handles "approve now, skip verification
+  // later" as a separate save.
+  const retroactiveSkip =
+    !statusChanged &&
+    newStatus === 'approved' &&
+    previousDoc?.skipEmailVerification !== true &&
+    doc.skipEmailVerification === true
+
+  if (!statusChanged && !retroactiveSkip) return doc
 
   const mongoClient = await getMongoClient()
   const db = mongoClient.db()
@@ -32,6 +46,15 @@ export const userApprovalAfterChangeHook: CollectionAfterChangeHook = async ({
   const baUser = await baUserCollection.findOne({ email: doc.email })
   if (!baUser) {
     console.warn(`[userApprovalHook] No Better Auth user found for email: ${doc.email}`)
+    return doc
+  }
+
+  if (retroactiveSkip) {
+    await baUserCollection.updateOne(
+      { _id: baUser._id },
+      { $set: { emailVerified: true } },
+    )
+    console.log(`[userApprovalHook] Email verification retroactively skipped for ${doc.email}`)
     return doc
   }
 
@@ -62,60 +85,17 @@ export const userApprovalAfterChangeHook: CollectionAfterChangeHook = async ({
     })
 
     if (!skipVerification) {
+      // Ask Better Auth to mint its OWN signed token and route it through the
+      // single sender in lib/auth.ts. Dynamic import avoids any config-load
+      // cycle (Users -> hook -> auth) and keeps this the sole email path.
       try {
-        const { Resend } = await import('resend')
-        const resend = new Resend(process.env.RESEND_API_KEY)
-        const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@hoytlabs.app'
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-
-        // Create a verification token in Better Auth's verification collection
-        const crypto = await import('crypto')
-        const token = crypto.randomBytes(32).toString('hex')
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
-
-        await db.collection('verification').insertOne({
-          identifier: doc.email,
-          value: token,
-          expiresAt,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+        const { auth } = await import('@/lib/auth')
+        await auth.api.sendVerificationEmail({
+          body: { email: doc.email, callbackURL: '/login' },
         })
-
-        const verificationUrl = `${appUrl}/api/auth/verify-email?token=${token}&callbackURL=${encodeURIComponent(appUrl + '/login')}`
-
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`\n${'='.repeat(60)}`)
-          console.log(`📧 EMAIL VERIFICATION (dev mode)`)
-          console.log(`   To: ${doc.email}`)
-          console.log(`   URL: ${verificationUrl}`)
-          console.log(`${'='.repeat(60)}\n`)
-        }
-
-        if (!process.env.RESEND_API_KEY) {
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`   (No RESEND_API_KEY — skipping email send in dev mode)`)
-          }
-        } else {
-          await resend.emails.send({
-            from: fromEmail,
-            to: doc.email,
-            subject: 'Verify your Orbit account',
-            html: `
-              <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #1a1a1a;">Verify your email address</h2>
-                <p>Your Orbit account has been approved! Click the link below to verify your email and start using Orbit.</p>
-                <p style="margin: 24px 0;">
-                  <a href="${verificationUrl}" style="display: inline-block; background: #FF5C00; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 500;">
-                    Verify Email
-                  </a>
-                </p>
-                <p style="color: #666; font-size: 14px;">This link expires in 24 hours. If you didn't create an Orbit account, you can ignore this email.</p>
-              </div>
-            `,
-          })
-          console.log(`[userApprovalHook] Verification email sent to ${doc.email}`)
-        }
+        console.log(`[userApprovalHook] Verification email requested for ${doc.email}`)
       } catch (error) {
+        // Approval itself must not roll back if delivery fails.
         console.error(`[userApprovalHook] Failed to send verification email to ${doc.email}:`, error)
       }
     } else {
