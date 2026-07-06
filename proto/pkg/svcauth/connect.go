@@ -39,7 +39,7 @@ func (i *connectInterceptor) authenticateConnect(ctx context.Context, procedure 
 		}
 		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("invalid or missing service auth token"))
 	}
-	return WithIdentity(ctx, Identity{UserID: claims.Subject, WorkspaceID: claims.WorkspaceID}), nil
+	return WithIdentity(ctx, Identity{UserID: claims.Subject, WorkspaceID: claims.WorkspaceID, PlatformAdmin: claims.PlatformAdmin}), nil
 }
 
 func (i *connectInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {

@@ -42,6 +42,20 @@ function loadSecret(): Uint8Array {
 }
 
 /**
+ * Options for minting a service-auth token.
+ */
+export interface MintServiceTokenOptions {
+  /**
+   * When true, sign the `adm: true` platform-admin claim so the services'
+   * EnforcePlatformAdmin gate (e.g. Kafka cluster management) admits the call.
+   * MUST be derived from the server-side session user role, never from request
+   * input. Omitted from the token when false so non-admin (and legacy) tokens
+   * fail closed.
+   */
+  platformAdmin?: boolean
+}
+
+/**
  * Mint a service-auth JWT for a single outbound call.
  *
  * @param subject     betterAuthId of the acting user (session.user.id).
@@ -49,8 +63,13 @@ function loadSecret(): Uint8Array {
  *                    request; signed into `wid` and enforced by the services
  *                    against the request body's workspace_id. May be empty for
  *                    RPCs that carry no workspace scope.
+ * @param opts        optional claims; see MintServiceTokenOptions.
  */
-export async function mintServiceToken(subject: string, workspaceId: string): Promise<string> {
+export async function mintServiceToken(
+  subject: string,
+  workspaceId: string,
+  opts?: MintServiceTokenOptions,
+): Promise<string> {
   if (!subject) {
     throw new Error('mintServiceToken: subject (betterAuthId) is required')
   }
@@ -58,7 +77,14 @@ export async function mintServiceToken(subject: string, workspaceId: string): Pr
   const secret = loadSecret()
   const now = Math.floor(Date.now() / 1000)
 
-  return new jose.SignJWT({ wid: workspaceId })
+  const claims: Record<string, unknown> = { wid: workspaceId }
+  // Only set `adm` when true — omitting it keeps the token shape identical to
+  // the pre-admin-claim tokens, which the Go side parses as non-admin.
+  if (opts?.platformAdmin) {
+    claims.adm = true
+  }
+
+  return new jose.SignJWT(claims)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuer(ISSUER)
     .setAudience(AUDIENCE)

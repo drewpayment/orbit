@@ -44,6 +44,26 @@ func TestEnforceWorkspace(t *testing.T) {
 	})
 }
 
+func TestEnforcePlatformAdmin(t *testing.T) {
+	t.Run("admin identity is allowed", func(t *testing.T) {
+		ctx := WithIdentity(context.Background(), Identity{UserID: "u", PlatformAdmin: true})
+		require.NoError(t, EnforcePlatformAdmin(ctx))
+	})
+
+	t.Run("non-admin identity is PermissionDenied", func(t *testing.T) {
+		ctx := WithIdentity(context.Background(), Identity{UserID: "u", PlatformAdmin: false})
+		err := EnforcePlatformAdmin(ctx)
+		require.Error(t, err)
+		assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	})
+
+	t.Run("missing identity is Unauthenticated", func(t *testing.T) {
+		err := EnforcePlatformAdmin(context.Background())
+		require.Error(t, err)
+		assert.Equal(t, codes.Unauthenticated, status.Code(err))
+	})
+}
+
 func TestIdentityRoundTrip(t *testing.T) {
 	id := Identity{UserID: "user-123", WorkspaceID: "ws-456"}
 	got, ok := IdentityFromContext(WithIdentity(context.Background(), id))

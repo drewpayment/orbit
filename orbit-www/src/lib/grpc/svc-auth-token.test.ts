@@ -40,6 +40,30 @@ describe('mintServiceToken', () => {
     expect((payload.exp as number) - (payload.iat as number)).toBe(120)
   })
 
+  it('sets the adm claim only when platformAdmin is true', async () => {
+    vi.stubEnv('ORBIT_SVC_AUTH_SECRET', MOCK_SECRET)
+    const { mintServiceToken } = await importFresh()
+    const secret = new TextEncoder().encode(MOCK_SECRET)
+
+    const adminToken = await mintServiceToken('user-abc', 'ws', { platformAdmin: true })
+    const { payload: adminPayload } = await jose.jwtVerify(adminToken, secret)
+    expect(adminPayload.adm).toBe(true)
+  })
+
+  it('omits the adm claim when platformAdmin is false or unset (fail closed)', async () => {
+    vi.stubEnv('ORBIT_SVC_AUTH_SECRET', MOCK_SECRET)
+    const { mintServiceToken } = await importFresh()
+    const secret = new TextEncoder().encode(MOCK_SECRET)
+
+    const falseToken = await mintServiceToken('user-abc', 'ws', { platformAdmin: false })
+    const { payload: falsePayload } = await jose.jwtVerify(falseToken, secret)
+    expect(falsePayload.adm).toBeUndefined()
+
+    const defaultToken = await mintServiceToken('user-abc', 'ws')
+    const { payload: defaultPayload } = await jose.jwtVerify(defaultToken, secret)
+    expect(defaultPayload.adm).toBeUndefined()
+  })
+
   it('allows an empty workspace for RPCs with no workspace scope', async () => {
     vi.stubEnv('ORBIT_SVC_AUTH_SECRET', MOCK_SECRET)
     const { mintServiceToken } = await importFresh()

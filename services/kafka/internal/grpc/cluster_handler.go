@@ -4,6 +4,7 @@ import (
 	"context"
 
 	kafkav1 "github.com/drewpayment/orbit/proto/gen/go/idp/kafka/v1"
+	"github.com/drewpayment/orbit/proto/pkg/svcauth"
 	"github.com/drewpayment/orbit/services/kafka/internal/domain"
 	"github.com/drewpayment/orbit/services/kafka/internal/service"
 	"github.com/google/uuid"
@@ -26,6 +27,9 @@ func NewClusterHandler(clusterService *service.ClusterService) *ClusterHandler {
 
 // ListProviders returns all available Kafka providers
 func (h *ClusterHandler) ListProviders(ctx context.Context, req *kafkav1.ListProvidersRequest) (*kafkav1.ListProvidersResponse, error) {
+	if err := svcauth.EnforcePlatformAdmin(ctx); err != nil {
+		return nil, err
+	}
 	providers, err := h.clusterService.ListProviders(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to list providers: %v", err)
@@ -43,6 +47,9 @@ func (h *ClusterHandler) ListProviders(ctx context.Context, req *kafkav1.ListPro
 
 // RegisterCluster registers a new Kafka cluster
 func (h *ClusterHandler) RegisterCluster(ctx context.Context, req *kafkav1.RegisterClusterRequest) (*kafkav1.RegisterClusterResponse, error) {
+	if err := svcauth.EnforcePlatformAdmin(ctx); err != nil {
+		return nil, err
+	}
 	cluster, err := h.clusterService.RegisterCluster(ctx, service.RegisterClusterRequest{
 		Name:             req.Name,
 		ProviderID:       req.ProviderId,
@@ -63,6 +70,9 @@ func (h *ClusterHandler) RegisterCluster(ctx context.Context, req *kafkav1.Regis
 
 // ValidateCluster validates a cluster connection (cluster stored in Go service)
 func (h *ClusterHandler) ValidateCluster(ctx context.Context, req *kafkav1.ValidateClusterRequest) (*kafkav1.ValidateClusterResponse, error) {
+	if err := svcauth.EnforcePlatformAdmin(ctx); err != nil {
+		return nil, err
+	}
 	clusterID, err := uuid.Parse(req.ClusterId)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid cluster ID: %v", err)
@@ -84,6 +94,9 @@ func (h *ClusterHandler) ValidateCluster(ctx context.Context, req *kafkav1.Valid
 // ValidateClusterConnection validates a Kafka connection using provided config
 // This is used when cluster config is stored externally (e.g., Payload CMS)
 func (h *ClusterHandler) ValidateClusterConnection(ctx context.Context, req *kafkav1.ValidateClusterConnectionRequest) (*kafkav1.ValidateClusterConnectionResponse, error) {
+	if err := svcauth.EnforcePlatformAdmin(ctx); err != nil {
+		return nil, err
+	}
 	valid, err := h.clusterService.ValidateClusterConnection(ctx, req.ConnectionConfig, req.Credentials)
 	if err != nil {
 		return &kafkav1.ValidateClusterConnectionResponse{
@@ -101,6 +114,9 @@ func (h *ClusterHandler) ValidateClusterConnection(ctx context.Context, req *kaf
 // This is used when topic metadata is stored externally (e.g., Payload CMS)
 // and we only need to remove the topic from Kafka without looking up internal IDs.
 func (h *ClusterHandler) DeleteTopicByName(ctx context.Context, req *kafkav1.DeleteTopicByNameRequest) (*kafkav1.DeleteTopicByNameResponse, error) {
+	if err := svcauth.EnforcePlatformAdmin(ctx); err != nil {
+		return nil, err
+	}
 	if req.TopicName == "" {
 		return &kafkav1.DeleteTopicByNameResponse{
 			Success: false,
@@ -125,6 +141,9 @@ func (h *ClusterHandler) DeleteTopicByName(ctx context.Context, req *kafkav1.Del
 // This is used when topic metadata is stored externally (e.g., Payload CMS)
 // and we only need to create the topic on Kafka without storing in Go service.
 func (h *ClusterHandler) CreateTopicDirect(ctx context.Context, req *kafkav1.CreateTopicDirectRequest) (*kafkav1.CreateTopicDirectResponse, error) {
+	if err := svcauth.EnforcePlatformAdmin(ctx); err != nil {
+		return nil, err
+	}
 	if req.TopicName == "" {
 		return &kafkav1.CreateTopicDirectResponse{
 			Success: false,
@@ -154,6 +173,9 @@ func (h *ClusterHandler) CreateTopicDirect(ctx context.Context, req *kafkav1.Cre
 
 // ListClusters returns all registered clusters
 func (h *ClusterHandler) ListClusters(ctx context.Context, req *kafkav1.ListClustersRequest) (*kafkav1.ListClustersResponse, error) {
+	if err := svcauth.EnforcePlatformAdmin(ctx); err != nil {
+		return nil, err
+	}
 	clusters, err := h.clusterService.ListClusters(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to list clusters: %v", err)
@@ -171,6 +193,9 @@ func (h *ClusterHandler) ListClusters(ctx context.Context, req *kafkav1.ListClus
 
 // DeleteCluster deletes a cluster
 func (h *ClusterHandler) DeleteCluster(ctx context.Context, req *kafkav1.DeleteClusterRequest) (*kafkav1.DeleteClusterResponse, error) {
+	if err := svcauth.EnforcePlatformAdmin(ctx); err != nil {
+		return nil, err
+	}
 	clusterID, err := uuid.Parse(req.ClusterId)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid cluster ID: %v", err)
@@ -190,6 +215,9 @@ func (h *ClusterHandler) DeleteCluster(ctx context.Context, req *kafkav1.DeleteC
 
 // CreateEnvironmentMapping creates an environment to cluster mapping
 func (h *ClusterHandler) CreateEnvironmentMapping(ctx context.Context, req *kafkav1.CreateEnvironmentMappingRequest) (*kafkav1.CreateEnvironmentMappingResponse, error) {
+	if err := svcauth.EnforcePlatformAdmin(ctx); err != nil {
+		return nil, err
+	}
 	clusterID, err := uuid.Parse(req.ClusterId)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid cluster ID: %v", err)
@@ -216,6 +244,9 @@ func (h *ClusterHandler) CreateEnvironmentMapping(ctx context.Context, req *kafk
 
 // ListEnvironmentMappings returns environment mappings
 func (h *ClusterHandler) ListEnvironmentMappings(ctx context.Context, req *kafkav1.ListEnvironmentMappingsRequest) (*kafkav1.ListEnvironmentMappingsResponse, error) {
+	if err := svcauth.EnforcePlatformAdmin(ctx); err != nil {
+		return nil, err
+	}
 	mappings, err := h.clusterService.ListEnvironmentMappings(ctx, req.Environment)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to list mappings: %v", err)
@@ -233,6 +264,9 @@ func (h *ClusterHandler) ListEnvironmentMappings(ctx context.Context, req *kafka
 
 // DeleteEnvironmentMapping deletes an environment mapping
 func (h *ClusterHandler) DeleteEnvironmentMapping(ctx context.Context, req *kafkav1.DeleteEnvironmentMappingRequest) (*kafkav1.DeleteEnvironmentMappingResponse, error) {
+	if err := svcauth.EnforcePlatformAdmin(ctx); err != nil {
+		return nil, err
+	}
 	mappingID, err := uuid.Parse(req.MappingId)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid mapping ID: %v", err)
