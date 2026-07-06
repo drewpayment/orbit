@@ -107,7 +107,7 @@ export default async function DashboardPage() {
           collection: 'pending-approvals',
           where: { ...workspaceFilter, status: { equals: 'pending' } },
           sort: '-createdAt',
-          limit: 3,
+          limit: 5,
           depth: 1,
           overrideAccess: true,
         }),
@@ -139,7 +139,7 @@ export default async function DashboardPage() {
           collection: 'agent-runs',
           where: { ...workspaceFilter, status: { in: ['running', 'awaiting_user', 'awaiting_approval'] } },
           sort: '-startedAt',
-          limit: 3,
+          limit: 5,
           depth: 1,
           overrideAccess: true,
         }),
@@ -224,6 +224,9 @@ export default async function DashboardPage() {
   // Build the attention strip: pending approvals + active agent runs
   const approvalDocs = 'docs' in pendingApprovalsResult ? pendingApprovalsResult.docs : []
   const activeRunDocs = 'docs' in activeAgentRunsResult ? activeAgentRunsResult.docs : []
+  // Totals let the hub surface overflow when more items exist than were fetched.
+  // pendingApprovals already counts only status:pending — the same set we fetch here.
+  const activeRunsTotal = 'totalDocs' in activeAgentRunsResult ? activeAgentRunsResult.totalDocs : 0
 
   const attentionRuns: AttentionRun[] = [
     ...approvalDocs.map((appr): AttentionRun => {
@@ -400,7 +403,11 @@ export default async function DashboardPage() {
 
           {/* Attention Strip */}
           <div className="stagger-item">
-            <DashboardAttention runs={attentionRuns} />
+            <DashboardAttention
+              runs={attentionRuns}
+              approvalsTotal={pendingApprovals}
+              runsTotal={activeRunsTotal}
+            />
           </div>
 
           {/* Stats Row */}
