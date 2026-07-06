@@ -93,6 +93,7 @@ export interface Config {
     launches: Launch;
     'llm-providers': LlmProvider;
     'agent-runs': AgentRun;
+    'agent-events': AgentEvent;
     'agent-tools': AgentTool;
     'agent-tool-versions': AgentToolVersion;
     patterns: Pattern;
@@ -169,6 +170,7 @@ export interface Config {
     launches: LaunchesSelect<false> | LaunchesSelect<true>;
     'llm-providers': LlmProvidersSelect<false> | LlmProvidersSelect<true>;
     'agent-runs': AgentRunsSelect<false> | AgentRunsSelect<true>;
+    'agent-events': AgentEventsSelect<false> | AgentEventsSelect<true>;
     'agent-tools': AgentToolsSelect<false> | AgentToolsSelect<true>;
     'agent-tool-versions': AgentToolVersionsSelect<false> | AgentToolVersionsSelect<true>;
     patterns: PatternsSelect<false> | PatternsSelect<true>;
@@ -1521,6 +1523,38 @@ export interface AgentRun {
         id?: string | null;
       }[]
     | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Persisted Infrastructure Agent transcript events
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "agent-events".
+ */
+export interface AgentEvent {
+  id: string;
+  workspace: string | Workspace;
+  run: string | AgentRun;
+  workflowId: string;
+  sequence: number;
+  /**
+   * conversation_turn | proposal_update | approval_request | approval_resolution | status_update | tool_call_output
+   */
+  kind: string;
+  /**
+   * Exact AgentEvent.Payload map as emitted by the workflow
+   */
+  payload:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  emittedAt: string;
   updatedAt: string;
   createdAt: string;
 }
@@ -4147,6 +4181,10 @@ export interface PayloadLockedDocument {
         value: string | AgentRun;
       } | null)
     | ({
+        relationTo: 'agent-events';
+        value: string | AgentEvent;
+      } | null)
+    | ({
         relationTo: 'agent-tools';
         value: string | AgentTool;
       } | null)
@@ -4972,6 +5010,21 @@ export interface AgentRunsSelect<T extends boolean = true> {
         agentToolVersionId?: T;
         id?: T;
       };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "agent-events_select".
+ */
+export interface AgentEventsSelect<T extends boolean = true> {
+  workspace?: T;
+  run?: T;
+  workflowId?: T;
+  sequence?: T;
+  kind?: T;
+  payload?: T;
+  emittedAt?: T;
   updatedAt?: T;
   createdAt?: T;
 }

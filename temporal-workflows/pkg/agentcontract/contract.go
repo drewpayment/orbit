@@ -143,6 +143,11 @@ const (
 	ActivityUpdateAgentRun = "UpdateAgentRun"
 )
 
+// ActivityPersistAgentEvents writes durable transcript events into the
+// orbit-www agent-events collection (Mongo system-of-record replica) so the
+// chat history survives Temporal retention expiry and continue-as-new.
+const ActivityPersistAgentEvents = "PersistAgentEvents"
+
 // Activity names for Spike 7 commit γ — aggregated pending-approvals queue.
 // The workflow calls these on every gate open/close in addition to its
 // inline state mutations so a reviewer who isn't watching the chat can
@@ -174,6 +179,10 @@ const (
 	EventKindApprovalResolved   = "approval_resolution"
 	EventKindStatusUpdate       = "status_update"
 	EventKindToolCallOutputChunk = "tool_call_output_chunk"
+	// EventKindToolCallOutput is the aggregated, persisted counterpart to the
+	// ephemeral tool_call_output_chunk stream: one durable event per callId,
+	// emitted when a tool's output streaming completes (capped + truncated).
+	EventKindToolCallOutput = "tool_call_output"
 )
 
 // InfrastructureAgentInput is the workflow input.
@@ -204,10 +213,41 @@ type InfrastructureAgentInput struct {
 	// the GitHub API. May be empty for public repos.
 	GitHubToken string
 
+	// ApprovalTimeout bounds how long an approval gate may stay pending
+	// before the workflow auto-rejects it ("approval timed out"). Zero
+	// means "use the worker default" (see workflows.DefaultApprovalTimeout,
+	// overridable via AGENT_APPROVAL_TIMEOUT).
+	ApprovalTimeout time.Duration
+
 	History         []ConversationTurn
 	Events          []AgentEvent
 	NextSequence    uint64
 	IterationsSoFar int
+
+	// UnflushedDurable carries durable transcript events that a run buffered
+	// but never successfully persisted before continue-as-new (e.g. the
+	// pre-CAN flush activity errored, or an event was appended during the
+	// flush await). The continued run seeds its own flush buffer from this so
+	// the events are persisted at its first barrier — they would otherwise be
+	// lost across the CAN boundary (GH issue #43). Idempotent on
+	// (workflowId, sequence); since these were never persisted, carrying them
+	// cannot double-write. Backward-compatible: a nil value (older carry
+	// inputs / fresh runs) simply seeds an empty buffer. The element type
+	// mirrors the activity-layer AgentEventWire so the contract package keeps
+	// no dependency on internal/activities.
+	UnflushedDurable []DurableEventWire
+}
+
+// DurableEventWire is the contract-level shape of one buffered durable event
+// carried across continue-as-new. It mirrors the activity-layer AgentEventWire
+// field-for-field (including JSON tags) so the workflow can convert between the
+// two at the CAN boundary without coupling pkg/agentcontract to
+// internal/activities.
+type DurableEventWire struct {
+	Sequence  uint64         `json:"sequence"`
+	Kind      string         `json:"kind"`
+	Payload   map[string]any `json:"payload"`
+	EmittedAt string         `json:"emitted_at"` // RFC3339
 }
 
 // ConversationTurn captures one message in the agent transcript.

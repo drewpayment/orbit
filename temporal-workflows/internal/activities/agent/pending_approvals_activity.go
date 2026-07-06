@@ -91,6 +91,7 @@ type ResolvePendingApprovalInput struct {
 	Resolution     string // "approved" | "rejected"
 	ResolvedBy     string
 	Notes          string
+	WorkspaceID    string // resolving workflow's workspace (ownership check)
 	ReviewerRounds int
 }
 
@@ -113,6 +114,7 @@ func (a *PendingApprovalsActivities) ResolvePendingApproval(ctx context.Context,
 		Resolution:     in.Resolution,
 		ResolvedBy:     in.ResolvedBy,
 		Notes:          in.Notes,
+		WorkspaceID:    in.WorkspaceID,
 		ReviewerRounds: in.ReviewerRounds,
 	})
 }

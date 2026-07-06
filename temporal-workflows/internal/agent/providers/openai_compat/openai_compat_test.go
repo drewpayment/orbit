@@ -2,6 +2,7 @@ package openai_compat
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -119,5 +120,88 @@ func TestNew_RequiresModel(t *testing.T) {
 	_, err := New(providers.Config{APIKey: "k"})
 	if err == nil {
 		t.Fatal("expected error when Model is empty")
+	}
+}
+
+// BUG-2: a multi-turn history containing an empty-content/no-tool-call
+// assistant turn (e.g. a done-marker reply) and an empty-content tool turn
+// must serialize with explicit "content" keys. With json:"content,omitempty"
+// these marshaled to bare {"role":"assistant"} / {"role":"tool",...} which
+// Ollama rejects with "invalid message content type: <nil>", 400ing every
+// follow-up call.
+func TestBuildRequest_AlwaysEmitsContentKey(t *testing.T) {
+	body, err := buildRequest("ollama-llama3", providers.CompletionRequest{
+		System: "you are a bot",
+		Messages: []providers.Message{
+			{Role: providers.RoleUser, Content: "hi"},
+			// Assistant turn with NO content and NO tool calls — dropped.
+			{Role: providers.RoleAssistant, Content: ""},
+			// Assistant turn with text but no tool calls — must keep content.
+			{Role: providers.RoleAssistant, Content: "thinking..."},
+			// Tool result with empty content — must keep explicit content.
+			{Role: providers.RoleTool, ToolCallID: "call_1", Name: "shell_exec", Content: ""},
+			{Role: providers.RoleUser, Content: "again"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var parsed struct {
+		Messages []map[string]any `json:"messages"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		t.Fatal(err)
+	}
+
+	emptyAssistantCount := 0
+	for i, m := range parsed.Messages {
+		role, _ := m["role"].(string)
+		_, hasToolCalls := m["tool_calls"]
+		switch role {
+		case "assistant":
+			if !hasToolCalls {
+				if _, ok := m["content"]; !ok {
+					t.Errorf("message %d (assistant, no tool_calls) missing explicit content key: %v", i, m)
+				}
+				if m["content"] == "" {
+					emptyAssistantCount++
+				}
+			}
+		case "tool":
+			if _, ok := m["content"]; !ok {
+				t.Errorf("message %d (tool) missing explicit content key: %v", i, m)
+			}
+		}
+	}
+	// The empty/no-tool-call assistant turn must have been dropped entirely.
+	if emptyAssistantCount != 0 {
+		t.Errorf("expected empty content-free assistant turn to be dropped, found %d", emptyAssistantCount)
+	}
+}
+
+// An assistant turn that carries tool_calls but no text content is valid
+// without a content key (OpenAI allows null/absent content alongside
+// tool_calls), and the tool_calls must survive serialization.
+func TestBuildRequest_AssistantWithToolCallsSerializes(t *testing.T) {
+	body, err := buildRequest("ollama-llama3", providers.CompletionRequest{
+		Messages: []providers.Message{
+			{Role: providers.RoleAssistant, Content: "", ToolCalls: []providers.ToolCall{
+				{ID: "call_1", Name: "shell_exec", Arguments: map[string]any{"command": "ls"}},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed struct {
+		Messages []map[string]any `json:"messages"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	last := parsed.Messages[len(parsed.Messages)-1]
+	if _, ok := last["tool_calls"]; !ok {
+		t.Errorf("assistant tool_calls dropped: %v", last)
 	}
 }

@@ -49,17 +49,28 @@ func nonRetryableLLMErr(msg string) error {
 	return temporal.NewNonRetryableApplicationError(msg, "LLMNonRetryable", errors.New(msg))
 }
 
-func TestInfraAgentLLMRecovery_FirstCallErrorFailsRun(t *testing.T) {
+// BUG-2b: a NON-retryable first-call LLM error must NOT silently fail the
+// run. It surfaces in chat via the recoverable-error sentinel status_update
+// and parks awaiting_user so the user can /done to close out (or /retry).
+// Previously this failed the workflow with no user-visible signal.
+func TestInfraAgentLLMRecovery_FirstCallNonRetryableSurfacesAndParks(t *testing.T) {
 	suite := &testsuite.WorkflowTestSuite{}
 	env := suite.NewTestWorkflowEnvironment()
 	registerSandboxStubs(env)
 
 	llm := &scriptedLLMWithErrors{
 		errorOnCall: map[int]error{
-			1: nonRetryableLLMErr("anthropic: HTTP 400: malformed request"),
+			1: nonRetryableLLMErr("openai_compat: HTTP 400: invalid message content type: <nil>"),
 		},
 	}
 	env.RegisterActivityWithOptions(llm.Run, activity.RegisterOptions{Name: ActivityLLMNextStep})
+
+	// The run parks awaiting_user; send /done to finalize cleanly.
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(AgentSignalUserMessage, UserMessageSignalPayload{
+			TurnID: "u-done", UserID: "u1", Message: "/done",
+		})
+	}, 100*time.Millisecond)
 
 	env.ExecuteWorkflow(InfrastructureAgentWorkflow, InfrastructureAgentInput{
 		AgentRunID:    "run-rec-1",
@@ -71,7 +82,7 @@ func TestInfraAgentLLMRecovery_FirstCallErrorFailsRun(t *testing.T) {
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
-	require.Error(t, env.GetWorkflowError(), "first-call LLM error must fail the run")
+	require.NoError(t, env.GetWorkflowError(), "non-retryable LLM error must surface, not fail the run")
 	require.Equal(t, int32(1), llm.calls.Load())
 }
 
@@ -190,6 +201,52 @@ func TestInfraAgentLLMRecovery_RetrySentinelRetriesLLMStep(t *testing.T) {
 	}
 }
 
+// retryableLLMErr is a plain error (not a temporal.ApplicationError), so the
+// LLM activity's retry policy retries it — exercising the backoff window an
+// abort must be able to preempt.
+func retryableLLMErr(msg string) error { return errors.New(msg) }
+
+// Abort-during-LLM-retry (the QA-reported wedge): an abort delivered while
+// the LLM activity is grinding through its retry backoff must preempt the
+// activity and terminate the run promptly as aborted. Before the fix the LLM
+// activity ran on a context derived from the parent ctx (not loopCtx), so
+// cancelLoop() on abort never reached it and the run hung until retries
+// exhausted (or forever on a long backoff).
+func TestInfraAgentAbort_PreemptsLLMRetryBackoff(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	registerSandboxStubs(env)
+
+	var attempts atomic.Int32
+	// Always-failing retryable LLM: keeps the activity in retry until either
+	// MaximumAttempts or an abort-driven context cancellation preempts it.
+	env.RegisterActivityWithOptions(
+		func(ctx context.Context, _ agentactivity.LLMNextStepInput) (agentactivity.LLMNextStepResult, error) {
+			attempts.Add(1)
+			return agentactivity.LLMNextStepResult{}, retryableLLMErr("provider unavailable, will retry")
+		},
+		activity.RegisterOptions{Name: ActivityLLMNextStep},
+	)
+
+	// Abort during the first retry backoff window (InitialInterval is 2s).
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(AgentSignalAbort, AbortSignalPayload{
+			RequestedBy: "u1", Reason: "user gave up on the wedged run",
+		})
+	}, 500*time.Millisecond)
+
+	env.ExecuteWorkflow(InfrastructureAgentWorkflow, InfrastructureAgentInput{
+		AgentRunID:    "run-abort-retry",
+		WorkspaceID:   "ws-1",
+		LLMProviderID: "prov-1",
+		InitialPrompt: "do something",
+	})
+
+	require.True(t, env.IsWorkflowCompleted(), "workflow must terminate, not hang")
+	// Abort path returns nil (graceful termination), not a workflow error.
+	require.NoError(t, env.GetWorkflowError())
+}
+
 func TestHasExecutedAnyTools(t *testing.T) {
 	t.Run("empty history", func(t *testing.T) {
 		s := &agentState{}
@@ -215,11 +272,14 @@ func TestHasExecutedAnyTools(t *testing.T) {
 func TestAwaitingUser_RecoveryFlagShortCircuits(t *testing.T) {
 	// awaitingLLMRecovery should park awaitingUser=true even when the
 	// history shape doesn't otherwise indicate we're waiting on a reply.
+	// History ends on a user turn — a shape that never gates on its own —
+	// so the assertion isolates the flag. (A trailing text-only assistant
+	// turn now gates by itself; see TestAwaitingUser_TextOnlyAssistantTurnParks.)
 	s := &agentState{
 		awaitingLLMRecovery: true,
 		history: []ConversationTurn{
-			{Role: "user", Content: "go"},
 			{Role: "assistant", Content: "ok"},
+			{Role: "user", Content: "go"},
 		},
 	}
 	require.True(t, awaitingUser(s))
