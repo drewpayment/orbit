@@ -1,9 +1,11 @@
 import type { AuthStrategy, AuthStrategyFunctionArgs, AuthStrategyResult } from 'payload'
 import { auth } from '@/lib/auth'
+import { ensurePayloadUser } from '@/lib/auth/ensure-payload-user'
 
 /**
  * Custom Payload AuthStrategy that validates Better Auth sessions.
- * All authenticated users get req.user populated.
+ * All authenticated users get req.user populated; a missing Payload user
+ * doc is self-healed from the session (see ensurePayloadUser).
  * Admin panel access is gated separately via Users.access.admin.
  */
 async function authenticate({ headers, payload }: AuthStrategyFunctionArgs): Promise<AuthStrategyResult> {
@@ -14,33 +16,9 @@ async function authenticate({ headers, payload }: AuthStrategyFunctionArgs): Pro
       return { user: null }
     }
 
-    const betterAuthId = session.user.id
-    const result = await payload.find({
-      collection: 'users',
-      where: { email: { equals: session.user.email } },
-      limit: 1,
-      overrideAccess: true,
-    })
-
-    let payloadUser = result.docs[0]
+    const payloadUser = await ensurePayloadUser(payload, session.user)
     if (!payloadUser) {
-      console.warn(`[better-auth-strategy] No Payload user found for email: ${session.user.email}`)
       return { user: null }
-    }
-
-    // Lazy-populate betterAuthId on first authentication
-    if (!payloadUser.betterAuthId && betterAuthId) {
-      try {
-        payloadUser = await payload.update({
-          collection: 'users',
-          id: payloadUser.id,
-          data: { betterAuthId },
-          overrideAccess: true,
-          context: { skipApprovalHook: true },
-        })
-      } catch (error) {
-        console.error('[better-auth-strategy] Failed to populate betterAuthId:', error)
-      }
     }
 
     return {
