@@ -1,7 +1,7 @@
 # Kafka ClusterHandler platform-admin gate (GitHub issue #50)
 
 **Date:** 2026-07-06
-**Status:** In progress on `fix/50-kafka-cluster-admin-gate`
+**Status:** Implemented on `fix/50-kafka-cluster-admin-gate` — QA validated (all UAC PASS incl. wire-level denial proof: no-token ⇒ Unauthenticated, non-admin JWT ⇒ PermissionDenied "platform admin required", admin JWT ⇒ OK; admin Validate-Connection browser flow green against rebuilt kafka-service)
 **Owner:** PM session (Claude) directing engineer + QA agents
 **Refs:** issue #50, PR #49 review record, `docs/plans/2026-06-10-grpc-auth-interceptor-design.md`
 
