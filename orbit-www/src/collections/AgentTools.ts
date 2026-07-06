@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { getMemberWorkspaceIds } from '@/lib/access/workspace-access'
 
 /**
  * AgentTools Collection
@@ -23,16 +24,8 @@ export const AgentTools: CollectionConfig = {
   access: {
     read: async ({ req: { user, payload } }) => {
       if (!user) return false
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [{ user: { equals: user.id } }, { status: { equals: 'active' } }],
-        },
-        limit: 100,
-      })
-      const workspaceIds = members.docs.map((m) =>
-        typeof m.workspace === 'string' ? m.workspace : m.workspace.id,
-      )
+      const betterAuthId = user.betterAuthId
+      const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
       return { workspace: { in: workspaceIds } }
     },
     // Rows are written via the temporal worker's internal API; humans

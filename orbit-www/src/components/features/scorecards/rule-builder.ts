@@ -1,0 +1,539 @@
+/**
+ * Pure builders + validators for scorecard rule `expression` JSON (IDP refocus P2).
+ *
+ * Rules are DATA, not code: each scorecard-rule carries a JSON `expression`
+ * interpreted by lib/scorecards/evaluate per `type`. This module is the single
+ * place that ASSEMBLES those expressions from form inputs and VALIDATES an
+ * expression against its type before it is persisted. The four shapes (kept in
+ * lockstep with the evaluator and the ScorecardRules collection doc) are:
+ *
+ *   - field-presence: { path, op: 'exists' | 'not-empty' }
+ *   - relation-check: { relationType, direction: 'from'|'to'|'either',
+ *                       targetKind?, min }
+ *   - threshold:      { path, op: 'eq'|'neq'|'gt'|'gte'|'lt'|'lte'|'in', value }
+ *   - entity-score:   { target: 'self'|'related', scoreScope: 'overall'|'scorecard',
+ *                       scorecardId?, relationType?, direction?, targetKind?,
+ *                       aggregate: 'min'|'avg'|'max',
+ *                       op: 'gte'|'gt'|'lte'|'lt'|'eq', value } — compiles the
+ *                       entity's own or related entities' persisted
+ *                       entity-scores rows (see
+ *                       docs/plans/2026-07-01-entity-scores-and-golden-paths.md).
+ *                       NOT interpreted by this module — evaluate.ts owns that.
+ *
+ * Deliberately framework-light: no 'use server', no React, no Payload imports —
+ * so both the client RuleBuilder and the server authoring actions import these
+ * and the round-trip stays unit-testable (see rule-builder.test.ts).
+ */
+
+// Import the vocabularies from the framework-light constants module, NOT the
+// `@/collections/catalog` barrel: this module is reachable from the client
+// RuleBuilder, and the barrel would drag the collection configs (and their
+// server-only automation hooks) into the browser bundle.
+import { ENTITY_KINDS, RELATION_TYPES } from '@/collections/catalog/constants'
+
+// --- option vocabularies (drive the builder dropdowns) ----------------------
+
+export type RuleType = 'field-presence' | 'relation-check' | 'threshold' | 'entity-score'
+export type FieldPresenceOp = 'exists' | 'not-empty'
+export type ThresholdOp = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in'
+export type RelationDirection = 'from' | 'to' | 'either'
+export type ScoreTarget = 'self' | 'related'
+export type ScoreScope = 'overall' | 'scorecard'
+export type ScoreAggregate = 'min' | 'avg' | 'max'
+export type EntityScoreOp = 'gte' | 'gt' | 'lte' | 'lt' | 'eq'
+
+export const RULE_TYPES: { value: RuleType; label: string }[] = [
+  { value: 'field-presence', label: 'Field presence' },
+  { value: 'relation-check', label: 'Relation check' },
+  { value: 'threshold', label: 'Threshold' },
+  { value: 'entity-score', label: 'Entity score' },
+]
+
+export const FIELD_PRESENCE_OPS: { value: FieldPresenceOp; label: string }[] = [
+  { value: 'exists', label: 'exists (is set)' },
+  { value: 'not-empty', label: 'not empty' },
+]
+
+export const THRESHOLD_OPS: { value: ThresholdOp; label: string }[] = [
+  { value: 'eq', label: '= equals' },
+  { value: 'neq', label: '≠ not equals' },
+  { value: 'gt', label: '> greater than' },
+  { value: 'gte', label: '≥ greater or equal' },
+  { value: 'lt', label: '< less than' },
+  { value: 'lte', label: '≤ less or equal' },
+  { value: 'in', label: 'in (one of)' },
+]
+
+export const RELATION_DIRECTIONS: { value: RelationDirection; label: string }[] = [
+  { value: 'either', label: 'either direction' },
+  { value: 'from', label: 'from this entity' },
+  { value: 'to', label: 'to this entity' },
+]
+
+export const SCORE_TARGETS: { value: ScoreTarget; label: string }[] = [
+  { value: 'self', label: 'This entity' },
+  { value: 'related', label: 'Related entities' },
+]
+
+export const SCORE_SCOPES: { value: ScoreScope; label: string }[] = [
+  { value: 'overall', label: 'Overall score' },
+  { value: 'scorecard', label: 'Specific scorecard' },
+]
+
+export const SCORE_AGGREGATES: { value: ScoreAggregate; label: string }[] = [
+  { value: 'min', label: 'min (weakest link)' },
+  { value: 'avg', label: 'average' },
+  { value: 'max', label: 'max' },
+]
+
+export const ENTITY_SCORE_OPS: { value: EntityScoreOp; label: string }[] = [
+  { value: 'gte', label: '≥ greater or equal' },
+  { value: 'gt', label: '> greater than' },
+  { value: 'lte', label: '≤ less or equal' },
+  { value: 'lt', label: '< less than' },
+  { value: 'eq', label: '= equals' },
+]
+
+/** Relation types offered in the relation-check builder (mirrors the catalog). */
+export const RELATION_TYPE_OPTIONS = RELATION_TYPES as readonly string[]
+/** Entity kinds offered as the relation-check target / scorecard applies-to. */
+export const ENTITY_KIND_OPTIONS = ENTITY_KINDS as readonly string[]
+
+const THRESHOLD_OP_VALUES = THRESHOLD_OPS.map((o) => o.value)
+const NUMERIC_OPS: ThresholdOp[] = ['gt', 'gte', 'lt', 'lte']
+const ENTITY_SCORE_OP_VALUES = ENTITY_SCORE_OPS.map((o) => o.value)
+
+// --- scoreable entity fields (drive the schema-aware field pickers) ---------
+
+export type ScoreableValueType = 'text' | 'enum' | 'number' | 'relationship' | 'array'
+
+export interface ScoreableField {
+  path: string
+  label: string
+  valueType: ScoreableValueType
+  enumOptions?: readonly string[]
+  help?: string
+}
+
+/** Conventional prefix for custom/freeform fields (e.g. metadata.costCenter). */
+export const METADATA_PREFIX = 'metadata.'
+
+/**
+ * The CatalogEntity fields a rule can target — mirrored from
+ * collections/catalog/CatalogEntities.ts. `valueType` drives the threshold value
+ * control; `enumOptions` lists the allowed values for select fields. Any field
+ * not listed here is reachable by typing a custom path into the field combobox.
+ */
+export const SCOREABLE_FIELDS: ScoreableField[] = [
+  { path: 'name', label: 'Name', valueType: 'text' },
+  { path: 'slug', label: 'Slug', valueType: 'text' },
+  { path: 'description', label: 'Description', valueType: 'text' },
+  {
+    path: 'owner',
+    label: 'Owning team',
+    valueType: 'relationship',
+    help: 'The team that owns this entity.',
+  },
+  { path: 'kind', label: 'Kind', valueType: 'enum', enumOptions: ENTITY_KIND_OPTIONS },
+  {
+    path: 'lifecycle',
+    label: 'Lifecycle',
+    valueType: 'enum',
+    enumOptions: ['experimental', 'production', 'deprecated'],
+  },
+  { path: 'tier', label: 'Tier', valueType: 'enum', enumOptions: ['tier-1', 'tier-2', 'tier-3'] },
+  {
+    path: 'health',
+    label: 'Health',
+    valueType: 'enum',
+    enumOptions: ['healthy', 'degraded', 'down', 'unknown'],
+  },
+  { path: 'links', label: 'Links', valueType: 'array', help: 'Docs, dashboards, runbooks.' },
+]
+
+/** Look up a known scoreable field by its path. */
+export function fieldByPath(path: string): ScoreableField | undefined {
+  return SCOREABLE_FIELDS.find((f) => f.path === path)
+}
+
+/**
+ * The value-input kind for a threshold's value control given the chosen field:
+ * enum field → 'enum' (pick from its options), number field → 'number', and
+ * everything else (text, relationship, array, custom metadata, unknown) → 'text'.
+ * `op` is accepted for future per-operator narrowing; the kind is field-driven.
+ */
+export function valueInputType(path: string, _op?: ThresholdOp): 'enum' | 'number' | 'text' {
+  const field = fieldByPath(path)
+  if (field?.valueType === 'enum') return 'enum'
+  if (field?.valueType === 'number') return 'number'
+  return 'text'
+}
+
+/** Threshold operators valid for a field — enum fields narrow to eq/neq/in. */
+export function thresholdOpsForPath(path: string): { value: ThresholdOp; label: string }[] {
+  const field = fieldByPath(path)
+  if (field?.valueType === 'enum') {
+    return THRESHOLD_OPS.filter((o) => o.value === 'eq' || o.value === 'neq' || o.value === 'in')
+  }
+  return THRESHOLD_OPS
+}
+
+/** One-line explanation of what each rule type checks, shown under the selector. */
+export const RULE_TYPE_HELP: Record<RuleType, string> = {
+  'field-presence': 'Passes when the chosen field is set / non-empty on the entity.',
+  'relation-check': 'Passes when the entity has at least N relations of the chosen type.',
+  threshold: 'Passes when the chosen field compares to the value.',
+  'entity-score':
+    "Passes when the entity's own (or related entities' compiled) score compares to the value.",
+}
+
+// --- form shapes (the controlled state the builder edits) -------------------
+
+export interface FieldPresenceForm {
+  type: 'field-presence'
+  path: string
+  op: FieldPresenceOp
+}
+
+export interface RelationCheckForm {
+  type: 'relation-check'
+  relationType: string
+  direction: RelationDirection
+  targetKind?: string
+  min: number
+}
+
+export interface ThresholdForm {
+  type: 'threshold'
+  path: string
+  op: ThresholdOp
+  /** Raw text from the input; `in` is comma-separated. Coerced in buildExpression. */
+  value: string
+}
+
+export interface EntityScoreForm {
+  type: 'entity-score'
+  target: ScoreTarget
+  scoreScope: ScoreScope
+  /** Raw text id; required (validated) only when scoreScope === 'scorecard'. */
+  scorecardId: string
+  /** Required (validated) only when target === 'related'. */
+  relationType: string
+  direction: RelationDirection
+  targetKind?: string
+  aggregate: ScoreAggregate
+  op: EntityScoreOp
+  /** Raw text from the input, 0-100. Coerced to a number in buildExpression. */
+  value: string
+}
+
+export type RuleForm = FieldPresenceForm | RelationCheckForm | ThresholdForm | EntityScoreForm
+
+// --- helpers ----------------------------------------------------------------
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return v != null && typeof v === 'object' && !Array.isArray(v)
+}
+
+const NUMERIC_RE = /^-?\d*\.?\d+$/
+
+/** Coerce a raw input token to a number when it is purely numeric, else trim it. */
+export function coerceScalar(raw: string): string | number {
+  const t = raw.trim()
+  if (t !== '' && NUMERIC_RE.test(t)) {
+    const n = Number(t)
+    if (!Number.isNaN(n)) return n
+  }
+  return t
+}
+
+// --- buildExpression --------------------------------------------------------
+
+/**
+ * Assemble the persisted `expression` object from builder form state. The output
+ * matches exactly what lib/scorecards/evaluate interprets; pair every call with
+ * {@link validateExpression} before persisting.
+ */
+export function buildExpression(form: RuleForm): Record<string, unknown> {
+  switch (form.type) {
+    case 'field-presence':
+      return { path: form.path.trim(), op: form.op }
+
+    case 'relation-check': {
+      const expr: Record<string, unknown> = {
+        relationType: form.relationType,
+        direction: form.direction,
+        min: Number.isFinite(form.min) ? form.min : 1,
+      }
+      const targetKind = form.targetKind?.trim()
+      if (targetKind) expr.targetKind = targetKind
+      return expr
+    }
+
+    case 'threshold': {
+      const value =
+        form.op === 'in'
+          ? form.value
+              .split(',')
+              .map((s) => s.trim())
+              .filter((s) => s.length > 0)
+              .map(coerceScalar)
+          : coerceScalar(form.value)
+      return { path: form.path.trim(), op: form.op, value }
+    }
+
+    case 'entity-score': {
+      const expr: Record<string, unknown> = {
+        target: form.target,
+        scoreScope: form.scoreScope,
+        aggregate: form.aggregate,
+        op: form.op,
+        value: coerceScalar(form.value),
+      }
+      if (form.scoreScope === 'scorecard') {
+        expr.scorecardId = form.scorecardId.trim()
+      }
+      if (form.target === 'related') {
+        expr.relationType = form.relationType
+        expr.direction = form.direction
+        const targetKind = form.targetKind?.trim()
+        if (targetKind) expr.targetKind = targetKind
+      }
+      return expr
+    }
+  }
+}
+
+// --- validateExpression -----------------------------------------------------
+
+/**
+ * Validate an `expression` against its rule `type`: shape + required fields +
+ * enum membership. Returns a human-readable error string, or `null` when valid.
+ * The authoring server actions throw on any non-null result so a malformed rule
+ * can never be persisted, and the builder uses it for inline feedback.
+ */
+export function validateExpression(type: string, expression: unknown): string | null {
+  if (!isRecord(expression)) {
+    return 'Expression must be an object.'
+  }
+
+  switch (type) {
+    case 'field-presence': {
+      const { path, op } = expression
+      if (typeof path !== 'string' || !path.trim()) {
+        return 'Field presence: a non-empty path is required (e.g. owner, metadata.costCenter).'
+      }
+      if (op !== 'exists' && op !== 'not-empty') {
+        return 'Field presence: op must be "exists" or "not-empty".'
+      }
+      return null
+    }
+
+    case 'relation-check': {
+      const { relationType, direction, targetKind, min } = expression
+      if (typeof relationType !== 'string' || !relationType) {
+        return 'Relation check: a relation type is required.'
+      }
+      if (!RELATION_TYPE_OPTIONS.includes(relationType)) {
+        return `Relation check: unknown relation type "${relationType}".`
+      }
+      if (
+        direction !== undefined &&
+        direction !== 'from' &&
+        direction !== 'to' &&
+        direction !== 'either'
+      ) {
+        return 'Relation check: direction must be from, to, or either.'
+      }
+      if (
+        targetKind !== undefined &&
+        targetKind !== null &&
+        targetKind !== '' &&
+        !(typeof targetKind === 'string' && ENTITY_KIND_OPTIONS.includes(targetKind))
+      ) {
+        return `Relation check: unknown target kind "${String(targetKind)}".`
+      }
+      if (min !== undefined && (typeof min !== 'number' || Number.isNaN(min) || min < 0)) {
+        return 'Relation check: min must be a non-negative number.'
+      }
+      return null
+    }
+
+    case 'threshold': {
+      const { path, op, value } = expression
+      if (typeof path !== 'string' || !path.trim()) {
+        return 'Threshold: a non-empty path is required.'
+      }
+      if (typeof op !== 'string' || !THRESHOLD_OP_VALUES.includes(op as ThresholdOp)) {
+        return 'Threshold: an operator is required.'
+      }
+      if (op === 'in') {
+        if (!Array.isArray(value) || value.length === 0) {
+          return 'Threshold: "in" requires a non-empty list of values.'
+        }
+      } else if (NUMERIC_OPS.includes(op as ThresholdOp)) {
+        const n = typeof value === 'number' ? value : Number(value)
+        if (value === '' || value == null || Number.isNaN(n)) {
+          return `Threshold: operator "${op}" needs a numeric value.`
+        }
+      } else {
+        // eq / neq
+        if (value === undefined || value === null || value === '') {
+          return 'Threshold: a value is required.'
+        }
+      }
+      return null
+    }
+
+    case 'entity-score': {
+      const { target, scoreScope, scorecardId, relationType, direction, targetKind, aggregate, op, value } =
+        expression
+      if (target !== 'self' && target !== 'related') {
+        return 'Entity score: target must be "self" or "related".'
+      }
+      if (scoreScope !== undefined && scoreScope !== 'overall' && scoreScope !== 'scorecard') {
+        return 'Entity score: scoreScope must be "overall" or "scorecard".'
+      }
+      const scope = scoreScope ?? 'overall'
+      if (scope === 'scorecard' && (typeof scorecardId !== 'string' || !scorecardId.trim())) {
+        return 'Entity score: a scorecard is required when scope is "scorecard".'
+      }
+      if (target === 'related') {
+        if (typeof relationType !== 'string' || !relationType) {
+          return 'Entity score: a relation type is required when target is "related".'
+        }
+        if (!RELATION_TYPE_OPTIONS.includes(relationType)) {
+          return `Entity score: unknown relation type "${relationType}".`
+        }
+        if (
+          direction !== undefined &&
+          direction !== 'from' &&
+          direction !== 'to' &&
+          direction !== 'either'
+        ) {
+          return 'Entity score: direction must be from, to, or either.'
+        }
+        if (
+          targetKind !== undefined &&
+          targetKind !== null &&
+          targetKind !== '' &&
+          !(typeof targetKind === 'string' && ENTITY_KIND_OPTIONS.includes(targetKind))
+        ) {
+          return `Entity score: unknown target kind "${String(targetKind)}".`
+        }
+      }
+      if (
+        aggregate !== undefined &&
+        aggregate !== 'min' &&
+        aggregate !== 'avg' &&
+        aggregate !== 'max'
+      ) {
+        return 'Entity score: aggregate must be min, avg, or max.'
+      }
+      if (typeof op !== 'string' || !ENTITY_SCORE_OP_VALUES.includes(op as EntityScoreOp)) {
+        return 'Entity score: op must be gte, gt, lte, lt, or eq.'
+      }
+      const n = typeof value === 'number' ? value : Number(value)
+      if (value === '' || value == null || Number.isNaN(n) || n < 0 || n > 100) {
+        return 'Entity score: value must be a number between 0 and 100.'
+      }
+      return null
+    }
+
+    default:
+      return `Unknown rule type "${type}".`
+  }
+}
+
+// --- parseExpression (edit round-trip) --------------------------------------
+
+const DEFAULT_FORMS: Record<RuleType, RuleForm> = {
+  'field-presence': { type: 'field-presence', path: '', op: 'exists' },
+  'relation-check': { type: 'relation-check', relationType: RELATION_TYPE_OPTIONS[0], direction: 'either', targetKind: '', min: 1 },
+  threshold: { type: 'threshold', path: '', op: 'eq', value: '' },
+  'entity-score': {
+    type: 'entity-score',
+    target: 'self',
+    scoreScope: 'overall',
+    scorecardId: '',
+    // Deliberately empty (unlike relation-check): the field only becomes
+    // relevant when the user switches target to 'related', and they must then
+    // pick a relation explicitly — otherwise validateExpression surfaces the
+    // missing-relationType error instead of silently scoring over 'owns'.
+    relationType: '',
+    direction: 'either',
+    targetKind: '',
+    aggregate: 'min',
+    op: 'gte',
+    value: '70',
+  },
+}
+
+/** A blank, valid-by-construction form for a freshly chosen rule type. */
+export function defaultForm(type: RuleType): RuleForm {
+  return { ...DEFAULT_FORMS[type] }
+}
+
+/** Render a stored scalar/array back into the builder's raw text field. */
+function scalarToText(v: unknown): string {
+  if (Array.isArray(v)) return v.map((x) => String(x)).join(', ')
+  if (v == null) return ''
+  return String(v)
+}
+
+/**
+ * Hydrate builder form state from a persisted (type, expression) pair so an
+ * existing rule can be edited. Falls back to a blank form for the type when the
+ * stored expression is missing fields.
+ */
+export function parseExpression(type: RuleType, expression: unknown): RuleForm {
+  const expr = isRecord(expression) ? expression : {}
+  switch (type) {
+    case 'field-presence':
+      return {
+        type,
+        path: typeof expr.path === 'string' ? expr.path : '',
+        op: expr.op === 'not-empty' ? 'not-empty' : 'exists',
+      }
+    case 'relation-check':
+      return {
+        type,
+        relationType:
+          typeof expr.relationType === 'string' ? expr.relationType : RELATION_TYPE_OPTIONS[0],
+        direction:
+          expr.direction === 'from' || expr.direction === 'to' ? expr.direction : 'either',
+        targetKind: typeof expr.targetKind === 'string' ? expr.targetKind : '',
+        min: typeof expr.min === 'number' ? expr.min : 1,
+      }
+    case 'threshold':
+      return {
+        type,
+        path: typeof expr.path === 'string' ? expr.path : '',
+        op: THRESHOLD_OP_VALUES.includes(expr.op as ThresholdOp) ? (expr.op as ThresholdOp) : 'eq',
+        value: scalarToText(expr.value),
+      }
+    case 'entity-score':
+      return {
+        type,
+        target: expr.target === 'related' ? 'related' : 'self',
+        scoreScope: expr.scoreScope === 'scorecard' ? 'scorecard' : 'overall',
+        scorecardId: typeof expr.scorecardId === 'string' ? expr.scorecardId : '',
+        // Empty (not RELATION_TYPE_OPTIONS[0]) so a stored related-rule that
+        // somehow lost its relationType re-surfaces the validation error on
+        // edit rather than silently rebinding to 'owns'.
+        relationType: typeof expr.relationType === 'string' ? expr.relationType : '',
+        direction:
+          expr.direction === 'from' || expr.direction === 'to' ? expr.direction : 'either',
+        targetKind: typeof expr.targetKind === 'string' ? expr.targetKind : '',
+        aggregate:
+          expr.aggregate === 'avg' || expr.aggregate === 'max' ? expr.aggregate : 'min',
+        op: ENTITY_SCORE_OP_VALUES.includes(expr.op as EntityScoreOp)
+          ? (expr.op as EntityScoreOp)
+          : 'gte',
+        // Fall back to a valid default (not '') so a missing/malformed stored
+        // value still hydrates a valid-by-construction form, matching the other
+        // types' numeric fallbacks (e.g. relation-check's min: 1) above.
+        value: expr.value == null ? '70' : scalarToText(expr.value),
+      }
+  }
+}

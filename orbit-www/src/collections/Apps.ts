@@ -1,5 +1,10 @@
-import type { CollectionConfig, Where } from 'payload'
+import type { CollectionConfig } from 'payload'
 import { healthClient } from '@/lib/grpc/health-client'
+import {
+  workspaceScopedRead,
+  memberCreate,
+  docWorkspaceMutate,
+} from '@/lib/access/collection-access'
 
 export const Apps: CollectionConfig = {
   slug: 'apps',
@@ -133,12 +138,35 @@ export const Apps: CollectionConfig = {
 
         return doc
       },
+      // Catalog projection: keep the unified catalog graph in sync.
+      async ({ doc, req }) => {
+        // Fire and forget — projection failure must never block the save.
+        ;(async () => {
+          try {
+            const { projectAppEntity } = await import('@/lib/catalog/projection')
+            await projectAppEntity(req.payload, doc)
+          } catch (err) {
+            console.error('[Apps Hook] catalog projection failed:', err)
+          }
+        })()
+        return doc
+      },
     ],
     afterDelete: [
-      async ({ doc }) => {
+      async ({ doc, req }) => {
         // Fire and forget - don't block the delete
         healthClient.deleteSchedule({ appId: doc.id })
           .catch(err => console.error('Failed to delete health schedule:', err))
+
+        // Catalog projection: remove the projected entity + its relations.
+        ;(async () => {
+          try {
+            const { removeProjectedEntity } = await import('@/lib/catalog/projection')
+            await removeProjectedEntity(req.payload, 'apps', String(doc.id))
+          } catch (err) {
+            console.error('[Apps Hook] catalog projection removal failed:', err)
+          }
+        })()
 
         // Clean up GitHub webhook if sync was enabled
         if (doc.webhookId && doc.repository?.url && doc.repository?.installationId) {
@@ -165,100 +193,14 @@ export const Apps: CollectionConfig = {
     ],
   },
   access: {
-    // Read: Admins see all, others see workspace-scoped
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-
-      // Payload admin users can see all apps (user.collection indicates Payload auth)
-      // TODO: Add proper role-based check when roles are implemented
-      if (user.collection === 'users') return true
-
-      // Get user's workspace memberships
-      const memberships = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          user: { equals: user.id },
-          status: { equals: 'active' },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-
-      const workspaceIds = memberships.docs.map(m =>
-        String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
-      )
-
-      // Return query constraint: in user's workspaces
-      return {
-        workspace: { in: workspaceIds },
-      } as Where
-    },
-    // Create: Users with app:create permission (workspace membership checked by workspace field)
-    create: ({ req: { user } }) => !!user,
-    // Update: Admins or workspace members (owner, admin, or member role)
-    update: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-
-      // Payload admin users can update all apps
-      if (user.collection === 'users') return true
-
-      const app = await payload.findByID({
-        collection: 'apps',
-        id,
-        overrideAccess: true,
-      })
-
-      const workspaceId = typeof app.workspace === 'string'
-        ? app.workspace
-        : app.workspace.id
-
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: user.id } },
-            { role: { in: ['owner', 'admin', 'member'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
-
-      return members.docs.length > 0
-    },
-    // Delete: System admins or workspace owners/admins only
-    delete: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-
-      // Payload admin users can delete all apps
-      if (user.collection === 'users') return true
-
-      const app = await payload.findByID({
-        collection: 'apps',
-        id,
-        overrideAccess: true,
-      })
-
-      const workspaceId = typeof app.workspace === 'string'
-        ? app.workspace
-        : app.workspace.id
-
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: user.id } },
-            { role: { in: ['owner', 'admin'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
-
-      return members.docs.length > 0
-    },
+    // Read: platform admin sees all; others see their active workspaces.
+    read: workspaceScopedRead(),
+    // Create: any active member of the target `data.workspace`.
+    create: memberCreate(),
+    // Update: workspace owner, admin, or member.
+    update: docWorkspaceMutate('apps', ['owner', 'admin', 'member']),
+    // Delete: workspace owner or admin only.
+    delete: docWorkspaceMutate('apps', ['owner', 'admin']),
   },
   fields: [
     {

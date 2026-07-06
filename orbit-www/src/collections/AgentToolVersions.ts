@@ -1,4 +1,5 @@
 import type { CollectionConfig, Where } from 'payload'
+import { getMemberWorkspaceIds } from '@/lib/access/workspace-access'
 
 /**
  * AgentToolVersions Collection
@@ -33,31 +34,23 @@ export const AgentToolVersions: CollectionConfig = {
     read: async ({ req: { user, payload } }) => {
       if (!user) return false
       if (user.role === 'super_admin' || user.role === 'admin') return true
-      const memberships = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [{ user: { equals: user.id } }, { status: { equals: 'active' } }],
-        },
-        limit: 100,
+      const betterAuthId = user.betterAuthId
+      const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
+      if (workspaceIds.length === 0) {
+        const denyAll: Where = { id: { equals: '__nope__' } }
+        return denyAll
+      }
+      // Join through the parent AgentTools row's workspace: a version row
+      // is visible only if its `tool` belongs to a workspace the caller is
+      // an active member of.
+      const tools = await payload.find({
+        collection: 'agent-tools',
+        where: { workspace: { in: workspaceIds } },
+        limit: 1000,
         overrideAccess: true,
       })
-      const workspaceIds = memberships.docs.map((m) =>
-        typeof m.workspace === 'string' ? m.workspace : m.workspace.id,
-      )
-      // We can't join through `tool.workspace` in a Payload `where`, so
-      // we filter at the surface by querying tools first then versions.
-      // For MVP, return all rows the workspace-membership query would
-      // allow at the tool layer. Practical effect: a workspace member
-      // sees every version row for tools they could already see.
-      const where: Where = {
-        // Cheap heuristic: deny by default unless an editedBy user or
-        // viewer is in those workspaces. Concrete narrowing happens in
-        // the page layer that joins to AgentTools.
-        // (Better filter: server-side only; this collection isn't a
-        // primary surface for end users, so a permissive read is OK.)
-        and: workspaceIds.length > 0 ? [] : [{ id: { equals: '__nope__' } }],
-      }
-      return where
+      const toolIds = tools.docs.map((t) => t.id)
+      return { tool: { in: toolIds } }
     },
     create: () => false,
     update: () => false,

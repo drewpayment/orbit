@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { adminOnly, workspaceScopedRead } from '@/lib/access/collection-access'
 
 /**
  * KafkaApplicationQuotas - Workspace-level quota overrides
@@ -16,47 +17,13 @@ export const KafkaApplicationQuotas: CollectionConfig = {
     description: 'Workspace-level quota overrides for Kafka applications',
   },
   access: {
-    // Platform admins can read all quotas
-    // Workspace admins can read their own workspace quota
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-
-      // Platform admins can see all
-      if (user.collection === 'users') return true
-
-      // Workspace admins can see their workspace quota
-      const memberships = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          user: { equals: user.id },
-          status: { equals: 'active' },
-          role: { in: ['owner', 'admin'] },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-
-      const workspaceIds = memberships.docs.map((m) =>
-        String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
-      )
-
-      return {
-        workspace: { in: workspaceIds },
-      }
-    },
+    // Platform admins can read all quotas; workspace owner/admin can read
+    // their own workspace's quota.
+    read: workspaceScopedRead({ scope: 'manage' }),
     // Only platform admins can create/update/delete quotas
-    create: ({ req: { user } }) => {
-      if (!user) return false
-      return user.collection === 'users'
-    },
-    update: ({ req: { user } }) => {
-      if (!user) return false
-      return user.collection === 'users'
-    },
-    delete: ({ req: { user } }) => {
-      if (!user) return false
-      return user.collection === 'users'
-    },
+    create: adminOnly,
+    update: adminOnly,
+    delete: adminOnly,
   },
   fields: [
     {

@@ -125,6 +125,19 @@ export interface Config {
     'kafka-offset-checkpoints': KafkaOffsetCheckpoint;
     'api-schemas': ApiSchema;
     'api-schema-versions': ApiSchemaVersion;
+    'catalog-entities': CatalogEntity;
+    'catalog-relations': CatalogRelation;
+    'entity-types': EntityType;
+    scorecards: Scorecard;
+    'scorecard-rules': ScorecardRule;
+    'scorecard-rule-results': ScorecardRuleResult;
+    'entity-scores': EntityScore;
+    'score-snapshots': ScoreSnapshot;
+    initiatives: Initiative;
+    'initiative-action-items': InitiativeActionItem;
+    actions: Action;
+    'action-runs': ActionRun;
+    automations: Automation;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -189,6 +202,19 @@ export interface Config {
     'kafka-offset-checkpoints': KafkaOffsetCheckpointsSelect<false> | KafkaOffsetCheckpointsSelect<true>;
     'api-schemas': ApiSchemasSelect<false> | ApiSchemasSelect<true>;
     'api-schema-versions': ApiSchemaVersionsSelect<false> | ApiSchemaVersionsSelect<true>;
+    'catalog-entities': CatalogEntitiesSelect<false> | CatalogEntitiesSelect<true>;
+    'catalog-relations': CatalogRelationsSelect<false> | CatalogRelationsSelect<true>;
+    'entity-types': EntityTypesSelect<false> | EntityTypesSelect<true>;
+    scorecards: ScorecardsSelect<false> | ScorecardsSelect<true>;
+    'scorecard-rules': ScorecardRulesSelect<false> | ScorecardRulesSelect<true>;
+    'scorecard-rule-results': ScorecardRuleResultsSelect<false> | ScorecardRuleResultsSelect<true>;
+    'entity-scores': EntityScoresSelect<false> | EntityScoresSelect<true>;
+    'score-snapshots': ScoreSnapshotsSelect<false> | ScoreSnapshotsSelect<true>;
+    initiatives: InitiativesSelect<false> | InitiativesSelect<true>;
+    'initiative-action-items': InitiativeActionItemsSelect<false> | InitiativeActionItemsSelect<true>;
+    actions: ActionsSelect<false> | ActionsSelect<true>;
+    'action-runs': ActionRunsSelect<false> | ActionRunsSelect<true>;
+    automations: AutomationsSelect<false> | AutomationsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -3420,6 +3446,630 @@ export interface ApiSchemaVersion {
   createdAt: string;
 }
 /**
+ * Unified catalog graph — projected from apps, APIs, topics and more.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "catalog-entities".
+ */
+export interface CatalogEntity {
+  id: string;
+  name: string;
+  /**
+   * URL-safe identifier, unique within a workspace.
+   */
+  slug?: string | null;
+  description?: string | null;
+  kind: 'service' | 'api' | 'resource' | 'datastore' | 'kafka-topic' | 'domain' | 'system' | 'team' | 'environment';
+  /**
+   * Security enclave the entity belongs to (absent = global).
+   */
+  workspace?: (string | null) | Workspace;
+  /**
+   * Owning team (a catalog-entities row of kind "team").
+   */
+  owner?: (string | null) | CatalogEntity;
+  lifecycle?: ('experimental' | 'production' | 'deprecated') | null;
+  /**
+   * Criticality — drives scorecard expectations in P2.
+   */
+  tier?: ('tier-1' | 'tier-2' | 'tier-3') | null;
+  /**
+   * Docs, dashboards, runbooks.
+   */
+  links?:
+    | {
+        label: string;
+        url: string;
+        type?: ('docs' | 'dashboard' | 'runbook' | 'repository' | 'other') | null;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * Provenance back to the backing collection this row projects from.
+   */
+  source: {
+    type: 'manual' | 'apps' | 'api-schemas' | 'kafka' | 'sync';
+    /**
+     * ID of the backing row in the source collection.
+     */
+    sourceId?: string | null;
+  };
+  /**
+   * Freeform, queryable by scorecard rules (P2).
+   */
+  metadata?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Folded-in health badge (projected from the source app).
+   */
+  health?: ('healthy' | 'degraded' | 'down' | 'unknown') | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Typed edges between catalog entities (dependencies, ownership, lineage).
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "catalog-relations".
+ */
+export interface CatalogRelation {
+  id: string;
+  /**
+   * Security enclave the relation belongs to (absent = global).
+   */
+  workspace?: (string | null) | Workspace;
+  from: string | CatalogEntity;
+  to: string | CatalogEntity;
+  type:
+    | 'owns'
+    | 'depends-on'
+    | 'exposes-api'
+    | 'consumes-api'
+    | 'produces-topic'
+    | 'consumes-topic'
+    | 'runs-in'
+    | 'built-from'
+    | 'part-of';
+  /**
+   * Provenance back to the backing collection this edge projects from.
+   */
+  source: {
+    type: 'manual' | 'apps' | 'api-schemas' | 'kafka-lineage' | 'sync';
+    sourceId?: string | null;
+  };
+  metadata?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Definition, golden path, and inherited base value for a catalog kind.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "entity-types".
+ */
+export interface EntityType {
+  id: string;
+  /**
+   * Security enclave the type definition belongs to.
+   */
+  workspace: string | Workspace;
+  /**
+   * One definition per kind per workspace (enforced in the app layer).
+   */
+  kind: 'service' | 'api' | 'resource' | 'datastore' | 'kafka-topic' | 'domain' | 'system' | 'team' | 'environment';
+  /**
+   * e.g. "Backend Service".
+   */
+  displayName: string;
+  /**
+   * What this type means here.
+   */
+  description?: string | null;
+  /**
+   * The inherited value: the score an entity of this kind carries when no scorecard applies to it, and the baseline term in the overall score.
+   */
+  baseValue?: number | null;
+  /**
+   * How much this kind counts in cross-entity aggregation (entity-score rules with `aggregate`).
+   */
+  scoringWeight?: number | null;
+  /**
+   * The paved-road definition for this kind.
+   */
+  goldenPath?: {
+    /**
+     * Narrative for leaders.
+     */
+    summary?: string | null;
+    /**
+     * Link to the paved-road docs/template.
+     */
+    docsUrl?: string | null;
+    /**
+     * Structural expectations checked against the entity’s actual relations.
+     */
+    requiredRelations?:
+      | {
+          relationType:
+            | 'owns'
+            | 'depends-on'
+            | 'exposes-api'
+            | 'consumes-api'
+            | 'produces-topic'
+            | 'consumes-topic'
+            | 'runs-in'
+            | 'built-from'
+            | 'part-of';
+          direction?: ('from' | 'to' | 'either') | null;
+          /**
+           * Restrict to relations touching this kind. Blank = any kind.
+           */
+          targetKind?:
+            | (
+                | 'service'
+                | 'api'
+                | 'resource'
+                | 'datastore'
+                | 'kafka-topic'
+                | 'domain'
+                | 'system'
+                | 'team'
+                | 'environment'
+              )
+            | null;
+          min?: number | null;
+          id?: string | null;
+        }[]
+      | null;
+    /**
+     * Expected metadata.* /field paths on the entity.
+     */
+    requiredMetadata?:
+      | {
+          path: string;
+          label?: string | null;
+          id?: string | null;
+        }[]
+      | null;
+  };
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Standards + maturity ladders scored against catalog entities.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "scorecards".
+ */
+export interface Scorecard {
+  id: string;
+  name: string;
+  description?: string | null;
+  /**
+   * Security enclave the scorecard belongs to.
+   */
+  workspace: string | Workspace;
+  /**
+   * Which catalog entities this scorecard scores.
+   */
+  appliesTo?: {
+    /**
+     * Restrict to one entity kind. Blank = all kinds.
+     */
+    kind?:
+      | ('service' | 'api' | 'resource' | 'datastore' | 'kafka-topic' | 'domain' | 'system' | 'team' | 'environment')
+      | null;
+    /**
+     * Optional extra Payload `where` merged into the entity selection.
+     */
+    filter?:
+      | {
+          [k: string]: unknown;
+        }
+      | unknown[]
+      | string
+      | number
+      | boolean
+      | null;
+  };
+  /**
+   * Maturity ladder, lowest rank first (e.g. Bronze=1, Silver=2, Gold=3).
+   */
+  levels?:
+    | {
+        name: string;
+        /**
+         * Ordering; higher = more mature.
+         */
+        rank: number;
+        /**
+         * Optional hex/className for the chip.
+         */
+        color?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  enabled?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Individual pass/fail checks within a scorecard.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "scorecard-rules".
+ */
+export interface ScorecardRule {
+  id: string;
+  scorecard: string | Scorecard;
+  /**
+   * Denormalised from the parent scorecard.
+   */
+  workspace: string | Workspace;
+  title: string;
+  description?: string | null;
+  /**
+   * Ladder rung this rule belongs to (matches a scorecard level name).
+   */
+  level?: string | null;
+  type: 'field-presence' | 'relation-check' | 'threshold' | 'entity-score';
+  /**
+   * Rule definition interpreted by the evaluator per type (see collection doc).
+   */
+  expression:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  weight?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Per-entity pass/fail results — generated by evaluation.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "scorecard-rule-results".
+ */
+export interface ScorecardRuleResult {
+  id: string;
+  workspace: string | Workspace;
+  scorecard: string | Scorecard;
+  rule: string | ScorecardRule;
+  entity: string | CatalogEntity;
+  passed: boolean;
+  evaluatedAt?: string | null;
+  /**
+   * Human-readable why-pass/why-fail.
+   */
+  detail?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Per-entity scores (per-scorecard + overall) — generated by evaluation.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "entity-scores".
+ */
+export interface EntityScore {
+  id: string;
+  workspace: string | Workspace;
+  entity: string | CatalogEntity;
+  scope: 'scorecard' | 'overall';
+  /**
+   * Required when scope=scorecard; absent for scope=overall.
+   */
+  scorecard?: (string | null) | Scorecard;
+  score: number;
+  /**
+   * Achieved ladder rung (scorecard scope).
+   */
+  levelName?: string | null;
+  levelRank?: number | null;
+  passedRules?: number | null;
+  totalRules?: number | null;
+  /**
+   * Weighted sum of passed rules backing `score`.
+   */
+  weightedPoints?: number | null;
+  maxPoints?: number | null;
+  /**
+   * The inherited value that seeded this score (overall scope).
+   */
+  baseValue?: number | null;
+  /**
+   * % of golden-path expectations met (overall scope).
+   */
+  goldenPathAlignment?: number | null;
+  evaluatedAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Append-only score history — generated by evaluation for the reports trend line.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "score-snapshots".
+ */
+export interface ScoreSnapshot {
+  id: string;
+  workspace: string | Workspace;
+  scope: 'workspace' | 'scorecard' | 'team';
+  /**
+   * Set when scope=scorecard.
+   */
+  scorecard?: (string | null) | Scorecard;
+  /**
+   * Set when scope=team (a catalog-entities row of kind 'team').
+   */
+  team?: (string | null) | CatalogEntity;
+  /**
+   * Mean overall score (workspace/team scope) or mean scorecard score (scorecard scope).
+   */
+  avgScore: number;
+  /**
+   * Mean golden-path alignment (workspace/team scope).
+   */
+  avgAlignment?: number | null;
+  /**
+   * Entities behind the average.
+   */
+  entityCount: number;
+  /**
+   * Scorecard scope: passing rule results / total rule results.
+   */
+  passRate?: number | null;
+  /**
+   * Scorecard scope: { [levelName]: count, unranked: count }.
+   */
+  levelDistribution?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  capturedAt: string;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Campaigns to raise scorecard compliance by a deadline.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "initiatives".
+ */
+export interface Initiative {
+  id: string;
+  name: string;
+  description?: string | null;
+  workspace: string | Workspace;
+  scorecard: string | Scorecard;
+  /**
+   * Ladder level to reach (scorecard level name).
+   */
+  targetLevel?: string | null;
+  owner?: (string | null) | User;
+  deadline?: string | null;
+  status?: ('active' | 'completed' | 'cancelled') | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Remediation tasks tracked under an initiative.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "initiative-action-items".
+ */
+export interface InitiativeActionItem {
+  id: string;
+  workspace: string | Workspace;
+  initiative: string | Initiative;
+  entity: string | CatalogEntity;
+  rule?: (string | null) | ScorecardRule;
+  assignee?: (string | null) | User;
+  status?: ('open' | 'in-progress' | 'done' | 'waived') | null;
+  notes?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Self-service actions developers can run (templates, provisioning, agent, …).
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "actions".
+ */
+export interface Action {
+  id: string;
+  name: string;
+  description?: string | null;
+  workspace: string | Workspace;
+  /**
+   * Optional lucide icon name for the catalog card.
+   */
+  icon?: string | null;
+  /**
+   * JSON Schema for the run form (reuses the Patterns inputSchemaJson convention). Drives the inputs collected before a run.
+   */
+  inputSchema?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  approvalPolicy?: ('none' | 'workspace-admin' | 'platform-admin') | null;
+  /**
+   * How this action executes.
+   */
+  backend: {
+    type:
+      | 'builtin'
+      | 'webhook'
+      | 'temporal-template'
+      | 'temporal-pattern'
+      | 'temporal-launch'
+      | 'kafka-provision'
+      | 'agent';
+    /**
+     * Backend target: builtin handler id, webhook URL, template/pattern/launch id, topic config, or agent prompt ref — interpreted per type.
+     */
+    ref?: string | null;
+  };
+  enabled?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Execution records for self-service actions.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "action-runs".
+ */
+export interface ActionRun {
+  id: string;
+  action: string | Action;
+  workspace: string | Workspace;
+  /**
+   * What this run produced or targeted, if anything.
+   */
+  entity?: (string | null) | CatalogEntity;
+  /**
+   * Validated against the Action inputSchema.
+   */
+  inputs?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  status: 'pending' | 'awaiting-approval' | 'running' | 'succeeded' | 'failed';
+  /**
+   * Temporal dispatch workflow id (Temporal backends).
+   */
+  workflowId?: string | null;
+  /**
+   * Append-only array of { ts, level, message } entries.
+   */
+  logs?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Produced urls/ids/etc.
+   */
+  outputs?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  error?: string | null;
+  triggeredBy?: (string | null) | User;
+  /**
+   * P4 automations create runs with trigger=automation.
+   */
+  trigger?: ('manual' | 'automation') | null;
+  /**
+   * The automation that created this run (P4.1; set when trigger=automation).
+   */
+  sourceAutomation?: (string | null) | Automation;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Event-driven rules that run self-service actions when catalog or scorecard state changes.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "automations".
+ */
+export interface Automation {
+  id: string;
+  name: string;
+  description?: string | null;
+  workspace: string | Workspace;
+  /**
+   * What event this automation reacts to.
+   */
+  trigger: {
+    event: 'rule-result-changed' | 'entity-changed' | 'schedule';
+    /**
+     * Optional JSON predicate narrowing the event (e.g. { "transition": "drift" } or { "kind": "service" }). Evaluated in-process; AND of all keys.
+     */
+    filter?:
+      | {
+          [k: string]: unknown;
+        }
+      | unknown[]
+      | string
+      | number
+      | boolean
+      | null;
+    /**
+     * Cron expression — only used when event is "schedule" (swept by the deferred Temporal worker).
+     */
+    schedule?: string | null;
+  };
+  /**
+   * The self-service Action to run when this automation fires.
+   */
+  action: string | Action;
+  /**
+   * Maps event fields → action inputs. Values may be templates referencing the event, e.g. { "service": "{{entity.slug}}", "reason": "Rule {{rule.title}} failing" }.
+   */
+  inputMapping?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  enabled?: boolean | null;
+  /**
+   * When this automation last created a run.
+   */
+  lastTriggeredAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
@@ -3657,6 +4307,58 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'api-schema-versions';
         value: string | ApiSchemaVersion;
+      } | null)
+    | ({
+        relationTo: 'catalog-entities';
+        value: string | CatalogEntity;
+      } | null)
+    | ({
+        relationTo: 'catalog-relations';
+        value: string | CatalogRelation;
+      } | null)
+    | ({
+        relationTo: 'entity-types';
+        value: string | EntityType;
+      } | null)
+    | ({
+        relationTo: 'scorecards';
+        value: string | Scorecard;
+      } | null)
+    | ({
+        relationTo: 'scorecard-rules';
+        value: string | ScorecardRule;
+      } | null)
+    | ({
+        relationTo: 'scorecard-rule-results';
+        value: string | ScorecardRuleResult;
+      } | null)
+    | ({
+        relationTo: 'entity-scores';
+        value: string | EntityScore;
+      } | null)
+    | ({
+        relationTo: 'score-snapshots';
+        value: string | ScoreSnapshot;
+      } | null)
+    | ({
+        relationTo: 'initiatives';
+        value: string | Initiative;
+      } | null)
+    | ({
+        relationTo: 'initiative-action-items';
+        value: string | InitiativeActionItem;
+      } | null)
+    | ({
+        relationTo: 'actions';
+        value: string | Action;
+      } | null)
+    | ({
+        relationTo: 'action-runs';
+        value: string | ActionRun;
+      } | null)
+    | ({
+        relationTo: 'automations';
+        value: string | Automation;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -5037,6 +5739,284 @@ export interface ApiSchemaVersionsSelect<T extends boolean = true> {
   contentHash?: T;
   releaseNotes?: T;
   createdBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "catalog-entities_select".
+ */
+export interface CatalogEntitiesSelect<T extends boolean = true> {
+  name?: T;
+  slug?: T;
+  description?: T;
+  kind?: T;
+  workspace?: T;
+  owner?: T;
+  lifecycle?: T;
+  tier?: T;
+  links?:
+    | T
+    | {
+        label?: T;
+        url?: T;
+        type?: T;
+        id?: T;
+      };
+  source?:
+    | T
+    | {
+        type?: T;
+        sourceId?: T;
+      };
+  metadata?: T;
+  health?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "catalog-relations_select".
+ */
+export interface CatalogRelationsSelect<T extends boolean = true> {
+  workspace?: T;
+  from?: T;
+  to?: T;
+  type?: T;
+  source?:
+    | T
+    | {
+        type?: T;
+        sourceId?: T;
+      };
+  metadata?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "entity-types_select".
+ */
+export interface EntityTypesSelect<T extends boolean = true> {
+  workspace?: T;
+  kind?: T;
+  displayName?: T;
+  description?: T;
+  baseValue?: T;
+  scoringWeight?: T;
+  goldenPath?:
+    | T
+    | {
+        summary?: T;
+        docsUrl?: T;
+        requiredRelations?:
+          | T
+          | {
+              relationType?: T;
+              direction?: T;
+              targetKind?: T;
+              min?: T;
+              id?: T;
+            };
+        requiredMetadata?:
+          | T
+          | {
+              path?: T;
+              label?: T;
+              id?: T;
+            };
+      };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "scorecards_select".
+ */
+export interface ScorecardsSelect<T extends boolean = true> {
+  name?: T;
+  description?: T;
+  workspace?: T;
+  appliesTo?:
+    | T
+    | {
+        kind?: T;
+        filter?: T;
+      };
+  levels?:
+    | T
+    | {
+        name?: T;
+        rank?: T;
+        color?: T;
+        id?: T;
+      };
+  enabled?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "scorecard-rules_select".
+ */
+export interface ScorecardRulesSelect<T extends boolean = true> {
+  scorecard?: T;
+  workspace?: T;
+  title?: T;
+  description?: T;
+  level?: T;
+  type?: T;
+  expression?: T;
+  weight?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "scorecard-rule-results_select".
+ */
+export interface ScorecardRuleResultsSelect<T extends boolean = true> {
+  workspace?: T;
+  scorecard?: T;
+  rule?: T;
+  entity?: T;
+  passed?: T;
+  evaluatedAt?: T;
+  detail?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "entity-scores_select".
+ */
+export interface EntityScoresSelect<T extends boolean = true> {
+  workspace?: T;
+  entity?: T;
+  scope?: T;
+  scorecard?: T;
+  score?: T;
+  levelName?: T;
+  levelRank?: T;
+  passedRules?: T;
+  totalRules?: T;
+  weightedPoints?: T;
+  maxPoints?: T;
+  baseValue?: T;
+  goldenPathAlignment?: T;
+  evaluatedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "score-snapshots_select".
+ */
+export interface ScoreSnapshotsSelect<T extends boolean = true> {
+  workspace?: T;
+  scope?: T;
+  scorecard?: T;
+  team?: T;
+  avgScore?: T;
+  avgAlignment?: T;
+  entityCount?: T;
+  passRate?: T;
+  levelDistribution?: T;
+  capturedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "initiatives_select".
+ */
+export interface InitiativesSelect<T extends boolean = true> {
+  name?: T;
+  description?: T;
+  workspace?: T;
+  scorecard?: T;
+  targetLevel?: T;
+  owner?: T;
+  deadline?: T;
+  status?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "initiative-action-items_select".
+ */
+export interface InitiativeActionItemsSelect<T extends boolean = true> {
+  workspace?: T;
+  initiative?: T;
+  entity?: T;
+  rule?: T;
+  assignee?: T;
+  status?: T;
+  notes?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "actions_select".
+ */
+export interface ActionsSelect<T extends boolean = true> {
+  name?: T;
+  description?: T;
+  workspace?: T;
+  icon?: T;
+  inputSchema?: T;
+  approvalPolicy?: T;
+  backend?:
+    | T
+    | {
+        type?: T;
+        ref?: T;
+      };
+  enabled?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "action-runs_select".
+ */
+export interface ActionRunsSelect<T extends boolean = true> {
+  action?: T;
+  workspace?: T;
+  entity?: T;
+  inputs?: T;
+  status?: T;
+  workflowId?: T;
+  logs?: T;
+  outputs?: T;
+  error?: T;
+  triggeredBy?: T;
+  trigger?: T;
+  sourceAutomation?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "automations_select".
+ */
+export interface AutomationsSelect<T extends boolean = true> {
+  name?: T;
+  description?: T;
+  workspace?: T;
+  trigger?:
+    | T
+    | {
+        event?: T;
+        filter?: T;
+        schedule?: T;
+      };
+  action?: T;
+  inputMapping?: T;
+  enabled?: T;
+  lastTriggeredAt?: T;
   updatedAt?: T;
   createdAt?: T;
 }

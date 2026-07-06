@@ -7,6 +7,7 @@ export interface WorkspaceRowMeta {
   topics: number
   schemas: number
   lastActive?: string
+  degraded?: number
 }
 
 interface DashboardWorkspacesCardProps {
@@ -84,6 +85,15 @@ export function DashboardWorkspacesCard({ memberships, metaById = {} }: Dashboar
                   <FileCode className="h-3 w-3 text-muted-foreground/70" />
                   {meta?.schemas ?? 0} schema{(meta?.schemas ?? 0) === 1 ? '' : 's'}
                 </span>
+                {!!meta?.degraded && (
+                  <>
+                    <span className="h-[3px] w-[3px] rounded-full bg-border" />
+                    <span className="inline-flex items-center gap-1 text-amber-500">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                      {meta.degraded} degraded
+                    </span>
+                  </>
+                )}
                 {meta?.lastActive && (
                   <>
                     <span className="h-[3px] w-[3px] rounded-full bg-border" />

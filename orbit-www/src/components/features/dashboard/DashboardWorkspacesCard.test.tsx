@@ -67,4 +67,28 @@ describe('DashboardWorkspacesCard', () => {
     render(<DashboardWorkspacesCard memberships={[]} />)
     expect(screen.getByText(/no workspaces/i)).toBeInTheDocument()
   })
+
+  it('should render a degraded indicator when meta.degraded > 0', () => {
+    render(
+      <DashboardWorkspacesCard
+        memberships={mockMemberships}
+        metaById={{
+          ws1: { apps: 3, topics: 2, schemas: 1, degraded: 2 },
+        }}
+      />,
+    )
+    expect(screen.getByText('2 degraded')).toBeInTheDocument()
+  })
+
+  it('should not render a degraded indicator when meta.degraded is 0 or absent', () => {
+    render(
+      <DashboardWorkspacesCard
+        memberships={mockMemberships}
+        metaById={{
+          ws1: { apps: 3, topics: 2, schemas: 1, degraded: 0 },
+        }}
+      />,
+    )
+    expect(screen.queryByText(/degraded/)).not.toBeInTheDocument()
+  })
 })

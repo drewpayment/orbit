@@ -15,6 +15,12 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
-    include: ['tests/int/**/*.int.spec.ts', 'src/**/*.test.{ts,tsx}'],
+    include: [
+      'tests/int/**/*.int.spec.ts',
+      'src/**/*.test.{ts,tsx}',
+      // Workspace-package unit tests (e.g. the automation Temporal worker under
+      // services/automation-worker) live outside the app `src/` tree.
+      'services/**/src/**/*.test.ts',
+    ],
   },
 })

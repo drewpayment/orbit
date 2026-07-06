@@ -23,6 +23,8 @@ import {
   WorkspaceMembersCardSimple,
   WorkspaceKafkaOverviewCard,
 } from '@/components/features/workspace'
+import { WorkspaceEntitiesCard } from '@/components/features/workspace/entities/WorkspaceEntitiesCard'
+import type { WorkspaceEntitySummary } from '@/components/features/workspace/entities/workspace-entities-ui'
 
 interface PageProps {
   params: Promise<{
@@ -72,6 +74,7 @@ export default async function WorkspacePage({ params }: PageProps) {
     virtualClusterCountResult,
     topicCountResult,
     pendingShareCountResult,
+    catalogEntitiesResult,
   ] = await Promise.all([
     // Fetch members
     payload.find({
@@ -139,9 +142,25 @@ export default async function WorkspacePage({ params }: PageProps) {
       },
       overrideAccess: true,
     }),
+    // Fetch catalog entities for the Entities card (org-wide read model,
+    // scoped here to this workspace; see catalog-entity-crud plan WP3)
+    payload.find({
+      collection: 'catalog-entities',
+      where: { workspace: { equals: workspace.id } },
+      sort: 'name',
+      limit: 500,
+      depth: 0,
+      overrideAccess: true,
+    }),
   ])
 
   const members = membersResult.docs
+
+  const catalogEntities: WorkspaceEntitySummary[] = catalogEntitiesResult.docs.map((e) => ({
+    id: e.id,
+    name: e.name,
+    kind: e.kind,
+  }))
 
   // Batch-fetch Better Auth user details for member display
   const memberBaUserIds = members
@@ -279,6 +298,11 @@ export default async function WorkspacePage({ params }: PageProps) {
               <div className="space-y-6">
                 <WorkspaceApplicationsCard apps={appsResult.docs} />
                 <WorkspaceAPIsCard apis={apisResult.docs} workspaceSlug={workspace.slug} />
+                <WorkspaceEntitiesCard
+                  entities={catalogEntities}
+                  workspaceId={workspace.id}
+                  isMember={membershipStatus?.isMember ?? false}
+                />
               </div>
 
               {/* Middle Column - Kafka Overview + Registries + Recent Docs */}

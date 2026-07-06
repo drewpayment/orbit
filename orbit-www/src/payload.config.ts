@@ -72,6 +72,26 @@ import {
 // API Catalog collections
 import { APISchemas, APISchemaVersions } from './collections/api-catalog'
 
+// Unified catalog graph (IDP refocus P1)
+import { CatalogEntities, CatalogRelations, EntityTypes } from './collections/catalog'
+
+// Scorecards + initiatives (IDP refocus P2)
+import {
+  Scorecards,
+  ScorecardRules,
+  ScorecardRuleResults,
+  EntityScores,
+  ScoreSnapshots,
+  Initiatives,
+  InitiativeActionItems,
+} from './collections/scorecards'
+
+// Self-Service actions (IDP refocus P3)
+import { Actions, ActionRuns } from './collections/actions'
+
+// Event automation + drift detection (IDP refocus P4)
+import { Automations } from './collections/automations'
+
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
@@ -144,6 +164,23 @@ export default buildConfig({
     // API Catalog collections
     APISchemas,
     APISchemaVersions,
+    // Unified catalog graph (IDP refocus P1)
+    CatalogEntities,
+    CatalogRelations,
+    EntityTypes,
+    // Scorecards + initiatives (IDP refocus P2)
+    Scorecards,
+    ScorecardRules,
+    ScorecardRuleResults,
+    EntityScores,
+    ScoreSnapshots,
+    Initiatives,
+    InitiativeActionItems,
+    // Self-Service actions (IDP refocus P3)
+    Actions,
+    ActionRuns,
+    // Event automation + drift detection (IDP refocus P4)
+    Automations,
   ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',

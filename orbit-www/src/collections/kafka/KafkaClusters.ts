@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { adminOnly } from '@/lib/access/collection-access'
 
 export const KafkaClusters: CollectionConfig = {
   slug: 'kafka-clusters',
@@ -9,11 +10,11 @@ export const KafkaClusters: CollectionConfig = {
     description: 'Registered Kafka clusters managed by platform team',
   },
   access: {
-    // Only admins can see cluster details (contains sensitive config)
-    read: ({ req: { user } }) => user?.collection === 'users',
-    create: ({ req: { user } }) => user?.collection === 'users',
-    update: ({ req: { user } }) => user?.collection === 'users',
-    delete: ({ req: { user } }) => user?.collection === 'users',
+    // Only platform admins can see cluster details (contains sensitive config)
+    read: adminOnly,
+    create: adminOnly,
+    update: adminOnly,
+    delete: adminOnly,
   },
   fields: [
     {

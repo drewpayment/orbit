@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { adminOnly } from '@/lib/access/collection-access'
 
 export const UserWorkspaceRoles: CollectionConfig = {
   slug: 'user-workspace-roles',
@@ -24,9 +25,13 @@ export const UserWorkspaceRoles: CollectionConfig = {
       })
       return assignment.user === user.id
     },
-    create: ({ req: { user } }) => !!user,
-    update: ({ req: { user } }) => !!user,
-    delete: ({ req: { user } }) => !!user,
+    // Role assignment is a platform-admin operation until the Permissions
+    // system activates workspace-owner delegation (future product decision,
+    // not this PR). Previously `!!user`, which let any authenticated caller
+    // assign themselves a platform-scoped role (issue #63 escalation chain).
+    create: adminOnly,
+    update: adminOnly,
+    delete: adminOnly,
   },
   fields: [
     {

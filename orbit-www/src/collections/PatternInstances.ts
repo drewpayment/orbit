@@ -1,4 +1,9 @@
-import type { CollectionConfig, Where } from 'payload'
+import type { CollectionConfig } from 'payload'
+import {
+  workspaceScopedRead,
+  memberCreate,
+  docWorkspaceMutate,
+} from '@/lib/access/collection-access'
 
 /**
  * PatternInstances Collection
@@ -27,80 +32,18 @@ export const PatternInstances: CollectionConfig = {
     group: 'Agent',
   },
   access: {
-    // Read: workspace members see their own; Payload admins see all.
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-      if (user.collection === 'users') return true
-      const memberships = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          user: { equals: user.id },
-          status: { equals: 'active' },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-      const workspaceIds = memberships.docs.map((m) =>
-        String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id),
-      )
-      return { workspace: { in: workspaceIds } } as Where
-    },
-    // Create: any authenticated user; workspace membership checked via
-    // the agent dispatch + the workspace field. Direct user-driven
-    // creation from a future browse UI follows the same path.
-    create: ({ req: { user } }) => !!user,
+    // Read: platform admin sees all; workspace members see their own.
+    read: workspaceScopedRead(),
+    // Create: any active member of the target `data.workspace`; workspace
+    // membership is checked via the agent dispatch + the workspace field.
+    // Direct user-driven creation from a future browse UI follows the same path.
+    create: memberCreate(),
     // Update: workspace owner/admin/member. Status writebacks from the
     // temporal worker go through /api/internal/pattern-instances/[id]/
     // status with X-API-Key, bypassing this access check.
-    update: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-      if (user.collection === 'users') return true
-      const inst = await payload.findByID({
-        collection: 'pattern-instances',
-        id,
-        overrideAccess: true,
-      })
-      const workspaceId =
-        typeof inst.workspace === 'string' ? inst.workspace : inst.workspace.id
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: user.id } },
-            { role: { in: ['owner', 'admin', 'member'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
-      return members.docs.length > 0
-    },
+    update: docWorkspaceMutate('pattern-instances', ['owner', 'admin', 'member']),
     // Delete: workspace owner/admin only.
-    delete: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-      if (user.collection === 'users') return true
-      const inst = await payload.findByID({
-        collection: 'pattern-instances',
-        id,
-        overrideAccess: true,
-      })
-      const workspaceId =
-        typeof inst.workspace === 'string' ? inst.workspace : inst.workspace.id
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: user.id } },
-            { role: { in: ['owner', 'admin'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
-      return members.docs.length > 0
-    },
+    delete: docWorkspaceMutate('pattern-instances', ['owner', 'admin']),
   },
   fields: [
     {

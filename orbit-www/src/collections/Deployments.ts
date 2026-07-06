@@ -1,4 +1,5 @@
 import type { CollectionConfig, Where } from 'payload'
+import { memberCreate } from '@/lib/access/collection-access'
 
 export const Deployments: CollectionConfig = {
   slug: 'deployments',
@@ -47,8 +48,30 @@ export const Deployments: CollectionConfig = {
         app: { in: appIds },
       } as Where
     },
-    // Create: Users with active workspace membership (validated through app access)
-    create: ({ req: { user } }) => !!user,
+    // Create: active member of the workspace owning `data.app` (was `!!user`
+    // — gap closed; the app→workspace relation is indirect, so resolve via
+    // the apps record rather than a direct `workspace` field).
+    create: memberCreate({
+      field: 'app',
+      resolveWorkspace: async ({ data, payload }) => {
+        const appId =
+          typeof (data as { app?: unknown } | undefined)?.app === 'string'
+            ? (data as { app?: string }).app
+            : (data as { app?: { id?: string } } | undefined)?.app?.id
+        if (!appId) return null
+        try {
+          const app = await payload.findByID({
+            collection: 'apps',
+            id: appId,
+            depth: 0,
+            overrideAccess: true,
+          })
+          return typeof app.workspace === 'string' ? app.workspace : app.workspace?.id ?? null
+        } catch {
+          return null
+        }
+      },
+    }),
     // Update: Workspace members (owner, admin, or member role)
     update: async ({ req: { user, payload }, id }) => {
       if (!user || !id) return false

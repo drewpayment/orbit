@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { adminOnly } from '@/lib/access/collection-access'
 
 export const Permissions: CollectionConfig = {
   slug: 'permissions',
@@ -8,11 +9,13 @@ export const Permissions: CollectionConfig = {
     group: 'Access Control',
   },
   access: {
-    // Read: all users | Write: authenticated users (TODO: restrict to admins via UserWorkspaceRoles)
-    read: () => true,
-    create: ({ req: { user } }) => !!user,
-    update: ({ req: { user } }) => !!user,
-    delete: ({ req: { user } }) => !!user,
+    // Read: authenticated users. Write: platform admins only — permission
+    // definitions are system config (was `!!user`, part of the issue #63
+    // privilege-escalation chain).
+    read: ({ req: { user } }) => !!user,
+    create: adminOnly,
+    update: adminOnly,
+    delete: adminOnly,
   },
   fields: [
     {

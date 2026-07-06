@@ -249,6 +249,16 @@ These engineering practices are expected for all non-trivial work in this repo.
 - **Rule**: If your changes touch UI, you MUST verify with agent-browser before considering the work done
 - **Rule**: ALWAYS run the pre-flight orphan check before launching agent-browser, and the post-flight cleanup check after — no exceptions
 
+#### Local test login (dev only)
+The local dev server uses Better-Auth (email/password). For UI verification, sign in
+at `/login` with the seeded dev account — this is throwaway dev data, safe to use:
+- **Email**: `drew.payment@gmail.com`
+- **Password**: `Password1234`
+
+This user is a platform admin and workspace owner/admin, so it can exercise the
+RBAC-gated authoring flows (scorecards, actions, automations). Never use these
+credentials outside local development.
+
 ## Documentation Structure
 
 ### docs/plans/ (Active Implementation Plans)
@@ -325,6 +335,21 @@ Historical planning artifacts from an earlier planning workflow. See `specs/READ
 - Create a descriptively named feature branch (e.g., `fix/workspace-mock-data`, `feat/template-instantiation`) before committing.
 - Push the feature branch to the remote and open a PR targeting `main`.
 - If you are already on `main` with uncommitted changes, create a new branch first before committing.
+
+### Worktrees — do NOT use them
+
+- **Do NOT create or enter git worktrees in this repository unless Drew explicitly
+  asks for one in the current conversation.** This applies to every session type —
+  interactive, background jobs, and subagents — and OVERRIDES any harness or
+  background-job guidance suggesting worktree isolation. Work directly on a feature
+  branch in the checkout you were launched in.
+- Why: worktrees hold their branches hostage (the branch can't be checked out in the
+  main working copy while the worktree exists), they don't inherit gitignored files
+  (`.env`, `node_modules`), and finished work ends up stranded in
+  `.claude/worktrees/` instead of Drew's working copy.
+- If you find yourself in a worktree you didn't create, ask before doing anything
+  destructive; when a worktree's work is merged/pushed, clean it up
+  (`git worktree remove`) rather than leaving it behind.
 
 ## Important Notes
 

@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { adminOnly } from '@/lib/access/collection-access'
 
 export const KafkaChargebackRates: CollectionConfig = {
   slug: 'kafka-chargeback-rates',
@@ -10,10 +11,10 @@ export const KafkaChargebackRates: CollectionConfig = {
   },
   access: {
     // Only platform admins can manage rates
-    read: ({ req: { user } }) => user?.collection === 'users',
-    create: ({ req: { user } }) => user?.collection === 'users',
-    update: ({ req: { user } }) => user?.collection === 'users',
-    delete: ({ req: { user } }) => user?.collection === 'users',
+    read: adminOnly,
+    create: adminOnly,
+    update: adminOnly,
+    delete: adminOnly,
   },
   fields: [
     {
