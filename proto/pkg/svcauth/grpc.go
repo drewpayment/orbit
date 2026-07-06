@@ -59,7 +59,7 @@ func authenticate(ctx context.Context, secret []byte, enforce bool) (context.Con
 		}
 		return nil, status.Error(codes.Unauthenticated, "invalid or missing service auth token")
 	}
-	return WithIdentity(ctx, Identity{UserID: claims.Subject, WorkspaceID: claims.WorkspaceID}), nil
+	return WithIdentity(ctx, Identity{UserID: claims.Subject, WorkspaceID: claims.WorkspaceID, PlatformAdmin: claims.PlatformAdmin}), nil
 }
 
 // identityStream overrides Context() so the wrapped handler observes the

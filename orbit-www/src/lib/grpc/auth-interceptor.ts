@@ -22,7 +22,7 @@ import type { Interceptor } from '@connectrpc/connect'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { getCurrentUser } from '@/lib/auth/session'
-import { isWorkspaceMember } from '@/lib/access/workspace-access'
+import { isWorkspaceMember, isPlatformAdmin } from '@/lib/access/workspace-access'
 import { mintServiceToken } from './svc-auth-token'
 
 /**
@@ -59,7 +59,13 @@ export const authInterceptor: Interceptor = (next) => async (req) => {
     workspaceId = requestedWorkspaceId
   }
 
-  const token = await mintServiceToken(user.id, workspaceId)
+  // Platform-admin status is derived from the server-side session user role
+  // (a server-set, input:false field) — never from the request message — so a
+  // client cannot self-elevate. It gates the Go services' platform-scoped RPCs
+  // (Kafka cluster management) via the `adm` claim.
+  const platformAdmin = isPlatformAdmin(user)
+
+  const token = await mintServiceToken(user.id, workspaceId, { platformAdmin })
   req.header.set('Authorization', `Bearer ${token}`)
 
   return next(req)

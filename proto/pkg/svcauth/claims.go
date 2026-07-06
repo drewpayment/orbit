@@ -34,6 +34,11 @@ type Identity struct {
 	// request (the JWT "wid" claim). orbit-www only ever signs a workspace the
 	// session user is a verified member of.
 	WorkspaceID string
+	// PlatformAdmin is true when the caller is a verified platform admin (the JWT
+	// "adm" claim). orbit-www only sets it from the server-side session user role,
+	// never from request input. Gate platform-scoped RPCs on this via
+	// EnforcePlatformAdmin.
+	PlatformAdmin bool
 }
 
 // ctxKey is an unexported type so the identity value cannot collide with or be
@@ -75,6 +80,26 @@ func EnforceWorkspace(ctx context.Context, bodyWorkspaceID string) error {
 	}
 	if bodyWorkspaceID != id.WorkspaceID {
 		return status.Error(codes.PermissionDenied, "workspace_id does not match authorized workspace")
+	}
+	return nil
+}
+
+// EnforcePlatformAdmin gates platform-scoped RPCs (e.g. Kafka cluster
+// management) that have no workspace boundary in the domain model. It requires a
+// verified identity whose token carried adm=true.
+//
+//   - identity missing   : not authenticated; Unauthenticated.
+//   - !PlatformAdmin      : authenticated but not an admin; PermissionDenied.
+//
+// A token minted without the "adm" claim yields PlatformAdmin=false, so such a
+// token is rejected (fail closed).
+func EnforcePlatformAdmin(ctx context.Context) error {
+	id, ok := IdentityFromContext(ctx)
+	if !ok {
+		return status.Error(codes.Unauthenticated, "no verified identity in context")
+	}
+	if !id.PlatformAdmin {
+		return status.Error(codes.PermissionDenied, "platform admin required")
 	}
 	return nil
 }

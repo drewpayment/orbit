@@ -12,6 +12,10 @@ import (
 type Claims struct {
 	jwt.RegisteredClaims
 	WorkspaceID string `json:"wid"`
+	// PlatformAdmin is the platform-admin flag ("adm"). It is omitted when false,
+	// so a token minted before this claim existed (or for a non-admin user) parses
+	// as false — platform-admin RPCs fail closed for such tokens.
+	PlatformAdmin bool `json:"adm,omitempty"`
 }
 
 // LoadSecret validates a raw secret string and returns it as bytes. It is the

@@ -51,6 +51,22 @@ func TestParseAndVerify(t *testing.T) {
 		assert.Equal(t, "ws-456", claims.WorkspaceID)
 	})
 
+	t.Run("adm claim true parses as PlatformAdmin", func(t *testing.T) {
+		tok := mintForTest(t, testSecret, jwt.SigningMethodHS256, func(c jwt.MapClaims) {
+			c["adm"] = true
+		})
+		claims, err := ParseAndVerify(tok, testSecret)
+		require.NoError(t, err)
+		assert.True(t, claims.PlatformAdmin)
+	})
+
+	t.Run("absent adm claim parses as non-admin (fail closed)", func(t *testing.T) {
+		tok := mintForTest(t, testSecret, jwt.SigningMethodHS256, nil)
+		claims, err := ParseAndVerify(tok, testSecret)
+		require.NoError(t, err)
+		assert.False(t, claims.PlatformAdmin, "old token without adm must be non-admin")
+	})
+
 	t.Run("expired token is rejected", func(t *testing.T) {
 		tok := mintForTest(t, testSecret, jwt.SigningMethodHS256, func(c jwt.MapClaims) {
 			c["iat"] = time.Now().Add(-10 * time.Minute).Unix()
