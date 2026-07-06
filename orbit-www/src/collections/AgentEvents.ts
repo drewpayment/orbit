@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { getMemberWorkspaceIds } from '@/lib/access/workspace-access'
 
 /**
  * AgentEvents Collection
@@ -30,16 +31,8 @@ export const AgentEvents: CollectionConfig = {
   access: {
     read: async ({ req: { user, payload } }) => {
       if (!user) return false
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [{ user: { equals: user.id } }, { status: { equals: 'active' } }],
-        },
-        limit: 100,
-      })
-      const workspaceIds = members.docs.map((m) =>
-        typeof m.workspace === 'string' ? m.workspace : m.workspace.id,
-      )
+      const betterAuthId = user.betterAuthId
+      const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
       return { workspace: { in: workspaceIds } }
     },
     // Events are written by the temporal worker via the internal API only.
