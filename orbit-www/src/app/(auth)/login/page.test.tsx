@@ -3,8 +3,10 @@ import { render, screen, waitFor, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 const mockPush = vi.fn()
+let mockSearchParams = new URLSearchParams()
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
+  useSearchParams: () => mockSearchParams,
 }))
 
 const mockSignInEmail = vi.fn()
@@ -28,6 +30,7 @@ async function fillAndSubmit() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockSearchParams = new URLSearchParams()
 })
 
 afterEach(() => {
@@ -89,6 +92,25 @@ describe('LoginPage — verification error resend', () => {
     await waitFor(() => {
       expect(screen.getByText(/verification email sent/i)).toBeInTheDocument()
     })
+  })
+
+  it('shows a Forgot password link pointing at /forgot-password', () => {
+    render(<LoginPage />)
+    expect(screen.getByRole('link', { name: /forgot password/i })).toHaveAttribute(
+      'href',
+      '/forgot-password',
+    )
+  })
+
+  it('shows the password-updated notice when ?reset=success is present', () => {
+    mockSearchParams = new URLSearchParams('reset=success')
+    render(<LoginPage />)
+    expect(screen.getByText(/password updated/i)).toBeInTheDocument()
+  })
+
+  it('does not show the password-updated notice by default', () => {
+    render(<LoginPage />)
+    expect(screen.queryByText(/password updated/i)).not.toBeInTheDocument()
   })
 
   it('shows failure feedback when the resend call errors', async () => {
