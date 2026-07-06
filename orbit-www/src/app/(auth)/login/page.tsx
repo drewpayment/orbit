@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { signIn, authClient } from '@/lib/auth-client'
 import { Button } from '@/components/ui/button'
@@ -49,8 +49,10 @@ const alertStyles = {
   info: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400',
 }
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const resetSuccess = searchParams.get('reset') === 'success'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [errorDisplay, setErrorDisplay] = useState<{ message: string; type: 'error' | 'info' | 'warning' } | null>(null)
@@ -117,6 +119,12 @@ export default function LoginPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        {resetSuccess && (
+          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 px-4 py-3 rounded">
+            Password updated — sign in with your new password.
+          </div>
+        )}
+
         {errorDisplay && (
           <div className={`border px-4 py-3 rounded ${alertStyles[errorDisplay.type]}`}>
             {errorDisplay.message}
@@ -162,7 +170,15 @@ export default function LoginPage() {
         </div>
 
         <div>
-          <Label htmlFor="password">Password</Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="password">Password</Label>
+            <Link
+              href="/forgot-password"
+              className="text-sm font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400"
+            >
+              Forgot password?
+            </Link>
+          </div>
           <Input
             id="password"
             name="password"
@@ -184,5 +200,13 @@ export default function LoginPage() {
         </Button>
       </form>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   )
 }

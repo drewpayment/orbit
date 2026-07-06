@@ -19,6 +19,49 @@ export const auth = betterAuth({
     // pending users — creating a session at signup would make registration
     // itself fail with FORBIDDEN. New users sign in after approval instead.
     autoSignIn: false,
+    // Keep the default resetPasswordTokenExpiresIn (1 hour).
+    sendResetPassword: async ({ user, url }) => {
+      if (process.env.NODE_ENV === "development") {
+        console.log(`\n${"=".repeat(60)}`)
+        console.log(`📧 PASSWORD RESET (dev mode)`)
+        console.log(`   To: ${user.email}`)
+        console.log(`   URL: ${url}`)
+        console.log(`${"=".repeat(60)}\n`)
+      }
+
+      if (!process.env.RESEND_API_KEY) {
+        if (process.env.NODE_ENV === "development") {
+          console.log(`   (No RESEND_API_KEY — skipping email send in dev mode)`)
+        } else if (process.env.NODE_ENV === "production") {
+          console.error(
+            `[password-reset] RESEND_API_KEY not configured — password reset email NOT sent to ${user.email}`,
+          )
+        }
+        return
+      }
+
+      const { Resend } = await import("resend")
+      const resend = new Resend(process.env.RESEND_API_KEY)
+      const fromEmail = process.env.RESEND_FROM_EMAIL || "noreply@hoytlabs.app"
+
+      await resend.emails.send({
+        from: fromEmail,
+        to: user.email,
+        subject: "Reset your Orbit password",
+        html: `
+          <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #1a1a1a;">Reset your password</h2>
+            <p>We received a request to reset the password for your Orbit account. Click the link below to choose a new password.</p>
+            <p style="margin: 24px 0;">
+              <a href="${url}" style="display: inline-block; background: #FF5C00; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 500;">
+                Reset Password
+              </a>
+            </p>
+            <p style="color: #666; font-size: 14px;">This link expires in 1 hour. If you didn't request a password reset, you can safely ignore this email.</p>
+          </div>
+        `,
+      })
+    },
   },
   emailVerification: {
     sendVerificationEmail: async ({ user, url }) => {
