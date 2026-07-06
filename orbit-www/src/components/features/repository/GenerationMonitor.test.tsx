@@ -1,8 +1,27 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { create } from '@bufbuild/protobuf';
+import { TimestampSchema, type Timestamp } from '@bufbuild/protobuf/wkt';
 import { GenerationMonitor } from './GenerationMonitor';
-import { WorkflowStatus } from '@/lib/proto/temporal_pb';
-import type { GetWorkflowStatusResponse } from '@/lib/proto/temporal_pb';
+import { WorkflowStatus, WorkflowStepSchema, CancelWorkflowResponseSchema } from '@/lib/proto/temporal_pb';
+import type { GetWorkflowStatusResponse, WorkflowStep } from '@/lib/proto/temporal_pb';
+
+// Helper to build a valid protobuf-es v2 Timestamp fixture ($typeName-branded).
+function mockTimestamp(seconds: number): Timestamp {
+  return create(TimestampSchema, { seconds: BigInt(seconds), nanos: 0 });
+}
+
+// Helper to build a valid protobuf-es v2 WorkflowStep fixture ($typeName-branded).
+function mockStep(init: {
+  stepName: string;
+  status: WorkflowStatus;
+  startedAt?: Timestamp;
+  completedAt?: Timestamp;
+  errorMessage?: string;
+  metadata?: Record<string, string>;
+}): WorkflowStep {
+  return create(WorkflowStepSchema, init);
+}
 
 // Mock the workflow client - must be defined before vi.mock for hoisting
 vi.mock('@/lib/temporal/workflow-client', () => ({
@@ -59,19 +78,19 @@ describe('GenerationMonitor', () => {
       runId: mockRunId,
       status: WorkflowStatus.RUNNING,
       steps: [
-        {
+        mockStep({
           stepName: 'Clone template',
           status: WorkflowStatus.COMPLETED,
-          startedAt: { seconds: BigInt(Math.floor(Date.now() / 1000)), nanos: 0 },
-          completedAt: { seconds: BigInt(Math.floor(Date.now() / 1000)), nanos: 0 },
+          startedAt: mockTimestamp(Math.floor(Date.now() / 1000)),
+          completedAt: mockTimestamp(Math.floor(Date.now() / 1000)),
           metadata: {},
-        },
-        {
+        }),
+        mockStep({
           stepName: 'Apply variables',
           status: WorkflowStatus.RUNNING,
-          startedAt: { seconds: BigInt(Math.floor(Date.now() / 1000)), nanos: 0 },
+          startedAt: mockTimestamp(Math.floor(Date.now() / 1000)),
           metadata: {},
-        },
+        }),
       ],
     };
 
@@ -104,15 +123,15 @@ describe('GenerationMonitor', () => {
       workflowId: mockWorkflowId,
       runId: mockRunId,
       status: WorkflowStatus.COMPLETED,
-      completedAt: { seconds: BigInt(Math.floor(Date.now() / 1000)), nanos: 0 },
+      completedAt: mockTimestamp(Math.floor(Date.now() / 1000)),
       steps: [
-        {
+        mockStep({
           stepName: 'Clone template',
           status: WorkflowStatus.COMPLETED,
-          startedAt: { seconds: BigInt(Math.floor(Date.now() / 1000)), nanos: 0 },
-          completedAt: { seconds: BigInt(Math.floor(Date.now() / 1000)), nanos: 0 },
+          startedAt: mockTimestamp(Math.floor(Date.now() / 1000)),
+          completedAt: mockTimestamp(Math.floor(Date.now() / 1000)),
           metadata: {},
-        },
+        }),
       ],
     };
 
@@ -269,7 +288,7 @@ describe('GenerationMonitor', () => {
       workflowId: mockWorkflowId,
       runId: mockRunId,
       status: WorkflowStatus.COMPLETED,
-      completedAt: { seconds: BigInt(Math.floor(Date.now() / 1000)), nanos: 0 },
+      completedAt: mockTimestamp(Math.floor(Date.now() / 1000)),
       steps: [],
     };
 
@@ -318,7 +337,9 @@ describe('GenerationMonitor', () => {
     };
 
     vi.mocked(workflowClient.getWorkflowStatus).mockResolvedValue(mockResponse as GetWorkflowStatusResponse);
-    vi.mocked(workflowClient.cancelWorkflow).mockResolvedValue({ success: true, message: 'Cancelled' });
+    vi.mocked(workflowClient.cancelWorkflow).mockResolvedValue(
+      create(CancelWorkflowResponseSchema, { success: true, message: 'Cancelled' }),
+    );
 
     render(
       <GenerationMonitor
@@ -347,7 +368,7 @@ describe('GenerationMonitor', () => {
       workflowId: mockWorkflowId,
       runId: mockRunId,
       status: WorkflowStatus.RUNNING,
-      startedAt: { seconds: BigInt(Math.floor(startTime / 1000)), nanos: 0 },
+      startedAt: mockTimestamp(Math.floor(startTime / 1000)),
       steps: [],
     };
 
@@ -374,31 +395,31 @@ describe('GenerationMonitor', () => {
       runId: mockRunId,
       status: WorkflowStatus.RUNNING,
       steps: [
-        {
+        mockStep({
           stepName: 'Clone template',
           status: WorkflowStatus.COMPLETED,
-          startedAt: { seconds: BigInt(Math.floor(Date.now() / 1000)), nanos: 0 },
-          completedAt: { seconds: BigInt(Math.floor(Date.now() / 1000)), nanos: 0 },
+          startedAt: mockTimestamp(Math.floor(Date.now() / 1000)),
+          completedAt: mockTimestamp(Math.floor(Date.now() / 1000)),
           metadata: {},
-        },
-        {
+        }),
+        mockStep({
           stepName: 'Apply variables',
           status: WorkflowStatus.RUNNING,
-          startedAt: { seconds: BigInt(Math.floor(Date.now() / 1000)), nanos: 0 },
+          startedAt: mockTimestamp(Math.floor(Date.now() / 1000)),
           metadata: {},
-        },
-        {
+        }),
+        mockStep({
           stepName: 'Initialize Git',
           status: WorkflowStatus.PENDING,
           metadata: {},
-        },
-        {
+        }),
+        mockStep({
           stepName: 'Failed step',
           status: WorkflowStatus.FAILED,
-          startedAt: { seconds: BigInt(Math.floor(Date.now() / 1000)), nanos: 0 },
+          startedAt: mockTimestamp(Math.floor(Date.now() / 1000)),
           errorMessage: 'Step failed',
           metadata: {},
-        },
+        }),
       ],
     };
 

@@ -147,7 +147,10 @@ describe('MovePageModal', () => {
 
   it('should disable move button during operation', async () => {
     const user = userEvent.setup()
-    const mockOnMove = vi.fn(() => new Promise(resolve => setTimeout(resolve, 100)))
+    const mockOnMove = vi.fn(
+      (_pageId: string, _newParentId: string | null) =>
+        new Promise<void>(resolve => setTimeout(resolve, 100))
+    )
 
     render(
       <MovePageModal

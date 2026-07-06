@@ -36,16 +36,18 @@ describe('PageTreeNode - Context Menu Actions', () => {
     id: '1',
     title: 'Test Page',
     slug: 'test-page',
+    status: 'published' as const,
+    sortOrder: 0,
+    parentId: null,
     children: [],
   }
 
   const defaultProps: PageTreeNodeProps = {
     node: mockNode,
-    currentPageId: null,
+    currentPageId: undefined,
     depth: 0,
     workspaceSlug: 'test-workspace',
     spaceSlug: 'test-space',
-    isDragging: false,
   }
 
   beforeEach(() => {

@@ -20,7 +20,8 @@ describe('SpaceNavigator', () => {
     workspaceId: 'ws-123',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-  } as KnowledgeSpace;
+    // Deliberately partial fixture using legacy field names; component only reads a subset.
+  } as unknown as KnowledgeSpace;
 
   const mockPages: KnowledgePage[] = [
     {
@@ -34,7 +35,8 @@ describe('SpaceNavigator', () => {
       content: {},
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    } as KnowledgePage,
+      // Deliberately partial fixture using legacy field names; component only reads a subset.
+    } as unknown as KnowledgePage,
     {
       id: 'page-2',
       title: 'Advanced Topics',
@@ -46,7 +48,8 @@ describe('SpaceNavigator', () => {
       content: {},
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    } as KnowledgePage,
+      // Deliberately partial fixture using legacy field names; component only reads a subset.
+    } as unknown as KnowledgePage,
     {
       id: 'page-3',
       title: 'Nested Page',
@@ -58,7 +61,8 @@ describe('SpaceNavigator', () => {
       content: {},
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    } as KnowledgePage,
+      // Deliberately partial fixture using legacy field names; component only reads a subset.
+    } as unknown as KnowledgePage,
   ];
 
   beforeEach(() => {
@@ -217,7 +221,8 @@ describe('SpaceNavigator', () => {
         content: {},
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-      } as KnowledgePage,
+        // Deliberately partial fixture using legacy field names; component only reads a subset.
+    } as unknown as KnowledgePage,
     ];
 
     render(
