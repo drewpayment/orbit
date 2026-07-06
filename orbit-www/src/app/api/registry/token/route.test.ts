@@ -2,6 +2,7 @@
  * @vitest-environment node
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { NextRequest } from 'next/server'
 
 vi.stubEnv('ORBIT_REGISTRY_JWT_SECRET', 'test-secret-key-for-jwt-signing-min-32-chars')
 
@@ -14,7 +15,7 @@ describe('GET /api/registry/token', () => {
   })
 
   it('returns 401 without authorization', async () => {
-    const request = new Request(
+    const request = new NextRequest(
       'http://localhost/api/registry/token?scope=repository:ws/app:pull&service=orbit-registry'
     )
 
@@ -24,7 +25,7 @@ describe('GET /api/registry/token', () => {
 
   it('returns 401 with invalid token', async () => {
     const credentials = Buffer.from('orbit-pull:invalid-token').toString('base64')
-    const request = new Request(
+    const request = new NextRequest(
       'http://localhost/api/registry/token?scope=repository:ws/app:pull&service=orbit-registry',
       {
         headers: { Authorization: `Basic ${credentials}` },
@@ -42,7 +43,7 @@ describe('GET /api/registry/token', () => {
     })
     const credentials = Buffer.from(`orbit-pull:${token}`).toString('base64')
 
-    const request = new Request(
+    const request = new NextRequest(
       'http://localhost/api/registry/token?scope=repository:other-workspace/other-app:pull&service=orbit-registry',
       {
         headers: { Authorization: `Basic ${credentials}` },
@@ -60,7 +61,7 @@ describe('GET /api/registry/token', () => {
     })
     const credentials = Buffer.from(`orbit-pull:${token}`).toString('base64')
 
-    const request = new Request(
+    const request = new NextRequest(
       'http://localhost/api/registry/token?scope=repository:my-workspace/my-app:pull&service=orbit-registry',
       {
         headers: { Authorization: `Basic ${credentials}` },

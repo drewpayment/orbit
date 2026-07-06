@@ -9,8 +9,10 @@ vi.mock('@/lib/grpc/agent-client', () => ({
 vi.mock('@/lib/auth/session', () => ({ getPayloadUserFromSession: vi.fn() }))
 vi.mock('@/lib/access/workspace-access', () => ({ isWorkspaceMember: vi.fn() }))
 
+import type { BasePayload } from 'payload'
 import { getPayload } from 'payload'
 import { agentClient } from '@/lib/grpc/agent-client'
+import type { AgentEvent } from '@/lib/proto/idp/agent/v1/agent_pb'
 import { getPayloadUserFromSession } from '@/lib/auth/session'
 import { isWorkspaceMember } from '@/lib/access/workspace-access'
 import { GET } from './route'
@@ -49,11 +51,11 @@ function emptyStream() {
 }
 
 /** Async-iterable whose first iteration throws a ConnectError. */
-function throwingStream(code: Code): AsyncIterable<unknown> {
+function throwingStream(code: Code): AsyncIterable<AgentEvent> {
   return {
     [Symbol.asyncIterator]() {
       return {
-        next(): Promise<IteratorResult<unknown>> {
+        next(): Promise<IteratorResult<AgentEvent>> {
           return Promise.reject(new ConnectError('boom', code))
         },
       }
@@ -64,8 +66,10 @@ function throwingStream(code: Code): AsyncIterable<unknown> {
 describe('GET /api/agent/[runId]/stream', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(getPayload).mockResolvedValue(mockPayload)
-    vi.mocked(getPayloadUserFromSession).mockResolvedValue({ id: 'user-1' })
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as unknown as BasePayload)
+    vi.mocked(getPayloadUserFromSession).mockResolvedValue({
+      id: 'user-1',
+    } as unknown as Awaited<ReturnType<typeof getPayloadUserFromSession>>)
     vi.mocked(isWorkspaceMember).mockResolvedValue(true)
     // agent-runs lookup at connect time
     mockPayload.find.mockResolvedValue({ docs: [{ id: 'run-1', workspace: 'ws-1', status: 'running' }] })
