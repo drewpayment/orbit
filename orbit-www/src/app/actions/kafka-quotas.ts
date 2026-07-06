@@ -113,7 +113,7 @@ export async function setWorkspaceQuotaOverride(
         data: {
           applicationQuota: input.newQuota,
           reason: input.reason,
-          setBy: payloadUser.betterAuthId || payloadUser.id,
+          setBy: payloadUser.id,
         },
         user: payloadUser,
         overrideAccess: false,
@@ -126,7 +126,7 @@ export async function setWorkspaceQuotaOverride(
           workspace: input.workspaceId,
           applicationQuota: input.newQuota,
           reason: input.reason,
-          setBy: payloadUser.betterAuthId || payloadUser.id,
+          setBy: payloadUser.id,
         },
         user: payloadUser,
         overrideAccess: false,
