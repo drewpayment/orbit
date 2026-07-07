@@ -475,6 +475,21 @@ func main() {
 	log.Println("API spec sync activities registered")
 
 	// =======================================================================
+	// Catalog Discovery Scan
+	// =======================================================================
+
+	// Repository scanning for automated catalog entity discovery. The worker
+	// enumerates a GitHub installation's repos, walks each tree, and POSTs an
+	// evidence bundle to orbit-www's /api/internal/discovery/ingest route
+	// (detection + staging happen there). See
+	// docs/plans/2026-07-06-catalog-discovery.md.
+	w.RegisterWorkflow(workflows.CatalogScanWorkflow)
+	catalogScanActivities := activities.NewCatalogScanActivities(orbitAPIURL, orbitInternalAPIKey, logger)
+	w.RegisterActivity(catalogScanActivities.ListInstallationReposActivity)
+	w.RegisterActivity(catalogScanActivities.ScanRepoActivity)
+	log.Println("Catalog discovery scan workflow and activities registered")
+
+	// =======================================================================
 	// Infrastructure Agent
 	// =======================================================================
 
