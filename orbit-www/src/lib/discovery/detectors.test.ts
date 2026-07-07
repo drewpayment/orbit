@@ -6,6 +6,7 @@ import {
   detectOwnershipHints,
   runDetectors,
   extractSpecMetadata,
+  isVendoredPath,
   DISCOVERY_FETCH_PATTERNS,
   type EvidenceBundle,
 } from './detectors'
@@ -334,5 +335,45 @@ describe('DISCOVERY_FETCH_PATTERNS', () => {
     expect(DISCOVERY_FETCH_PATTERNS).toContain('package.json')
     expect(DISCOVERY_FETCH_PATTERNS).toContain('go.mod')
     expect(DISCOVERY_FETCH_PATTERNS).toContain('CODEOWNERS')
+  })
+})
+
+describe('vendored path exclusion', () => {
+  it('classifies vendored and generated directories', () => {
+    expect(isVendoredPath('node_modules/accepts/package.json')).toBe(true)
+    expect(isVendoredPath('web/node_modules/left-pad/package.json')).toBe(true)
+    expect(isVendoredPath('vendor/github.com/foo/bar/go.mod')).toBe(true)
+    expect(isVendoredPath('dist/openapi.yaml')).toBe(true)
+    expect(isVendoredPath('services/api/package.json')).toBe(false)
+    expect(isVendoredPath('package.json')).toBe(false)
+    expect(isVendoredPath('builder/package.json')).toBe(false) // 'build' must not match 'builder'
+  })
+
+  it('detectService ignores build manifests inside node_modules (live-scan spam regression)', () => {
+    const bundle: EvidenceBundle = {
+      tree: [
+        'package.json',
+        'node_modules/JSONStream/package.json',
+        'node_modules/abbrev/package.json',
+        'node_modules/accepts/package.json',
+      ],
+      files: {
+        'package.json': JSON.stringify({ name: 'real-app', dependencies: { express: '^4' } }),
+        'node_modules/accepts/package.json': JSON.stringify({ name: 'accepts' }),
+      },
+    }
+    const detections = detectService(bundle)
+    expect(detections).toHaveLength(1)
+    expect(detections[0].path).toBe('')
+  })
+
+  it('detectApiSpecs ignores specs shipped inside vendored directories', () => {
+    const bundle: EvidenceBundle = {
+      tree: ['node_modules/some-sdk/openapi.yaml', 'docs/openapi.yaml'],
+      files: {},
+    }
+    const detections = detectApiSpecs(bundle)
+    expect(detections).toHaveLength(1)
+    expect(detections[0].path).toBe('docs')
   })
 })

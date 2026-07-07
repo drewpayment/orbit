@@ -249,11 +249,16 @@ func (a *CatalogScanActivities) ScanRepoActivity(ctx context.Context, in ScanRep
 		activity.RecordHeartbeat(ctx, fmt.Sprintf("%s/%s: fetched %s", in.Repo.Owner, in.Repo.Name, p))
 	}
 
-	// 4. Build the flattened tree path list (bounded).
+	// 4. Build the flattened tree path list (bounded). Vendored/generated
+	// directories are dropped here so a committed node_modules cannot eat the
+	// tree cap and crowd out real paths (the detectors ignore them anyway).
 	treePaths := make([]string, 0, len(entries))
 	treeTruncated := treeResp.Truncated
 	for _, e := range entries {
 		if e.Type != "blob" && e.Type != "tree" {
+			continue
+		}
+		if isVendoredPath(e.Path) {
 			continue
 		}
 		if len(treePaths) >= maxTreeEntries {
@@ -361,11 +366,35 @@ const (
 	prioK8s             // yaml under k8s manifest dirs
 )
 
+// vendoredSegments are directory names whose contents must never be scanned or
+// shipped — vendored dependencies and generated output. Keep in sync with
+// isVendoredPath/VENDORED_SEGMENT_RE in orbit-www/src/lib/discovery/detectors.ts.
+var vendoredSegments = map[string]struct{}{
+	"node_modules": {}, "vendor": {}, "bower_components": {}, "third_party": {},
+	".git": {}, "dist": {}, "build": {}, "out": {}, ".next": {}, ".nuxt": {},
+	"target": {}, "__pycache__": {}, "site-packages": {}, ".venv": {}, "venv": {},
+	"coverage": {}, ".terraform": {},
+}
+
+// isVendoredPath reports whether any segment of the path is a vendored or
+// generated directory (see vendoredSegments).
+func isVendoredPath(p string) bool {
+	for _, seg := range strings.Split(p, "/") {
+		if _, ok := vendoredSegments[seg]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 // classifyWellKnown reports whether a path is a discovery-relevant file and, if
 // so, its fetch priority. Build manifests and container files are matched at the
 // repo root only (to avoid node_modules / vendored noise); API specs and k8s
-// manifests are matched anywhere in the tree.
+// manifests are matched anywhere in the tree. Vendored paths never classify.
 func classifyWellKnown(p string) (int, bool) {
+	if isVendoredPath(p) {
+		return 0, false
+	}
 	lower := strings.ToLower(p)
 	base := path.Base(p)
 	lowerBase := strings.ToLower(base)

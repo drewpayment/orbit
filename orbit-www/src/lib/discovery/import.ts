@@ -128,7 +128,7 @@ export async function importDiscoveredService(
   if (discovery.status === 'imported' && discovery.importedRef?.id) {
     return {
       imported: true,
-      ref: { collection: discovery.importedRef.collection || 'apps', id: discovery.importedRef.id },
+      ref: { collection: discovery.importedRef.collectionSlug || 'apps', id: discovery.importedRef.id },
     }
   }
 
@@ -172,7 +172,7 @@ export async function importDiscoveredService(
     overrideAccess: true,
     data: {
       status: 'imported',
-      importedRef: { collection: 'apps', id: appId },
+      importedRef: { collectionSlug: 'apps', id: appId },
     },
   })
 
@@ -195,7 +195,7 @@ export async function importDiscoveredApi(
     return {
       imported: true,
       ref: {
-        collection: discovery.importedRef.collection || 'api-schemas',
+        collection: discovery.importedRef.collectionSlug || 'api-schemas',
         id: discovery.importedRef.id,
       },
     }
@@ -274,7 +274,7 @@ export async function importDiscoveredApi(
     overrideAccess: true,
     data: {
       status: 'imported',
-      importedRef: { collection: 'api-schemas', id: schemaId },
+      importedRef: { collectionSlug: 'api-schemas', id: schemaId },
     },
   })
 
@@ -300,7 +300,7 @@ export async function importDiscoveredGlobalEntity(
     return {
       imported: true,
       ref: {
-        collection: discovery.importedRef.collection || 'catalog-entities',
+        collection: discovery.importedRef.collectionSlug || 'catalog-entities',
         id: discovery.importedRef.id,
       },
     }
@@ -367,7 +367,7 @@ export async function importDiscoveredGlobalEntity(
     overrideAccess: true,
     data: {
       status: 'imported',
-      importedRef: { collection: 'catalog-entities', id: entityId },
+      importedRef: { collectionSlug: 'catalog-entities', id: entityId },
     },
   })
 

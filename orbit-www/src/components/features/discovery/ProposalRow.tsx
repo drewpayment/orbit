@@ -108,9 +108,9 @@ export function ProposalRow({
 
           {note && <p className="text-xs text-amber-600 dark:text-amber-400">{note}</p>}
 
-          {imported && row.importedRef?.collection && (
+          {imported && row.importedRef?.collectionSlug && (
             <p className="text-xs text-muted-foreground">
-              Imported into <span className="font-mono">{row.importedRef.collection}</span>
+              Imported into <span className="font-mono">{row.importedRef.collectionSlug}</span>
             </p>
           )}
 

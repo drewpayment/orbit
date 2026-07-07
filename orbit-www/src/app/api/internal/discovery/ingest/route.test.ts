@@ -235,7 +235,7 @@ describe('ingestScan', () => {
     // discovery row kept for traceability, linked
     const row = f.collections['discovered-entities'][0]
     expect(row.status).toBe('imported')
-    expect(row.importedRef).toEqual({ collection: 'apps', id: f.collections['apps'][0].id })
+    expect(row.importedRef).toEqual({ collectionSlug: 'apps', id: f.collections['apps'][0].id })
   })
 
   it('creates an api proposal (not auto-imported) for an OpenAPI spec', async () => {
@@ -347,7 +347,7 @@ describe('ingestScan', () => {
     expect(entities[0]).toMatchObject({ kind: 'service', source: { type: 'scan' } })
     const row = f.collections['discovered-entities'][0]
     expect(row.status).toBe('imported')
-    expect((row.importedRef as { collection: string }).collection).toBe('catalog-entities')
+    expect((row.importedRef as { collectionSlug: string }).collectionSlug).toBe('catalog-entities')
   })
 
   it('resolves the numeric installationId to the github-installations doc id for the relationship', async () => {

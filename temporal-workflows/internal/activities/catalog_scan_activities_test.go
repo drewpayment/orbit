@@ -222,3 +222,32 @@ func TestEncodePath(t *testing.T) {
 	require.Equal(t, "a%20b/c.yaml", encodePath("a b/c.yaml"))
 	require.Equal(t, ".github/CODEOWNERS", encodePath(".github/CODEOWNERS"))
 }
+
+func TestIsVendoredPath(t *testing.T) {
+	cases := []struct {
+		path string
+		want bool
+	}{
+		{"node_modules/accepts/package.json", true},
+		{"web/node_modules/left-pad/package.json", true},
+		{"vendor/github.com/foo/go.mod", true},
+		{"dist/openapi.yaml", true},
+		{"services/api/package.json", false},
+		{"package.json", false},
+		{"builder/package.json", false},
+	}
+	for _, c := range cases {
+		if got := isVendoredPath(c.path); got != c.want {
+			t.Errorf("isVendoredPath(%q) = %v, want %v", c.path, got, c.want)
+		}
+	}
+}
+
+func TestClassifyWellKnownSkipsVendored(t *testing.T) {
+	if _, ok := classifyWellKnown("node_modules/some-sdk/openapi.yaml"); ok {
+		t.Error("vendored openapi spec must not classify")
+	}
+	if _, ok := classifyWellKnown("docs/openapi.yaml"); !ok {
+		t.Error("non-vendored openapi spec must classify")
+	}
+}

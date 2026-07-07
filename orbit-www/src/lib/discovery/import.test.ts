@@ -169,7 +169,7 @@ describe('importDiscoveredService', () => {
     // discovery row linked
     const row = f.collections['discovered-entities'][0]
     expect(row.status).toBe('imported')
-    expect(row.importedRef).toEqual({ collection: 'apps', id: apps[0].id })
+    expect(row.importedRef).toEqual({ collectionSlug: 'apps', id: apps[0].id })
   })
 
   it('no-op links to an existing App for the same repo (idempotent, edits preserved)', async () => {
@@ -187,14 +187,14 @@ describe('importDiscoveredService', () => {
     expect(f.collections['apps']).toHaveLength(1)
     expect(f.collections['apps'][0].name).toBe('HAND-EDITED')
     expect(f.collections['discovered-entities'][0].importedRef).toEqual({
-      collection: 'apps',
+      collectionSlug: 'apps',
       id: 'app-existing',
     })
   })
 
   it('short-circuits when the row is already imported', async () => {
     const f = fp()
-    const d = discovery({ status: 'imported', importedRef: { collection: 'apps', id: 'app-x' } })
+    const d = discovery({ status: 'imported', importedRef: { collectionSlug: 'apps', id: 'app-x' } })
 
     const res = await importDiscoveredService(payloadOf(f), d)
 
@@ -250,7 +250,7 @@ describe('importDiscoveredApi', () => {
     })
     expect(f.collections['discovered-entities'][0].status).toBe('imported')
     expect(f.collections['discovered-entities'][0].importedRef).toEqual({
-      collection: 'api-schemas',
+      collectionSlug: 'api-schemas',
       id: schemas[0].id,
     })
   })
@@ -331,7 +331,7 @@ describe('importDiscoveredApi', () => {
     expect(res.ref).toEqual({ collection: 'api-schemas', id: 'schema-existing' })
     expect(f.collections['api-schemas']).toHaveLength(1)
     expect(f.collections['discovered-entities'][0].importedRef).toEqual({
-      collection: 'api-schemas',
+      collectionSlug: 'api-schemas',
       id: 'schema-existing',
     })
   })
@@ -341,7 +341,7 @@ describe('importDiscoveredApi', () => {
     const d = discovery({
       detectedKind: 'api',
       status: 'imported',
-      importedRef: { collection: 'api-schemas', id: 'schema-x' },
+      importedRef: { collectionSlug: 'api-schemas', id: 'schema-x' },
       proposal: { schemaType: 'openapi', specPath: 'openapi.yaml', rawContent: 'openapi: 3.0.0' },
     })
 
@@ -385,7 +385,7 @@ describe('importDiscoveredGlobalEntity', () => {
     expect(f.collections['apps']).toHaveLength(0)
     const row = f.collections['discovered-entities'][0]
     expect(row.status).toBe('imported')
-    expect(row.importedRef).toEqual({ collection: 'catalog-entities', id: entities[0].id })
+    expect(row.importedRef).toEqual({ collectionSlug: 'catalog-entities', id: entities[0].id })
   })
 
   it('carries schemaType/specPath into metadata for a global api', async () => {

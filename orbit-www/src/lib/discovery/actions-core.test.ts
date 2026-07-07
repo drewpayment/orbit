@@ -274,7 +274,7 @@ describe('approveDiscoveriesCore — global rows (WP8)', () => {
     expect(f.collections['apps'] ?? []).toHaveLength(0)
     const row = f.collections['discovered-entities'][0]
     expect(row.status).toBe('imported')
-    expect((row.importedRef as { collection: string }).collection).toBe('catalog-entities')
+    expect((row.importedRef as { collectionSlug: string }).collectionSlug).toBe('catalog-entities')
   })
 
   it('forbids a non-admin from approving a global proposal', async () => {

@@ -145,7 +145,9 @@ export const DiscoveredEntities: CollectionConfig = {
         description: 'The row this proposal was imported into (traceability).',
       },
       fields: [
-        { name: 'collection', type: 'text' },
+        // Named collectionSlug (not `collection`) — `collection` is a reserved
+        // Mongoose schema pathname and triggers warnings / undefined behavior.
+        { name: 'collectionSlug', type: 'text' },
         { name: 'id', type: 'text' },
       ],
     },

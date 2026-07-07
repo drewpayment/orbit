@@ -92,6 +92,20 @@ export const DISCOVERY_FETCH_PATTERNS: string[] = [
 
 // --- Path helpers ---
 
+/**
+ * Vendored / generated directories that must never yield detections — a repo
+ * with committed node_modules would otherwise propose every dependency as a
+ * "service" (observed live: 300+ spam proposals from one repo). Keep in sync
+ * with the Go scanner's path filter in
+ * temporal-workflows/internal/activities/catalog_scan_activities.go.
+ */
+const VENDORED_SEGMENT_RE =
+  /(^|\/)(node_modules|vendor|bower_components|third_party|\.git|dist|build|out|\.next|\.nuxt|target|__pycache__|site-packages|\.venv|venv|coverage|\.terraform)(\/|$)/
+
+export function isVendoredPath(path: string): boolean {
+  return VENDORED_SEGMENT_RE.test(path)
+}
+
 function dirOf(path: string): string {
   const idx = path.lastIndexOf('/')
   return idx === -1 ? '' : path.slice(0, idx)
@@ -264,6 +278,7 @@ export function detectApiSpecs(bundle: EvidenceBundle): Detection[] {
 
   // Content-backed matches first (highest fidelity).
   for (const [path, content] of Object.entries(bundle.files)) {
+    if (isVendoredPath(path)) continue
     const match = matchApiFilename(path)
     if (!match) continue
 
@@ -301,7 +316,7 @@ export function detectApiSpecs(bundle: EvidenceBundle): Detection[] {
 
   // Filename-only matches from the tree (no content fetched -> medium).
   for (const path of bundle.tree) {
-    if (seen.has(path)) continue
+    if (seen.has(path) || isVendoredPath(path)) continue
     const match = matchApiFilename(path)
     if (!match) continue
     emit(path, {
@@ -448,6 +463,7 @@ export function detectService(bundle: EvidenceBundle): Detection[] {
   }
 
   for (const path of bundle.tree) {
+    if (isVendoredPath(path)) continue
     const base = baseOf(path)
     if (isContainerFile(base)) {
       scopeOf(path).container ??= { detector: 'container', file: path }

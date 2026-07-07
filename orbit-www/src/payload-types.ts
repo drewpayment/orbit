@@ -4131,7 +4131,7 @@ export interface DiscoveredEntity {
    * The row this proposal was imported into (traceability).
    */
   importedRef?: {
-    collection?: string | null;
+    collectionSlug?: string | null;
     id?: string | null;
   };
   /**
@@ -6128,7 +6128,7 @@ export interface DiscoveredEntitiesSelect<T extends boolean = true> {
   importedRef?:
     | T
     | {
-        collection?: T;
+        collectionSlug?: T;
         id?: T;
       };
   dedupeKey?: T;
