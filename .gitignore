@@ -1,7 +1,7 @@
-.DS_Store.worktrees/
 .claude/.DS_Store
 .DS_Store
 .worktrees/
+.claude/worktrees/
 
 # Local Docker data volumes
 .data/
