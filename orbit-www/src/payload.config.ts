@@ -92,6 +92,9 @@ import { Actions, ActionRuns } from './collections/actions'
 // Event automation + drift detection (IDP refocus P4)
 import { Automations } from './collections/automations'
 
+// Catalog discovery — repository-scan review queue (Phase 1)
+import { DiscoveredEntities } from './collections/discovery/DiscoveredEntities'
+
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
@@ -181,6 +184,8 @@ export default buildConfig({
     ActionRuns,
     // Event automation + drift detection (IDP refocus P4)
     Automations,
+    // Catalog discovery — repository-scan review queue (Phase 1)
+    DiscoveredEntities,
   ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',

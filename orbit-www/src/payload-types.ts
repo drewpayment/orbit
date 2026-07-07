@@ -138,6 +138,7 @@ export interface Config {
     actions: Action;
     'action-runs': ActionRun;
     automations: Automation;
+    'discovered-entities': DiscoveredEntity;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -215,6 +216,7 @@ export interface Config {
     actions: ActionsSelect<false> | ActionsSelect<true>;
     'action-runs': ActionRunsSelect<false> | ActionRunsSelect<true>;
     automations: AutomationsSelect<false> | AutomationsSelect<true>;
+    'discovered-entities': DiscoveredEntitiesSelect<false> | DiscoveredEntitiesSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -840,7 +842,7 @@ export interface App {
     branch?: string | null;
   };
   origin: {
-    type: 'template' | 'imported' | 'manual';
+    type: 'template' | 'imported' | 'manual' | 'discovered';
     template?: (string | null) | Template;
     instantiatedAt?: string | null;
   };
@@ -4070,6 +4072,84 @@ export interface Automation {
   createdAt: string;
 }
 /**
+ * Repository-scan proposals awaiting review — projected into the catalog on approval.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "discovered-entities".
+ */
+export interface DiscoveredEntity {
+  id: string;
+  /**
+   * Security enclave the proposal belongs to.
+   */
+  workspace: string | Workspace;
+  /**
+   * GitHub App installation the scan ran under.
+   */
+  installation?: (string | null) | GithubInstallation;
+  /**
+   * Repository the proposal was detected in.
+   */
+  repo: {
+    owner: string;
+    name: string;
+    url?: string | null;
+    defaultBranch?: string | null;
+  };
+  /**
+   * '' = repo root; monorepo subdirectory otherwise.
+   */
+  path?: string | null;
+  detectedKind: 'service' | 'api';
+  confidence: 'high' | 'medium' | 'low';
+  /**
+   * Which detectors fired, at which files: [{ detector, file, excerpt? }].
+   */
+  evidence?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Prefilled entity (service buildConfig, or api schemaType/specPath) used on approval.
+   */
+  proposal?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  status: 'proposed' | 'approved' | 'ignored' | 'imported' | 'stale';
+  /**
+   * The row this proposal was imported into (traceability).
+   */
+  importedRef?: {
+    collection?: string | null;
+    id?: string | null;
+  };
+  /**
+   * sha1(installationId:owner/name:path:detectedKind) — re-scan idempotency key.
+   */
+  dedupeKey: string;
+  /**
+   * Temporal workflow run id that last touched this proposal.
+   */
+  scanRunId?: string | null;
+  /**
+   * When the most recent scan last observed this proposal.
+   */
+  lastSeenAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
@@ -4359,6 +4439,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'automations';
         value: string | Automation;
+      } | null)
+    | ({
+        relationTo: 'discovered-entities';
+        value: string | DiscoveredEntity;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -6017,6 +6101,39 @@ export interface AutomationsSelect<T extends boolean = true> {
   inputMapping?: T;
   enabled?: T;
   lastTriggeredAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "discovered-entities_select".
+ */
+export interface DiscoveredEntitiesSelect<T extends boolean = true> {
+  workspace?: T;
+  installation?: T;
+  repo?:
+    | T
+    | {
+        owner?: T;
+        name?: T;
+        url?: T;
+        defaultBranch?: T;
+      };
+  path?: T;
+  detectedKind?: T;
+  confidence?: T;
+  evidence?: T;
+  proposal?: T;
+  status?: T;
+  importedRef?:
+    | T
+    | {
+        collection?: T;
+        id?: T;
+      };
+  dedupeKey?: T;
+  scanRunId?: T;
+  lastSeenAt?: T;
   updatedAt?: T;
   createdAt?: T;
 }
