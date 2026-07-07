@@ -16,7 +16,8 @@ vi.mock('@payload-config', () => ({
 vi.stubEnv('ORBIT_INTERNAL_API_KEY', 'test-api-key')
 
 import { getPayload } from 'payload'
-const { POST, ingestScan } = await import('./route')
+const { POST } = await import('./route')
+const { ingestScan } = await import('@/lib/discovery/ingest')
 
 // --- helpers -----------------------------------------------------------------
 
@@ -307,5 +308,24 @@ describe('ingestScan', () => {
 
     // Tier-1 service imported, openapi proposed, asyncapi skipped-ignored.
     expect(counts).toEqual({ proposed: 1, imported: 1, skippedIgnored: 1 })
+  })
+
+  it('resolves the numeric installationId to the github-installations doc id for the relationship', async () => {
+    const f = new FakePayload()
+    f.collections['github-installations'] = [{ id: 'inst-doc-1', installationId: 42 }]
+
+    await ingestScan(p(f), body({ bundle: heuristicServiceBundle() }))
+
+    // The relation must carry the Payload doc id, never the raw numeric GitHub id
+    // (writing '42' into a relationship field fails Mongo's ObjectId cast).
+    expect(f.collections['discovered-entities'][0].installation).toBe('inst-doc-1')
+  })
+
+  it('leaves the installation relation unset when no github-installations doc matches', async () => {
+    const f = new FakePayload()
+
+    await ingestScan(p(f), body({ bundle: heuristicServiceBundle() }))
+
+    expect(f.collections['discovered-entities'][0].installation).toBeUndefined()
   })
 })
