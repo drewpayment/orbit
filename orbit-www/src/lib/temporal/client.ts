@@ -1,4 +1,5 @@
 import { Client, Connection, WorkflowExecutionAlreadyStartedError } from '@temporalio/client';
+import { catalogScanWorkflowId } from '@/lib/discovery/actions-core';
 
 let temporalClient: Client | null = null;
 
@@ -101,6 +102,86 @@ export async function cancelGitHubTokenRefreshWorkflow(workflowId: string): Prom
   const client = await getTemporalClient()
   const handle = client.workflow.getHandle(workflowId)
   await handle.cancel()
+}
+
+/**
+ * Input type for CatalogScanWorkflow (must match the Go
+ * `CatalogScanWorkflowInput` struct — WP4). Only the numeric installation id
+ * (as string) and workspace id are set on the initial invocation.
+ */
+interface CatalogScanWorkflowInput {
+  InstallationID: string
+  WorkspaceID: string
+}
+
+/**
+ * Start (or attach to) the catalog scan for a GitHub installation. Idempotent
+ * "Scan now": the deterministic workflow id + USE_EXISTING means a concurrent
+ * or repeat trigger converges on the single running scan rather than racing.
+ * ALLOW_DUPLICATE lets a fresh run start once a previous one has closed.
+ *
+ * @param installationId the NUMERIC github-installations.installationId (string).
+ * @returns the workflow id on success, or null on a real failure (caller skips
+ *          that installation; the scan for the others still proceeds).
+ */
+export async function startCatalogScanWorkflow(input: {
+  installationId: string
+  workspaceId: string
+}): Promise<string | null> {
+  const workflowId = catalogScanWorkflowId(input.installationId)
+  const workflowInput: CatalogScanWorkflowInput = {
+    InstallationID: input.installationId,
+    WorkspaceID: input.workspaceId,
+  }
+  try {
+    const client = await getTemporalClient()
+    const handle = await client.workflow.start('CatalogScanWorkflow', {
+      taskQueue: 'orbit-workflows',
+      workflowId,
+      args: [workflowInput],
+      workflowIdConflictPolicy: 'USE_EXISTING',
+      workflowIdReusePolicy: 'ALLOW_DUPLICATE',
+    })
+    return handle.workflowId
+  } catch (error) {
+    if (error instanceof WorkflowExecutionAlreadyStartedError) return workflowId
+    console.error('[Discovery] Failed to start CatalogScanWorkflow:', error)
+    return null
+  }
+}
+
+export interface CatalogScanStatus {
+  status: 'running' | 'completed' | 'failed' | 'none'
+  /** Close time for a finished run, else the start time; ISO string. */
+  lastRunAt?: string
+}
+
+/**
+ * Best-effort status of an installation's catalog scan for the review-queue
+ * banner. A missing workflow (never scanned) maps to `none`; any non-running,
+ * non-completed terminal state (failed/canceled/terminated/timed out) maps to
+ * `failed`. Never throws.
+ */
+export async function describeCatalogScanWorkflow(installationId: string): Promise<CatalogScanStatus> {
+  try {
+    const client = await getTemporalClient()
+    const desc = await client.workflow.getHandle(catalogScanWorkflowId(installationId)).describe()
+    const statusName =
+      typeof desc.status === 'string'
+        ? desc.status
+        : ((desc.status as { name?: string })?.name ?? '')
+    const lastRunAt = (desc.closeTime ?? desc.startTime)?.toISOString?.()
+    switch (statusName) {
+      case 'RUNNING':
+        return { status: 'running', lastRunAt }
+      case 'COMPLETED':
+        return { status: 'completed', lastRunAt }
+      default:
+        return { status: 'failed', lastRunAt }
+    }
+  } catch {
+    return { status: 'none' }
+  }
 }
 
 /**
