@@ -44,6 +44,11 @@ export async function startWorkspaceScan(workspaceId: string): Promise<{
 
   const payload = await getPayload({ config })
 
+  // Membership gate BEFORE resolving installations, so non-members learn
+  // nothing about the workspace's GitHub wiring (the core re-checks too).
+  const membership = await getWorkspaceMembership(payload, user.id, workspaceId)
+  if (!membership) return { success: false, error: 'Not a member of this workspace', started: [] }
+
   const installations = await getWorkspaceGitHubInstallations(workspaceId)
   if (!installations.success) {
     return { success: false, error: installations.error ?? 'Failed to resolve installations', started: [] }

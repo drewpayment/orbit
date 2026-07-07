@@ -375,7 +375,7 @@ func classifyWellKnown(p string) (int, bool) {
 	}
 
 	// API specs (anywhere in the tree).
-	if ext == ".graphql" || ext == ".graphqls" {
+	if ext == ".graphql" || ext == ".graphqls" || ext == ".gql" {
 		return prioAPISpec, true
 	}
 	if ext == ".json" || ext == ".yaml" || ext == ".yml" {
