@@ -81,15 +81,23 @@ export async function startGitHubTokenRefreshWorkflow(installationId: string): P
 }
 
 /**
- * Nudge a running refresh workflow to refresh immediately (best-effort).
+ * Nudge the refresh workflow to refresh immediately (best-effort).
  * Used when a consumer reads a near-expired/expired token so the next read
- * self-heals. Never throws — a missing workflow is recovered by the sweeper.
+ * self-heals. Signal-with-start: a dead refresher (terminated, failed, never
+ * started) is RESTARTED rather than warned about — a bare signal to a closed
+ * workflow lands nowhere and previously left expired tokens stuck until a
+ * sweeper pass noticed. Never throws.
  */
 export async function signalGitHubTokenRefresh(installationId: string): Promise<void> {
   try {
     const client = await getTemporalClient()
-    const handle = client.workflow.getHandle(gitHubTokenRefreshWorkflowId(installationId))
-    await handle.signal('trigger-refresh')
+    await client.workflow.signalWithStart('GitHubTokenRefreshWorkflow', {
+      taskQueue: 'orbit-workflows',
+      workflowId: gitHubTokenRefreshWorkflowId(installationId),
+      args: [{ InstallationID: installationId }],
+      signal: 'trigger-refresh',
+      signalArgs: [],
+    })
   } catch (error) {
     console.warn('[GitHub] Failed to signal token refresh (sweeper will recover):', error)
   }
