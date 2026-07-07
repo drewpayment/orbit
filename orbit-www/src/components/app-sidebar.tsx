@@ -18,6 +18,7 @@ import {
   Sparkles,
   Shield,
   ShieldCheck,
+  Telescope,
   TrendingUp,
   Workflow,
   Zap,
@@ -139,6 +140,11 @@ const navPlatformData: NavPlatformItem[] = [
         url: "/platform/kafka/pending-approvals",
       },
     ],
+  },
+  {
+    title: "Discovery",
+    url: "/discovery",
+    icon: Telescope,
   },
   {
     title: "LLM Providers",

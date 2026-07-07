@@ -1,10 +1,37 @@
 package activities
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+// TestIngestRequestOmitsEmptyWorkspace verifies the WP8 contract: a global scan
+// (empty WorkspaceID) marshals a body with NO workspaceId key, so the ingest
+// route's parseBody treats it as absent (a workspace-less proposal). A workspace
+// scan still carries the id.
+func TestIngestRequestOmitsEmptyWorkspace(t *testing.T) {
+	global, err := json.Marshal(ingestRequest{
+		InstallationID: "42",
+		WorkspaceID:    "",
+		Repo:           RepoRef{Owner: "acme", Name: "billing"},
+		ScanRunID:      "run-1",
+		Bundle:         ingestBundle{Tree: []string{}, Files: map[string]string{}},
+	})
+	require.NoError(t, err)
+	require.NotContains(t, string(global), "workspaceId", "global scan must omit workspaceId")
+
+	scoped, err := json.Marshal(ingestRequest{
+		InstallationID: "42",
+		WorkspaceID:    "ws-1",
+		Repo:           RepoRef{Owner: "acme", Name: "billing"},
+		Bundle:         ingestBundle{Tree: []string{}, Files: map[string]string{}},
+	})
+	require.NoError(t, err)
+	require.True(t, strings.Contains(string(scoped), `"workspaceId":"ws-1"`), "workspace scan must carry workspaceId")
+}
 
 func blob(p string, size int64) treeEntry { return treeEntry{Path: p, Type: "blob", Size: size} }
 func tree(p string) treeEntry             { return treeEntry{Path: p, Type: "tree"} }

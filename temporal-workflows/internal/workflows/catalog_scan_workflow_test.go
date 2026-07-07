@@ -58,6 +58,41 @@ func TestCatalogScanWorkflow_FanOutAndAggregate(t *testing.T) {
 	require.NotEmpty(t, res.ScanRunID)
 }
 
+// TestCatalogScanWorkflow_GlobalScanEmptyWorkspace verifies a global scan (WP8):
+// an empty WorkspaceID flows through enumeration and the fan-out unchanged — the
+// workspace is simply not required — and the activities receive the empty value.
+func TestCatalogScanWorkflow_GlobalScanEmptyWorkspace(t *testing.T) {
+	s := testsuite.WorkflowTestSuite{}
+	env := s.NewTestWorkflowEnvironment()
+
+	var a *activities.CatalogScanActivities
+	env.RegisterActivity(a.ListInstallationReposActivity)
+	env.RegisterActivity(a.ScanRepoActivity)
+
+	repos := makeRepos(2)
+	env.OnActivity(a.ListInstallationReposActivity, mock.Anything,
+		mock.MatchedBy(func(in activities.ListInstallationReposInput) bool {
+			return in.InstallationID == "123" && in.WorkspaceID == ""
+		})).Return(repos, nil)
+	env.OnActivity(a.ScanRepoActivity, mock.Anything,
+		mock.MatchedBy(func(in activities.ScanRepoInput) bool { return in.WorkspaceID == "" })).
+		Return(activities.ScanRepoResult{Proposed: 1, Imported: 1}, nil)
+
+	env.ExecuteWorkflow(CatalogScanWorkflow, CatalogScanWorkflowInput{
+		InstallationID: "123",
+		WorkspaceID:    "",
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+
+	var res CatalogScanWorkflowResult
+	require.NoError(t, env.GetWorkflowResult(&res))
+	require.Equal(t, 2, res.ReposScanned)
+	require.Equal(t, 2, res.Proposed)
+	require.Equal(t, 2, res.Imported)
+}
+
 // TestCatalogScanWorkflow_PartialFailureTolerant verifies that one repo whose
 // scan activity fails does not fail the whole scan — it is counted as failed
 // and the rest complete.

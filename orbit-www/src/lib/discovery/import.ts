@@ -33,6 +33,12 @@ export interface ImportOptions {
    * route never needs it (apps has no `createdBy`, and Tier 1 is service-only).
    */
   actorUserId?: string
+  /**
+   * Assign a GLOBAL (workspace-less) proposal to this workspace on approval,
+   * then run the NORMAL apps/api-schemas import path in it (WP8). Ignored for a
+   * proposal that already has a workspace. Platform-admin gated by the caller.
+   */
+  assignWorkspaceId?: string
 }
 
 /**
@@ -275,18 +281,135 @@ export async function importDiscoveredApi(
   return { imported: true, ref: { collection: 'api-schemas', id: schemaId } }
 }
 
-/** Dispatch a discovery row to the importer for its kind. */
+/**
+ * Import a GLOBAL (workspace-less) proposal directly into a `catalog-entities`
+ * row (WP8). Unlike the workspace path, a global import bypasses apps/api-schemas
+ * (both are workspace-bound) and writes the catalog entity itself, kind
+ * `service`/`api` from `detectedKind`, `source: { type: 'scan', sourceId:
+ * dedupeKey }`. The build/spec details the workspace path would carry on an
+ * apps/api-schemas row are folded into `metadata` so a later assign-to-workspace
+ * re-import (Phase 2 follow-up) has them. Idempotent on (source.type,
+ * source.sourceId): an existing scan-sourced entity for this dedupeKey is linked,
+ * never duplicated.
+ */
+export async function importDiscoveredGlobalEntity(
+  payload: Payload,
+  discovery: DiscoveredEntity,
+): Promise<ImportResult> {
+  if (discovery.status === 'imported' && discovery.importedRef?.id) {
+    return {
+      imported: true,
+      ref: {
+        collection: discovery.importedRef.collection || 'catalog-entities',
+        id: discovery.importedRef.id,
+      },
+    }
+  }
+
+  const kind = discovery.detectedKind
+  if (kind !== 'service' && kind !== 'api') {
+    return { imported: false, skippedReason: `unknown-kind:${String(kind)}` }
+  }
+
+  const proposal = asRecord(discovery.proposal)
+  const sourceId = discovery.dedupeKey
+
+  // Idempotent link: reuse an existing scan-sourced entity for this dedupeKey.
+  const existing = await payload.find({
+    collection: 'catalog-entities',
+    where: {
+      and: [{ 'source.type': { equals: 'scan' } }, { 'source.sourceId': { equals: sourceId } }],
+    },
+    limit: 1,
+    depth: 0,
+    overrideAccess: true,
+  })
+
+  let entityId: string
+  if (existing.docs.length > 0) {
+    entityId = String(existing.docs[0].id)
+  } else {
+    const { owner, name: repoName, url, defaultBranch } = discovery.repo
+    const name = (proposal.name as string) || repoName || 'entity'
+    const buildConfig = asRecord(proposal.buildConfig)
+    const metadata: Record<string, unknown> = {
+      repo: {
+        owner,
+        name: repoName,
+        ...(url ? { url } : {}),
+        ...(defaultBranch ? { defaultBranch } : {}),
+      },
+      path: discovery.path ?? '',
+      ...(typeof proposal.schemaType === 'string' ? { schemaType: proposal.schemaType } : {}),
+      ...(typeof proposal.specPath === 'string' ? { specPath: proposal.specPath } : {}),
+      ...(Object.keys(buildConfig).length > 0 ? { buildConfig } : {}),
+    }
+    const created = await payload.create({
+      collection: 'catalog-entities',
+      overrideAccess: true,
+      data: {
+        name,
+        // Global slug uniqueness is enforced in the projection layer, not by a DB
+        // constraint; a dedupeKey suffix keeps two same-named global scans distinct.
+        slug: `${slugify(name) || 'entity'}-${sourceId.slice(0, 8)}`,
+        kind,
+        ...(typeof proposal.description === 'string' ? { description: proposal.description } : {}),
+        source: { type: 'scan', sourceId },
+        metadata,
+      },
+    })
+    entityId = String(created.id)
+  }
+
+  await payload.update({
+    collection: 'discovered-entities',
+    id: discovery.id,
+    overrideAccess: true,
+    data: {
+      status: 'imported',
+      importedRef: { collection: 'catalog-entities', id: entityId },
+    },
+  })
+
+  return { imported: true, ref: { collection: 'catalog-entities', id: entityId } }
+}
+
+/**
+ * Dispatch a discovery row to the importer for its kind and scope. A global
+ * (workspace-less) proposal imports as a global catalog entity, UNLESS
+ * `opts.assignWorkspaceId` is set — then the row is first assigned that
+ * workspace and imported through the normal apps/api-schemas path (WP8).
+ */
 export async function importDiscovery(
   payload: Payload,
   discovery: DiscoveredEntity,
   opts: ImportOptions = {},
 ): Promise<ImportResult> {
-  switch (discovery.detectedKind) {
+  let row = discovery
+
+  // Assign-to-workspace: a global proposal an admin routes into a workspace.
+  // Persist the workspace, then fall through to the normal workspace import.
+  if (opts.assignWorkspaceId && !relId(row.workspace)) {
+    await payload.update({
+      collection: 'discovered-entities',
+      id: row.id,
+      overrideAccess: true,
+      data: { workspace: opts.assignWorkspaceId },
+    })
+    row = { ...row, workspace: opts.assignWorkspaceId } as DiscoveredEntity
+  }
+
+  // Global proposal with no assignment → direct global catalog entity.
+  if (!relId(row.workspace)) {
+    return importDiscoveredGlobalEntity(payload, row)
+  }
+
+  switch (row.detectedKind) {
     case 'service':
-      return importDiscoveredService(payload, discovery)
+      return importDiscoveredService(payload, row)
     case 'api':
-      return importDiscoveredApi(payload, discovery, opts)
+      return importDiscoveredApi(payload, row, opts)
     default:
-      return { imported: false, skippedReason: `unknown-kind:${String(discovery.detectedKind)}` }
+      return { imported: false, skippedReason: `unknown-kind:${String(row.detectedKind)}` }
   }
 }

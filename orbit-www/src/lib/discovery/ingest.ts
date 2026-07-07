@@ -18,11 +18,16 @@ import { computeDedupeKey, importDiscovery } from '@/lib/discovery/import'
  * Body:
  *   {
  *     installationId: string,
- *     workspaceId: string,
+ *     workspaceId?: string,   // ABSENT/empty for a global (platform-admin) scan
  *     repo: { owner, name, url?, defaultBranch? },
  *     scanRunId?: string,
  *     bundle: { tree: string[], files: Record<path, content> }
  *   }
+ *
+ * A GLOBAL scan (WP8) omits `workspaceId`: the Go scanner runs with an empty
+ * WorkspaceID (`omitempty` drops the field). Rows are then created without a
+ * `workspace`, and Tier-1 auto-import goes through the global-entity path
+ * (importDiscovery routes a workspace-less row to importDiscoveredGlobalEntity).
  *
  * The Go scanner may attach truncation telemetry to the bundle
  * (`skippedLarge` / `truncatedTree` / `truncatedSelection`); those extra fields
@@ -42,7 +47,8 @@ export interface IngestRepo {
 
 export interface IngestBody {
   installationId: string
-  workspaceId: string
+  /** Absent/empty for a global (platform-admin) scan; rows omit `workspace`. */
+  workspaceId?: string
   repo: IngestRepo
   scanRunId?: string
   bundle: EvidenceBundle
@@ -61,7 +67,9 @@ export function parseBody(raw: unknown): IngestBody | null {
   const bundle = b.bundle as Record<string, unknown> | undefined
 
   if (typeof b.installationId !== 'string' || b.installationId.length === 0) return null
-  if (typeof b.workspaceId !== 'string' || b.workspaceId.length === 0) return null
+  // workspaceId is OPTIONAL (WP8): absent/empty ⇒ a global scan. A present value
+  // must be a non-empty string; an empty string is treated as absent.
+  if (b.workspaceId !== undefined && typeof b.workspaceId !== 'string') return null
   if (!repo || typeof repo.owner !== 'string' || typeof repo.name !== 'string') return null
   if (!repo.owner || !repo.name) return null
   if (
@@ -76,7 +84,9 @@ export function parseBody(raw: unknown): IngestBody | null {
 
   return {
     installationId: b.installationId,
-    workspaceId: b.workspaceId,
+    ...(typeof b.workspaceId === 'string' && b.workspaceId.length > 0
+      ? { workspaceId: b.workspaceId }
+      : {}),
     repo: {
       owner: repo.owner,
       name: repo.name,
@@ -167,7 +177,9 @@ export async function ingestScan(payload: Payload, body: IngestBody): Promise<In
         collection: 'discovered-entities',
         overrideAccess: true,
         data: {
-          workspace: workspaceId,
+          // Omit `workspace` entirely for a global scan (WP8) — a null/absent
+          // workspace marks the row global (platform-admin managed).
+          ...(workspaceId ? { workspace: workspaceId } : {}),
           ...(installationDocId ? { installation: installationDocId } : {}),
           repo: {
             owner: repo.owner,

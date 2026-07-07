@@ -5,6 +5,7 @@ import {
   computeDedupeKey,
   importDiscoveredService,
   importDiscoveredApi,
+  importDiscoveredGlobalEntity,
   importDiscovery,
 } from './import'
 
@@ -351,6 +352,74 @@ describe('importDiscoveredApi', () => {
   })
 })
 
+// --- importDiscoveredGlobalEntity (WP8) -------------------------------------
+
+describe('importDiscoveredGlobalEntity', () => {
+  it('creates a global catalog entity (no workspace, source.type scan) for a service', async () => {
+    const f = fp()
+    const d = discovery({
+      workspace: undefined,
+      dedupeKey: 'globalkey123456',
+      proposal: { name: 'billing', description: 'Billing', buildConfig: { language: 'go' } },
+    })
+    f.collections['discovered-entities'] = [{ ...d } as Doc]
+
+    const res = await importDiscoveredGlobalEntity(payloadOf(f), d)
+
+    expect(res.imported).toBe(true)
+    expect(res.ref?.collection).toBe('catalog-entities')
+    const entities = f.collections['catalog-entities']
+    expect(entities).toHaveLength(1)
+    expect(entities[0]).toMatchObject({
+      name: 'billing',
+      description: 'Billing',
+      kind: 'service',
+      source: { type: 'scan', sourceId: 'globalkey123456' },
+    })
+    // no workspace on the global entity
+    expect(entities[0].workspace).toBeUndefined()
+    // build details folded into metadata for a later assign-to-workspace re-import
+    expect((entities[0].metadata as Record<string, unknown>).buildConfig).toEqual({ language: 'go' })
+    expect((entities[0].metadata as Record<string, unknown>).repo).toMatchObject({ owner: 'acme', name: 'billing' })
+    // no apps/api-schemas rows for a global import
+    expect(f.collections['apps']).toHaveLength(0)
+    const row = f.collections['discovered-entities'][0]
+    expect(row.status).toBe('imported')
+    expect(row.importedRef).toEqual({ collection: 'catalog-entities', id: entities[0].id })
+  })
+
+  it('carries schemaType/specPath into metadata for a global api', async () => {
+    const f = fp()
+    const d = discovery({
+      workspace: undefined,
+      detectedKind: 'api',
+      dedupeKey: 'apikey',
+      proposal: { name: 'orders', schemaType: 'openapi', specPath: 'openapi.yaml' },
+    })
+    f.collections['discovered-entities'] = [{ ...d } as Doc]
+
+    const res = await importDiscoveredGlobalEntity(payloadOf(f), d)
+
+    expect(res.imported).toBe(true)
+    const entity = f.collections['catalog-entities'][0]
+    expect(entity).toMatchObject({ kind: 'api' })
+    expect((entity.metadata as Record<string, unknown>).schemaType).toBe('openapi')
+    expect((entity.metadata as Record<string, unknown>).specPath).toBe('openapi.yaml')
+  })
+
+  it('is idempotent on (source.type, source.sourceId): links, never duplicates', async () => {
+    const f = fp()
+    const d = discovery({ workspace: undefined, dedupeKey: 'dupe', proposal: { name: 'svc' } })
+    f.collections['discovered-entities'] = [{ ...d } as Doc]
+
+    await importDiscoveredGlobalEntity(payloadOf(f), d)
+    const linked = { ...f.collections['discovered-entities'][0] } as unknown as DiscoveredEntity
+    await importDiscoveredGlobalEntity(payloadOf(f), linked)
+
+    expect(f.collections['catalog-entities']).toHaveLength(1)
+  })
+})
+
 // --- importDiscovery (dispatcher) -------------------------------------------
 
 describe('importDiscovery', () => {
@@ -377,5 +446,31 @@ describe('importDiscovery', () => {
 
     expect(res.ref?.collection).toBe('api-schemas')
     expect(f.collections['api-schemas'][0].createdBy).toBe('user-7')
+  })
+
+  it('routes a workspace-less row to the global entity importer (WP8)', async () => {
+    const f = fp()
+    const d = discovery({ workspace: undefined, dedupeKey: 'gk', proposal: { name: 'svc' } })
+    f.collections['discovered-entities'] = [{ ...d } as Doc]
+
+    const res = await importDiscovery(payloadOf(f), d)
+
+    expect(res.ref?.collection).toBe('catalog-entities')
+    expect(f.collections['catalog-entities']).toHaveLength(1)
+    expect(f.collections['apps']).toHaveLength(0)
+  })
+
+  it('assignWorkspaceId reassigns a global row and imports through the workspace path (WP8)', async () => {
+    const f = fp()
+    const d = discovery({ workspace: undefined, dedupeKey: 'gk', proposal: { name: 'svc' } })
+    f.collections['discovered-entities'] = [{ ...d } as Doc]
+
+    const res = await importDiscovery(payloadOf(f), d, { assignWorkspaceId: 'ws-target' })
+
+    expect(res.ref?.collection).toBe('apps')
+    expect(f.collections['apps']).toHaveLength(1)
+    expect(f.collections['apps'][0].workspace).toBe('ws-target')
+    expect(f.collections['catalog-entities'] ?? []).toHaveLength(0)
+    expect(f.collections['discovered-entities'][0].workspace).toBe('ws-target')
   })
 })

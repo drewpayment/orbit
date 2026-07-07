@@ -3490,7 +3490,7 @@ export interface CatalogEntity {
    * Provenance back to the backing collection this row projects from.
    */
   source: {
-    type: 'manual' | 'apps' | 'api-schemas' | 'kafka' | 'sync';
+    type: 'manual' | 'apps' | 'api-schemas' | 'kafka' | 'sync' | 'scan';
     /**
      * ID of the backing row in the source collection.
      */
@@ -4080,9 +4080,9 @@ export interface Automation {
 export interface DiscoveredEntity {
   id: string;
   /**
-   * Security enclave the proposal belongs to.
+   * Security enclave the proposal belongs to (absent = global).
    */
-  workspace: string | Workspace;
+  workspace?: (string | null) | Workspace;
   /**
    * GitHub App installation the scan ran under.
    */

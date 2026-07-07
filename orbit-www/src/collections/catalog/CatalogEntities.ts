@@ -210,6 +210,10 @@ export const CatalogEntities: CollectionConfig = {
             { label: 'API Schemas', value: 'api-schemas' },
             { label: 'Kafka', value: 'kafka' },
             { label: 'Sync', value: 'sync' },
+            // Catalog Discovery global import (WP8): a repository scan created
+            // this entity directly (no api-schemas/apps source), sourceId = the
+            // discovered-entities dedupeKey. See lib/discovery/import.ts.
+            { label: 'Scan', value: 'scan' },
           ],
         },
         {

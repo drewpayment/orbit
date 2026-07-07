@@ -22,6 +22,17 @@ import {
  * = active workspace members, delete = workspace owner/admin. There is NO
  * user-facing create path — the ingest route writes with `overrideAccess`, so
  * direct create is locked to platform admins.
+ *
+ * Workspace-less (global) proposals (Phase 1.5, WP8): `workspace` is OPTIONAL. A
+ * row with no workspace is a GLOBAL proposal, produced by a platform admin's
+ * installation-level scan and managed by platform admins only. The access
+ * factories already deliver those semantics without a special case: the read
+ * `Where` (`{ workspace: { in: memberIds } }`) never matches a null-workspace
+ * row, and the mutate gates resolve a null workspace to "deny" — so for every
+ * global row the sole non-deny branch is `isPlatformAdmin`. Workspace rows are
+ * unchanged. Approval imports a global row as a global catalog-entities row
+ * (`source.type: 'scan'`) or, when a workspace is assigned, through the normal
+ * apps/api-schemas path — see lib/discovery/import.ts.
  */
 export const DiscoveredEntities: CollectionConfig = {
   slug: 'discovered-entities',
@@ -47,9 +58,12 @@ export const DiscoveredEntities: CollectionConfig = {
       name: 'workspace',
       type: 'relationship',
       relationTo: 'workspaces',
-      required: true,
+      // Optional: a global proposal (no workspace) comes from an installation-
+      // level scan and is platform-admin managed (WP8), mirroring the optional
+      // `workspace` on catalog-entities. Access is enforced by the factories above.
+      required: false,
       index: true,
-      admin: { description: 'Security enclave the proposal belongs to.' },
+      admin: { description: 'Security enclave the proposal belongs to (absent = global).' },
     },
     {
       name: 'installation',

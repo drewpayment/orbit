@@ -57,15 +57,18 @@ type ListInstallationReposInput struct {
 	// InstallationID is the numeric GitHub App installation ID (as a string).
 	// It is the key the orbit-www /api/internal/github/token route expects.
 	InstallationID string `json:"installationId"`
-	WorkspaceID    string `json:"workspaceId"`
+	// WorkspaceID is empty for a GLOBAL (platform-admin) scan (WP8); omitempty
+	// drops it from the POST body so the ingest route sees an absent workspaceId.
+	WorkspaceID string `json:"workspaceId,omitempty"`
 }
 
 // ScanRepoInput drives ScanRepoActivity.
 type ScanRepoInput struct {
-	InstallationID string  `json:"installationId"`
-	WorkspaceID    string  `json:"workspaceId"`
-	Repo           RepoRef `json:"repo"`
-	ScanRunID      string  `json:"scanRunId"`
+	InstallationID string `json:"installationId"`
+	// WorkspaceID is empty for a global scan (WP8); see ListInstallationReposInput.
+	WorkspaceID string  `json:"workspaceId,omitempty"`
+	Repo        RepoRef `json:"repo"`
+	ScanRunID   string  `json:"scanRunId"`
 }
 
 // ScanRepoResult is the aggregate the ingest route reports back for one repo.
@@ -123,8 +126,10 @@ type ghRepo struct {
 // repositorySelection ("all" vs "selected") — GitHub only returns repos the
 // installation is actually granted, so no extra filtering is required here.
 func (a *CatalogScanActivities) ListInstallationReposActivity(ctx context.Context, in ListInstallationReposInput) ([]RepoRef, error) {
-	if in.InstallationID == "" || in.WorkspaceID == "" {
-		return nil, temporal.NewNonRetryableApplicationError("installationId and workspaceId required", "InvalidInput", nil)
+	// WorkspaceID may be empty (a global scan, WP8); only the installation id is
+	// required to enumerate repos.
+	if in.InstallationID == "" {
+		return nil, temporal.NewNonRetryableApplicationError("installationId required", "InvalidInput", nil)
 	}
 
 	token, err := a.installationToken(ctx, in.InstallationID)
@@ -184,8 +189,10 @@ func (a *CatalogScanActivities) ListInstallationReposActivity(ctx context.Contex
 // A repo the installation cannot read (deleted, permissions) fails with a
 // non-retryable error so the workflow can record it and move on.
 func (a *CatalogScanActivities) ScanRepoActivity(ctx context.Context, in ScanRepoInput) (ScanRepoResult, error) {
-	if in.WorkspaceID == "" || in.Repo.Owner == "" || in.Repo.Name == "" {
-		return ScanRepoResult{}, temporal.NewNonRetryableApplicationError("workspaceId and repo owner/name required", "InvalidInput", nil)
+	// WorkspaceID may be empty (a global scan, WP8); the repo coordinates are the
+	// only hard requirement for a scan.
+	if in.Repo.Owner == "" || in.Repo.Name == "" {
+		return ScanRepoResult{}, temporal.NewNonRetryableApplicationError("repo owner/name required", "InvalidInput", nil)
 	}
 
 	token, err := a.installationToken(ctx, in.InstallationID)
@@ -549,11 +556,13 @@ func (a *CatalogScanActivities) fetchFileContent(ctx context.Context, owner, rep
 // ingestRequest is the body POSTed to /api/internal/discovery/ingest.
 // Keep this contract in sync with the ingest route (orbit-www side).
 type ingestRequest struct {
-	InstallationID string       `json:"installationId"`
-	WorkspaceID    string       `json:"workspaceId"`
-	Repo           RepoRef      `json:"repo"`
-	ScanRunID      string       `json:"scanRunId"`
-	Bundle         ingestBundle `json:"bundle"`
+	InstallationID string `json:"installationId"`
+	// WorkspaceID is omitted for a global scan (WP8) so the ingest route's
+	// parseBody sees an absent workspaceId and creates workspace-less rows.
+	WorkspaceID string       `json:"workspaceId,omitempty"`
+	Repo        RepoRef      `json:"repo"`
+	ScanRunID   string       `json:"scanRunId"`
+	Bundle      ingestBundle `json:"bundle"`
 }
 
 type ingestBundle struct {

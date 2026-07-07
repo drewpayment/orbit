@@ -233,6 +233,45 @@ by `betterAuthId`, not Payload `id`** — the recurring gotcha).
   visible in catalog with relation → re-scan produces no dupes. Pre/post
   orphan-Chrome checks per CLAUDE.md.
 
+## Phase 1.5 — cross-workspace visibility + workspace-less import (approved 2026-07-07)
+
+Two additions Drew requested after Phase 1 review:
+
+### WP7 — Attention Hub proposals card
+Dashboard-level visibility: a bounded card beside `DashboardAttention` on
+`app/(frontend)/dashboard/page.tsx` showing proposed-discovery counts grouped
+by workspace (member workspaces only; platform admins also see the global
+queue). Each row links to that workspace's `/discovery` page (or `/discovery`
+for global). Purely additive files: `lib/discovery/attention-core.ts` (tested
+query core), `app/actions/discovery-attention.ts`, and
+`components/features/discovery/DiscoveryAttentionCard.tsx`; hidden entirely
+when there is nothing to review (the hub is bounded — no empty chrome).
+
+### WP8 — workspace-less discovery
+`apps`/`api-schemas` require a workspace, but `catalog-entities.workspace` is
+already optional (global entities, platform-admin managed — see
+2026-07-02-catalog-entity-crud.md). Model:
+- `discovered-entities.workspace` → `required: false`. Global rows (no
+  workspace) are platform-admin managed (read/update/delete), mirroring the
+  CatalogEntities global-entity access rules.
+- Scan without a workspace: platform admins trigger an installation-level
+  scan (no workspaceId); the Go workflow already treats WorkspaceID as an
+  opaque string — empty means global. Ingest accepts an absent workspaceId.
+- Platform-level review UX at `app/(frontend)/discovery` (org-level page,
+  admin-gated): pick an installation, scan, review the global queue.
+- Approval of a GLOBAL proposal offers two affordances:
+  1. **Assign to workspace** → the existing apps/api-schemas import path runs
+     in the chosen workspace.
+  2. **Import as global entity** → direct `catalog-entities` create with
+     `workspace: null`, `source: { type: 'scan', sourceId: dedupeKey }`
+     (new `scan` option on the CatalogEntities source enum), kind
+     service/api. Platform admin only, consistent with `canCreateGlobal`.
+     APIs imported globally skip `api-schemas` (it is workspace-bound) — the
+     entity carries `metadata.specPath`/`schemaType` instead; assigning to a
+     workspace later re-imports properly (Phase 2 follow-up).
+- Tier-1 auto-import for global scans creates the global entity directly
+  (same trust rationale: the repo self-declares).
+
 ## Future phases (sketch, out of Phase 1 scope)
 
 - **Phase 2 — richer manifests & monorepos:** multi-entity `.orbit.yaml`

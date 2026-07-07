@@ -167,6 +167,14 @@ describe('POST /api/internal/discovery/ingest — auth & validation', () => {
     expect(data).toEqual({ proposed: 0, imported: 0, skippedIgnored: 0 })
   })
 
+  it('accepts a global-scan body with no workspaceId (WP8)', async () => {
+    const { workspaceId: _omit, ...global } = validBody()
+    void _omit
+    const res = await POST(req('test-api-key', global))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ proposed: 0, imported: 0, skippedIgnored: 0 })
+  })
+
   it('tolerates the optional truncation bundle fields the Go scanner sends', async () => {
     // WP4 contract: bundle may carry skippedLarge/truncatedTree/truncatedSelection —
     // the route must ignore, not reject, these extras.
@@ -308,6 +316,38 @@ describe('ingestScan', () => {
 
     // Tier-1 service imported, openapi proposed, asyncapi skipped-ignored.
     expect(counts).toEqual({ proposed: 1, imported: 1, skippedIgnored: 1 })
+  })
+
+  it('creates workspace-less proposals for a global scan (no workspaceId) (WP8)', async () => {
+    const f = new FakePayload()
+    // Omit workspaceId entirely — a global (platform-admin) scan.
+    const { workspaceId: _omit, ...global } = body({ bundle: heuristicServiceBundle() })
+    void _omit
+
+    const counts = await ingestScan(p(f), global as Parameters<typeof ingestScan>[1])
+
+    expect(counts).toEqual({ proposed: 1, imported: 0, skippedIgnored: 0 })
+    const row = f.collections['discovered-entities'][0]
+    expect(row.workspace).toBeUndefined() // global row, no workspace
+    expect(row.status).toBe('proposed')
+  })
+
+  it('auto-imports a Tier-1 global scan as a global catalog entity (WP8)', async () => {
+    const f = new FakePayload()
+    const { workspaceId: _omit, ...global } = body({ bundle: tier1Bundle() })
+    void _omit
+
+    const counts = await ingestScan(p(f), global as Parameters<typeof ingestScan>[1])
+
+    expect(counts).toEqual({ proposed: 0, imported: 1, skippedIgnored: 0 })
+    // Global import writes a catalog-entities row directly — no apps row.
+    expect(f.collections['apps'] ?? []).toHaveLength(0)
+    const entities = f.collections['catalog-entities'] ?? []
+    expect(entities).toHaveLength(1)
+    expect(entities[0]).toMatchObject({ kind: 'service', source: { type: 'scan' } })
+    const row = f.collections['discovered-entities'][0]
+    expect(row.status).toBe('imported')
+    expect((row.importedRef as { collection: string }).collection).toBe('catalog-entities')
   })
 
   it('resolves the numeric installationId to the github-installations doc id for the relationship', async () => {

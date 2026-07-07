@@ -5,9 +5,11 @@ import {
   catalogScanWorkflowId,
   sortDiscoveries,
   listDiscoveriesCore,
+  listGlobalDiscoveriesCore,
   approveDiscoveriesCore,
   ignoreDiscoveriesCore,
   startWorkspaceScanCore,
+  startInstallationScanCore,
 } from './actions-core'
 
 // --- FakePayload -------------------------------------------------------------
@@ -98,6 +100,9 @@ function matchesWhere(doc: Doc, where: unknown): boolean {
       if (actualId !== cond.equals) return false
     } else if ('in' in cond) {
       if (!(cond.in as unknown[]).includes(actualId)) return false
+    } else if ('exists' in cond) {
+      const present = actualId !== undefined && actualId !== null
+      if (present !== cond.exists) return false
     }
   }
   return true
@@ -198,7 +203,7 @@ describe('approveDiscoveriesCore', () => {
     seedMember(f, 'ws1')
     seedDiscovery(f, { id: 'd1', proposal: { name: 'billing', buildConfig: { language: 'go' } } })
 
-    const res = await approveDiscoveriesCore(payloadOf(f), AUTH_ID, 'payload-user-9', ['d1'])
+    const res = await approveDiscoveriesCore(payloadOf(f), AUTH_ID, 'payload-user-9', false, ['d1'])
     expect(res).toEqual([{ id: 'd1', imported: true }])
     expect(f.collections['apps']).toHaveLength(1)
     expect(f.collections['discovered-entities'][0].status).toBe('imported')
@@ -213,7 +218,7 @@ describe('approveDiscoveriesCore', () => {
       proposal: { name: 'orders', schemaType: 'openapi', rawContent: 'openapi: 3.0.0', specPath: 'openapi.yaml' },
     })
 
-    const res = await approveDiscoveriesCore(payloadOf(f), AUTH_ID, 'payload-user-9', ['d1'])
+    const res = await approveDiscoveriesCore(payloadOf(f), AUTH_ID, 'payload-user-9', false, ['d1'])
     expect(res).toEqual([{ id: 'd1', imported: true }])
     expect(f.collections['api-schemas'][0]).toMatchObject({ createdBy: 'payload-user-9' })
   })
@@ -227,7 +232,7 @@ describe('approveDiscoveriesCore', () => {
       proposal: { name: 'graph', schemaType: 'graphql', rawContent: 'type Query' },
     })
 
-    const res = await approveDiscoveriesCore(payloadOf(f), AUTH_ID, 'payload-user-9', ['d1'])
+    const res = await approveDiscoveriesCore(payloadOf(f), AUTH_ID, 'payload-user-9', false, ['d1'])
     expect(res).toEqual([{ id: 'd1', imported: false, skippedReason: 'unsupported-schema-type:graphql' }])
     expect(f.collections['api-schemas']).toHaveLength(0)
   })
@@ -238,7 +243,7 @@ describe('approveDiscoveriesCore', () => {
     seedDiscovery(f, { id: 'mine', proposal: { name: 'ok' } })
     seedDiscovery(f, { id: 'theirs', workspace: 'ws2', proposal: { name: 'nope' } })
 
-    const res = await approveDiscoveriesCore(payloadOf(f), AUTH_ID, 'payload-user-9', [
+    const res = await approveDiscoveriesCore(payloadOf(f), AUTH_ID, 'payload-user-9', false, [
       'mine',
       'theirs',
       'ghost',
@@ -252,6 +257,114 @@ describe('approveDiscoveriesCore', () => {
   })
 })
 
+// --- global (workspace-less) proposals (WP8) ---------------------------------
+
+describe('approveDiscoveriesCore — global rows (WP8)', () => {
+  it('imports a global proposal as a global catalog entity for a platform admin', async () => {
+    const f = fp()
+    // No workspace on the row = global. Admin, no membership needed.
+    seedDiscovery(f, { id: 'g1', workspace: undefined, proposal: { name: 'billing' } })
+
+    const res = await approveDiscoveriesCore(payloadOf(f), AUTH_ID, 'payload-user-9', true, ['g1'])
+
+    expect(res).toEqual([{ id: 'g1', imported: true }])
+    const entities = f.collections['catalog-entities'] ?? []
+    expect(entities).toHaveLength(1)
+    expect(entities[0]).toMatchObject({ kind: 'service', source: { type: 'scan' } })
+    expect(f.collections['apps'] ?? []).toHaveLength(0)
+    const row = f.collections['discovered-entities'][0]
+    expect(row.status).toBe('imported')
+    expect((row.importedRef as { collection: string }).collection).toBe('catalog-entities')
+  })
+
+  it('forbids a non-admin from approving a global proposal', async () => {
+    const f = fp()
+    seedMember(f, 'ws1') // caller is a member of ws1, but the row is global
+    seedDiscovery(f, { id: 'g1', workspace: undefined })
+
+    const res = await approveDiscoveriesCore(payloadOf(f), AUTH_ID, 'payload-user-9', false, ['g1'])
+
+    expect(res).toEqual([{ id: 'g1', imported: false, skippedReason: 'forbidden' }])
+    expect(f.collections['catalog-entities'] ?? []).toHaveLength(0)
+  })
+
+  it('assigns a global proposal to a workspace and imports through the apps path', async () => {
+    const f = fp()
+    seedDiscovery(f, { id: 'g1', workspace: undefined, proposal: { name: 'billing', buildConfig: { language: 'go' } } })
+
+    const res = await approveDiscoveriesCore(payloadOf(f), AUTH_ID, 'payload-user-9', true, ['g1'], {
+      assignWorkspaceId: 'ws-target',
+    })
+
+    expect(res).toEqual([{ id: 'g1', imported: true }])
+    // Normal workspace import path ran: an apps row, no global catalog entity.
+    expect(f.collections['apps']).toHaveLength(1)
+    expect(f.collections['apps'][0]).toMatchObject({ workspace: 'ws-target', origin: { type: 'discovered' } })
+    expect(f.collections['catalog-entities'] ?? []).toHaveLength(0)
+    // The discovery row was reassigned to the workspace.
+    expect(f.collections['discovered-entities'][0].workspace).toBe('ws-target')
+  })
+
+  it('lets a platform admin approve any workspace row without membership', async () => {
+    const f = fp()
+    seedDiscovery(f, { id: 'w1', workspace: 'ws-other', proposal: { name: 'ok' } })
+
+    const res = await approveDiscoveriesCore(payloadOf(f), AUTH_ID, 'payload-user-9', true, ['w1'])
+    expect(res).toEqual([{ id: 'w1', imported: true }])
+    expect(f.collections['apps']).toHaveLength(1)
+  })
+})
+
+describe('ignoreDiscoveriesCore — global rows (WP8)', () => {
+  it('lets an admin ignore a global row but forbids a non-admin', async () => {
+    const f = fp()
+    seedDiscovery(f, { id: 'g1', workspace: undefined, status: 'proposed' })
+
+    const denied = await ignoreDiscoveriesCore(payloadOf(f), AUTH_ID, false, ['g1'])
+    expect(denied).toEqual([{ id: 'g1', ignored: false, reason: 'forbidden' }])
+
+    const ok = await ignoreDiscoveriesCore(payloadOf(f), AUTH_ID, true, ['g1'])
+    expect(ok).toEqual([{ id: 'g1', ignored: true }])
+    expect(f.collections['discovered-entities'][0].status).toBe('ignored')
+  })
+})
+
+describe('listGlobalDiscoveriesCore', () => {
+  it('returns only workspace-less rows for an admin, sorted', async () => {
+    const f = fp()
+    seedDiscovery(f, { id: 'g2', workspace: undefined, repo: { owner: 'acme', name: 'zzz' } })
+    seedDiscovery(f, { id: 'g1', workspace: undefined, repo: { owner: 'acme', name: 'aaa' } })
+    seedDiscovery(f, { id: 'w1', workspace: 'ws1' }) // scoped — excluded
+
+    const rows = await listGlobalDiscoveriesCore(payloadOf(f), true)
+    expect(rows.map((r) => r.id)).toEqual(['g1', 'g2'])
+  })
+
+  it('returns [] for a non-admin (AC-7 for the global queue)', async () => {
+    const f = fp()
+    seedDiscovery(f, { id: 'g1', workspace: undefined })
+    expect(await listGlobalDiscoveriesCore(payloadOf(f), false)).toEqual([])
+  })
+})
+
+describe('startInstallationScanCore', () => {
+  it('starts a global scan with an empty workspaceId for an admin', async () => {
+    const start = vi.fn(async ({ installationId }: { installationId: string }) => `catalog-scan-${installationId}`)
+    const res = await startInstallationScanCore(true, 12345, start)
+    expect(start).toHaveBeenCalledWith({ installationId: '12345', workspaceId: '' })
+    expect(res.started).toEqual({ installationId: '12345', workflowId: 'catalog-scan-12345' })
+  })
+
+  it('returns null started when the starter reports a transient failure', async () => {
+    const res = await startInstallationScanCore(true, 1, async () => null)
+    expect(res.started).toBeNull()
+  })
+
+  it('throws for a non-admin', async () => {
+    await expect(startInstallationScanCore(false, 1, async () => 'x')).rejects.toThrow(/platform admin/i)
+  })
+})
+
 // --- ignoreDiscoveriesCore ---------------------------------------------------
 
 describe('ignoreDiscoveriesCore', () => {
@@ -262,7 +375,7 @@ describe('ignoreDiscoveriesCore', () => {
     seedDiscovery(f, { id: 'done', status: 'imported' })
     seedDiscovery(f, { id: 'theirs', workspace: 'ws2', status: 'proposed' })
 
-    const res = await ignoreDiscoveriesCore(payloadOf(f), AUTH_ID, ['mine', 'done', 'theirs'])
+    const res = await ignoreDiscoveriesCore(payloadOf(f), AUTH_ID, false, ['mine', 'done', 'theirs'])
     expect(res).toEqual([
       { id: 'mine', ignored: true },
       { id: 'done', ignored: false, reason: 'already-imported' },

@@ -24,7 +24,11 @@ const (
 // fields (RemainingRepos, ScanRunID, Totals) are populated on subsequent runs.
 type CatalogScanWorkflowInput struct {
 	InstallationID string `json:"installationId"`
-	WorkspaceID    string `json:"workspaceId"`
+	// WorkspaceID is empty for a GLOBAL (platform-admin) installation scan (WP8);
+	// omitempty keeps it out of the continue-as-new carry-over when unset. An
+	// empty WorkspaceID flows through the activities and the ingest POST as an
+	// absent workspaceId, yielding workspace-less (global) proposals.
+	WorkspaceID string `json:"workspaceId,omitempty"`
 
 	// RemainingRepos carries the not-yet-scanned repos across continue-as-new.
 	// nil on the first invocation (the workflow enumerates repos itself).
