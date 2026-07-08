@@ -2,12 +2,19 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
+import { revalidatePath } from 'next/cache'
 import { getPayloadUserFromSession } from '@/lib/auth/session'
 import { isPlatformAdmin } from '@/lib/access/workspace-access'
-import { signalGitHubTokenRefresh } from '@/lib/temporal/client'
+import {
+  signalGitHubTokenRefresh,
+  cancelGitHubTokenRefreshWorkflow,
+  gitHubTokenRefreshWorkflowId,
+} from '@/lib/temporal/client'
 import {
   listInstallationsAdminCore,
   getInstallationRefreshStateCore,
+  countAppsForInstallation,
+  deleteInstallationCore,
   type AdminInstallationView,
   type InstallationRefreshState,
 } from '@/lib/github/installations-core'
@@ -71,4 +78,54 @@ export async function getInstallationRefreshState(docId: string): Promise<{
   } catch {
     return { success: false, error: 'Installation not found', state: null }
   }
+}
+
+/**
+ * How many Apps reference this installation — prefetched when the Remove-
+ * connection confirm dialog opens so the admin sees the blast radius before
+ * confirming.
+ */
+export async function getInstallationAppCount(docId: string): Promise<{
+  success: boolean
+  error?: string
+  count: number
+}> {
+  const actor = await requirePlatformAdmin()
+  if (!actor) return { success: false, error: 'Platform admin required', count: 0 }
+
+  const payload = await getPayload({ config })
+  try {
+    const doc = await payload.findByID({
+      collection: 'github-installations',
+      id: docId,
+      depth: 0,
+      overrideAccess: true,
+    })
+    const count = await countAppsForInstallation(payload, String(doc.installationId ?? ''))
+    return { success: true, count }
+  } catch {
+    return { success: false, error: 'Installation not found', count: 0 }
+  }
+}
+
+/**
+ * Remove a GitHub installation (platform admin): cancel its token refresh
+ * workflow and delete the doc. Apps referencing it keep their data but lose
+ * GitHub access at the next token use; the app must still be uninstalled on
+ * GitHub (the UI links there). Never throws.
+ */
+export async function deleteInstallationAdmin(docId: string): Promise<{
+  success: boolean
+  error?: string
+  appCount: number
+}> {
+  const actor = await requirePlatformAdmin()
+  if (!actor) return { success: false, error: 'Platform admin required', appCount: 0 }
+
+  const payload = await getPayload({ config })
+  const res = await deleteInstallationCore(payload, docId, () =>
+    cancelGitHubTokenRefreshWorkflow(gitHubTokenRefreshWorkflowId(docId)),
+  )
+  if (res.ok) revalidatePath('/settings/github')
+  return { success: res.ok, error: res.error, appCount: res.appCount }
 }

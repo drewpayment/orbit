@@ -16,6 +16,7 @@ import {
   ignoreDiscoveries,
   getInstallationScanStatus,
 } from '@/app/actions/discovery'
+import { startConnectionScan, getConnectionScanStatus } from '@/app/actions/git-connections'
 import { groupByRepo, humanizeSkippedReason } from './discovery-ui'
 import { ProposalRow } from './ProposalRow'
 
@@ -23,6 +24,13 @@ export interface GlobalInstallation {
   id: string
   installationId: string
   accountLogin: string
+}
+
+/** An Azure DevOps (git-connections) scan target for the discovery picker (WP11). */
+export interface GlobalConnection {
+  id: string
+  name: string
+  provider: string
 }
 
 export interface GlobalWorkspaceOption {
@@ -36,16 +44,40 @@ export interface InstallationScanStatus {
   lastRunAt?: string
 }
 
+export interface ConnectionScanStatus {
+  connectionId: string
+  status: 'running' | 'completed' | 'failed' | 'none'
+  lastRunAt?: string
+}
+
+type ScanStatusValue = { status: 'running' | 'completed' | 'failed' | 'none'; lastRunAt?: string }
+
+/**
+ * A unified scan target for the picker: a GitHub installation (`github`, keyed on
+ * the numeric installation id) or an Azure DevOps connection (`ado`, keyed on the
+ * git-connections doc id). `key` is the composite `${kind}:${id}` used as the
+ * <select> value and the status-map key.
+ */
+type ScanTarget =
+  | { kind: 'github'; id: string; label: string; key: string }
+  | { kind: 'ado'; id: string; label: string; key: string }
+
+const targetKey = (kind: 'github' | 'ado', id: string) => `${kind}:${id}`
+
 interface GlobalDiscoveryClientProps {
   installations: GlobalInstallation[]
+  connections: GlobalConnection[]
   workspaces: GlobalWorkspaceOption[]
   discoveries: DiscoveredEntity[]
   scanStatuses: InstallationScanStatus[]
+  connectionScanStatuses: ConnectionScanStatus[]
 }
 
 type Tab = 'proposed' | 'ignored' | 'imported'
 
 const SCAN_POLL_MS = 5000
+
+const PROVIDER_LABEL: Record<string, string> = { 'azure-devops': 'Azure DevOps' }
 
 /**
  * Platform-level (workspace-less) discovery review queue (WP8). An admin picks a
@@ -56,47 +88,80 @@ const SCAN_POLL_MS = 5000
  */
 export function GlobalDiscoveryClient({
   installations,
+  connections,
   workspaces,
   discoveries,
   scanStatuses,
+  connectionScanStatuses,
 }: GlobalDiscoveryClientProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [tab, setTab] = useState<Tab>('proposed')
-  const [selectedInstallation, setSelectedInstallation] = useState<string>(
-    installations[0]?.installationId ?? '',
-  )
+
+  // Unified GitHub + Azure DevOps scan targets for the picker (WP11).
+  const targets = useMemo<ScanTarget[]>(() => {
+    const gh: ScanTarget[] = installations.map((i) => ({
+      kind: 'github',
+      id: i.installationId,
+      label: `GitHub · ${i.accountLogin}`,
+      key: targetKey('github', i.installationId),
+    }))
+    const ado: ScanTarget[] = connections.map((c) => ({
+      kind: 'ado',
+      id: c.id,
+      label: `${PROVIDER_LABEL[c.provider] ?? c.provider} · ${c.name}`,
+      key: targetKey('ado', c.id),
+    }))
+    return [...gh, ...ado]
+  }, [installations, connections])
+
+  const [selectedKey, setSelectedKey] = useState<string>(targets[0]?.key ?? '')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [notes, setNotes] = useState<Map<string, string>>(new Map())
   // Per-row workspace assignment: '' (or absent) = import as a global entity.
   const [assignments, setAssignments] = useState<Map<string, string>>(new Map())
-  const [statuses, setStatuses] = useState<InstallationScanStatus[]>(scanStatuses)
 
-  useEffect(() => setStatuses(scanStatuses), [scanStatuses])
+  // Scan status keyed on the composite target key, seeded from both providers.
+  const [statusByKey, setStatusByKey] = useState<Record<string, ScanStatusValue>>({})
+  useEffect(() => {
+    const next: Record<string, ScanStatusValue> = {}
+    for (const s of scanStatuses)
+      next[targetKey('github', s.installationId)] = { status: s.status, lastRunAt: s.lastRunAt }
+    for (const s of connectionScanStatuses)
+      next[targetKey('ado', s.connectionId)] = { status: s.status, lastRunAt: s.lastRunAt }
+    setStatusByKey(next)
+  }, [scanStatuses, connectionScanStatuses])
 
   const proposed = useMemo(() => discoveries.filter((d) => d.status === 'proposed'), [discoveries])
   const ignored = useMemo(() => discoveries.filter((d) => d.status === 'ignored'), [discoveries])
   const imported = useMemo(() => discoveries.filter((d) => d.status === 'imported'), [discoveries])
 
-  const currentStatus = statuses.find((s) => s.installationId === selectedInstallation)
+  const selectedTarget = targets.find((t) => t.key === selectedKey)
+  const currentStatus = statusByKey[selectedKey]
   const scanning = currentStatus?.status === 'running'
 
-  // While the selected installation's scan runs, poll status + pull new proposals.
-  useEffect(() => {
-    if (!scanning) return
-    const timer = setInterval(async () => {
-      const res = await getInstallationScanStatus(selectedInstallation)
-      if (res.success) {
-        setStatuses((prev) =>
-          prev
-            .filter((s) => s.installationId !== selectedInstallation)
-            .concat({ installationId: selectedInstallation, status: res.status, lastRunAt: res.lastRunAt }),
-        )
+  const fetchStatus = useCallback(
+    async (target: ScanTarget): Promise<ScanStatusValue | null> => {
+      if (target.kind === 'github') {
+        const res = await getInstallationScanStatus(target.id)
+        return res.success ? { status: res.status, lastRunAt: res.lastRunAt } : null
       }
+      const res = await getConnectionScanStatus(target.id)
+      return res.success ? { status: res.status, lastRunAt: res.lastRunAt } : null
+    },
+    [],
+  )
+
+  // While the selected target's scan runs, poll status + pull new proposals.
+  useEffect(() => {
+    if (!scanning || !selectedTarget) return
+    const timer = setInterval(async () => {
+      const next = await fetchStatus(selectedTarget)
+      if (next) setStatusByKey((prev) => ({ ...prev, [selectedTarget.key]: next }))
       router.refresh()
     }, SCAN_POLL_MS)
     return () => clearInterval(timer)
-  }, [scanning, selectedInstallation, router])
+  }, [scanning, selectedTarget, fetchStatus, router])
 
   const setNote = useCallback((id: string, note: string) => {
     setNotes((prev) => new Map(prev).set(id, note))
@@ -135,28 +200,26 @@ export function GlobalDiscoveryClient({
   }, [])
 
   const onScan = useCallback(() => {
-    if (!selectedInstallation) {
-      toast.error('Select a GitHub installation to scan.')
+    if (!selectedTarget) {
+      toast.error('Select a connection to scan.')
       return
     }
+    const target = selectedTarget
     startTransition(async () => {
-      const res = await startInstallationScan(selectedInstallation)
+      const res =
+        target.kind === 'github'
+          ? await startInstallationScan(target.id)
+          : await startConnectionScan(target.id)
       if (!res.success) {
         toast.error(res.error ?? 'Failed to start scan')
         return
       }
       toast.success('Scan started — proposals will appear as repositories are scanned.')
-      const status = await getInstallationScanStatus(selectedInstallation)
-      if (status.success) {
-        setStatuses((prev) =>
-          prev
-            .filter((s) => s.installationId !== selectedInstallation)
-            .concat({ installationId: selectedInstallation, status: status.status, lastRunAt: status.lastRunAt }),
-        )
-      }
+      const next = await fetchStatus(target)
+      if (next) setStatusByKey((prev) => ({ ...prev, [target.key]: next }))
       router.refresh()
     })
-  }, [selectedInstallation, router])
+  }, [selectedTarget, fetchStatus, router])
 
   const applyApproveResults = useCallback(
     (results: { id: string; imported: boolean; skippedReason?: string }[]) => {
@@ -246,9 +309,9 @@ export function GlobalDiscoveryClient({
   return (
     <div className="space-y-6">
       <ScanBanner
-        installations={installations}
-        selectedInstallation={selectedInstallation}
-        onSelectInstallation={setSelectedInstallation}
+        targets={targets}
+        selectedKey={selectedKey}
+        onSelectKey={setSelectedKey}
         status={currentStatus}
         scanning={scanning}
         pending={isPending}
@@ -414,31 +477,31 @@ function WorkspaceAssignSelect({
 }
 
 function ScanBanner({
-  installations,
-  selectedInstallation,
-  onSelectInstallation,
+  targets,
+  selectedKey,
+  onSelectKey,
   status,
   scanning,
   pending,
   onScan,
   counts,
 }: {
-  installations: GlobalInstallation[]
-  selectedInstallation: string
-  onSelectInstallation: (installationId: string) => void
-  status?: InstallationScanStatus
+  targets: ScanTarget[]
+  selectedKey: string
+  onSelectKey: (key: string) => void
+  status?: ScanStatusValue
   scanning: boolean
   pending: boolean
   onScan: () => void
   counts: { proposed: number; ignored: number; imported: number }
 }) {
   let statusText: string
-  if (installations.length === 0) statusText = 'No GitHub installations are connected.'
+  if (targets.length === 0) statusText = 'No GitHub installations or git connections are configured.'
   else if (scanning) statusText = 'Scanning repositories…'
   else if (status?.status === 'failed') statusText = 'The last scan did not finish. Try running it again.'
   else if (status?.status === 'completed' && status.lastRunAt)
     statusText = `Last scan completed ${new Date(status.lastRunAt).toLocaleString()}.`
-  else statusText = 'No scan has run for this installation yet.'
+  else statusText = 'No scan has run for this target yet.'
 
   const failed = status?.status === 'failed'
 
@@ -455,24 +518,24 @@ function ScanBanner({
       <div className="flex items-center gap-2">
         <select
           className="h-9 rounded-md border bg-background px-2 text-sm"
-          value={selectedInstallation}
-          onChange={(e) => onSelectInstallation(e.target.value)}
-          disabled={installations.length === 0 || scanning}
-          aria-label="GitHub installation"
+          value={selectedKey}
+          onChange={(e) => onSelectKey(e.target.value)}
+          disabled={targets.length === 0 || scanning}
+          aria-label="Scan target"
         >
-          {installations.map((inst) => (
-            <option key={inst.id} value={inst.installationId}>
-              {inst.accountLogin}
+          {targets.map((t) => (
+            <option key={t.key} value={t.key}>
+              {t.kind === 'ado' ? `${t.label} (Azure DevOps)` : t.label}
             </option>
           ))}
         </select>
-        <Button onClick={onScan} disabled={pending || scanning || installations.length === 0}>
+        <Button onClick={onScan} disabled={pending || scanning || targets.length === 0}>
           {scanning ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (
             <RefreshCw className="mr-2 h-4 w-4" />
           )}
-          {scanning ? 'Scanning…' : 'Scan installation'}
+          {scanning ? 'Scanning…' : 'Scan repositories'}
         </Button>
       </div>
     </div>

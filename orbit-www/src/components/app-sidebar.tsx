@@ -13,6 +13,7 @@ import {
   LayoutTemplate,
   Layers,
   MessageSquare,
+  Plug,
   RadioTower,
   Settings,
   Sparkles,
@@ -103,6 +104,7 @@ const navSettingsData = [
     icon: Settings,
     items: [
       { title: "GitHub", url: "/settings/github", icon: GitBranch },
+      { title: "Connections", url: "/settings/connections", icon: Plug },
       { title: "Registries", url: "/settings/registries", icon: Container },
       { title: "Templates", url: "/settings/templates", icon: LayoutTemplate },
       { title: "Cloud Accounts", url: "/settings/cloud-accounts", icon: Cloud },

@@ -31,6 +31,16 @@ export function catalogScanWorkflowId(installationId: string): string {
   return `catalog-scan-${installationId}`
 }
 
+/**
+ * Deterministic Temporal workflow id for an Azure DevOps (git-connections)
+ * catalog scan (WP11). Keyed on the git-connections doc id so "Scan" is
+ * idempotent under USE_EXISTING, and namespaced (`-ado-`) so it never collides
+ * with a numeric GitHub installation scan id.
+ */
+export function catalogScanAdoWorkflowId(connectionId: string): string {
+  return `catalog-scan-ado-${connectionId}`
+}
+
 /** Normalize a relationship value (`string` id or populated `{ id }`) to its id. */
 function relId(value: unknown): string | null {
   if (!value) return null

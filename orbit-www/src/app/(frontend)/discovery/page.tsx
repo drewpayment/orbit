@@ -10,7 +10,9 @@ import { describeCatalogScanWorkflow } from '@/lib/temporal/client'
 import {
   GlobalDiscoveryClient,
   type GlobalInstallation,
+  type GlobalConnection,
   type InstallationScanStatus,
+  type ConnectionScanStatus,
 } from '@/components/features/discovery/GlobalDiscoveryClient'
 import { listGlobalDiscoveries } from '@/app/actions/discovery'
 
@@ -32,12 +34,20 @@ export default async function GlobalDiscoveryPage() {
 
   const payload = await getPayload({ config })
 
-  // ALL active installations + workspaces (admin view, membership-independent).
-  const [installationsResult, workspacesResult, discoveries] = await Promise.all([
+  // ALL active installations + connections + workspaces (admin view,
+  // membership-independent).
+  const [installationsResult, connectionsResult, workspacesResult, discoveries] = await Promise.all([
     payload.find({
       collection: 'github-installations',
       where: { status: { equals: 'active' } },
       sort: 'accountLogin',
+      limit: 200,
+      depth: 0,
+      overrideAccess: true,
+    }),
+    payload.find({
+      collection: 'git-connections',
+      sort: 'name',
       limit: 200,
       depth: 0,
       overrideAccess: true,
@@ -60,13 +70,27 @@ export default async function GlobalDiscoveryPage() {
 
   const workspaces = workspacesResult.docs.map((w) => ({ id: String(w.id), name: w.name as string }))
 
-  // Best-effort scan status per installation for the banner.
-  const scanStatuses: InstallationScanStatus[] = await Promise.all(
-    installations.map(async (inst) => {
-      const status = await describeCatalogScanWorkflow(inst.installationId)
-      return { installationId: inst.installationId, status: status.status, lastRunAt: status.lastRunAt }
-    }),
-  )
+  const connections: GlobalConnection[] = connectionsResult.docs.map((c) => ({
+    id: String(c.id),
+    name: (c.name as string) ?? String(c.id),
+    provider: (c.provider as string) ?? 'azure-devops',
+  }))
+
+  // Best-effort scan status per target for the banner.
+  const [scanStatuses, connectionScanStatuses] = await Promise.all([
+    Promise.all(
+      installations.map(async (inst): Promise<InstallationScanStatus> => {
+        const status = await describeCatalogScanWorkflow(inst.installationId)
+        return { installationId: inst.installationId, status: status.status, lastRunAt: status.lastRunAt }
+      }),
+    ),
+    Promise.all(
+      connections.map(async (conn): Promise<ConnectionScanStatus> => {
+        const status = await describeCatalogScanWorkflow(conn.id, { provider: 'azure-devops' })
+        return { connectionId: conn.id, status: status.status, lastRunAt: status.lastRunAt }
+      }),
+    ),
+  ])
 
   return (
     <SidebarProvider>
@@ -85,9 +109,11 @@ export default async function GlobalDiscoveryPage() {
 
           <GlobalDiscoveryClient
             installations={installations}
+            connections={connections}
             workspaces={workspaces}
             discoveries={discoveries}
             scanStatuses={scanStatuses}
+            connectionScanStatuses={connectionScanStatuses}
           />
         </div>
       </SidebarInset>

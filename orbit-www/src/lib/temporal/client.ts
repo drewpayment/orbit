@@ -1,5 +1,5 @@
 import { Client, Connection, WorkflowExecutionAlreadyStartedError } from '@temporalio/client';
-import { catalogScanWorkflowId } from '@/lib/discovery/actions-core';
+import { catalogScanWorkflowId, catalogScanAdoWorkflowId } from '@/lib/discovery/actions-core';
 
 let temporalClient: Client | null = null;
 
@@ -114,32 +114,51 @@ export async function cancelGitHubTokenRefreshWorkflow(workflowId: string): Prom
 
 /**
  * Input type for CatalogScanWorkflow (must match the Go
- * `CatalogScanWorkflowInput` struct — WP4). Only the numeric installation id
- * (as string) and workspace id are set on the initial invocation.
+ * `CatalogScanWorkflowInput` struct — WP4/WP11).
+ *
+ * GitHub scans set only InstallationID (numeric, as string) + WorkspaceID.
+ * Azure DevOps scans (WP11) set Provider 'azure-devops' + ConnectionID (the
+ * git-connections doc id), and pass that SAME doc id as InstallationID so the
+ * ingest dedupeKey shape is unchanged. Provider/ConnectionID are omitempty on
+ * the Go side, so a GitHub call that leaves them unset is wire-identical to the
+ * pre-WP11 contract.
  */
 interface CatalogScanWorkflowInput {
   InstallationID: string
   WorkspaceID: string
+  Provider?: 'github' | 'azure-devops'
+  ConnectionID?: string
 }
 
 /**
- * Start (or attach to) the catalog scan for a GitHub installation. Idempotent
- * "Scan now": the deterministic workflow id + USE_EXISTING means a concurrent
- * or repeat trigger converges on the single running scan rather than racing.
- * ALLOW_DUPLICATE lets a fresh run start once a previous one has closed.
+ * Start (or attach to) a catalog scan. Idempotent "Scan now": the deterministic
+ * workflow id + USE_EXISTING means a concurrent or repeat trigger converges on
+ * the single running scan rather than racing. ALLOW_DUPLICATE lets a fresh run
+ * start once a previous one has closed.
  *
- * @param installationId the NUMERIC github-installations.installationId (string).
+ * GitHub (default): pass `{ installationId, workspaceId }`; the workflow id is
+ * `catalog-scan-<installationId>`. Azure DevOps (WP11): pass
+ * `{ installationId: connId, workspaceId: '', provider: 'azure-devops',
+ * connectionId: connId }`; the workflow id is `catalog-scan-ado-<connId>`.
+ *
  * @returns the workflow id on success, or null on a real failure (caller skips
- *          that installation; the scan for the others still proceeds).
+ *          that target; the scan for the others still proceeds).
  */
 export async function startCatalogScanWorkflow(input: {
   installationId: string
   workspaceId: string
+  provider?: 'github' | 'azure-devops'
+  connectionId?: string
 }): Promise<string | null> {
-  const workflowId = catalogScanWorkflowId(input.installationId)
+  const isAdo = input.provider === 'azure-devops'
+  const workflowId = isAdo
+    ? catalogScanAdoWorkflowId(input.connectionId ?? input.installationId)
+    : catalogScanWorkflowId(input.installationId)
   const workflowInput: CatalogScanWorkflowInput = {
     InstallationID: input.installationId,
     WorkspaceID: input.workspaceId,
+    ...(input.provider ? { Provider: input.provider } : {}),
+    ...(input.connectionId ? { ConnectionID: input.connectionId } : {}),
   }
   try {
     const client = await getTemporalClient()
@@ -170,10 +189,17 @@ export interface CatalogScanStatus {
  * non-completed terminal state (failed/canceled/terminated/timed out) maps to
  * `failed`. Never throws.
  */
-export async function describeCatalogScanWorkflow(installationId: string): Promise<CatalogScanStatus> {
+export async function describeCatalogScanWorkflow(
+  installationId: string,
+  opts: { provider?: 'github' | 'azure-devops' } = {},
+): Promise<CatalogScanStatus> {
+  const workflowId =
+    opts.provider === 'azure-devops'
+      ? catalogScanAdoWorkflowId(installationId)
+      : catalogScanWorkflowId(installationId)
   try {
     const client = await getTemporalClient()
-    const desc = await client.workflow.getHandle(catalogScanWorkflowId(installationId)).describe()
+    const desc = await client.workflow.getHandle(workflowId).describe()
     const statusName =
       typeof desc.status === 'string'
         ? desc.status

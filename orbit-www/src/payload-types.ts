@@ -139,6 +139,7 @@ export interface Config {
     'action-runs': ActionRun;
     automations: Automation;
     'discovered-entities': DiscoveredEntity;
+    'git-connections': GitConnection;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -217,6 +218,7 @@ export interface Config {
     'action-runs': ActionRunsSelect<false> | ActionRunsSelect<true>;
     automations: AutomationsSelect<false> | AutomationsSelect<true>;
     'discovered-entities': DiscoveredEntitiesSelect<false> | DiscoveredEntitiesSelect<true>;
+    'git-connections': GitConnectionsSelect<false> | GitConnectionsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -4088,6 +4090,10 @@ export interface DiscoveredEntity {
    */
   installation?: (string | null) | GithubInstallation;
   /**
+   * Non-GitHub git connection the scan ran under (Azure DevOps; mutually exclusive with `installation`).
+   */
+  connection?: (string | null) | GitConnection;
+  /**
    * Repository the proposal was detected in.
    */
   repo: {
@@ -4146,6 +4152,62 @@ export interface DiscoveredEntity {
    * When the most recent scan last observed this proposal.
    */
   lastSeenAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Non-GitHub git provider connections (Azure DevOps) for catalog discovery.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "git-connections".
+ */
+export interface GitConnection {
+  id: string;
+  /**
+   * Display name (e.g., "Acme Azure DevOps").
+   */
+  name: string;
+  /**
+   * Git provider. Azure DevOps only for now.
+   */
+  provider: 'azure-devops';
+  /**
+   * Provider organization (e.g., the ADO org name).
+   */
+  organization: string;
+  /**
+   * Optional project filter. Empty = all projects in the org.
+   */
+  project?: string | null;
+  /**
+   * API base URL. Override for Azure DevOps Server (on-prem).
+   */
+  baseUrl?: string | null;
+  /**
+   * Encrypted provider credentials.
+   */
+  credentials?: {
+    /**
+     * Personal access token (AES-256-GCM encrypted at rest).
+     */
+    pat?: string | null;
+  };
+  /**
+   * Workspaces a scan of this connection may attribute entities to.
+   */
+  allowedWorkspaces?: (string | Workspace)[] | null;
+  /**
+   * Connection health. "error" is set when validation fails.
+   */
+  status: 'active' | 'error';
+  /**
+   * When the PAT was last successfully validated against the provider.
+   */
+  lastValidatedAt?: string | null;
+  /**
+   * Most recent validation failure reason.
+   */
+  lastError?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -4443,6 +4505,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'discovered-entities';
         value: string | DiscoveredEntity;
+      } | null)
+    | ({
+        relationTo: 'git-connections';
+        value: string | GitConnection;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -6111,6 +6177,7 @@ export interface AutomationsSelect<T extends boolean = true> {
 export interface DiscoveredEntitiesSelect<T extends boolean = true> {
   workspace?: T;
   installation?: T;
+  connection?: T;
   repo?:
     | T
     | {
@@ -6134,6 +6201,28 @@ export interface DiscoveredEntitiesSelect<T extends boolean = true> {
   dedupeKey?: T;
   scanRunId?: T;
   lastSeenAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "git-connections_select".
+ */
+export interface GitConnectionsSelect<T extends boolean = true> {
+  name?: T;
+  provider?: T;
+  organization?: T;
+  project?: T;
+  baseUrl?: T;
+  credentials?:
+    | T
+    | {
+        pat?: T;
+      };
+  allowedWorkspaces?: T;
+  status?: T;
+  lastValidatedAt?: T;
+  lastError?: T;
   updatedAt?: T;
   createdAt?: T;
 }

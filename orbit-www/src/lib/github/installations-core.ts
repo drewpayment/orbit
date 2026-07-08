@@ -125,6 +125,77 @@ export async function listInstallationsAdminCore(
 }
 
 /**
+ * Count the Apps that reference a GitHub installation via
+ * `repository.installationId` (a TEXT field holding the numeric GitHub id as a
+ * string). Surfaced in the Remove-connection confirm dialog so an admin sees
+ * how many Apps keep their data but lose GitHub access at the next token use.
+ */
+export async function countAppsForInstallation(
+  payload: Payload,
+  numericInstallationId: string,
+): Promise<number> {
+  const res = await payload.find({
+    collection: 'apps',
+    where: { 'repository.installationId': { equals: numericInstallationId } },
+    limit: 0, // totalDocs only; we don't need the rows
+    depth: 0,
+    overrideAccess: true,
+  })
+  return res.totalDocs
+}
+
+export interface DeleteInstallationResult {
+  ok: boolean
+  error?: string
+  /** Apps that referenced the installation at delete time (for the toast). */
+  appCount: number
+}
+
+/**
+ * Remove a GitHub installation: count referencing Apps, cancel the token
+ * refresh workflow (best-effort — a not-found/closed workflow is ignored), then
+ * delete the doc. Apps keep their rows but lose GitHub access at their next
+ * token use; the app itself must still be uninstalled on GitHub (the UI links
+ * to it — we cannot uninstall server-side). `cancelRefresh` is injected so the
+ * core stays Temporal-free and unit-testable.
+ */
+export async function deleteInstallationCore(
+  payload: Payload,
+  docId: string,
+  cancelRefresh: () => Promise<void>,
+): Promise<DeleteInstallationResult> {
+  let doc: Record<string, unknown>
+  try {
+    doc = (await payload.findByID({
+      collection: 'github-installations',
+      id: docId,
+      depth: 0,
+      overrideAccess: true,
+    })) as unknown as Record<string, unknown>
+  } catch {
+    return { ok: false, error: 'Installation not found', appCount: 0 }
+  }
+
+  const numericId = String(doc.installationId ?? '')
+  const appCount = numericId ? await countAppsForInstallation(payload, numericId) : 0
+
+  // Best-effort: a dead/closed/never-started workflow must not block deletion.
+  try {
+    await cancelRefresh()
+  } catch {
+    // ignore — the workflow may already be gone
+  }
+
+  try {
+    await payload.delete({ collection: 'github-installations', id: docId, overrideAccess: true })
+  } catch {
+    return { ok: false, error: 'Failed to delete installation', appCount }
+  }
+
+  return { ok: true, appCount }
+}
+
+/**
  * Re-read one installation and return just its refresh-relevant state so the
  * client can poll for the token-expiry flip after triggering a refresh.
  */

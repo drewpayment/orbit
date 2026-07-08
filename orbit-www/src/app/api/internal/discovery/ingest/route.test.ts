@@ -55,6 +55,11 @@ class FakePayload {
     const all = (this.collections[collection] ?? []).filter((d) => matchesWhere(d, where))
     return { docs: all.slice(0, limit), hasNextPage: false }
   }
+  async findByID({ collection, id }: { collection: string; id: string }) {
+    const doc = (this.collections[collection] ?? []).find((d) => d.id === id)
+    if (!doc) throw new Error(`findByID: ${collection}/${id} not found`)
+    return doc
+  }
   async create({ collection, data }: { collection: string; data: Record<string, unknown> }) {
     const doc = { id: `${collection}-${this.counter++}`, ...data } as Doc
     this.collections[collection] = this.collections[collection] ?? []
@@ -197,7 +202,10 @@ describe('POST /api/internal/discovery/ingest — auth & validation', () => {
 // --- ingestScan: dedupe / no-resurrect / Tier-1 matrix ----------------------
 
 describe('ingestScan', () => {
-  const body = (over: Partial<ReturnType<typeof validBody>> = {}) => ({ ...validBody(), ...over })
+  const body = (over: Partial<ReturnType<typeof validBody>> & { connectionId?: string } = {}) => ({
+    ...validBody(),
+    ...over,
+  })
 
   it('creates a new proposed row for a heuristic service detection', async () => {
     const f = new FakePayload()
@@ -367,5 +375,37 @@ describe('ingestScan', () => {
     await ingestScan(p(f), body({ bundle: heuristicServiceBundle() }))
 
     expect(f.collections['discovered-entities'][0].installation).toBeUndefined()
+  })
+
+  it('attributes a connectionId scan to the connection relationship, skipping the github lookup (WP11)', async () => {
+    const f = new FakePayload()
+    f.collections['git-connections'] = [{ id: 'conn-1', provider: 'azure-devops' }]
+    // A github-installations doc that must NOT be consulted for an ADO scan.
+    f.collections['github-installations'] = [{ id: 'inst-doc-1', installationId: 42 }]
+
+    // For an ADO scan the Go worker sets installationId == connectionId (the doc id).
+    await ingestScan(
+      p(f),
+      body({ installationId: 'conn-1', connectionId: 'conn-1', bundle: heuristicServiceBundle() }),
+    )
+
+    const row = f.collections['discovered-entities'][0]
+    expect(row.connection).toBe('conn-1')
+    expect(row.installation).toBeUndefined()
+  })
+
+  it('leaves the connection relation unset when the git-connections doc is missing (WP11)', async () => {
+    const f = new FakePayload()
+
+    const counts = await ingestScan(
+      p(f),
+      body({ installationId: 'conn-missing', connectionId: 'conn-missing', bundle: heuristicServiceBundle() }),
+    )
+
+    // Proposals still ingest; only the relation is skipped.
+    expect(counts).toEqual({ proposed: 1, imported: 0, skippedIgnored: 0 })
+    const row = f.collections['discovered-entities'][0]
+    expect(row.connection).toBeUndefined()
+    expect(row.installation).toBeUndefined()
   })
 })

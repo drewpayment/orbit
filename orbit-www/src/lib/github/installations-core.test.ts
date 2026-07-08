@@ -6,26 +6,62 @@ import {
   sortInstallations,
   listInstallationsAdminCore,
   getInstallationRefreshStateCore,
+  countAppsForInstallation,
+  deleteInstallationCore,
   type AdminInstallationView,
 } from './installations-core'
 
 // --- FakePayload -------------------------------------------------------------
-// Minimal in-memory Payload stand-in (find/findByID) mirroring the discovery
-// core tests. allowedWorkspaces are pre-populated to model depth:1.
+// Minimal in-memory Payload stand-in (find/findByID/delete) mirroring the
+// discovery core tests. allowedWorkspaces are pre-populated to model depth:1.
 
 type Doc = Record<string, unknown> & { id: string }
 
-class FakePayload {
-  collections: Record<string, Doc[]> = { 'github-installations': [] }
+function getField(doc: Doc, field: string): unknown {
+  return field.split('.').reduce<unknown>((acc, part) => {
+    if (acc && typeof acc === 'object') return (acc as Record<string, unknown>)[part]
+    return undefined
+  }, doc)
+}
 
-  async find({ collection, limit = 100 }: { collection: string; limit?: number }) {
-    const all = this.collections[collection] ?? []
-    return { docs: all.slice(0, limit), hasNextPage: false }
+function matchesWhere(doc: Doc, where: unknown): boolean {
+  if (!where || typeof where !== 'object') return true
+  for (const [field, condRaw] of Object.entries(where as Record<string, unknown>)) {
+    const cond = condRaw as Record<string, unknown>
+    if ('equals' in cond && getField(doc, field) !== cond.equals) return false
+  }
+  return true
+}
+
+class FakePayload {
+  collections: Record<string, Doc[]> = { 'github-installations': [], apps: [] }
+
+  async find({
+    collection,
+    where,
+    limit = 100,
+  }: {
+    collection: string
+    where?: unknown
+    limit?: number
+  }) {
+    const matched = (this.collections[collection] ?? []).filter((d) => matchesWhere(d, where))
+    // limit:0 means "count only" in Payload — return no rows but the total.
+    const docs = limit === 0 ? [] : matched.slice(0, limit)
+    return { docs, totalDocs: matched.length, hasNextPage: false }
   }
 
   async findByID({ collection, id }: { collection: string; id: string }) {
     const doc = (this.collections[collection] ?? []).find((d) => d.id === id)
     if (!doc) throw new Error(`findByID: ${collection}/${id} not found`)
+    return doc
+  }
+
+  async delete({ collection, id }: { collection: string; id: string }) {
+    const list = this.collections[collection] ?? []
+    const idx = list.findIndex((d) => d.id === id)
+    if (idx === -1) throw new Error(`delete: ${collection}/${id} not found`)
+    const [doc] = list.splice(idx, 1)
     return doc
   }
 }
@@ -183,5 +219,58 @@ describe('getInstallationRefreshStateCore', () => {
     fp.collections['github-installations'][0].status = 'active'
     const after = await getInstallationRefreshStateCore(payloadOf(fp), 'a', NOW)
     expect(after).toEqual({ status: 'active', tokenExpiresAt: FUTURE, tokenExpired: false })
+  })
+})
+
+describe('countAppsForInstallation', () => {
+  it('counts apps whose repository.installationId matches the numeric id', async () => {
+    const fp = new FakePayload()
+    fp.collections['apps'] = [
+      { id: 'a1', repository: { installationId: '12345' } },
+      { id: 'a2', repository: { installationId: '12345' } },
+      { id: 'a3', repository: { installationId: '999' } },
+      { id: 'a4' }, // no repository
+    ]
+    expect(await countAppsForInstallation(payloadOf(fp), '12345')).toBe(2)
+    expect(await countAppsForInstallation(payloadOf(fp), '999')).toBe(1)
+    expect(await countAppsForInstallation(payloadOf(fp), 'none')).toBe(0)
+  })
+})
+
+describe('deleteInstallationCore', () => {
+  it('cancels the refresh workflow, deletes the doc, and reports the app count', async () => {
+    const fp = new FakePayload()
+    fp.collections['github-installations'] = [{ id: 'inst-1', installationId: 12345 }]
+    fp.collections['apps'] = [
+      { id: 'a1', repository: { installationId: '12345' } },
+      { id: 'a2', repository: { installationId: '12345' } },
+    ]
+    let cancelled = false
+    const res = await deleteInstallationCore(payloadOf(fp), 'inst-1', async () => {
+      cancelled = true
+    })
+    expect(res).toEqual({ ok: true, appCount: 2 })
+    expect(cancelled).toBe(true)
+    expect(fp.collections['github-installations']).toHaveLength(0)
+  })
+
+  it('still deletes when the workflow cancel throws (best-effort)', async () => {
+    const fp = new FakePayload()
+    fp.collections['github-installations'] = [{ id: 'inst-1', installationId: 12345 }]
+    const res = await deleteInstallationCore(payloadOf(fp), 'inst-1', async () => {
+      throw new Error('workflow not found')
+    })
+    expect(res.ok).toBe(true)
+    expect(fp.collections['github-installations']).toHaveLength(0)
+  })
+
+  it('returns not-found for a missing installation without cancelling', async () => {
+    const fp = new FakePayload()
+    let cancelled = false
+    const res = await deleteInstallationCore(payloadOf(fp), 'nope', async () => {
+      cancelled = true
+    })
+    expect(res).toEqual({ ok: false, error: 'Installation not found', appCount: 0 })
+    expect(cancelled).toBe(false)
   })
 })

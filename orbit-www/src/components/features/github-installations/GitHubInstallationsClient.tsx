@@ -9,14 +9,27 @@ import {
   Github,
   Loader2,
   RefreshCw,
+  Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
 import {
   refreshInstallationToken,
   getInstallationRefreshState,
+  getInstallationAppCount,
+  deleteInstallationAdmin,
 } from '@/app/actions/github-installations'
 import type { AdminInstallationView, InstallationStatus } from '@/lib/github/installations-core'
 
@@ -176,6 +189,10 @@ export function GitHubInstallationsClient({ installations: initial }: GitHubInst
     )
   }
 
+  const onRemoved = useCallback((docId: string) => {
+    setInstallations((prev) => prev.filter((inst) => inst.id !== docId))
+  }, [])
+
   return (
     <div className="space-y-4">
       {installations.map((inst) => (
@@ -184,6 +201,7 @@ export function GitHubInstallationsClient({ installations: initial }: GitHubInst
           installation={inst}
           refresh={refreshState[inst.id] ?? { phase: 'idle' }}
           onRefresh={() => onRefresh(inst.id)}
+          onRemoved={() => onRemoved(inst.id)}
         />
       ))}
     </div>
@@ -194,14 +212,44 @@ function InstallationCard({
   installation: inst,
   refresh,
   onRefresh,
+  onRemoved,
 }: {
   installation: AdminInstallationView
   refresh: RefreshUiState
   onRefresh: () => void
+  onRemoved: () => void
 }) {
   const badge = statusBadge(inst.status)
   const refreshing = refresh.phase === 'refreshing'
   const manageUrl = `https://github.com/settings/installations/${inst.installationId}`
+
+  const [confirmRemove, setConfirmRemove] = useState(false)
+  const [appCount, setAppCount] = useState<number | null>(null)
+  const [removing, setRemoving] = useState(false)
+
+  const openRemove = useCallback(() => {
+    setAppCount(null)
+    setConfirmRemove(true)
+    // Prefetch the blast radius so the dialog can name it.
+    void getInstallationAppCount(inst.id).then((res) => {
+      if (res.success) setAppCount(res.count)
+    })
+  }, [inst.id])
+
+  const onRemove = useCallback(() => {
+    setRemoving(true)
+    void (async () => {
+      const res = await deleteInstallationAdmin(inst.id)
+      setRemoving(false)
+      if (!res.success) {
+        toast.error(res.error ?? 'Failed to remove installation')
+        return
+      }
+      toast.success('Installation removed. Remember to uninstall the app on GitHub.')
+      setConfirmRemove(false)
+      onRemoved()
+    })()
+  }, [inst.id, onRemoved])
 
   return (
     <Card>
@@ -238,6 +286,14 @@ function InstallationCard({
               <a href={manageUrl} target="_blank" rel="noopener noreferrer">
                 Manage on GitHub <ExternalLink className="ml-2 h-4 w-4" />
               </a>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-destructive hover:text-destructive"
+              onClick={openRemove}
+            >
+              <Trash2 className="mr-2 h-4 w-4" /> Remove
             </Button>
           </div>
         </div>
@@ -287,6 +343,53 @@ function InstallationCard({
           )}
         </div>
       </CardContent>
+
+      <AlertDialog open={confirmRemove} onOpenChange={setConfirmRemove}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove {inst.accountLogin}?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                <p>
+                  {appCount === null
+                    ? 'Checking how many apps reference this installation…'
+                    : appCount === 0
+                      ? 'No apps currently reference this installation.'
+                      : `${appCount} app${appCount === 1 ? '' : 's'} reference this installation. They keep their data, but lose GitHub access at their next token use.`}
+                </p>
+                <p>
+                  Removing here deletes Orbit&apos;s record and stops token refresh. It does{' '}
+                  <span className="font-medium">not</span> uninstall the app on GitHub — you must
+                  also{' '}
+                  <a
+                    href={manageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline"
+                  >
+                    uninstall it on GitHub
+                  </a>
+                  .
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removing}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                onRemove()
+              }}
+              disabled={removing}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {removing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Remove installation
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   )
 }

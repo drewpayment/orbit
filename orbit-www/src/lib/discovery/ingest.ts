@@ -49,6 +49,14 @@ export interface IngestBody {
   installationId: string
   /** Absent/empty for a global (platform-admin) scan; rows omit `workspace`. */
   workspaceId?: string
+  /**
+   * Non-GitHub git-connections doc id (Azure DevOps scans, WP11). When present,
+   * the row is attributed to the `connection` relationship instead of a GitHub
+   * `installation`, and the github-installations lookup is skipped. For an ADO
+   * scan the Go worker sets `installationId` to this SAME doc id (it feeds the
+   * dedupeKey verbatim), so the key shape is unchanged.
+   */
+  connectionId?: string
   repo: IngestRepo
   scanRunId?: string
   bundle: EvidenceBundle
@@ -82,10 +90,17 @@ export function parseBody(raw: unknown): IngestBody | null {
     return null
   }
 
+  // connectionId is OPTIONAL (WP11): a present value must be a non-empty string;
+  // an empty string is treated as absent.
+  if (b.connectionId !== undefined && typeof b.connectionId !== 'string') return null
+
   return {
     installationId: b.installationId,
     ...(typeof b.workspaceId === 'string' && b.workspaceId.length > 0
       ? { workspaceId: b.workspaceId }
+      : {}),
+    ...(typeof b.connectionId === 'string' && b.connectionId.length > 0
+      ? { connectionId: b.connectionId }
       : {}),
     repo: {
       owner: repo.owner,
@@ -126,21 +141,41 @@ function buildProposal(detection: Detection, repoName: string): Record<string, u
  * an in-memory FakePayload (the dedupe / no-resurrect / Tier-1 matrix).
  */
 export async function ingestScan(payload: Payload, body: IngestBody): Promise<IngestCounts> {
-  const { installationId, workspaceId, repo, scanRunId, bundle } = body
+  const { installationId, workspaceId, connectionId, repo, scanRunId, bundle } = body
   const detections = runDetectors(bundle)
   const ownerRepo = `${repo.owner}/${repo.name}`
   const nowIso = new Date().toISOString()
 
-  // `installationId` is the numeric GitHub id; the `installation` relationship
-  // needs the github-installations doc id. Absent doc → leave the relation unset.
-  const installationDocs = await payload.find({
-    collection: 'github-installations',
-    where: { installationId: { equals: Number(installationId) } },
-    limit: 1,
-    depth: 0,
-    overrideAccess: true,
-  })
-  const installationDocId = installationDocs.docs[0]?.id
+  // Resolve the source relationship. A non-GitHub scan (WP11) carries
+  // `connectionId` — the git-connections doc id — and attributes rows to the
+  // `connection` relationship; the github-installations lookup is skipped.
+  // Otherwise `installationId` is the numeric GitHub id and the `installation`
+  // relationship needs the github-installations doc id. In either case an
+  // unresolvable id just leaves the relation unset.
+  let installationDocId: string | undefined
+  let connectionDocId: string | undefined
+  if (connectionId) {
+    try {
+      const conn = await payload.findByID({
+        collection: 'git-connections',
+        id: connectionId,
+        depth: 0,
+        overrideAccess: true,
+      })
+      if (conn) connectionDocId = String(conn.id)
+    } catch {
+      // Connection doc missing → skip the relation, still ingest the proposals.
+    }
+  } else {
+    const installationDocs = await payload.find({
+      collection: 'github-installations',
+      where: { installationId: { equals: Number(installationId) } },
+      limit: 1,
+      depth: 0,
+      overrideAccess: true,
+    })
+    installationDocId = installationDocs.docs[0]?.id
+  }
 
   let proposed = 0
   let imported = 0
@@ -181,6 +216,7 @@ export async function ingestScan(payload: Payload, body: IngestBody): Promise<In
           // workspace marks the row global (platform-admin managed).
           ...(workspaceId ? { workspace: workspaceId } : {}),
           ...(installationDocId ? { installation: installationDocId } : {}),
+          ...(connectionDocId ? { connection: connectionDocId } : {}),
           repo: {
             owner: repo.owner,
             name: repo.name,

@@ -72,6 +72,15 @@ export const DiscoveredEntities: CollectionConfig = {
       admin: { description: 'GitHub App installation the scan ran under.' },
     },
     {
+      name: 'connection',
+      type: 'relationship',
+      relationTo: 'git-connections',
+      admin: {
+        description:
+          'Non-GitHub git connection the scan ran under (Azure DevOps; mutually exclusive with `installation`).',
+      },
+    },
+    {
       name: 'repo',
       type: 'group',
       admin: { description: 'Repository the proposal was detected in.' },
