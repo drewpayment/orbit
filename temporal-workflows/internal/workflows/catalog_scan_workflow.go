@@ -2,6 +2,7 @@
 package workflows
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/drewpayment/orbit/temporal-workflows/internal/activities"
@@ -17,12 +18,34 @@ const (
 	catalogScanParallelism = 5
 	// CatalogScanProgressQuery is the query name exposing running totals.
 	CatalogScanProgressQuery = "scanProgress"
+
+	// catalogProviderGitHub is the default provider (empty Provider normalises to
+	// it) — the GitHub App installation scan path.
+	catalogProviderGitHub = "github"
+	// catalogProviderADO is the Azure DevOps connection scan path.
+	catalogProviderADO = "azure-devops"
 )
+
+// catalogScanSupportedProviders is a fail-closed registry: an unknown non-empty
+// Provider is rejected before any activity is scheduled (mirrors the launches
+// workflow's supportedProviders pattern). Empty Provider normalises to github.
+var catalogScanSupportedProviders = map[string]bool{
+	catalogProviderGitHub: true,
+	catalogProviderADO:    true,
+}
 
 // CatalogScanWorkflowInput drives CatalogScanWorkflow. On the first invocation
 // only InstallationID + WorkspaceID are set; the continue-as-new carry-over
 // fields (RemainingRepos, ScanRunID, Totals) are populated on subsequent runs.
 type CatalogScanWorkflowInput struct {
+	// Provider selects the scan path: "" or "github" (default) scans a GitHub App
+	// installation; "azure-devops" scans an ADO connection. An unknown non-empty
+	// value is rejected fail-closed before any activity runs.
+	Provider string `json:"provider,omitempty"`
+	// ConnectionID is the git-connections doc id for a non-GitHub (ADO) scan.
+	// Ignored on the GitHub path. Carried across continue-as-new.
+	ConnectionID string `json:"connectionId,omitempty"`
+
 	InstallationID string `json:"installationId"`
 	// WorkspaceID is empty for a GLOBAL (platform-admin) installation scan (WP8);
 	// omitempty keeps it out of the continue-as-new carry-over when unset. An
@@ -73,6 +96,19 @@ type scanOutcome struct {
 func CatalogScanWorkflow(ctx workflow.Context, input CatalogScanWorkflowInput) (CatalogScanWorkflowResult, error) {
 	logger := workflow.GetLogger(ctx)
 
+	// Normalise + validate the provider fail-closed BEFORE scheduling any activity.
+	// An empty Provider is the GitHub default; an unknown non-empty value would
+	// otherwise dispatch to a path we don't support, so reject it non-retryably.
+	provider := input.Provider
+	if provider == "" {
+		provider = catalogProviderGitHub
+	}
+	if !catalogScanSupportedProviders[provider] {
+		errMsg := fmt.Sprintf("unsupported catalog scan provider %q", input.Provider)
+		logger.Error("unsupported provider", "Provider", input.Provider)
+		return CatalogScanWorkflowResult{}, temporal.NewNonRetryableApplicationError(errMsg, "UnsupportedProvider", nil)
+	}
+
 	// Stable scan run id: seed from the first run's RunID, then carry it across
 	// every continue-as-new so all proposals belong to one logical scan.
 	scanRunID := input.ScanRunID
@@ -101,8 +137,12 @@ func CatalogScanWorkflow(ctx workflow.Context, input CatalogScanWorkflowInput) (
 	}
 	ctx = workflow.WithActivityOptions(ctx, scanOpts)
 
-	// Nil pointer used only to reference the activity methods by name.
+	// Nil pointers used only to reference the activity methods by name. The
+	// provider selects which set the workflow dispatches to; the fan-out,
+	// continue-as-new, and aggregation below are identical for both.
 	var a *activities.CatalogScanActivities
+	var ado *activities.ADOScanActivities
+	isADO := provider == catalogProviderADO
 
 	// 1. Enumerate repos on the first invocation only.
 	repos := input.RemainingRepos
@@ -118,14 +158,22 @@ func CatalogScanWorkflow(ctx workflow.Context, input CatalogScanWorkflowInput) (
 			},
 		}
 		listCtx := workflow.WithActivityOptions(ctx, listOpts)
-		if err := workflow.ExecuteActivity(listCtx, a.ListInstallationReposActivity, activities.ListInstallationReposInput{
-			InstallationID: input.InstallationID,
-			WorkspaceID:    input.WorkspaceID,
-		}).Get(listCtx, &repos); err != nil {
-			logger.Error("list installation repos failed", "Error", err)
-			return CatalogScanWorkflowResult{}, err
+		var listErr error
+		if isADO {
+			listErr = workflow.ExecuteActivity(listCtx, ado.ListADOReposActivity, activities.ListADOReposInput{
+				ConnectionID: input.ConnectionID,
+			}).Get(listCtx, &repos)
+		} else {
+			listErr = workflow.ExecuteActivity(listCtx, a.ListInstallationReposActivity, activities.ListInstallationReposInput{
+				InstallationID: input.InstallationID,
+				WorkspaceID:    input.WorkspaceID,
+			}).Get(listCtx, &repos)
 		}
-		logger.Info("enumerated installation repos", "Count", len(repos), "ScanRunID", scanRunID)
+		if listErr != nil {
+			logger.Error("list repos failed", "Provider", provider, "Error", listErr)
+			return CatalogScanWorkflowResult{}, listErr
+		}
+		logger.Info("enumerated repos", "Provider", provider, "Count", len(repos), "ScanRunID", scanRunID)
 	}
 
 	// 2. Slice this run's batch; the rest rolls into continue-as-new.
@@ -153,12 +201,22 @@ func CatalogScanWorkflow(ctx workflow.Context, input CatalogScanWorkflowInput) (
 			defer wg.Done()
 			defer sem.Receive(gctx, nil) // release
 			var res activities.ScanRepoResult
-			err := workflow.ExecuteActivity(gctx, a.ScanRepoActivity, activities.ScanRepoInput{
-				InstallationID: input.InstallationID,
-				WorkspaceID:    input.WorkspaceID,
-				Repo:           repo,
-				ScanRunID:      scanRunID,
-			}).Get(gctx, &res)
+			var err error
+			if isADO {
+				err = workflow.ExecuteActivity(gctx, ado.ScanADORepoActivity, activities.ScanADORepoInput{
+					ConnectionID: input.ConnectionID,
+					WorkspaceID:  input.WorkspaceID,
+					Repo:         repo,
+					ScanRunID:    scanRunID,
+				}).Get(gctx, &res)
+			} else {
+				err = workflow.ExecuteActivity(gctx, a.ScanRepoActivity, activities.ScanRepoInput{
+					InstallationID: input.InstallationID,
+					WorkspaceID:    input.WorkspaceID,
+					Repo:           repo,
+					ScanRunID:      scanRunID,
+				}).Get(gctx, &res)
+			}
 			if err != nil {
 				workflow.GetLogger(gctx).Warn("repo scan failed; skipping",
 					"Owner", repo.Owner, "Repo", repo.Name, "Error", err)
@@ -186,6 +244,8 @@ func CatalogScanWorkflow(ctx workflow.Context, input CatalogScanWorkflowInput) (
 		logger.Info("continue-as-new with remaining repos",
 			"Remaining", len(remaining), "ScannedSoFar", totals.ReposScanned)
 		return CatalogScanWorkflowResult{}, workflow.NewContinueAsNewError(ctx, CatalogScanWorkflow, CatalogScanWorkflowInput{
+			Provider:       input.Provider,
+			ConnectionID:   input.ConnectionID,
 			InstallationID: input.InstallationID,
 			WorkspaceID:    input.WorkspaceID,
 			RemainingRepos: remaining,

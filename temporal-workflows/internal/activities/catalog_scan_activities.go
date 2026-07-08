@@ -252,21 +252,7 @@ func (a *CatalogScanActivities) ScanRepoActivity(ctx context.Context, in ScanRep
 	// 4. Build the flattened tree path list (bounded). Vendored/generated
 	// directories are dropped here so a committed node_modules cannot eat the
 	// tree cap and crowd out real paths (the detectors ignore them anyway).
-	treePaths := make([]string, 0, len(entries))
-	treeTruncated := treeResp.Truncated
-	for _, e := range entries {
-		if e.Type != "blob" && e.Type != "tree" {
-			continue
-		}
-		if isVendoredPath(e.Path) {
-			continue
-		}
-		if len(treePaths) >= maxTreeEntries {
-			treeTruncated = true
-			break
-		}
-		treePaths = append(treePaths, e.Path)
-	}
+	treePaths, treeTruncated := buildBundleTreePaths(entries, treeResp.Truncated)
 
 	// 5. POST the evidence bundle to the ingest route.
 	reqBody := ingestRequest{
@@ -356,6 +342,32 @@ func selectWellKnownFiles(entries []treeEntry, maxFiles int, maxBytes int64) fil
 	sort.Strings(skippedLarge)
 
 	return fileSelection{Paths: paths, SkippedLarge: skippedLarge, Truncated: truncated}
+}
+
+// buildBundleTreePaths flattens a repo tree into the bounded path list shipped
+// in the evidence bundle. Vendored/generated directories are dropped (a committed
+// node_modules must not eat the maxTreeEntries cap and crowd out real paths — the
+// detectors ignore them anyway) and the result is capped at maxTreeEntries.
+// alreadyTruncated seeds the truncated flag from any provider-side truncation
+// (GitHub's git-tree "truncated"; Azure DevOps always returns the full listing so
+// it passes false). Shared by the GitHub and ADO scanners.
+func buildBundleTreePaths(entries []treeEntry, alreadyTruncated bool) (paths []string, truncated bool) {
+	truncated = alreadyTruncated
+	paths = make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.Type != "blob" && e.Type != "tree" {
+			continue
+		}
+		if isVendoredPath(e.Path) {
+			continue
+		}
+		if len(paths) >= maxTreeEntries {
+			truncated = true
+			break
+		}
+		paths = append(paths, e.Path)
+	}
+	return paths, truncated
 }
 
 // Detection priorities (lower = higher signal, fetched first).
@@ -586,6 +598,11 @@ func (a *CatalogScanActivities) fetchFileContent(ctx context.Context, owner, rep
 // Keep this contract in sync with the ingest route (orbit-www side).
 type ingestRequest struct {
 	InstallationID string `json:"installationId"`
+	// ConnectionID is set for non-GitHub (e.g. Azure DevOps) scans: it is the
+	// git-connections doc id. Omitted for GitHub scans. On an ADO scan the shared
+	// installationId field ALSO carries the connection doc id verbatim (it feeds
+	// the ingest route's dedupeKey unchanged), so this is an additive hint.
+	ConnectionID string `json:"connectionId,omitempty"`
 	// WorkspaceID is omitted for a global scan (WP8) so the ingest route's
 	// parseBody sees an absent workspaceId and creates workspace-less rows.
 	WorkspaceID string       `json:"workspaceId,omitempty"`
@@ -606,14 +623,21 @@ type ingestBundle struct {
 // activity error (the ingest route is idempotent by dedupeKey, so retries are
 // safe).
 func (a *CatalogScanActivities) postIngest(ctx context.Context, reqBody ingestRequest) (ScanRepoResult, error) {
-	if a.orbitBaseURL == "" {
+	return postIngestBundle(ctx, a.httpClient, a.orbitBaseURL, a.apiKey, reqBody)
+}
+
+// postIngestBundle POSTs an evidence bundle to orbit-www's ingest route. It is
+// provider-agnostic (GitHub and Azure DevOps scans share it): any non-2xx is a
+// retryable error because the ingest route is idempotent by dedupeKey.
+func postIngestBundle(ctx context.Context, httpClient *http.Client, orbitBaseURL, apiKey string, reqBody ingestRequest) (ScanRepoResult, error) {
+	if orbitBaseURL == "" {
 		return ScanRepoResult{}, temporal.NewNonRetryableApplicationError("orbit base URL not configured", "Config", nil)
 	}
 	buf, err := json.Marshal(reqBody)
 	if err != nil {
 		return ScanRepoResult{}, fmt.Errorf("marshal ingest body: %w", err)
 	}
-	u := a.orbitBaseURL + "/api/internal/discovery/ingest"
+	u := strings.TrimRight(orbitBaseURL, "/") + "/api/internal/discovery/ingest"
 
 	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -621,11 +645,11 @@ func (a *CatalogScanActivities) postIngest(ctx context.Context, reqBody ingestRe
 	if err != nil {
 		return ScanRepoResult{}, err
 	}
-	req.Header.Set("X-API-Key", a.apiKey)
+	req.Header.Set("X-API-Key", apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := a.httpClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return ScanRepoResult{}, err
 	}

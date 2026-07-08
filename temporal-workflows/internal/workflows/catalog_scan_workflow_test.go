@@ -201,6 +201,156 @@ func TestCatalogScanWorkflow_ContinueAsNewResumesWithoutRelist(t *testing.T) {
 	require.Equal(t, 23, res.Proposed)     // 20 carried + 3 this run
 }
 
+// TestCatalogScanWorkflow_ADOProviderDispatch verifies that Provider
+// "azure-devops" dispatches to the ADO activities (ListADOReposActivity /
+// ScanADORepoActivity) and NOT the GitHub ones, while the fan-out and
+// aggregation are identical.
+func TestCatalogScanWorkflow_ADOProviderDispatch(t *testing.T) {
+	s := testsuite.WorkflowTestSuite{}
+	env := s.NewTestWorkflowEnvironment()
+
+	var gh *activities.CatalogScanActivities
+	var ado *activities.ADOScanActivities
+	env.RegisterActivity(gh.ListInstallationReposActivity)
+	env.RegisterActivity(gh.ScanRepoActivity)
+	env.RegisterActivity(ado.ListADOReposActivity)
+	env.RegisterActivity(ado.ScanADORepoActivity)
+
+	repos := makeRepos(3)
+	// ADO list receives the ConnectionID; GitHub list must never be called.
+	env.OnActivity(ado.ListADOReposActivity, mock.Anything,
+		mock.MatchedBy(func(in activities.ListADOReposInput) bool { return in.ConnectionID == "conn-1" })).
+		Return(repos, nil)
+	env.OnActivity(ado.ScanADORepoActivity, mock.Anything,
+		mock.MatchedBy(func(in activities.ScanADORepoInput) bool {
+			return in.ConnectionID == "conn-1" && in.WorkspaceID == "ws-1"
+		})).
+		Return(activities.ScanRepoResult{Proposed: 2, Imported: 1}, nil)
+
+	env.ExecuteWorkflow(CatalogScanWorkflow, CatalogScanWorkflowInput{
+		Provider:     "azure-devops",
+		ConnectionID: "conn-1",
+		WorkspaceID:  "ws-1",
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+
+	var res CatalogScanWorkflowResult
+	require.NoError(t, env.GetWorkflowResult(&res))
+	require.Equal(t, 3, res.ReposScanned)
+	require.Equal(t, 6, res.Proposed)
+	require.Equal(t, 3, res.Imported)
+	require.NotEmpty(t, res.ScanRunID)
+
+	env.AssertNotCalled(t, "ListInstallationReposActivity", mock.Anything, mock.Anything)
+	env.AssertNotCalled(t, "ScanRepoActivity", mock.Anything, mock.Anything)
+}
+
+// TestCatalogScanWorkflow_GitHubDefaultUnchanged verifies an explicit
+// Provider:"github" behaves exactly like the empty-provider default: it
+// dispatches to the GitHub activities.
+func TestCatalogScanWorkflow_GitHubDefaultUnchanged(t *testing.T) {
+	s := testsuite.WorkflowTestSuite{}
+	env := s.NewTestWorkflowEnvironment()
+
+	var gh *activities.CatalogScanActivities
+	var ado *activities.ADOScanActivities
+	env.RegisterActivity(gh.ListInstallationReposActivity)
+	env.RegisterActivity(gh.ScanRepoActivity)
+	env.RegisterActivity(ado.ListADOReposActivity)
+	env.RegisterActivity(ado.ScanADORepoActivity)
+
+	repos := makeRepos(2)
+	env.OnActivity(gh.ListInstallationReposActivity, mock.Anything, mock.Anything).Return(repos, nil)
+	env.OnActivity(gh.ScanRepoActivity, mock.Anything, mock.Anything).
+		Return(activities.ScanRepoResult{Proposed: 1}, nil)
+
+	env.ExecuteWorkflow(CatalogScanWorkflow, CatalogScanWorkflowInput{
+		Provider:       "github",
+		InstallationID: "123",
+		WorkspaceID:    "ws-1",
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+
+	var res CatalogScanWorkflowResult
+	require.NoError(t, env.GetWorkflowResult(&res))
+	require.Equal(t, 2, res.ReposScanned)
+	require.Equal(t, 2, res.Proposed)
+
+	env.AssertNotCalled(t, "ListADOReposActivity", mock.Anything, mock.Anything)
+	env.AssertNotCalled(t, "ScanADORepoActivity", mock.Anything, mock.Anything)
+}
+
+// TestCatalogScanWorkflow_UnknownProviderFailsClosed verifies an unknown
+// non-empty Provider is rejected with a non-retryable error before any activity
+// is scheduled.
+func TestCatalogScanWorkflow_UnknownProviderFailsClosed(t *testing.T) {
+	s := testsuite.WorkflowTestSuite{}
+	env := s.NewTestWorkflowEnvironment()
+
+	var gh *activities.CatalogScanActivities
+	var ado *activities.ADOScanActivities
+	env.RegisterActivity(gh.ListInstallationReposActivity)
+	env.RegisterActivity(gh.ScanRepoActivity)
+	env.RegisterActivity(ado.ListADOReposActivity)
+	env.RegisterActivity(ado.ScanADORepoActivity)
+
+	env.ExecuteWorkflow(CatalogScanWorkflow, CatalogScanWorkflowInput{
+		Provider:     "gitlab",
+		ConnectionID: "conn-1",
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	err := env.GetWorkflowError()
+	require.Error(t, err)
+
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.Equal(t, "UnsupportedProvider", appErr.Type())
+	require.True(t, appErr.NonRetryable())
+
+	env.AssertNotCalled(t, "ListInstallationReposActivity", mock.Anything, mock.Anything)
+	env.AssertNotCalled(t, "ListADOReposActivity", mock.Anything, mock.Anything)
+}
+
+// TestCatalogScanWorkflow_ADOCarriesProviderThroughCAN verifies continue-as-new
+// carries Provider + ConnectionID (so the resumed run keeps dispatching to ADO).
+func TestCatalogScanWorkflow_ADOCarriesProviderThroughCAN(t *testing.T) {
+	s := testsuite.WorkflowTestSuite{}
+	env := s.NewTestWorkflowEnvironment()
+
+	var ado *activities.ADOScanActivities
+	env.RegisterActivity(ado.ListADOReposActivity)
+	env.RegisterActivity(ado.ScanADORepoActivity)
+
+	total := catalogScanCANThreshold + 50 // 250
+	repos := makeRepos(total)
+	env.OnActivity(ado.ListADOReposActivity, mock.Anything, mock.Anything).Return(repos, nil)
+	env.OnActivity(ado.ScanADORepoActivity, mock.Anything, mock.Anything).
+		Return(activities.ScanRepoResult{Proposed: 1}, nil)
+
+	env.ExecuteWorkflow(CatalogScanWorkflow, CatalogScanWorkflowInput{
+		Provider:     "azure-devops",
+		ConnectionID: "conn-1",
+		WorkspaceID:  "ws-1",
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	err := env.GetWorkflowError()
+	require.Error(t, err)
+	var canErr *workflow.ContinueAsNewError
+	require.ErrorAs(t, err, &canErr)
+
+	carry := decodeCatalogCarry(t, canErr)
+	require.Equal(t, "azure-devops", carry.Provider)
+	require.Equal(t, "conn-1", carry.ConnectionID)
+	require.Len(t, carry.RemainingRepos, 50)
+	require.Equal(t, catalogScanCANThreshold, carry.Totals.ReposScanned)
+}
+
 // decodeCatalogCarry pulls the typed CatalogScanWorkflowInput out of a
 // ContinueAsNewError's encoded payload.
 func decodeCatalogCarry(t *testing.T, canErr *workflow.ContinueAsNewError) CatalogScanWorkflowInput {
