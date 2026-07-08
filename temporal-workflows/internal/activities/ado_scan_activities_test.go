@@ -61,6 +61,7 @@ func TestADOItemsToEntriesFeedsSelection(t *testing.T) {
 // token + ingest routes) and the Azure DevOps REST API. The token route returns
 // baseUrl == the server's own URL so every ADO call loops back here.
 type adoTestServer struct {
+	authMode   string
 	srv        *httptest.Server
 	pat        string
 	project    string // connection project filter ("" = org-wide)
@@ -81,7 +82,8 @@ func newADOTestServer(t *testing.T, project string, handler func(w http.Response
 				Organization: "acme",
 				Project:      ts.project,
 				BaseURL:      ts.srv.URL,
-				PAT:          ts.pat,
+				AuthMode:     ts.authMode,
+				Token:        ts.pat,
 			})
 		case r.Method == http.MethodPost && r.URL.Path == "/api/internal/discovery/ingest":
 			require.Equal(t, "test-key", r.Header.Get("X-API-Key"))
@@ -336,4 +338,41 @@ func TestADOInputValidation(t *testing.T) {
 		Repo:         RepoRef{Owner: "", Name: ""},
 	})
 	require.Error(t, err)
+}
+
+func TestAuthorizationHeaderModes(t *testing.T) {
+	basic := adoConnectionInfo{AuthMode: "basic-pat", Token: "s3cr3t-pat"}
+	require.Equal(t, adoBasicAuth("s3cr3t-pat"), basic.authorizationHeader())
+
+	// Absent/unknown mode defaults to PAT basic auth (pre-WP12 responses).
+	legacy := adoConnectionInfo{Token: "s3cr3t-pat"}
+	require.Equal(t, adoBasicAuth("s3cr3t-pat"), legacy.authorizationHeader())
+
+	bearer := adoConnectionInfo{AuthMode: "bearer", Token: "entra-token"}
+	require.Equal(t, "Bearer entra-token", bearer.authorizationHeader())
+}
+
+func TestScanADORepoBearerAuthHeader(t *testing.T) {
+	ts := newADOTestServer(t, "Payments", func(w http.ResponseWriter, r *http.Request, ts *adoTestServer) {
+		q := r.URL.Query()
+		switch {
+		case q.Get("recursionLevel") == "Full":
+			_ = json.NewEncoder(w).Encode(map[string]any{"value": []adoItem{
+				{Path: "/Dockerfile", IsFolder: false},
+			}})
+		case q.Get("$format") == "text":
+			_, _ = w.Write([]byte("FROM golang:1.22"))
+		default:
+			t.Fatalf("unexpected ADO call: %s?%s", r.URL.Path, r.URL.RawQuery)
+		}
+	})
+	ts.authMode = "bearer"
+
+	_, err := runScanADORepo(t, ts.activities(), ScanADORepoInput{
+		ConnectionID: "conn-1",
+		Repo:         RepoRef{Owner: "Payments", Name: "billing", DefaultBranch: "main"},
+		ScanRunID:    "run-1",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Bearer test-pat", ts.authHeader)
 }

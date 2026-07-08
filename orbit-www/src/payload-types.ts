@@ -4184,6 +4184,10 @@ export interface GitConnection {
    */
   baseUrl?: string | null;
   /**
+   * How Orbit authenticates. Service principal mints short-lived Entra tokens (Microsoft-recommended; global PATs retire Dec 2026). PAT remains for ADO Server.
+   */
+  authType: 'pat' | 'service-principal';
+  /**
    * Encrypted provider credentials.
    */
   credentials?: {
@@ -4191,6 +4195,18 @@ export interface GitConnection {
      * Personal access token (AES-256-GCM encrypted at rest).
      */
     pat?: string | null;
+    /**
+     * Entra tenant (directory) id — service principal auth.
+     */
+    tenantId?: string | null;
+    /**
+     * Entra app registration (client) id — service principal auth.
+     */
+    clientId?: string | null;
+    /**
+     * Entra client secret (AES-256-GCM encrypted at rest).
+     */
+    clientSecret?: string | null;
   };
   /**
    * Workspaces a scan of this connection may attribute entities to.
@@ -6214,10 +6230,14 @@ export interface GitConnectionsSelect<T extends boolean = true> {
   organization?: T;
   project?: T;
   baseUrl?: T;
+  authType?: T;
   credentials?:
     | T
     | {
         pat?: T;
+        tenantId?: T;
+        clientId?: T;
+        clientSecret?: T;
       };
   allowedWorkspaces?: T;
   status?: T;

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { Payload } from 'payload'
 
 // connections-core imports lib/encryption at module load for the default
@@ -80,7 +80,7 @@ describe('toAdminConnectionView', () => {
     expect(view.allowedWorkspaces).toEqual([{ id: 'ws1', name: 'Payments' }])
     // No PAT anywhere in the projected view.
     expect(JSON.stringify(view)).not.toContain('enc')
-    expect((view as Record<string, unknown>).credentials).toBeUndefined()
+    expect((view as unknown as Record<string, unknown>).credentials).toBeUndefined()
   })
 
   it('reports patSet=false and defaults baseUrl when no PAT/baseUrl set', () => {
@@ -100,7 +100,7 @@ describe('listConnectionsAdminCore', () => {
     ]
     const views = await listConnectionsAdminCore(p(f))
     expect(views.map((v) => v.name)).toEqual(['A', 'B'])
-    expect(views.every((v) => (v as Record<string, unknown>).credentials === undefined)).toBe(true)
+    expect(views.every((v) => (v as unknown as Record<string, unknown>).credentials === undefined)).toBe(true)
   })
 })
 
@@ -265,5 +265,101 @@ describe('validateConnectionCore', () => {
     const fetchFn: ValidateFetch = vi.fn(async () => ({ status: 200 }))
     const res = await validateConnectionCore(p(f), 'nope', { fetchFn, decryptFn: decryptStub })
     expect(res).toMatchObject({ ok: false, status: 'error', error: 'Connection not found' })
+  })
+})
+
+describe('service principal auth (WP12)', () => {
+  const spConn = () => ({
+    id: 'c-sp',
+    name: 'Acme SP',
+    organization: 'acme',
+    baseUrl: 'https://dev.azure.com',
+    authType: 'service-principal',
+    credentials: { tenantId: 'tenant-1', clientId: 'client-1', clientSecret: 'enc-secret' },
+  })
+
+  beforeEach(async () => {
+    const { clearEntraTokenCache } = await import('@/lib/connections/token-core')
+    clearEntraTokenCache()
+  })
+
+  it('createConnectionCore requires all three service principal fields', async () => {
+    const f = new FakePayload()
+    const res = await createConnectionCore(p(f), {
+      name: 'X',
+      organization: 'acme',
+      authType: 'service-principal',
+      tenantId: 't',
+      clientId: '',
+      clientSecret: 's',
+    })
+    expect(res).toMatchObject({ ok: false })
+    expect(res.error).toMatch(/client id/i)
+  })
+
+  it('createConnectionCore stores SP credentials and authType', async () => {
+    const f = new FakePayload()
+    const res = await createConnectionCore(p(f), {
+      name: 'X',
+      organization: 'acme',
+      authType: 'service-principal',
+      tenantId: 'tenant-1',
+      clientId: 'client-1',
+      clientSecret: 'secret-1',
+    })
+    expect(res.ok).toBe(true)
+    const doc = f.collections['git-connections'][0]
+    expect(doc.authType).toBe('service-principal')
+    expect(doc.credentials).toEqual({
+      tenantId: 'tenant-1',
+      clientId: 'client-1',
+      clientSecret: 'secret-1',
+    })
+  })
+
+  it('updateConnectionCore keeps the stored secret when clientSecret is absent (write-only)', async () => {
+    const f = new FakePayload()
+    f.collections['git-connections'] = [spConn()]
+    const res = await updateConnectionCore(p(f), { id: 'c-sp', tenantId: 'tenant-2' })
+    expect(res.ok).toBe(true)
+    const creds = f.collections['git-connections'][0].credentials as Record<string, unknown>
+    expect(creds.tenantId).toBe('tenant-2')
+    // FakePayload replaces the group wholesale (real Payload merges subfields);
+    // the essential assertion is that no empty clientSecret was written.
+    expect(creds.clientSecret === undefined || creds.clientSecret === 'enc-secret').toBe(true)
+    expect(creds.clientSecret).not.toBe('')
+  })
+
+  it('validateConnectionCore uses a Bearer header for SP connections', async () => {
+    const f = new FakePayload()
+    f.collections['git-connections'] = [spConn()]
+    const mint = vi.fn(async () => ({ token: 'entra-token', expiresAtMs: Date.now() + 3_600_000 }))
+    const fetchFn: ValidateFetch = vi.fn(async (url, init) => {
+      expect(init.headers.Authorization).toBe('Bearer entra-token')
+      expect(url).toBe('https://dev.azure.com/acme/_apis/projects?api-version=7.1')
+      return { status: 200 }
+    })
+    const res = await validateConnectionCore(p(f), 'c-sp', {
+      fetchFn,
+      decryptFn: decryptStub,
+      mintFn: mint,
+    })
+    expect(res).toMatchObject({ ok: true, status: 'active' })
+  })
+
+  it('validateConnectionCore surfaces Entra sign-in failures as connection errors', async () => {
+    const f = new FakePayload()
+    f.collections['git-connections'] = [spConn()]
+    const mint = vi.fn().mockRejectedValue(new Error('Entra token request failed: HTTP 401 invalid_client'))
+    const fetchFn: ValidateFetch = vi.fn()
+    const res = await validateConnectionCore(p(f), 'c-sp', {
+      fetchFn,
+      decryptFn: decryptStub,
+      mintFn: mint,
+    })
+    expect(res).toMatchObject({ ok: false, status: 'error' })
+    expect(res.error).toMatch(/Entra sign-in failed/i)
+    expect(fetchFn).not.toHaveBeenCalled()
+    expect(f.collections['git-connections'][0].status).toBe('error')
   })
 })

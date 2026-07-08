@@ -321,6 +321,21 @@ Pulled forward from Phase 3 after live local testing.
   `_apis/projects` with the PAT → status/lastValidatedAt/lastError), Scan
   shortcut. Sidebar Settings group entry "Connections".
 
+### WP12 — Entra service-principal auth for Azure DevOps (approved 2026-07-08)
+
+Microsoft context: ADO's legacy OAuth is sunset in 2026 and global PATs stop
+working 2026-12-01; the recommended automation identity is an Entra service
+principal. `git-connections.authType` gains `service-principal`
+(tenantId/clientId + encrypted clientSecret). The internal token route mints
+short-lived Entra access tokens via client-credentials against the ADO
+resource scope (`499b84ac-…/.default`), cached in-module until 5 min before
+expiry, returned as `{ authMode: 'bearer', token }` — PAT connections return
+`{ authMode: 'basic-pat', token }`. The Go scanner builds the Authorization
+header per authMode (absent mode = basic-pat for compatibility). Validate
+proves the Entra sign-in AND org access in one pass. PAT stays for ADO Server
+(on-prem). Entra OAuth user flow (one-click connect) deferred until a
+deployment-owned Entra app registration exists.
+
 ## Future phases (sketch, out of Phase 1 scope)
 
 - **Phase 2 — richer manifests & monorepos:** multi-entity `.orbit.yaml`

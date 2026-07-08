@@ -63,7 +63,20 @@ type adoConnectionInfo struct {
 	Organization string `json:"organization"`
 	Project      string `json:"project"`
 	BaseURL      string `json:"baseUrl"`
-	PAT          string `json:"pat"`
+	// AuthMode is how the token must be presented: "basic-pat" (HTTP Basic,
+	// empty username) or "bearer" (a short-lived Microsoft Entra access token
+	// minted server-side for service-principal connections — WP12).
+	AuthMode string `json:"authMode"`
+	Token    string `json:"token"`
+}
+
+// authorizationHeader builds the provider Authorization header for the
+// connection's auth mode. The token is sensitive — never log the result.
+func (c adoConnectionInfo) authorizationHeader() string {
+	if c.AuthMode == "bearer" {
+		return "Bearer " + c.Token
+	}
+	return adoBasicAuth(c.Token)
 }
 
 // ADOScanActivities holds the shared HTTP dependencies for the Azure DevOps scan
@@ -127,7 +140,7 @@ func (a *ADOScanActivities) ListADOReposActivity(ctx context.Context, in ListADO
 		return nil, err
 	}
 	base := strings.TrimRight(conn.BaseURL, "/")
-	auth := adoBasicAuth(conn.PAT)
+	auth := conn.authorizationHeader()
 
 	var projects []string
 	if conn.Project != "" {
@@ -260,7 +273,7 @@ func (a *ADOScanActivities) ScanADORepoActivity(ctx context.Context, in ScanADOR
 		return ScanRepoResult{}, err
 	}
 	base := strings.TrimRight(conn.BaseURL, "/")
-	auth := adoBasicAuth(conn.PAT)
+	auth := conn.authorizationHeader()
 	org := conn.Organization
 	project := in.Repo.Owner
 	repo := in.Repo.Name
@@ -412,8 +425,8 @@ func (a *ADOScanActivities) adoConnection(ctx context.Context, connectionID stri
 		if err := json.Unmarshal(body, &out); err != nil {
 			return adoConnectionInfo{}, fmt.Errorf("parse connection token response: %w", err)
 		}
-		if out.PAT == "" {
-			return adoConnectionInfo{}, temporal.NewNonRetryableApplicationError("connection returned empty PAT", "ADOAuth", nil)
+		if out.Token == "" {
+			return adoConnectionInfo{}, temporal.NewNonRetryableApplicationError("connection returned empty token", "ADOAuth", nil)
 		}
 		if out.BaseURL == "" {
 			return adoConnectionInfo{}, temporal.NewNonRetryableApplicationError("connection returned empty baseUrl", "ADOConfig", nil)

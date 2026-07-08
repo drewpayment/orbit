@@ -196,7 +196,11 @@ function ConnectionCard({
               {c.lastValidatedAt
                 ? `Last validated ${new Date(c.lastValidatedAt).toLocaleString()}`
                 : 'Not validated yet'}
-              {c.patSet ? '' : ' · no credentials set'}
+              {c.authType === 'service-principal'
+                ? ` · service principal${c.secretSet ? '' : ' · no secret set'}`
+                : c.patSet
+                  ? ' · PAT'
+                  : ' · no credentials set'}
             </p>
           </div>
 
@@ -292,7 +296,11 @@ function ConnectionDialog({ state, onClose }: { state: DialogState; onClose: () 
   const [organization, setOrganization] = useState('')
   const [project, setProject] = useState('')
   const [baseUrl, setBaseUrl] = useState(DEFAULT_BASE_URL)
+  const [authType, setAuthType] = useState<'pat' | 'service-principal'>('service-principal')
   const [pat, setPat] = useState('')
+  const [tenantId, setTenantId] = useState('')
+  const [clientId, setClientId] = useState('')
+  const [clientSecret, setClientSecret] = useState('')
 
   // Reset the form whenever a dialog opens (create = blank, edit = prefill).
   const [initializedFor, setInitializedFor] = useState<string | null>(null)
@@ -303,12 +311,25 @@ function ConnectionDialog({ state, onClose }: { state: DialogState; onClose: () 
     setOrganization(editing?.organization ?? '')
     setProject(editing?.project ?? '')
     setBaseUrl(editing?.baseUrl ?? DEFAULT_BASE_URL)
+    setAuthType(editing?.authType ?? 'service-principal')
     setPat('')
+    setTenantId(editing?.tenantId ?? '')
+    setClientId(editing?.clientId ?? '')
+    setClientSecret('')
   }
   if (!key && initializedFor) setInitializedFor(null)
 
   const onSubmit = useCallback(() => {
     startTransition(async () => {
+      const secretFields =
+        authType === 'service-principal'
+          ? {
+              tenantId,
+              clientId,
+              // Write-only: only send a secret when one was entered.
+              ...(clientSecret ? { clientSecret } : {}),
+            }
+          : { ...(pat ? { pat } : {}) }
       const res = editing
         ? await updateConnection({
             id: editing.id,
@@ -316,10 +337,19 @@ function ConnectionDialog({ state, onClose }: { state: DialogState; onClose: () 
             organization,
             project,
             baseUrl,
-            // Write-only: only send a PAT when one was entered.
-            ...(pat ? { pat } : {}),
+            authType,
+            ...secretFields,
           })
-        : await createConnection({ name, organization, project, baseUrl, pat })
+        : await createConnection({
+            name,
+            organization,
+            project,
+            baseUrl,
+            authType,
+            ...(authType === 'service-principal'
+              ? { tenantId, clientId, clientSecret }
+              : { pat }),
+          })
       if (!res.success) {
         toast.error(res.error ?? 'Failed to save connection')
         return
@@ -328,7 +358,7 @@ function ConnectionDialog({ state, onClose }: { state: DialogState; onClose: () 
       onClose()
       router.refresh()
     })
-  }, [editing, name, organization, project, baseUrl, pat, onClose, router])
+  }, [editing, name, organization, project, baseUrl, authType, pat, tenantId, clientId, clientSecret, onClose, router])
 
   return (
     <Dialog open={state !== null} onOpenChange={(open) => (!open ? onClose() : undefined)}>
@@ -380,19 +410,89 @@ function ConnectionDialog({ state, onClose }: { state: DialogState; onClose: () 
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="conn-pat">Personal access token</Label>
-            <Input
-              id="conn-pat"
-              type="password"
-              value={pat}
-              onChange={(e) => setPat(e.target.value)}
-              placeholder={editing?.patSet ? 'PAT set — enter to replace' : 'Paste the PAT'}
-              autoComplete="off"
-            />
-            <p className="text-xs text-muted-foreground">
-              Stored encrypted. {editing?.patSet ? 'Leave blank to keep the current token.' : ''}
-            </p>
+            <Label htmlFor="conn-authtype">Authentication</Label>
+            <select
+              id="conn-authtype"
+              className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+              value={authType}
+              onChange={(e) => setAuthType(e.target.value as 'pat' | 'service-principal')}
+            >
+              <option value="service-principal">Service principal (Microsoft Entra ID) — recommended</option>
+              <option value="pat">Personal access token</option>
+            </select>
+            {authType === 'pat' && (
+              <p className="text-xs text-muted-foreground">
+                Microsoft is retiring global PATs (Dec 2026). Use a service principal unless this
+                is an on-prem Azure DevOps Server.
+              </p>
+            )}
           </div>
+
+          {authType === 'service-principal' ? (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="conn-tenant">Tenant (directory) ID</Label>
+                <Input
+                  id="conn-tenant"
+                  value={tenantId}
+                  onChange={(e) => setTenantId(e.target.value)}
+                  placeholder="00000000-0000-0000-0000-000000000000"
+                  autoComplete="off"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="conn-client">Application (client) ID</Label>
+                <Input
+                  id="conn-client"
+                  value={clientId}
+                  onChange={(e) => setClientId(e.target.value)}
+                  placeholder="00000000-0000-0000-0000-000000000000"
+                  autoComplete="off"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="conn-secret">Client secret</Label>
+                <Input
+                  id="conn-secret"
+                  type="password"
+                  value={clientSecret}
+                  onChange={(e) => setClientSecret(e.target.value)}
+                  placeholder={editing?.secretSet ? 'Secret set — enter to replace' : 'Paste the client secret'}
+                  autoComplete="off"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Stored encrypted. {editing?.secretSet ? 'Leave blank to keep the current secret. ' : ''}
+                  Orbit mints short-lived Entra tokens — no PAT needed.
+                </p>
+              </div>
+              <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                <p className="font-medium text-foreground">One-time Azure setup</p>
+                <ol className="ml-4 mt-1 list-decimal space-y-0.5">
+                  <li>Entra admin center → App registrations → New registration.</li>
+                  <li>Certificates &amp; secrets → New client secret (copy it here).</li>
+                  <li>
+                    Azure DevOps → Organization settings → Users → Add the app as a user with
+                    Basic access (Readers works for scanning).
+                  </li>
+                </ol>
+              </div>
+            </>
+          ) : (
+            <div className="space-y-1.5">
+              <Label htmlFor="conn-pat">Personal access token</Label>
+              <Input
+                id="conn-pat"
+                type="password"
+                value={pat}
+                onChange={(e) => setPat(e.target.value)}
+                placeholder={editing?.patSet ? 'PAT set — enter to replace' : 'Paste the PAT'}
+                autoComplete="off"
+              />
+              <p className="text-xs text-muted-foreground">
+                Stored encrypted. {editing?.patSet ? 'Leave blank to keep the current token.' : ''}
+              </p>
+            </div>
+          )}
         </div>
 
         <DialogFooter>

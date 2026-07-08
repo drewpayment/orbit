@@ -43,14 +43,17 @@ export const GitConnections: CollectionConfig = {
   hooks: {
     beforeChange: [
       ({ data }) => {
-        // Encrypt the PAT if present and not already encrypted (encrypted values
-        // have the iv:authTag:ciphertext shape). An absent credentials.pat on
-        // update means "keep the stored value" — the action omits it entirely.
-        const pat = data?.credentials?.pat
-        if (typeof pat === 'string' && pat.length > 0) {
-          const isEncrypted = pat.includes(':') && pat.split(':').length === 3
-          if (!isEncrypted) {
-            data.credentials.pat = encrypt(pat)
+        // Encrypt secrets if present and not already encrypted (encrypted values
+        // have the iv:authTag:ciphertext shape — ADO PATs and Entra client
+        // secrets never contain colons). An absent secret on update means "keep
+        // the stored value" — the action omits the field entirely.
+        for (const field of ['pat', 'clientSecret'] as const) {
+          const value = data?.credentials?.[field]
+          if (typeof value === 'string' && value.length > 0) {
+            const isEncrypted = value.includes(':') && value.split(':').length === 3
+            if (!isEncrypted) {
+              data.credentials[field] = encrypt(value)
+            }
           }
         }
         return data
@@ -94,6 +97,21 @@ export const GitConnections: CollectionConfig = {
       },
     },
     {
+      name: 'authType',
+      type: 'select',
+      required: true,
+      defaultValue: 'pat',
+      options: [
+        { label: 'Personal access token', value: 'pat' },
+        { label: 'Service principal (Microsoft Entra ID)', value: 'service-principal' },
+      ],
+      admin: {
+        description:
+          'How Orbit authenticates. Service principal mints short-lived Entra tokens ' +
+          '(Microsoft-recommended; global PATs retire Dec 2026). PAT remains for ADO Server.',
+      },
+    },
+    {
       name: 'credentials',
       type: 'group',
       admin: { description: 'Encrypted provider credentials.' },
@@ -103,6 +121,25 @@ export const GitConnections: CollectionConfig = {
           type: 'text',
           admin: {
             description: 'Personal access token (AES-256-GCM encrypted at rest).',
+            hidden: true, // Never show in the admin UI.
+            readOnly: true,
+          },
+        },
+        {
+          name: 'tenantId',
+          type: 'text',
+          admin: { description: 'Entra tenant (directory) id — service principal auth.' },
+        },
+        {
+          name: 'clientId',
+          type: 'text',
+          admin: { description: 'Entra app registration (client) id — service principal auth.' },
+        },
+        {
+          name: 'clientSecret',
+          type: 'text',
+          admin: {
+            description: 'Entra client secret (AES-256-GCM encrypted at rest).',
             hidden: true, // Never show in the admin UI.
             readOnly: true,
           },

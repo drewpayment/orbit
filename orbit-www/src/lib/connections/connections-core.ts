@@ -1,5 +1,5 @@
 import type { Payload } from 'payload'
-import { decrypt as defaultDecrypt } from '@/lib/encryption'
+import { resolveConnectionToken, type EntraTokenMinter } from '@/lib/connections/token-core'
 
 /**
  * Testable core for the Platform Admin "Connections" page (WP11) — the
@@ -35,6 +35,12 @@ export interface AdminConnectionView {
   lastError: string | null
   /** Whether a PAT is stored — drives the "PAT set — enter to replace" UI. */
   patSet: boolean
+  authType: 'pat' | 'service-principal'
+  /** Entra coordinates (non-secret) — service principal auth. */
+  tenantId: string
+  clientId: string
+  /** Whether an Entra client secret is stored (write-only UI, like the PAT). */
+  secretSet: boolean
   allowedWorkspaces: AdminConnectionWorkspace[]
   updatedAt: string | null
 }
@@ -43,6 +49,8 @@ export interface AdminConnectionView {
 export function toAdminConnectionView(doc: Record<string, unknown>): AdminConnectionView {
   const credentials = (doc.credentials ?? {}) as Record<string, unknown>
   const patSet = typeof credentials.pat === 'string' && credentials.pat.length > 0
+  const secretSet =
+    typeof credentials.clientSecret === 'string' && credentials.clientSecret.length > 0
 
   const allowedRaw = Array.isArray(doc.allowedWorkspaces) ? doc.allowedWorkspaces : []
   const allowedWorkspaces: AdminConnectionWorkspace[] = allowedRaw.map((w) => {
@@ -66,6 +74,10 @@ export function toAdminConnectionView(doc: Record<string, unknown>): AdminConnec
     lastValidatedAt: typeof doc.lastValidatedAt === 'string' ? doc.lastValidatedAt : null,
     lastError: typeof doc.lastError === 'string' ? doc.lastError : null,
     patSet,
+    authType: doc.authType === 'service-principal' ? 'service-principal' : 'pat',
+    tenantId: typeof credentials.tenantId === 'string' ? credentials.tenantId : '',
+    clientId: typeof credentials.clientId === 'string' ? credentials.clientId : '',
+    secretSet,
     allowedWorkspaces,
     updatedAt: typeof doc.updatedAt === 'string' ? doc.updatedAt : null,
   }
@@ -94,6 +106,10 @@ export interface CreateConnectionInput {
   project?: string
   baseUrl?: string
   pat?: string
+  authType?: 'pat' | 'service-principal'
+  tenantId?: string
+  clientId?: string
+  clientSecret?: string
   allowedWorkspaces?: string[]
 }
 
@@ -129,10 +145,19 @@ export async function createConnectionCore(
     project: input.project?.trim() || '',
     baseUrl: input.baseUrl?.trim() || DEFAULT_BASE_URL,
     status: 'active',
+    authType: input.authType === 'service-principal' ? 'service-principal' : 'pat',
     ...(input.allowedWorkspaces ? { allowedWorkspaces: input.allowedWorkspaces } : {}),
   }
-  // Only include credentials when a PAT was supplied; the hook encrypts it.
-  if (input.pat && input.pat.length > 0) {
+  if (input.authType === 'service-principal') {
+    if (!input.tenantId?.trim() || !input.clientId?.trim() || !input.clientSecret)
+      return { ok: false, error: 'Tenant id, client id, and client secret are required' }
+    data.credentials = {
+      tenantId: input.tenantId.trim(),
+      clientId: input.clientId.trim(),
+      clientSecret: input.clientSecret,
+    }
+  } else if (input.pat && input.pat.length > 0) {
+    // Only include credentials when a PAT was supplied; the hook encrypts it.
     data.credentials = { pat: input.pat }
   }
 
@@ -152,6 +177,11 @@ export interface UpdateConnectionInput {
   baseUrl?: string
   /** Absent/empty means KEEP the stored PAT (write-only edit). */
   pat?: string
+  authType?: 'pat' | 'service-principal'
+  tenantId?: string
+  clientId?: string
+  /** Absent/empty means KEEP the stored client secret (write-only edit). */
+  clientSecret?: string
   allowedWorkspaces?: string[]
 }
 
@@ -176,8 +206,15 @@ export async function updateConnectionCore(
   if (input.project !== undefined) data.project = input.project.trim()
   if (input.baseUrl !== undefined) data.baseUrl = input.baseUrl.trim() || DEFAULT_BASE_URL
   if (input.allowedWorkspaces !== undefined) data.allowedWorkspaces = input.allowedWorkspaces
-  // Only touch credentials when a replacement PAT was supplied.
-  if (input.pat && input.pat.length > 0) data.credentials = { pat: input.pat }
+  if (input.authType !== undefined) data.authType = input.authType
+  // Secrets are write-only: only supplied keys are written; Payload merges
+  // group subfields, so absent keys keep their stored (encrypted) values.
+  const creds: Record<string, unknown> = {}
+  if (input.pat && input.pat.length > 0) creds.pat = input.pat
+  if (input.tenantId !== undefined) creds.tenantId = input.tenantId.trim()
+  if (input.clientId !== undefined) creds.clientId = input.clientId.trim()
+  if (input.clientSecret && input.clientSecret.length > 0) creds.clientSecret = input.clientSecret
+  if (Object.keys(creds).length > 0) data.credentials = creds
 
   try {
     await payload.update({
@@ -236,52 +273,46 @@ export function adoProjectsUrl(baseUrl: string, organization: string): string {
 export async function validateConnectionCore(
   payload: Payload,
   id: string,
-  opts: { fetchFn: ValidateFetch; decryptFn?: (s: string) => string; now?: Date },
+  opts: {
+    fetchFn: ValidateFetch
+    decryptFn?: (s: string) => string
+    mintFn?: EntraTokenMinter
+    now?: Date
+  },
 ): Promise<ValidateConnectionResult> {
-  const decryptFn = opts.decryptFn ?? defaultDecrypt
   const nowIso = (opts.now ?? new Date()).toISOString()
 
-  let doc: Record<string, unknown>
-  try {
-    doc = (await payload.findByID({
-      collection: 'git-connections',
-      id,
-      depth: 0,
-      overrideAccess: true,
-    })) as unknown as Record<string, unknown>
-  } catch {
-    return { ok: false, status: 'error', error: 'Connection not found' }
-  }
-
-  const credentials = (doc.credentials ?? {}) as Record<string, unknown>
-  const encryptedPat = typeof credentials.pat === 'string' ? credentials.pat : ''
-  if (!encryptedPat) {
-    const error = 'No credentials configured'
+  // Resolve credentials through the shared token core: PAT connections get the
+  // decrypted PAT (basic-pat); service-principal connections get a freshly
+  // minted Entra bearer token — so Validate proves BOTH the Entra credentials
+  // AND the org access in one pass.
+  const resolved = await resolveConnectionToken(payload, id, opts.decryptFn, opts.mintFn)
+  if (!resolved.ok) {
+    if (resolved.status === 404) return { ok: false, status: 'error', error: 'Connection not found' }
+    const error =
+      resolved.code === 'NOT_CONFIGURED'
+        ? 'No credentials configured'
+        : resolved.code === 'DECRYPT_FAILED'
+          ? 'Failed to decrypt stored credentials'
+          : `Microsoft Entra sign-in failed: ${resolved.error}`
     await persistValidation(payload, id, 'error', nowIso, error)
     return { ok: false, status: 'error', error }
   }
 
-  let pat: string
-  try {
-    pat = decryptFn(encryptedPat)
-  } catch {
-    const error = 'Failed to decrypt stored credentials'
-    await persistValidation(payload, id, 'error', nowIso, error)
-    return { ok: false, status: 'error', error }
-  }
-
-  const organization = typeof doc.organization === 'string' ? doc.organization : ''
-  const baseUrl = typeof doc.baseUrl === 'string' && doc.baseUrl ? doc.baseUrl : DEFAULT_BASE_URL
+  const { organization, baseUrl, authMode, token } = resolved.body
   const url = adoProjectsUrl(baseUrl, organization)
-  // Azure DevOps PAT auth: HTTP Basic with an empty username and the PAT.
-  const auth = Buffer.from(`:${pat}`).toString('base64')
+  const authorization =
+    authMode === 'bearer'
+      ? `Bearer ${token}`
+      : // Azure DevOps PAT auth: HTTP Basic with an empty username and the PAT.
+        `Basic ${Buffer.from(`:${token}`).toString('base64')}`
 
   let httpStatus: number
   let statusText: string | undefined
   try {
     const res = await opts.fetchFn(url, {
       method: 'GET',
-      headers: { Authorization: `Basic ${auth}`, Accept: 'application/json' },
+      headers: { Authorization: authorization, Accept: 'application/json' },
     })
     httpStatus = res.status
     statusText = res.statusText
@@ -298,7 +329,7 @@ export async function validateConnectionCore(
 
   const error =
     httpStatus === 401 || httpStatus === 403
-      ? 'Authentication failed — check the PAT and its scopes'
+      ? 'Authentication failed — check the credentials and their access to the organization'
       : `Provider returned HTTP ${httpStatus}${statusText ? ` ${statusText}` : ''}`
   await persistValidation(payload, id, 'error', nowIso, error)
   return { ok: false, status: 'error', error }
