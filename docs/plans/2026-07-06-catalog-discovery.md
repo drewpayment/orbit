@@ -272,6 +272,55 @@ already optional (global entities, platform-admin managed — see
 - Tier-1 auto-import for global scans creates the global entity directly
   (same trust rationale: the repo self-declares).
 
+## Phase 1.6 — GitHub connection lifecycle + Azure DevOps scanning (approved 2026-07-07)
+
+Pulled forward from Phase 3 after live local testing.
+
+### WP10 — GitHub installation lifecycle control (`/settings/github`)
+- **Remove connection**: confirm dialog (shows count of Apps referencing the
+  installation), deletes the `github-installations` doc, cancels the refresh
+  workflow (`cancelGitHubTokenRefreshWorkflow`), links to GitHub to uninstall
+  the app itself (we cannot uninstall server-side without the app acting on
+  itself). Apps keep working until their next token use; the dialog says so.
+- **Remediation**: existing Refresh (signal-with-start) + Reconnect install
+  link on `needs_reconnect`; add "Restart refresher" == Refresh (no new verb).
+- **Edit**: existing `[id]/configure` (allowedWorkspaces) is the edit surface;
+  linked from each card (done in the previous round).
+
+### WP11 — `git-connections` + Azure DevOps scanning
+- NEW collection `git-connections`: `name`, `provider` (select: `azure-devops`
+  — fail-closed registry, more later), `organization` (ADO org), `project`
+  (optional filter; empty = all projects), `baseUrl` (default
+  `https://dev.azure.com`, overridable for ADO Server), `credentials` group
+  `{ pat: text ENCRYPTED via lib/encryption (AES-256-GCM, beforeChange
+  encrypt, never returned by APIs) }`, `allowedWorkspaces`, `status`
+  (active | error), `lastValidatedAt`, `lastError`. Admin-managed
+  (create/update/delete = platform admin; read = admin; workspace exposure
+  comes later).
+- NEW internal route `POST /api/internal/git-connections/token` (X-API-Key):
+  `{ connectionId }` → `{ provider, organization, project?, baseUrl, pat }`
+  (decrypted server-side for the Go worker only — mirrors the GitHub token
+  route).
+- `discovered-entities`: add optional `connection` (rel→git-connections);
+  ingest body gains optional `connectionId` (mutually exclusive with a
+  numeric GitHub `installationId` — the shared `installationId` body field
+  carries the connection doc id for non-GitHub scans and is used verbatim in
+  the dedupeKey, so no key-shape change).
+- Go scanner: `CatalogScanWorkflow` input gains `Provider`
+  (`github` default | `azure-devops`) + `ConnectionID`. ADO activities via
+  REST 7.1 (PAT basic auth): list repos
+  (`{org}/{project}/_apis/git/repositories` or org-wide via projects
+  enumeration), tree (`.../items?recursionLevel=Full`), file content
+  (`.../items?path=`). Same vendored filter, caps, and ingest POST.
+- Scan triggers: `/discovery` picker lists GitHub installations AND ADO
+  connections; `startConnectionScan(connectionId)` (admin) starts
+  `catalog-scan-ado-<connectionId>`.
+- Connections UI: NEW `/settings/connections` (platform admin): list/add/
+  edit/remove ADO connections; PAT entry (write-only — edit shows "PAT set",
+  replace field), **Validate** button (server action calls ADO
+  `_apis/projects` with the PAT → status/lastValidatedAt/lastError), Scan
+  shortcut. Sidebar Settings group entry "Connections".
+
 ## Future phases (sketch, out of Phase 1 scope)
 
 - **Phase 2 — richer manifests & monorepos:** multi-entity `.orbit.yaml`
