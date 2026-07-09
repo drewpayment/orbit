@@ -32,7 +32,7 @@ export default function FrontendLayout({ children }: { children: React.ReactNode
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"
-          enableSystem={false}
+          enableSystem
           disableTransitionOnChange
         >
           <BreadcrumbProvider>
