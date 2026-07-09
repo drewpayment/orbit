@@ -171,6 +171,10 @@ export function GitHubInstallationsClient({ installations: initial }: GitHubInst
     [applyState, setPhase],
   )
 
+  const onRemoved = useCallback((docId: string) => {
+    setInstallations((prev) => prev.filter((inst) => inst.id !== docId))
+  }, [])
+
   if (installations.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16 text-center">
@@ -188,10 +192,6 @@ export function GitHubInstallationsClient({ installations: initial }: GitHubInst
       </div>
     )
   }
-
-  const onRemoved = useCallback((docId: string) => {
-    setInstallations((prev) => prev.filter((inst) => inst.id !== docId))
-  }, [])
 
   return (
     <div className="space-y-4">
