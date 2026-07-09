@@ -1,6 +1,8 @@
 'use client'
 
-import { Github, Server } from 'lucide-react'
+import { useTransition } from 'react'
+import { toast } from 'sonner'
+import { Github, Loader2, Server } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -8,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { githubInstallUrl } from '@/lib/github/install-url'
+import { createGithubInstallUrl } from '@/app/actions/github-install'
 
 interface AddConnectionDialogProps {
   open: boolean
@@ -18,16 +20,29 @@ interface AddConnectionDialogProps {
 }
 
 /**
- * Provider picker for "Add connection". GitHub hands off to the external
- * GitHub App install redirect (state token preserved in sessionStorage until
- * WI4 moves it server-side); Azure DevOps opens the in-app credential dialog.
- * New providers slot in here as additional options.
+ * Provider picker for "Add connection". GitHub mints a server-issued CSRF
+ * state token (cookie-backed, see WI4 / app/actions/github-install.ts) before
+ * navigating to the GitHub App install redirect; Azure DevOps opens the
+ * in-app credential dialog. New providers slot in here as additional options.
  */
 export function AddConnectionDialog({
   open,
   onClose,
   onSelectAzureDevOps,
 }: AddConnectionDialogProps) {
+  const [connecting, startConnecting] = useTransition()
+
+  const onSelectGitHub = () => {
+    startConnecting(async () => {
+      const res = await createGithubInstallUrl()
+      if (!res.success || !res.url) {
+        toast.error(res.error ?? 'Failed to start the GitHub install flow')
+        return
+      }
+      window.location.href = res.url
+    })
+  }
+
   return (
     <Dialog open={open} onOpenChange={(o) => (!o ? onClose() : undefined)}>
       <DialogContent className="sm:max-w-md">
@@ -39,12 +54,18 @@ export function AddConnectionDialog({
         </DialogHeader>
 
         <div className="space-y-2">
-          <a
-            href={githubInstallUrl()}
-            className="flex items-start gap-3 rounded-lg border p-4 transition-colors hover:bg-muted/50"
+          <button
+            type="button"
+            onClick={onSelectGitHub}
+            disabled={connecting}
+            className="flex w-full items-start gap-3 rounded-lg border p-4 text-left transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <div className="rounded-md border p-2">
-              <Github className="h-5 w-5" />
+              {connecting ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Github className="h-5 w-5" />
+              )}
             </div>
             <div>
               <p className="font-medium">GitHub</p>
@@ -52,7 +73,7 @@ export function AddConnectionDialog({
                 Install the Orbit GitHub App into an organization.
               </p>
             </div>
-          </a>
+          </button>
 
           <button
             type="button"

@@ -1,6 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { toast } from 'sonner'
 import { Github, Plus, Server, Unplug } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { AdminConnectionView } from '@/lib/connections/connections-core'
@@ -14,6 +16,32 @@ import {
   type WorkspaceDialogTarget,
   type WorkspaceOption,
 } from './WorkspaceAssignmentDialog'
+
+// Maps the install-callback's `?error=` code (WI4) to a user-facing message.
+const CALLBACK_ERROR_MESSAGES: Record<string, string> = {
+  state_mismatch: 'The GitHub install link could not be verified. Please try connecting again.',
+  unauthorized: 'You must be signed in as a platform admin to connect GitHub.',
+}
+
+/** Surfaces the install-callback's `?error=` query param as a toast, then strips it from the URL. */
+function ConnectionsCallbackError() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+
+  useEffect(() => {
+    const error = searchParams.get('error')
+    if (!error) return
+    toast.error(
+      CALLBACK_ERROR_MESSAGES[error] ??
+        'Something went wrong connecting to GitHub. Please try again.',
+    )
+    const params = new URLSearchParams(searchParams)
+    params.delete('error')
+    router.replace(params.size ? `/settings/connections?${params}` : '/settings/connections')
+  }, [searchParams, router])
+
+  return null
+}
 
 interface ConnectionsClientProps {
   installations: AdminInstallationView[]
@@ -41,6 +69,10 @@ export function ConnectionsClient({
 
   return (
     <>
+      <Suspense fallback={null}>
+        <ConnectionsCallbackError />
+      </Suspense>
+
       <Header onAdd={() => setAddOpen(true)} />
 
       {isEmpty ? (

@@ -33,7 +33,7 @@ import {
   deleteInstallationAdmin,
 } from '@/app/actions/github-installations'
 import { startInstallationScan } from '@/app/actions/discovery'
-import { githubInstallUrl } from '@/lib/github/install-url'
+import { createGithubInstallUrl } from '@/app/actions/github-install'
 import type { AdminInstallationView, InstallationStatus } from '@/lib/github/installations-core'
 import type { WorkspaceDialogTarget } from './WorkspaceAssignmentDialog'
 
@@ -116,6 +116,7 @@ export function GitHubConnectionCard({
 
   const [refresh, setRefresh] = useState<RefreshUiState>({ phase: 'idle' })
   const [isScanning, startScan] = useTransition()
+  const [isReconnecting, startReconnect] = useTransition()
 
   // Track live poll timers so we can cancel them on unmount.
   const timers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
@@ -188,6 +189,17 @@ export function GitHubConnectionCard({
       toast.success('Scan started — review proposals in Discovery.')
     })
   }, [installation.installationId])
+
+  const onReconnect = useCallback(() => {
+    startReconnect(async () => {
+      const res = await createGithubInstallUrl()
+      if (!res.success || !res.url) {
+        toast.error(res.error ?? 'Failed to start the GitHub reconnect flow')
+        return
+      }
+      window.location.href = res.url
+    })
+  }, [])
 
   const openRemove = useCallback(() => {
     setAppCount(null)
@@ -297,8 +309,9 @@ export function GitHubConnectionCard({
               {installation.lastFailureReason ||
                 'Orbit can no longer authenticate to this installation. A token refresh will not recover it — reinstall or re-authorize the app on GitHub.'}
             </p>
-            <Button asChild size="sm" className="mt-3">
-              <a href={githubInstallUrl()}>Reconnect on GitHub</a>
+            <Button size="sm" className="mt-3" onClick={onReconnect} disabled={isReconnecting}>
+              {isReconnecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Reconnect on GitHub
             </Button>
           </div>
         )}

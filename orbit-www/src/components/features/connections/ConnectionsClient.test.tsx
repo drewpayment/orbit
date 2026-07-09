@@ -22,8 +22,12 @@ vi.mock('@/app/actions/git-connections', () => ({
 vi.mock('@/app/actions/discovery', () => ({
   startInstallationScan: vi.fn(),
 }))
+vi.mock('@/app/actions/github-install', () => ({
+  createGithubInstallUrl: vi.fn(),
+}))
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
 }))
 
 afterEach(() => cleanup())
@@ -101,9 +105,9 @@ describe('ConnectionsClient', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /Add connection/i })[0])
     const dialog = screen.getByRole('dialog')
     expect(within(dialog).getByText('Add a connection')).toBeInTheDocument()
-    // GitHub option is a link to the external install redirect.
-    const githubLink = within(dialog).getByRole('link', { name: /GitHub/i })
-    expect(githubLink).toHaveAttribute('href', expect.stringContaining('github.com/apps/'))
+    // GitHub option mints a server-issued CSRF state token (WI4) before
+    // navigating, so it's a button rather than a static link.
+    expect(within(dialog).getByRole('button', { name: /GitHub/i })).toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: /Azure DevOps/i })).toBeInTheDocument()
   })
 })
