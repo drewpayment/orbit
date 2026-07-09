@@ -138,6 +138,8 @@ export interface Config {
     actions: Action;
     'action-runs': ActionRun;
     automations: Automation;
+    'discovered-entities': DiscoveredEntity;
+    'git-connections': GitConnection;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -215,6 +217,8 @@ export interface Config {
     actions: ActionsSelect<false> | ActionsSelect<true>;
     'action-runs': ActionRunsSelect<false> | ActionRunsSelect<true>;
     automations: AutomationsSelect<false> | AutomationsSelect<true>;
+    'discovered-entities': DiscoveredEntitiesSelect<false> | DiscoveredEntitiesSelect<true>;
+    'git-connections': GitConnectionsSelect<false> | GitConnectionsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -840,7 +844,7 @@ export interface App {
     branch?: string | null;
   };
   origin: {
-    type: 'template' | 'imported' | 'manual';
+    type: 'template' | 'imported' | 'manual' | 'discovered';
     template?: (string | null) | Template;
     instantiatedAt?: string | null;
   };
@@ -3488,7 +3492,7 @@ export interface CatalogEntity {
    * Provenance back to the backing collection this row projects from.
    */
   source: {
-    type: 'manual' | 'apps' | 'api-schemas' | 'kafka' | 'sync';
+    type: 'manual' | 'apps' | 'api-schemas' | 'kafka' | 'sync' | 'scan';
     /**
      * ID of the backing row in the source collection.
      */
@@ -4070,6 +4074,160 @@ export interface Automation {
   createdAt: string;
 }
 /**
+ * Repository-scan proposals awaiting review — projected into the catalog on approval.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "discovered-entities".
+ */
+export interface DiscoveredEntity {
+  id: string;
+  /**
+   * Security enclave the proposal belongs to (absent = global).
+   */
+  workspace?: (string | null) | Workspace;
+  /**
+   * GitHub App installation the scan ran under.
+   */
+  installation?: (string | null) | GithubInstallation;
+  /**
+   * Non-GitHub git connection the scan ran under (Azure DevOps; mutually exclusive with `installation`).
+   */
+  connection?: (string | null) | GitConnection;
+  /**
+   * Repository the proposal was detected in.
+   */
+  repo: {
+    owner: string;
+    name: string;
+    url?: string | null;
+    defaultBranch?: string | null;
+  };
+  /**
+   * '' = repo root; monorepo subdirectory otherwise.
+   */
+  path?: string | null;
+  detectedKind: 'service' | 'api';
+  confidence: 'high' | 'medium' | 'low';
+  /**
+   * Which detectors fired, at which files: [{ detector, file, excerpt? }].
+   */
+  evidence?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Prefilled entity (service buildConfig, or api schemaType/specPath) used on approval.
+   */
+  proposal?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  status: 'proposed' | 'approved' | 'ignored' | 'imported' | 'stale';
+  /**
+   * The row this proposal was imported into (traceability).
+   */
+  importedRef?: {
+    collectionSlug?: string | null;
+    id?: string | null;
+  };
+  /**
+   * sha1(installationId:owner/name:path:detectedKind) — re-scan idempotency key.
+   */
+  dedupeKey: string;
+  /**
+   * Temporal workflow run id that last touched this proposal.
+   */
+  scanRunId?: string | null;
+  /**
+   * When the most recent scan last observed this proposal.
+   */
+  lastSeenAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Non-GitHub git provider connections (Azure DevOps) for catalog discovery.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "git-connections".
+ */
+export interface GitConnection {
+  id: string;
+  /**
+   * Display name (e.g., "Acme Azure DevOps").
+   */
+  name: string;
+  /**
+   * Git provider. Azure DevOps only for now.
+   */
+  provider: 'azure-devops';
+  /**
+   * Provider organization (e.g., the ADO org name).
+   */
+  organization: string;
+  /**
+   * Optional project filter. Empty = all projects in the org.
+   */
+  project?: string | null;
+  /**
+   * API base URL. Override for Azure DevOps Server (on-prem).
+   */
+  baseUrl?: string | null;
+  /**
+   * How Orbit authenticates. Service principal mints short-lived Entra tokens (Microsoft-recommended; global PATs retire Dec 2026). PAT remains for ADO Server.
+   */
+  authType: 'pat' | 'service-principal';
+  /**
+   * Encrypted provider credentials.
+   */
+  credentials?: {
+    /**
+     * Personal access token (AES-256-GCM encrypted at rest).
+     */
+    pat?: string | null;
+    /**
+     * Entra tenant (directory) id — service principal auth.
+     */
+    tenantId?: string | null;
+    /**
+     * Entra app registration (client) id — service principal auth.
+     */
+    clientId?: string | null;
+    /**
+     * Entra client secret (AES-256-GCM encrypted at rest).
+     */
+    clientSecret?: string | null;
+  };
+  /**
+   * Workspaces a scan of this connection may attribute entities to.
+   */
+  allowedWorkspaces?: (string | Workspace)[] | null;
+  /**
+   * Connection health. "error" is set when validation fails.
+   */
+  status: 'active' | 'error';
+  /**
+   * When the PAT was last successfully validated against the provider.
+   */
+  lastValidatedAt?: string | null;
+  /**
+   * Most recent validation failure reason.
+   */
+  lastError?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
@@ -4359,6 +4517,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'automations';
         value: string | Automation;
+      } | null)
+    | ({
+        relationTo: 'discovered-entities';
+        value: string | DiscoveredEntity;
+      } | null)
+    | ({
+        relationTo: 'git-connections';
+        value: string | GitConnection;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -6017,6 +6183,66 @@ export interface AutomationsSelect<T extends boolean = true> {
   inputMapping?: T;
   enabled?: T;
   lastTriggeredAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "discovered-entities_select".
+ */
+export interface DiscoveredEntitiesSelect<T extends boolean = true> {
+  workspace?: T;
+  installation?: T;
+  connection?: T;
+  repo?:
+    | T
+    | {
+        owner?: T;
+        name?: T;
+        url?: T;
+        defaultBranch?: T;
+      };
+  path?: T;
+  detectedKind?: T;
+  confidence?: T;
+  evidence?: T;
+  proposal?: T;
+  status?: T;
+  importedRef?:
+    | T
+    | {
+        collectionSlug?: T;
+        id?: T;
+      };
+  dedupeKey?: T;
+  scanRunId?: T;
+  lastSeenAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "git-connections_select".
+ */
+export interface GitConnectionsSelect<T extends boolean = true> {
+  name?: T;
+  provider?: T;
+  organization?: T;
+  project?: T;
+  baseUrl?: T;
+  authType?: T;
+  credentials?:
+    | T
+    | {
+        pat?: T;
+        tenantId?: T;
+        clientId?: T;
+        clientSecret?: T;
+      };
+  allowedWorkspaces?: T;
+  status?: T;
+  lastValidatedAt?: T;
+  lastError?: T;
   updatedAt?: T;
   createdAt?: T;
 }

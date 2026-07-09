@@ -269,6 +269,7 @@ export const Apps: CollectionConfig = {
             { label: 'Template', value: 'template' },
             { label: 'Imported', value: 'imported' },
             { label: 'Manual', value: 'manual' },
+            { label: 'Discovered', value: 'discovered' },
           ],
         },
         {

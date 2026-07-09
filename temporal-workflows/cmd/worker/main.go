@@ -475,6 +475,28 @@ func main() {
 	log.Println("API spec sync activities registered")
 
 	// =======================================================================
+	// Catalog Discovery Scan
+	// =======================================================================
+
+	// Repository scanning for automated catalog entity discovery. The worker
+	// enumerates a GitHub installation's repos, walks each tree, and POSTs an
+	// evidence bundle to orbit-www's /api/internal/discovery/ingest route
+	// (detection + staging happen there). See
+	// docs/plans/2026-07-06-catalog-discovery.md.
+	w.RegisterWorkflow(workflows.CatalogScanWorkflow)
+	catalogScanActivities := activities.NewCatalogScanActivities(orbitAPIURL, orbitInternalAPIKey, logger)
+	w.RegisterActivity(catalogScanActivities.ListInstallationReposActivity)
+	w.RegisterActivity(catalogScanActivities.ScanRepoActivity)
+	// Azure DevOps scan path (WP11): the same CatalogScanWorkflow dispatches to
+	// these when its input Provider == "azure-devops". Same env (ORBIT_API_URL /
+	// ORBIT_INTERNAL_API_KEY); the ADO base URL + PAT come per-scan from the
+	// /api/internal/git-connections/token route.
+	adoScanActivities := activities.NewADOScanActivities(orbitAPIURL, orbitInternalAPIKey, logger)
+	w.RegisterActivity(adoScanActivities.ListADOReposActivity)
+	w.RegisterActivity(adoScanActivities.ScanADORepoActivity)
+	log.Println("Catalog discovery scan workflow and activities registered (GitHub + Azure DevOps)")
+
+	// =======================================================================
 	// Infrastructure Agent
 	// =======================================================================
 

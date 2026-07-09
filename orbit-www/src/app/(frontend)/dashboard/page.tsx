@@ -18,6 +18,8 @@ import {
 import type { Activity, ActivityKind, AttentionRun } from '@/components/features/dashboard'
 import type { WorkspaceRowMeta } from '@/components/features/dashboard'
 import { getScorecardReport } from '@/app/(frontend)/scorecards/reports/actions'
+import { DiscoveryAttentionCard } from '@/components/features/discovery/DiscoveryAttentionCard'
+import { getDiscoveryAttentionAction } from '@/app/actions/discovery-attention'
 
 const agentRunStatusLabel: Record<string, string> = {
   starting: 'started',
@@ -54,6 +56,10 @@ export default async function DashboardPage() {
   // returns an empty report for a workspace-less user, so it runs unconditionally
   // in parallel with the payload queries below.
   const scorecardReportPromise = getScorecardReport(30)
+
+  // Discovery proposals awaiting review (self-scopes to the session user's
+  // memberships + global queue for platform admins; card hides itself at zero).
+  const discoveryAttentionPromise = getDiscoveryAttentionAction()
 
   const [
     appsResult,
@@ -178,6 +184,7 @@ export default async function DashboardPage() {
       ]
 
   const scorecardReport = await scorecardReportPromise
+  const discoveryAttention = await discoveryAttentionPromise
 
   // Phase 4: Recent docs (depends on knowledge spaces)
   const spaceIds = Array.isArray(knowledgeSpacesResult)
@@ -402,12 +409,13 @@ export default async function DashboardPage() {
           </div>
 
           {/* Attention Strip */}
-          <div className="stagger-item">
+          <div className="stagger-item space-y-4">
             <DashboardAttention
               runs={attentionRuns}
               approvalsTotal={pendingApprovals}
               runsTotal={activeRunsTotal}
             />
+            <DiscoveryAttentionCard data={discoveryAttention} />
           </div>
 
           {/* Stats Row */}

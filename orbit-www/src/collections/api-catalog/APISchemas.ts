@@ -358,57 +358,36 @@ export const APISchemas: CollectionConfig = {
           data.lastEditedBy = req.user.id
         }
 
-        // Parse spec to extract metadata
+        // Parse spec to extract metadata. Sniffing lives in the discovery
+        // detectors lib so there is one implementation shared with the
+        // catalog scanner.
         if (data.rawContent) {
-          try {
-            // Dynamic import yaml to avoid SSR issues
-            const yaml = await import('yaml')
-            const spec = yaml.parse(data.rawContent)
-
+          const { extractSpecMetadata } = await import('@/lib/discovery/detectors')
+          const meta = extractSpecMetadata(data.rawContent)
+          if (meta) {
             // Auto-detect schema type from content
-            if (spec?.asyncapi) {
-              data.schemaType = 'asyncapi'
-            } else if (spec?.openapi || spec?.swagger) {
-              data.schemaType = 'openapi'
+            if (meta.schemaType) {
+              data.schemaType = meta.schemaType
             }
 
-            if (spec?.info) {
-              data.specTitle = spec.info.title || null
-              data.specDescription = spec.info.description || null
-              data.currentVersion = spec.info.version || null
+            if (meta.hasInfo) {
+              data.specTitle = meta.title
+              data.specDescription = meta.description
+              data.currentVersion = meta.version
 
-              if (spec.info.contact) {
-                data.contactName = data.contactName || spec.info.contact.name || null
-                data.contactEmail = data.contactEmail || spec.info.contact.email || null
+              if (meta.hasContact) {
+                data.contactName = data.contactName || meta.contactName
+                data.contactEmail = data.contactEmail || meta.contactEmail
               }
             }
 
-            if (spec?.servers && Array.isArray(spec.servers)) {
-              data.serverUrls = spec.servers.map((s: { url: string }) => ({ url: s.url }))
+            if (meta.serverUrls) {
+              data.serverUrls = meta.serverUrls.map((url) => ({ url }))
             }
 
-            if (data.schemaType === 'asyncapi') {
-              // Count channels for AsyncAPI specs
-              if (spec?.channels) {
-                data.endpointCount = Object.keys(spec.channels).length
-              }
-            } else {
-              // Count endpoints for OpenAPI specs
-              if (spec?.paths) {
-                let count = 0
-                for (const path of Object.values(spec.paths)) {
-                  if (path && typeof path === 'object') {
-                    const methods = ['get', 'post', 'put', 'patch', 'delete', 'options', 'head']
-                    for (const method of methods) {
-                      if (method in path) count++
-                    }
-                  }
-                }
-                data.endpointCount = count
-              }
+            if (meta.endpointCount !== null) {
+              data.endpointCount = meta.endpointCount
             }
-          } catch {
-            // Invalid YAML - will be caught by validation
           }
         }
 

@@ -13,11 +13,13 @@ import {
   LayoutTemplate,
   Layers,
   MessageSquare,
+  Plug,
   RadioTower,
   Settings,
   Sparkles,
   Shield,
   ShieldCheck,
+  Telescope,
   TrendingUp,
   Workflow,
   Zap,
@@ -102,6 +104,7 @@ const navSettingsData = [
     icon: Settings,
     items: [
       { title: "GitHub", url: "/settings/github", icon: GitBranch },
+      { title: "Connections", url: "/settings/connections", icon: Plug },
       { title: "Registries", url: "/settings/registries", icon: Container },
       { title: "Templates", url: "/settings/templates", icon: LayoutTemplate },
       { title: "Cloud Accounts", url: "/settings/cloud-accounts", icon: Cloud },
@@ -139,6 +142,11 @@ const navPlatformData: NavPlatformItem[] = [
         url: "/platform/kafka/pending-approvals",
       },
     ],
+  },
+  {
+    title: "Discovery",
+    url: "/discovery",
+    icon: Telescope,
   },
   {
     title: "LLM Providers",

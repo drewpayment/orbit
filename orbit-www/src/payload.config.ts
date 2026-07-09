@@ -92,6 +92,12 @@ import { Actions, ActionRuns } from './collections/actions'
 // Event automation + drift detection (IDP refocus P4)
 import { Automations } from './collections/automations'
 
+// Catalog discovery — repository-scan review queue (Phase 1)
+import { DiscoveredEntities } from './collections/discovery/DiscoveredEntities'
+
+// Non-GitHub git provider connections (Azure DevOps) — Catalog Discovery Phase 1.6
+import { GitConnections } from './collections/connections/GitConnections'
+
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
@@ -181,6 +187,10 @@ export default buildConfig({
     ActionRuns,
     // Event automation + drift detection (IDP refocus P4)
     Automations,
+    // Catalog discovery — repository-scan review queue (Phase 1)
+    DiscoveredEntities,
+    // Non-GitHub git provider connections (Azure DevOps) — Phase 1.6
+    GitConnections,
   ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',

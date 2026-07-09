@@ -34,6 +34,14 @@ dev-local: ## Start core infrastructure in Docker, run orbit-www locally
 	@echo "   launches-worker-azure) and Prometheus are not started."
 	@echo "   Testing launches or image builds? Run: make dev-local-full"
 	@echo ""
+	@echo "ℹ️  Changed temporal-workflows/ code? The worker container does NOT"
+	@echo "   rebuild automatically — run: make rebuild-worker"
+	@echo ""
+
+rebuild-worker: ## Rebuild + restart the Temporal worker (required after changing temporal-workflows/ — new workflows/activities only register via a fresh image)
+	docker compose build temporal-worker
+	docker compose up -d temporal-worker
+	@echo "✅ temporal-worker rebuilt and restarted — new workflow/activity registrations are live."
 
 dev-local-full: dev-local ## dev-local plus the launches/build stack and Prometheus
 	@echo "🚀 Starting launches/build stack..."
