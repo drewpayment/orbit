@@ -196,6 +196,31 @@ export async function deleteInstallationCore(
 }
 
 /**
+ * Set the workspaces allowed to use a GitHub installation. The shared
+ * workspace-assignment dialog (WI2) calls this in place of the old raw PATCH to
+ * `/api/github/installations/[id]`. `overrideAccess` is deliberate — the caller
+ * (server action) has already enforced platform-admin.
+ */
+export async function updateInstallationWorkspacesCore(
+  payload: Payload,
+  docId: string,
+  workspaceIds: string[],
+): Promise<{ ok: boolean; error?: string }> {
+  if (!docId) return { ok: false, error: 'Installation id is required' }
+  try {
+    await payload.update({
+      collection: 'github-installations',
+      id: docId,
+      data: { allowedWorkspaces: workspaceIds } as never,
+      overrideAccess: true,
+    })
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'Installation not found' }
+  }
+}
+
+/**
  * Re-read one installation and return just its refresh-relevant state so the
  * client can poll for the token-expiry flip after triggering a refresh.
  */

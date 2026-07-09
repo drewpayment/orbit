@@ -124,7 +124,7 @@ export async function GET(request: NextRequest) {
     const accountLogin = 'login' in account ? account.login : account.slug
     const accountType = 'type' in account ? (account.type as 'Organization' | 'User') : 'Organization'
 
-    const githubInstallation = await payload.create({
+    await payload.create({
       collection: 'github-installations',
       data: {
         installationId: Number(installationId),
@@ -151,7 +151,7 @@ export async function GET(request: NextRequest) {
 
     // Redirect to workspace configuration page
     return NextResponse.redirect(
-      new URL(`/settings/github/${githubInstallation.id}/configure`, request.url)
+      new URL(`/settings/connections`, request.url)
     )
 
   } catch (error) {

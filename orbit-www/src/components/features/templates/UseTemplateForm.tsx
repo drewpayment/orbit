@@ -218,7 +218,7 @@ export function UseTemplateForm({
       return {
         title: 'No GitHub App Installed',
         description: 'Install the Orbit GitHub App to create repositories from templates.',
-        action: { label: 'Install GitHub App', href: '/settings/github/install' },
+        action: { label: 'Install GitHub App', href: '/settings/connections' },
       }
     }
 
@@ -228,7 +228,7 @@ export function UseTemplateForm({
       return {
         title: 'GitHub Token Expired',
         description: 'Your GitHub token has expired and needs to be refreshed.',
-        action: { label: 'Go to Settings', href: '/settings/github' },
+        action: { label: 'Go to Settings', href: '/settings/connections' },
       }
     }
 
@@ -238,7 +238,7 @@ export function UseTemplateForm({
       return {
         title: 'GitHub Not Linked to Workspace',
         description: 'Your GitHub installation is not linked to this workspace.',
-        action: { label: 'Configure', href: '/settings/github' },
+        action: { label: 'Configure', href: '/settings/connections' },
       }
     }
 
@@ -246,7 +246,7 @@ export function UseTemplateForm({
     return {
       title: 'No GitHub Organizations Available',
       description: 'Please configure your GitHub connection to create repositories.',
-      action: { label: 'Go to Settings', href: '/settings/github' },
+      action: { label: 'Go to Settings', href: '/settings/connections' },
     }
   }
 

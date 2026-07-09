@@ -8,7 +8,6 @@ import {
   Cloud,
   Command,
   Container,
-  GitBranch,
   LayoutDashboard,
   LayoutTemplate,
   Layers,
@@ -103,7 +102,6 @@ const navSettingsData = [
     url: "/settings",
     icon: Settings,
     items: [
-      { title: "GitHub", url: "/settings/github", icon: GitBranch },
       { title: "Connections", url: "/settings/connections", icon: Plug },
       { title: "Registries", url: "/settings/registries", icon: Container },
       { title: "Templates", url: "/settings/templates", icon: LayoutTemplate },

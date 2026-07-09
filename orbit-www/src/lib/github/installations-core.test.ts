@@ -8,6 +8,7 @@ import {
   getInstallationRefreshStateCore,
   countAppsForInstallation,
   deleteInstallationCore,
+  updateInstallationWorkspacesCore,
   type AdminInstallationView,
 } from './installations-core'
 
@@ -62,6 +63,21 @@ class FakePayload {
     const idx = list.findIndex((d) => d.id === id)
     if (idx === -1) throw new Error(`delete: ${collection}/${id} not found`)
     const [doc] = list.splice(idx, 1)
+    return doc
+  }
+
+  async update({
+    collection,
+    id,
+    data,
+  }: {
+    collection: string
+    id: string
+    data: Record<string, unknown>
+  }) {
+    const doc = (this.collections[collection] ?? []).find((d) => d.id === id)
+    if (!doc) throw new Error(`update: ${collection}/${id} not found`)
+    Object.assign(doc, data)
     return doc
   }
 }
@@ -272,5 +288,39 @@ describe('deleteInstallationCore', () => {
     })
     expect(res).toEqual({ ok: false, error: 'Installation not found', appCount: 0 })
     expect(cancelled).toBe(false)
+  })
+})
+
+describe('updateInstallationWorkspacesCore', () => {
+  it('persists the workspace ids onto the installation doc', async () => {
+    const fp = new FakePayload()
+    fp.collections['github-installations'] = [
+      { id: 'inst-1', installationId: 12345, allowedWorkspaces: ['ws-old'] },
+    ]
+    const res = await updateInstallationWorkspacesCore(payloadOf(fp), 'inst-1', ['ws-1', 'ws-2'])
+    expect(res).toEqual({ ok: true })
+    expect(fp.collections['github-installations'][0].allowedWorkspaces).toEqual(['ws-1', 'ws-2'])
+  })
+
+  it('clears the assignment when given an empty array', async () => {
+    const fp = new FakePayload()
+    fp.collections['github-installations'] = [
+      { id: 'inst-1', installationId: 12345, allowedWorkspaces: ['ws-1'] },
+    ]
+    const res = await updateInstallationWorkspacesCore(payloadOf(fp), 'inst-1', [])
+    expect(res.ok).toBe(true)
+    expect(fp.collections['github-installations'][0].allowedWorkspaces).toEqual([])
+  })
+
+  it('rejects a missing installation id', async () => {
+    const fp = new FakePayload()
+    const res = await updateInstallationWorkspacesCore(payloadOf(fp), '', ['ws-1'])
+    expect(res).toEqual({ ok: false, error: 'Installation id is required' })
+  })
+
+  it('returns not-found when the installation does not exist', async () => {
+    const fp = new FakePayload()
+    const res = await updateInstallationWorkspacesCore(payloadOf(fp), 'nope', ['ws-1'])
+    expect(res).toEqual({ ok: false, error: 'Installation not found' })
   })
 })

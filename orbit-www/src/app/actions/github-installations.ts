@@ -15,6 +15,7 @@ import {
   getInstallationRefreshStateCore,
   countAppsForInstallation,
   deleteInstallationCore,
+  updateInstallationWorkspacesCore,
   type AdminInstallationView,
   type InstallationRefreshState,
 } from '@/lib/github/installations-core'
@@ -109,6 +110,24 @@ export async function getInstallationAppCount(docId: string): Promise<{
 }
 
 /**
+ * Assign the workspaces allowed to use a GitHub installation (platform admin).
+ * Replaces the old GitHub configure sub-page + raw PATCH; the
+ * shared workspace-assignment dialog (WI2) calls this for github-installations.
+ */
+export async function updateInstallationWorkspaces(
+  docId: string,
+  workspaceIds: string[],
+): Promise<{ success: boolean; error?: string }> {
+  const actor = await requirePlatformAdmin()
+  if (!actor) return { success: false, error: 'Platform admin required' }
+
+  const payload = await getPayload({ config })
+  const res = await updateInstallationWorkspacesCore(payload, docId, workspaceIds)
+  if (res.ok) revalidatePath('/settings/connections')
+  return { success: res.ok, error: res.error }
+}
+
+/**
  * Remove a GitHub installation (platform admin): cancel its token refresh
  * workflow and delete the doc. Apps referencing it keep their data but lose
  * GitHub access at the next token use; the app must still be uninstalled on
@@ -126,6 +145,6 @@ export async function deleteInstallationAdmin(docId: string): Promise<{
   const res = await deleteInstallationCore(payload, docId, () =>
     cancelGitHubTokenRefreshWorkflow(gitHubTokenRefreshWorkflowId(docId)),
   )
-  if (res.ok) revalidatePath('/settings/github')
+  if (res.ok) revalidatePath('/settings/connections')
   return { success: res.ok, error: res.error, appCount: res.appCount }
 }
