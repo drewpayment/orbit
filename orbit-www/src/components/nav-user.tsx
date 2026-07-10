@@ -1,11 +1,16 @@
 "use client"
 
+import * as React from "react"
 import {
   Bell,
   LogOut,
+  Monitor,
+  Moon,
   Shield,
+  Sun,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useTheme } from "next-themes"
 import { signOut } from "@/lib/auth-client"
 
 import {
@@ -19,7 +24,12 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -44,6 +54,13 @@ export function NavUser({
 }) {
   const { isMobile } = useSidebar()
   const router = useRouter()
+  const { theme, setTheme } = useTheme()
+
+  // next-themes resolves the active theme only on the client; guard the
+  // active-state indicators against a hydration mismatch.
+  const [mounted, setMounted] = React.useState(false)
+  React.useEffect(() => setMounted(true), [])
+  const activeTheme = mounted ? theme : undefined
 
   const handleLogout = async () => {
     await signOut()
@@ -114,6 +131,38 @@ export function NavUser({
                 </DropdownMenuGroup>
               </>
             )}
+            <DropdownMenuSeparator />
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                {activeTheme === "light" ? (
+                  <Sun />
+                ) : activeTheme === "dark" ? (
+                  <Moon />
+                ) : (
+                  <Monitor />
+                )}
+                Theme
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                <DropdownMenuRadioGroup
+                  value={activeTheme}
+                  onValueChange={setTheme}
+                >
+                  <DropdownMenuRadioItem value="light">
+                    <Sun />
+                    Light
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="dark">
+                    <Moon />
+                    Dark
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="system">
+                    <Monitor />
+                    System
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout}>
               <LogOut />
