@@ -50,6 +50,16 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>
 
+/** Message naming both accepted repo-URL shapes (GitHub and Azure DevOps). */
+const UNSUPPORTED_URL_MESSAGE =
+  'Enter a GitHub (github.com/owner/repo) or Azure DevOps ' +
+  '(dev.azure.com/org/project/_git/repo) repository URL'
+
+/** True when the URL is a recognized GitHub or Azure DevOps repo URL. */
+function isSupportedRepoUrl(url: string): boolean {
+  return /github\.com\/[^/]+\/[^/]+/.test(url) || parseAdoRepoUrl(url) !== null
+}
+
 /** Unified repo source across providers, so one selector can list both. */
 type ImportSource =
   | { kind: 'github'; id: string; label: string; installation: GitHubInstallation }
@@ -80,6 +90,9 @@ export function ImportAppForm({ workspaces }: ImportAppFormProps) {
   })
 
   const workspaceId = form.watch('workspaceId')
+  // Watched (reactive) so the submit button enables the same render the URL is
+  // auto-filled — form.getValues is non-reactive and lagged one render behind.
+  const repositoryUrlValue = form.watch('repositoryUrl')
 
   // Fetch both GitHub installations and Azure DevOps connections when the
   // workspace changes, then build the unified source list.
@@ -143,15 +156,25 @@ export function ImportAppForm({ workspaces }: ImportAppFormProps) {
   }
 
   const onSubmit = async (data: FormData) => {
+    const fallbackUrl =
+      selectedSource?.kind === 'github' && selectedRepo
+        ? `https://github.com/${selectedRepo.fullName}`
+        : ''
+    const repositoryUrl = data.repositoryUrl || fallbackUrl
+
+    // Client-side guard: a URL that is neither GitHub nor Azure DevOps surfaces
+    // an inline field error immediately (naming both shapes) rather than only
+    // failing on the server round-trip with nothing shown.
+    if (repositoryUrl && !isSupportedRepoUrl(repositoryUrl)) {
+      form.setError('repositoryUrl', { message: UNSUPPORTED_URL_MESSAGE })
+      return
+    }
+
     setIsSubmitting(true)
     try {
-      const fallbackUrl =
-        selectedSource?.kind === 'github' && selectedRepo
-          ? `https://github.com/${selectedRepo.fullName}`
-          : ''
       const result = await importRepository({
         workspaceId: data.workspaceId,
-        repositoryUrl: data.repositoryUrl || fallbackUrl,
+        repositoryUrl,
         name: data.name,
         description: data.description,
         ...(selectedSource?.kind === 'azure-devops'
@@ -173,6 +196,7 @@ export function ImportAppForm({ workspaces }: ImportAppFormProps) {
   // Auto-fill name from a manually entered URL (GitHub or Azure DevOps).
   const handleUrlChange = (url: string) => {
     form.setValue('repositoryUrl', url)
+    form.clearErrors('repositoryUrl')
     if (form.getValues('name')) return
     const ghMatch = url.match(/github\.com\/[^/]+\/([^/]+)/)
     if (ghMatch) {
@@ -408,7 +432,7 @@ export function ImportAppForm({ workspaces }: ImportAppFormProps) {
               </Button>
               <Button
                 type="submit"
-                disabled={isSubmitting || (!selectedRepo && !form.getValues('repositoryUrl'))}
+                disabled={isSubmitting || (!selectedRepo && !repositoryUrlValue)}
               >
                 {isSubmitting ? (
                   <>

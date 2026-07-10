@@ -155,6 +155,7 @@ export function RepositoryBrowser({ installationId, connectionId, onSelect }: Re
             <p className="text-sm text-muted-foreground">No repositories found</p>
             {showSearchAllButton && (
               <Button
+                type="button"
                 variant="outline"
                 size="sm"
                 onClick={handleSearchAll}
@@ -175,6 +176,7 @@ export function RepositoryBrowser({ installationId, connectionId, onSelect }: Re
           <div className="p-1">
             {filteredRepos.map((repo) => (
               <button
+                type="button"
                 key={repo.fullName}
                 onClick={() => onSelect(repo)}
                 className="flex w-full items-start gap-3 rounded-md p-3 text-left hover:bg-accent"
@@ -210,6 +212,7 @@ export function RepositoryBrowser({ installationId, connectionId, onSelect }: Re
 
       {hasMore && !searchQuery && (
         <Button
+          type="button"
           variant="outline"
           size="sm"
           onClick={handleLoadMore}

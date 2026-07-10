@@ -329,6 +329,38 @@ describe('ImportAppForm', () => {
     })
   })
 
+  it('shows a validation message naming both URL shapes for an unsupported manual URL (ADO source)', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getWorkspaceGitHubInstallations).mockResolvedValue({ success: true, installations: [] })
+    vi.mocked(getWorkspaceGitConnections).mockResolvedValue({
+      success: true,
+      connections: [
+        { id: 'conn-1', name: 'Acme ADO', organization: 'acme', baseUrl: 'https://dev.azure.com' },
+      ],
+    })
+    vi.mocked(listConnectionRepositories).mockResolvedValue({ success: true, repos: [], hasMore: false })
+
+    render(<ImportAppForm workspaces={mockWorkspaces} />)
+
+    // Lone ADO source is auto-selected; open the manual URL entry.
+    await waitFor(() => {
+      expect(screen.getByText(/enter a repository url manually/i)).toBeInTheDocument()
+    })
+    await user.click(screen.getByText(/enter a repository url manually/i))
+
+    await user.type(screen.getByLabelText(/repository url/i), 'https://gitlab.com/foo/bar')
+    await user.type(screen.getByLabelText(/application name/i), 'foo')
+    await user.click(screen.getByRole('button', { name: /import repository/i }))
+
+    // The inline error names both shapes ("Enter a GitHub …" distinguishes it
+    // from the always-present field description "A GitHub …").
+    await waitFor(() => {
+      expect(screen.getByText(/Enter a GitHub .*Azure DevOps.*_git\/repo/i)).toBeInTheDocument()
+    })
+    // Rejected client-side — no server round-trip.
+    expect(importRepository).not.toHaveBeenCalled()
+  })
+
   it('shows a source selector when both providers are available', async () => {
     vi.mocked(getWorkspaceGitHubInstallations).mockResolvedValue({
       success: true,
