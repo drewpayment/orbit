@@ -338,7 +338,7 @@ export const APISchemas: CollectionConfig = {
   ],
   hooks: {
     beforeValidate: [
-      async ({ data, operation, req }) => {
+      async ({ data, operation, req, originalDoc }) => {
         if (!data) return data
 
         // Auto-generate slug from name if not provided
@@ -363,8 +363,15 @@ export const APISchemas: CollectionConfig = {
         // detectors lib so there is one implementation shared with the
         // catalog scanner. GraphQL SDL is not YAML, so it gets its own
         // extractor rather than misfiring `extractSpecMetadata`.
+        //
+        // On update, `data` is the partial patch from the edit form and may
+        // omit `schemaType` entirely (it's not a field the edit page sends) —
+        // fall back to the persisted value on `originalDoc` so a graphql row's
+        // content edit still hits the graphql branch instead of misfiring the
+        // yaml-based extractor.
+        const effectiveSchemaType = data.schemaType ?? originalDoc?.schemaType
         if (data.rawContent) {
-          if (data.schemaType === 'graphql') {
+          if (effectiveSchemaType === 'graphql') {
             const { extractGraphQLMetadata } = await import('@/lib/discovery/detectors')
             const meta = extractGraphQLMetadata(data.rawContent)
             if (meta) {
