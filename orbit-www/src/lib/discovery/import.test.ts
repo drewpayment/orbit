@@ -64,6 +64,12 @@ class FakePayload {
     Object.assign(doc, data)
     return doc
   }
+
+  async findByID({ collection, id }: { collection: string; id: string }) {
+    const doc = (this.collections[collection] ?? []).find((d) => d.id === id)
+    if (!doc) throw new Error(`findByID: ${collection}/${id} not found`)
+    return doc
+  }
 }
 
 /** Supports the nested `repository.owner` dot-path queries the import lib uses. */
@@ -213,6 +219,106 @@ describe('importDiscoveredService', () => {
 
     expect(f.collections['apps']).toHaveLength(1)
   })
+
+  it('sets provider: github explicitly on a GitHub (installation-backed) accept', async () => {
+    const f = fp()
+    const d = discovery({ installation: 'inst-1', connection: undefined, proposal: { name: 'billing-svc' } })
+    f.collections['discovered-entities'] = [{ ...d } as Doc]
+
+    await importDiscoveredService(payloadOf(f), d)
+
+    expect(f.collections['apps'][0]).toMatchObject({
+      repository: { provider: 'github', owner: 'acme', name: 'billing', installationId: 'inst-1' },
+    })
+  })
+
+  it('ADO accept: reconstructs owner=organization from the linked git-connections doc, keeps repo.owner as project', async () => {
+    const f = fp()
+    f.collections['git-connections'] = [
+      { id: 'conn-1', organization: 'my-ado-org', name: 'ADO Conn' },
+    ]
+    const d = discovery({
+      installation: undefined,
+      connection: 'conn-1',
+      repo: { owner: 'my-project', name: 'billing', defaultBranch: 'main' },
+      proposal: { name: 'billing-svc' },
+    })
+    f.collections['discovered-entities'] = [{ ...d } as Doc]
+
+    const res = await importDiscoveredService(payloadOf(f), d)
+
+    expect(res.imported).toBe(true)
+    expect(f.collections['apps'][0]).toMatchObject({
+      repository: {
+        provider: 'azure-devops',
+        connection: 'conn-1',
+        owner: 'my-ado-org',
+        project: 'my-project',
+        name: 'billing',
+      },
+    })
+  })
+
+  it('ADO accept is idempotent: re-import finds the App by the resolved org, not the raw discovered project owner', async () => {
+    const f = fp()
+    f.collections['git-connections'] = [{ id: 'conn-1', organization: 'my-ado-org' }]
+    f.collections['apps'] = [
+      {
+        id: 'app-existing',
+        workspace: 'ws1',
+        name: 'billing',
+        repository: { provider: 'azure-devops', connection: 'conn-1', owner: 'my-ado-org', project: 'my-project', name: 'billing' },
+      },
+    ]
+    const d = discovery({
+      installation: undefined,
+      connection: 'conn-1',
+      repo: { owner: 'my-project', name: 'billing' },
+      proposal: { name: 'billing-svc' },
+    })
+    f.collections['discovered-entities'] = [{ ...d } as Doc]
+
+    const res = await importDiscoveredService(payloadOf(f), d)
+
+    expect(res.ref).toEqual({ collection: 'apps', id: 'app-existing' })
+    expect(f.collections['apps']).toHaveLength(1)
+  })
+
+  it('fails soft (no provider, no crash) for an entity with neither installation nor connection', async () => {
+    const f = fp()
+    const d = discovery({
+      installation: undefined,
+      connection: undefined,
+      repo: { owner: 'acme', name: 'billing' },
+      proposal: { name: 'billing-svc' },
+    })
+    f.collections['discovered-entities'] = [{ ...d } as Doc]
+
+    const res = await importDiscoveredService(payloadOf(f), d)
+
+    expect(res.imported).toBe(true)
+    expect(f.collections['apps'][0].repository).toMatchObject({ owner: 'acme', name: 'billing' })
+    expect((f.collections['apps'][0].repository as Record<string, unknown>).provider).toBeUndefined()
+  })
+
+  it('ADO accept: an unresolvable connection (deleted/missing) fails soft — no crash, owner falls back to discovered repo.owner', async () => {
+    const f = fp()
+    // No git-connections seeded — connection id points nowhere.
+    const d = discovery({
+      installation: undefined,
+      connection: 'conn-missing',
+      repo: { owner: 'my-project', name: 'billing' },
+      proposal: { name: 'billing-svc' },
+    })
+    f.collections['discovered-entities'] = [{ ...d } as Doc]
+
+    const res = await importDiscoveredService(payloadOf(f), d)
+
+    expect(res.imported).toBe(true)
+    const repo = f.collections['apps'][0].repository as Record<string, unknown>
+    expect(repo.provider).toBeUndefined()
+    expect(repo.owner).toBe('my-project')
+  })
 })
 
 // --- importDiscoveredApi -----------------------------------------------------
@@ -350,6 +456,36 @@ describe('importDiscoveredApi', () => {
     expect(res).toEqual({ imported: true, ref: { collection: 'api-schemas', id: 'schema-x' } })
     expect(f.collections['api-schemas']).toHaveLength(0)
   })
+
+  it('ADO: links the repository rel by resolved org, not the raw discovered project owner', async () => {
+    const f = fp()
+    f.collections['git-connections'] = [{ id: 'conn-1', organization: 'my-ado-org' }]
+    f.collections['apps'] = [
+      {
+        id: 'app-1',
+        workspace: 'ws1',
+        repository: { provider: 'azure-devops', connection: 'conn-1', owner: 'my-ado-org', project: 'my-project', name: 'billing' },
+      },
+    ]
+    const d = discovery({
+      detectedKind: 'api',
+      installation: undefined,
+      connection: 'conn-1',
+      repo: { owner: 'my-project', name: 'billing' },
+      proposal: {
+        schemaType: 'openapi',
+        specPath: 'openapi.yaml',
+        specTitle: 'Billing API',
+        rawContent: 'openapi: 3.0.0',
+      },
+    })
+    f.collections['discovered-entities'] = [{ ...d } as Doc]
+
+    const res = await importDiscoveredApi(payloadOf(f), d, { actorUserId: 'user-9' })
+
+    expect(res.imported).toBe(true)
+    expect(f.collections['api-schemas'][0]).toMatchObject({ repository: 'app-1' })
+  })
 })
 
 // --- importDiscoveredGlobalEntity (WP8) -------------------------------------
@@ -417,6 +553,32 @@ describe('importDiscoveredGlobalEntity', () => {
     await importDiscoveredGlobalEntity(payloadOf(f), linked)
 
     expect(f.collections['catalog-entities']).toHaveLength(1)
+  })
+
+  it('ADO: folds provider/connection/org/project into metadata.repo (catalog-entities has no dedicated provider field)', async () => {
+    const f = fp()
+    f.collections['git-connections'] = [{ id: 'conn-1', organization: 'my-ado-org' }]
+    const d = discovery({
+      workspace: undefined,
+      installation: undefined,
+      connection: 'conn-1',
+      dedupeKey: 'adoglobalkey',
+      repo: { owner: 'my-project', name: 'billing' },
+      proposal: { name: 'billing' },
+    })
+    f.collections['discovered-entities'] = [{ ...d } as Doc]
+
+    const res = await importDiscoveredGlobalEntity(payloadOf(f), d)
+
+    expect(res.imported).toBe(true)
+    const metadata = f.collections['catalog-entities'][0].metadata as Record<string, unknown>
+    expect(metadata.repo).toMatchObject({
+      provider: 'azure-devops',
+      connection: 'conn-1',
+      owner: 'my-ado-org',
+      project: 'my-project',
+      name: 'billing',
+    })
   })
 })
 

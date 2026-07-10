@@ -9,6 +9,7 @@ import { builtInGenerators } from '@/lib/seeds/deployment-generators'
 import { serializeAppManifest } from '@/lib/app-manifest'
 import { generateWebhookSecret, parseGitHubUrl } from '@/lib/github-manifest'
 import { getInstallationOctokit } from '@/lib/github/octokit'
+import { parseAdoRepoUrl } from '@/lib/connections/ado-url'
 
 interface CreateAppFromTemplateInput {
   name: string
@@ -85,7 +86,10 @@ interface ImportRepositoryInput {
   repositoryUrl: string
   name: string
   description?: string
+  /** GitHub source: the app installation backing the repo. */
   installationId?: string
+  /** Azure DevOps source: the git-connection backing the repo (auth root). */
+  connectionId?: string
 }
 
 export async function importRepository(input: ImportRepositoryInput) {
@@ -116,13 +120,58 @@ export async function importRepository(input: ImportRepositoryInput) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 
-  // Parse repository URL
-  const match = input.repositoryUrl.match(/github\.com\/([^/]+)\/([^/]+)/)
-  if (!match) {
-    return { success: false, error: 'Invalid GitHub repository URL' }
-  }
+  // Classify the URL. GitHub keeps its exact existing behavior; anything that
+  // isn't a github.com URL is tried as an Azure DevOps `_git` URL.
+  const githubMatch = input.repositoryUrl.match(/github\.com\/([^/]+)\/([^/]+)/)
 
-  const [, owner, repoName] = match
+  let repositoryData: Record<string, unknown>
+  if (githubMatch) {
+    const [, owner, repoName] = githubMatch
+    repositoryData = {
+      owner,
+      name: repoName.replace(/\.git$/, ''),
+      url: input.repositoryUrl,
+      ...(input.installationId && { installationId: input.installationId }),
+    }
+  } else {
+    const ado = parseAdoRepoUrl(input.repositoryUrl)
+    if (!ado) {
+      return {
+        success: false,
+        error:
+          'Invalid repository URL — expected a GitHub (github.com/owner/repo) or ' +
+          'Azure DevOps (dev.azure.com/org/project/_git/repo) URL',
+      }
+    }
+
+    // When a connection is supplied it is the auth root — verify it is allowed
+    // for this workspace before linking it.
+    if (input.connectionId) {
+      const allowed = await payload.find({
+        collection: 'git-connections',
+        where: {
+          and: [
+            { id: { equals: input.connectionId } },
+            { allowedWorkspaces: { contains: input.workspaceId } },
+          ],
+        },
+        overrideAccess: true,
+        limit: 1,
+      })
+      if (allowed.docs.length === 0) {
+        return { success: false, error: 'Connection is not available for this workspace' }
+      }
+    }
+
+    repositoryData = {
+      provider: 'azure-devops',
+      owner: ado.organization,
+      project: ado.project,
+      name: ado.repo,
+      url: input.repositoryUrl,
+      ...(input.connectionId && { connection: input.connectionId }),
+    }
+  }
 
   try {
     const app = await payload.create({
@@ -131,12 +180,7 @@ export async function importRepository(input: ImportRepositoryInput) {
         name: input.name,
         description: input.description,
         workspace: input.workspaceId,
-        repository: {
-          owner,
-          name: repoName.replace(/\.git$/, ''),
-          url: input.repositoryUrl,
-          ...(input.installationId && { installationId: input.installationId }),
-        },
+        repository: repositoryData,
         origin: {
           type: 'imported',
         },

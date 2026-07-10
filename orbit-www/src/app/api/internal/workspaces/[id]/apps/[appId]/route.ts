@@ -41,9 +41,24 @@ export async function GET(
       return NextResponse.json({ error: 'App not found in this workspace' }, { status: 404 })
     }
 
-    const repo = (app as { repository?: { url?: string; owner?: string; name?: string; branch?: string } }).repository
+    const repo = (app as {
+      repository?: {
+        url?: string
+        owner?: string
+        name?: string
+        branch?: string
+        provider?: string
+        // depth:0 read → a git-connections id string (object shape handled defensively).
+        connection?: string | { id?: string }
+        project?: string
+      }
+    }).repository
     const healthConfig = (app as { healthConfig?: Record<string, unknown> }).healthConfig
     const buildConfig = (app as { buildConfig?: Record<string, unknown> }).buildConfig
+
+    const connectionId = typeof repo?.connection === 'string'
+      ? repo.connection
+      : repo?.connection?.id ?? ''
 
     return NextResponse.json({
       id: app.id,
@@ -51,7 +66,17 @@ export async function GET(
       description: (app as { description?: string }).description ?? '',
       status: (app as { status?: string }).status ?? 'unknown',
       repository: repo
-        ? { url: repo.url ?? '', owner: repo.owner ?? '', name: repo.name ?? '', branch: repo.branch ?? '' }
+        ? {
+            url: repo.url ?? '',
+            owner: repo.owner ?? '',
+            name: repo.name ?? '',
+            branch: repo.branch ?? '',
+            // WI1 provider fields for the ADO-aware Go clone path. Empty for
+            // legacy/GitHub apps; the Go side branches on provider.
+            provider: repo.provider ?? '',
+            connectionId,
+            project: repo.project ?? '',
+          }
         : null,
       healthConfig: healthConfig ?? null,
       buildConfig: buildConfig ?? null,

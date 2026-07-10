@@ -602,7 +602,8 @@ func main() {
 	// workspace's connected GitHub App and clones the repo inside the
 	// sandbox. Token never reaches LLM context.
 	githubTokenClient := services.NewPayloadGitHubClient(orbitAPIURL, orbitInternalAPIKey, logger)
-	repoCloneActivities := agentactivity.NewOrbitRepoCloneActivities(sandboxExec, githubTokenClient, orbitContextClient, logger)
+	adoConnectionClient := services.NewPayloadADOConnectionClient(orbitAPIURL, orbitInternalAPIKey, logger)
+	repoCloneActivities := agentactivity.NewOrbitRepoCloneActivities(sandboxExec, githubTokenClient, adoConnectionClient, orbitContextClient, logger)
 	w.RegisterActivityWithOptions(repoCloneActivities.OrbitRepoClone, activity.RegisterOptions{Name: agentcontract.ActivityOrbitRepoClone})
 
 	log.Printf("Infrastructure Agent workflow + activities registered (sandbox backend=%s)", sandboxExec.Backend())

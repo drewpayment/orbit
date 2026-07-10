@@ -12,13 +12,29 @@ import {
   searchInstallationRepositories,
   type Repository,
 } from '@/app/actions/github'
+import {
+  listConnectionRepositories,
+  searchConnectionRepositories,
+} from '@/app/actions/azure-devops'
 
 interface RepositoryBrowserProps {
-  installationId: string
+  /** GitHub source: the app installation id. */
+  installationId?: string
+  /** Azure DevOps source: the git-connection id. Takes precedence when set. */
+  connectionId?: string
   onSelect: (repo: Repository) => void
 }
 
-export function RepositoryBrowser({ installationId, onSelect }: RepositoryBrowserProps) {
+export function RepositoryBrowser({ installationId, connectionId, onSelect }: RepositoryBrowserProps) {
+  // Provider-aware source id + list/search actions. Azure DevOps listing is
+  // unpaginated (page is ignored) and search filters the full set server-side.
+  const sourceId = connectionId ?? installationId ?? ''
+  const listRepos = connectionId
+    ? (page: number) => listConnectionRepositories(connectionId, page)
+    : (page: number) => listInstallationRepositories(installationId ?? '', page)
+  const searchRepos = connectionId
+    ? (query: string) => searchConnectionRepositories(connectionId, query)
+    : (query: string) => searchInstallationRepositories(installationId ?? '', query)
   const [repos, setRepos] = useState<Repository[]>([])
   const [searchResults, setSearchResults] = useState<Repository[] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -36,7 +52,7 @@ export function RepositoryBrowser({ installationId, onSelect }: RepositoryBrowse
       setError(null)
       setSearchResults(null)
       setSearchQuery('')
-      const result = await listInstallationRepositories(installationId)
+      const result = await listRepos(1)
       if (result.success) {
         setRepos(result.repos)
         setHasMore(result.hasMore)
@@ -46,13 +62,14 @@ export function RepositoryBrowser({ installationId, onSelect }: RepositoryBrowse
       setIsLoading(false)
     }
     loadRepos()
-  }, [installationId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceId])
 
   // Load more
   const handleLoadMore = async () => {
     setIsLoadingMore(true)
     const nextPage = page + 1
-    const result = await listInstallationRepositories(installationId, nextPage)
+    const result = await listRepos(nextPage)
     if (result.success) {
       setRepos((prev) => [...prev, ...result.repos])
       setHasMore(result.hasMore)
@@ -65,7 +82,7 @@ export function RepositoryBrowser({ installationId, onSelect }: RepositoryBrowse
   const handleSearchAll = async () => {
     if (searchQuery.length < 3) return
     setIsSearching(true)
-    const result = await searchInstallationRepositories(installationId, searchQuery)
+    const result = await searchRepos(searchQuery)
     if (result.success) {
       setSearchResults(result.repos)
     }
@@ -138,6 +155,7 @@ export function RepositoryBrowser({ installationId, onSelect }: RepositoryBrowse
             <p className="text-sm text-muted-foreground">No repositories found</p>
             {showSearchAllButton && (
               <Button
+                type="button"
                 variant="outline"
                 size="sm"
                 onClick={handleSearchAll}
@@ -158,6 +176,7 @@ export function RepositoryBrowser({ installationId, onSelect }: RepositoryBrowse
           <div className="p-1">
             {filteredRepos.map((repo) => (
               <button
+                type="button"
                 key={repo.fullName}
                 onClick={() => onSelect(repo)}
                 className="flex w-full items-start gap-3 rounded-md p-3 text-left hover:bg-accent"
@@ -193,6 +212,7 @@ export function RepositoryBrowser({ installationId, onSelect }: RepositoryBrowse
 
       {hasMore && !searchQuery && (
         <Button
+          type="button"
           variant="outline"
           size="sm"
           onClick={handleLoadMore}

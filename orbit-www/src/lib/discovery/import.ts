@@ -92,6 +92,75 @@ export function computeDedupeKey(
     .digest('hex')
 }
 
+/**
+ * Provider attribution resolved from a discovery row, ready to copy onto the
+ * created `apps` row's `repository` group (WI4, docs/plans/2026-07-09-ado-import-parity.md).
+ */
+interface ProviderInfo {
+  provider?: 'github' | 'azure-devops'
+  connection?: string
+  /** GitHub owner or ADO organization — never the ADO project. */
+  owner: string
+  /** ADO project (the middle org/project/repo segment). Absent for GitHub. */
+  project?: string
+}
+
+/**
+ * Resolve provider/connection/owner/project for a discovery row.
+ *
+ * GitHub rows (`installation` set): `discovery.repo.owner` is already the true
+ * GitHub owner — passed through, `provider: 'github'` set explicitly (preferred
+ * over the absent-provider legacy invariant).
+ *
+ * ADO rows (`connection` set): the scanner stores the ADO *project* name in
+ * `discovery.repo.owner` (there is no org field on discovered-entities — see
+ * DiscoveredEntities.ts `repo` group) — the true org lives on the linked
+ * `git-connections.organization`, so the connection doc must be resolved to
+ * reconstruct `apps.repository.owner`. `discovery.repo.owner` becomes `project`.
+ *
+ * Neither linkage, or the connection doc is missing/unresolvable: fails soft —
+ * no provider fields, `owner` falls back to `discovery.repo.owner` verbatim
+ * (matches pre-ADO-parity behavior; never throws).
+ */
+async function resolveProviderInfo(
+  payload: Payload,
+  discovery: DiscoveredEntity,
+): Promise<ProviderInfo> {
+  const installationId = relId(discovery.installation)
+  if (installationId) {
+    return { provider: 'github', owner: discovery.repo.owner }
+  }
+
+  const connectionId = relId(discovery.connection)
+  if (connectionId) {
+    try {
+      const conn = await payload.findByID({
+        collection: 'git-connections',
+        id: connectionId,
+        depth: 0,
+        overrideAccess: true,
+      })
+      const organization = (conn as { organization?: string } | null)?.organization
+      if (typeof organization === 'string' && organization.length > 0) {
+        return {
+          provider: 'azure-devops',
+          connection: connectionId,
+          owner: organization,
+          project: discovery.repo.owner,
+        }
+      }
+      console.error('[discovery/import] git-connections row missing organization', { connectionId })
+    } catch (err) {
+      console.error('[discovery/import] failed to resolve git-connections for ADO owner', {
+        connectionId,
+        err,
+      })
+    }
+  }
+
+  return { owner: discovery.repo.owner }
+}
+
 /** Find the App that represents a repo in a workspace (Phase 1: repo-scoped). */
 async function findRepoApp(
   payload: Payload,
@@ -136,9 +205,10 @@ export async function importDiscoveredService(
   if (!workspaceId) return { imported: false, skippedReason: 'missing-workspace' }
 
   const proposal = asRecord(discovery.proposal)
-  const { owner, name: repoName, url, defaultBranch } = discovery.repo
+  const { name: repoName, url, defaultBranch } = discovery.repo
+  const providerInfo = await resolveProviderInfo(payload, discovery)
 
-  let appId = await findRepoApp(payload, workspaceId, owner, repoName)
+  let appId = await findRepoApp(payload, workspaceId, providerInfo.owner, repoName)
   if (!appId) {
     const installationId = relId(discovery.installation)
     const buildConfig = asRecord(proposal.buildConfig)
@@ -150,10 +220,13 @@ export async function importDiscoveredService(
         name: (proposal.name as string) || repoName,
         ...(typeof proposal.description === 'string' ? { description: proposal.description } : {}),
         repository: {
-          owner,
+          owner: providerInfo.owner,
           name: repoName,
           ...(url ? { url } : {}),
           ...(installationId ? { installationId } : {}),
+          ...(providerInfo.provider ? { provider: providerInfo.provider } : {}),
+          ...(providerInfo.connection ? { connection: providerInfo.connection } : {}),
+          ...(providerInfo.project ? { project: providerInfo.project } : {}),
           ...(defaultBranch ? { branch: defaultBranch } : {}),
         },
         origin: { type: 'discovered' },
@@ -219,8 +292,12 @@ export async function importDiscoveredApi(
 
   const specPath =
     typeof proposal.specPath === 'string' ? proposal.specPath : discovery.path || ''
-  const { owner, name: repoName } = discovery.repo
-  const appId = await findRepoApp(payload, workspaceId, owner, repoName)
+  const { name: repoName } = discovery.repo
+  // api-schemas carries no provider/connection fields of its own — repo
+  // attribution lives entirely on the linked App, so only the lookup owner
+  // needs the ADO org (not the discovered project) to find the right App.
+  const providerInfo = await resolveProviderInfo(payload, discovery)
+  const appId = await findRepoApp(payload, workspaceId, providerInfo.owner, repoName)
 
   const existing = await payload.find({
     collection: 'api-schemas',
@@ -329,15 +406,23 @@ export async function importDiscoveredGlobalEntity(
   if (existing.docs.length > 0) {
     entityId = String(existing.docs[0].id)
   } else {
-    const { owner, name: repoName, url, defaultBranch } = discovery.repo
+    const { name: repoName, url, defaultBranch } = discovery.repo
     const name = (proposal.name as string) || repoName || 'entity'
     const buildConfig = asRecord(proposal.buildConfig)
+    // catalog-entities has no dedicated provider/connection/project fields
+    // (WI4 scope: do not widen this collection's schema) — `metadata` is
+    // already freeform JSON storing repo linkage, so provider attribution
+    // folds into `metadata.repo` alongside owner/name/url/defaultBranch.
+    const providerInfo = await resolveProviderInfo(payload, discovery)
     const metadata: Record<string, unknown> = {
       repo: {
-        owner,
+        owner: providerInfo.owner,
         name: repoName,
         ...(url ? { url } : {}),
         ...(defaultBranch ? { defaultBranch } : {}),
+        ...(providerInfo.provider ? { provider: providerInfo.provider } : {}),
+        ...(providerInfo.connection ? { connection: providerInfo.connection } : {}),
+        ...(providerInfo.project ? { project: providerInfo.project } : {}),
       },
       path: discovery.path ?? '',
       ...(typeof proposal.schemaType === 'string' ? { schemaType: proposal.schemaType } : {}),

@@ -8,6 +8,11 @@ vi.mock('@/app/actions/github', () => ({
   searchInstallationRepositories: vi.fn(),
 }))
 
+vi.mock('@/app/actions/azure-devops', () => ({
+  listConnectionRepositories: vi.fn(),
+  searchConnectionRepositories: vi.fn(),
+}))
+
 import {
   listInstallationRepositories,
   searchInstallationRepositories,
@@ -97,6 +102,36 @@ describe('RepositoryBrowser', () => {
       private: true,
       defaultBranch: 'main',
     })
+  })
+
+  it('does not submit the surrounding form when a repo card is clicked', async () => {
+    const user = userEvent.setup()
+    const onSelect = vi.fn()
+    const onSubmit = vi.fn((e: { preventDefault: () => void }) => e.preventDefault())
+
+    vi.mocked(listInstallationRepositories).mockResolvedValue({
+      success: true,
+      repos: [
+        { name: 'backend', fullName: 'org/backend', description: 'API', private: true, defaultBranch: 'main' },
+      ],
+      hasMore: false,
+    })
+
+    render(
+      <form onSubmit={onSubmit}>
+        <RepositoryBrowser installationId="install-1" onSelect={onSelect} />
+      </form>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('backend')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByText('backend'))
+
+    // Card is type="button": it selects without natively submitting the form.
+    expect(onSelect).toHaveBeenCalledTimes(1)
+    expect(onSubmit).not.toHaveBeenCalled()
   })
 
   it('should filter repositories client-side', async () => {
