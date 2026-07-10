@@ -135,7 +135,7 @@
     "prettier": "^3.4.2",
     "tailwindcss": "^4.1.14",
     "typescript": "6.0.3",
-    "typescript-7": "npm:typescript@rc",
+    "typescript-7": "npm:typescript@^7.0.0",
     "vite-tsconfig-paths": "5.1.4",
     "vitest": "3.2.3",
     "vitest-dom": "^0.1.1"
