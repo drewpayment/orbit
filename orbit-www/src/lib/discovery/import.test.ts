@@ -414,7 +414,7 @@ describe('importDiscoveredApi', () => {
     expect(f.collections['api-schemas']).toHaveLength(0)
   })
 
-  it('SKIPS graphql proposals with an explicit reason (schemaType not in api-schemas enum)', async () => {
+  it('imports graphql proposals into api-schemas', async () => {
     const f = fp()
     const d = discovery({
       detectedKind: 'api',
@@ -422,9 +422,34 @@ describe('importDiscoveredApi', () => {
     })
     f.collections['discovered-entities'] = [{ ...d } as Doc]
 
+    const res = await importDiscoveredApi(payloadOf(f), d, { actorUserId: 'user-9' })
+
+    expect(res.imported).toBe(true)
+    const schemas = f.collections['api-schemas']
+    expect(schemas).toHaveLength(1)
+    expect(schemas[0]).toMatchObject({
+      schemaType: 'graphql',
+      rawContent: 'type Query { a: String }',
+      repositoryPath: 'schema.graphql',
+    })
+    expect(f.collections['discovered-entities'][0].status).toBe('imported')
+    expect(f.collections['discovered-entities'][0].importedRef).toEqual({
+      collectionSlug: 'api-schemas',
+      docId: schemas[0].id,
+    })
+  })
+
+  it('SKIPS proposals with a genuinely unknown schema type', async () => {
+    const f = fp()
+    const d = discovery({
+      detectedKind: 'api',
+      proposal: { schemaType: 'protobuf', specPath: 'schema.proto', rawContent: 'syntax = "proto3";' },
+    })
+    f.collections['discovered-entities'] = [{ ...d } as Doc]
+
     const res = await importDiscoveredApi(payloadOf(f), d)
 
-    expect(res).toEqual({ imported: false, skippedReason: 'unsupported-schema-type:graphql' })
+    expect(res).toEqual({ imported: false, skippedReason: 'unsupported-schema-type:protobuf' })
     expect(f.collections['api-schemas']).toHaveLength(0)
     // proposal row untouched — still available in the review queue
     expect(f.collections['discovered-entities'][0].status).toBe('proposed')

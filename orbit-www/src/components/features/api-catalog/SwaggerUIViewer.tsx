@@ -21,12 +21,14 @@ const ApiReferenceReact = dynamic(
 )
 
 interface APISpecViewerProps {
-  /** OpenAPI or AsyncAPI spec content (YAML or JSON string) */
+  /** OpenAPI, AsyncAPI, or GraphQL SDL spec content */
   spec: string
   /** Optional version label to display */
   version?: string
   /** Additional class names */
   className?: string
+  /** When 'graphql', the spec is rendered as raw SDL instead of fed to Scalar */
+  schemaType?: 'openapi' | 'asyncapi' | 'graphql'
 }
 
 function parseSpec(content: string): { spec: Record<string, unknown> | null; error: string | null } {
@@ -52,8 +54,37 @@ function parseSpec(content: string): { spec: Record<string, unknown> | null; err
   }
 }
 
-export function APISpecViewer({ spec, version, className }: APISpecViewerProps) {
-  const { spec: parsedSpec, error } = React.useMemo(() => parseSpec(spec), [spec])
+export function APISpecViewer({ spec, version, className, schemaType }: APISpecViewerProps) {
+  const { spec: parsedSpec, error } = React.useMemo(
+    () => (schemaType === 'graphql' ? { spec: null, error: null } : parseSpec(spec)),
+    [spec, schemaType]
+  )
+
+  if (schemaType === 'graphql') {
+    if (!spec?.trim()) {
+      return (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            <div className="font-semibold">Failed to load API documentation</div>
+            <p className="text-sm mt-1">No specification content provided</p>
+          </AlertDescription>
+        </Alert>
+      )
+    }
+    return (
+      <div className={className}>
+        {version && (
+          <div className="mb-4 text-sm text-muted-foreground">
+            Viewing version: <span className="font-medium">{version}</span>
+          </div>
+        )}
+        <pre className="max-h-[600px] overflow-auto rounded-md bg-zinc-900 p-4 text-sm text-zinc-100">
+          <code>{spec}</code>
+        </pre>
+      </div>
+    )
+  }
 
   if (error) {
     return (

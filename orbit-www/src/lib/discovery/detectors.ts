@@ -1,4 +1,5 @@
 import * as yaml from 'yaml'
+import { parse as parseGraphQL, Kind } from 'graphql'
 import { parseAppManifest, mapManifestToAppFields } from '@/lib/app-manifest'
 
 // --- Types ---
@@ -203,6 +204,37 @@ export function extractSpecMetadata(rawContent: string): SpecMetadata | null {
     serverUrls,
     endpointCount,
   }
+}
+
+export interface GraphQLSpecMetadata {
+  /** Total fields across top-level Query/Mutation/Subscription type definitions. */
+  endpointCount: number
+}
+
+const GRAPHQL_ROOT_TYPE_NAMES = new Set(['Query', 'Mutation', 'Subscription'])
+
+/**
+ * Parse GraphQL SDL and derive the metadata the catalog cares about. Returns
+ * `null` when the content does not parse as GraphQL — this is the
+ * GraphQL-analog of `extractSpecMetadata` (which is YAML-based and cannot
+ * read SDL), reused by the `api-schemas` beforeValidate hook.
+ */
+export function extractGraphQLMetadata(rawContent: string): GraphQLSpecMetadata | null {
+  let doc
+  try {
+    doc = parseGraphQL(rawContent)
+  } catch {
+    return null
+  }
+
+  let endpointCount = 0
+  for (const def of doc.definitions) {
+    if (def.kind === Kind.OBJECT_TYPE_DEFINITION && GRAPHQL_ROOT_TYPE_NAMES.has(def.name.value)) {
+      endpointCount += def.fields?.length ?? 0
+    }
+  }
+
+  return { endpointCount }
 }
 
 // --- detectOrbitManifest ---

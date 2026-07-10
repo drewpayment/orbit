@@ -3416,15 +3416,15 @@ export interface ApiSchema {
    */
   visibility: 'private' | 'workspace' | 'public';
   /**
-   * Schema format (OpenAPI and AsyncAPI supported)
+   * Schema format (OpenAPI, AsyncAPI, GraphQL supported)
    */
-  schemaType: 'openapi' | 'asyncapi';
+  schemaType: 'openapi' | 'asyncapi' | 'graphql';
   /**
    * Current version string (from OpenAPI info.version)
    */
   currentVersion?: string | null;
   /**
-   * OpenAPI specification content
+   * OpenAPI, AsyncAPI, GraphQL specification content
    */
   rawContent: string;
   status: 'draft' | 'published' | 'deprecated';

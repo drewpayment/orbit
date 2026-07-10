@@ -379,6 +379,7 @@ export function APIDetailClient({ api, versions, canEdit, userId }: APIDetailCli
               <APISpecViewer
                 spec={displayContent}
                 version={selectedVersionContent ? 'Historical Version' : api.currentVersion ?? undefined}
+                schemaType={api.schemaType}
               />
             </CardContent>
           </Card>

@@ -178,9 +178,10 @@ export const APISchemas: CollectionConfig = {
       options: [
         { label: 'OpenAPI', value: 'openapi' },
         { label: 'AsyncAPI', value: 'asyncapi' },
+        { label: 'GraphQL', value: 'graphql' },
       ],
       admin: {
-        description: 'Schema format (OpenAPI and AsyncAPI supported)',
+        description: 'Schema format (OpenAPI, AsyncAPI, GraphQL supported)',
       },
     },
     {
@@ -196,7 +197,7 @@ export const APISchemas: CollectionConfig = {
       required: true,
       admin: {
         language: 'yaml',
-        description: 'OpenAPI specification content',
+        description: 'OpenAPI, AsyncAPI, GraphQL specification content',
       },
     },
     {
@@ -360,33 +361,42 @@ export const APISchemas: CollectionConfig = {
 
         // Parse spec to extract metadata. Sniffing lives in the discovery
         // detectors lib so there is one implementation shared with the
-        // catalog scanner.
+        // catalog scanner. GraphQL SDL is not YAML, so it gets its own
+        // extractor rather than misfiring `extractSpecMetadata`.
         if (data.rawContent) {
-          const { extractSpecMetadata } = await import('@/lib/discovery/detectors')
-          const meta = extractSpecMetadata(data.rawContent)
-          if (meta) {
-            // Auto-detect schema type from content
-            if (meta.schemaType) {
-              data.schemaType = meta.schemaType
-            }
-
-            if (meta.hasInfo) {
-              data.specTitle = meta.title
-              data.specDescription = meta.description
-              data.currentVersion = meta.version
-
-              if (meta.hasContact) {
-                data.contactName = data.contactName || meta.contactName
-                data.contactEmail = data.contactEmail || meta.contactEmail
-              }
-            }
-
-            if (meta.serverUrls) {
-              data.serverUrls = meta.serverUrls.map((url) => ({ url }))
-            }
-
-            if (meta.endpointCount !== null) {
+          if (data.schemaType === 'graphql') {
+            const { extractGraphQLMetadata } = await import('@/lib/discovery/detectors')
+            const meta = extractGraphQLMetadata(data.rawContent)
+            if (meta) {
               data.endpointCount = meta.endpointCount
+            }
+          } else {
+            const { extractSpecMetadata } = await import('@/lib/discovery/detectors')
+            const meta = extractSpecMetadata(data.rawContent)
+            if (meta) {
+              // Auto-detect schema type from content
+              if (meta.schemaType) {
+                data.schemaType = meta.schemaType
+              }
+
+              if (meta.hasInfo) {
+                data.specTitle = meta.title
+                data.specDescription = meta.description
+                data.currentVersion = meta.version
+
+                if (meta.hasContact) {
+                  data.contactName = data.contactName || meta.contactName
+                  data.contactEmail = data.contactEmail || meta.contactEmail
+                }
+              }
+
+              if (meta.serverUrls) {
+                data.serverUrls = meta.serverUrls.map((url) => ({ url }))
+              }
+
+              if (meta.endpointCount !== null) {
+                data.endpointCount = meta.endpointCount
+              }
             }
           }
         }

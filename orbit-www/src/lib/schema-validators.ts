@@ -1,3 +1,4 @@
+import { parse as parseGraphQL, GraphQLError } from 'graphql';
 import { SchemaType } from '@/lib/proto/api_catalog_pb';
 
 export interface ValidationResult {
@@ -182,63 +183,35 @@ export function validateSchemaByType(content: string, schemaType: string): Valid
 }
 
 /**
- * Validates GraphQL schema syntax
+ * Validates GraphQL schema syntax using the `graphql` package's parser.
  */
 export function validateGraphQL(content: string): ValidationResult {
-  const errors: ValidationError[] = [];
-
   if (!content.trim()) {
     return { valid: true, errors: [] };
   }
 
-  // Basic GraphQL syntax validation
-  const lines = content.split('\n');
-  let inBlockComment = false;
-
-  lines.forEach((line, index) => {
-    const trimmedLine = line.trim();
-
-    // Handle block comments
-    if (trimmedLine.includes('"""')) {
-      inBlockComment = !inBlockComment;
-      return;
+  try {
+    parseGraphQL(content);
+    return { valid: true, errors: [] };
+  } catch (error) {
+    if (error instanceof GraphQLError) {
+      const location = error.locations?.[0];
+      return {
+        valid: false,
+        errors: [
+          {
+            line: location?.line,
+            column: location?.column,
+            message: error.message,
+          },
+        ],
+      };
     }
-    if (inBlockComment || trimmedLine.startsWith('#')) {
-      return;
-    }
-
-    // Check for valid GraphQL type definitions
-    if (trimmedLine && !trimmedLine.match(/^(type|interface|union|enum|input|scalar|schema|extend|directive|query|mutation|subscription)\s/)) {
-      // Check if it's part of a type definition (fields, etc.)
-      if (!trimmedLine.match(/^\w+(\(.*\))?:\s*[\w\[\]!]+/) &&
-          !trimmedLine.endsWith('{') &&
-          !trimmedLine.endsWith('}') &&
-          trimmedLine.length > 0) {
-        // This might be an error, but let's be lenient for now
-      }
-    }
-
-    // Check for unclosed braces
-    const openBraces = (line.match(/{/g) || []).length;
-    const closeBraces = (line.match(/}/g) || []).length;
-    if (openBraces > 1 || closeBraces > 1) {
-      errors.push({
-        line: index + 1,
-        message: 'Multiple braces on single line'
-      });
-    }
-  });
-
-  if (inBlockComment) {
-    errors.push({
-      message: 'Unclosed block comment'
-    });
+    return {
+      valid: false,
+      errors: [{ message: error instanceof Error ? error.message : 'Invalid GraphQL syntax' }],
+    };
   }
-
-  return {
-    valid: errors.length === 0,
-    errors
-  };
 }
 
 /**

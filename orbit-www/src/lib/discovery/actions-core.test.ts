@@ -237,17 +237,34 @@ describe('approveDiscoveriesCore', () => {
     expect(f.collections['api-schemas'][0]).toMatchObject({ createdBy: 'payload-user-9' })
   })
 
-  it('surfaces the import skippedReason (graphql) instead of throwing', async () => {
+  it('imports a graphql proposal into api-schemas', async () => {
     const f = fp()
     seedMember(f, 'ws1')
     seedDiscovery(f, {
       id: 'd1',
       detectedKind: 'api',
-      proposal: { name: 'graph', schemaType: 'graphql', rawContent: 'type Query' },
+      proposal: { name: 'graph', schemaType: 'graphql', rawContent: 'type Query { a: String }' },
     })
 
     const res = await approveDiscoveriesCore(payloadOf(f), AUTH_ID, 'payload-user-9', false, ['d1'])
-    expect(res).toEqual([{ id: 'd1', imported: false, skippedReason: 'unsupported-schema-type:graphql' }])
+    expect(res).toEqual([
+      { id: 'd1', imported: true, ref: { collectionSlug: 'api-schemas', docId: expect.any(String) } },
+    ])
+    expect(f.collections['api-schemas']).toHaveLength(1)
+    expect(f.collections['api-schemas'][0]).toMatchObject({ schemaType: 'graphql' })
+  })
+
+  it('surfaces the import skippedReason for a genuinely unsupported schema type instead of throwing', async () => {
+    const f = fp()
+    seedMember(f, 'ws1')
+    seedDiscovery(f, {
+      id: 'd1',
+      detectedKind: 'api',
+      proposal: { name: 'proto', schemaType: 'protobuf', rawContent: 'syntax = "proto3";' },
+    })
+
+    const res = await approveDiscoveriesCore(payloadOf(f), AUTH_ID, 'payload-user-9', false, ['d1'])
+    expect(res).toEqual([{ id: 'd1', imported: false, skippedReason: 'unsupported-schema-type:protobuf' }])
     expect(f.collections['api-schemas']).toHaveLength(0)
   })
 
