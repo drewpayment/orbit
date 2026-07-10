@@ -183,7 +183,7 @@ export function ImportAppForm({ workspaces }: ImportAppFormProps) {
                 <Info className="h-4 w-4" />
                 <AlertDescription>
                   No GitHub integrations available.{' '}
-                  <a href="/settings/github" className="underline hover:no-underline">
+                  <a href="/settings/connections" className="underline hover:no-underline">
                     Install a GitHub App
                   </a>{' '}
                   in Settings, or enter a URL manually below.

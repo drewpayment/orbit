@@ -74,7 +74,7 @@ export function GitHubHealthToast() {
                     variant="outline"
                     className="h-7 text-xs border-amber-300 dark:border-amber-700"
                     onClick={() => {
-                      window.location.href = '/settings/github'
+                      window.location.href = '/settings/connections'
                     }}
                   >
                     <ExternalLink className="h-3 w-3 mr-1" />

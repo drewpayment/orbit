@@ -1,18 +1,10 @@
-import { AppSidebar } from '@/components/app-sidebar'
-import { SiteHeader } from '@/components/site-header'
-import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
-import { ConfigureInstallationClient } from './configure-client'
+import { permanentRedirect } from 'next/navigation'
 
-export default async function ConfigureInstallationPage() {
-  return (
-    <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset>
-        <SiteHeader />
-        <div className="flex flex-1 flex-col gap-4 p-8">
-          <ConfigureInstallationClient />
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
-  )
+/**
+ * Workspace assignment moved from this standalone sub-page into the in-page
+ * dialog on the unified Connections page (WI2/WI3). Kept as a permanent
+ * redirect so `[id]` deep links resolve.
+ */
+export default function ConfigureInstallationRedirect() {
+  permanentRedirect('/settings/connections')
 }

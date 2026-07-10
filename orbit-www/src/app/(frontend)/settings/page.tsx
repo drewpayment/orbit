@@ -1,15 +1,15 @@
 import Link from 'next/link'
-import { GitBranch, Container, LayoutTemplate, Cloud } from 'lucide-react'
+import { Plug, Container, LayoutTemplate, Cloud } from 'lucide-react'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 
 const settingsItems = [
   {
-    title: 'GitHub',
-    description: 'Connect GitHub Apps and manage repository access for your workspaces.',
-    href: '/settings/github',
-    icon: GitBranch,
+    title: 'Connections',
+    description: 'Connect GitHub and Azure DevOps for repository import and catalog discovery.',
+    href: '/settings/connections',
+    icon: Plug,
   },
   {
     title: 'Registries',
