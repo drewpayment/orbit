@@ -831,13 +831,28 @@ export interface App {
    * Optional - link to a Git repository
    */
   repository?: {
+    /**
+     * Repo source provider. Absent on legacy rows = GitHub. GitHub rows use installationId; Azure DevOps rows use connection + project.
+     */
+    provider?: ('github' | 'azure-devops') | null;
+    /**
+     * GitHub repo owner, or the Azure DevOps organization (never the ADO project).
+     */
     owner?: string | null;
     name?: string | null;
     url?: string | null;
     /**
-     * GitHub App installation ID
+     * GitHub App installation ID (GitHub rows only).
      */
     installationId?: string | null;
+    /**
+     * Azure DevOps git-connection backing this repo — the auth root for clones. ADO rows only.
+     */
+    connection?: (string | null) | GitConnection;
+    /**
+     * Azure DevOps project (the middle segment of org/project/repo). ADO rows only.
+     */
+    project?: string | null;
     /**
      * Branch to build from (default: main)
      */
@@ -977,6 +992,78 @@ export interface App {
    */
   registryConfig?: (string | null) | RegistryConfig;
   status?: ('healthy' | 'degraded' | 'down' | 'unknown') | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Non-GitHub git provider connections (Azure DevOps) for catalog discovery.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "git-connections".
+ */
+export interface GitConnection {
+  id: string;
+  /**
+   * Display name (e.g., "Acme Azure DevOps").
+   */
+  name: string;
+  /**
+   * Git provider. Azure DevOps only for now.
+   */
+  provider: 'azure-devops';
+  /**
+   * Provider organization (e.g., the ADO org name).
+   */
+  organization: string;
+  /**
+   * Optional project filter. Empty = all projects in the org.
+   */
+  project?: string | null;
+  /**
+   * API base URL. Override for Azure DevOps Server (on-prem).
+   */
+  baseUrl?: string | null;
+  /**
+   * How Orbit authenticates. Service principal mints short-lived Entra tokens (Microsoft-recommended; global PATs retire Dec 2026). PAT remains for ADO Server.
+   */
+  authType: 'pat' | 'service-principal';
+  /**
+   * Encrypted provider credentials.
+   */
+  credentials?: {
+    /**
+     * Personal access token (AES-256-GCM encrypted at rest).
+     */
+    pat?: string | null;
+    /**
+     * Entra tenant (directory) id — service principal auth.
+     */
+    tenantId?: string | null;
+    /**
+     * Entra app registration (client) id — service principal auth.
+     */
+    clientId?: string | null;
+    /**
+     * Entra client secret (AES-256-GCM encrypted at rest).
+     */
+    clientSecret?: string | null;
+  };
+  /**
+   * Workspaces a scan of this connection may attribute entities to.
+   */
+  allowedWorkspaces?: (string | Workspace)[] | null;
+  /**
+   * Connection health. "error" is set when validation fails.
+   */
+  status: 'active' | 'error';
+  /**
+   * When the PAT was last successfully validated against the provider.
+   */
+  lastValidatedAt?: string | null;
+  /**
+   * Most recent validation failure reason.
+   */
+  lastError?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -4156,78 +4243,6 @@ export interface DiscoveredEntity {
   createdAt: string;
 }
 /**
- * Non-GitHub git provider connections (Azure DevOps) for catalog discovery.
- *
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "git-connections".
- */
-export interface GitConnection {
-  id: string;
-  /**
-   * Display name (e.g., "Acme Azure DevOps").
-   */
-  name: string;
-  /**
-   * Git provider. Azure DevOps only for now.
-   */
-  provider: 'azure-devops';
-  /**
-   * Provider organization (e.g., the ADO org name).
-   */
-  organization: string;
-  /**
-   * Optional project filter. Empty = all projects in the org.
-   */
-  project?: string | null;
-  /**
-   * API base URL. Override for Azure DevOps Server (on-prem).
-   */
-  baseUrl?: string | null;
-  /**
-   * How Orbit authenticates. Service principal mints short-lived Entra tokens (Microsoft-recommended; global PATs retire Dec 2026). PAT remains for ADO Server.
-   */
-  authType: 'pat' | 'service-principal';
-  /**
-   * Encrypted provider credentials.
-   */
-  credentials?: {
-    /**
-     * Personal access token (AES-256-GCM encrypted at rest).
-     */
-    pat?: string | null;
-    /**
-     * Entra tenant (directory) id — service principal auth.
-     */
-    tenantId?: string | null;
-    /**
-     * Entra app registration (client) id — service principal auth.
-     */
-    clientId?: string | null;
-    /**
-     * Entra client secret (AES-256-GCM encrypted at rest).
-     */
-    clientSecret?: string | null;
-  };
-  /**
-   * Workspaces a scan of this connection may attribute entities to.
-   */
-  allowedWorkspaces?: (string | Workspace)[] | null;
-  /**
-   * Connection health. "error" is set when validation fails.
-   */
-  status: 'active' | 'error';
-  /**
-   * When the PAT was last successfully validated against the provider.
-   */
-  lastValidatedAt?: string | null;
-  /**
-   * Most recent validation failure reason.
-   */
-  lastError?: string | null;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
@@ -4861,10 +4876,13 @@ export interface AppsSelect<T extends boolean = true> {
   repository?:
     | T
     | {
+        provider?: T;
         owner?: T;
         name?: T;
         url?: T;
         installationId?: T;
+        connection?: T;
+        project?: T;
         branch?: T;
       };
   origin?:

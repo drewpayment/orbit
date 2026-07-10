@@ -22,11 +22,21 @@ vi.mock('@/app/actions/github', () => ({
   searchInstallationRepositories: vi.fn(),
 }))
 
+vi.mock('@/app/actions/azure-devops', () => ({
+  getWorkspaceGitConnections: vi.fn(),
+  listConnectionRepositories: vi.fn(),
+  searchConnectionRepositories: vi.fn(),
+}))
+
 import { importRepository } from '@/app/actions/apps'
 import {
   getWorkspaceGitHubInstallations,
   listInstallationRepositories,
 } from '@/app/actions/github'
+import {
+  getWorkspaceGitConnections,
+  listConnectionRepositories,
+} from '@/app/actions/azure-devops'
 
 describe('ImportAppForm', () => {
   afterEach(() => {
@@ -35,6 +45,9 @@ describe('ImportAppForm', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    // Default: no Azure DevOps connections, so existing assertions exercise the
+    // GitHub-only path. ADO-specific tests override this.
+    vi.mocked(getWorkspaceGitConnections).mockResolvedValue({ success: true, connections: [] })
   })
 
   const mockWorkspaces = [
@@ -236,6 +249,105 @@ describe('ImportAppForm', () => {
 
     await waitFor(() => {
       expect(getWorkspaceGitHubInstallations).toHaveBeenCalledWith('ws-2')
+    })
+  })
+
+  it('auto-selects a lone Azure DevOps connection without a source selector', async () => {
+    vi.mocked(getWorkspaceGitHubInstallations).mockResolvedValue({ success: true, installations: [] })
+    vi.mocked(getWorkspaceGitConnections).mockResolvedValue({
+      success: true,
+      connections: [
+        { id: 'conn-1', name: 'Acme ADO', organization: 'acme', baseUrl: 'https://dev.azure.com' },
+      ],
+    })
+    vi.mocked(listConnectionRepositories).mockResolvedValue({
+      success: true,
+      repos: [
+        {
+          name: 'backend',
+          fullName: 'platform/backend',
+          description: null,
+          private: true,
+          defaultBranch: 'main',
+          project: 'platform',
+        },
+      ],
+      hasMore: false,
+    })
+
+    render(<ImportAppForm workspaces={mockWorkspaces} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('backend')).toBeInTheDocument()
+    })
+    // Single provider: no source-selector chrome.
+    expect(screen.queryByLabelText(/repository source/i)).not.toBeInTheDocument()
+  })
+
+  it('submits an ADO repo with connectionId and a dev.azure.com URL', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getWorkspaceGitHubInstallations).mockResolvedValue({ success: true, installations: [] })
+    vi.mocked(getWorkspaceGitConnections).mockResolvedValue({
+      success: true,
+      connections: [
+        { id: 'conn-1', name: 'Acme ADO', organization: 'acme', baseUrl: 'https://dev.azure.com' },
+      ],
+    })
+    vi.mocked(listConnectionRepositories).mockResolvedValue({
+      success: true,
+      repos: [
+        {
+          name: 'backend',
+          fullName: 'platform/backend',
+          description: null,
+          private: true,
+          defaultBranch: 'main',
+          project: 'platform',
+        },
+      ],
+      hasMore: false,
+    })
+    vi.mocked(importRepository).mockResolvedValue({ success: true, appId: 'app-ado' })
+
+    render(<ImportAppForm workspaces={mockWorkspaces} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('backend')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByText('backend'))
+    await user.click(screen.getByRole('button', { name: /import repository/i }))
+
+    await waitFor(() => {
+      expect(importRepository).toHaveBeenCalledWith({
+        workspaceId: 'ws-1',
+        repositoryUrl: 'https://dev.azure.com/acme/platform/_git/backend',
+        name: 'backend',
+        description: '',
+        connectionId: 'conn-1',
+      })
+    })
+  })
+
+  it('shows a source selector when both providers are available', async () => {
+    vi.mocked(getWorkspaceGitHubInstallations).mockResolvedValue({
+      success: true,
+      installations: [
+        { id: 'install-1', installationId: 12345, accountLogin: 'acme-org', accountAvatarUrl: '', accountType: 'Organization' },
+      ],
+    })
+    vi.mocked(getWorkspaceGitConnections).mockResolvedValue({
+      success: true,
+      connections: [
+        { id: 'conn-1', name: 'Acme ADO', organization: 'acme', baseUrl: 'https://dev.azure.com' },
+      ],
+    })
+    vi.mocked(listConnectionRepositories).mockResolvedValue({ success: true, repos: [], hasMore: false })
+
+    render(<ImportAppForm workspaces={mockWorkspaces} />)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/repository source/i)).toBeInTheDocument()
     })
   })
 })

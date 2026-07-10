@@ -228,8 +228,28 @@ export const Apps: CollectionConfig = {
       },
       fields: [
         {
+          // No default: absent `provider` means a legacy GitHub row (created
+          // before ADO parity). GitHub rows authenticate via `installationId`;
+          // Azure DevOps rows via `connection` + `project`.
+          name: 'provider',
+          type: 'select',
+          options: [
+            { label: 'GitHub', value: 'github' },
+            { label: 'Azure DevOps', value: 'azure-devops' },
+          ],
+          admin: {
+            description:
+              'Repo source provider. Absent on legacy rows = GitHub. ' +
+              'GitHub rows use installationId; Azure DevOps rows use connection + project.',
+          },
+        },
+        {
           name: 'owner',
           type: 'text',
+          admin: {
+            description:
+              'GitHub repo owner, or the Azure DevOps organization (never the ADO project).',
+          },
         },
         {
           name: 'name',
@@ -243,7 +263,27 @@ export const Apps: CollectionConfig = {
           name: 'installationId',
           type: 'text',
           admin: {
-            description: 'GitHub App installation ID',
+            description: 'GitHub App installation ID (GitHub rows only).',
+          },
+        },
+        {
+          name: 'connection',
+          type: 'relationship',
+          relationTo: 'git-connections',
+          admin: {
+            description:
+              'Azure DevOps git-connection backing this repo — the auth root for clones. ' +
+              'ADO rows only.',
+            condition: (_data, siblingData) => siblingData?.provider === 'azure-devops',
+          },
+        },
+        {
+          name: 'project',
+          type: 'text',
+          admin: {
+            description:
+              'Azure DevOps project (the middle segment of org/project/repo). ADO rows only.',
+            condition: (_data, siblingData) => siblingData?.provider === 'azure-devops',
           },
         },
         {

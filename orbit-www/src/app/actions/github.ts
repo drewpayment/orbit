@@ -57,6 +57,8 @@ export interface Repository {
   description: string | null
   private: boolean
   defaultBranch: string
+  /** Azure DevOps project coordinate; undefined for GitHub repos. */
+  project?: string
 }
 
 export async function listInstallationRepositories(

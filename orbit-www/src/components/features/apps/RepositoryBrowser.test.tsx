@@ -8,6 +8,11 @@ vi.mock('@/app/actions/github', () => ({
   searchInstallationRepositories: vi.fn(),
 }))
 
+vi.mock('@/app/actions/azure-devops', () => ({
+  listConnectionRepositories: vi.fn(),
+  searchConnectionRepositories: vi.fn(),
+}))
+
 import {
   listInstallationRepositories,
   searchInstallationRepositories,
