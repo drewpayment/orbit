@@ -133,6 +133,22 @@ const heuristicServiceBundle = () => ({
   files: { 'go.mod': 'module github.com/acme/billing\n' },
 })
 
+/** A repo with a GraphQL SDL file named with a generic stem -> no specTitle (WI7). */
+const graphqlGenericStemBundle = () => ({
+  tree: ['schema.graphql'],
+  files: {
+    'schema.graphql': 'type Book {\n  id: ID!\n}\n\ntype Query {\n  books: [Book!]!\n}\n',
+  },
+})
+
+/** An OpenAPI spec whose title happens to collide with a generic stem (WI7). */
+const openapiGenericTitledBundle = () => ({
+  tree: ['openapi.yaml'],
+  files: {
+    'openapi.yaml': 'openapi: 3.0.0\ninfo:\n  title: Schema\n  version: 1.0.0\npaths: {}\n',
+  },
+})
+
 // --- POST: auth + validation -------------------------------------------------
 
 describe('POST /api/internal/discovery/ingest — auth & validation', () => {
@@ -356,6 +372,24 @@ describe('ingestScan', () => {
     const row = f.collections['discovered-entities'][0]
     expect(row.status).toBe('imported')
     expect((row.importedRef as { collectionSlug: string }).collectionSlug).toBe('catalog-entities')
+  })
+
+  it('renames a generic-stem GraphQL proposal to "<repo> GraphQL API" (WI7)', async () => {
+    const f = new FakePayload()
+    await ingestScan(p(f), body({ bundle: graphqlGenericStemBundle() }))
+
+    const row = f.collections['discovered-entities'][0]
+    expect(row.detectedKind).toBe('api')
+    expect((row.proposal as Record<string, unknown>).name).toBe('billing GraphQL API')
+  })
+
+  it('leaves the proposal name untouched when a specTitle is present, even if it matches a generic stem (WI7)', async () => {
+    const f = new FakePayload()
+    await ingestScan(p(f), body({ bundle: openapiGenericTitledBundle() }))
+
+    const row = f.collections['discovered-entities'][0]
+    expect((row.proposal as Record<string, unknown>).name).toBe('Schema')
+    expect((row.proposal as Record<string, unknown>).specTitle).toBe('Schema')
   })
 
   it('resolves the numeric installationId to the github-installations doc id for the relationship', async () => {

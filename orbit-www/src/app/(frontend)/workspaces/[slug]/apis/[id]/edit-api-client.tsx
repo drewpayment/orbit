@@ -34,7 +34,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Loader2, Save, X, AlertCircle, Eye } from 'lucide-react'
-import { validateOpenAPI, type ValidationResult } from '@/lib/schema-validators'
+import { validateSchemaByType, type ValidationResult } from '@/lib/schema-validators'
 import { updateAPISchema } from '../actions'
 import { toast } from 'sonner'
 import type { APISchema } from '@/types/api-catalog'
@@ -90,13 +90,21 @@ export function EditAPIClient({ api, workspaceSlug: _workspaceSlug, userId }: Ed
   const rawContent = form.watch('rawContent')
   const hasContentChanged = rawContent !== api.rawContent
 
+  const specCardTitle =
+    api.schemaType === 'graphql'
+      ? 'GraphQL Schema'
+      : api.schemaType === 'asyncapi'
+        ? 'AsyncAPI Specification'
+        : 'OpenAPI Specification'
+  const editorLanguage = api.schemaType === 'graphql' ? 'graphql' : 'yaml'
+
   // Validate content when it changes
   React.useEffect(() => {
     if (rawContent) {
-      const result = validateOpenAPI(rawContent)
+      const result = validateSchemaByType(rawContent, api.schemaType)
       setValidation(result)
     }
-  }, [rawContent])
+  }, [rawContent, api.schemaType])
 
   const handleAddTag = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && tagInput.trim()) {
@@ -331,7 +339,7 @@ export function EditAPIClient({ api, workspaceSlug: _workspaceSlug, userId }: Ed
 
           <Card>
             <CardHeader>
-              <CardTitle>OpenAPI Specification</CardTitle>
+              <CardTitle>{specCardTitle}</CardTitle>
               <CardDescription>
                 {hasContentChanged && (
                   <span className="text-yellow-600">
@@ -350,7 +358,7 @@ export function EditAPIClient({ api, workspaceSlug: _workspaceSlug, userId }: Ed
                       <div className="border rounded-md overflow-hidden">
                         <Editor
                           height="400px"
-                          language="yaml"
+                          language={editorLanguage}
                           value={field.value}
                           onChange={(value) => field.onChange(value || '')}
                           theme="vs-dark"

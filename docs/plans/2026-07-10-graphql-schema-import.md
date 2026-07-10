@@ -1,7 +1,7 @@
 # GraphQL schema import support (Catalog Discovery → api-schemas)
 
 **Date:** 2026-07-10
-**Status:** Implementation complete (WI1-WI5); manual/agent-browser verification pending
+**Status:** Implementation complete (WI1-WI7); manual/agent-browser verification pending
 **Branch:** `feat/graphql-schema-import`
 
 ## Problem
@@ -89,6 +89,56 @@ File: `orbit-www/src/types/api-catalog.ts:10` — widen `schemaType` union to in
 - Grepped for other `'openapi' | 'asyncapi'` unions: only `detectors.ts` (already
   `'openapi' | 'asyncapi' | 'graphql'` pre-existing for the filename-match type) and
   `import.ts` (updated in WI2). `tsc --noEmit` is clean (0 errors).
+
+## Phase 2 — edit flow + naming (Drew's feedback after Phase 1, 2026-07-10)
+
+Feedback: the imported entity is named "schema" (useless), and it cannot be edited —
+the edit page validates ALL content as OpenAPI, so Save is permanently disabled for
+GraphQL rows, with bogus OpenAPI errors shown in real time.
+
+### WI6 — edit page is schemaType-aware (the actual blocker) — DONE
+File: `orbit-www/src/app/(frontend)/workspaces/[slug]/apis/[id]/edit-api-client.tsx`
+- Line 96: replace `validateOpenAPI(rawContent)` with
+  `validateSchemaByType(rawContent, api.schemaType)` (already exported from
+  `@/lib/schema-validators`) so live validation matches the schema type and Save
+  (line 401, disabled on `!validation.valid`) becomes reachable for GraphQL.
+- Line 334 card title: "GraphQL Schema" / "AsyncAPI Specification" / "OpenAPI
+  Specification" by `api.schemaType`.
+- Line 353 Monaco `language`: `'graphql'` when `api.schemaType === 'graphql'`,
+  `'yaml'` otherwise (Monaco has a built-in graphql language id).
+- Validation errors from `validateGraphQL` already carry line/column — the existing
+  error list rendering (line 374+) needs no change.
+- No component test infra existed for this client component (confirmed, still
+  none added). Per the deviation allowance, added dispatch-level coverage for
+  `validateSchemaByType` in `orbit-www/src/lib/schema-validators.test.ts`
+  (graphql/openapi/asyncapi routing) instead of a component test; the UI wiring
+  itself (`useEffect` dep on `api.schemaType`, card title, Monaco language) is
+  covered by `tsc --noEmit` plus the manual verification pass below.
+
+### WI7 — sane default names for spec proposals without a title — DONE
+File: `orbit-www/src/lib/discovery/ingest.ts` (`buildProposal`, line 130)
+- Mirror the existing `'service'`→repoName normalization: for `kind === 'api'`
+  proposals with no `specTitle` whose name is a generic spec filename stem
+  (`schema`, `index`, `api`, `types`, `main`, `openapi`, `swagger`, `asyncapi`),
+  rename to `` `${repoName} ${label} API` `` where label is `GraphQL` / `OpenAPI` /
+  `AsyncAPI` from `proposal.schemaType` (fallback `API` suffix only).
+  e.g. booksrus `schema.graphql` → `booksrus GraphQL API`.
+- Unit tests in the ingest test suite (generic name → renamed; specTitle present →
+  untouched; service normalization unchanged).
+- Already-imported rows keep their name — fixable via the now-working edit page.
+- Implemented as-is; no dedicated `ingest.test.ts` file existed (the ingest test
+  suite lives alongside the route it backs, at
+  `orbit-www/src/app/api/internal/discovery/ingest/route.test.ts`, which imports
+  and exercises `ingestScan` directly against a `FakePayload`) — added the two new
+  WI7 cases there. The "service normalization unchanged" case was already covered
+  by pre-existing tests in that file and re-verified green after the change.
+
+### Verification (Phase 2)
+- Touched vitest suites + tsc as before.
+- Browser: open the imported "schema" row → Edit → rename to a real name, confirm
+  live validation accepts the SDL, break the SDL and see a GraphQL parse error
+  appear in real time, fix it, Save → detail page shows new name (and a new
+  version when content changed).
 
 ### Out of scope (follow-ups, do NOT do now)
 - Manual "New API" wizard graphql support (`wizard/SchemaContentStep.tsx`,
