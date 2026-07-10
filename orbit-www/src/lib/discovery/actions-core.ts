@@ -101,6 +101,13 @@ export interface ApproveResult {
   imported: boolean
   /** Per-row reason the import was skipped (surfaced inline in the UI). */
   skippedReason?: string
+  /**
+   * The row the proposal was imported into — the "View imported" affordance's
+   * link target (WI: import traceability). `collectionSlug` maps to a detail
+   * route in the UI (`apps` → /apps, `catalog-entities` → /catalog, `api-schemas`
+   * → /catalog/apis); absent when the import was skipped.
+   */
+  ref?: { collectionSlug: string; docId: string }
 }
 
 export interface ApproveOptions {
@@ -168,6 +175,7 @@ export async function approveDiscoveriesCore(
       id,
       imported: result.imported,
       ...(result.skippedReason ? { skippedReason: result.skippedReason } : {}),
+      ...(result.ref ? { ref: { collectionSlug: result.ref.collection, docId: result.ref.id } } : {}),
     })
   }
 

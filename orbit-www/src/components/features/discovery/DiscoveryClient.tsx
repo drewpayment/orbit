@@ -17,8 +17,14 @@ import {
   getScanStatus,
   type ScanStatusEntry,
 } from '@/app/actions/discovery'
-import { groupByRepo, humanizeSkippedReason } from './discovery-ui'
+import {
+  groupByRepo,
+  humanizeSkippedReason,
+  importedHref,
+  proposalDisplayName,
+} from './discovery-ui'
 import { ProposalRow } from './ProposalRow'
+import type { ApproveResult } from '@/lib/discovery/actions-core'
 
 interface DiscoveryClientProps {
   workspaceId: string
@@ -121,6 +127,28 @@ export function DiscoveryClient({
     })
   }, [workspaceId, router])
 
+  // Success toast that names what was imported and, for a single row, links to
+  // its detail page. A batch keeps the count summary (no single link to offer).
+  const showImportSuccess = useCallback(
+    (results: ApproveResult[]) => {
+      const imported = results.filter((r) => r.imported)
+      if (imported.length === 0) return
+      if (imported.length === 1) {
+        const r = imported[0]
+        const row = discoveries.find((d) => d.id === r.id)
+        const name = row ? proposalDisplayName(row) : 'entity'
+        const href = importedHref(r.ref?.collectionSlug, r.ref?.docId)
+        toast.success(
+          `Imported ${name}.`,
+          href ? { action: { label: 'View', onClick: () => router.push(href) } } : undefined,
+        )
+      } else {
+        toast.success(`Imported ${imported.length} entities.`)
+      }
+    },
+    [discoveries, router],
+  )
+
   const onApprove = useCallback(
     (ids: string[]) => {
       if (ids.length === 0) return
@@ -130,19 +158,12 @@ export function DiscoveryClient({
           toast.error(res.error ?? 'Failed to approve proposals')
           return
         }
-        let importedCount = 0
         for (const r of res.results) {
-          if (r.imported) {
-            importedCount++
-            clearNote(r.id)
-          } else {
-            setNote(r.id, humanizeSkippedReason(r.skippedReason))
-          }
+          if (r.imported) clearNote(r.id)
+          else setNote(r.id, humanizeSkippedReason(r.skippedReason))
         }
-        const skipped = res.results.length - importedCount
-        if (importedCount > 0) {
-          toast.success(`Imported ${importedCount} ${importedCount === 1 ? 'entity' : 'entities'}.`)
-        }
+        showImportSuccess(res.results)
+        const skipped = res.results.filter((r) => !r.imported).length
         if (skipped > 0) {
           toast.warning(`${skipped} proposal${skipped === 1 ? '' : 's'} could not be imported.`)
         }
@@ -150,7 +171,7 @@ export function DiscoveryClient({
         router.refresh()
       })
     },
-    [router, clearNote, setNote],
+    [router, clearNote, setNote, showImportSuccess],
   )
 
   const onIgnore = useCallback(

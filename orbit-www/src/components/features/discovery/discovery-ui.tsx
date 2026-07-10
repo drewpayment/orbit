@@ -89,6 +89,45 @@ export function proposalSummary(row: DiscoveredEntity): string | null {
   return parts.length > 0 ? parts.join(' · ') : null
 }
 
+/**
+ * Human name for a proposal, for toasts and confirm copy: the prefilled entity
+ * name, falling back to the repository name, then the in-repo path, then the
+ * dedupe key. Never empty.
+ */
+export function proposalDisplayName(row: DiscoveredEntity): string {
+  const proposal = (row.proposal && typeof row.proposal === 'object' && !Array.isArray(row.proposal)
+    ? row.proposal
+    : {}) as Record<string, unknown>
+  if (typeof proposal.name === 'string' && proposal.name.trim()) return proposal.name
+  if (row.repo?.name) return row.repo.name
+  return row.path || row.dedupeKey
+}
+
+/**
+ * Detail-page href for an imported row, keyed on the `importedRef.collectionSlug`
+ * the importer records: `apps` → the App page, `catalog-entities` → the catalog
+ * entity page, `api-schemas` → the API catalog page. Returns null when the ref is
+ * incomplete (e.g. a legacy row that only persisted `collectionSlug`) or the
+ * collection has no user-facing detail route — the UI then names the target
+ * without linking.
+ */
+export function importedHref(
+  collectionSlug?: string | null,
+  docId?: string | null,
+): string | null {
+  if (!collectionSlug || !docId) return null
+  switch (collectionSlug) {
+    case 'apps':
+      return `/apps/${docId}`
+    case 'catalog-entities':
+      return `/catalog/${docId}`
+    case 'api-schemas':
+      return `/catalog/apis/${docId}`
+    default:
+      return null
+  }
+}
+
 const SKIPPED_REASON_LABELS: Record<string, string> = {
   forbidden: 'You are not a member of this proposal’s workspace.',
   'not-found': 'This proposal no longer exists.',

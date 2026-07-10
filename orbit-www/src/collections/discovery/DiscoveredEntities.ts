@@ -154,10 +154,14 @@ export const DiscoveredEntities: CollectionConfig = {
         description: 'The row this proposal was imported into (traceability).',
       },
       fields: [
-        // Named collectionSlug (not `collection`) — `collection` is a reserved
-        // Mongoose schema pathname and triggers warnings / undefined behavior.
+        // Named collectionSlug (not `collection`) and docId (not `id`) — both
+        // `collection` and `id` are reserved Mongoose subdocument pathnames.
+        // Mongoose auto-defines an `id` virtual on every subdocument, so a group
+        // subfield literally named `id` is silently swallowed on write (the ref
+        // never persists); `docId` sidesteps that just like `collectionSlug`
+        // sidesteps `collection`.
         { name: 'collectionSlug', type: 'text' },
-        { name: 'id', type: 'text' },
+        { name: 'docId', type: 'text' },
       ],
     },
     {
