@@ -13,6 +13,7 @@ import {
   listGlobalDiscoveriesCore,
   approveDiscoveriesCore,
   ignoreDiscoveriesCore,
+  renameDiscoveryCore,
   startWorkspaceScanCore,
   startInstallationScanCore,
   type DiscoveryFilter,
@@ -151,6 +152,34 @@ export async function approveDiscoveries(
   revalidatePath('/discovery')
 
   return { success: true, results }
+}
+
+/**
+ * Rename a single proposal before import (Phase 3, inline rename in the review
+ * queue — no confirm dialog on approve, so the entity name must be fixable
+ * up-front). Same auth-resolution pattern as `approveDiscoveries`: the Payload
+ * user id is threaded through for call-shape symmetry even though the core
+ * doesn't persist it (there's no "renamed by" field on the proposal).
+ */
+export async function renameDiscovery(id: string, name: string): Promise<{
+  success: boolean
+  error?: string
+}> {
+  const actor = await getPayloadUserFromSession()
+  if (!actor) return { success: false, error: 'Unauthorized' }
+
+  const payload = await getPayload({ config })
+  const result = await renameDiscoveryCore(
+    payload,
+    actor.betterAuthId ?? '',
+    String(actor.id),
+    isPlatformAdmin(actor),
+    id,
+    name,
+  )
+
+  if (!result.ok) return { success: false, error: result.reason }
+  return { success: true }
 }
 
 export async function ignoreDiscoveries(ids: string[]): Promise<{

@@ -140,6 +140,80 @@ File: `orbit-www/src/lib/discovery/ingest.ts` (`buildProposal`, line 130)
   appear in real time, fix it, Save → detail page shows new name (and a new
   version when content changed).
 
+## Phase 3 — show + inline-rename proposal names in the review queue (Drew, 2026-07-10)
+
+Decision (Drew, via option picker): proposal rows should DISPLAY the proposed entity
+name and allow INLINE rename before import. No confirmation dialog on Approve (a real
+org scan produces ~266 proposals; per-approve friction is unacceptable and bulk
+approve would bypass it anyway). The edited name persists on the proposal, so both
+single and bulk approve import with it.
+
+Current gaps: `ProposalRow.tsx` renders kind/confidence/path/schemaType but NOT the
+proposal name (`proposalDisplayName()` exists in `discovery-ui.tsx` but is only used
+for toasts). There is no rename action.
+
+### WI8 — rename core with per-row RBAC — DONE
+File: `orbit-www/src/lib/discovery/actions-core.ts`
+- New `renameDiscoveryCore(payload, betterAuthId, actorUserId, isAdmin, id, name)`
+  (mirror `approveDiscoveriesCore`'s shape/auth exactly): load row via findByID
+  (not-found → error result, no throw); authorize — workspace row → platform admin
+  OR active member (reuse `isMemberCached`), global row → admin only; only rows with
+  `status: 'proposed'` are renameable (`invalid-status` otherwise); validate name —
+  trimmed, non-empty, ≤ 120 chars (`invalid-name`); write `{ proposal: { ...existing
+  proposal, name } }` with overrideAccess. Return a discriminated result
+  (`{ ok: true } | { ok: false, reason }`).
+- TDD in `actions-core.test.ts` (FakePayload): happy path persists proposal.name and
+  preserves other proposal keys; forbidden non-member; global row non-admin
+  forbidden; imported/ignored row rejected; whitespace-only name rejected.
+- Implemented as-is, with two extra cases beyond the plan's minimum for full
+  coverage of the discriminated result: a >120-char name (`invalid-name`) and a
+  missing row (`not-found`). `actorUserId` is threaded through and intentionally
+  unused inside the core (there's no "renamed by" field) — kept only so the
+  `'use server'` wrapper resolves the caller identically to `approveDiscoveries`;
+  `void actorUserId` silences the otherwise-unused binding. Order of checks:
+  findByID → authorize → status → name validity → write (matches the plan's
+  listed order, which also matches what makes the test assertions unambiguous).
+
+### WI9 — server action wrapper — DONE
+File: `orbit-www/src/app/actions/discovery.ts`
+- `renameDiscovery(id: string, name: string)` following the exact auth-resolution
+  pattern of `approveDiscoveries` (same session lookup, same admin resolution),
+  delegating to `renameDiscoveryCore`.
+- Returns `{ success: boolean; error?: string }` (the raw `renameDiscoveryCore`
+  reason code on failure, e.g. `'forbidden'`) — mirrors `ignoreDiscoveries`'
+  shape rather than `approveDiscoveries`' batched `results` array, since rename
+  only ever acts on one row. No `revalidatePath` call, again matching
+  `ignoreDiscoveries` — the client refreshes via `router.refresh()` on success.
+
+### WI10 — review-queue UI — DONE
+Files: `orbit-www/src/components/features/discovery/ProposalRow.tsx`,
+`DiscoveryClient.tsx`, `GlobalDiscoveryClient.tsx`, `discovery-ui.tsx`
+- ProposalRow: render `proposalDisplayName(row)` prominently (font-medium, first
+  line of the row, above the mono path). New optional `onRename?: (name: string) =>
+  Promise<boolean>` prop: when provided AND the row is renameable (proposed tab),
+  show a small pencil (lucide `Pencil`) button next to the name → swaps to an
+  inline `<Input>` + Save button; Enter saves, Escape cancels; disable while
+  pending; on success update display (parent refreshes/optimistically updates), on
+  failure toast the reason. No `onRename` (imported/ignored tabs, or rows the
+  caller can't rename) → name renders read-only, no pencil.
+- DiscoveryClient + GlobalDiscoveryClient: wire `onRename` for proposed rows to the
+  new server action, refresh the list (or update local state) on success, toast on
+  failure. Keep bulk-select/approve behavior untouched.
+- Keep `proposalDisplayName` as the single source for the display fallback chain.
+- Added `humanizeRenameReason()` to `discovery-ui.tsx` (mirrors
+  `humanizeSkippedReason`) to turn the core's reason codes into UI copy for the
+  failure toast; covered by new unit tests in `discovery-ui.test.ts`.
+- No component-test infra exists for `ProposalRow`/`DiscoveryClient`/
+  `GlobalDiscoveryClient` (same gap noted in Phase 2's WI6) — the TDD weight went
+  into WI8's core tests and the `humanizeRenameReason` unit tests, per the
+  pointer; the UI wiring is covered by `tsc --noEmit` plus the browser pass.
+
+### Verification (Phase 3)
+- Touched vitest suites + `bunx tsc --noEmit` (0 errors).
+- Browser (main session): a proposed row shows its name; pencil → rename →
+  persists across reload; approve → imported entity carries the edited name;
+  imported rows show name without pencil; bulk approve unaffected.
+
 ### Out of scope (follow-ups, do NOT do now)
 - Manual "New API" wizard graphql support (`wizard/SchemaContentStep.tsx`,
   `apis/actions.ts:47` hardcodes `openapi`).

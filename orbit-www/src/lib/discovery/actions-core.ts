@@ -269,6 +269,77 @@ export async function ignoreDiscoveriesCore(
   return results
 }
 
+export type RenameResult = { ok: true } | { ok: false; reason: string }
+
+const MAX_PROPOSAL_NAME_LENGTH = 120
+
+/**
+ * Rename a single proposal (Phase 3, `docs/plans/2026-07-10-graphql-schema-import.md`):
+ * Drew chose inline rename over an approve-time confirm dialog, since a real org
+ * scan produces ~200+ proposals and per-approve friction is unacceptable. The
+ * edited name is written onto `proposal.name`, so both single and bulk approve
+ * import with it (`buildProposal`/the importers already read `proposal.name`
+ * first).
+ *
+ * Authorization mirrors `approveDiscoveriesCore`: workspace row → platform admin
+ * OR an active member of that workspace; global row → platform admin only.
+ * `actorUserId` isn't written anywhere (there's no "renamed by" field), but is
+ * kept in the signature so the `'use server'` wrapper resolves the caller
+ * identically to `approveDiscoveries`.
+ */
+export async function renameDiscoveryCore(
+  payload: Payload,
+  betterAuthId: string,
+  actorUserId: string,
+  isAdmin: boolean,
+  id: string,
+  name: string,
+): Promise<RenameResult> {
+  void actorUserId
+
+  let row: DiscoveredEntity
+  try {
+    row = (await payload.findByID({
+      collection: 'discovered-entities',
+      id,
+      depth: 0,
+      overrideAccess: true,
+    })) as DiscoveredEntity
+  } catch {
+    return { ok: false, reason: 'not-found' }
+  }
+
+  const workspaceId = relId(row.workspace)
+  const allowed = workspaceId
+    ? isAdmin || (await isMemberCached(payload, betterAuthId, workspaceId, new Map()))
+    : isAdmin // global rows: platform admin only
+  if (!allowed) {
+    return { ok: false, reason: 'forbidden' }
+  }
+
+  if (row.status !== 'proposed') {
+    return { ok: false, reason: 'invalid-status' }
+  }
+
+  const trimmed = name.trim()
+  if (!trimmed || trimmed.length > MAX_PROPOSAL_NAME_LENGTH) {
+    return { ok: false, reason: 'invalid-name' }
+  }
+
+  const proposal = (row.proposal && typeof row.proposal === 'object' && !Array.isArray(row.proposal)
+    ? row.proposal
+    : {}) as Record<string, unknown>
+
+  await payload.update({
+    collection: 'discovered-entities',
+    id,
+    overrideAccess: true,
+    data: { proposal: { ...proposal, name: trimmed } },
+  })
+
+  return { ok: true }
+}
+
 export interface StartedScan {
   installationId: string
   workflowId: string
