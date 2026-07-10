@@ -4225,7 +4225,7 @@ export interface DiscoveredEntity {
    */
   importedRef?: {
     collectionSlug?: string | null;
-    id?: string | null;
+    docId?: string | null;
   };
   /**
    * sha1(installationId:owner/name:path:detectedKind) — re-scan idempotency key.
@@ -6230,7 +6230,7 @@ export interface DiscoveredEntitiesSelect<T extends boolean = true> {
     | T
     | {
         collectionSlug?: T;
-        id?: T;
+        docId?: T;
       };
   dedupeKey?: T;
   scanRunId?: T;

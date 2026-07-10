@@ -243,7 +243,7 @@ describe('ingestScan', () => {
     // discovery row kept for traceability, linked
     const row = f.collections['discovered-entities'][0]
     expect(row.status).toBe('imported')
-    expect(row.importedRef).toEqual({ collectionSlug: 'apps', id: f.collections['apps'][0].id })
+    expect(row.importedRef).toEqual({ collectionSlug: 'apps', docId: f.collections['apps'][0].id })
   })
 
   it('creates an api proposal (not auto-imported) for an OpenAPI spec', async () => {

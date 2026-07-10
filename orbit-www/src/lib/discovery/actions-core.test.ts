@@ -204,9 +204,21 @@ describe('approveDiscoveriesCore', () => {
     seedDiscovery(f, { id: 'd1', proposal: { name: 'billing', buildConfig: { language: 'go' } } })
 
     const res = await approveDiscoveriesCore(payloadOf(f), AUTH_ID, 'payload-user-9', false, ['d1'])
-    expect(res).toEqual([{ id: 'd1', imported: true }])
+    expect(res).toEqual([
+      { id: 'd1', imported: true, ref: { collectionSlug: 'apps', docId: expect.any(String) } },
+    ])
     expect(f.collections['apps']).toHaveLength(1)
     expect(f.collections['discovered-entities'][0].status).toBe('imported')
+  })
+
+  it('surfaces the imported ref (collectionSlug + docId) so the UI can link to what it created', async () => {
+    const f = fp()
+    seedMember(f, 'ws1')
+    seedDiscovery(f, { id: 'd1', proposal: { name: 'billing' } })
+
+    const res = await approveDiscoveriesCore(payloadOf(f), AUTH_ID, 'payload-user-9', false, ['d1'])
+    const appId = f.collections['apps'][0].id
+    expect(res[0].ref).toEqual({ collectionSlug: 'apps', docId: appId })
   })
 
   it('passes the acting member as the api-schemas actor (createdBy)', async () => {
@@ -219,7 +231,9 @@ describe('approveDiscoveriesCore', () => {
     })
 
     const res = await approveDiscoveriesCore(payloadOf(f), AUTH_ID, 'payload-user-9', false, ['d1'])
-    expect(res).toEqual([{ id: 'd1', imported: true }])
+    expect(res).toEqual([
+      { id: 'd1', imported: true, ref: { collectionSlug: 'api-schemas', docId: expect.any(String) } },
+    ])
     expect(f.collections['api-schemas'][0]).toMatchObject({ createdBy: 'payload-user-9' })
   })
 
@@ -249,7 +263,7 @@ describe('approveDiscoveriesCore', () => {
       'ghost',
     ])
     expect(res).toEqual([
-      { id: 'mine', imported: true },
+      { id: 'mine', imported: true, ref: { collectionSlug: 'apps', docId: expect.any(String) } },
       { id: 'theirs', imported: false, skippedReason: 'forbidden' },
       { id: 'ghost', imported: false, skippedReason: 'not-found' },
     ])
@@ -267,7 +281,9 @@ describe('approveDiscoveriesCore — global rows (WP8)', () => {
 
     const res = await approveDiscoveriesCore(payloadOf(f), AUTH_ID, 'payload-user-9', true, ['g1'])
 
-    expect(res).toEqual([{ id: 'g1', imported: true }])
+    expect(res).toEqual([
+      { id: 'g1', imported: true, ref: { collectionSlug: 'catalog-entities', docId: expect.any(String) } },
+    ])
     const entities = f.collections['catalog-entities'] ?? []
     expect(entities).toHaveLength(1)
     expect(entities[0]).toMatchObject({ kind: 'service', source: { type: 'scan' } })
@@ -296,7 +312,9 @@ describe('approveDiscoveriesCore — global rows (WP8)', () => {
       assignWorkspaceId: 'ws-target',
     })
 
-    expect(res).toEqual([{ id: 'g1', imported: true }])
+    expect(res).toEqual([
+      { id: 'g1', imported: true, ref: { collectionSlug: 'apps', docId: expect.any(String) } },
+    ])
     // Normal workspace import path ran: an apps row, no global catalog entity.
     expect(f.collections['apps']).toHaveLength(1)
     expect(f.collections['apps'][0]).toMatchObject({ workspace: 'ws-target', origin: { type: 'discovered' } })
@@ -310,7 +328,9 @@ describe('approveDiscoveriesCore — global rows (WP8)', () => {
     seedDiscovery(f, { id: 'w1', workspace: 'ws-other', proposal: { name: 'ok' } })
 
     const res = await approveDiscoveriesCore(payloadOf(f), AUTH_ID, 'payload-user-9', true, ['w1'])
-    expect(res).toEqual([{ id: 'w1', imported: true }])
+    expect(res).toEqual([
+      { id: 'w1', imported: true, ref: { collectionSlug: 'apps', docId: expect.any(String) } },
+    ])
     expect(f.collections['apps']).toHaveLength(1)
   })
 })

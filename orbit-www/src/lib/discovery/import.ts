@@ -194,10 +194,10 @@ export async function importDiscoveredService(
   payload: Payload,
   discovery: DiscoveredEntity,
 ): Promise<ImportResult> {
-  if (discovery.status === 'imported' && discovery.importedRef?.id) {
+  if (discovery.status === 'imported' && discovery.importedRef?.docId) {
     return {
       imported: true,
-      ref: { collection: discovery.importedRef.collectionSlug || 'apps', id: discovery.importedRef.id },
+      ref: { collection: discovery.importedRef.collectionSlug || 'apps', id: discovery.importedRef.docId },
     }
   }
 
@@ -245,7 +245,7 @@ export async function importDiscoveredService(
     overrideAccess: true,
     data: {
       status: 'imported',
-      importedRef: { collectionSlug: 'apps', id: appId },
+      importedRef: { collectionSlug: 'apps', docId: appId },
     },
   })
 
@@ -264,12 +264,12 @@ export async function importDiscoveredApi(
   discovery: DiscoveredEntity,
   opts: ImportOptions = {},
 ): Promise<ImportResult> {
-  if (discovery.status === 'imported' && discovery.importedRef?.id) {
+  if (discovery.status === 'imported' && discovery.importedRef?.docId) {
     return {
       imported: true,
       ref: {
         collection: discovery.importedRef.collectionSlug || 'api-schemas',
-        id: discovery.importedRef.id,
+        id: discovery.importedRef.docId,
       },
     }
   }
@@ -351,7 +351,7 @@ export async function importDiscoveredApi(
     overrideAccess: true,
     data: {
       status: 'imported',
-      importedRef: { collectionSlug: 'api-schemas', id: schemaId },
+      importedRef: { collectionSlug: 'api-schemas', docId: schemaId },
     },
   })
 
@@ -373,12 +373,12 @@ export async function importDiscoveredGlobalEntity(
   payload: Payload,
   discovery: DiscoveredEntity,
 ): Promise<ImportResult> {
-  if (discovery.status === 'imported' && discovery.importedRef?.id) {
+  if (discovery.status === 'imported' && discovery.importedRef?.docId) {
     return {
       imported: true,
       ref: {
         collection: discovery.importedRef.collectionSlug || 'catalog-entities',
-        id: discovery.importedRef.id,
+        id: discovery.importedRef.docId,
       },
     }
   }
@@ -452,7 +452,7 @@ export async function importDiscoveredGlobalEntity(
     overrideAccess: true,
     data: {
       status: 'imported',
-      importedRef: { collectionSlug: 'catalog-entities', id: entityId },
+      importedRef: { collectionSlug: 'catalog-entities', docId: entityId },
     },
   })
 

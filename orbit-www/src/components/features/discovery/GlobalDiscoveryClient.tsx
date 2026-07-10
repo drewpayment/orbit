@@ -9,6 +9,16 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
 import {
   startInstallationScan,
@@ -16,8 +26,15 @@ import {
   ignoreDiscoveries,
   getInstallationScanStatus,
 } from '@/app/actions/discovery'
+import type { ApproveResult } from '@/lib/discovery/actions-core'
 import { startConnectionScan, getConnectionScanStatus } from '@/app/actions/git-connections'
-import { groupByRepo, humanizeSkippedReason } from './discovery-ui'
+import {
+  groupByRepo,
+  humanizeSkippedReason,
+  importedHref,
+  KindBadge,
+  proposalDisplayName,
+} from './discovery-ui'
 import { ProposalRow } from './ProposalRow'
 
 export interface GlobalInstallation {
@@ -118,8 +135,10 @@ export function GlobalDiscoveryClient({
   const [selectedKey, setSelectedKey] = useState<string>(targets[0]?.key ?? '')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [notes, setNotes] = useState<Map<string, string>>(new Map())
-  // Per-row workspace assignment: '' (or absent) = import as a global entity.
-  const [assignments, setAssignments] = useState<Map<string, string>>(new Map())
+  // The proposed row awaiting an explicit import-destination choice, plus the
+  // workspace picked in that confirm dialog ('' = import as a global entity).
+  const [confirmRow, setConfirmRow] = useState<DiscoveredEntity | null>(null)
+  const [confirmWorkspaceId, setConfirmWorkspaceId] = useState<string>('')
 
   // Scan status keyed on the composite target key, seeded from both providers.
   const [statusByKey, setStatusByKey] = useState<Record<string, ScanStatusValue>>({})
@@ -175,10 +194,6 @@ export function GlobalDiscoveryClient({
     })
   }, [])
 
-  const setAssignment = useCallback((id: string, workspaceId: string) => {
-    setAssignments((prev) => new Map(prev).set(id, workspaceId))
-  }, [])
-
   const toggle = useCallback((id: string) => {
     setSelected((prev) => {
       const next = new Set(prev)
@@ -222,48 +237,60 @@ export function GlobalDiscoveryClient({
   }, [selectedTarget, fetchStatus, router])
 
   const applyApproveResults = useCallback(
-    (results: { id: string; imported: boolean; skippedReason?: string }[]) => {
-      let importedCount = 0
+    (results: ApproveResult[]) => {
       for (const r of results) {
-        if (r.imported) {
-          importedCount++
-          clearNote(r.id)
-        } else {
-          setNote(r.id, humanizeSkippedReason(r.skippedReason))
-        }
+        if (r.imported) clearNote(r.id)
+        else setNote(r.id, humanizeSkippedReason(r.skippedReason))
       }
-      const skipped = results.length - importedCount
-      if (importedCount > 0) {
-        toast.success(`Imported ${importedCount} ${importedCount === 1 ? 'entity' : 'entities'}.`)
+      const imported = results.filter((r) => r.imported)
+      if (imported.length === 1) {
+        const r = imported[0]
+        const row = discoveries.find((d) => d.id === r.id)
+        const name = row ? proposalDisplayName(row) : 'entity'
+        const href = importedHref(r.ref?.collectionSlug, r.ref?.docId)
+        toast.success(
+          `Imported ${name}.`,
+          href ? { action: { label: 'View', onClick: () => router.push(href) } } : undefined,
+        )
+      } else if (imported.length > 1) {
+        toast.success(`Imported ${imported.length} entities.`)
       }
+      const skipped = results.length - imported.length
       if (skipped > 0) {
         toast.warning(`${skipped} proposal${skipped === 1 ? '' : 's'} could not be imported.`)
       }
     },
-    [clearNote, setNote],
+    [clearNote, setNote, discoveries, router],
   )
 
-  // Approve a single row, honouring its per-row workspace assignment.
-  const onApproveRow = useCallback(
-    (id: string) => {
-      const ws = assignments.get(id)
-      startTransition(async () => {
-        const res = await approveDiscoveries([id], ws ? { assignWorkspaceId: ws } : {})
-        if (!res.success) {
-          toast.error(res.error ?? 'Failed to approve proposal')
-          return
-        }
-        applyApproveResults(res.results)
-        setSelected((prev) => {
-          const next = new Set(prev)
-          next.delete(id)
-          return next
-        })
-        router.refresh()
+  // Approving a global row is consequential (creates an org-wide catalog entity,
+  // or routes the proposal into a workspace), so it opens an explicit
+  // destination-confirm dialog rather than importing on the first click.
+  const openConfirm = useCallback((row: DiscoveredEntity) => {
+    setConfirmRow(row)
+    setConfirmWorkspaceId('')
+  }, [])
+
+  const confirmImport = useCallback(() => {
+    const row = confirmRow
+    if (!row) return
+    const ws = confirmWorkspaceId
+    setConfirmRow(null)
+    startTransition(async () => {
+      const res = await approveDiscoveries([row.id], ws ? { assignWorkspaceId: ws } : {})
+      if (!res.success) {
+        toast.error(res.error ?? 'Failed to approve proposal')
+        return
+      }
+      applyApproveResults(res.results)
+      setSelected((prev) => {
+        const next = new Set(prev)
+        next.delete(row.id)
+        return next
       })
-    },
-    [assignments, applyApproveResults, router],
-  )
+      router.refresh()
+    })
+  }, [confirmRow, confirmWorkspaceId, applyApproveResults, router])
 
   // Bulk approve selected rows as GLOBAL entities (no workspace assignment).
   const onApproveSelectedGlobal = useCallback(
@@ -380,15 +407,8 @@ export function GlobalDiscoveryClient({
                           onToggle={() => toggle(row.id)}
                           note={notes.get(row.id)}
                           pending={isPending}
-                          onApprove={() => onApproveRow(row.id)}
+                          onApprove={() => openConfirm(row)}
                           onIgnore={() => onIgnore([row.id])}
-                          footer={
-                            <WorkspaceAssignSelect
-                              workspaces={workspaces}
-                              value={assignments.get(row.id) ?? ''}
-                              onChange={(ws) => setAssignment(row.id, ws)}
-                            />
-                          }
                         />
                       ))}
                     </ul>
@@ -414,7 +434,7 @@ export function GlobalDiscoveryClient({
                         row={row}
                         note={notes.get(row.id)}
                         pending={isPending}
-                        onApprove={() => onApproveRow(row.id)}
+                        onApprove={() => openConfirm(row)}
                       />
                     ))}
                   </ul>
@@ -443,36 +463,93 @@ export function GlobalDiscoveryClient({
           )}
         </TabsContent>
       </Tabs>
+
+      <ConfirmGlobalImportDialog
+        row={confirmRow}
+        workspaces={workspaces}
+        workspaceId={confirmWorkspaceId}
+        onWorkspaceChange={setConfirmWorkspaceId}
+        onCancel={() => setConfirmRow(null)}
+        onConfirm={confirmImport}
+        pending={isPending}
+      />
     </div>
   )
 }
 
-/** Native workspace picker rendered in a proposed row's footer (WP8). */
-function WorkspaceAssignSelect({
+/**
+ * Explicit destination confirm for approving a workspace-less proposal (WP8).
+ * States exactly what will be created — the entity name (proposal name, falling
+ * back to the repo name) and its kind — and forces a destination choice: the
+ * default "Global catalog (no workspace)" writes an org-wide catalog entity not
+ * tied to any workspace, or picking a workspace routes it through that
+ * workspace's normal apps/api-schemas import instead. Drew approved a global
+ * entity and couldn't find it because this consequence was silent; the dialog
+ * makes it loud.
+ */
+function ConfirmGlobalImportDialog({
+  row,
   workspaces,
-  value,
-  onChange,
+  workspaceId,
+  onWorkspaceChange,
+  onCancel,
+  onConfirm,
+  pending,
 }: {
+  row: DiscoveredEntity | null
   workspaces: GlobalWorkspaceOption[]
-  value: string
-  onChange: (workspaceId: string) => void
+  workspaceId: string
+  onWorkspaceChange: (workspaceId: string) => void
+  onCancel: () => void
+  onConfirm: () => void
+  pending: boolean
 }) {
+  const isGlobal = workspaceId === ''
+  const name = row ? proposalDisplayName(row) : ''
   return (
-    <label className="flex items-center gap-2 text-xs text-muted-foreground">
-      Import as
-      <select
-        className="h-8 rounded-md border bg-background px-2 text-xs"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      >
-        <option value="">Global entity</option>
-        {workspaces.map((w) => (
-          <option key={w.id} value={w.id}>
-            Workspace: {w.name}
-          </option>
-        ))}
-      </select>
-    </label>
+    <AlertDialog open={row !== null} onOpenChange={(open) => !open && onCancel()}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Import “{name}”?</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                {row && <KindBadge kind={row.detectedKind} />}
+                <span>
+                  This proposal isn’t tied to a workspace. Choose where to import it.
+                </span>
+              </div>
+              <label className="flex flex-col gap-1 text-sm text-foreground">
+                Destination
+                <select
+                  className="h-9 rounded-md border bg-background px-2 text-sm"
+                  value={workspaceId}
+                  onChange={(e) => onWorkspaceChange(e.target.value)}
+                >
+                  <option value="">Global catalog (no workspace)</option>
+                  {workspaces.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      Workspace: {w.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="text-xs text-muted-foreground">
+                {isGlobal
+                  ? `“${name}” will be created as a global catalog entity — visible org-wide and not part of any workspace.`
+                  : `“${name}” will be imported into the selected workspace and appear in its catalog.`}
+              </p>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+          <AlertDialogAction disabled={pending} onClick={onConfirm}>
+            {isGlobal ? 'Import as global entity' : 'Import into workspace'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 

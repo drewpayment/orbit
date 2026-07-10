@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, type ReactNode } from 'react'
-import { Check, ChevronDown, X } from 'lucide-react'
+import Link from 'next/link'
+import { Check, ChevronDown, ExternalLink, X } from 'lucide-react'
 import type { DiscoveredEntity } from '@/payload-types'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -15,6 +16,7 @@ import {
   ConfidenceChip,
   KindBadge,
   detectionEvidence,
+  importedHref,
   ownershipHints,
   parseEvidence,
   proposalSummary,
@@ -109,8 +111,18 @@ export function ProposalRow({
           {note && <p className="text-xs text-amber-600 dark:text-amber-400">{note}</p>}
 
           {imported && row.importedRef?.collectionSlug && (
-            <p className="text-xs text-muted-foreground">
-              Imported into <span className="font-mono">{row.importedRef.collectionSlug}</span>
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>
+                Imported into <span className="font-mono">{row.importedRef.collectionSlug}</span>
+              </span>
+              {importedHref(row.importedRef.collectionSlug, row.importedRef.docId) && (
+                <Link
+                  href={importedHref(row.importedRef.collectionSlug, row.importedRef.docId) as string}
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  View <ExternalLink className="h-3 w-3" />
+                </Link>
+              )}
             </p>
           )}
 

@@ -175,7 +175,7 @@ describe('importDiscoveredService', () => {
     // discovery row linked
     const row = f.collections['discovered-entities'][0]
     expect(row.status).toBe('imported')
-    expect(row.importedRef).toEqual({ collectionSlug: 'apps', id: apps[0].id })
+    expect(row.importedRef).toEqual({ collectionSlug: 'apps', docId: apps[0].id })
   })
 
   it('no-op links to an existing App for the same repo (idempotent, edits preserved)', async () => {
@@ -194,18 +194,44 @@ describe('importDiscoveredService', () => {
     expect(f.collections['apps'][0].name).toBe('HAND-EDITED')
     expect(f.collections['discovered-entities'][0].importedRef).toEqual({
       collectionSlug: 'apps',
-      id: 'app-existing',
+      docId: 'app-existing',
     })
   })
 
   it('short-circuits when the row is already imported', async () => {
     const f = fp()
-    const d = discovery({ status: 'imported', importedRef: { collectionSlug: 'apps', id: 'app-x' } })
+    const d = discovery({ status: 'imported', importedRef: { collectionSlug: 'apps', docId: 'app-x' } })
 
     const res = await importDiscoveredService(payloadOf(f), d)
 
     expect(res).toEqual({ imported: true, ref: { collection: 'apps', id: 'app-x' } })
     expect(f.collections['apps']).toHaveLength(0)
+  })
+
+  it('legacy imported row (collectionSlug only, no docId) backfills docId via the dedupe/App lookup', async () => {
+    // Pre-rename rows persisted `importedRef.collectionSlug` but silently dropped
+    // the Mongoose-reserved `id` subfield, so the ref is unlinkable. The fast-path
+    // misses (no docId) and falls through to findRepoApp, which re-links AND
+    // backfills docId so a "View imported" affordance works afterwards.
+    const f = fp()
+    f.collections['apps'] = [
+      { id: 'app-legacy', workspace: 'ws1', name: 'billing', repository: { owner: 'acme', name: 'billing' } },
+    ]
+    const d = discovery({
+      status: 'imported',
+      importedRef: { collectionSlug: 'apps' },
+      proposal: { name: 'billing-svc' },
+    })
+    f.collections['discovered-entities'] = [{ ...d } as Doc]
+
+    const res = await importDiscoveredService(payloadOf(f), d)
+
+    expect(res.ref).toEqual({ collection: 'apps', id: 'app-legacy' })
+    expect(f.collections['apps']).toHaveLength(1)
+    expect(f.collections['discovered-entities'][0].importedRef).toEqual({
+      collectionSlug: 'apps',
+      docId: 'app-legacy',
+    })
   })
 
   it('re-import is idempotent: second call links to the same App, no duplicate', async () => {
@@ -357,7 +383,7 @@ describe('importDiscoveredApi', () => {
     expect(f.collections['discovered-entities'][0].status).toBe('imported')
     expect(f.collections['discovered-entities'][0].importedRef).toEqual({
       collectionSlug: 'api-schemas',
-      id: schemas[0].id,
+      docId: schemas[0].id,
     })
   })
 
@@ -438,7 +464,7 @@ describe('importDiscoveredApi', () => {
     expect(f.collections['api-schemas']).toHaveLength(1)
     expect(f.collections['discovered-entities'][0].importedRef).toEqual({
       collectionSlug: 'api-schemas',
-      id: 'schema-existing',
+      docId: 'schema-existing',
     })
   })
 
@@ -447,7 +473,7 @@ describe('importDiscoveredApi', () => {
     const d = discovery({
       detectedKind: 'api',
       status: 'imported',
-      importedRef: { collectionSlug: 'api-schemas', id: 'schema-x' },
+      importedRef: { collectionSlug: 'api-schemas', docId: 'schema-x' },
       proposal: { schemaType: 'openapi', specPath: 'openapi.yaml', rawContent: 'openapi: 3.0.0' },
     })
 
@@ -521,7 +547,7 @@ describe('importDiscoveredGlobalEntity', () => {
     expect(f.collections['apps']).toHaveLength(0)
     const row = f.collections['discovered-entities'][0]
     expect(row.status).toBe('imported')
-    expect(row.importedRef).toEqual({ collectionSlug: 'catalog-entities', id: entities[0].id })
+    expect(row.importedRef).toEqual({ collectionSlug: 'catalog-entities', docId: entities[0].id })
   })
 
   it('carries schemaType/specPath into metadata for a global api', async () => {
