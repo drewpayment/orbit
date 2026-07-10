@@ -38,11 +38,21 @@ func NewPayloadOrbitContextClient(baseURL, apiKey string, logger *slog.Logger) *
 }
 
 // AppRepository mirrors the repository sub-shape the apps endpoint returns.
+//
+// Provider discriminates the repo source: "github" (also the default when
+// absent, for legacy rows) or "azure-devops". ConnectionID + Project are
+// ADO-only — they carry the git-connections linkage the clone activity
+// needs to resolve credentials. They are empty for GitHub rows (which use
+// the installation-token path instead) and absent on the wire until the
+// apps endpoint is extended to emit them.
 type AppRepository struct {
-	URL    string `json:"url"`
-	Owner  string `json:"owner"`
-	Name   string `json:"name"`
-	Branch string `json:"branch"`
+	URL          string `json:"url"`
+	Owner        string `json:"owner"`
+	Name         string `json:"name"`
+	Branch       string `json:"branch"`
+	Provider     string `json:"provider,omitempty"`
+	ConnectionID string `json:"connectionId,omitempty"`
+	Project      string `json:"project,omitempty"`
 }
 
 // AppSummary is what GET /api/internal/workspaces/[id]/apps returns per row.

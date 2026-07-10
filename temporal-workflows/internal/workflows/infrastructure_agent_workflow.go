@@ -79,13 +79,13 @@ const (
 	ToolProposeToUser = agentcontract.ToolProposeToUser
 	ToolDone          = agentcontract.ToolDone
 
-	ToolShellExec       = agentcontract.ToolShellExec
-	ToolHTTPRequest     = agentcontract.ToolHTTPRequest
-	ToolReadFile        = agentcontract.ToolReadFile
-	ToolWriteFile       = agentcontract.ToolWriteFile
-	ToolListDir         = agentcontract.ToolListDir
-	ToolRepoInspect     = agentcontract.ToolRepoInspect
-	ToolRequestApproval  = agentcontract.ToolRequestApproval
+	ToolShellExec          = agentcontract.ToolShellExec
+	ToolHTTPRequest        = agentcontract.ToolHTTPRequest
+	ToolReadFile           = agentcontract.ToolReadFile
+	ToolWriteFile          = agentcontract.ToolWriteFile
+	ToolListDir            = agentcontract.ToolListDir
+	ToolRepoInspect        = agentcontract.ToolRepoInspect
+	ToolRequestApproval    = agentcontract.ToolRequestApproval
 	ToolRegisterTool       = agentcontract.ToolRegisterTool
 	ToolStartHealthCheck   = agentcontract.ToolStartHealthCheck
 	ToolProposePattern     = agentcontract.ToolProposePattern
@@ -98,11 +98,11 @@ const (
 	ToolOrbitCloudLogin        = agentcontract.ToolOrbitCloudLogin
 	ToolOrbitRepoClone         = agentcontract.ToolOrbitRepoClone
 
-	EventKindConversationTurn = agentcontract.EventKindConversationTurn
-	EventKindTokenDelta       = agentcontract.EventKindTokenDelta
-	EventKindProposalUpdate   = agentcontract.EventKindProposalUpdate
-	EventKindApprovalRequest  = agentcontract.EventKindApprovalRequest
-	EventKindApprovalResolved = agentcontract.EventKindApprovalResolved
+	EventKindConversationTurn    = agentcontract.EventKindConversationTurn
+	EventKindTokenDelta          = agentcontract.EventKindTokenDelta
+	EventKindProposalUpdate      = agentcontract.EventKindProposalUpdate
+	EventKindApprovalRequest     = agentcontract.EventKindApprovalRequest
+	EventKindApprovalResolved    = agentcontract.EventKindApprovalResolved
 	EventKindStatusUpdate        = agentcontract.EventKindStatusUpdate
 	EventKindToolCallOutputChunk = agentcontract.EventKindToolCallOutputChunk
 	EventKindToolCallOutput      = agentcontract.EventKindToolCallOutput
@@ -110,9 +110,9 @@ const (
 
 // Default behavioral knobs. Tunable via input.
 const (
-	defaultMaxIterations    = 80
-	defaultMaxHistoryTurns  = 80
-	defaultUserWaitTimeout  = 24 * time.Hour
+	defaultMaxIterations   = 80
+	defaultMaxHistoryTurns = 80
+	defaultUserWaitTimeout = 24 * time.Hour
 )
 
 // DefaultApprovalTimeout bounds how long an approval gate may stay pending
@@ -143,38 +143,38 @@ func effectiveApprovalTimeout(input *InfrastructureAgentInput) time.Duration {
 
 // agentState is the in-workflow mutable state.
 type agentState struct {
-	status               string
+	status string
 	// workspaceID is the run's workspace, copied from input once at
 	// initState. Carried on state so helpers (event flush, pending-approval
 	// resolve) can stamp it without threading input through every call.
-	workspaceID          string
+	workspaceID string
 	// unflushedDurable buffers durable-kind events emitted since the last
 	// successful PersistAgentEvents flush. Flushed in batches at every
 	// barrier and before continue-as-new / return. A failed flush keeps the
 	// buffer intact for the next attempt (sequence idempotency makes that
 	// safe). Carried across continue-as-new is NOT needed — flushes run
 	// before CAN — so this stays workflow-local.
-	unflushedDurable     []AgentEventWire
+	unflushedDurable []AgentEventWire
 	// toolOutputBuffers accumulates streamed tool output per callId so the
 	// workflow can persist one aggregated tool_call_output event when the
 	// call completes (the per-chunk events are ephemeral and not durable).
 	// Capped at toolOutputCap bytes per call: oldest output is dropped (keep
 	// tail) and the aggregate is marked truncated. Keyed by callId.
-	toolOutputBuffers    map[string]*toolOutputBuffer
-	history              []ConversationTurn
-	events               []AgentEvent
-	nextSeq              uint64
-	streamingPartial     string
-	streamingTurnID      string
-	proposal             *Proposal
-	pendingApprovals     map[string]PendingApproval
+	toolOutputBuffers map[string]*toolOutputBuffer
+	history           []ConversationTurn
+	events            []AgentEvent
+	nextSeq           uint64
+	streamingPartial  string
+	streamingTurnID   string
+	proposal          *Proposal
+	pendingApprovals  map[string]PendingApproval
 	// pendingApprovalRowIDs maps approval_id → PendingApprovals collection
 	// row id so the workflow can call ResolvePendingApproval on the right
 	// row when the gate closes (Spike 7 commit γ). Empty = the open call
 	// failed; resolve falls back to a no-op so a flaky internal API
 	// can't deadlock the gate.
 	pendingApprovalRowIDs map[string]string
-	registeredTools      map[string]agentactivity.ApprovedAgentTool
+	registeredTools       map[string]agentactivity.ApprovedAgentTool
 	// availablePatterns is the in-memory snapshot of the platform-wide
 	// Patterns catalog (approved only), refreshed at the top of each LLM
 	// iteration via refreshAvailablePatterns. Keyed by pattern name to
@@ -290,10 +290,10 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 		StartToCloseTimeout: 5 * time.Minute,
 		HeartbeatTimeout:    30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    2 * time.Second,
-			BackoffCoefficient: 2.0,
-			MaximumInterval:    30 * time.Second,
-			MaximumAttempts:    3,
+			InitialInterval:        2 * time.Second,
+			BackoffCoefficient:     2.0,
+			MaximumInterval:        30 * time.Second,
+			MaximumAttempts:        3,
 			NonRetryableErrorTypes: []string{"InvalidInput", "LLMNonRetryable"},
 		},
 	})
@@ -305,10 +305,10 @@ func InfrastructureAgentWorkflow(ctx workflow.Context, input InfrastructureAgent
 		StartToCloseTimeout: 60 * time.Minute,
 		HeartbeatTimeout:    30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    2 * time.Second,
-			BackoffCoefficient: 2.0,
-			MaximumInterval:    30 * time.Second,
-			MaximumAttempts:    2,
+			InitialInterval:        2 * time.Second,
+			BackoffCoefficient:     2.0,
+			MaximumInterval:        30 * time.Second,
+			MaximumAttempts:        2,
 			NonRetryableErrorTypes: []string{"InvalidInput", "PathEscape", "HostNotAllowed"},
 		},
 	})
@@ -1085,11 +1085,11 @@ func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agen
 			return jsonError("repo_inspect", err), false
 		}
 		return jsonResult(map[string]any{
-			"source":      res.Source,
-			"revision":    res.Revision,
-			"clone_ref":   res.CloneRef,
-			"tree":        res.Tree,
-			"files":       res.Files,
+			"source":       res.Source,
+			"revision":     res.Revision,
+			"clone_ref":    res.CloneRef,
+			"tree":         res.Tree,
+			"files":        res.Files,
 			"truncated_at": res.TruncatedAt,
 		}), false
 
@@ -1240,6 +1240,7 @@ func dispatchTool(ctx workflow.Context, sandboxCtx workflow.Context, state *agen
 			"clone_path":      res.ClonePath,
 			"owner":           res.Owner,
 			"repo":            res.Repo,
+			"project":         res.Project,
 			"branch":          res.Branch,
 			"head_sha":        res.HeadSHA,
 			"installation_id": res.InstallationID,
@@ -1547,13 +1548,13 @@ func dispatchRegisterTool(ctx workflow.Context, sandboxCtx workflow.Context, sta
 	}
 
 	emitEvent(ctx, state, EventKindApprovalResolved, map[string]any{
-		"approval_id":            approvalID,
-		"approved":               resolution.Approved,
-		"resolved_by":            resolution.ResolvedBy,
-		"notes":                  resolution.Notes,
-		"edited":                 resolution.Approved && len(resolveResult.EditedFields) > 0,
-		"edited_fields":          resolveResult.EditedFields,
-		"agent_tool_version_id":  resolveResult.AgentToolVersionID,
+		"approval_id":           approvalID,
+		"approved":              resolution.Approved,
+		"resolved_by":           resolution.ResolvedBy,
+		"notes":                 resolution.Notes,
+		"edited":                resolution.Approved && len(resolveResult.EditedFields) > 0,
+		"edited_fields":         resolveResult.EditedFields,
+		"agent_tool_version_id": resolveResult.AgentToolVersionID,
 	})
 	resolvePendingApproval(auditCtx, state, approvalID, "resolved", resolutionLabel(resolution.Approved), resolution.ResolvedBy, resolution.Notes)
 
@@ -1799,13 +1800,13 @@ func dispatchProposePattern(ctx workflow.Context, sandboxCtx workflow.Context, s
 	}
 
 	emitEvent(ctx, state, EventKindApprovalResolved, map[string]any{
-		"approval_id":         approvalID,
-		"approved":            resolution.Approved,
-		"resolved_by":         resolution.ResolvedBy,
-		"notes":               resolution.Notes,
-		"edited":              resolution.Approved && len(resolveResult.EditedFields) > 0,
-		"edited_fields":       resolveResult.EditedFields,
-		"pattern_version_id":  resolveResult.PatternVersionID,
+		"approval_id":        approvalID,
+		"approved":           resolution.Approved,
+		"resolved_by":        resolution.ResolvedBy,
+		"notes":              resolution.Notes,
+		"edited":             resolution.Approved && len(resolveResult.EditedFields) > 0,
+		"edited_fields":      resolveResult.EditedFields,
+		"pattern_version_id": resolveResult.PatternVersionID,
 	})
 	resolvePendingApproval(auditCtx, state, approvalID, "resolved", resolutionLabel(resolution.Approved), resolution.ResolvedBy, resolution.Notes)
 
@@ -1892,18 +1893,18 @@ func dispatchListPatterns(state *agentState, tc providers.ToolCall) (string, boo
 
 // dispatchInstantiatePattern provisions an approved Pattern into the
 // current workspace. Lifecycle:
-//   1. GetPatternByID — load templateJson + inputSchemaJson + version.
-//   2. Validate user-supplied parameters against the schema's required[].
-//   3. CreatePatternInstance — row at status=pending; bind to workspace,
-//      app (optional), name (unique per workspace), patternVersion snap.
-//   4. UpdateStatus(validating), then UpdateStatus(provisioning).
-//   5. tooltemplate.Expand against the user-supplied parameters and
-//      dispatch each expanded primitive via dispatchTool — same path
-//      registered tools use, so all the existing safety / approval /
-//      sandbox plumbing applies. Failures along the way short-circuit
-//      to UpdateStatus(failed, errorMessage=...).
-//   6. On success: UpdateStatus(active, outputs={...}). Outputs are the
-//      JSON-decoded results of each primitive call, in step order.
+//  1. GetPatternByID — load templateJson + inputSchemaJson + version.
+//  2. Validate user-supplied parameters against the schema's required[].
+//  3. CreatePatternInstance — row at status=pending; bind to workspace,
+//     app (optional), name (unique per workspace), patternVersion snap.
+//  4. UpdateStatus(validating), then UpdateStatus(provisioning).
+//  5. tooltemplate.Expand against the user-supplied parameters and
+//     dispatch each expanded primitive via dispatchTool — same path
+//     registered tools use, so all the existing safety / approval /
+//     sandbox plumbing applies. Failures along the way short-circuit
+//     to UpdateStatus(failed, errorMessage=...).
+//  6. On success: UpdateStatus(active, outputs={...}). Outputs are the
+//     JSON-decoded results of each primitive call, in step order.
 //
 // See plans/merry-strolling-bumblebee.md (Phase 3). For v1, instance
 // execution lives inside the agent run. A future iteration moves
@@ -2289,7 +2290,7 @@ func buildCloudLoginCommand(provider, tenant string) (string, string, error) {
 }
 
 // bashQuote single-quotes s for safe inclusion in a bash command line. The
-// classic '\'' trick escapes embedded single quotes.
+// classic '\” trick escapes embedded single quotes.
 func bashQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
@@ -2300,15 +2301,15 @@ func bashQuote(s string) string {
 // overlays on top via mergeEnv so callers can still pin a different value.
 func defaultSandboxEnv() map[string]string {
 	return map[string]string{
-		"AZURE_CORE_NO_PAGER":          "1",
-		"AZURE_CORE_OUTPUT":            "json",
-		"AZURE_CORE_ONLY_SHOW_ERRORS":  "false",
-		"AWS_PAGER":                    "",
+		"AZURE_CORE_NO_PAGER":           "1",
+		"AZURE_CORE_OUTPUT":             "json",
+		"AZURE_CORE_ONLY_SHOW_ERRORS":   "false",
+		"AWS_PAGER":                     "",
 		"CLOUDSDK_CORE_DISABLE_PROMPTS": "1",
 		"CLOUDSDK_PYTHON_SITEPACKAGES":  "1",
-		"GIT_TERMINAL_PROMPT":          "0",
-		"PYTHONUNBUFFERED":             "1",
-		"DEBIAN_FRONTEND":              "noninteractive",
+		"GIT_TERMINAL_PROMPT":           "0",
+		"PYTHONUNBUFFERED":              "1",
+		"DEBIAN_FRONTEND":               "noninteractive",
 	}
 }
 
@@ -2725,7 +2726,7 @@ func builtInToolSchemas() []providers.ToolSchema {
 			},
 		},
 		{
-			Name: ToolShellExec,
+			Name:        ToolShellExec,
 			Description: "Run a bash command inside the run's sandbox. Use this for `az`, `gcloud`, `kubectl`, `helm`, `terraform`, `pulumi`, `git`, `npm`, etc. Output is captured and returned. Long commands heartbeat automatically. Returns {exit_code, stdout, stderr, duration_ms, truncated}.",
 			InputSchema: map[string]any{
 				"type": "object",
@@ -2737,7 +2738,7 @@ func builtInToolSchemas() []providers.ToolSchema {
 			},
 		},
 		{
-			Name: ToolHTTPRequest,
+			Name:        ToolHTTPRequest,
 			Description: "Make an outbound HTTP request, gated by the workspace's host allowlist. Use for cloud-provider REST APIs the agent doesn't have a CLI for. Returns {status, status_code, headers, body, truncated}.",
 			InputSchema: map[string]any{
 				"type": "object",
@@ -2751,7 +2752,7 @@ func builtInToolSchemas() []providers.ToolSchema {
 			},
 		},
 		{
-			Name: ToolReadFile,
+			Name:        ToolReadFile,
 			Description: "Read a file inside the sandbox. Path is relative to the sandbox root and rejected if it escapes.",
 			InputSchema: map[string]any{
 				"type":       "object",
@@ -2760,7 +2761,7 @@ func builtInToolSchemas() []providers.ToolSchema {
 			},
 		},
 		{
-			Name: ToolWriteFile,
+			Name:        ToolWriteFile,
 			Description: "Write a file inside the sandbox (parent directories are created). Use to author terraform / helm / pulumi files before applying.",
 			InputSchema: map[string]any{
 				"type": "object",
@@ -2772,7 +2773,7 @@ func builtInToolSchemas() []providers.ToolSchema {
 			},
 		},
 		{
-			Name: ToolListDir,
+			Name:        ToolListDir,
 			Description: "List the contents of a directory inside the sandbox.",
 			InputSchema: map[string]any{
 				"type":       "object",
@@ -2780,7 +2781,7 @@ func builtInToolSchemas() []providers.ToolSchema {
 			},
 		},
 		{
-			Name: ToolRepoInspect,
+			Name:        ToolRepoInspect,
 			Description: "Survey a git repository (tree + key manifest files like README, package.json, go.mod, Dockerfile). Tries the GitHub API first; falls back to a shallow clone of the main branch into the sandbox at repo/<slug>/. Use this to learn what kind of app the user wants to deploy before proposing a plan.",
 			InputSchema: map[string]any{
 				"type": "object",
@@ -2793,7 +2794,7 @@ func builtInToolSchemas() []providers.ToolSchema {
 			},
 		},
 		{
-			Name: ToolRequestApproval,
+			Name:        ToolRequestApproval,
 			Description: "Request explicit human approval before proceeding. The workflow blocks on this; the chat UI surfaces an inline Approve/Reject card. Use BEFORE any destructive command (terraform destroy, kubectl delete, az ... delete) and any time the user has not yet given consent for a billable / observable action. Returns {approved, resolved_by, notes}.",
 			InputSchema: map[string]any{
 				"type": "object",
@@ -2806,7 +2807,7 @@ func builtInToolSchemas() []providers.ToolSchema {
 			},
 		},
 		{
-			Name: ToolRegisterTool,
+			Name:        ToolRegisterTool,
 			Description: `Register a new named tool for this workspace. The tool becomes a parameterized template over primitives (shell or http); after a workspace admin approves it the agent can invoke it by name in subsequent turns and the template expands to vetted primitive calls. You never write executable code — the template references {{var}} placeholders that bind to your supplied args at call time. Use this to capture a useful procedure once instead of re-deriving it every run (e.g. deploy_azure_appservice → shell_exec("az appservice create ...")). Returns {approved, name, agent_tool_id, resolved_by, notes}.`,
 			InputSchema: map[string]any{
 				"type": "object",
@@ -2822,7 +2823,7 @@ func builtInToolSchemas() []providers.ToolSchema {
 			},
 		},
 		{
-			Name: ToolInstantiatePattern,
+			Name:        ToolInstantiatePattern,
 			Description: `Provision an approved Pattern into a workspace. Pass pattern_id (from list_patterns), workspace_id (defaults to the current run's workspace), a unique name for the instance, and the parameters object (must satisfy the pattern's input_schema_json). The platform validates parameters, expands the template through the same engine that runs registered tools (shell / http / composite primitives), runs each primitive with the agent's existing safety + approval plumbing, and writes the result back as a PatternInstance row. Returns {instance_id, pattern_id, status, outputs}. Prefer this over shell when a matching pattern exists — patterns are audited, deterministic, and cheap to re-run.`,
 			InputSchema: map[string]any{
 				"type": "object",
@@ -2837,7 +2838,7 @@ func builtInToolSchemas() []providers.ToolSchema {
 			},
 		},
 		{
-			Name: ToolListPatterns,
+			Name:        ToolListPatterns,
 			Description: `List the platform-wide Patterns catalog (admin-approved deployment recipes available to every workspace). Call this EARLY in a run — before reaching for shell — to see whether an existing pattern already solves the user's request. Each entry includes the pattern's id, name, display_name, description, category, and input_schema_json (the parameters it accepts). When a pattern matches, prefer it: invoke it via instantiate_pattern instead of re-deriving from shell. Returns {patterns: [...], count}.`,
 			InputSchema: map[string]any{
 				"type": "object",
@@ -2851,7 +2852,7 @@ func builtInToolSchemas() []providers.ToolSchema {
 			},
 		},
 		{
-			Name: ToolProposePattern,
+			Name:        ToolProposePattern,
 			Description: `Propose a new platform-wide deployment Pattern. Patterns are the durable, curated counterpart to register_tool — once a platform admin approves the proposal, the pattern lives in the global catalog and any workspace can instantiate it (via instantiate_pattern, later via a browse UI). Use this AFTER you've successfully completed a deployment via shell so the next person doesn't have to re-derive the steps. The pattern's template_json compiles via the same engine as register_tool (shell / http / composite). Returns {approved, name, pattern_id, resolved_by, notes, edited_fields}.`,
 			InputSchema: map[string]any{
 				"type": "object",
@@ -2869,7 +2870,7 @@ func builtInToolSchemas() []providers.ToolSchema {
 			},
 		},
 		{
-			Name: ToolStartHealthCheck,
+			Name:        ToolStartHealthCheck,
 			Description: "Set up a periodic HTTP health check against a deployed URL. Writes the spec onto the App's healthConfig; Orbit's platform then runs exactly one HealthCheckWorkflow per app (durable, survives this agent run, survives worker restarts) and the App detail page shows live status. Idempotent — calling again with new params restarts the same canonical workflow. Use this once you've successfully deployed something the user wants monitored.",
 			InputSchema: map[string]any{
 				"type": "object",
@@ -3035,11 +3036,11 @@ Style: be concise. Prefer structured proposals over wall-of-text. When the user'
 
 func initState(ctx workflow.Context, input InfrastructureAgentInput) agentState {
 	state := agentState{
-		status:           "starting",
-		workspaceID:      input.WorkspaceID,
-		history:          append([]ConversationTurn(nil), input.History...),
-		events:           append([]AgentEvent(nil), input.Events...),
-		nextSeq:          input.NextSequence,
+		status:                "starting",
+		workspaceID:           input.WorkspaceID,
+		history:               append([]ConversationTurn(nil), input.History...),
+		events:                append([]AgentEvent(nil), input.Events...),
+		nextSeq:               input.NextSequence,
 		pendingApprovals:      map[string]PendingApproval{},
 		pendingApprovalRowIDs: map[string]string{},
 		toolOutputBuffers:     map[string]*toolOutputBuffer{},
