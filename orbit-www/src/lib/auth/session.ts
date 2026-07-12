@@ -40,6 +40,11 @@ export async function getPayloadUserFromSession() {
   const payloadUser = await ensurePayloadUser(payload, session.user)
   if (!payloadUser) return null
 
+  // A deactivated user may still hold a valid session cookie (Better-Auth caches
+  // sessions for a few minutes independent of the DB). Treat them as signed out
+  // here so deactivation takes effect on the next request, not on cache expiry.
+  if (payloadUser.status === 'deactivated') return null
+
   return {
     ...payloadUser,
     collection: 'users' as const,

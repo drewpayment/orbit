@@ -20,6 +20,20 @@ export const auth = betterAuth({
     // itself fail with FORBIDDEN. New users sign in after approval instead.
     autoSignIn: false,
     // Keep the default resetPasswordTokenExpiresIn (1 hour).
+    // Completing an emailed reset/invite link proves mailbox ownership, so mark
+    // the account verified. For an admin-created invite this is what flips the
+    // user from unverified→verified once they set their first password; for an
+    // ordinary reset the flag is already true, so this is idempotent.
+    onPasswordReset: async ({ user }) => {
+      try {
+        await client
+          .db()
+          .collection("user")
+          .updateOne({ _id: new ObjectId(user.id) }, { $set: { emailVerified: true } })
+      } catch (error) {
+        console.error(`[password-reset] Failed to mark ${user.email} verified:`, error)
+      }
+    },
     sendResetPassword: async ({ user, url }) => {
       if (process.env.NODE_ENV === "development") {
         console.log(`\n${"=".repeat(60)}`)
@@ -163,6 +177,11 @@ export const auth = betterAuth({
           if (status === "rejected") {
             throw new APIError("FORBIDDEN", {
               message: "Your registration was not approved. Contact an administrator.",
+            })
+          }
+          if (status === "deactivated") {
+            throw new APIError("FORBIDDEN", {
+              message: "Your account has been deactivated. Contact an administrator.",
             })
           }
           if (

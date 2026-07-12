@@ -53,6 +53,7 @@ function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const resetSuccess = searchParams.get('reset') === 'success'
+  const inviteSuccess = searchParams.get('invite') === 'success'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [errorDisplay, setErrorDisplay] = useState<{ message: string; type: 'error' | 'info' | 'warning' } | null>(null)
@@ -122,6 +123,12 @@ function LoginForm() {
         {resetSuccess && (
           <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 px-4 py-3 rounded">
             Password updated — sign in with your new password.
+          </div>
+        )}
+
+        {inviteSuccess && (
+          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 px-4 py-3 rounded">
+            Your account is ready — sign in with the password you just set.
           </div>
         )}
 

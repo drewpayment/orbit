@@ -266,7 +266,7 @@ export interface User {
   /**
    * Change to "Approved" to allow this user to log in.
    */
-  status?: ('pending' | 'approved' | 'rejected') | null;
+  status?: ('pending' | 'approved' | 'rejected' | 'deactivated') | null;
   /**
    * Super Admin and Admin can access the Payload admin panel.
    */

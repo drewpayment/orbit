@@ -46,6 +46,7 @@ export const Users: CollectionConfig = {
         { label: 'Pending', value: 'pending' },
         { label: 'Approved', value: 'approved' },
         { label: 'Rejected', value: 'rejected' },
+        { label: 'Deactivated', value: 'deactivated' },
       ],
       admin: {
         position: 'sidebar',
