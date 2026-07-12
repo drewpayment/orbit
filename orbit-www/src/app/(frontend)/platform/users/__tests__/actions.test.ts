@@ -29,7 +29,7 @@ const {
     sendVerificationEmail: vi.fn(),
   },
   sessionCollection: { deleteMany: vi.fn() },
-  baUserCollection: { updateOne: vi.fn(), findOne: vi.fn() },
+  baUserCollection: { updateOne: vi.fn(), findOne: vi.fn(), deleteOne: vi.fn() },
 }))
 
 const dbMock = {
@@ -56,7 +56,7 @@ const superAdmin = { id: 'p-super', betterAuthId: 'ba-super', role: 'super_admin
 const admin = { id: 'p-admin', betterAuthId: 'ba-admin', role: 'admin', email: 'admin@x.io', status: 'approved' }
 const regular = { id: 'p-user', betterAuthId: 'ba-user', role: 'user', email: 'user@x.io', status: 'approved' }
 
-function targetUser(over: Partial<typeof regular> = {}) {
+function targetUser(over: Record<string, unknown> = {}) {
   return { ...regular, ...over }
 }
 
@@ -65,6 +65,9 @@ beforeEach(() => {
   // Default: no email collision, plenty of super_admins.
   payloadMock.find.mockResolvedValue({ docs: [] })
   baUserCollection.findOne.mockResolvedValue(null)
+  baUserCollection.updateOne.mockResolvedValue({ acknowledged: true })
+  baUserCollection.deleteOne.mockResolvedValue({ acknowledged: true })
+  sessionCollection.deleteMany.mockResolvedValue({ acknowledged: true })
   payloadMock.count.mockResolvedValue({ totalDocs: 3 })
   payloadMock.create.mockResolvedValue({ id: 'p-new' })
   payloadMock.update.mockResolvedValue({ id: 'p-new' })
@@ -136,11 +139,16 @@ describe('createUser', () => {
       expect.objectContaining({ email: 'new@x.io' }),
       expect.objectContaining({ $set: expect.objectContaining({ status: 'approved', role: 'user' }) }),
     )
-    // Payload mirror created approved with the BA id linked.
+    // Payload mirror created approved with the BA id linked and invitedAt set.
     expect(payloadMock.create).toHaveBeenCalledWith(
       expect.objectContaining({
         collection: 'users',
-        data: expect.objectContaining({ status: 'approved', role: 'user', betterAuthId: 'ba-new' }),
+        data: expect.objectContaining({
+          status: 'approved',
+          role: 'user',
+          betterAuthId: 'ba-new',
+          invitedAt: expect.any(String),
+        }),
         overrideAccess: true,
       }),
     )
@@ -196,6 +204,27 @@ describe('createUser', () => {
     expect(res.ok).toBe(false)
     expect(authApi.signUpEmail).not.toHaveBeenCalled()
     expect(payloadMock.create).not.toHaveBeenCalled()
+  })
+
+  it('cleans up the orphaned Better-Auth account when the Payload write fails (MINOR 5)', async () => {
+    mockGetActor.mockResolvedValue(admin)
+    payloadMock.create.mockRejectedValue(new Error('mongo down'))
+    const res = await actions.createUser({ name: 'Half', email: 'half@x.io', role: 'user', mode: 'invite' })
+    expect(res.ok).toBe(false)
+    if (!res.ok) expect(res.error).toBe('Failed to create user record')
+    // Compensating delete of the just-created BA user.
+    expect(baUserCollection.deleteOne).toHaveBeenCalledWith(expect.objectContaining({ email: 'half@x.io' }))
+    // No invite goes out for a rolled-back account.
+    expect(authApi.requestPasswordReset).not.toHaveBeenCalled()
+  })
+
+  it('reports a half-created account when cleanup also fails', async () => {
+    mockGetActor.mockResolvedValue(admin)
+    payloadMock.create.mockRejectedValue(new Error('mongo down'))
+    baUserCollection.deleteOne.mockRejectedValue(new Error('cleanup failed too'))
+    const res = await actions.createUser({ name: 'Half', email: 'half@x.io', role: 'user', mode: 'invite' })
+    expect(res.ok).toBe(false)
+    if (!res.ok) expect(res.error).toContain('half-created')
   })
 })
 
@@ -262,6 +291,36 @@ describe('updateUser', () => {
     payloadMock.count.mockResolvedValue({ totalDocs: 2 })
     const res = await actions.updateUser({ userId: 'p-other-super', role: 'admin' })
     expect(res.ok).toBe(true)
+  })
+
+  it('rolls back a demotion when the post-write recount shows the invariant broke (TOCTOU)', async () => {
+    mockGetActor.mockResolvedValue(superAdmin)
+    payloadMock.findByID.mockResolvedValue({ ...superAdmin, id: 'p-other-super', email: 'other@x.io' })
+    // Pre-write count passes (2); post-write recount reveals a concurrent
+    // demotion drained the last super_admin (0) → roll back.
+    payloadMock.count.mockResolvedValueOnce({ totalDocs: 2 }).mockResolvedValueOnce({ totalDocs: 0 })
+    const res = await actions.updateUser({ userId: 'p-other-super', role: 'admin' })
+    expect(res.ok).toBe(false)
+    // Write happened, then a compensating write restored super_admin.
+    expect(payloadMock.update).toHaveBeenCalledTimes(2)
+    expect(payloadMock.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ role: 'super_admin' }) }),
+    )
+    // The auth-store mirror must NOT have been written for a rolled-back change.
+    expect(baUserCollection.updateOne).not.toHaveBeenCalled()
+  })
+
+  it('reverts the Payload role change when the auth-store mirror fails (MINOR 6)', async () => {
+    mockGetActor.mockResolvedValue(superAdmin)
+    payloadMock.findByID.mockResolvedValue(targetUser())
+    baUserCollection.updateOne.mockRejectedValueOnce(new Error('mongo down'))
+    const res = await actions.updateUser({ userId: 'p-user', role: 'admin' })
+    expect(res.ok).toBe(false)
+    // First update applied the role; second reverted it to the original.
+    expect(payloadMock.update).toHaveBeenCalledTimes(2)
+    expect(payloadMock.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ role: 'user' }) }),
+    )
   })
 })
 
@@ -336,6 +395,35 @@ describe('deactivateUser', () => {
     const res = await actions.deactivateUser('p-other-super')
     expect(res.ok).toBe(false)
     expect(sessionCollection.deleteMany).not.toHaveBeenCalled()
+    // Pre-check blocks before touching either store.
+    expect(baUserCollection.updateOne).not.toHaveBeenCalled()
+    expect(payloadMock.update).not.toHaveBeenCalled()
+  })
+
+  it('rolls back when a post-write recount shows it drained the last super_admin (TOCTOU)', async () => {
+    mockGetActor.mockResolvedValue(superAdmin)
+    payloadMock.findByID.mockResolvedValue({ ...superAdmin, id: 'p-other-super', email: 'o@x.io' })
+    payloadMock.count.mockResolvedValueOnce({ totalDocs: 2 }).mockResolvedValueOnce({ totalDocs: 0 })
+    const res = await actions.deactivateUser('p-other-super')
+    expect(res.ok).toBe(false)
+    // Both stores were written then restored to approved.
+    expect(payloadMock.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'approved' }) }),
+    )
+    expect(baUserCollection.updateOne).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ $set: expect.objectContaining({ status: 'approved' }) }),
+    )
+  })
+
+  it('does not touch Payload if the auth-store write fails first (MINOR 6, BA-first)', async () => {
+    mockGetActor.mockResolvedValue(admin)
+    payloadMock.findByID.mockResolvedValue(targetUser())
+    baUserCollection.updateOne.mockRejectedValueOnce(new Error('mongo down'))
+    const res = await actions.deactivateUser('p-user')
+    expect(res.ok).toBe(false)
+    expect(payloadMock.update).not.toHaveBeenCalled()
+    expect(sessionCollection.deleteMany).not.toHaveBeenCalled()
   })
 })
 
@@ -372,24 +460,60 @@ describe('email utilities', () => {
     )
   })
 
-  it('sendPasswordReset uses the reset-token path', async () => {
+  it('resendVerification refuses an invited user (they use the invite link)', async () => {
+    mockGetActor.mockResolvedValue(admin)
+    payloadMock.findByID.mockResolvedValue(targetUser({ invitedAt: '2026-07-12T00:00:00.000Z' }))
+    baUserCollection.findOne.mockResolvedValue({ email: 'user@x.io', emailVerified: false, status: 'approved' })
+    const res = await actions.resendVerification('p-user')
+    expect(res.ok).toBe(false)
+    expect(authApi.sendVerificationEmail).not.toHaveBeenCalled()
+  })
+
+  it('resendVerification refuses an already-verified user', async () => {
     mockGetActor.mockResolvedValue(admin)
     payloadMock.findByID.mockResolvedValue(targetUser())
+    baUserCollection.findOne.mockResolvedValue({ email: 'user@x.io', emailVerified: true, status: 'approved' })
+    const res = await actions.resendVerification('p-user')
+    expect(res.ok).toBe(false)
+  })
+
+  it('sendPasswordReset requires a verified email', async () => {
+    mockGetActor.mockResolvedValue(admin)
+    payloadMock.findByID.mockResolvedValue(targetUser())
+    baUserCollection.findOne.mockResolvedValue({ email: 'user@x.io', emailVerified: false, status: 'approved' })
+    const res = await actions.sendPasswordReset('p-user')
+    expect(res.ok).toBe(false)
+    expect(authApi.requestPasswordReset).not.toHaveBeenCalled()
+  })
+
+  it('sendPasswordReset uses the reset-token path for a verified user', async () => {
+    mockGetActor.mockResolvedValue(admin)
+    payloadMock.findByID.mockResolvedValue(targetUser())
+    baUserCollection.findOne.mockResolvedValue({ email: 'user@x.io', emailVerified: true, status: 'approved' })
     const res = await actions.sendPasswordReset('p-user')
     expect(res.ok).toBe(true)
     expect(authApi.requestPasswordReset).toHaveBeenCalledWith(
-      expect.objectContaining({ body: expect.objectContaining({ email: 'user@x.io' }) }),
+      expect.objectContaining({ body: expect.objectContaining({ email: 'user@x.io', redirectTo: '/reset-password' }) }),
     )
   })
 
-  it('resendInvite re-sends the invite reset link', async () => {
+  it('resendInvite re-sends the invite reset link for an invited, unverified user', async () => {
     mockGetActor.mockResolvedValue(admin)
-    payloadMock.findByID.mockResolvedValue(targetUser())
+    payloadMock.findByID.mockResolvedValue(targetUser({ invitedAt: '2026-07-12T00:00:00.000Z' }))
     baUserCollection.findOne.mockResolvedValue({ email: 'user@x.io', emailVerified: false, status: 'approved' })
     const res = await actions.resendInvite('p-user')
     expect(res.ok).toBe(true)
     expect(authApi.requestPasswordReset).toHaveBeenCalledWith(
       expect.objectContaining({ body: expect.objectContaining({ redirectTo: expect.stringContaining('invite=1') }) }),
     )
+  })
+
+  it('resendInvite refuses a user who was never invited', async () => {
+    mockGetActor.mockResolvedValue(admin)
+    payloadMock.findByID.mockResolvedValue(targetUser())
+    baUserCollection.findOne.mockResolvedValue({ email: 'user@x.io', emailVerified: false, status: 'approved' })
+    const res = await actions.resendInvite('p-user')
+    expect(res.ok).toBe(false)
+    expect(authApi.requestPasswordReset).not.toHaveBeenCalled()
   })
 })

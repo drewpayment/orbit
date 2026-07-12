@@ -82,6 +82,10 @@ export interface UserRow {
   emailVerified: boolean
   avatarUrl: string | null
   createdAt: string
+  // Set when the account was created via an admin invite link; distinguishes
+  // invited users (show "Resend invite") from self-registered ones ("Resend
+  // verification"). null for self-registered / pre-existing users.
+  invitedAt: string | null
 }
 
 interface UsersTableProps {
@@ -367,7 +371,12 @@ function UserTableRow({ user, actorId, actorRole, pending, onEdit, onDeactivate,
 
   const canEdit = canManage
   const canApproveReject = canManage && user.status === 'pending'
-  const canResendEmails = canManage && user.status === 'approved' && !user.emailVerified
+  const approvedUnverified = canManage && user.status === 'approved' && !user.emailVerified
+  // An invited user finishes via the invite link (Resend invite); a
+  // self-registered user via the verification email (Resend verification).
+  // The server actions enforce the same split, so only one shows per row.
+  const canResendInvite = approvedUnverified && Boolean(user.invitedAt)
+  const canResendVerification = approvedUnverified && !user.invitedAt
   const canPasswordReset = canManage && user.status === 'approved' && user.emailVerified
   const canDeactivate = canManage && !isSelf && user.status === 'approved'
   const canReactivate = canManage && user.status === 'deactivated'
@@ -375,7 +384,8 @@ function UserTableRow({ user, actorId, actorRole, pending, onEdit, onDeactivate,
   const hasAnyAction =
     canEdit ||
     canApproveReject ||
-    canResendEmails ||
+    canResendInvite ||
+    canResendVerification ||
     canPasswordReset ||
     canDeactivate ||
     canReactivate
@@ -451,23 +461,23 @@ function UserTableRow({ user, actorId, actorRole, pending, onEdit, onDeactivate,
                   </DropdownMenuItem>
                 </>
               )}
-              {canResendEmails && (
-                <>
-                  <DropdownMenuItem
-                    onClick={() =>
-                      runAction('Verification email sent', () => resendVerification(user.id))
-                    }
-                  >
-                    <Mail className="mr-2 h-4 w-4" />
-                    Resend verification
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => runAction('Invite email sent', () => resendInvite(user.id))}
-                  >
-                    <Send className="mr-2 h-4 w-4" />
-                    Resend invite
-                  </DropdownMenuItem>
-                </>
+              {canResendVerification && (
+                <DropdownMenuItem
+                  onClick={() =>
+                    runAction('Verification email sent', () => resendVerification(user.id))
+                  }
+                >
+                  <Mail className="mr-2 h-4 w-4" />
+                  Resend verification
+                </DropdownMenuItem>
+              )}
+              {canResendInvite && (
+                <DropdownMenuItem
+                  onClick={() => runAction('Invite email sent', () => resendInvite(user.id))}
+                >
+                  <Send className="mr-2 h-4 w-4" />
+                  Resend invite
+                </DropdownMenuItem>
               )}
               {canPasswordReset && (
                 <DropdownMenuItem

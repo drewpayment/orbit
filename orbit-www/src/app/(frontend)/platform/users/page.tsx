@@ -24,11 +24,15 @@ export default async function PlatformUsersPage() {
 
   const payload = await getPayload({ config })
 
-  // Fetch every user with overrideAccess so the admin sees the full set.
+  // Fetch users with overrideAccess so the admin sees the full set. limit: 500
+  // is a deliberate cap — this page has no pagination yet; if an install grows
+  // past it, the newest 500 show and this needs real pagination (tracked as
+  // follow-up, not built here).
+  const USERS_PAGE_CAP = 500
   const usersResult = await payload.find({
     collection: 'users',
     sort: '-createdAt',
-    limit: 500,
+    limit: USERS_PAGE_CAP,
     depth: 1,
     overrideAccess: true,
   })
@@ -50,6 +54,7 @@ export default async function PlatformUsersPage() {
       emailVerified: verifiedMap.get(doc.email.toLowerCase()) ?? false,
       avatarUrl,
       createdAt: doc.createdAt,
+      invitedAt: doc.invitedAt ?? null,
     }
   })
 

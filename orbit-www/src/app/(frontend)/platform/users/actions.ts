@@ -37,6 +37,7 @@ interface TargetUser {
   role: UserRole
   status?: string | null
   betterAuthId?: string | null
+  invitedAt?: string | null
 }
 
 const forbidden: ActionResult<never> = { ok: false, error: 'Forbidden' }
@@ -66,6 +67,7 @@ async function loadTarget(userId: string): Promise<TargetUser | null> {
       role: (doc.role ?? 'user') as UserRole,
       status: doc.status,
       betterAuthId: doc.betterAuthId,
+      invitedAt: doc.invitedAt,
     }
   } catch {
     return null
@@ -110,6 +112,30 @@ function randomPassword(): string {
   return crypto.randomBytes(32).toString('hex')
 }
 
+/** Look up the Better-Auth mirror row for a user (emailVerified / status live here). */
+async function findBaUser(email: string) {
+  const db = (await getMongoClient()).db()
+  return db.collection('user').findOne({ email })
+}
+
+/**
+ * Compensating cleanup for a half-created invite/password account: remove the
+ * orphaned Better-Auth user + any sessions so a failed Payload write can't leave
+ * an approved account that never surfaces in the UI. Returns false if cleanup
+ * itself failed (caller must warn the admin the account is half-created).
+ */
+async function cleanupBetterAuthUser(email: string, betterAuthId?: string): Promise<boolean> {
+  try {
+    const db = (await getMongoClient()).db()
+    await db.collection('user').deleteOne({ email })
+    await revokeSessions(betterAuthId)
+    return true
+  } catch (err) {
+    console.error(`[users] Failed to clean up orphaned Better-Auth account for ${email}:`, err)
+    return false
+  }
+}
+
 // --- createUser ---------------------------------------------------------------
 
 interface CreateUserInput {
@@ -148,8 +174,7 @@ export async function createUser(input: CreateUserInput): Promise<ActionResult<{
     limit: 1,
     overrideAccess: true,
   })
-  const db = (await getMongoClient()).db()
-  const existingBa = await db.collection('user').findOne({ email })
+  const existingBa = await findBaUser(email)
   if (existingPayload.docs.length > 0 || existingBa) {
     return { ok: false, error: 'A user with this email already exists' }
   }
@@ -170,18 +195,19 @@ export async function createUser(input: CreateUserInput): Promise<ActionResult<{
     return { ok: false, error: 'Failed to create account' }
   }
 
-  // 2. Promote the Better-Auth user to approved. Manual-password accounts are
-  //    email-verified immediately (the admin vouches); invited accounts verify
-  //    when they complete the invite link.
-  await mirrorBetterAuthUser(email, {
-    status: 'approved',
-    role: input.role,
-    emailVerified: input.mode === 'password',
-  })
-
-  // 3. Create the Payload mirror.
+  // 2. Promote the Better-Auth user to approved and create the Payload mirror.
+  //    Manual-password accounts are email-verified immediately (the admin
+  //    vouches); invited accounts verify when they complete the invite link.
+  //    If the Payload write fails, compensate by deleting the BA account so the
+  //    operation is atomic from the admin's perspective (MINOR 5).
   let createdId: string
   try {
+    await mirrorBetterAuthUser(email, {
+      status: 'approved',
+      role: input.role,
+      emailVerified: input.mode === 'password',
+    })
+
     const created = await payload.create({
       collection: 'users',
       data: {
@@ -191,6 +217,7 @@ export async function createUser(input: CreateUserInput): Promise<ActionResult<{
         status: 'approved',
         betterAuthId: baUserId || undefined,
         skipEmailVerification: input.mode === 'password',
+        invitedAt: input.mode === 'invite' ? new Date().toISOString() : undefined,
         // Local strategy is disabled; this password is never usable for login.
         password: randomPassword(),
       },
@@ -198,11 +225,19 @@ export async function createUser(input: CreateUserInput): Promise<ActionResult<{
       context: { skipApprovalHook: true },
     })
     createdId = String(created.id)
-  } catch {
+  } catch (err) {
+    console.error(`[users] Failed to create Payload user for ${email}:`, err)
+    const cleaned = await cleanupBetterAuthUser(email, baUserId)
+    if (!cleaned) {
+      return {
+        ok: false,
+        error: `Account half-created for ${email}. Remove the leftover login in the Payload admin before retrying.`,
+      }
+    }
     return { ok: false, error: 'Failed to create user record' }
   }
 
-  // 4. Invite mode: send the "set your password" link via the reset-token path.
+  // 3. Invite mode: send the "set your password" link via the reset-token path.
   if (input.mode === 'invite') {
     try {
       await auth.api.requestPasswordReset({ body: { email, redirectTo: INVITE_REDIRECT } })
@@ -237,6 +272,8 @@ export async function updateUser(input: UpdateUserInput): Promise<ActionResult> 
   // Any edit requires the actor to be allowed to manage this target at all.
   if (!canManageTarget(actor.role, target.role)) return forbidden
 
+  const demotingSuperAdmin = roleChange && target.role === 'super_admin' && input.role !== 'super_admin'
+
   if (roleChange) {
     const nextRole = input.role as UserRole
     if (actor.id === target.id) {
@@ -245,10 +282,9 @@ export async function updateUser(input: UpdateUserInput): Promise<ActionResult> 
     if (!canAssignRole(actor.role, nextRole)) {
       return { ok: false, error: 'You are not allowed to assign that role' }
     }
-    if (target.role === 'super_admin' && nextRole !== 'super_admin') {
-      if ((await countActiveSuperAdmins()) <= 1) {
-        return { ok: false, error: 'Cannot demote the last active super admin' }
-      }
+    // Cheap pre-check; the post-write re-verify below closes the TOCTOU window.
+    if (demotingSuperAdmin && (await countActiveSuperAdmins()) <= 1) {
+      return { ok: false, error: 'Cannot demote the last active super admin' }
     }
   }
 
@@ -271,8 +307,45 @@ export async function updateUser(input: UpdateUserInput): Promise<ActionResult> 
     return { ok: false, error: 'Failed to update user' }
   }
 
+  // TOCTOU guard (UAC 19): re-count against the Payload store AFTER the write.
+  // Two concurrent demotions that each saw count=2 pre-write both land here; the
+  // one that observes 0 remaining rolls itself back. Residual window: the count
+  // is eventually consistent, so in a tight race both may roll back — that errs
+  // toward keeping super_admins, which is the safe direction.
+  if (demotingSuperAdmin && (await countActiveSuperAdmins()) < 1) {
+    try {
+      await payload.update({
+        collection: 'users',
+        id: target.id,
+        data: { role: 'super_admin' },
+        overrideAccess: true,
+        context: { skipApprovalHook: true },
+      })
+    } catch (err) {
+      console.error(`[users] Failed to roll back super_admin demotion for ${target.email}:`, err)
+    }
+    return { ok: false, error: 'Cannot demote the last active super admin' }
+  }
+
   if (roleChange) {
-    await mirrorBetterAuthUser(target.email, { role: input.role })
+    try {
+      await mirrorBetterAuthUser(target.email, { role: input.role })
+    } catch (err) {
+      // Keep the two stores consistent: undo the Payload role change.
+      console.error(`[users] Failed to mirror role to Better-Auth for ${target.email}:`, err)
+      try {
+        await payload.update({
+          collection: 'users',
+          id: target.id,
+          data: { role: target.role },
+          overrideAccess: true,
+          context: { skipApprovalHook: true },
+        })
+      } catch (rollbackErr) {
+        console.error(`[users] Failed to roll back role for ${target.email}:`, rollbackErr)
+      }
+      return { ok: false, error: 'Could not sync the role to the auth store; the change was reverted.' }
+    }
   }
 
   revalidatePath(USERS_PATH)
@@ -350,6 +423,16 @@ export async function deactivateUser(userId: string): Promise<ActionResult> {
     return { ok: false, error: 'Cannot deactivate the last active super admin' }
   }
 
+  // Better-Auth FIRST: it owns the sign-in gate, so flipping it before Payload
+  // guarantees the user cannot mint a new session even if the Payload write
+  // lags or fails (MINOR 6). If it fails, nothing else has changed yet.
+  try {
+    await mirrorBetterAuthUser(target.email, { status: 'deactivated' })
+  } catch (err) {
+    console.error(`[users] Failed to deactivate Better-Auth user ${target.email}:`, err)
+    return { ok: false, error: 'Could not update the auth store; user was not deactivated.' }
+  }
+
   const payload = await getPayload({ config })
   try {
     await payload.update({
@@ -359,12 +442,43 @@ export async function deactivateUser(userId: string): Promise<ActionResult> {
       overrideAccess: true,
       context: { skipApprovalHook: true },
     })
-  } catch {
+  } catch (err) {
+    console.error(`[users] Failed to deactivate Payload user ${target.email}:`, err)
+    // Roll the sign-in gate back so the two stores stay consistent.
+    try {
+      await mirrorBetterAuthUser(target.email, { status: 'approved' })
+    } catch (rollbackErr) {
+      console.error(`[users] Failed to roll back auth deactivation for ${target.email}:`, rollbackErr)
+    }
     return { ok: false, error: 'Failed to deactivate user' }
   }
 
-  await mirrorBetterAuthUser(target.email, { status: 'deactivated' })
-  await revokeSessions(target.betterAuthId)
+  // TOCTOU guard (UAC 19): re-verify AFTER the write that a super_admin
+  // deactivation didn't drain the last one via a concurrent operation.
+  if (target.role === 'super_admin' && (await countActiveSuperAdmins()) < 1) {
+    try {
+      await payload.update({
+        collection: 'users',
+        id: target.id,
+        data: { status: 'approved' },
+        overrideAccess: true,
+        context: { skipApprovalHook: true },
+      })
+      await mirrorBetterAuthUser(target.email, { status: 'approved' })
+    } catch (err) {
+      console.error(`[users] Failed to roll back super_admin deactivation for ${target.email}:`, err)
+    }
+    return { ok: false, error: 'Cannot deactivate the last active super admin' }
+  }
+
+  // Best-effort session revocation. The fresh-status gates in getCurrentUser /
+  // getPayloadUserFromSession / the Payload auth strategy already lock the user
+  // out on the next request, so a failure here is non-fatal.
+  try {
+    await revokeSessions(target.betterAuthId)
+  } catch (err) {
+    console.error(`[users] Failed to revoke sessions for ${target.email}:`, err)
+  }
 
   revalidatePath(USERS_PATH)
   return { ok: true }
@@ -392,18 +506,31 @@ export async function reactivateUser(userId: string): Promise<ActionResult> {
     return { ok: false, error: 'Failed to reactivate user' }
   }
 
-  await mirrorBetterAuthUser(target.email, { status: 'approved' })
+  try {
+    await mirrorBetterAuthUser(target.email, { status: 'approved' })
+  } catch (err) {
+    console.error(`[users] Failed to mirror reactivation to Better-Auth for ${target.email}:`, err)
+    // Undo the Payload change so the user isn't shown active while sign-in is
+    // still gated 'deactivated' in Better-Auth.
+    try {
+      await payload.update({
+        collection: 'users',
+        id: target.id,
+        data: { status: 'deactivated' },
+        overrideAccess: true,
+        context: { skipApprovalHook: true },
+      })
+    } catch (rollbackErr) {
+      console.error(`[users] Failed to roll back reactivation for ${target.email}:`, rollbackErr)
+    }
+    return { ok: false, error: 'Could not sync reactivation to the auth store; the change was reverted.' }
+  }
 
   revalidatePath(USERS_PATH)
   return { ok: true }
 }
 
 // --- email utilities ----------------------------------------------------------
-
-async function findBaUser(email: string) {
-  const db = (await getMongoClient()).db()
-  return db.collection('user').findOne({ email })
-}
 
 export async function resendVerification(userId: string): Promise<ActionResult> {
   const actor = await requirePlatformAdmin()
@@ -412,6 +539,13 @@ export async function resendVerification(userId: string): Promise<ActionResult> 
   const target = await loadTarget(userId)
   if (!target) return { ok: false, error: 'User not found' }
   if (!canManageTarget(actor.role, target.role)) return forbidden
+  if (target.status !== 'approved') {
+    return { ok: false, error: 'Verification is only available for approved users' }
+  }
+  // Invited users complete verification through the invite link, not this path.
+  if (target.invitedAt) {
+    return { ok: false, error: 'This user was invited — use "Resend invite" instead' }
+  }
 
   const baUser = await findBaUser(target.email)
   if (baUser?.emailVerified) {
@@ -433,6 +567,14 @@ export async function sendPasswordReset(userId: string): Promise<ActionResult> {
   const target = await loadTarget(userId)
   if (!target) return { ok: false, error: 'User not found' }
   if (!canManageTarget(actor.role, target.role)) return forbidden
+  if (target.status !== 'approved') {
+    return { ok: false, error: 'Password reset is only available for approved users' }
+  }
+
+  const baUser = await findBaUser(target.email)
+  if (!baUser?.emailVerified) {
+    return { ok: false, error: 'This user has not verified their email yet' }
+  }
 
   try {
     await auth.api.requestPasswordReset({ body: { email: target.email, redirectTo: RESET_REDIRECT } })
@@ -449,6 +591,12 @@ export async function resendInvite(userId: string): Promise<ActionResult> {
   const target = await loadTarget(userId)
   if (!target) return { ok: false, error: 'User not found' }
   if (!canManageTarget(actor.role, target.role)) return forbidden
+  if (target.status !== 'approved') {
+    return { ok: false, error: 'Invites are only available for approved users' }
+  }
+  if (!target.invitedAt) {
+    return { ok: false, error: 'This user was not invited — use "Resend verification" instead' }
+  }
 
   const baUser = await findBaUser(target.email)
   if (baUser?.emailVerified) {

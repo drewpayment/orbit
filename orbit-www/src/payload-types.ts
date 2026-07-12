@@ -279,6 +279,7 @@ export interface User {
    * If checked, user can log in immediately after approval without verifying their email.
    */
   skipEmailVerification?: boolean | null;
+  invitedAt?: string | null;
   registrationApprovedAt?: string | null;
   registrationApprovedBy?: (string | null) | User;
   updatedAt: string;
