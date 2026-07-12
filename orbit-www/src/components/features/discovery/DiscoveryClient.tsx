@@ -14,11 +14,13 @@ import {
   startWorkspaceScan,
   approveDiscoveries,
   ignoreDiscoveries,
+  renameDiscovery,
   getScanStatus,
   type ScanStatusEntry,
 } from '@/app/actions/discovery'
 import {
   groupByRepo,
+  humanizeRenameReason,
   humanizeSkippedReason,
   importedHref,
   proposalDisplayName,
@@ -194,6 +196,21 @@ export function DiscoveryClient({
     [router],
   )
 
+  // Inline rename (Phase 3): no confirm dialog, just persist and refresh so the
+  // edited name is what single/bulk approve import with.
+  const onRename = useCallback(
+    async (id: string, name: string) => {
+      const res = await renameDiscovery(id, name)
+      if (!res.success) {
+        toast.error(humanizeRenameReason(res.error))
+        return false
+      }
+      router.refresh()
+      return true
+    },
+    [router],
+  )
+
   const proposedIds = proposed.map((d) => d.id)
   const selectedProposed = proposedIds.filter((id) => selected.has(id))
 
@@ -282,6 +299,7 @@ export function DiscoveryClient({
                           pending={isPending}
                           onApprove={() => onApprove([row.id])}
                           onIgnore={() => onIgnore([row.id])}
+                          onRename={(name) => onRename(row.id, name)}
                         />
                       ))}
                     </ul>

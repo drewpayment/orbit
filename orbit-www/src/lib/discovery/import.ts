@@ -20,7 +20,7 @@ import type { DiscoveredEntity } from '@/payload-types'
 
 export interface ImportResult {
   imported: boolean
-  /** Set when the proposal was intentionally not imported (e.g. graphql). */
+  /** Set when the proposal was intentionally not imported (e.g. an unsupported schema type). */
   skippedReason?: string
   ref?: { collection: string; id: string }
 }
@@ -42,12 +42,12 @@ export interface ImportOptions {
 }
 
 /**
- * `api-schemas` only supports these two schema types (see APISchemas.ts). The
- * `detectApiSpecs` detector can additionally emit 'graphql'; those proposals are
- * skipped on import rather than writing an invalid enum value — the proposal row
- * still lives in the review queue for visibility.
+ * `api-schemas` supports these schema types (see APISchemas.ts `schemaType`
+ * select). Any other value the `detectApiSpecs` detector could theoretically
+ * emit is skipped on import rather than writing an invalid enum value — the
+ * proposal row still lives in the review queue for visibility.
  */
-const SUPPORTED_API_SCHEMA_TYPES = new Set(['openapi', 'asyncapi'])
+const SUPPORTED_API_SCHEMA_TYPES = new Set(['openapi', 'asyncapi', 'graphql'])
 
 function relId(v: unknown): string | undefined {
   if (typeof v === 'string') return v
@@ -254,10 +254,10 @@ export async function importDiscoveredService(
 
 /**
  * Import an API proposal into an `api-schemas` row, letting the existing
- * projection emit the `api` entity + `exposes-api` relation. graphql proposals
- * are skipped (unsupported schemaType). Idempotent: an existing api-schemas row
- * for the same workspace + repositoryPath (+ App when known) is linked, not
- * duplicated.
+ * projection emit the `api` entity + `exposes-api` relation. A proposal with a
+ * schema type `api-schemas` does not support is skipped rather than written as
+ * an invalid enum value. Idempotent: an existing api-schemas row for the same
+ * workspace + repositoryPath (+ App when known) is linked, not duplicated.
  */
 export async function importDiscoveredApi(
   payload: Payload,
@@ -335,7 +335,7 @@ export async function importDiscoveredApi(
         workspace: workspaceId,
         visibility: 'workspace',
         status: 'draft',
-        schemaType: schemaType as 'openapi' | 'asyncapi',
+        schemaType: schemaType as 'openapi' | 'asyncapi' | 'graphql',
         rawContent,
         repositoryPath: specPath,
         ...(appId ? { repository: appId } : {}),

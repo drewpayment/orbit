@@ -24,12 +24,14 @@ import {
   startInstallationScan,
   approveDiscoveries,
   ignoreDiscoveries,
+  renameDiscovery,
   getInstallationScanStatus,
 } from '@/app/actions/discovery'
 import type { ApproveResult } from '@/lib/discovery/actions-core'
 import { startConnectionScan, getConnectionScanStatus } from '@/app/actions/git-connections'
 import {
   groupByRepo,
+  humanizeRenameReason,
   humanizeSkippedReason,
   importedHref,
   KindBadge,
@@ -330,6 +332,21 @@ export function GlobalDiscoveryClient({
     [router],
   )
 
+  // Inline rename (Phase 3): no confirm dialog, just persist and refresh so the
+  // edited name is what single/bulk approve import with.
+  const onRename = useCallback(
+    async (id: string, name: string) => {
+      const res = await renameDiscovery(id, name)
+      if (!res.success) {
+        toast.error(humanizeRenameReason(res.error))
+        return false
+      }
+      router.refresh()
+      return true
+    },
+    [router],
+  )
+
   const proposedIds = proposed.map((d) => d.id)
   const selectedProposed = proposedIds.filter((id) => selected.has(id))
 
@@ -409,6 +426,7 @@ export function GlobalDiscoveryClient({
                           pending={isPending}
                           onApprove={() => openConfirm(row)}
                           onIgnore={() => onIgnore([row.id])}
+                          onRename={(name) => onRename(row.id, name)}
                         />
                       ))}
                     </ul>

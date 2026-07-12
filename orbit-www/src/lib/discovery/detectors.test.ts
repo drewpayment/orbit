@@ -6,6 +6,7 @@ import {
   detectOwnershipHints,
   runDetectors,
   extractSpecMetadata,
+  extractGraphQLMetadata,
   isVendoredPath,
   DISCOVERY_FETCH_PATTERNS,
   type EvidenceBundle,
@@ -96,6 +97,42 @@ describe('extractSpecMetadata', () => {
   it('leaves serverUrls null when spec has no servers array', () => {
     const meta = extractSpecMetadata('openapi: 3.0.0\ninfo:\n  title: X\n  version: "1"\n')
     expect(meta!.serverUrls).toBeNull()
+  })
+})
+
+describe('extractGraphQLMetadata', () => {
+  it('counts fields across Query, Mutation, and Subscription', () => {
+    const sdl = `
+      type Query {
+        user(id: ID!): User
+        users: [User!]!
+      }
+      type Mutation {
+        createUser(name: String!): User
+      }
+      type Subscription {
+        userCreated: User
+      }
+      type User {
+        id: ID!
+        name: String!
+      }
+    `
+    const meta = extractGraphQLMetadata(sdl)
+    expect(meta).not.toBeNull()
+    // 2 Query fields + 1 Mutation field + 1 Subscription field = 4
+    // (the User type's own fields do not count)
+    expect(meta!.endpointCount).toBe(4)
+  })
+
+  it('returns 0 when there is no Query, Mutation, or Subscription type', () => {
+    const meta = extractGraphQLMetadata('type User {\n  id: ID!\n}\n')
+    expect(meta).not.toBeNull()
+    expect(meta!.endpointCount).toBe(0)
+  })
+
+  it('returns null for unparseable SDL', () => {
+    expect(extractGraphQLMetadata('type Query { this is not valid')).toBeNull()
   })
 })
 

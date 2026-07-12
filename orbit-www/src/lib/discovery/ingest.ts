@@ -122,16 +122,53 @@ function isTier1(detection: Detection): boolean {
 }
 
 /**
- * Build the persisted proposal, normalizing a fallen-back heuristic service name
- * to the repo name. `detectService` names a root-scope service literally
- * `'service'` when no build manifest gives one; the ingest side knows the real
- * repo name, so use it (handoff note from WP1).
+ * Generic spec filename stems that carry no real title info (`schema.graphql`,
+ * `openapi.yaml`, etc.) — an api proposal named after one of these gets
+ * renamed to something a human can recognize in the review queue.
+ */
+const GENERIC_API_NAME_STEMS = new Set([
+  'schema',
+  'index',
+  'api',
+  'types',
+  'main',
+  'openapi',
+  'swagger',
+  'asyncapi',
+])
+
+const SCHEMA_TYPE_LABELS: Record<string, string> = {
+  graphql: 'GraphQL',
+  openapi: 'OpenAPI',
+  asyncapi: 'AsyncAPI',
+}
+
+/**
+ * Build the persisted proposal, normalizing generic fallback names to something
+ * recognizable in the review queue.
+ * - `detectService` names a root-scope service literally `'service'` when no
+ *   build manifest gives one; the ingest side knows the real repo name, so use
+ *   it (handoff note from WP1).
+ * - `detectApiSpecs` names an api proposal after the spec filename stem when it
+ *   has no parsed title (`specTitle`); a generic stem (`schema`, `index`, `api`,
+ *   `types`, `main`, `openapi`, `swagger`, `asyncapi`) is renamed to
+ *   `` `${repoName} ${label} API` `` using the schema type as the label
+ *   (falls back to just `` `${repoName} API` `` for an unrecognized type).
  */
 function buildProposal(detection: Detection, repoName: string): Record<string, unknown> {
   const base = detection.proposal ?? {}
   let name = (base.name as string) ?? detection.name
   if (detection.kind === 'service' && detection.path === '' && (!name || name === 'service')) {
     name = repoName
+  }
+  if (
+    detection.kind === 'api' &&
+    !base.specTitle &&
+    name &&
+    GENERIC_API_NAME_STEMS.has(name.toLowerCase())
+  ) {
+    const label = SCHEMA_TYPE_LABELS[base.schemaType as string]
+    name = label ? `${repoName} ${label} API` : `${repoName} API`
   }
   return { ...base, name }
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { DiscoveredEntity } from '@/payload-types'
-import { importedHref, proposalDisplayName } from './discovery-ui'
+import { humanizeRenameReason, importedHref, proposalDisplayName } from './discovery-ui'
 
 function row(partial: Partial<DiscoveredEntity> = {}): DiscoveredEntity {
   return {
@@ -61,5 +61,19 @@ describe('importedHref', () => {
 
   it('returns null for a collection with no user-facing detail route', () => {
     expect(importedHref('some-other-collection', 'x1')).toBeNull()
+  })
+})
+
+describe('humanizeRenameReason', () => {
+  it('maps known renameDiscoveryCore reasons to human copy', () => {
+    expect(humanizeRenameReason('forbidden')).toMatch(/not allowed/i)
+    expect(humanizeRenameReason('not-found')).toMatch(/no longer exists/i)
+    expect(humanizeRenameReason('invalid-status')).toMatch(/proposed/i)
+    expect(humanizeRenameReason('invalid-name')).toMatch(/120 characters/i)
+  })
+
+  it('falls back to a generic message for an unknown or missing reason', () => {
+    expect(humanizeRenameReason(undefined)).toBe('Could not rename this proposal.')
+    expect(humanizeRenameReason('weird-reason')).toBe('Could not rename this proposal (weird-reason).')
   })
 })

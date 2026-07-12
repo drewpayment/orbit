@@ -8,6 +8,7 @@ import {
   listGlobalDiscoveriesCore,
   approveDiscoveriesCore,
   ignoreDiscoveriesCore,
+  renameDiscoveryCore,
   startWorkspaceScanCore,
   startInstallationScanCore,
 } from './actions-core'
@@ -237,17 +238,34 @@ describe('approveDiscoveriesCore', () => {
     expect(f.collections['api-schemas'][0]).toMatchObject({ createdBy: 'payload-user-9' })
   })
 
-  it('surfaces the import skippedReason (graphql) instead of throwing', async () => {
+  it('imports a graphql proposal into api-schemas', async () => {
     const f = fp()
     seedMember(f, 'ws1')
     seedDiscovery(f, {
       id: 'd1',
       detectedKind: 'api',
-      proposal: { name: 'graph', schemaType: 'graphql', rawContent: 'type Query' },
+      proposal: { name: 'graph', schemaType: 'graphql', rawContent: 'type Query { a: String }' },
     })
 
     const res = await approveDiscoveriesCore(payloadOf(f), AUTH_ID, 'payload-user-9', false, ['d1'])
-    expect(res).toEqual([{ id: 'd1', imported: false, skippedReason: 'unsupported-schema-type:graphql' }])
+    expect(res).toEqual([
+      { id: 'd1', imported: true, ref: { collectionSlug: 'api-schemas', docId: expect.any(String) } },
+    ])
+    expect(f.collections['api-schemas']).toHaveLength(1)
+    expect(f.collections['api-schemas'][0]).toMatchObject({ schemaType: 'graphql' })
+  })
+
+  it('surfaces the import skippedReason for a genuinely unsupported schema type instead of throwing', async () => {
+    const f = fp()
+    seedMember(f, 'ws1')
+    seedDiscovery(f, {
+      id: 'd1',
+      detectedKind: 'api',
+      proposal: { name: 'proto', schemaType: 'protobuf', rawContent: 'syntax = "proto3";' },
+    })
+
+    const res = await approveDiscoveriesCore(payloadOf(f), AUTH_ID, 'payload-user-9', false, ['d1'])
+    expect(res).toEqual([{ id: 'd1', imported: false, skippedReason: 'unsupported-schema-type:protobuf' }])
     expect(f.collections['api-schemas']).toHaveLength(0)
   })
 
@@ -403,6 +421,121 @@ describe('ignoreDiscoveriesCore', () => {
     ])
     expect(f.collections['discovered-entities'].find((d) => d.id === 'mine')?.status).toBe('ignored')
     expect(f.collections['discovered-entities'].find((d) => d.id === 'theirs')?.status).toBe('proposed')
+  })
+})
+
+// --- renameDiscoveryCore (Phase 3, WI8) --------------------------------------
+
+describe('renameDiscoveryCore', () => {
+  it('renames a proposed row, trims the name, and preserves other proposal keys', async () => {
+    const f = fp()
+    seedMember(f, 'ws1')
+    seedDiscovery(f, {
+      id: 'd1',
+      proposal: { name: 'schema', schemaType: 'graphql', specPath: 'schema.graphql' },
+    })
+
+    const res = await renameDiscoveryCore(
+      payloadOf(f),
+      AUTH_ID,
+      'payload-user-9',
+      false,
+      'd1',
+      '  Billing GraphQL API  ',
+    )
+
+    expect(res).toEqual({ ok: true })
+    expect(f.collections['discovered-entities'][0].proposal).toEqual({
+      name: 'Billing GraphQL API',
+      schemaType: 'graphql',
+      specPath: 'schema.graphql',
+    })
+  })
+
+  it('forbids a non-member from renaming a workspace row', async () => {
+    const f = fp()
+    seedDiscovery(f, { id: 'd1', workspace: 'ws1', proposal: { name: 'schema' } })
+
+    const res = await renameDiscoveryCore(payloadOf(f), AUTH_ID, 'payload-user-9', false, 'd1', 'New name')
+
+    expect(res).toEqual({ ok: false, reason: 'forbidden' })
+    expect((f.collections['discovered-entities'][0].proposal as Record<string, unknown>).name).toBe('schema')
+  })
+
+  it('forbids a non-admin from renaming a global row', async () => {
+    const f = fp()
+    seedMember(f, 'ws1') // member elsewhere — the row itself is global
+    seedDiscovery(f, { id: 'g1', workspace: undefined, proposal: { name: 'schema' } })
+
+    const res = await renameDiscoveryCore(payloadOf(f), AUTH_ID, 'payload-user-9', false, 'g1', 'New name')
+
+    expect(res).toEqual({ ok: false, reason: 'forbidden' })
+  })
+
+  it('lets a platform admin rename a global row', async () => {
+    const f = fp()
+    seedDiscovery(f, { id: 'g1', workspace: undefined, proposal: { name: 'schema' } })
+
+    const res = await renameDiscoveryCore(payloadOf(f), AUTH_ID, 'payload-user-9', true, 'g1', 'New name')
+
+    expect(res).toEqual({ ok: true })
+    expect((f.collections['discovered-entities'][0].proposal as Record<string, unknown>).name).toBe('New name')
+  })
+
+  it('rejects renaming an already-imported row', async () => {
+    const f = fp()
+    seedMember(f, 'ws1')
+    seedDiscovery(f, { id: 'd1', status: 'imported', proposal: { name: 'schema' } })
+
+    const res = await renameDiscoveryCore(payloadOf(f), AUTH_ID, 'payload-user-9', false, 'd1', 'New name')
+
+    expect(res).toEqual({ ok: false, reason: 'invalid-status' })
+  })
+
+  it('rejects renaming an ignored row', async () => {
+    const f = fp()
+    seedMember(f, 'ws1')
+    seedDiscovery(f, { id: 'd1', status: 'ignored', proposal: { name: 'schema' } })
+
+    const res = await renameDiscoveryCore(payloadOf(f), AUTH_ID, 'payload-user-9', false, 'd1', 'New name')
+
+    expect(res).toEqual({ ok: false, reason: 'invalid-status' })
+  })
+
+  it('rejects a whitespace-only name', async () => {
+    const f = fp()
+    seedMember(f, 'ws1')
+    seedDiscovery(f, { id: 'd1', proposal: { name: 'schema' } })
+
+    const res = await renameDiscoveryCore(payloadOf(f), AUTH_ID, 'payload-user-9', false, 'd1', '   ')
+
+    expect(res).toEqual({ ok: false, reason: 'invalid-name' })
+    expect((f.collections['discovered-entities'][0].proposal as Record<string, unknown>).name).toBe('schema')
+  })
+
+  it('rejects a name over 120 characters', async () => {
+    const f = fp()
+    seedMember(f, 'ws1')
+    seedDiscovery(f, { id: 'd1', proposal: { name: 'schema' } })
+
+    const res = await renameDiscoveryCore(
+      payloadOf(f),
+      AUTH_ID,
+      'payload-user-9',
+      false,
+      'd1',
+      'x'.repeat(121),
+    )
+
+    expect(res).toEqual({ ok: false, reason: 'invalid-name' })
+  })
+
+  it('returns not-found for a missing row', async () => {
+    const f = fp()
+
+    const res = await renameDiscoveryCore(payloadOf(f), AUTH_ID, 'payload-user-9', true, 'ghost', 'New name')
+
+    expect(res).toEqual({ ok: false, reason: 'not-found' })
   })
 })
 

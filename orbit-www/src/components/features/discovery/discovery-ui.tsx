@@ -147,6 +147,19 @@ export function humanizeSkippedReason(reason?: string): string {
   return SKIPPED_REASON_LABELS[reason] ?? `Could not be imported (${reason}).`
 }
 
+const RENAME_REASON_LABELS: Record<string, string> = {
+  forbidden: 'You are not allowed to rename this proposal.',
+  'not-found': 'This proposal no longer exists.',
+  'invalid-status': 'Only proposed rows can be renamed.',
+  'invalid-name': 'Enter a name (up to 120 characters).',
+}
+
+/** Human-readable note for a failed rename (`renameDiscoveryCore` reason). */
+export function humanizeRenameReason(reason?: string): string {
+  if (!reason) return 'Could not rename this proposal.'
+  return RENAME_REASON_LABELS[reason] ?? `Could not rename this proposal (${reason}).`
+}
+
 export function KindBadge({ kind }: { kind: DiscoveredEntity['detectedKind'] }) {
   return (
     <Badge variant={kind === 'api' ? 'secondary' : 'default'} className="capitalize">
