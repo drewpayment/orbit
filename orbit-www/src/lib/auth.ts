@@ -10,6 +10,24 @@ const client = new MongoClient(process.env.DATABASE_URI || "")
 
 const appUrl = getEnv('NEXT_PUBLIC_APP_URL') || "http://localhost:3000"
 
+// Dev-only escape hatch: when SMTP_HOST is set (e.g. MailHog on localhost:1025),
+// deliver auth emails over SMTP instead of Resend so they can be inspected in a
+// local inbox UI. Never used in production (guarded below); returns true when it
+// handled the send so callers skip the Resend path.
+async function sendViaDevSmtp(to: string, subject: string, html: string): Promise<boolean> {
+  if (!process.env.SMTP_HOST || process.env.NODE_ENV === "production") return false
+  const { default: nodemailer } = await import("nodemailer")
+  const transport = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT || 1025),
+    secure: false,
+  })
+  const fromEmail = process.env.RESEND_FROM_EMAIL || "noreply@hoytlabs.app"
+  await transport.sendMail({ from: fromEmail, to, subject, html })
+  console.log(`📬 [dev-smtp] "${subject}" → ${to} (via ${process.env.SMTP_HOST}:${process.env.SMTP_PORT || 1025})`)
+  return true
+}
+
 export const auth = betterAuth({
   database: mongodbAdapter(client.db()),
   emailAndPassword: {
@@ -43,6 +61,21 @@ export const auth = betterAuth({
         console.log(`${"=".repeat(60)}\n`)
       }
 
+      const resetHtml = `
+          <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #1a1a1a;">Reset your password</h2>
+            <p>We received a request to reset the password for your Orbit account. Click the link below to choose a new password.</p>
+            <p style="margin: 24px 0;">
+              <a href="${url}" style="display: inline-block; background: #FF5C00; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 500;">
+                Reset Password
+              </a>
+            </p>
+            <p style="color: #666; font-size: 14px;">This link expires in 1 hour. If you didn't request a password reset, you can safely ignore this email.</p>
+          </div>
+        `
+
+      if (await sendViaDevSmtp(user.email, "Reset your Orbit password", resetHtml)) return
+
       if (!process.env.RESEND_API_KEY) {
         if (process.env.NODE_ENV === "development") {
           console.log(`   (No RESEND_API_KEY — skipping email send in dev mode)`)
@@ -62,18 +95,7 @@ export const auth = betterAuth({
         from: fromEmail,
         to: user.email,
         subject: "Reset your Orbit password",
-        html: `
-          <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #1a1a1a;">Reset your password</h2>
-            <p>We received a request to reset the password for your Orbit account. Click the link below to choose a new password.</p>
-            <p style="margin: 24px 0;">
-              <a href="${url}" style="display: inline-block; background: #FF5C00; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 500;">
-                Reset Password
-              </a>
-            </p>
-            <p style="color: #666; font-size: 14px;">This link expires in 1 hour. If you didn't request a password reset, you can safely ignore this email.</p>
-          </div>
-        `,
+        html: resetHtml,
       })
     },
   },
@@ -86,6 +108,21 @@ export const auth = betterAuth({
         console.log(`   URL: ${url}`)
         console.log(`${"=".repeat(60)}\n`)
       }
+
+      const verifyHtml = `
+          <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #1a1a1a;">Verify your email address</h2>
+            <p>Your Orbit account has been approved! Click the link below to verify your email and start using Orbit.</p>
+            <p style="margin: 24px 0;">
+              <a href="${url}" style="display: inline-block; background: #FF5C00; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 500;">
+                Verify Email
+              </a>
+            </p>
+            <p style="color: #666; font-size: 14px;">If you didn't create an Orbit account, you can ignore this email.</p>
+          </div>
+        `
+
+      if (await sendViaDevSmtp(user.email, "Verify your Orbit account", verifyHtml)) return
 
       if (!process.env.RESEND_API_KEY) {
         if (process.env.NODE_ENV === "development") {
@@ -106,18 +143,7 @@ export const auth = betterAuth({
         from: fromEmail,
         to: user.email,
         subject: "Verify your Orbit account",
-        html: `
-          <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #1a1a1a;">Verify your email address</h2>
-            <p>Your Orbit account has been approved! Click the link below to verify your email and start using Orbit.</p>
-            <p style="margin: 24px 0;">
-              <a href="${url}" style="display: inline-block; background: #FF5C00; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 500;">
-                Verify Email
-              </a>
-            </p>
-            <p style="color: #666; font-size: 14px;">If you didn't create an Orbit account, you can ignore this email.</p>
-          </div>
-        `,
+        html: verifyHtml,
       })
     },
     sendOnSignUp: false,
