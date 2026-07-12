@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   Telescope,
   TrendingUp,
+  Users,
   Workflow,
   Zap,
 } from "lucide-react"
@@ -145,6 +146,11 @@ const navPlatformData: NavPlatformItem[] = [
     title: "Discovery",
     url: "/discovery",
     icon: Telescope,
+  },
+  {
+    title: "Users",
+    url: "/platform/users",
+    icon: Users,
   },
   {
     title: "LLM Providers",
