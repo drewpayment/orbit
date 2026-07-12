@@ -8,14 +8,12 @@ import { ensurePayloadUser } from '@/lib/auth/ensure-payload-user'
  * Get the current user from the session on the server side.
  * Returns null if not authenticated (or deactivated).
  *
- * disableCookieCache forces a fresh DB read of the session + user rather than
- * trusting Better-Auth's signed session cookie (session.cookieCache), which
- * freezes the user — including its `status` — for up to 5 minutes. Without this,
- * a deactivated user keeps passing this gate (and the ~33 call sites plus the
- * gRPC authInterceptor that rely on it) until the cache expires. The cost is one
- * indexed session lookup per call on this path; we accept it here rather than
- * globally disabling cookieCache, so the many direct auth.api.getSession callers
- * keep the cache. See docs/plans/2026-07-11-platform-user-management.md.
+ * The session cookie cache is disabled globally in lib/auth.ts, so getSession
+ * already reads fresh from the DB. disableCookieCache + the status check here are
+ * belt-and-suspenders: if the cache were ever re-enabled, this path (and its ~33
+ * callers plus the gRPC authInterceptor) would still reject a deactivated user
+ * on the next request rather than serving a stale cached session for up to
+ * maxAge. See docs/plans/2026-07-11-platform-user-management.md (UAC 20).
  */
 export async function getCurrentUser() {
   const reqHeaders = await headers()

@@ -127,9 +127,16 @@ export const auth = betterAuth({
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // 1 day (every 1 day session is updated)
     storeSessionInDatabase: true,
+    // Cookie cache intentionally DISABLED. When enabled it serves the signed
+    // session cookie (user + status) for up to maxAge WITHOUT a DB read, so a
+    // deactivated/revoked user keeps passing every getSession-based gate — the
+    // ~40 raw auth.api.getSession call sites (server data loaders and client
+    // useSession via /api/auth/get-session included) — until the cache expires.
+    // Session revocation on deactivate must take effect on the next request
+    // everywhere, so each getSession does one indexed DB lookup instead. See
+    // docs/plans/2026-07-11-platform-user-management.md (UAC 20).
     cookieCache: {
-      enabled: true,
-      maxAge: 60 * 5, // 5 minutes
+      enabled: false,
     },
   },
   user: {
