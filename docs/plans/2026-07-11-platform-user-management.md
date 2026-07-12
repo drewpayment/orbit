@@ -1,6 +1,6 @@
 # Platform User Management
 
-**Status**: In progress
+**Status**: Complete — all 25 UAC verified (1–23 via agent-browser QA pass 2026-07-12; 24–25 via vitest/tsc). Implemented in commits 51b520c (backend), eb07082 (frontend), d759d84 (review fixes), 8015f85 (cookieCache disabled globally so deactivation revocation is immediate on all session-read paths). Notable deviation from the original design: Better-Auth's session cookieCache is now disabled app-wide — a per-path cache bypass could not guarantee UAC 20 across the ~40 raw auth.api.getSession call sites.
 **Branch**: `feat/platform-user-management`
 **Date**: 2026-07-11
 **Owner**: Drew (PM: Claude)
