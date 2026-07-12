@@ -14,7 +14,9 @@ export const Users: CollectionConfig = {
       // session-cookie-cache expiry. req.user comes from betterAuthStrategy,
       // which resolves status from a fresh Payload read.
       if (req.user?.status === 'deactivated') return false
-      return role === 'super_admin' || role === 'admin'
+      // The Payload admin panel is the escape hatch around all app-level policy
+      // (raw collection edits, no policy matrix) — super_admin only.
+      return role === 'super_admin'
     },
   },
   auth: {
