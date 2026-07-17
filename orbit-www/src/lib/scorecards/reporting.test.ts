@@ -4,6 +4,7 @@ import {
   computeScoreBands,
   computeGroupBreakdown,
   computeRuleFailures,
+  rankFailingEntities,
   buildTrendSeries,
   formatRelativeTime,
   type GroupScoreRow,
@@ -50,6 +51,16 @@ describe('computeOrgKpis', () => {
     const result = computeOrgKpis([100], [100], 4)
     expect(result.scoredCount).toBe(1)
     expect(result.entityTotal).toBe(4)
+  })
+
+  it('accepts an evaluated count distinct from coverage-invariant overall rows', () => {
+    const result = computeOrgKpis([50, 50, 100], [0, 0, 100], 3, 1)
+    expect(result).toEqual({
+      avgScore: 67,
+      avgAlignment: 33,
+      scoredCount: 1,
+      entityTotal: 3,
+    })
   })
 })
 
@@ -207,6 +218,21 @@ describe('computeRuleFailures', () => {
   })
 })
 
+describe('rankFailingEntities', () => {
+  it('omits low-scoring entities with no failed rule and ranks actual failures by score', () => {
+    const rows = [
+      { id: 'baseline', name: 'Baseline only', score: 10 },
+      { id: 'failed-high', name: 'Failed high', score: 80 },
+      { id: 'failed-low', name: 'Failed low', score: 30 },
+    ]
+
+    expect(rankFailingEntities(rows, new Set(['failed-high', 'failed-low']), 10)).toEqual([
+      { id: 'failed-low', name: 'Failed low', score: 30 },
+      { id: 'failed-high', name: 'Failed high', score: 80 },
+    ])
+  })
+})
+
 // --- buildTrendSeries -------------------------------------------------------------
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -253,7 +279,9 @@ describe('buildTrendSeries', () => {
   })
 
   it('accepts `now` as an epoch-ms number, not just a Date', () => {
-    const snapshots: SnapshotPoint[] = [{ capturedAt: new Date(NOW_MS - DAY_MS).toISOString(), avgScore: 55 }]
+    const snapshots: SnapshotPoint[] = [
+      { capturedAt: new Date(NOW_MS - DAY_MS).toISOString(), avgScore: 55 },
+    ]
     expect(buildTrendSeries(snapshots, 7, NOW_MS)).toEqual([{ t: NOW_MS - DAY_MS, v: 55 }])
   })
 

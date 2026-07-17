@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import { ArrowLeft, ShieldAlert } from 'lucide-react'
-import { getCurrentUser } from '@/lib/auth/session'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -15,8 +14,7 @@ import { getManageableWorkspaces } from '../actions'
  * of the RBAC-enforced createScorecard action.
  */
 export default async function NewScorecardPage() {
-  const user = await getCurrentUser()
-  const workspaces = await getManageableWorkspaces(user?.id)
+  const workspaces = await getManageableWorkspaces()
 
   return (
     <SidebarProvider>

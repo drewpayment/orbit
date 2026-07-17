@@ -15,6 +15,8 @@
     "generate:importmap": "cross-env NODE_OPTIONS=\"--no-deprecation --conditions=react-server\" payload generate:importmap",
     "generate:types": "cross-env NODE_OPTIONS=\"--no-deprecation --conditions=react-server\" payload generate:types",
     "generate:proto": "cd ../proto && ../orbit-www/node_modules/.bin/buf generate",
+    "scorecards:dedupe": "tsx src/scripts/dedupe-scorecard-projections.ts",
+    "scorecards:dedupe:apply": "tsx src/scripts/dedupe-scorecard-projections.ts --apply",
     "lint": "cross-env NODE_OPTIONS=--no-deprecation next lint",
     "payload": "cross-env NODE_OPTIONS=--no-deprecation payload",
     "seed:oauth2-proxy-client": "tsx src/scripts/seed-oauth2-proxy-client.ts",

@@ -66,7 +66,12 @@ const member = (role: string, workspace = 'ws-1', user = 'ba-1'): MemberDoc => (
 // id and betterAuthId deliberately differ: membership queries MUST key on
 // betterAuthId, never the Payload doc id (bug-2 regression guard).
 const plainUser = { id: 'payload-1', betterAuthId: 'ba-1', role: 'user', collection: 'users' }
-const superAdmin = { id: 'payload-9', betterAuthId: 'ba-9', role: 'super_admin', collection: 'users' }
+const superAdmin = {
+  id: 'payload-9',
+  betterAuthId: 'ba-9',
+  role: 'super_admin',
+  collection: 'users',
+}
 const adminUser = { id: 'payload-8', betterAuthId: 'ba-8', role: 'admin', collection: 'users' }
 
 describe('adminOnly', () => {
@@ -142,13 +147,18 @@ describe('workspaceScopedRead', () => {
         payload,
       }),
     ).toEqual({
-      or: [{ sourceWorkspace: { in: ['ws-1', 'ws-2'] } }, { targetWorkspace: { in: ['ws-1', 'ws-2'] } }],
+      or: [
+        { sourceWorkspace: { in: ['ws-1', 'ws-2'] } },
+        { targetWorkspace: { in: ['ws-1', 'ws-2'] } },
+      ],
     })
   })
 
   it('role-restricted variant reads only owner/admin workspaces (KafkaApplicationQuotas)', async () => {
     const { payload } = makePayload([member('member', 'ws-1'), member('owner', 'ws-2')])
-    expect(await invoke(workspaceScopedRead({ scope: 'manage' }), { user: plainUser, payload })).toEqual({
+    expect(
+      await invoke(workspaceScopedRead({ scope: 'manage' }), { user: plainUser, payload }),
+    ).toEqual({
       workspace: { in: ['ws-2'] },
     })
   })
@@ -156,7 +166,10 @@ describe('workspaceScopedRead', () => {
   it('missing betterAuthId yields an empty filter without querying', async () => {
     const { payload, find } = makePayload([member('member')])
     expect(
-      await invoke(workspaceScopedRead(), { user: { ...plainUser, betterAuthId: undefined }, payload }),
+      await invoke(workspaceScopedRead(), {
+        user: { ...plainUser, betterAuthId: undefined },
+        payload,
+      }),
     ).toEqual({ workspace: { in: [] } })
     expect(find).not.toHaveBeenCalled()
   })
@@ -167,37 +180,39 @@ describe('memberCreate', () => {
 
   it('denies anonymous', async () => {
     const { payload } = makePayload([])
-    expect(await invoke(memberCreate(), { user: null, payload, data: { workspace: 'ws-1' } })).toBe(false)
+    expect(await invoke(memberCreate(), { user: null, payload, data: { workspace: 'ws-1' } })).toBe(
+      false,
+    )
   })
 
   it('grants a platform admin without a query', async () => {
     const { payload, find } = makePayload([])
-    expect(await invoke(memberCreate(), { user: superAdmin, payload, data: { workspace: 'ws-1' } })).toBe(
-      true,
-    )
+    expect(
+      await invoke(memberCreate(), { user: superAdmin, payload, data: { workspace: 'ws-1' } }),
+    ).toBe(true)
     expect(find).not.toHaveBeenCalled()
   })
 
   it('grants an active member (any role) of data.workspace', async () => {
     const { payload } = makePayload([member('member')])
-    expect(await invoke(memberCreate(), { user: plainUser, payload, data: { workspace: 'ws-1' } })).toBe(
-      true,
-    )
+    expect(
+      await invoke(memberCreate(), { user: plainUser, payload, data: { workspace: 'ws-1' } }),
+    ).toBe(true)
   })
 
   it('denies a non-member of data.workspace', async () => {
     const { payload } = makePayload([member('member')])
-    expect(await invoke(memberCreate(), { user: plainUser, payload, data: { workspace: 'ws-2' } })).toBe(
-      false,
-    )
+    expect(
+      await invoke(memberCreate(), { user: plainUser, payload, data: { workspace: 'ws-2' } }),
+    ).toBe(false)
   })
 
   it('denies a non-admin when data.workspace is missing/null', async () => {
     const { payload } = makePayload([member('owner')])
     expect(await invoke(memberCreate(), { user: plainUser, payload, data: {} })).toBe(false)
-    expect(await invoke(memberCreate(), { user: plainUser, payload, data: { workspace: null } })).toBe(
-      false,
-    )
+    expect(
+      await invoke(memberCreate(), { user: plainUser, payload, data: { workspace: null } }),
+    ).toBe(false)
   })
 
   it('keys the membership query on betterAuthId (bug-2 regression guard)', async () => {
@@ -241,28 +256,42 @@ describe('manageCreate', () => {
   it('grants an owner/admin of data.workspace', async () => {
     const { payload } = makePayload([member('admin')])
     expect(
-      await invoke(manageCreate(['owner', 'admin']), { user: plainUser, payload, data: { workspace: 'ws-1' } }),
+      await invoke(manageCreate(['owner', 'admin']), {
+        user: plainUser,
+        payload,
+        data: { workspace: 'ws-1' },
+      }),
     ).toBe(true)
   })
 
   it('denies a plain member (role gating: manage-create needs owner/admin)', async () => {
     const { payload } = makePayload([member('member')])
     expect(
-      await invoke(manageCreate(['owner', 'admin']), { user: plainUser, payload, data: { workspace: 'ws-1' } }),
+      await invoke(manageCreate(['owner', 'admin']), {
+        user: plainUser,
+        payload,
+        data: { workspace: 'ws-1' },
+      }),
     ).toBe(false)
   })
 
   it('grants a platform admin without a query', async () => {
     const { payload, find } = makePayload([])
     expect(
-      await invoke(manageCreate(['owner', 'admin']), { user: adminUser, payload, data: { workspace: 'ws-1' } }),
+      await invoke(manageCreate(['owner', 'admin']), {
+        user: adminUser,
+        payload,
+        data: { workspace: 'ws-1' },
+      }),
     ).toBe(true)
     expect(find).not.toHaveBeenCalled()
   })
 
   it('denies a non-admin with missing data.workspace', async () => {
     const { payload } = makePayload([member('owner')])
-    expect(await invoke(manageCreate(['owner', 'admin']), { user: plainUser, payload, data: {} })).toBe(false)
+    expect(
+      await invoke(manageCreate(['owner', 'admin']), { user: plainUser, payload, data: {} }),
+    ).toBe(false)
   })
 })
 
@@ -271,18 +300,29 @@ describe('docWorkspaceMutate', () => {
 
   it('denies anonymous and missing id', async () => {
     const { payload } = makePayload([])
-    expect(await invoke(docWorkspaceMutate('scorecards', ['owner', 'admin']), { user: null, payload, id: 'd1' })).toBe(
-      false,
-    )
     expect(
-      await invoke(docWorkspaceMutate('scorecards', ['owner', 'admin']), { user: plainUser, payload }),
+      await invoke(docWorkspaceMutate('scorecards', ['owner', 'admin']), {
+        user: null,
+        payload,
+        id: 'd1',
+      }),
+    ).toBe(false)
+    expect(
+      await invoke(docWorkspaceMutate('scorecards', ['owner', 'admin']), {
+        user: plainUser,
+        payload,
+      }),
     ).toBe(false)
   })
 
   it('grants a platform admin without loading the doc', async () => {
     const { payload, findByID } = makePayload([])
     expect(
-      await invoke(docWorkspaceMutate('scorecards', ['owner', 'admin']), { user: superAdmin, payload, id: 'd1' }),
+      await invoke(docWorkspaceMutate('scorecards', ['owner', 'admin']), {
+        user: superAdmin,
+        payload,
+        id: 'd1',
+      }),
     ).toBe(true)
     expect(findByID).not.toHaveBeenCalled()
   })
@@ -290,21 +330,48 @@ describe('docWorkspaceMutate', () => {
   it('grants an owner/admin of the doc workspace (direct field default)', async () => {
     const { payload } = makePayload([member('admin')], { d1: { id: 'd1', workspace: 'ws-1' } })
     expect(
-      await invoke(docWorkspaceMutate('scorecards', ['owner', 'admin']), { user: plainUser, payload, id: 'd1' }),
+      await invoke(docWorkspaceMutate('scorecards', ['owner', 'admin']), {
+        user: plainUser,
+        payload,
+        id: 'd1',
+      }),
     ).toBe(true)
+  })
+
+  it('denies moving a document to a different workspace even when the caller manages the original', async () => {
+    const { payload } = makePayload([member('admin', 'ws-1')], {
+      d1: { id: 'd1', workspace: 'ws-1' },
+    })
+
+    expect(
+      await invoke(docWorkspaceMutate('posts', ['owner', 'admin']), {
+        user: plainUser,
+        payload,
+        id: 'd1',
+        data: { workspace: 'ws-2' },
+      }),
+    ).toBe(false)
   })
 
   it('denies a plain member when roles require owner/admin', async () => {
     const { payload } = makePayload([member('member')], { d1: { id: 'd1', workspace: 'ws-1' } })
     expect(
-      await invoke(docWorkspaceMutate('scorecards', ['owner', 'admin']), { user: plainUser, payload, id: 'd1' }),
+      await invoke(docWorkspaceMutate('scorecards', ['owner', 'admin']), {
+        user: plainUser,
+        payload,
+        id: 'd1',
+      }),
     ).toBe(false)
   })
 
   it('denies when the doc has no workspace', async () => {
     const { payload } = makePayload([member('owner')], { d1: { id: 'd1' } })
     expect(
-      await invoke(docWorkspaceMutate('scorecards', ['owner', 'admin']), { user: plainUser, payload, id: 'd1' }),
+      await invoke(docWorkspaceMutate('scorecards', ['owner', 'admin']), {
+        user: plainUser,
+        payload,
+        id: 'd1',
+      }),
     ).toBe(false)
   })
 
@@ -329,18 +396,27 @@ describe('docWorkspaceMutate', () => {
       return app.workspace
     }
     expect(
-      await invoke(docWorkspaceMutate('kafka-offset-checkpoints', ['owner', 'admin'], { resolveWorkspace }), {
-        user: plainUser,
-        payload,
-        id: 'chk1',
-      }),
+      await invoke(
+        docWorkspaceMutate('kafka-offset-checkpoints', ['owner', 'admin'], { resolveWorkspace }),
+        {
+          user: plainUser,
+          payload,
+          id: 'chk1',
+        },
+      ),
     ).toBe(true)
     expect(findByID).toHaveBeenCalled()
   })
 
   it('keys the membership query on betterAuthId (bug-2 regression guard)', async () => {
-    const { payload, find } = makePayload([member('admin')], { d1: { id: 'd1', workspace: 'ws-1' } })
-    await invoke(docWorkspaceMutate('scorecards', ['owner', 'admin']), { user: plainUser, payload, id: 'd1' })
+    const { payload, find } = makePayload([member('admin')], {
+      d1: { id: 'd1', workspace: 'ws-1' },
+    })
+    await invoke(docWorkspaceMutate('scorecards', ['owner', 'admin']), {
+      user: plainUser,
+      payload,
+      id: 'd1',
+    })
     expect(find).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
@@ -364,17 +440,29 @@ describe('scorecards/access adapter', () => {
   it('workspaceScopedCreate now denies a non-member (policy change from !!user)', async () => {
     const { payload } = makePayload([member('member')])
     expect(
-      await invoke(scorecards.workspaceScopedCreate, { user: plainUser, payload, data: { workspace: 'ws-2' } }),
+      await invoke(scorecards.workspaceScopedCreate, {
+        user: plainUser,
+        payload,
+        data: { workspace: 'ws-2' },
+      }),
     ).toBe(false)
     expect(
-      await invoke(scorecards.workspaceScopedCreate, { user: plainUser, payload, data: { workspace: 'ws-1' } }),
+      await invoke(scorecards.workspaceScopedCreate, {
+        user: plainUser,
+        payload,
+        data: { workspace: 'ws-1' },
+      }),
     ).toBe(true)
   })
 
   it('workspaceScopedManageCreate requires owner/admin', async () => {
     const { payload } = makePayload([member('member')])
     expect(
-      await invoke(scorecards.workspaceScopedManageCreate, { user: plainUser, payload, data: { workspace: 'ws-1' } }),
+      await invoke(scorecards.workspaceScopedManageCreate, {
+        user: plainUser,
+        payload,
+        data: { workspace: 'ws-1' },
+      }),
     ).toBe(false)
   })
 
@@ -396,14 +484,22 @@ describe('actions/access adapter', () => {
   it('workspaceScopedMemberCreate grants an active member', async () => {
     const { payload } = makePayload([member('member')])
     expect(
-      await invoke(actions.workspaceScopedMemberCreate, { user: plainUser, payload, data: { workspace: 'ws-1' } }),
+      await invoke(actions.workspaceScopedMemberCreate, {
+        user: plainUser,
+        payload,
+        data: { workspace: 'ws-1' },
+      }),
     ).toBe(true)
   })
 
   it('workspaceScopedManageCreate denies a plain member', async () => {
     const { payload } = makePayload([member('member')])
     expect(
-      await invoke(actions.workspaceScopedManageCreate, { user: plainUser, payload, data: { workspace: 'ws-1' } }),
+      await invoke(actions.workspaceScopedManageCreate, {
+        user: plainUser,
+        payload,
+        data: { workspace: 'ws-1' },
+      }),
     ).toBe(false)
   })
 })
@@ -427,6 +523,8 @@ describe('automations/access adapter', () => {
 
   it('workspaceScopedManageMutate denies anonymous', async () => {
     const { payload } = makePayload([])
-    expect(await invoke(automations.workspaceScopedManageMutate, { user: null, payload, id: 'a1' })).toBe(false)
+    expect(
+      await invoke(automations.workspaceScopedManageMutate, { user: null, payload, id: 'a1' }),
+    ).toBe(false)
   })
 })

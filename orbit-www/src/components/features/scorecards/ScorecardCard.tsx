@@ -12,7 +12,10 @@ import type { ScorecardSummary } from '@/app/(frontend)/scorecards/actions'
  */
 export function ScorecardCard({ summary }: { summary: ScorecardSummary }) {
   return (
-    <Link href={`/scorecards/${summary.id}`} className="block focus:outline-none">
+    <Link
+      href={`/scorecards/${summary.id}`}
+      className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+    >
       <Card className="h-full transition-colors hover:border-primary/50 hover:bg-accent/40">
         <CardHeader className="space-y-2">
           <div className="flex items-start justify-between gap-2">

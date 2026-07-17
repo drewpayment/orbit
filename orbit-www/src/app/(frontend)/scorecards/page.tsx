@@ -1,7 +1,6 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
 import { BarChart3, Loader2, Plus, ShieldCheck, Target } from 'lucide-react'
-import { getCurrentUser } from '@/lib/auth/session'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -19,8 +18,7 @@ import { listScorecards, getManageableWorkspaces } from './actions'
  */
 
 async function ScorecardsContent() {
-  const user = await getCurrentUser()
-  const scorecards = await listScorecards(user?.id)
+  const scorecards = await listScorecards()
 
   if (scorecards.length === 0) {
     return (
@@ -51,8 +49,7 @@ async function ScorecardsContent() {
  * page header.
  */
 async function NewScorecardButton() {
-  const user = await getCurrentUser()
-  const workspaces = await getManageableWorkspaces(user?.id)
+  const workspaces = await getManageableWorkspaces()
   if (workspaces.length === 0) return null
   return (
     <Button asChild size="sm">
@@ -75,7 +72,8 @@ export default function ScorecardsPage() {
             <div>
               <h1 className="text-3xl font-bold">Scorecards</h1>
               <p className="mt-2 text-muted-foreground">
-                Standards enforcement and operational-excellence maturity across every catalog entity.
+                Standards enforcement and operational-excellence maturity across every catalog
+                entity.
               </p>
             </div>
             <div className="flex items-center gap-2">

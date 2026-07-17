@@ -5,7 +5,7 @@ import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { ReportView } from '@/components/features/scorecards/reports/ReportView'
-import { getScorecardReport } from './actions'
+import { getReportWorkspaceOptions, getScorecardReport, type ReportWorkspaceOption } from './actions'
 
 /**
  * Scorecard Reports & Insights (docs/plans/2026-07-01-scorecard-reports.md,
@@ -17,12 +17,34 @@ import { getScorecardReport } from './actions'
 
 const DEFAULT_WINDOW_DAYS = 30
 
-async function ReportContent() {
-  const report = await getScorecardReport(DEFAULT_WINDOW_DAYS)
-  return <ReportView initialReport={report} initialWindowDays={DEFAULT_WINDOW_DAYS} />
+async function ReportContent({
+  workspaceId,
+  workspaces,
+}: {
+  workspaceId: string
+  workspaces: ReportWorkspaceOption[]
+}) {
+  const report = await getScorecardReport(workspaceId, DEFAULT_WINDOW_DAYS)
+  return (
+    <ReportView
+      key={workspaceId}
+      initialReport={report}
+      initialWindowDays={DEFAULT_WINDOW_DAYS}
+      workspaces={workspaces}
+    />
+  )
 }
 
-export default function ScorecardReportsPage() {
+export default async function ScorecardReportsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ workspace?: string }>
+}) {
+  const [params, workspaces] = await Promise.all([searchParams, getReportWorkspaceOptions()])
+  const requestedWorkspace = params.workspace
+  const workspaceId =
+    workspaces.find((workspace) => workspace.id === requestedWorkspace)?.id ?? workspaces[0]?.id ?? ''
+
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -39,7 +61,7 @@ export default function ScorecardReportsPage() {
             </Link>
             <h1 className="text-3xl font-bold">Reports</h1>
             <p className="mt-2 text-muted-foreground">
-              Org-wide standards health: are we getting better, which teams are behind, and which
+              Workspace standards health: are we getting better, which teams are behind, and which
               standards are failing.
             </p>
           </div>
@@ -51,7 +73,7 @@ export default function ScorecardReportsPage() {
               </div>
             }
           >
-            <ReportContent />
+            <ReportContent workspaceId={workspaceId} workspaces={workspaces} />
           </Suspense>
         </div>
       </SidebarInset>

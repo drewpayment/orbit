@@ -97,6 +97,18 @@ export const ScoreSnapshots: CollectionConfig = {
       type: 'json',
       admin: { description: "Scorecard scope: { [levelName]: count, unranked: count }." },
     },
+    {
+      name: 'captureKey',
+      type: 'text',
+      index: true,
+      admin: { description: 'Stable Temporal/manual capture identifier for retry recovery.' },
+    },
+    {
+      name: 'snapshotKey',
+      type: 'text',
+      unique: true,
+      admin: { description: 'Per-row idempotency key within a keyed capture set.' },
+    },
     { name: 'capturedAt', type: 'date', required: true, index: true },
   ],
   indexes: [

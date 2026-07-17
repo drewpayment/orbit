@@ -1,6 +1,6 @@
 import type { CollectionConfig } from 'payload'
 import { ENTITY_KINDS } from '../catalog/constants'
-import { workspaceScopedRead, workspaceScopedManageCreate, workspaceScopedMutate } from './access'
+import { platformAdminFieldUpdate, workspaceScopedRead } from './access'
 
 /**
  * Scorecards — operational-excellence standards applied to catalog entities
@@ -21,13 +21,15 @@ export const Scorecards: CollectionConfig = {
     defaultColumns: ['name', 'workspace', 'enabled', 'updatedAt'],
     description: 'Standards + maturity ladders scored against catalog entities.',
   },
-  // Authoring (create/update/delete) is gated on workspace owner/admin (P2
-  // Option A); members read-only. See lib/scorecards/authz.ts.
+  // Authoring is service-owned because update/delete require projection cleanup,
+  // reevaluation, and cascades. Authenticated server actions enforce owner/admin
+  // policy and write with overrideAccess; direct REST/GraphQL/Admin mutations are
+  // denied so those lifecycle guarantees cannot be bypassed.
   access: {
     read: workspaceScopedRead,
-    create: workspaceScopedManageCreate,
-    update: workspaceScopedMutate('scorecards', ['owner', 'admin']),
-    delete: workspaceScopedMutate('scorecards', ['owner', 'admin']),
+    create: () => false,
+    update: () => false,
+    delete: () => false,
   },
   fields: [
     { name: 'name', type: 'text', required: true, index: true },
@@ -38,6 +40,7 @@ export const Scorecards: CollectionConfig = {
       relationTo: 'workspaces',
       required: true,
       index: true,
+      access: { update: platformAdminFieldUpdate },
       admin: { description: 'Security enclave the scorecard belongs to.' },
     },
     {
@@ -54,7 +57,9 @@ export const Scorecards: CollectionConfig = {
         {
           name: 'filter',
           type: 'json',
-          admin: { description: 'Optional extra Payload `where` merged into the entity selection.' },
+          admin: {
+            description: 'Optional extra Payload `where` merged into the entity selection.',
+          },
         },
       ],
     },
@@ -66,8 +71,17 @@ export const Scorecards: CollectionConfig = {
       },
       fields: [
         { name: 'name', type: 'text', required: true },
-        { name: 'rank', type: 'number', required: true, admin: { description: 'Ordering; higher = more mature.' } },
-        { name: 'color', type: 'text', admin: { description: 'Optional hex/className for the chip.' } },
+        {
+          name: 'rank',
+          type: 'number',
+          required: true,
+          admin: { description: 'Ordering; higher = more mature.' },
+        },
+        {
+          name: 'color',
+          type: 'text',
+          admin: { description: 'Optional hex/className for the chip.' },
+        },
       ],
     },
     {

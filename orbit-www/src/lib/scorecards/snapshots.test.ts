@@ -163,6 +163,9 @@ class FakePayload {
     'score-snapshots': [],
   }
   private counter = 1
+  snapshotCreateCount = 0
+  failOnSnapshotCreateNumber: number | null = null
+  findCalls: Array<{ collection: string; page: number; limit: number }> = []
 
   private nextId(collection: string): string {
     return `${collection}-${this.counter++}`
@@ -173,26 +176,44 @@ class FakePayload {
     where,
     sort,
     limit = 100,
+    page = 1,
   }: {
     collection: string
     where?: unknown
     sort?: string
     limit?: number
+    page?: number
   }) {
+    this.findCalls.push({ collection, page, limit })
     let all = (this.collections[collection] ?? []).filter((d) => matchesWhere(d, where))
     if (sort === '-capturedAt') {
       all = [...all].sort((a, b) => String(b.capturedAt).localeCompare(String(a.capturedAt)))
     }
     // depth=1 population of `entity-scores.entity` for team-grouping — good
     // enough for these tests (entity docs are stored as full objects already).
-    return { docs: all.slice(0, limit), hasNextPage: false }
+    const start = (page - 1) * limit
+    return { docs: all.slice(start, start + limit), hasNextPage: start + limit < all.length }
   }
 
   async create({ collection, data }: { collection: string; data: Record<string, unknown> }) {
+    if (collection === 'score-snapshots') {
+      this.snapshotCreateCount++
+      if (this.snapshotCreateCount === this.failOnSnapshotCreateNumber) {
+        throw new Error('simulated partial snapshot failure')
+      }
+    }
     const doc = { id: this.nextId(collection), ...data } as Doc
     this.collections[collection] = this.collections[collection] ?? []
     this.collections[collection].push(doc)
     return doc
+  }
+
+  async update({ collection, id, data }: { collection: string; id: string; data: Record<string, unknown> }) {
+    const index = this.collections[collection].findIndex((doc) => doc.id === id)
+    if (index < 0) throw new Error(`missing ${collection}:${id}`)
+    const updated = { ...this.collections[collection][index], ...data } as Doc
+    this.collections[collection][index] = updated
+    return updated
   }
 }
 
@@ -216,6 +237,24 @@ function matchesWhere(doc: Doc, where: unknown): boolean {
 }
 
 describe('captureScoreSnapshots', () => {
+  it('paginates aggregation inputs instead of silently truncating large workspaces', async () => {
+    const fp = new FakePayload()
+    fp.collections['entity-scores'] = Array.from({ length: 501 }, (_, index) => ({
+      id: `es-${index}`,
+      workspace: 'ws1',
+      entity: { id: `e-${index}` },
+      scope: 'overall',
+      score: 50,
+    }))
+
+    await captureScoreSnapshots(fp as unknown as Payload, 'ws1')
+
+    expect(fp.collections['score-snapshots'][0]).toMatchObject({ entityCount: 501, avgScore: 50 })
+    expect(
+      fp.findCalls.some((call) => call.collection === 'entity-scores' && call.page === 2),
+    ).toBe(true)
+  })
+
   it('appends a workspace-scope row aggregating every overall entity-scores row', async () => {
     const fp = new FakePayload()
     fp.collections['entity-scores'] = [
@@ -307,6 +346,79 @@ describe('captureScoreSnapshots', () => {
     const forced = await captureScoreSnapshots(fp as unknown as Payload, 'ws1', { force: true })
     expect(forced.skipped).toBe(false)
     expect(fp.collections['score-snapshots'].filter((r) => r.scope === 'workspace')).toHaveLength(2)
+  })
+
+  it('reuses keyed snapshot rows when the same Temporal capture is retried', async () => {
+    const fp = new FakePayload()
+    fp.collections['entity-scores'] = [
+      { id: 'es1', workspace: 'ws1', entity: { id: 'e1' }, scope: 'overall', score: 50 },
+    ]
+
+    await captureScoreSnapshots(fp as unknown as Payload, 'ws1', {
+      force: true,
+      captureKey: 'workflow-1',
+    })
+    await captureScoreSnapshots(fp as unknown as Payload, 'ws1', {
+      force: true,
+      captureKey: 'workflow-1',
+    })
+
+    expect(fp.collections['score-snapshots']).toHaveLength(1)
+    expect(fp.collections['score-snapshots'][0]).toMatchObject({
+      captureKey: 'workflow-1',
+      snapshotKey: 'workflow-1:ws1:workspace',
+    })
+  })
+
+  it('keeps the same manual capture key isolated between workspaces', async () => {
+    const fp = new FakePayload()
+    fp.collections['entity-scores'] = [
+      { id: 'ws1-score', workspace: 'ws1', entity: { id: 'e1' }, scope: 'overall', score: 50 },
+      { id: 'ws2-score', workspace: 'ws2', entity: { id: 'e2' }, scope: 'overall', score: 80 },
+    ]
+
+    await captureScoreSnapshots(fp as unknown as Payload, 'ws1', {
+      force: true,
+      captureKey: 'manual-capture',
+    })
+    await captureScoreSnapshots(fp as unknown as Payload, 'ws2', {
+      force: true,
+      captureKey: 'manual-capture',
+    })
+
+    expect(fp.collections['score-snapshots']).toHaveLength(2)
+    expect(fp.collections['score-snapshots'].map((row) => row.snapshotKey).sort()).toEqual([
+      'manual-capture:ws1:workspace',
+      'manual-capture:ws2:workspace',
+    ])
+  })
+
+  it('resumes a partially written keyed snapshot set without duplicating completed rows', async () => {
+    const fp = new FakePayload()
+    fp.collections['entity-scores'] = [
+      { id: 'overall', workspace: 'ws1', entity: { id: 'e1' }, scope: 'overall', score: 50 },
+      { id: 'score', workspace: 'ws1', entity: { id: 'e1' }, scope: 'scorecard', scorecard: 'sc1', score: 50 },
+    ]
+    fp.collections.scorecards = [
+      { id: 'sc1', workspace: 'ws1', name: 'Readiness', enabled: true, levels: [] },
+    ]
+    fp.failOnSnapshotCreateNumber = 2
+
+    await expect(
+      captureScoreSnapshots(fp as unknown as Payload, 'ws1', {
+        force: true,
+        captureKey: 'workflow-2',
+      }),
+    ).rejects.toThrow('simulated partial snapshot failure')
+
+    fp.failOnSnapshotCreateNumber = null
+    await captureScoreSnapshots(fp as unknown as Payload, 'ws1', {
+      force: true,
+      captureKey: 'workflow-2',
+    })
+
+    expect(fp.collections['score-snapshots']).toHaveLength(2)
+    expect(new Set(fp.collections['score-snapshots'].map((row) => row.snapshotKey)).size).toBe(2)
   })
 
   it('an empty workspace (no entity-scores at all) writes no rows but is not an error', async () => {

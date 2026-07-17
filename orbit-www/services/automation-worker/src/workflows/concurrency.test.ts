@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { runWithConcurrency } from './concurrency'
+import { groupByKey, runWithConcurrency } from './concurrency'
 
 /**
  * Unit tests for the sandbox-safe bounded-concurrency helper used by the
@@ -76,6 +76,30 @@ describe('runWithConcurrency', () => {
   it('handles a limit larger than the number of items', async () => {
     const result = await runWithConcurrency([1, 2], 10, async (n) => n * 10)
     expect(result).toEqual([10, 20])
+  })
+})
+
+describe('groupByKey', () => {
+  it('keeps scorecards from one workspace together and preserves input order', () => {
+    const groups = groupByKey(
+      [
+        { id: 'a', workspaceId: 'ws1' },
+        { id: 'b', workspaceId: 'ws2' },
+        { id: 'c', workspaceId: 'ws1' },
+      ],
+      (item) => item.workspaceId,
+    )
+
+    expect(groups).toEqual([
+      {
+        key: 'ws1',
+        items: [
+          { id: 'a', workspaceId: 'ws1' },
+          { id: 'c', workspaceId: 'ws1' },
+        ],
+      },
+      { key: 'ws2', items: [{ id: 'b', workspaceId: 'ws2' }] },
+    ])
   })
 })
 

@@ -8,10 +8,7 @@ import { Progress } from '@/components/ui/progress'
 import { cn } from '@/lib/utils'
 import { ScoreChip, ScoreNumberChip } from '@/components/features/scorecards/ScoreChip'
 import { passRatioTone } from '@/components/features/scorecards/scorecard-ui'
-import {
-  getEntityScoreSummary,
-  type EntityScoreSummary,
-} from '@/app/(frontend)/scorecards/actions'
+import { getEntityScoreSummary, type EntityScoreSummary } from '@/app/(frontend)/scorecards/actions'
 import type { EntityScoreBreakdown } from '@/app/(frontend)/catalog/[id]/actions'
 
 /**
@@ -44,7 +41,7 @@ export function EntityScorecardsTab({
     let active = true
     if (!entityId) return
     setLoading(true)
-    getEntityScoreSummary(undefined, entityId)
+    getEntityScoreSummary(entityId)
       .then((data) => {
         if (active) setSummary(data)
       })
@@ -115,9 +112,7 @@ export function EntityScorecardsTab({
                         <span className="text-xs text-muted-foreground">{rule.level}</span>
                       )}
                     </div>
-                    {rule.detail && (
-                      <p className="text-xs text-muted-foreground">{rule.detail}</p>
-                    )}
+                    {rule.detail && <p className="text-xs text-muted-foreground">{rule.detail}</p>}
                   </div>
                 </div>
               ))}
@@ -142,8 +137,7 @@ function OverallScoreCard({ breakdown }: { breakdown: EntityScoreBreakdown | nul
     return (
       <Card>
         <CardContent className="py-6 text-sm text-muted-foreground">
-          Not yet scored — run a scorecard evaluation to populate this entity&apos;s overall
-          score.
+          Not yet scored — run a scorecard evaluation to populate this entity&apos;s overall score.
         </CardContent>
       </Card>
     )
@@ -168,12 +162,7 @@ function OverallScoreCard({ breakdown }: { breakdown: EntityScoreBreakdown | nul
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">Golden-path alignment</span>
-            <span
-              className={cn(
-                'font-semibold',
-                passRatioTone((goldenPathAlignment ?? 0) / 100),
-              )}
-            >
+            <span className={cn('font-semibold', passRatioTone((goldenPathAlignment ?? 0) / 100))}>
               {goldenPathAlignment === null ? '—' : `${goldenPathAlignment}%`}
             </span>
           </div>

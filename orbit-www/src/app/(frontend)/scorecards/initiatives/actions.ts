@@ -3,7 +3,7 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
-import { getCurrentUser } from '@/lib/auth/session'
+import { getCurrentUser, getPayloadUserFromSession } from '@/lib/auth/session'
 import type {
   CatalogEntity,
   Initiative,
@@ -50,7 +50,9 @@ async function getMemberWorkspaceIds(payload: Payload, userId: string): Promise<
     depth: 0,
     overrideAccess: true,
   })
-  return memberships.docs.map((m) => (typeof m.workspace === 'string' ? m.workspace : m.workspace.id))
+  return memberships.docs.map((m) =>
+    typeof m.workspace === 'string' ? m.workspace : m.workspace.id,
+  )
 }
 
 /** Resolve + assert the session user; throws when unauthenticated. */
@@ -235,6 +237,8 @@ export interface CreateInitiativeInput {
 export async function createInitiative(input: CreateInitiativeInput): Promise<{ id: string }> {
   const payload = await getPayload({ config })
   const uid = await requireUserId()
+  const payloadUser = await getPayloadUserFromSession()
+  if (!payloadUser || payloadUser.betterAuthId !== uid) throw new Error('Not authenticated')
 
   if (!input.name?.trim()) throw new Error('An initiative name is required.')
   if (!input.scorecardId) throw new Error('A scorecard is required.')
@@ -267,7 +271,7 @@ export async function createInitiative(input: CreateInitiativeInput): Promise<{ 
       workspace: workspaceId as string,
       scorecard: input.scorecardId,
       targetLevel: input.targetLevel,
-      owner: uid,
+      owner: payloadUser.id,
       deadline: input.deadline || undefined,
       status: 'active',
     },
@@ -285,10 +289,7 @@ export async function createInitiative(input: CreateInitiativeInput): Promise<{ 
 // updateInitiativeStatus — lifecycle (owner/admin)
 // ---------------------------------------------------------------------------
 
-export async function updateInitiativeStatus(
-  id: string,
-  status: InitiativeStatus,
-): Promise<void> {
+export async function updateInitiativeStatus(id: string, status: InitiativeStatus): Promise<void> {
   const payload = await getPayload({ config })
   const uid = await requireUserId()
 

@@ -3,7 +3,14 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { getCurrentUser } from '@/lib/auth/session'
-import type { CatalogEntity, EntityScore, Scorecard, ScorecardRule, ScorecardRuleResult, ScoreSnapshot } from '@/payload-types'
+import type {
+  CatalogEntity,
+  EntityScore,
+  Scorecard,
+  ScorecardRule,
+  ScorecardRuleResult,
+  ScoreSnapshot,
+} from '@/payload-types'
 import {
   buildLevelDistribution,
   type LevelBucket,
@@ -14,6 +21,7 @@ import {
   computeScoreBands,
   computeGroupBreakdown,
   computeRuleFailures,
+  rankFailingEntities,
   buildTrendSeries,
   type OrgKpis,
   type ScoreBand,
@@ -36,7 +44,7 @@ import {
 
 type Payload = Awaited<ReturnType<typeof getPayload>>
 
-const PAGE_LIMIT = 5000
+const PAGE_SIZE = 500
 
 /** Extract a relationship's id whether it arrived as a string or a populated doc. */
 function relId(value: unknown): string | null {
@@ -48,24 +56,63 @@ function relId(value: unknown): string | null {
   return null
 }
 
-/**
- * Resolve the workspace IDs the given user actively belongs to — the tenant
- * boundary for every report query below. Mirrors `scorecards/actions.ts`'s
- * `getMemberWorkspaceIds`.
- */
-async function getMemberWorkspaceIds(payload: Payload, userId: string): Promise<string[]> {
-  const memberships = await payload.find({
+async function findAllDocs<T>(
+  payload: Payload,
+  args: Record<string, unknown>,
+): Promise<T[]> {
+  const docs: T[] = []
+  for (let page = 1; ; page++) {
+    const result = await payload.find({ ...args, limit: PAGE_SIZE, page } as never)
+    docs.push(...(result.docs as T[]))
+    if (!result.hasNextPage) return docs
+  }
+}
+
+async function hasActiveMembership(
+  payload: Payload,
+  userId: string,
+  workspaceId: string,
+): Promise<boolean> {
+  const membership = await payload.find({
     collection: 'workspace-members',
     where: {
-      user: { equals: userId },
-      status: { equals: 'active' },
+      and: [
+        { user: { equals: userId } },
+        { workspace: { equals: workspaceId } },
+        { status: { equals: 'active' } },
+      ],
     },
-    limit: 1000,
+    limit: 1,
     depth: 0,
     overrideAccess: true,
   })
+  return membership.docs.length > 0
+}
 
-  return memberships.docs.map((m) => (typeof m.workspace === 'string' ? m.workspace : m.workspace.id))
+export interface ReportWorkspaceOption {
+  id: string
+  name: string
+}
+
+/** Workspaces the current user may select as the explicit report boundary. */
+export async function getReportWorkspaceOptions(): Promise<ReportWorkspaceOption[]> {
+  const payload = await getPayload({ config })
+  const uid = (await getCurrentUser())?.id
+  if (!uid) return []
+  const memberships = await findAllDocs<Record<string, unknown>>(payload, {
+    collection: 'workspace-members',
+    where: { and: [{ user: { equals: uid } }, { status: { equals: 'active' } }] },
+    depth: 1,
+    overrideAccess: true,
+  })
+  return memberships
+    .map((membership) => membership.workspace)
+    .filter(
+      (workspace): workspace is { id: string; name: string } =>
+        typeof workspace === 'object' && workspace !== null && 'id' in workspace && 'name' in workspace,
+    )
+    .map((workspace) => ({ id: String(workspace.id), name: String(workspace.name) }))
+    .sort((left, right) => left.name.localeCompare(right.name))
 }
 
 /** Normalise a scorecard's ladder into clean {@link LevelDef}s, lowest rank first. */
@@ -105,6 +152,11 @@ export interface ScorecardSectionReport {
 }
 
 export interface ScorecardReport {
+  /** The single explicit workspace represented by every row in this report. */
+  workspaceId: string
+  /** When the underlying projections/snapshots were last evaluated. */
+  dataAsOf: string | null
+  /** When this report payload was fetched. */
   generatedAt: string
   windowDays: number
   kpis: ScorecardReportKpis
@@ -117,12 +169,13 @@ export interface ScorecardReport {
 
 const RULE_FAILURES_PER_SCORECARD = 5
 const FAILING_ENTITIES_PER_SCORECARD = 10
-const TREND_SNAPSHOT_LIMIT = 1000
 const TEAM_UNASSIGNED_LABEL = 'Unassigned'
 
 /** An all-zeros report for an unauthenticated caller or a workspace-less user. */
-function emptyReport(windowDays: number): ScorecardReport {
+function emptyReport(workspaceId: string, windowDays: number): ScorecardReport {
   return {
+    workspaceId,
+    dataAsOf: null,
     generatedAt: new Date().toISOString(),
     windowDays,
     kpis: { avgScore: 0, avgAlignment: 0, scoredCount: 0, entityTotal: 0, activeScorecards: 0 },
@@ -138,69 +191,98 @@ function emptyReport(windowDays: number): ScorecardReport {
  * The full scorecard report payload: org KPIs, score-band distribution, the
  * windowed trend series, team/kind breakdowns, and a per-enabled-scorecard
  * section (level distribution, top failing rules, top failing entities).
- * Tenancy mirrors `scorecards/actions.ts`: the session user is resolved
- * server-side and every query is bounded to their active workspace
- * memberships — `userId` is never trusted from the client.
+ * The caller selects one workspace, but the session is resolved server-side
+ * and active membership is verified before any report data is queried.
  */
-export async function getScorecardReport(windowDays: number): Promise<ScorecardReport> {
+export async function getScorecardReport(
+  workspaceId: string,
+  windowDays: number,
+): Promise<ScorecardReport> {
   const payload = await getPayload({ config })
   const uid = (await getCurrentUser())?.id
-  if (!uid) return emptyReport(windowDays)
+  if (!uid || !workspaceId) return emptyReport(workspaceId, windowDays)
+  if (!(await hasActiveMembership(payload, uid, workspaceId))) {
+    return emptyReport(workspaceId, windowDays)
+  }
+  const reportNow = new Date()
+  const boundedWindowDays = Math.max(0, Math.min(windowDays, 365))
+  const trendCutoff = new Date(
+    reportNow.getTime() - boundedWindowDays * 24 * 60 * 60 * 1000,
+  ).toISOString()
 
-  const workspaceIds = await getMemberWorkspaceIds(payload, uid)
-  if (workspaceIds.length === 0) return emptyReport(windowDays)
+  const [overallRows, entityTotalRes, teams, enabledScorecards, trendSnapshots] =
+    await Promise.all([
+      // scope=overall rows carry the entity's blended score + golden-path
+      // alignment; depth 1 resolves `entity` for name/kind/owner.
+      findAllDocs<EntityScore>(payload, {
+        collection: 'entity-scores',
+        where: {
+          and: [{ workspace: { equals: workspaceId } }, { scope: { equals: 'overall' } }],
+        },
+        depth: 1,
+        overrideAccess: true,
+      }),
+      payload.find({
+        collection: 'catalog-entities',
+        where: { workspace: { equals: workspaceId } },
+        limit: 0,
+        depth: 0,
+        overrideAccess: true,
+      }),
+      findAllDocs<CatalogEntity>(payload, {
+        collection: 'catalog-entities',
+        where: {
+          and: [{ workspace: { equals: workspaceId } }, { kind: { equals: 'team' } }],
+        },
+        depth: 0,
+        overrideAccess: true,
+      }),
+      findAllDocs<Scorecard>(payload, {
+        collection: 'scorecards',
+        where: {
+          and: [{ workspace: { equals: workspaceId } }, { enabled: { equals: true } }],
+        },
+        sort: 'name',
+        depth: 0,
+        overrideAccess: true,
+      }),
+      findAllDocs<ScoreSnapshot>(payload, {
+        collection: 'score-snapshots',
+        where: {
+          and: [
+            { workspace: { equals: workspaceId } },
+            { scope: { equals: 'workspace' } },
+            { capturedAt: { greater_than_equal: trendCutoff } },
+          ],
+        },
+        sort: '-capturedAt',
+        depth: 0,
+        overrideAccess: true,
+      }),
+    ])
 
-  const [overallRes, entityTotalRes, teamsRes, enabledScorecardsRes, trendRes] = await Promise.all([
-    // scope=overall rows carry the entity's blended score + golden-path
-    // alignment; depth 1 resolves `entity` for name/kind/owner (owner stays
-    // an id string at this depth — team names are joined via `teamsRes` below).
-    payload.find({
+  const teamNameById = new Map(teams.map((team) => [team.id, team.name]))
+
+  const enabledScorecardIds = enabledScorecards.map((scorecard) => scorecard.id)
+  const evaluatedEntityIds = new Set<string>()
+  if (enabledScorecardIds.length > 0) {
+    const evaluatedRows = await findAllDocs<EntityScore>(payload, {
       collection: 'entity-scores',
-      where: { and: [{ workspace: { in: workspaceIds } }, { scope: { equals: 'overall' } }] },
-      limit: PAGE_LIMIT,
-      depth: 1,
-      overrideAccess: true,
-    }),
-    // Count-only query (limit 0) for the workspace's total catalog entities —
-    // the "x of y" denominator on the Entities scored KPI tile.
-    payload.find({
-      collection: 'catalog-entities',
-      where: { workspace: { in: workspaceIds } },
-      limit: 0,
+      where: {
+        and: [
+          { workspace: { equals: workspaceId } },
+          { scope: { equals: 'scorecard' } },
+          { scorecard: { in: enabledScorecardIds } },
+        ],
+      },
       depth: 0,
       overrideAccess: true,
-    }),
-    payload.find({
-      collection: 'catalog-entities',
-      where: { and: [{ workspace: { in: workspaceIds } }, { kind: { equals: 'team' } }] },
-      limit: 1000,
-      depth: 0,
-      overrideAccess: true,
-    }),
-    payload.find({
-      collection: 'scorecards',
-      where: { and: [{ workspace: { in: workspaceIds } }, { enabled: { equals: true } }] },
-      sort: 'name',
-      limit: 200,
-      depth: 0,
-      overrideAccess: true,
-    }),
-    // Workspace-scope snapshots feed the trend line; fetched over a fixed
-    // lookback (comfortably beyond the widest 90-day segment) and windowed
-    // client-side-equivalent below via `buildTrendSeries`.
-    payload.find({
-      collection: 'score-snapshots',
-      where: { and: [{ workspace: { in: workspaceIds } }, { scope: { equals: 'workspace' } }] },
-      sort: '-capturedAt',
-      limit: TREND_SNAPSHOT_LIMIT,
-      depth: 0,
-      overrideAccess: true,
-    }),
-  ])
-
-  const overallRows = overallRes.docs as EntityScore[]
-  const teamNameById = new Map((teamsRes.docs as CatalogEntity[]).map((t) => [t.id, t.name]))
-  const enabledScorecards = enabledScorecardsRes.docs as Scorecard[]
+    })
+    for (const row of evaluatedRows) {
+      const entityId = relId(row.entity)
+      if (entityId) evaluatedEntityIds.add(entityId)
+    }
+  }
 
   // --- org KPIs + score bands -----------------------------------------------
   const overallScores = overallRows.map((r) => r.score)
@@ -208,7 +290,7 @@ export async function getScorecardReport(windowDays: number): Promise<ScorecardR
     .map((r) => r.goldenPathAlignment)
     .filter((v): v is number => typeof v === 'number')
   const kpis: ScorecardReportKpis = {
-    ...computeOrgKpis(overallScores, alignments, entityTotalRes.totalDocs),
+    ...computeOrgKpis(overallScores, alignments, entityTotalRes.totalDocs, evaluatedEntityIds.size),
     activeScorecards: enabledScorecards.length,
   }
   const bands = computeScoreBands(overallScores)
@@ -224,7 +306,9 @@ export async function getScorecardReport(windowDays: number): Promise<ScorecardR
     // dropped — the entity still counts toward the group's `count`.
     const alignment = typeof row.goldenPathAlignment === 'number' ? row.goldenPathAlignment : 0
     const ownerId = relId(entity.owner)
-    const teamName = ownerId ? (teamNameById.get(ownerId) ?? TEAM_UNASSIGNED_LABEL) : TEAM_UNASSIGNED_LABEL
+    const teamName = ownerId
+      ? (teamNameById.get(ownerId) ?? TEAM_UNASSIGNED_LABEL)
+      : TEAM_UNASSIGNED_LABEL
 
     teamRows.push({
       group: teamName,
@@ -245,18 +329,29 @@ export async function getScorecardReport(windowDays: number): Promise<ScorecardR
   const byKind = computeGroupBreakdown(kindRows)
 
   // --- trend series ----------------------------------------------------------
-  const snapshotPoints: SnapshotPoint[] = (trendRes.docs as ScoreSnapshot[]).map((s) => ({
-    capturedAt: s.capturedAt,
-    avgScore: s.avgScore,
+  const snapshotPoints: SnapshotPoint[] = trendSnapshots.map((snapshot) => ({
+    capturedAt: snapshot.capturedAt,
+    avgScore: snapshot.avgScore,
   }))
-  const trend = buildTrendSeries(snapshotPoints, windowDays, new Date())
+  const trend = buildTrendSeries(snapshotPoints, boundedWindowDays, reportNow)
+
+  const dataTimes = [
+    ...overallRows.map((row) => row.evaluatedAt),
+    ...trendSnapshots.map((snapshot) => snapshot.capturedAt),
+  ]
+    .filter((value): value is string => typeof value === 'string')
+    .map((value) => new Date(value).getTime())
+    .filter(Number.isFinite)
+  const dataAsOf = dataTimes.length > 0 ? new Date(Math.max(...dataTimes)).toISOString() : null
 
   // --- per-scorecard sections --------------------------------------------------
-  const scorecards = await buildScorecardSections(payload, workspaceIds, enabledScorecards)
+  const scorecards = await buildScorecardSections(payload, workspaceId, enabledScorecards)
 
   return {
-    generatedAt: new Date().toISOString(),
-    windowDays,
+    workspaceId,
+    dataAsOf,
+    generatedAt: reportNow.toISOString(),
+    windowDays: boundedWindowDays,
     kpis,
     bands,
     trend,
@@ -274,47 +369,54 @@ export async function getScorecardReport(windowDays: number): Promise<ScorecardR
  */
 async function buildScorecardSections(
   payload: Payload,
-  workspaceIds: string[],
+  workspaceId: string,
   scorecards: Scorecard[],
 ): Promise<ScorecardSectionReport[]> {
   if (scorecards.length === 0) return []
   const scorecardIds = scorecards.map((s) => s.id)
 
-  const [rulesRes, resultsRes, scoreRowsRes] = await Promise.all([
-    payload.find({
+  const [rules, results, scoreRows] = await Promise.all([
+    findAllDocs<ScorecardRule>(payload, {
       collection: 'scorecard-rules',
-      where: { scorecard: { in: scorecardIds } },
-      limit: PAGE_LIMIT,
+      where: {
+        and: [
+          { workspace: { equals: workspaceId } },
+          { scorecard: { in: scorecardIds } },
+        ],
+      },
       depth: 0,
       overrideAccess: true,
     }),
-    payload.find({
+    findAllDocs<ScorecardRuleResult>(payload, {
       collection: 'scorecard-rule-results',
-      where: { and: [{ workspace: { in: workspaceIds } }, { scorecard: { in: scorecardIds } }] },
-      limit: PAGE_LIMIT,
+      where: {
+        and: [
+          { workspace: { equals: workspaceId } },
+          { scorecard: { in: scorecardIds } },
+        ],
+      },
       depth: 0,
       overrideAccess: true,
     }),
     // depth 1 to resolve `entity` for the top-failing-entities links (name).
-    payload.find({
+    findAllDocs<EntityScore>(payload, {
       collection: 'entity-scores',
       where: {
         and: [
-          { workspace: { in: workspaceIds } },
+          { workspace: { equals: workspaceId } },
           { scope: { equals: 'scorecard' } },
           { scorecard: { in: scorecardIds } },
         ],
       },
-      limit: PAGE_LIMIT,
       depth: 1,
       overrideAccess: true,
     }),
   ])
 
-  const ruleTitleById = new Map((rulesRes.docs as ScorecardRule[]).map((r) => [r.id, r.title]))
+  const ruleTitleById = new Map(rules.map((rule) => [rule.id, rule.title]))
 
   const resultsByScorecard = new Map<string, ScorecardRuleResult[]>()
-  for (const res of resultsRes.docs as ScorecardRuleResult[]) {
+  for (const res of results) {
     const scId = relId(res.scorecard)
     if (!scId) continue
     const list = resultsByScorecard.get(scId) ?? []
@@ -323,7 +425,7 @@ async function buildScorecardSections(
   }
 
   const scoreRowsByScorecard = new Map<string, EntityScore[]>()
-  for (const row of scoreRowsRes.docs as EntityScore[]) {
+  for (const row of scoreRows) {
     const scId = relId(row.scorecard)
     if (!scId) continue
     const list = scoreRowsByScorecard.get(scId) ?? []
@@ -350,20 +452,32 @@ async function buildScorecardSections(
       title: ruleTitleById.get(relId(r.rule) ?? '') ?? 'Unknown rule',
       passed: r.passed,
     }))
-    const topFailingRules = computeRuleFailures(ruleResultRows).slice(0, RULE_FAILURES_PER_SCORECARD)
+    const topFailingRules = computeRuleFailures(ruleResultRows).slice(
+      0,
+      RULE_FAILURES_PER_SCORECARD,
+    )
 
-    const topFailingEntities: FailingEntity[] = [...scoreRows]
-      .sort((a, b) => a.score - b.score)
-      .slice(0, FAILING_ENTITIES_PER_SCORECARD)
-      .map((r) => {
-        const entity = r.entity
-        return {
-          id: typeof entity === 'object' && entity ? entity.id : (relId(entity) ?? ''),
-          name: typeof entity === 'object' && entity ? entity.name : 'Unknown entity',
-          score: r.score,
-        }
-      })
-      .filter((e) => e.id !== '')
+    const failingEntityIds = new Set(
+      results
+        .filter((result) => !result.passed)
+        .map((result) => relId(result.entity))
+        .filter((id): id is string => Boolean(id)),
+    )
+
+    const topFailingEntities: FailingEntity[] = rankFailingEntities(
+      scoreRows
+        .map((r) => {
+          const entity = r.entity
+          return {
+            id: typeof entity === 'object' && entity ? entity.id : (relId(entity) ?? ''),
+            name: typeof entity === 'object' && entity ? entity.name : 'Unknown entity',
+            score: r.score,
+          }
+        })
+        .filter((entity) => entity.id !== ''),
+      failingEntityIds,
+      FAILING_ENTITIES_PER_SCORECARD,
+    )
 
     return {
       scorecardId: scorecard.id,

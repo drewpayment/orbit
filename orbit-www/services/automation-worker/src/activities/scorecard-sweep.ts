@@ -44,7 +44,11 @@ function readInternalApiConfig(activity: string): { apiUrl: string; apiKey: stri
  * other non-2xx (5xx/network) is transient → a plain Error that Temporal retries
  * per the workflow policy.
  */
-async function throwForResponse(activity: string, response: Response, context: string): Promise<never> {
+async function throwForResponse(
+  activity: string,
+  response: Response,
+  context: string,
+): Promise<never> {
   const body = await response.text().catch(() => '<unreadable response body>')
   const message = `${activity}: ${context} returned ${response.status} ${response.statusText}: ${body}`
   if (response.status >= 400 && response.status < 500) {
@@ -88,7 +92,10 @@ export async function listEnabledScorecards(): Promise<DueScorecard[]> {
  * @throws if env is missing, or if the route responds non-2xx (4xx →
  *   non-retryable, else retryable).
  */
-export async function evaluateScorecard(input: { scorecardId: string }): Promise<void> {
+export async function evaluateScorecard(input: {
+  scorecardId: string
+  captureSnapshots?: boolean
+}): Promise<void> {
   const { apiUrl, apiKey } = readInternalApiConfig('evaluateScorecard')
 
   const url = `${apiUrl}/api/internal/scorecards/evaluate`
@@ -98,7 +105,10 @@ export async function evaluateScorecard(input: { scorecardId: string }): Promise
       'Content-Type': 'application/json',
       'X-API-Key': apiKey,
     },
-    body: JSON.stringify({ scorecardId: input.scorecardId }),
+    body: JSON.stringify({
+      scorecardId: input.scorecardId,
+      ...(input.captureSnapshots === false ? { captureSnapshots: false } : {}),
+    }),
   })
 
   if (!response.ok) {
@@ -106,6 +116,34 @@ export async function evaluateScorecard(input: { scorecardId: string }): Promise
       'evaluateScorecard',
       response,
       `evaluate route for scorecard ${input.scorecardId}`,
+    )
+  }
+}
+
+/** Capture one forced, workspace-consistent snapshot after its sweep settles. */
+export async function captureWorkspaceSnapshots(input: {
+  workspaceId: string
+  captureKey: string
+}): Promise<void> {
+  const { apiUrl, apiKey } = readInternalApiConfig('captureWorkspaceSnapshots')
+  const response = await fetch(`${apiUrl}/api/internal/scorecards/capture-snapshots`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Key': apiKey,
+    },
+    body: JSON.stringify({
+      workspaceId: input.workspaceId,
+      force: true,
+      captureKey: input.captureKey,
+    }),
+  })
+
+  if (!response.ok) {
+    await throwForResponse(
+      'captureWorkspaceSnapshots',
+      response,
+      `snapshot route for workspace ${input.workspaceId}`,
     )
   }
 }

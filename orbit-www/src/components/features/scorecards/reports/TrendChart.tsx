@@ -40,7 +40,7 @@ export function TrendChart({
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
         <CardTitle className="text-base">Org average score trend</CardTitle>
-        <div className="flex gap-1 rounded-lg bg-muted p-1">
+        <div className="flex gap-1 rounded-lg bg-muted p-1" role="group" aria-label="Trend window">
           {WINDOW_OPTIONS.map((opt) => (
             <Button
               key={opt.days}
@@ -65,9 +65,7 @@ export function TrendChart({
 
 function TrendChartBody({ trend }: { trend: TrendPoint[] }) {
   if (trend.length === 0) {
-    return (
-      <ReportEmptyState>No history yet — snapshots appear after evaluations.</ReportEmptyState>
-    )
+    return <ReportEmptyState>No history yet — snapshots appear after evaluations.</ReportEmptyState>
   }
 
   const plotWidth = VIEW_WIDTH - PADDING_LEFT
@@ -87,8 +85,10 @@ function TrendChartBody({ trend }: { trend: TrendPoint[] }) {
           width="100%"
           height={VIEW_HEIGHT}
           role="img"
-          aria-label="Org average score trend"
+          aria-labelledby="score-trend-title score-trend-desc"
         >
+          <title id="score-trend-title">Org average score trend</title>
+          <desc id="score-trend-desc">One snapshot with an average score of {trend[0].v}.</desc>
           <g transform={`translate(${PADDING_LEFT}, 0)`}>
             <GridLines ticks={yTicks} plotWidth={plotWidth} plotHeight={plotHeight} />
             <circle cx={x} cy={y} r={4} className="fill-primary" />
@@ -110,8 +110,12 @@ function TrendChartBody({ trend }: { trend: TrendPoint[] }) {
       width="100%"
       height={VIEW_HEIGHT}
       role="img"
-      aria-label="Org average score trend"
+      aria-labelledby="score-trend-title score-trend-desc"
     >
+      <title id="score-trend-title">Org average score trend</title>
+      <desc id="score-trend-desc">
+        {trend.length} snapshots, from score {trend[0].v} to {trend[trend.length - 1].v}.
+      </desc>
       <g transform={`translate(${PADDING_LEFT}, 0)`}>
         <GridLines ticks={yTicks} plotWidth={plotWidth} plotHeight={plotHeight} />
         <path d={path} fill="none" className="stroke-primary" strokeWidth={2} />

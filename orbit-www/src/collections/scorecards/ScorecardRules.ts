@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
-import { workspaceScopedRead, workspaceScopedManageCreate, workspaceScopedMutate } from './access'
+import { platformAdminFieldUpdate, workspaceScopedRead } from './access'
+import { validateRuleRelationships } from './invariants'
 
 /**
  * ScorecardRules — individual checks belonging to a scorecard (IDP refocus P2).
@@ -39,14 +40,16 @@ export const ScorecardRules: CollectionConfig = {
     defaultColumns: ['title', 'scorecard', 'type', 'level', 'updatedAt'],
     description: 'Individual pass/fail checks within a scorecard.',
   },
-  // Authoring is gated on workspace owner/admin (P2 Option A); members
-  // read-only. See lib/scorecards/authz.ts.
+  // Rule writes are service-owned because expression validation and parent
+  // scorecard reevaluation live in authenticated server actions. Denying direct
+  // REST/GraphQL/Admin mutations prevents malformed or stale rules.
   access: {
     read: workspaceScopedRead,
-    create: workspaceScopedManageCreate,
-    update: workspaceScopedMutate('scorecard-rules', ['owner', 'admin']),
-    delete: workspaceScopedMutate('scorecard-rules', ['owner', 'admin']),
+    create: () => false,
+    update: () => false,
+    delete: () => false,
   },
+  hooks: { beforeValidate: [validateRuleRelationships] },
   fields: [
     {
       name: 'scorecard',
@@ -54,6 +57,7 @@ export const ScorecardRules: CollectionConfig = {
       relationTo: 'scorecards',
       required: true,
       index: true,
+      access: { update: platformAdminFieldUpdate },
     },
     {
       name: 'workspace',
@@ -61,6 +65,7 @@ export const ScorecardRules: CollectionConfig = {
       relationTo: 'workspaces',
       required: true,
       index: true,
+      access: { update: platformAdminFieldUpdate },
       admin: { description: 'Denormalised from the parent scorecard.' },
     },
     { name: 'title', type: 'text', required: true },
@@ -85,7 +90,9 @@ export const ScorecardRules: CollectionConfig = {
       name: 'expression',
       type: 'json',
       required: true,
-      admin: { description: 'Rule definition interpreted by the evaluator per type (see collection doc).' },
+      admin: {
+        description: 'Rule definition interpreted by the evaluator per type (see collection doc).',
+      },
     },
     { name: 'weight', type: 'number', defaultValue: 1 },
   ],

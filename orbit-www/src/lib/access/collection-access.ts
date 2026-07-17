@@ -179,7 +179,7 @@ export function docWorkspaceMutate(
   options: DocMutateOptions = {},
 ): Access {
   const { field = 'workspace', resolveWorkspace } = options
-  return async ({ req: { user, payload }, id }) => {
+  return async ({ req: { user, payload }, id, data }) => {
     if (!user || !id) return false
     if (isPlatformAdmin(user)) return true
     const betterAuthId = betterAuthIdOf(user)
@@ -200,6 +200,15 @@ export function docWorkspaceMutate(
       ? await resolveWorkspace({ doc, payload })
       : relationId(doc[field])
     if (!workspaceId) return false
+
+    // Tenant identity is immutable for non-platform-admin callers. Without this
+    // check, access is granted from the original document while the update can
+    // move it into an arbitrary workspace the caller does not manage.
+    if (!resolveWorkspace && data && Object.prototype.hasOwnProperty.call(data, field)) {
+      const requestedWorkspaceId = relationId((data as Record<string, unknown>)[field])
+      if (!requestedWorkspaceId || requestedWorkspaceId !== workspaceId) return false
+    }
+
     return hasWorkspaceRole(payload, betterAuthId, workspaceId, roles)
   }
 }

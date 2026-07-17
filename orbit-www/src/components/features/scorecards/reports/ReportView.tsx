@@ -1,10 +1,15 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { formatRelativeTime } from '@/lib/scorecards/reporting'
-import { getScorecardReport, type ScorecardReport } from '@/app/(frontend)/scorecards/reports/actions'
+import {
+  getScorecardReport,
+  type ReportWorkspaceOption,
+  type ScorecardReport,
+} from '@/app/(frontend)/scorecards/reports/actions'
 import { KpiRow } from './KpiRow'
 import { TrendChart } from './TrendChart'
 import { ScoreBandsCard } from './ScoreBandsCard'
@@ -28,14 +33,22 @@ const FRESHNESS_TICK_MS = 30_000
 export function ReportView({
   initialReport,
   initialWindowDays,
+  workspaces,
 }: {
   initialReport: ScorecardReport
   initialWindowDays: number
+  workspaces: ReportWorkspaceOption[]
 }) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const workspaceId = initialReport.workspaceId
   const [report, setReport] = useState(initialReport)
   const [windowDays, setWindowDays] = useState(initialWindowDays)
   const [refreshing, setRefreshing] = useState(false)
+  const [refreshError, setRefreshError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
+  const refreshSequence = useRef(0)
 
   // Always-current ref so the interval/visibility callbacks below can read
   // the latest `windowDays` without re-registering the interval every time
@@ -43,15 +56,38 @@ export function ReportView({
   const windowDaysRef = useRef(windowDays)
   windowDaysRef.current = windowDays
 
+  useEffect(() => {
+    // Invalidate requests started for the previous workspace before applying
+    // new server props, and keep the window label aligned with the payload.
+    refreshSequence.current++
+    setReport(initialReport)
+    setWindowDays(initialReport.windowDays)
+  }, [initialReport])
+
   const refresh = useCallback(async (days: number) => {
+    const sequence = ++refreshSequence.current
     setRefreshing(true)
+    setRefreshError(null)
     try {
-      const next = await getScorecardReport(days)
-      setReport(next)
+      const next = await getScorecardReport(workspaceId, days)
+      if (sequence === refreshSequence.current && next.workspaceId === workspaceId) {
+        setReport(next)
+      }
+    } catch (error) {
+      if (sequence === refreshSequence.current) {
+        setRefreshError(error instanceof Error ? error.message : 'Unable to refresh the report.')
+      }
     } finally {
-      setRefreshing(false)
+      if (sequence === refreshSequence.current) setRefreshing(false)
     }
-  }, [])
+  }, [workspaceId])
+
+  function handleWorkspaceChange(nextWorkspaceId: string) {
+    refreshSequence.current++
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('workspace', nextWorkspaceId)
+    router.push(`${pathname}?${params.toString()}`)
+  }
 
   function handleWindowDaysChange(days: number) {
     setWindowDays(days)
@@ -101,8 +137,34 @@ export function ReportView({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-        <span>Updated {formatRelativeTime(report.generatedAt, now)}</span>
+      <div className="flex flex-wrap items-end justify-between gap-3 text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="grid gap-1 text-xs font-medium text-foreground">
+            Workspace
+            <select
+              className="h-8 min-w-48 rounded-md border border-input bg-background px-2 text-sm"
+              value={workspaceId}
+              onChange={(event) => handleWorkspaceChange(event.target.value)}
+              disabled={workspaces.length === 0}
+            >
+              {workspaces.length === 0 ? (
+                <option value="">No workspace available</option>
+              ) : (
+                workspaces.map((workspace) => (
+                  <option key={workspace.id} value={workspace.id}>
+                    {workspace.name}
+                  </option>
+                ))
+              )}
+            </select>
+          </label>
+          <span className="pb-1.5">
+            {report.dataAsOf
+              ? `Data as of ${formatRelativeTime(report.dataAsOf, now)}`
+              : 'No evaluated data yet'}
+            {' · '}Refreshed {formatRelativeTime(report.generatedAt, now)}
+          </span>
+        </div>
         <Button
           type="button"
           variant="outline"
@@ -111,10 +173,19 @@ export function ReportView({
           onClick={handleRefreshClick}
           disabled={refreshing}
         >
-          <RefreshCw className={refreshing ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'} />
+          <RefreshCw
+            aria-hidden="true"
+            className={refreshing ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'}
+          />
           Refresh
         </Button>
       </div>
+
+      {refreshError && (
+        <p role="alert" className="text-sm text-destructive">
+          {refreshError}
+        </p>
+      )}
 
       <KpiRow kpis={report.kpis} />
 
