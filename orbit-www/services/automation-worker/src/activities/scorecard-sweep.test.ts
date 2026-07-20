@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ApplicationFailure } from '@temporalio/activity'
-import { listEnabledScorecards, evaluateScorecard } from './scorecard-sweep'
+import {
+  captureWorkspaceSnapshots,
+  listEnabledScorecards,
+  evaluateScorecard,
+} from './scorecard-sweep'
 
 /**
  * Scorecard-sweep activity tests. Mirrors the dispatch activity tests: a global
@@ -120,6 +124,15 @@ describe('evaluateScorecard', () => {
     expect(JSON.parse(init.body as string)).toEqual({ scorecardId: 's1' })
   })
 
+  it('can suppress per-scorecard snapshots for a workspace-coordinated sweep', async () => {
+    const fetchFn = mockFetch(() => jsonResponse(200, { ok: true }))
+
+    await evaluateScorecard({ scorecardId: 's1', captureSnapshots: false })
+
+    const [, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit]
+    expect(JSON.parse(init.body as string)).toEqual({ scorecardId: 's1', captureSnapshots: false })
+  })
+
   it('throws a NON-retryable ApplicationFailure on a 4xx response', async () => {
     mockFetch(() => jsonResponse(422, { error: 'bad scorecard' }))
     const err = await evaluateScorecard({ scorecardId: 's1' }).catch((e) => e)
@@ -155,5 +168,24 @@ describe('evaluateScorecard', () => {
     expect(err).not.toBeInstanceOf(ApplicationFailure)
     expect((err as Error).message).toContain('ORBIT_INTERNAL_API_KEY')
     expect(fetchFn).not.toHaveBeenCalled()
+  })
+})
+
+describe('captureWorkspaceSnapshots', () => {
+  it('forces one final snapshot after every scorecard in the workspace settles', async () => {
+    const fetchFn = mockFetch(() => jsonResponse(200, { created: 3 }))
+
+    await expect(
+      captureWorkspaceSnapshots({ workspaceId: 'ws1', captureKey: 'workflow-1:ws1' }),
+    ).resolves.toBeUndefined()
+
+    const [url, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe('http://orbit.test/api/internal/scorecards/capture-snapshots')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(init.body as string)).toEqual({
+      workspaceId: 'ws1',
+      force: true,
+      captureKey: 'workflow-1:ws1',
+    })
   })
 })

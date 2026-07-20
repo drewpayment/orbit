@@ -100,6 +100,7 @@ export const EntityScores: CollectionConfig = {
     { name: 'evaluatedAt', type: 'date' },
   ],
   indexes: [
+    { fields: ['entity', 'scope', 'scorecard'], unique: true },
     { fields: ['workspace', 'entity', 'scope'] },
     { fields: ['workspace', 'scope', 'score'] },
     { fields: ['scorecard', 'score'] },

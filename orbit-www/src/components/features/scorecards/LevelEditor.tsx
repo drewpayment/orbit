@@ -42,9 +42,12 @@ export function LevelEditor({
   }
 
   return (
-    <div className="space-y-2">
+    <fieldset className="space-y-2">
+      <legend className="sr-only">Maturity ladder</legend>
       <div className="flex items-center justify-between">
-        <Label>Maturity ladder</Label>
+        <span className="text-sm font-medium" aria-hidden="true">
+          Maturity ladder
+        </span>
         <Button type="button" variant="outline" size="sm" onClick={add}>
           <Plus className="h-4 w-4" />
           Add level
@@ -60,24 +63,63 @@ export function LevelEditor({
           {value.map((level, index) => (
             <div key={index} className="flex items-end gap-2">
               <div className="flex-1 space-y-1">
-                {index === 0 && <Label className="text-xs text-muted-foreground">Name</Label>}
+                <Label
+                  htmlFor={`level-name-${index}`}
+                  className={index === 0 ? 'text-xs text-muted-foreground' : 'sr-only'}
+                >
+                  {index === 0 ? (
+                    <>
+                      <span aria-hidden="true">Name</span>
+                      <span className="sr-only">Level 1 name</span>
+                    </>
+                  ) : (
+                    `Level ${index + 1} name`
+                  )}
+                </Label>
                 <Input
+                  id={`level-name-${index}`}
                   value={level.name}
                   placeholder="Silver"
                   onChange={(e) => update(index, { name: e.target.value })}
                 />
               </div>
               <div className="w-20 space-y-1">
-                {index === 0 && <Label className="text-xs text-muted-foreground">Rank</Label>}
+                <Label
+                  htmlFor={`level-rank-${index}`}
+                  className={index === 0 ? 'text-xs text-muted-foreground' : 'sr-only'}
+                >
+                  {index === 0 ? (
+                    <>
+                      <span aria-hidden="true">Rank</span>
+                      <span className="sr-only">Level 1 rank</span>
+                    </>
+                  ) : (
+                    `Level ${index + 1} rank`
+                  )}
+                </Label>
                 <Input
+                  id={`level-rank-${index}`}
                   type="number"
                   value={Number.isFinite(level.rank) ? level.rank : 0}
                   onChange={(e) => update(index, { rank: Number(e.target.value) })}
                 />
               </div>
               <div className="w-28 space-y-1">
-                {index === 0 && <Label className="text-xs text-muted-foreground">Color</Label>}
+                <Label
+                  htmlFor={`level-color-${index}`}
+                  className={index === 0 ? 'text-xs text-muted-foreground' : 'sr-only'}
+                >
+                  {index === 0 ? (
+                    <>
+                      <span aria-hidden="true">Color</span>
+                      <span className="sr-only">Level 1 color</span>
+                    </>
+                  ) : (
+                    `Level ${index + 1} color`
+                  )}
+                </Label>
                 <Input
+                  id={`level-color-${index}`}
                   value={level.color ?? ''}
                   placeholder="#c0c0c0"
                   onChange={(e) => update(index, { color: e.target.value })}
@@ -121,6 +163,6 @@ export function LevelEditor({
           ))}
         </div>
       )}
-    </div>
+    </fieldset>
   )
 }

@@ -149,7 +149,7 @@ function StatusCell({
   return (
     <div className="flex items-center gap-2">
       <Select value={value} onValueChange={(v) => onChange(v as ItemStatus)} disabled={pending}>
-        <SelectTrigger className="h-8 w-[140px]">
+        <SelectTrigger className="h-8 w-[140px]" aria-label="Action item status">
           <SelectValue>
             <Badge variant={p.variant} className={cn('font-normal', p.className)}>
               {p.label}
@@ -164,7 +164,9 @@ function StatusCell({
           ))}
         </SelectContent>
       </Select>
-      {pending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+      {pending && (
+        <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+      )}
     </div>
   )
 }
@@ -194,7 +196,7 @@ function NotesCell({
           variant="ghost"
           size="sm"
           className={cn('h-8 gap-1 px-2', hasNotes ? 'text-foreground' : 'text-muted-foreground')}
-          title={hasNotes ? notes ?? undefined : 'Add a note'}
+          title={hasNotes ? (notes ?? undefined) : 'Add a note'}
         >
           <StickyNote className="h-4 w-4" />
           {hasNotes ? 'View' : 'Add'}
@@ -202,6 +204,7 @@ function NotesCell({
       </PopoverTrigger>
       <PopoverContent className="w-80 space-y-2" align="start">
         <Textarea
+          aria-label="Remediation notes"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Add remediation notes…"
@@ -219,7 +222,7 @@ function NotesCell({
             }}
             disabled={pending}
           >
-            {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+            {pending && <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />}
             Save
           </Button>
         </div>

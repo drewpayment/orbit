@@ -136,7 +136,16 @@ export function isThrottled(newestCapturedAt: string | null | undefined, now: Da
 
 // --- orchestration -------------------------------------------------------------
 
-const PAGE_LIMIT = 5000
+const PAGE_SIZE = 500
+
+async function findAllDocs<T>(payload: Payload, args: Record<string, unknown>): Promise<T[]> {
+  const docs: T[] = []
+  for (let page = 1; ; page++) {
+    const result = await payload.find({ ...args, limit: PAGE_SIZE, page } as never)
+    docs.push(...(result.docs as T[]))
+    if (!result.hasNextPage) return docs
+  }
+}
 
 /** Normalise a relationship end (id string or populated doc) to its id, or null when unset. */
 function relIdOf(v: string | { id: string } | null | undefined): string | null {
@@ -147,8 +156,79 @@ function relIdOf(v: string | { id: string } | null | undefined): string | null {
 export interface CaptureScoreSnapshotsResult {
   /** True when the throttle skipped this capture (no rows written). */
   skipped: boolean
-  /** Number of score-snapshots rows appended (0 when skipped). */
+  /** Number of score-snapshots rows materialised (created or refreshed). */
   rowsWritten: number
+}
+
+type SnapshotWriteData = Record<string, unknown> & {
+  workspace: string
+  scope: 'workspace' | 'scorecard' | 'team'
+  avgScore: number
+  entityCount: number
+  capturedAt: string
+}
+
+async function writeSnapshotRow(
+  payload: Payload,
+  data: SnapshotWriteData,
+  captureKey: string | undefined,
+  scopeKey: string,
+): Promise<void> {
+  const snapshotKey = captureKey ? `${captureKey}:${data.workspace}:${scopeKey}` : undefined
+  const keyedData = {
+    ...data,
+    ...(captureKey ? { captureKey, snapshotKey } : {}),
+  }
+
+  if (!snapshotKey) {
+    await payload.create({
+      collection: 'score-snapshots',
+      data: keyedData,
+      overrideAccess: true,
+    })
+    return
+  }
+
+  const findExisting = () =>
+    payload.find({
+      collection: 'score-snapshots',
+      where: {
+        and: [
+          { workspace: { equals: data.workspace } },
+          { snapshotKey: { equals: snapshotKey } },
+        ],
+      },
+      limit: 1,
+      depth: 0,
+      overrideAccess: true,
+    })
+  const existing = await findExisting()
+  if (existing.docs.length > 0) {
+    await payload.update({
+      collection: 'score-snapshots',
+      id: existing.docs[0].id,
+      data: keyedData,
+      overrideAccess: true,
+    })
+    return
+  }
+
+  try {
+    await payload.create({
+      collection: 'score-snapshots',
+      data: keyedData,
+      overrideAccess: true,
+    })
+  } catch (error) {
+    const raced = await findExisting()
+    if (raced.docs.length === 0) throw error
+    await payload.update({
+      collection: 'score-snapshots',
+      id: raced.docs[0].id,
+      data: keyedData,
+      overrideAccess: true,
+    })
+  }
 }
 
 /**
@@ -165,9 +245,10 @@ export interface CaptureScoreSnapshotsResult {
 export async function captureScoreSnapshots(
   payload: Payload,
   workspaceId: string,
-  opts: { force?: boolean } = {},
+  opts: { force?: boolean; captureKey?: string } = {},
 ): Promise<CaptureScoreSnapshotsResult> {
   const now = new Date()
+  const captureKey = opts.captureKey?.trim() || undefined
 
   if (!opts.force) {
     const newest = await payload.find({
@@ -184,28 +265,43 @@ export async function captureScoreSnapshots(
     }
   }
 
-  const capturedAt = now.toISOString()
+  let capturedAt = now.toISOString()
+  if (captureKey) {
+    const existingCapture = await payload.find({
+      collection: 'score-snapshots',
+      where: {
+        and: [
+          { workspace: { equals: workspaceId } },
+          { captureKey: { equals: captureKey } },
+        ],
+      },
+      sort: 'capturedAt',
+      limit: 1,
+      depth: 0,
+      overrideAccess: true,
+    })
+    const existingCapturedAt = (existingCapture.docs[0] as ScoreSnapshot | undefined)?.capturedAt
+    if (existingCapturedAt) capturedAt = existingCapturedAt
+  }
   let rowsWritten = 0
 
   // --- workspace scope: every `overall` entity-scores row in the workspace ---
   // Depth 1 so each row's `entity` populates far enough to read `entity.owner`
   // (the team relationship) for the team-scope grouping below.
-  const overallRes = await payload.find({
+  const overallRows = await findAllDocs<EntityScore>(payload, {
     collection: 'entity-scores',
     where: { and: [{ workspace: { equals: workspaceId } }, { scope: { equals: 'overall' } }] },
-    limit: PAGE_LIMIT,
     depth: 1,
     overrideAccess: true,
   })
-  const overallRows = overallRes.docs as EntityScore[]
 
   const workspaceAgg = aggregateOverallRows(
     overallRows.map((r) => ({ score: r.score, goldenPathAlignment: r.goldenPathAlignment })),
   )
   if (workspaceAgg) {
-    await payload.create({
-      collection: 'score-snapshots',
-      data: {
+    await writeSnapshotRow(
+      payload,
+      {
         workspace: workspaceId,
         scope: 'workspace',
         avgScore: workspaceAgg.avgScore,
@@ -213,23 +309,23 @@ export async function captureScoreSnapshots(
         entityCount: workspaceAgg.entityCount,
         capturedAt,
       },
-      overrideAccess: true,
-    })
+      captureKey,
+      'workspace',
+    )
     rowsWritten++
   }
 
   // --- scorecard scope: one row per enabled scorecard ------------------------
-  const scorecardsRes = await payload.find({
+  const scorecards = await findAllDocs<Scorecard>(payload, {
     collection: 'scorecards',
     where: { and: [{ workspace: { equals: workspaceId } }, { enabled: { equals: true } }] },
-    limit: 1000,
     depth: 0,
     overrideAccess: true,
   })
 
-  for (const scorecard of scorecardsRes.docs as Scorecard[]) {
-    const [scoreRowsRes, ruleResultsRes] = await Promise.all([
-      payload.find({
+  for (const scorecard of scorecards) {
+    const [scoreRows, ruleResults] = await Promise.all([
+      findAllDocs<EntityScore>(payload, {
         collection: 'entity-scores',
         where: {
           and: [
@@ -238,14 +334,12 @@ export async function captureScoreSnapshots(
             { scorecard: { equals: scorecard.id } },
           ],
         },
-        limit: PAGE_LIMIT,
         depth: 0,
         overrideAccess: true,
       }),
-      payload.find({
+      findAllDocs<ScorecardRuleResult>(payload, {
         collection: 'scorecard-rule-results',
         where: { and: [{ workspace: { equals: workspaceId } }, { scorecard: { equals: scorecard.id } }] },
-        limit: PAGE_LIMIT,
         depth: 0,
         overrideAccess: true,
       }),
@@ -253,19 +347,19 @@ export async function captureScoreSnapshots(
 
     const levels: LevelDef[] = (scorecard.levels ?? []).map((l) => ({ name: l.name, rank: l.rank }))
     const agg = aggregateScorecardRows(
-      (scoreRowsRes.docs as EntityScore[]).map((r) => ({
+      scoreRows.map((r) => ({
         score: r.score,
         levelName: r.levelName,
         levelRank: r.levelRank,
       })),
-      (ruleResultsRes.docs as ScorecardRuleResult[]).map((r) => ({ passed: r.passed })),
+      ruleResults.map((r) => ({ passed: r.passed })),
       levels,
     )
     if (!agg) continue
 
-    await payload.create({
-      collection: 'score-snapshots',
-      data: {
+    await writeSnapshotRow(
+      payload,
+      {
         workspace: workspaceId,
         scope: 'scorecard',
         scorecard: scorecard.id,
@@ -275,20 +369,19 @@ export async function captureScoreSnapshots(
         levelDistribution: agg.levelDistribution,
         capturedAt,
       },
-      overrideAccess: true,
-    })
+      captureKey,
+      `scorecard:${scorecard.id}`,
+    )
     rowsWritten++
   }
 
   // --- team scope: one row per owning team with ≥1 scored entity -------------
-  const teamsRes = await payload.find({
+  const teams = await findAllDocs<CatalogEntity>(payload, {
     collection: 'catalog-entities',
     where: { and: [{ workspace: { equals: workspaceId } }, { kind: { equals: 'team' } }] },
-    limit: 1000,
     depth: 0,
     overrideAccess: true,
   })
-  const teams = teamsRes.docs as CatalogEntity[]
 
   if (teams.length > 0) {
     const rowsByTeam = new Map<string, OverallScoreRow[]>()
@@ -305,9 +398,9 @@ export async function captureScoreSnapshots(
       const agg = aggregateOverallRows(rowsByTeam.get(team.id) ?? [])
       if (!agg) continue
 
-      await payload.create({
-        collection: 'score-snapshots',
-        data: {
+      await writeSnapshotRow(
+        payload,
+        {
           workspace: workspaceId,
           scope: 'team',
           team: team.id,
@@ -316,8 +409,9 @@ export async function captureScoreSnapshots(
           entityCount: agg.entityCount,
           capturedAt,
         },
-        overrideAccess: true,
-      })
+        captureKey,
+        `team:${team.id}`,
+      )
       rowsWritten++
     }
   }

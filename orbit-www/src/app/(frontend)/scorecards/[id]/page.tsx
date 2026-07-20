@@ -1,7 +1,6 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { getCurrentUser } from '@/lib/auth/session'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -26,8 +25,7 @@ interface PageProps {
  */
 export default async function ScorecardDetailPage({ params }: PageProps) {
   const { id } = await params
-  const user = await getCurrentUser()
-  const detail = await getScorecardDetail(user?.id, id)
+  const detail = await getScorecardDetail(id)
   if (!detail) notFound()
 
   const { scorecard, levels, rules, rows, summary, canManage } = detail

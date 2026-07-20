@@ -1,7 +1,6 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Loader2, Plus, Target } from 'lucide-react'
-import { getCurrentUser } from '@/lib/auth/session'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -51,8 +50,7 @@ async function InitiativesContent() {
  * page header.
  */
 async function NewInitiativeButton() {
-  const user = await getCurrentUser()
-  const workspaces = await getManageableWorkspaces(user?.id)
+  const workspaces = await getManageableWorkspaces()
   if (workspaces.length === 0) return null
   return (
     <Button asChild size="sm">

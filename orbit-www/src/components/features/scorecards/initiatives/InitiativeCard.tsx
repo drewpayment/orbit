@@ -24,7 +24,7 @@ export function InitiativeCard({ initiative }: { initiative: InitiativeSummaryVi
   return (
     <Link
       href={`/scorecards/initiatives/${initiative.id}`}
-      className="block focus:outline-none"
+      className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
       <Card className="h-full transition-colors hover:border-primary/50 hover:bg-accent/40">
         <CardHeader className="space-y-2">
@@ -32,7 +32,10 @@ export function InitiativeCard({ initiative }: { initiative: InitiativeSummaryVi
             <CardTitle className="truncate text-base" title={initiative.name}>
               {initiative.name}
             </CardTitle>
-            <Badge variant={status.variant} className={cn('shrink-0 font-normal', status.className)}>
+            <Badge
+              variant={status.variant}
+              className={cn('shrink-0 font-normal', status.className)}
+            >
               {status.label}
             </Badge>
           </div>
@@ -50,7 +53,10 @@ export function InitiativeCard({ initiative }: { initiative: InitiativeSummaryVi
           <InitiativeProgressBar progress={initiative.progress} />
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
             <span
-              className={cn('inline-flex items-center gap-1', overdue && 'font-medium text-red-600')}
+              className={cn(
+                'inline-flex items-center gap-1',
+                overdue && 'font-medium text-red-600',
+              )}
             >
               <CalendarClock className="h-3 w-3" />
               {formatDeadline(initiative.deadline)}

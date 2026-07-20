@@ -3943,6 +3943,14 @@ export interface ScoreSnapshot {
     | number
     | boolean
     | null;
+  /**
+   * Stable Temporal/manual capture identifier for retry recovery.
+   */
+  captureKey?: string | null;
+  /**
+   * Per-row idempotency key within a keyed capture set.
+   */
+  snapshotKey?: string | null;
   capturedAt: string;
   updatedAt: string;
   createdAt: string;
@@ -6107,6 +6115,8 @@ export interface ScoreSnapshotsSelect<T extends boolean = true> {
   entityCount?: T;
   passRate?: T;
   levelDistribution?: T;
+  captureKey?: T;
+  snapshotKey?: T;
   capturedAt?: T;
   updatedAt?: T;
   createdAt?: T;

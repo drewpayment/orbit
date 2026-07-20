@@ -1,10 +1,11 @@
-import type { Access } from 'payload'
+import type { Access, FieldAccess } from 'payload'
 import {
   workspaceScopedRead as scopedRead,
   memberCreate,
   manageCreate,
   docWorkspaceMutate,
 } from '@/lib/access/collection-access'
+import { isPlatformAdmin } from '@/lib/access/workspace-access'
 
 /**
  * Workspace-scoped access for the scorecards collections — thin adapters over
@@ -25,3 +26,6 @@ export const workspaceScopedManageCreate: Access = manageCreate(['owner', 'admin
 /** Update/delete: active member of the doc's workspace holding one of `roles`. */
 export const workspaceScopedMutate = (slug: string, roles: string[]): Access =>
   docWorkspaceMutate(slug, roles)
+
+/** Tenant/parent identity fields are immutable outside trusted overrideAccess writes. */
+export const platformAdminFieldUpdate: FieldAccess = ({ req: { user } }) => isPlatformAdmin(user)

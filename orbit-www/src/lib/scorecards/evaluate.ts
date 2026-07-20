@@ -219,11 +219,17 @@ function evalThreshold(expr: ThresholdExpr, ctx: EvalContext): RuleEvalResult {
   switch (op) {
     case 'eq': {
       const passed = valuesEqual(actual, expected)
-      return { passed, detail: `\`${path}\` (${show(actual)}) ${passed ? '==' : '!='} ${show(expected)}.` }
+      return {
+        passed,
+        detail: `\`${path}\` (${show(actual)}) ${passed ? '==' : '!='} ${show(expected)}.`,
+      }
     }
     case 'neq': {
       const passed = !valuesEqual(actual, expected)
-      return { passed, detail: `\`${path}\` (${show(actual)}) ${passed ? '!=' : '=='} ${show(expected)}.` }
+      return {
+        passed,
+        detail: `\`${path}\` (${show(actual)}) ${passed ? '!=' : '=='} ${show(expected)}.`,
+      }
     }
     case 'gt':
     case 'gte':
@@ -232,11 +238,16 @@ function evalThreshold(expr: ThresholdExpr, ctx: EvalContext): RuleEvalResult {
       const na = Number(actual)
       const nb = Number(expected)
       if (Number.isNaN(na) || Number.isNaN(nb)) {
-        return fail(`threshold: \`${path}\` (${show(actual)}) or value (${show(expected)}) is not numeric for op "${op}".`)
+        return fail(
+          `threshold: \`${path}\` (${show(actual)}) or value (${show(expected)}) is not numeric for op "${op}".`,
+        )
       }
       const passed =
         op === 'gt' ? na > nb : op === 'gte' ? na >= nb : op === 'lt' ? na < nb : na <= nb
-      return { passed, detail: `\`${path}\` (${na}) ${passed ? 'satisfies' : 'fails'} ${op} ${nb}.` }
+      return {
+        passed,
+        detail: `\`${path}\` (${na}) ${passed ? 'satisfies' : 'fails'} ${op} ${nb}.`,
+      }
     }
     case 'in': {
       if (!Array.isArray(expected)) {
@@ -370,12 +381,16 @@ function evalEntityScore(expr: EntityScoreExpr, ctx: EvalContext): RuleEvalResul
     const direction: RelationDirection = expr.direction ?? 'either'
     const relatedIds = [
       ...new Set(
-        collectRelatedEnds(ctx, expr.relationType, direction, expr.targetKind).map((end) => relEndId(end) as string),
+        collectRelatedEnds(ctx, expr.relationType, direction, expr.targetKind).map(
+          (end) => relEndId(end) as string,
+        ),
       ),
     ]
     const kindNote = expr.targetKind ? ` to ${expr.targetKind}` : ''
     if (relatedIds.length === 0) {
-      return fail(`entity-score: no related entities found via \`${expr.relationType}\`${kindNote} (${direction}).`)
+      return fail(
+        `entity-score: no related entities found via \`${expr.relationType}\`${kindNote} (${direction}).`,
+      )
     }
 
     const found: { score: number; weight: number }[] = []
@@ -515,27 +530,100 @@ export async function upsertRuleResult(
     return updated.id
   }
 
-  const created = await payload.create({
-    collection: 'scorecard-rule-results',
-    data,
-    overrideAccess: true,
-  })
-  return created.id
+  try {
+    const created = await payload.create({
+      collection: 'scorecard-rule-results',
+      data,
+      overrideAccess: true,
+    })
+    return created.id
+  } catch (error) {
+    // A concurrent evaluator may have won the unique-key race after our find.
+    const raced = await payload.find({
+      collection: 'scorecard-rule-results',
+      where: ruleResultWhere(args.scorecardId, args.ruleId, args.entityId),
+      limit: 1,
+      depth: 0,
+      overrideAccess: true,
+    })
+    if (raced.docs.length === 0) throw error
+    const updated = await payload.update({
+      collection: 'scorecard-rule-results',
+      id: raced.docs[0].id,
+      data,
+      overrideAccess: true,
+    })
+    return updated.id
+  }
 }
 
 function relIdOf(v: string | { id: string }): string {
   return typeof v === 'string' ? v : v.id
 }
 
+/**
+ * Remove materialised results that are no longer part of the scorecard's
+ * current rule/entity cross-product. This is intentionally run before score
+ * recomputation so changed `appliesTo` filters and deleted rules cannot keep
+ * influencing scores indefinitely.
+ */
+async function reconcileScorecardResults(
+  payload: Payload,
+  scorecardId: string,
+  ruleIds: Set<string>,
+  entityIds: Set<string>,
+): Promise<void> {
+  const rows: ScorecardRuleResult[] = []
+  for (let page = 1; ; page++) {
+    const result = await payload.find({
+      collection: 'scorecard-rule-results',
+      where: { scorecard: { equals: scorecardId } },
+      limit: PAGE_SIZE,
+      page,
+      depth: 0,
+      overrideAccess: true,
+    })
+    rows.push(...(result.docs as ScorecardRuleResult[]))
+    if (!result.hasNextPage) break
+  }
+
+  const seen = new Set<string>()
+  const staleIds: string[] = []
+  for (const row of rows) {
+    const ruleId = relIdOf(row.rule as string | { id: string })
+    const entityId = relIdOf(row.entity as string | { id: string })
+    const pair = `${ruleId}:${entityId}`
+    if (!ruleIds.has(ruleId) || !entityIds.has(entityId) || seen.has(pair)) {
+      staleIds.push(row.id)
+    } else {
+      seen.add(pair)
+    }
+  }
+
+  if (staleIds.length > 0) {
+    await payload.delete({
+      collection: 'scorecard-rule-results',
+      where: { id: { in: staleIds } },
+      overrideAccess: true,
+    })
+  }
+}
+
 // --- entity-scores recompute -------------------------------------------------
 
 /** Idempotency key for an entity-scores row: (entity, scope[, scorecard]). */
-function entityScoreWhere(entityId: string, scope: 'scorecard' | 'overall', scorecardId?: string): Where {
+function entityScoreWhere(
+  entityId: string,
+  scope: 'scorecard' | 'overall',
+  scorecardId?: string,
+): Where {
   return {
     and: [
       { entity: { equals: entityId } },
       { scope: { equals: scope } },
-      scope === 'scorecard' ? { scorecard: { equals: scorecardId } } : { scorecard: { exists: false } },
+      scope === 'scorecard'
+        ? { scorecard: { equals: scorecardId } }
+        : { scorecard: { exists: false } },
     ],
   }
 }
@@ -598,12 +686,30 @@ async function upsertEntityScore(
     return updated.id
   }
 
-  const created = await payload.create({
-    collection: 'entity-scores',
-    data,
-    overrideAccess: true,
-  })
-  return created.id
+  try {
+    const created = await payload.create({
+      collection: 'entity-scores',
+      data,
+      overrideAccess: true,
+    })
+    return created.id
+  } catch (error) {
+    const raced = await payload.find({
+      collection: 'entity-scores',
+      where: entityScoreWhere(args.entityId, args.scope, args.scorecardId),
+      limit: 1,
+      depth: 0,
+      overrideAccess: true,
+    })
+    if (raced.docs.length === 0) throw error
+    const updated = await payload.update({
+      collection: 'entity-scores',
+      id: raced.docs[0].id,
+      data,
+      overrideAccess: true,
+    })
+    return updated.id
+  }
 }
 
 /**
@@ -619,7 +725,11 @@ async function upsertEntityScore(
  * `requiredMetadata`. Overall score falls back to the type's `baseValue` when
  * no scorecard applies — the coverage-invariant fallback.
  */
-async function recomputeEntityScore(payload: Payload, workspaceId: string, entity: CatalogEntity): Promise<void> {
+async function recomputeEntityScore(
+  payload: Payload,
+  workspaceId: string,
+  entity: CatalogEntity,
+): Promise<void> {
   const entityId = entity.id
 
   const resultsRes = await payload.find({
@@ -640,6 +750,7 @@ async function recomputeEntityScore(payload: Payload, workspaceId: string, entit
   }
 
   const scorecardScores: number[] = []
+  const materialisedScorecardIds = new Set<string>()
 
   for (const [scorecardId, resultRows] of byScorecard) {
     const rulesRes = await payload.find({
@@ -656,22 +767,33 @@ async function recomputeEntityScore(payload: Payload, workspaceId: string, entit
     for (const row of resultRows) {
       const ruleId = relIdOf(row.rule as string | { id: string })
       const rule = ruleById.get(ruleId)
-      const weight = typeof rule?.weight === 'number' && Number.isFinite(rule.weight) ? rule.weight : 1
+      if (!rule) continue
+      const weight =
+        typeof rule.weight === 'number' && Number.isFinite(rule.weight) ? rule.weight : 1
       weighted.push({ weight, passed: row.passed })
-      rulesWithPass.push({ level: rule?.level ?? null, passed: row.passed })
+      rulesWithPass.push({ level: rule.level ?? null, passed: row.passed })
     }
 
     const scoreResult = computeScorecardScore(weighted)
     // No scoreable rules right now (e.g. all 0-weight) — nothing to write.
     if (!scoreResult) continue
 
-    const scorecard = (await payload.findByID({
-      collection: 'scorecards',
-      id: scorecardId,
-      depth: 0,
-      overrideAccess: true,
-    })) as Scorecard
-    const level = computeEntityLevel((scorecard.levels ?? []).map((l) => ({ name: l.name, rank: l.rank })), rulesWithPass)
+    let scorecard: Scorecard
+    try {
+      scorecard = (await payload.findByID({
+        collection: 'scorecards',
+        id: scorecardId,
+        depth: 0,
+        overrideAccess: true,
+      })) as Scorecard
+    } catch {
+      continue
+    }
+    if (scorecard.enabled === false) continue
+    const level = computeEntityLevel(
+      (scorecard.levels ?? []).map((l) => ({ name: l.name, rank: l.rank })),
+      rulesWithPass,
+    )
 
     await upsertEntityScore(payload, {
       workspaceId,
@@ -686,7 +808,37 @@ async function recomputeEntityScore(payload: Payload, workspaceId: string, entit
       weightedPoints: scoreResult.weightedPoints,
       maxPoints: scoreResult.maxPoints,
     })
+    materialisedScorecardIds.add(scorecardId)
     scorecardScores.push(scoreResult.score)
+  }
+
+  // A previous evaluation may have materialised a scorecard row that no
+  // longer has valid results (rule deletion, appliesTo change, or disable).
+  const existingScorecardRows = await payload.find({
+    collection: 'entity-scores',
+    where: {
+      and: [
+        { workspace: { equals: workspaceId } },
+        { entity: { equals: entityId } },
+        { scope: { equals: 'scorecard' } },
+      ],
+    },
+    limit: 1000,
+    depth: 0,
+    overrideAccess: true,
+  })
+  const staleScoreIds = (existingScorecardRows.docs as EntityScore[])
+    .filter((row) => {
+      if (!row.scorecard) return true
+      return !materialisedScorecardIds.has(relIdOf(row.scorecard as string | { id: string }))
+    })
+    .map((row) => row.id)
+  if (staleScoreIds.length > 0) {
+    await payload.delete({
+      collection: 'entity-scores',
+      where: { id: { in: staleScoreIds } },
+      overrideAccess: true,
+    })
   }
 
   // Golden-path alignment against the entity's type definition — reuses the
@@ -704,7 +856,12 @@ async function recomputeEntityScore(payload: Payload, workspaceId: string, entit
   let met = 0
   for (const rel of typeDef.goldenPath.requiredRelations) {
     const res = evalRelationCheck(
-      { relationType: rel.relationType, direction: rel.direction, targetKind: rel.targetKind ?? undefined, min: rel.min },
+      {
+        relationType: rel.relationType,
+        direction: rel.direction,
+        targetKind: rel.targetKind ?? undefined,
+        min: rel.min,
+      },
       ctx,
     )
     if (res.passed) met++
@@ -713,7 +870,8 @@ async function recomputeEntityScore(payload: Payload, workspaceId: string, entit
     const res = evalFieldPresence({ path: md.path, op: 'exists' }, ctx)
     if (res.passed) met++
   }
-  const expected = typeDef.goldenPath.requiredRelations.length + typeDef.goldenPath.requiredMetadata.length
+  const expected =
+    typeDef.goldenPath.requiredRelations.length + typeDef.goldenPath.requiredMetadata.length
   const goldenPathAlignment = computeGoldenPathAlignment({ met, expected })
 
   const overall = computeOverallScore({ scorecardScores, baseValue: typeDef.baseValue })
@@ -741,6 +899,7 @@ async function recomputeEntityScore(payload: Payload, workspaceId: string, entit
 export async function recomputeWorkspaceScores(
   payload: Payload,
   workspaceId: string,
+  options: { captureSnapshots?: boolean } = {},
 ): Promise<{ entitiesScored: number }> {
   let entitiesScored = 0
 
@@ -768,14 +927,16 @@ export async function recomputeWorkspaceScores(
   // never fail this recompute. Dynamic import mirrors the automation-emit
   // hooks (e.g. CatalogEntities, ScorecardRuleResults) — keeps the module
   // boundary loose and the happy path's import graph unchanged.
-  ;(async () => {
-    try {
-      const { captureScoreSnapshots } = await import('./snapshots')
-      await captureScoreSnapshots(payload, workspaceId)
-    } catch (err) {
-      console.error('[recomputeWorkspaceScores] score-snapshot capture failed:', err)
-    }
-  })()
+  if (options.captureSnapshots !== false) {
+    ;(async () => {
+      try {
+        const { captureScoreSnapshots } = await import('./snapshots')
+        await captureScoreSnapshots(payload, workspaceId)
+      } catch (err) {
+        console.error('[recomputeWorkspaceScores] score-snapshot capture failed:', err)
+      }
+    })()
+  }
 
   return { entitiesScored }
 }
@@ -845,6 +1006,26 @@ async function buildWeightLookup(
   return weights
 }
 
+/** Remove every current projection owned by one scorecard, then rebuild overall rows. */
+export async function clearScorecardProjections(
+  payload: Payload,
+  scorecardId: string,
+  workspaceId: string,
+  options: { captureSnapshots?: boolean } = {},
+): Promise<void> {
+  await payload.delete({
+    collection: 'scorecard-rule-results',
+    where: { scorecard: { equals: scorecardId } },
+    overrideAccess: true,
+  })
+  await payload.delete({
+    collection: 'entity-scores',
+    where: { scorecard: { equals: scorecardId } },
+    overrideAccess: true,
+  })
+  await recomputeWorkspaceScores(payload, workspaceId, options)
+}
+
 /**
  * Load a scorecard, its rules, and every entity it `appliesTo`; evaluate all
  * rules against each entity and idempotently upsert the results; then fold
@@ -868,6 +1049,7 @@ async function buildWeightLookup(
 export async function runScorecardEvaluation(
   payload: Payload,
   scorecardId: string,
+  options: { captureSnapshots?: boolean } = {},
 ): Promise<{
   scorecardId: string
   entitiesEvaluated: number
@@ -882,6 +1064,11 @@ export async function runScorecardEvaluation(
   })) as Scorecard
 
   const workspaceId = relIdOf(scorecard.workspace)
+
+  if (scorecard.enabled === false) {
+    await clearScorecardProjections(payload, scorecardId, workspaceId, options)
+    return { scorecardId, entitiesEvaluated: 0, rulesEvaluated: 0, resultsWritten: 0 }
+  }
 
   // Rules for this scorecard, split: entity-score rules read stored scores
   // (phase C), everything else is evaluated directly off the entity (phase A).
@@ -910,6 +1097,7 @@ export async function runScorecardEvaluation(
   let entitiesEvaluated = 0
   let rulesEvaluated = 0
   let resultsWritten = 0
+  const applicableEntityIds = new Set<string>()
 
   // --- Phase A: non-score rules ----------------------------------------------
 
@@ -924,6 +1112,7 @@ export async function runScorecardEvaluation(
     })
 
     for (const entity of entitiesRes.docs as CatalogEntity[]) {
+      applicableEntityIds.add(entity.id)
       // Relations touching this entity (depth 1 so target-kind checks can read
       // the other end's `kind`); skip the query when there's nothing to check.
       const relations =
@@ -960,9 +1149,16 @@ export async function runScorecardEvaluation(
     if (!entitiesRes.hasNextPage) break
   }
 
+  await reconcileScorecardResults(
+    payload,
+    scorecardId,
+    new Set(rules.map((rule) => rule.id)),
+    applicableEntityIds,
+  )
+
   // --- Phase B: fold phase A's results into stored entity-scores -------------
 
-  await recomputeWorkspaceScores(payload, workspaceId)
+  await recomputeWorkspaceScores(payload, workspaceId, options)
 
   // --- Phases C/D: entity-score rules read the latest stored scores ----------
 
@@ -1017,20 +1213,22 @@ export async function runScorecardEvaluation(
       if (!entitiesRes.hasNextPage) break
     }
 
-    await recomputeWorkspaceScores(payload, workspaceId)
+    await recomputeWorkspaceScores(payload, workspaceId, options)
   }
 
   // Fire-and-forget score-history snapshot capture — see recomputeWorkspaceScores
   // above (this call is throttle-deduped against any snapshot the phase B/D
   // recomputeWorkspaceScores calls already captured for this run).
-  ;(async () => {
-    try {
-      const { captureScoreSnapshots } = await import('./snapshots')
-      await captureScoreSnapshots(payload, workspaceId)
-    } catch (err) {
-      console.error('[runScorecardEvaluation] score-snapshot capture failed:', err)
-    }
-  })()
+  if (options.captureSnapshots !== false) {
+    ;(async () => {
+      try {
+        const { captureScoreSnapshots } = await import('./snapshots')
+        await captureScoreSnapshots(payload, workspaceId)
+      } catch (err) {
+        console.error('[runScorecardEvaluation] score-snapshot capture failed:', err)
+      }
+    })()
+  }
 
   // Fire-and-forget: reconcile every ACTIVE initiative on this scorecard with
   // the fresh results (auto-complete fixed items, reopen regressions) — the
@@ -1051,7 +1249,10 @@ export async function runScorecardEvaluation(
         try {
           await syncInitiativeActionItems(payload, initiative.id)
         } catch (err) {
-          console.error(`[runScorecardEvaluation] initiative sync failed for ${initiative.id}:`, err)
+          console.error(
+            `[runScorecardEvaluation] initiative sync failed for ${initiative.id}:`,
+            err,
+          )
         }
       }
     } catch (err) {

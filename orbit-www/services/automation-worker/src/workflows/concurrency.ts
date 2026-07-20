@@ -43,6 +43,26 @@ export async function runWithConcurrency<T, R>(
   return results
 }
 
+/** Group input-order-stably without relying on Node APIs (workflow sandbox safe). */
+export function groupByKey<T>(
+  items: readonly T[],
+  keyOf: (item: T) => string,
+): { key: string; items: T[] }[] {
+  const groups: { key: string; items: T[] }[] = []
+  const indexByKey = new Map<string, number>()
+  for (const item of items) {
+    const key = keyOf(item)
+    const existingIndex = indexByKey.get(key)
+    if (existingIndex === undefined) {
+      indexByKey.set(key, groups.length)
+      groups.push({ key, items: [item] })
+    } else {
+      groups[existingIndex].items.push(item)
+    }
+  }
+  return groups
+}
+
 /**
  * Extract the human-useful detail from a rejected value.
  *

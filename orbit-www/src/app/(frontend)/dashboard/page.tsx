@@ -52,10 +52,9 @@ export default async function DashboardPage() {
   const hasWorkspaces = workspaceIds.length > 0
   const workspaceFilter = { workspace: { in: workspaceIds } }
 
-  // Standards posture report — self-scopes to the session user's memberships and
-  // returns an empty report for a workspace-less user, so it runs unconditionally
-  // in parallel with the payload queries below.
-  const scorecardReportPromise = getScorecardReport(30)
+  // Dashboard posture uses one explicit workspace; the full reports page exposes
+  // the workspace selector. A workspace-less user receives the empty report.
+  const scorecardReportPromise = getScorecardReport(workspaceIds[0] ?? '', 30)
 
   // Discovery proposals awaiting review (self-scopes to the session user's
   // memberships + global queue for platform admins; card hides itself at zero).

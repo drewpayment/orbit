@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import { ArrowLeft, ShieldAlert } from 'lucide-react'
-import { getCurrentUser } from '@/lib/auth/session'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -16,9 +15,8 @@ import { listScorecardOptions } from '../actions'
  * "no scorecards to target yet".
  */
 export default async function NewInitiativePage() {
-  const user = await getCurrentUser()
   const [workspaces, scorecards] = await Promise.all([
-    getManageableWorkspaces(user?.id),
+    getManageableWorkspaces(),
     listScorecardOptions(),
   ])
 

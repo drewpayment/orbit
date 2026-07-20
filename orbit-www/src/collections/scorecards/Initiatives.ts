@@ -1,5 +1,11 @@
 import type { CollectionConfig } from 'payload'
-import { workspaceScopedRead, workspaceScopedCreate, workspaceScopedMutate } from './access'
+import {
+  platformAdminFieldUpdate,
+  workspaceScopedRead,
+  workspaceScopedManageCreate,
+  workspaceScopedMutate,
+} from './access'
+import { validateInitiativeRelationships } from './invariants'
 
 /**
  * Initiatives — time-boxed campaigns to drive entities up a scorecard ladder
@@ -18,10 +24,11 @@ export const Initiatives: CollectionConfig = {
   },
   access: {
     read: workspaceScopedRead,
-    create: workspaceScopedCreate,
-    update: workspaceScopedMutate('initiatives', ['owner', 'admin', 'member']),
+    create: workspaceScopedManageCreate,
+    update: workspaceScopedMutate('initiatives', ['owner', 'admin']),
     delete: workspaceScopedMutate('initiatives', ['owner', 'admin']),
   },
+  hooks: { beforeValidate: [validateInitiativeRelationships] },
   fields: [
     { name: 'name', type: 'text', required: true, index: true },
     { name: 'description', type: 'textarea' },
@@ -31,6 +38,7 @@ export const Initiatives: CollectionConfig = {
       relationTo: 'workspaces',
       required: true,
       index: true,
+      access: { update: platformAdminFieldUpdate },
     },
     {
       name: 'scorecard',
@@ -38,8 +46,13 @@ export const Initiatives: CollectionConfig = {
       relationTo: 'scorecards',
       required: true,
       index: true,
+      access: { update: platformAdminFieldUpdate },
     },
-    { name: 'targetLevel', type: 'text', admin: { description: 'Ladder level to reach (scorecard level name).' } },
+    {
+      name: 'targetLevel',
+      type: 'text',
+      admin: { description: 'Ladder level to reach (scorecard level name).' },
+    },
     { name: 'owner', type: 'relationship', relationTo: 'users' },
     { name: 'deadline', type: 'date' },
     {

@@ -1,6 +1,5 @@
 import type { CollectionSlug, Payload, Where } from 'payload'
 import type {
-  CatalogEntity,
   Initiative,
   InitiativeActionItem,
   Scorecard,
@@ -336,7 +335,11 @@ export function toActionItemLite(row: InitiativeActionItem): ActionItemLite {
 const PAGE_SIZE = 100
 
 /** Page-loop read of every doc matching `where` (evaluate.ts convention). */
-async function loadAll<T>(payload: Payload, collection: CollectionSlug, where: Where): Promise<T[]> {
+async function loadAll<T>(
+  payload: Payload,
+  collection: CollectionSlug,
+  where: Where,
+): Promise<T[]> {
   const docs: T[] = []
   for (let page = 1; ; page++) {
     const res = await payload.find({
@@ -414,17 +417,34 @@ export async function syncInitiativeActionItems(
   const { toCreate, toComplete, toReopen } = diffActionItems(existing, failing)
 
   for (const pair of toCreate) {
-    await payload.create({
-      collection: 'initiative-action-items',
-      data: {
-        workspace: workspaceId,
-        initiative: initiativeId,
-        entity: pair.entityId,
-        rule: pair.ruleId,
-        status: 'open',
-      },
-      overrideAccess: true,
-    })
+    try {
+      await payload.create({
+        collection: 'initiative-action-items',
+        data: {
+          workspace: workspaceId,
+          initiative: initiativeId,
+          entity: pair.entityId,
+          rule: pair.ruleId,
+          status: 'open',
+        },
+        overrideAccess: true,
+      })
+    } catch (error) {
+      const raced = await payload.find({
+        collection: 'initiative-action-items',
+        where: {
+          and: [
+            { initiative: { equals: initiativeId } },
+            { entity: { equals: pair.entityId } },
+            { rule: { equals: pair.ruleId } },
+          ],
+        },
+        limit: 1,
+        depth: 0,
+        overrideAccess: true,
+      })
+      if (raced.docs.length === 0) throw error
+    }
   }
   for (const item of toComplete) {
     await payload.update({

@@ -30,7 +30,9 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = await getPayload({ config: configPromise })
-    const summary = await runScorecardEvaluation(payload, scorecardId)
+    const summary = await runScorecardEvaluation(payload, scorecardId, {
+      captureSnapshots: body?.captureSnapshots !== false,
+    })
     return NextResponse.json(summary)
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })

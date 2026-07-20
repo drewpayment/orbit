@@ -20,7 +20,7 @@ import { captureScoreSnapshots } from '@/lib/scorecards/snapshots'
  *
  * Auth: X-API-Key validated against ORBIT_INTERNAL_API_KEY (constant-time).
  *
- * Body: { workspaceId: string, force?: boolean }
+ * Body: { workspaceId: string, force?: boolean, captureKey?: string }
  */
 export async function POST(request: NextRequest) {
   const authError = validateInternalApiKey(request.headers.get('X-API-Key'))
@@ -33,9 +33,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'workspaceId (string) is required' }, { status: 400 })
     }
     const force = body?.force === true
+    let captureKey: string | undefined
+    if (body && 'captureKey' in body) {
+      if (typeof body.captureKey !== 'string' || !body.captureKey.trim()) {
+        return NextResponse.json({ error: 'captureKey must be a non-empty string' }, { status: 400 })
+      }
+      captureKey = body.captureKey.trim()
+    }
 
     const payload = await getPayload({ config: configPromise })
-    const result = await captureScoreSnapshots(payload, workspaceId, { force })
+    const result = await captureScoreSnapshots(payload, workspaceId, { force, captureKey })
     return NextResponse.json(result)
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })

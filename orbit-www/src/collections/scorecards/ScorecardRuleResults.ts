@@ -75,9 +75,14 @@ export const ScorecardRuleResults: CollectionConfig = {
     },
     { name: 'passed', type: 'checkbox', required: true, index: true },
     { name: 'evaluatedAt', type: 'date' },
-    { name: 'detail', type: 'textarea', admin: { description: 'Human-readable why-pass/why-fail.' } },
+    {
+      name: 'detail',
+      type: 'textarea',
+      admin: { description: 'Human-readable why-pass/why-fail.' },
+    },
   ],
   indexes: [
+    { fields: ['scorecard', 'rule', 'entity'], unique: true },
     { fields: ['workspace', 'entity', 'passed'] },
     { fields: ['scorecard', 'rule'] },
     { fields: ['scorecard', 'entity'] },

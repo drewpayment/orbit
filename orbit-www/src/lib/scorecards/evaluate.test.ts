@@ -282,19 +282,13 @@ describe('evaluateRule — relation-check', () => {
 
   it('direction either (default): counts both directions', () => {
     const rels = [relation({ from: 'other', to: 'e1', type: 'depends-on' })]
-    const res = evaluateRule(
-      rule('relation-check', { relationType: 'depends-on' }),
-      ctx(e1, rels),
-    )
+    const res = evaluateRule(rule('relation-check', { relationType: 'depends-on' }), ctx(e1, rels))
     expect(res.passed).toBe(true)
   })
 
   it('wrong relation type → fail', () => {
     const rels = [relation({ from: 'e1', to: 'x', type: 'owns' })]
-    const res = evaluateRule(
-      rule('relation-check', { relationType: 'depends-on' }),
-      ctx(e1, rels),
-    )
+    const res = evaluateRule(rule('relation-check', { relationType: 'depends-on' }), ctx(e1, rels))
     expect(res.passed).toBe(false)
   })
 
@@ -361,10 +355,7 @@ describe('evaluateRule — relation-check', () => {
   })
 
   it('no relations at all → fail', () => {
-    const res = evaluateRule(
-      rule('relation-check', { relationType: 'depends-on' }),
-      ctx(e1, []),
-    )
+    const res = evaluateRule(rule('relation-check', { relationType: 'depends-on' }), ctx(e1, []))
     expect(res.passed).toBe(false)
   })
 })
@@ -395,7 +386,7 @@ describe('evaluateRule — entity-score', () => {
   // --- target: self ----------------------------------------------------------
 
   describe('target: self', () => {
-    it('overall scope (default): compares the entity\'s own overall score', () => {
+    it("overall scope (default): compares the entity's own overall score", () => {
       const scores = { e1: { overall: 80, byScorecard: {} } }
       const res = evaluateRule(
         rule('entity-score', { target: 'self', op: 'gte', value: 70 }),
@@ -414,10 +405,16 @@ describe('evaluateRule — entity-score', () => {
       expect(res.passed).toBe(false)
     })
 
-    it('scorecard scope: reads the named scorecard\'s stored score', () => {
+    it("scorecard scope: reads the named scorecard's stored score", () => {
       const scores = { e1: { overall: 80, byScorecard: { sc1: 55 } } }
       const res = evaluateRule(
-        rule('entity-score', { target: 'self', scoreScope: 'scorecard', scorecardId: 'sc1', op: 'eq', value: 55 }),
+        rule('entity-score', {
+          target: 'self',
+          scoreScope: 'scorecard',
+          scorecardId: 'sc1',
+          op: 'eq',
+          value: 55,
+        }),
         ctx(e1, [], { scores }),
       )
       expect(res.passed).toBe(true)
@@ -433,7 +430,10 @@ describe('evaluateRule — entity-score', () => {
     })
 
     it('no `ctx.scores` at all -> fail with clear "no stored score" detail', () => {
-      const res = evaluateRule(rule('entity-score', { target: 'self', op: 'gte', value: 50 }), ctx(e1))
+      const res = evaluateRule(
+        rule('entity-score', { target: 'self', op: 'gte', value: 50 }),
+        ctx(e1),
+      )
       expect(res.passed).toBe(false)
       expect(res.detail).toMatch(/no stored .* score/i)
     })
@@ -451,7 +451,13 @@ describe('evaluateRule — entity-score', () => {
     it('scorecard scope: this entity has an overall score but not the requested scorecard -> fail', () => {
       const scores = { e1: { overall: 80, byScorecard: { other: 90 } } }
       const res = evaluateRule(
-        rule('entity-score', { target: 'self', scoreScope: 'scorecard', scorecardId: 'sc1', op: 'gte', value: 50 }),
+        rule('entity-score', {
+          target: 'self',
+          scoreScope: 'scorecard',
+          scorecardId: 'sc1',
+          op: 'gte',
+          value: 50,
+        }),
         ctx(e1, [], { scores }),
       )
       expect(res.passed).toBe(false)
@@ -474,7 +480,13 @@ describe('evaluateRule — entity-score', () => {
         c: { overall: 100, byScorecard: {} },
       }
       const res = evaluateRule(
-        rule('entity-score', { target: 'related', relationType: 'depends-on', direction: 'from', op: 'gte', value: 70 }),
+        rule('entity-score', {
+          target: 'related',
+          relationType: 'depends-on',
+          direction: 'from',
+          op: 'gte',
+          value: 70,
+        }),
         ctx(e1, rels, { scores }),
       )
       expect(res.passed).toBe(false) // min is 40
@@ -570,7 +582,10 @@ describe('evaluateRule — entity-score', () => {
         relation({ id: 'r1', from: 'e1', to: topic, type: 'produces-topic' }),
         relation({ id: 'r2', from: 'e1', to: svc, type: 'produces-topic' }),
       ]
-      const scores = { 'topic-1': { overall: 10, byScorecard: {} }, 'svc-2': { overall: 90, byScorecard: {} } }
+      const scores = {
+        'topic-1': { overall: 10, byScorecard: {} },
+        'svc-2': { overall: 90, byScorecard: {} },
+      }
       const res = evaluateRule(
         rule('entity-score', {
           target: 'related',
@@ -599,7 +614,13 @@ describe('evaluateRule — entity-score', () => {
 
     it('no matching relations at all -> fail with clear detail', () => {
       const res = evaluateRule(
-        rule('entity-score', { target: 'related', relationType: 'owns', direction: 'from', op: 'gte', value: 50 }),
+        rule('entity-score', {
+          target: 'related',
+          relationType: 'owns',
+          direction: 'from',
+          op: 'gte',
+          value: 50,
+        }),
         ctx(e1, rels, { scores: {} }),
       )
       expect(res.passed).toBe(false)
@@ -608,7 +629,13 @@ describe('evaluateRule — entity-score', () => {
 
     it('relations exist but none of the related entities have a stored score -> fail with clear detail', () => {
       const res = evaluateRule(
-        rule('entity-score', { target: 'related', relationType: 'depends-on', direction: 'from', op: 'gte', value: 50 }),
+        rule('entity-score', {
+          target: 'related',
+          relationType: 'depends-on',
+          direction: 'from',
+          op: 'gte',
+          value: 50,
+        }),
         ctx(e1, rels, { scores: {} }), // no scores recorded for a/b/c
       )
       expect(res.passed).toBe(false)
@@ -618,7 +645,13 @@ describe('evaluateRule — entity-score', () => {
     it('some related entities missing scores: aggregates over the ones found, notes the rest as excluded', () => {
       const scores = { a: { overall: 90, byScorecard: {} } } // b, c have no stored score
       const res = evaluateRule(
-        rule('entity-score', { target: 'related', relationType: 'depends-on', direction: 'from', op: 'gte', value: 80 }),
+        rule('entity-score', {
+          target: 'related',
+          relationType: 'depends-on',
+          direction: 'from',
+          op: 'gte',
+          value: 80,
+        }),
         ctx(e1, rels, { scores }),
       )
       expect(res.passed).toBe(true) // only 'a' (90) counted -> min is 90
@@ -825,12 +858,27 @@ class FakePayload {
     return doc
   }
 
-  async update({ collection, id, data }: { collection: string; id: string; data: Record<string, unknown> }) {
+  async update({
+    collection,
+    id,
+    data,
+  }: {
+    collection: string
+    id: string
+    data: Record<string, unknown>
+  }) {
     const list = this.collections[collection] ?? []
     const idx = list.findIndex((d) => d.id === id)
     if (idx === -1) throw new Error(`${collection}/${id} not found`)
     list[idx] = { ...list[idx], ...data }
     return list[idx]
+  }
+
+  async delete({ collection, id, where }: { collection: string; id?: string; where?: unknown }) {
+    const list = this.collections[collection] ?? []
+    const removed = list.filter((doc) => (id ? doc.id === id : matchesWhere(doc, where)))
+    this.collections[collection] = list.filter((doc) => !removed.includes(doc))
+    return id ? removed[0] : { docs: removed, totalDocs: removed.length }
   }
 }
 
@@ -893,7 +941,7 @@ describe('recomputeWorkspaceScores — coverage invariant', () => {
     }
   })
 
-  it('falls back to each kind\'s own entity-types baseValue, not a shared default', async () => {
+  it("falls back to each kind's own entity-types baseValue, not a shared default", async () => {
     const fp = new FakePayload()
     fp.collections['catalog-entities'] = [
       { id: 'svc1', kind: 'service', workspace: 'ws1' },
@@ -929,7 +977,9 @@ describe('recomputeWorkspaceScores — per-scorecard score math', () => {
     fp.collections['entity-types'] = [
       { id: 'et1', workspace: 'ws1', kind: 'service', baseValue: 90, scoringWeight: 1 },
     ]
-    fp.collections['scorecards'] = [{ id: 'sc1', workspace: 'ws1', levels: [{ name: 'Bronze', rank: 1 }] }]
+    fp.collections['scorecards'] = [
+      { id: 'sc1', workspace: 'ws1', levels: [{ name: 'Bronze', rank: 1 }] },
+    ]
     fp.collections['scorecard-rules'] = [
       { id: 'r1', scorecard: 'sc1', weight: 1, level: null },
       { id: 'r2', scorecard: 'sc1', weight: 1, level: null },
@@ -971,13 +1021,36 @@ describe('recomputeWorkspaceScores — per-scorecard score math', () => {
     expect(scorecardRowFor(fp, 'e1', 'sc1')?.score).toBe(90)
   })
 
+  it('ignores a stored result whose rule was deleted directly', async () => {
+    const fp = new FakePayload()
+    fp.collections['catalog-entities'] = [{ id: 'e1', kind: 'service', workspace: 'ws1' }]
+    fp.collections.scorecards = [{ id: 'sc1', workspace: 'ws1', levels: [] }]
+    fp.collections['scorecard-rule-results'] = [
+      {
+        id: 'orphaned-result',
+        workspace: 'ws1',
+        scorecard: 'sc1',
+        rule: 'deleted-rule',
+        entity: 'e1',
+        passed: true,
+      },
+    ]
+
+    await recomputeWorkspaceScores(fp as unknown as Payload, 'ws1', { captureSnapshots: false })
+
+    expect(scorecardRowFor(fp, 'e1', 'sc1')).toBeUndefined()
+    expect(overallRowFor(fp, 'e1')?.score).toBe(50)
+  })
+
   it('golden-path alignment counts requiredRelations + requiredMetadata expectations met', async () => {
     const fp = new FakePayload()
     fp.collections['catalog-entities'] = [
       { id: 'e1', kind: 'service', workspace: 'ws1', metadata: { costCenter: 'CC-1' } },
       { id: 'team1', kind: 'team', workspace: 'ws1' },
     ]
-    fp.collections['catalog-relations'] = [{ id: 'rel1', workspace: 'ws1', from: 'e1', to: 'team1', type: 'owns' }]
+    fp.collections['catalog-relations'] = [
+      { id: 'rel1', workspace: 'ws1', from: 'e1', to: 'team1', type: 'owns' },
+    ]
     fp.collections['entity-types'] = [
       {
         id: 'et1',
@@ -986,7 +1059,9 @@ describe('recomputeWorkspaceScores — per-scorecard score math', () => {
         baseValue: 50,
         scoringWeight: 1,
         goldenPath: {
-          requiredRelations: [{ relationType: 'owns', direction: 'from', targetKind: 'team', min: 1 }],
+          requiredRelations: [
+            { relationType: 'owns', direction: 'from', targetKind: 'team', min: 1 },
+          ],
           requiredMetadata: [{ path: 'metadata.costCenter' }],
         },
       },
@@ -1021,7 +1096,107 @@ describe('recomputeWorkspaceScores — per-scorecard score math', () => {
 })
 
 describe('runScorecardEvaluation — entity-score rule integration', () => {
-  it('an entity-score rule (target=related) compiles a related entity\'s already-scored overall value', async () => {
+  it('clears all projections and restores baseline scores when a scorecard is disabled', async () => {
+    const fp = new FakePayload()
+    fp.collections['catalog-entities'] = [{ id: 'e1', kind: 'service', workspace: 'ws1' }]
+    fp.collections.scorecards = [{ id: 'sc1', workspace: 'ws1', enabled: false, levels: [] }]
+    fp.collections['scorecard-rules'] = [
+      {
+        id: 'r1',
+        scorecard: 'sc1',
+        type: 'field-presence',
+        weight: 1,
+        expression: { path: 'kind', op: 'exists' },
+      },
+    ]
+    fp.collections['scorecard-rule-results'] = [
+      { id: 'rr1', workspace: 'ws1', scorecard: 'sc1', rule: 'r1', entity: 'e1', passed: true },
+    ]
+    fp.collections['entity-scores'] = [
+      {
+        id: 'es1',
+        workspace: 'ws1',
+        entity: 'e1',
+        scope: 'scorecard',
+        scorecard: 'sc1',
+        score: 100,
+      },
+      { id: 'es2', workspace: 'ws1', entity: 'e1', scope: 'overall', scorecard: null, score: 100 },
+    ]
+
+    const summary = await runScorecardEvaluation(fp as unknown as Payload, 'sc1', {
+      captureSnapshots: false,
+    })
+
+    expect(summary).toEqual({
+      scorecardId: 'sc1',
+      entitiesEvaluated: 0,
+      rulesEvaluated: 0,
+      resultsWritten: 0,
+    })
+    expect(fp.collections['scorecard-rule-results']).toHaveLength(0)
+    expect(scorecardRowFor(fp, 'e1', 'sc1')).toBeUndefined()
+    expect(overallRowFor(fp, 'e1')?.score).toBe(50)
+  })
+
+  it('removes results and score rows for deleted rules and entities no longer matched by appliesTo', async () => {
+    const fp = new FakePayload()
+    fp.collections['catalog-entities'] = [
+      { id: 'service-1', kind: 'service', workspace: 'ws1' },
+      { id: 'api-1', kind: 'api', workspace: 'ws1' },
+    ]
+    fp.collections.scorecards = [
+      { id: 'sc1', workspace: 'ws1', enabled: true, appliesTo: { kind: 'service' }, levels: [] },
+    ]
+    fp.collections['scorecard-rules'] = [
+      {
+        id: 'current-rule',
+        scorecard: 'sc1',
+        type: 'field-presence',
+        weight: 1,
+        expression: { path: 'kind', op: 'exists' },
+      },
+    ]
+    fp.collections['scorecard-rule-results'] = [
+      {
+        id: 'stale-entity-result',
+        workspace: 'ws1',
+        scorecard: 'sc1',
+        rule: 'current-rule',
+        entity: 'api-1',
+        passed: true,
+      },
+      {
+        id: 'deleted-rule-result',
+        workspace: 'ws1',
+        scorecard: 'sc1',
+        rule: 'deleted-rule',
+        entity: 'service-1',
+        passed: true,
+      },
+    ]
+    fp.collections['entity-scores'] = [
+      {
+        id: 'stale-api-score',
+        workspace: 'ws1',
+        entity: 'api-1',
+        scope: 'scorecard',
+        scorecard: 'sc1',
+        score: 100,
+      },
+    ]
+
+    await runScorecardEvaluation(fp as unknown as Payload, 'sc1')
+
+    expect(fp.collections['scorecard-rule-results']).toEqual([
+      expect.objectContaining({ scorecard: 'sc1', rule: 'current-rule', entity: 'service-1' }),
+    ])
+    expect(scorecardRowFor(fp, 'api-1', 'sc1')).toBeUndefined()
+    expect(overallRowFor(fp, 'api-1')?.score).toBe(50)
+    expect(scorecardRowFor(fp, 'service-1', 'sc1')?.score).toBe(100)
+  })
+
+  it("an entity-score rule (target=related) compiles a related entity's already-scored overall value", async () => {
     const fp = new FakePayload()
     fp.collections['catalog-entities'] = [
       { id: 'svcY', kind: 'service', workspace: 'ws1' },
@@ -1031,12 +1206,28 @@ describe('runScorecardEvaluation — entity-score rule integration', () => {
       { id: 'rel1', workspace: 'ws1', from: 'svcX', to: 'svcY', type: 'depends-on' },
     ]
     fp.collections['scorecards'] = [
-      { id: 'scY', workspace: 'ws1', appliesTo: { filter: { id: { equals: 'svcY' } } }, levels: [] },
-      { id: 'scX', workspace: 'ws1', appliesTo: { filter: { id: { equals: 'svcX' } } }, levels: [] },
+      {
+        id: 'scY',
+        workspace: 'ws1',
+        appliesTo: { filter: { id: { equals: 'svcY' } } },
+        levels: [],
+      },
+      {
+        id: 'scX',
+        workspace: 'ws1',
+        appliesTo: { filter: { id: { equals: 'svcX' } } },
+        levels: [],
+      },
     ]
     fp.collections['scorecard-rules'] = [
       // Always-true threshold rule so svcY scores 100 on its own scorecard.
-      { id: 'ruleY1', scorecard: 'scY', type: 'threshold', weight: 1, expression: { path: 'kind', op: 'eq', value: 'service' } },
+      {
+        id: 'ruleY1',
+        scorecard: 'scY',
+        type: 'threshold',
+        weight: 1,
+        expression: { path: 'kind', op: 'eq', value: 'service' },
+      },
       // svcX's own scorecard is entirely an entity-score rule over its
       // depends-on target's overall score.
       {
@@ -1081,7 +1272,14 @@ describe('runScorecardEvaluation — entity-score rule integration', () => {
     fp.collections['catalog-relations'] = [
       { id: 'rel1', workspace: 'ws1', from: 'svcX', to: 'svcY', type: 'depends-on' },
     ]
-    fp.collections['scorecards'] = [{ id: 'scX', workspace: 'ws1', appliesTo: { filter: { id: { equals: 'svcX' } } }, levels: [] }]
+    fp.collections['scorecards'] = [
+      {
+        id: 'scX',
+        workspace: 'ws1',
+        appliesTo: { filter: { id: { equals: 'svcX' } } },
+        levels: [],
+      },
+    ]
     fp.collections['scorecard-rules'] = [
       {
         id: 'ruleXscore',
@@ -1117,7 +1315,13 @@ describe('runScorecardEvaluation — entity-score rule integration', () => {
     fp.collections['catalog-entities'] = [{ id: 'e1', kind: 'service', workspace: 'ws1' }]
     fp.collections['scorecards'] = [{ id: 'sc1', workspace: 'ws1', levels: [] }]
     fp.collections['scorecard-rules'] = [
-      { id: 'r1', scorecard: 'sc1', type: 'field-presence', weight: 1, expression: { path: 'kind', op: 'exists' } },
+      {
+        id: 'r1',
+        scorecard: 'sc1',
+        type: 'field-presence',
+        weight: 1,
+        expression: { path: 'kind', op: 'exists' },
+      },
     ]
 
     const summary = await runScorecardEvaluation(fp as unknown as Payload, 'sc1')

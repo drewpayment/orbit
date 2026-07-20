@@ -41,11 +41,12 @@ export function computeOrgKpis(
   overallScores: number[],
   alignments: number[],
   entityTotal: number,
+  evaluatedCount: number = overallScores.length,
 ): OrgKpis {
   return {
     avgScore: mean(overallScores),
     avgAlignment: mean(alignments),
-    scoredCount: overallScores.length,
+    scoredCount: evaluatedCount,
     entityTotal,
   }
 }
@@ -180,6 +181,24 @@ export function computeRuleFailures(results: RuleResultRow[]): RuleFailure[] {
   }
 
   return failures.sort((a, b) => b.failCount - a.failCount || a.title.localeCompare(b.title))
+}
+
+export interface FailingEntityRow {
+  id: string
+  name: string
+  score: number
+}
+
+/** Rank only entities with a current failed rule; a low baseline alone is not a failure. */
+export function rankFailingEntities(
+  rows: FailingEntityRow[],
+  failingEntityIds: ReadonlySet<string>,
+  limit: number,
+): FailingEntityRow[] {
+  return rows
+    .filter((row) => failingEntityIds.has(row.id))
+    .sort((a, b) => a.score - b.score || a.name.localeCompare(b.name))
+    .slice(0, Math.max(0, limit))
 }
 
 // --- buildTrendSeries -------------------------------------------------------------
