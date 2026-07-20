@@ -279,6 +279,9 @@ export interface User {
    * If checked, user can log in immediately after approval without verifying their email.
    */
   skipEmailVerification?: boolean | null;
+  /**
+   * Set when an admin creates this user via an invite link; distinguishes invited users from self-registered ones.
+   */
   invitedAt?: string | null;
   registrationApprovedAt?: string | null;
   registrationApprovedBy?: (string | null) | User;
@@ -841,6 +844,10 @@ export interface App {
      */
     owner?: string | null;
     name?: string | null;
+    /**
+     * Monorepo sub-app directory relative to the repo root (e.g. "apps/api"). Empty/absent = repo root. Distinguishes multiple apps discovered from one repo.
+     */
+    path?: string | null;
     url?: string | null;
     /**
      * GitHub App installation ID (GitHub rows only).
@@ -4603,6 +4610,7 @@ export interface UsersSelect<T extends boolean = true> {
   role?: T;
   betterAuthId?: T;
   skipEmailVerification?: T;
+  invitedAt?: T;
   registrationApprovedAt?: T;
   registrationApprovedBy?: T;
   updatedAt?: T;
@@ -4888,6 +4896,7 @@ export interface AppsSelect<T extends boolean = true> {
         provider?: T;
         owner?: T;
         name?: T;
+        path?: T;
         url?: T;
         installationId?: T;
         connection?: T;
