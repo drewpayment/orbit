@@ -38,3 +38,30 @@ export const RELATION_TYPES = [
 
 export type EntityKind = (typeof ENTITY_KINDS)[number]
 export type RelationType = (typeof RELATION_TYPES)[number]
+
+/**
+ * Where a catalog entity actually runs / how to reach it (the `runtime.platform`
+ * vocabulary). This is the human-facing "where does this live" pointer — graph
+ * topology (runs-in relations to environment entities) is complementary. Single
+ * source for the collection select, the `entity-crud` validator, and the form.
+ */
+export const RUNTIME_PLATFORMS = [
+  'kubernetes',
+  'vps',
+  'home-server',
+  'paas',
+  'serverless',
+  'other',
+] as const
+
+export type RuntimePlatform = (typeof RUNTIME_PLATFORMS)[number]
+
+/** Platform values paired with their human labels (schema select + form select). */
+export const RUNTIME_PLATFORM_OPTIONS: { value: RuntimePlatform; label: string }[] = [
+  { value: 'kubernetes', label: 'Kubernetes' },
+  { value: 'vps', label: 'VPS' },
+  { value: 'home-server', label: 'Home server' },
+  { value: 'paas', label: 'PaaS' },
+  { value: 'serverless', label: 'Serverless' },
+  { value: 'other', label: 'Other' },
+]

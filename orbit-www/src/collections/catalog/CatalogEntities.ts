@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
-import { ENTITY_KINDS } from './constants'
+import { ENTITY_KINDS, RUNTIME_PLATFORM_OPTIONS } from './constants'
+import { SUBTYPE_MAX_LENGTH } from '@/lib/catalog/entity-crud'
 import { canCreateEntity, canManageEntity, canDeleteEntity } from '@/lib/catalog/entity-authz'
 import { isPlatformAdmin } from '@/lib/access/workspace-access'
 
@@ -129,6 +130,16 @@ export const CatalogEntities: CollectionConfig = {
       options: ENTITY_KINDS.map((k) => ({ label: k, value: k })),
     },
     {
+      name: 'subtype',
+      type: 'text',
+      index: true,
+      maxLength: SUBTYPE_MAX_LENGTH,
+      admin: {
+        description:
+          'Free-form refinement of kind, e.g. postgresql (datastore), iot-device (resource), website (service).',
+      },
+    },
+    {
       name: 'workspace',
       type: 'relationship',
       relationTo: 'workspaces',
@@ -193,6 +204,32 @@ export const CatalogEntities: CollectionConfig = {
       ],
     },
     {
+      name: 'runtime',
+      type: 'group',
+      admin: {
+        description:
+          'Where this entity runs and how to reach it. Topology lives in runs-in relations; this is the human-facing pointer.',
+      },
+      fields: [
+        {
+          name: 'url',
+          type: 'text',
+          admin: { description: 'Deployed URL — where to reach this entity.' },
+        },
+        {
+          name: 'platform',
+          type: 'select',
+          options: RUNTIME_PLATFORM_OPTIONS,
+          admin: { description: 'Hosting substrate (kubernetes, vps, home-server, …).' },
+        },
+        {
+          name: 'notes',
+          type: 'textarea',
+          admin: { description: 'Free-form operational notes (access, quirks).' },
+        },
+      ],
+    },
+    {
       name: 'source',
       type: 'group',
       admin: {
@@ -252,6 +289,8 @@ export const CatalogEntities: CollectionConfig = {
   ],
   indexes: [
     { fields: ['workspace', 'kind'] },
+    // Refinement lookups (e.g. "all datastores of subtype postgresql").
+    { fields: ['kind', 'subtype'] },
     // Non-unique: slug may be absent on freshly-projected rows, and a compound
     // unique index collides on multiple nulls in MongoDB. Slug uniqueness within
     // a workspace and projection idempotency (one row per source) are enforced

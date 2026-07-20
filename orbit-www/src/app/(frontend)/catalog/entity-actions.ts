@@ -24,6 +24,7 @@ import {
   type RelationInput,
   type EntityFormOptions,
   type EntityOption,
+  type EntityRuntime,
 } from '@/lib/catalog/entity-crud'
 import type { EntityKind } from '@/collections/catalog/constants'
 import type { CatalogEntity } from '@/payload-types'
@@ -72,6 +73,15 @@ function refId(ref: unknown): string | null {
 /** Where-clause fragment matching a specific workspace, or the global (no-workspace) set. */
 function workspaceClause(workspaceId: string | null): Where {
   return workspaceId ? { workspace: { equals: workspaceId } } : { workspace: { exists: false } }
+}
+
+/**
+ * Normalize a runtime value for a Payload write. A `null` (caller clearing the
+ * group) becomes an all-null-subfields object — Payload's generated group type
+ * has no null form, so clearing is expressed by emptying each sub-field.
+ */
+function normalizeRuntimeWrite(runtime: EntityRuntime | null): EntityRuntime {
+  return runtime ?? { url: null, platform: null, notes: null }
 }
 
 /**
@@ -153,6 +163,8 @@ export async function createCatalogEntity(input: CreateEntityInput): Promise<{ i
       ...(input.description !== undefined ? { description: input.description } : {}),
       ...(input.lifecycle ? { lifecycle: input.lifecycle } : {}),
       ...(input.tier ? { tier: input.tier } : {}),
+      ...(input.subtype !== undefined ? { subtype: input.subtype?.trim() || null } : {}),
+      ...(input.runtime !== undefined ? { runtime: normalizeRuntimeWrite(input.runtime) } : {}),
       ...(input.ownerId ? { owner: input.ownerId } : {}),
       ...(input.links ? { links: input.links } : {}),
       ...(input.metadata ? { metadata: input.metadata } : {}),
@@ -208,6 +220,8 @@ export async function updateCatalogEntity(id: string, patch: UpdateEntityPatch):
       ...(patch.description !== undefined ? { description: patch.description } : {}),
       ...(patch.lifecycle !== undefined ? { lifecycle: patch.lifecycle } : {}),
       ...(patch.tier !== undefined ? { tier: patch.tier } : {}),
+      ...(patch.subtype !== undefined ? { subtype: patch.subtype?.trim() || null } : {}),
+      ...(patch.runtime !== undefined ? { runtime: normalizeRuntimeWrite(patch.runtime) } : {}),
       ...(patch.ownerId !== undefined ? { owner: patch.ownerId } : {}),
       ...(patch.links !== undefined ? { links: patch.links } : {}),
       ...(patch.metadata !== undefined ? { metadata: patch.metadata } : {}),
