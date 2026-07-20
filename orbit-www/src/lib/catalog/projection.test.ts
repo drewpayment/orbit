@@ -415,4 +415,17 @@ describe('mergeProjectionUpdate (field-ownership / set-if-absent)', () => {
     const out = mergeProjectionUpdate({}, incoming)
     expect('source' in out).toBe(false)
   })
+
+  it('never emits subtype/runtime — re-projecting cannot clobber curated values', () => {
+    const out = mergeProjectionUpdate(
+      {
+        description: 'Human edited',
+        subtype: 'postgresql',
+        runtime: { url: 'https://db.internal', platform: 'home-server' },
+      },
+      incoming,
+    )
+    expect('subtype' in out).toBe(false)
+    expect('runtime' in out).toBe(false)
+  })
 })

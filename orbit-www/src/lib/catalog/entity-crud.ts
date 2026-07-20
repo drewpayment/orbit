@@ -1,5 +1,5 @@
-import type { EntityKind, RelationType } from '@/collections/catalog/constants'
-import { ENTITY_KINDS, RELATION_TYPES } from '@/collections/catalog/constants'
+import type { EntityKind, RelationType, RuntimePlatform } from '@/collections/catalog/constants'
+import { ENTITY_KINDS, RELATION_TYPES, RUNTIME_PLATFORMS } from '@/collections/catalog/constants'
 
 /**
  * Catalog entity CRUD — pure, framework-light input types + validators
@@ -44,6 +44,11 @@ export const CURATION_FIELDS = [
   'owner',
   'links',
   'metadata',
+  // Curation refinements (catalog-representation-gaps P2): a free-form `subtype`
+  // and a `runtime` pointer stay editable even on a projected entity — the
+  // source owns identity, humans own the descriptive/operational overlay.
+  'subtype',
+  'runtime',
 ] as const
 
 // ---------------------------------------------------------------------------
@@ -61,6 +66,17 @@ export interface EntityLink {
   type?: LinkType
 }
 
+/**
+ * Where an entity runs and how to reach it. `url` is the human-facing deployed
+ * pointer, `platform` the hosting substrate; topology (runs-in relations to
+ * environment entities) is complementary and lives in the graph, not here.
+ */
+export interface EntityRuntime {
+  url?: string | null
+  platform?: RuntimePlatform | null
+  notes?: string | null
+}
+
 /** Payload for creating a new manual entity. `workspaceId: null` = Global. */
 export interface CreateEntityInput {
   kind: EntityKind
@@ -70,6 +86,10 @@ export interface CreateEntityInput {
   description?: string | null
   lifecycle?: EntityLifecycle | null
   tier?: EntityTier | null
+  /** Free-form refinement of kind (e.g. `postgresql`, `iot-device`, `website`). */
+  subtype?: string | null
+  /** Where this entity runs / how to reach it. */
+  runtime?: EntityRuntime | null
   /** Owning team entity id (a catalog entity of kind `team`). */
   ownerId?: string | null
   links?: EntityLink[]
@@ -87,6 +107,8 @@ export interface UpdateEntityPatch {
   description?: string | null
   lifecycle?: EntityLifecycle | null
   tier?: EntityTier | null
+  subtype?: string | null
+  runtime?: EntityRuntime | null
   ownerId?: string | null
   links?: EntityLink[]
   metadata?: Record<string, unknown> | null
@@ -162,12 +184,49 @@ export function uniqueSlug(base: string, taken: Iterable<string>): string {
 
 const HTTP_URL = /^https?:\/\//i
 
+/** Max length of the free-form `subtype` refinement. */
+export const SUBTYPE_MAX_LENGTH = 50
+
 function isEntityKind(value: unknown): value is EntityKind {
   return typeof value === 'string' && (ENTITY_KINDS as readonly string[]).includes(value)
 }
 
 function isRelationType(value: unknown): value is RelationType {
   return typeof value === 'string' && (RELATION_TYPES as readonly string[]).includes(value)
+}
+
+function isRuntimePlatform(value: unknown): value is RuntimePlatform {
+  return typeof value === 'string' && (RUNTIME_PLATFORMS as readonly string[]).includes(value)
+}
+
+/**
+ * Validate the free-form `subtype`: trimmed, capped at {@link SUBTYPE_MAX_LENGTH}.
+ * No vocabulary check — it is an intentionally open refinement of `kind`.
+ * Returns an error message, or null when valid (or absent).
+ */
+export function validateSubtype(subtype: string | null | undefined): string | null {
+  if (subtype == null) return null
+  if (subtype.trim().length > SUBTYPE_MAX_LENGTH) {
+    return `Subtype must be ${SUBTYPE_MAX_LENGTH} characters or fewer.`
+  }
+  return null
+}
+
+/**
+ * Validate the `runtime` group: `url` (when present) must be an http(s) URL and
+ * `platform` (when present) must be a known {@link RUNTIME_PLATFORMS} value.
+ * Returns an error message, or null when valid (or absent).
+ */
+export function validateRuntime(runtime: EntityRuntime | null | undefined): string | null {
+  if (!runtime) return null
+  const url = runtime.url?.trim()
+  if (url && !HTTP_URL.test(url)) {
+    return 'The runtime URL must start with http:// or https://.'
+  }
+  if (runtime.platform != null && !isRuntimePlatform(runtime.platform)) {
+    return 'A valid runtime platform is required.'
+  }
+  return null
 }
 
 /**
@@ -193,6 +252,10 @@ export function validateCreateInput(input: CreateEntityInput): string | null {
   if (!isEntityKind(input.kind)) return 'A valid entity kind is required.'
   const linkError = validateLinks(input.links)
   if (linkError) return linkError
+  const subtypeError = validateSubtype(input.subtype)
+  if (subtypeError) return subtypeError
+  const runtimeError = validateRuntime(input.runtime)
+  if (runtimeError) return runtimeError
   return null
 }
 
@@ -216,6 +279,10 @@ export function validateUpdatePatch(sourceType: string, patch: UpdateEntityPatch
   if (patch.kind !== undefined && !isEntityKind(patch.kind)) return 'A valid entity kind is required.'
   const linkError = validateLinks(patch.links)
   if (linkError) return linkError
+  const subtypeError = validateSubtype(patch.subtype)
+  if (subtypeError) return subtypeError
+  const runtimeError = validateRuntime(patch.runtime)
+  if (runtimeError) return runtimeError
   return null
 }
 

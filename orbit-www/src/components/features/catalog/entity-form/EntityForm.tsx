@@ -28,6 +28,7 @@ import { EntityLinksEditor } from './EntityLinksEditor'
 import {
   LIFECYCLE_OPTIONS,
   TIER_OPTIONS,
+  RUNTIME_PLATFORM_OPTIONS,
   buildWorkspaceOptions,
   collectLinkErrors,
   idToWorkspaceSelection,
@@ -36,6 +37,7 @@ import {
   newLinkRow,
   rowsToLinks,
   sourceProvenanceLabel,
+  subtypePlaceholder,
   workspaceSelectionToId,
   type EntityFormOptions,
   type LinkRow,
@@ -43,6 +45,8 @@ import {
   type PickerEntity,
   type Tier,
 } from './entity-form-ui'
+import type { RuntimePlatform } from '@/collections/catalog/constants'
+import { SUBTYPE_MAX_LENGTH } from '@/lib/catalog/entity-crud'
 
 /** Sentinel `<Select>` value for an unset optional field (lifecycle/tier). */
 const NONE = '__none__'
@@ -118,6 +122,12 @@ export function EntityForm({
     return workspaceOptions[0]?.value ?? ''
   })
   const [description, setDescription] = useState(entity?.description ?? '')
+  const [subtype, setSubtype] = useState(entity?.subtype ?? '')
+  const [runtimeUrl, setRuntimeUrl] = useState(entity?.runtime?.url ?? '')
+  const [runtimePlatform, setRuntimePlatform] = useState<RuntimePlatform | typeof NONE>(
+    entity?.runtime?.platform ?? NONE,
+  )
+  const [runtimeNotes, setRuntimeNotes] = useState(entity?.runtime?.notes ?? '')
   const [lifecycle, setLifecycle] = useState<Lifecycle | typeof NONE>(entity?.lifecycle ?? NONE)
   const [tier, setTier] = useState<Tier | typeof NONE>(entity?.tier ?? NONE)
   const [owner, setOwner] = useState<PickerEntity | null>(ownerOf(entity))
@@ -155,6 +165,13 @@ export function EntityForm({
     const links = rowsToLinks(linkRows)
     const lifecycleValue = lifecycle === NONE ? null : lifecycle
     const tierValue = tier === NONE ? null : tier
+    const subtypeValue = subtype.trim()
+    const runtime = {
+      url: runtimeUrl.trim() || null,
+      platform: runtimePlatform === NONE ? null : runtimePlatform,
+      notes: runtimeNotes.trim() || null,
+    }
+    const hasRuntime = !!(runtime.url || runtime.platform || runtime.notes)
 
     setSubmitting(true)
     try {
@@ -164,6 +181,8 @@ export function EntityForm({
           name: trimmedName,
           workspaceId: workspaceSelectionToId(workspaceSelection),
           description: description.trim() || undefined,
+          subtype: subtypeValue || undefined,
+          runtime: hasRuntime ? runtime : undefined,
           lifecycle: lifecycleValue ?? undefined,
           tier: tierValue ?? undefined,
           ownerId: owner?.id ?? undefined,
@@ -177,6 +196,9 @@ export function EntityForm({
           // rejects them on projected entities regardless.
           ...(locked ? {} : { name: trimmedName, kind }),
           description: description.trim() || null,
+          // subtype + runtime are curation fields — editable even when locked.
+          subtype: subtypeValue || null,
+          runtime,
           lifecycle: lifecycleValue,
           tier: tierValue,
           ownerId: owner?.id ?? null,
@@ -272,6 +294,21 @@ export function EntityForm({
         />
       </div>
 
+      <div className="space-y-1.5">
+        <Label htmlFor="entity-subtype">Subtype</Label>
+        <Input
+          id="entity-subtype"
+          value={subtype}
+          onChange={(e) => setSubtype(e.target.value)}
+          placeholder={subtypePlaceholder(kind)}
+          maxLength={SUBTYPE_MAX_LENGTH}
+          disabled={submitting}
+        />
+        <p className="text-xs text-muted-foreground">
+          A free-form refinement of the kind — no new entity type needed.
+        </p>
+      </div>
+
       <div className="grid gap-5 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="entity-lifecycle">Lifecycle</Label>
@@ -331,6 +368,59 @@ export function EntityForm({
         <p className="text-xs text-muted-foreground">
           The team entity that owns this. Create team entities from a workspace to populate this.
         </p>
+      </div>
+
+      <div className="space-y-3 rounded-md border p-4">
+        <div className="space-y-0.5">
+          <h3 className="text-sm font-medium">Runtime</h3>
+          <p className="text-xs text-muted-foreground">
+            Where this entity runs and how to reach it. Topology lives in relations; this is the
+            human-facing pointer.
+          </p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="entity-runtime-url">URL</Label>
+            <Input
+              id="entity-runtime-url"
+              type="url"
+              value={runtimeUrl}
+              onChange={(e) => setRuntimeUrl(e.target.value)}
+              placeholder="https://app.example.com"
+              disabled={submitting}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="entity-runtime-platform">Platform</Label>
+            <Select
+              value={runtimePlatform}
+              onValueChange={(v) => setRuntimePlatform(v as RuntimePlatform | typeof NONE)}
+              disabled={submitting}
+            >
+              <SelectTrigger id="entity-runtime-platform">
+                <SelectValue placeholder="Select a platform" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE}>—</SelectItem>
+                {RUNTIME_PLATFORM_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="entity-runtime-notes">Notes</Label>
+          <Textarea
+            id="entity-runtime-notes"
+            value={runtimeNotes}
+            onChange={(e) => setRuntimeNotes(e.target.value)}
+            placeholder="Access details, quirks, how to reach it."
+            disabled={submitting}
+          />
+        </div>
       </div>
 
       <EntityLinksEditor rows={linkRows} onChange={setLinkRows} disabled={submitting} />

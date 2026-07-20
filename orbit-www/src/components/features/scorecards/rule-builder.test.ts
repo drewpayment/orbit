@@ -434,6 +434,7 @@ describe('scoreable-field catalog', () => {
     expect(fieldByPath('lifecycle')?.enumOptions).toContain('production')
     expect(fieldByPath('owner')?.valueType).toBe('relationship')
     expect(fieldByPath('name')?.valueType).toBe('text')
+    expect(fieldByPath('subtype')?.valueType).toBe('text')
     expect(fieldByPath('metadata.costCenter')).toBeUndefined()
   })
 

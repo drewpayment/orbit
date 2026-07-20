@@ -74,7 +74,12 @@ export function EntityListItem({
             />
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
-            <EntityKindBadge kind={entity.kind} />
+            <span className="inline-flex items-center gap-1">
+              <EntityKindBadge kind={entity.kind} />
+              {entity.subtype && (
+                <span className="text-xs text-muted-foreground">· {entity.subtype}</span>
+              )}
+            </span>
             {entity.lifecycle && (
               <Badge variant={LIFECYCLE_VARIANT[entity.lifecycle]} className="font-normal capitalize">
                 {entity.lifecycle}

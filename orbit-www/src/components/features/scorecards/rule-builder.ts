@@ -129,6 +129,12 @@ export const SCOREABLE_FIELDS: ScoreableField[] = [
   { path: 'slug', label: 'Slug', valueType: 'text' },
   { path: 'description', label: 'Description', valueType: 'text' },
   {
+    path: 'subtype',
+    label: 'Subtype',
+    valueType: 'text',
+    help: 'Free-form refinement of kind (e.g. postgresql, iot-device).',
+  },
+  {
     path: 'owner',
     label: 'Owning team',
     valueType: 'relationship',
