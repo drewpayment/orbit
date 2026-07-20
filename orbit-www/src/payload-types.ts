@@ -266,7 +266,7 @@ export interface User {
   /**
    * Change to "Approved" to allow this user to log in.
    */
-  status?: ('pending' | 'approved' | 'rejected') | null;
+  status?: ('pending' | 'approved' | 'rejected' | 'deactivated') | null;
   /**
    * Super Admin and Admin can access the Payload admin panel.
    */
@@ -279,6 +279,7 @@ export interface User {
    * If checked, user can log in immediately after approval without verifying their email.
    */
   skipEmailVerification?: boolean | null;
+  invitedAt?: string | null;
   registrationApprovedAt?: string | null;
   registrationApprovedBy?: (string | null) | User;
   updatedAt: string;

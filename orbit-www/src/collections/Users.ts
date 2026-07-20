@@ -10,7 +10,13 @@ export const Users: CollectionConfig = {
   access: {
     admin: ({ req }) => {
       const role = req.user?.role
-      return role === 'super_admin' || role === 'admin'
+      // A deactivated admin must lose the /admin panel immediately, not on
+      // session-cookie-cache expiry. req.user comes from betterAuthStrategy,
+      // which resolves status from a fresh Payload read.
+      if (req.user?.status === 'deactivated') return false
+      // The Payload admin panel is the escape hatch around all app-level policy
+      // (raw collection edits, no policy matrix) — super_admin only.
+      return role === 'super_admin'
     },
   },
   auth: {
@@ -46,6 +52,7 @@ export const Users: CollectionConfig = {
         { label: 'Pending', value: 'pending' },
         { label: 'Approved', value: 'approved' },
         { label: 'Rejected', value: 'rejected' },
+        { label: 'Deactivated', value: 'deactivated' },
       ],
       admin: {
         position: 'sidebar',
@@ -87,6 +94,17 @@ export const Users: CollectionConfig = {
         position: 'sidebar',
         description: 'If checked, user can log in immediately after approval without verifying their email.',
         condition: (data) => data?.status === 'approved',
+      },
+    },
+    {
+      name: 'invitedAt',
+      type: 'date',
+      label: 'Invited At',
+      admin: {
+        position: 'sidebar',
+        readOnly: true,
+        description:
+          'Set when an admin creates this user via an invite link; distinguishes invited users from self-registered ones.',
       },
     },
     {

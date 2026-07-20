@@ -16,10 +16,10 @@ import {
   RadioTower,
   Settings,
   Sparkles,
-  Shield,
   ShieldCheck,
   Telescope,
   TrendingUp,
+  Users,
   Workflow,
   Zap,
 } from "lucide-react"
@@ -147,6 +147,11 @@ const navPlatformData: NavPlatformItem[] = [
     icon: Telescope,
   },
   {
+    title: "Users",
+    url: "/platform/users",
+    icon: Users,
+  },
+  {
     title: "LLM Providers",
     url: "/platform/llm-providers",
     icon: Bot,
@@ -165,7 +170,7 @@ const navPlatformData: NavPlatformItem[] = [
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { data: session } = useSession()
-  const { isPlatformAdmin } = usePlatformAdmin()
+  const { isPlatformAdmin, isSuperAdmin } = usePlatformAdmin()
 
   // Prepare user data from session
   const user = React.useMemo(() => {
@@ -216,12 +221,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavMain items={navSettingsData} label="Settings" />
         <NavPlatform items={navPlatformData} isVisible={isPlatformAdmin} />
         <NavSecondary items={navSecondaryData} className="mt-auto" />
-        {isPlatformAdmin && (
-          <NavSecondary items={[{ title: "Admin Panel", url: "/admin", icon: Shield }]} />
-        )}
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={user} isAdmin={isPlatformAdmin} />
+        {/* Admin Panel lives only in the user menu (NavUser), super_admin only —
+            matching the Users.access.admin gate on the Payload panel itself. */}
+        <NavUser user={user} isAdmin={isSuperAdmin} />
       </SidebarFooter>
     </Sidebar>
   )

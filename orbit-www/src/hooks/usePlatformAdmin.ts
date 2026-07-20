@@ -4,6 +4,7 @@ import { useSession } from '@/lib/auth-client'
 
 interface UsePlatformAdminReturn {
   isPlatformAdmin: boolean
+  isSuperAdmin: boolean
   isLoading: boolean
 }
 
@@ -17,6 +18,7 @@ export function usePlatformAdmin(): UsePlatformAdminReturn {
 
   const role = (session?.user as Record<string, unknown> | undefined)?.role as string | undefined
   const isPlatformAdmin = role === 'super_admin' || role === 'admin'
+  const isSuperAdmin = role === 'super_admin'
 
-  return { isPlatformAdmin, isLoading: isPending }
+  return { isPlatformAdmin, isSuperAdmin, isLoading: isPending }
 }

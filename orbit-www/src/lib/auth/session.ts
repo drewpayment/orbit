@@ -6,12 +6,25 @@ import { ensurePayloadUser } from '@/lib/auth/ensure-payload-user'
 
 /**
  * Get the current user from the session on the server side.
- * Returns null if not authenticated.
+ * Returns null if not authenticated (or deactivated).
+ *
+ * The session cookie cache is disabled globally in lib/auth.ts, so getSession
+ * already reads fresh from the DB. disableCookieCache + the status check here are
+ * belt-and-suspenders: if the cache were ever re-enabled, this path (and its ~33
+ * callers plus the gRPC authInterceptor) would still reject a deactivated user
+ * on the next request rather than serving a stale cached session for up to
+ * maxAge. See docs/plans/2026-07-11-platform-user-management.md (UAC 20).
  */
 export async function getCurrentUser() {
   const reqHeaders = await headers()
-  const session = await auth.api.getSession({ headers: reqHeaders })
-  return session?.user || null
+  const session = await auth.api.getSession({
+    headers: reqHeaders,
+    query: { disableCookieCache: true },
+  })
+  const user = session?.user
+  if (!user) return null
+  if ((user as { status?: string | null }).status === 'deactivated') return null
+  return user
 }
 
 /**
@@ -39,6 +52,11 @@ export async function getPayloadUserFromSession() {
 
   const payloadUser = await ensurePayloadUser(payload, session.user)
   if (!payloadUser) return null
+
+  // A deactivated user may still hold a valid session cookie (Better-Auth caches
+  // sessions for a few minutes independent of the DB). Treat them as signed out
+  // here so deactivation takes effect on the next request, not on cache expiry.
+  if (payloadUser.status === 'deactivated') return null
 
   return {
     ...payloadUser,

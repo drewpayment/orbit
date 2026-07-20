@@ -39,6 +39,7 @@ function ResetPasswordForm() {
   const searchParams = useSearchParams()
   const token = searchParams.get('token')
   const tokenError = searchParams.get('error') === 'INVALID_TOKEN'
+  const isInvite = searchParams.get('invite') === '1'
 
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -77,7 +78,7 @@ function ResetPasswordForm() {
       if (result?.error) {
         setServerError(true)
       } else {
-        router.push('/login?reset=success')
+        router.push(isInvite ? '/login?invite=success' : '/login?reset=success')
       }
     } catch (err) {
       console.error(err)
@@ -95,10 +96,12 @@ function ResetPasswordForm() {
     <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-md">
       <div className="text-center mb-8">
         <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-          Set a new password
+          {isInvite ? 'Set your password' : 'Set a new password'}
         </h2>
         <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-          Choose a new password for your Orbit account.
+          {isInvite
+            ? 'Welcome to Orbit! Choose a password to finish setting up your account.'
+            : 'Choose a new password for your Orbit account.'}
         </p>
       </div>
 
@@ -145,7 +148,7 @@ function ResetPasswordForm() {
           className="w-full"
           disabled={loading}
         >
-          {loading ? 'Resetting...' : 'Reset password'}
+          {loading ? 'Saving...' : isInvite ? 'Set password' : 'Reset password'}
         </Button>
       </form>
     </div>

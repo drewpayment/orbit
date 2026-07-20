@@ -21,6 +21,13 @@ async function authenticate({ headers, payload }: AuthStrategyFunctionArgs): Pro
       return { user: null }
     }
 
+    // ensurePayloadUser reads the Payload doc fresh from Mongo, so its status is
+    // current even when Better-Auth served the session from its cookie cache.
+    // A deactivated user is treated as unauthenticated (no /admin, no req.user).
+    if (payloadUser.status === 'deactivated') {
+      return { user: null }
+    }
+
     return {
       user: {
         ...payloadUser,

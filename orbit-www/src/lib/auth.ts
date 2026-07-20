@@ -10,6 +10,24 @@ const client = new MongoClient(process.env.DATABASE_URI || "")
 
 const appUrl = getEnv('NEXT_PUBLIC_APP_URL') || "http://localhost:3000"
 
+// Dev-only escape hatch: when SMTP_HOST is set (e.g. MailHog on localhost:1025),
+// deliver auth emails over SMTP instead of Resend so they can be inspected in a
+// local inbox UI. Never used in production (guarded below); returns true when it
+// handled the send so callers skip the Resend path.
+async function sendViaDevSmtp(to: string, subject: string, html: string): Promise<boolean> {
+  if (!process.env.SMTP_HOST || process.env.NODE_ENV === "production") return false
+  const { default: nodemailer } = await import("nodemailer")
+  const transport = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT || 1025),
+    secure: false,
+  })
+  const fromEmail = process.env.RESEND_FROM_EMAIL || "noreply@hoytlabs.app"
+  await transport.sendMail({ from: fromEmail, to, subject, html })
+  console.log(`📬 [dev-smtp] "${subject}" → ${to} (via ${process.env.SMTP_HOST}:${process.env.SMTP_PORT || 1025})`)
+  return true
+}
+
 export const auth = betterAuth({
   database: mongodbAdapter(client.db()),
   emailAndPassword: {
@@ -20,6 +38,20 @@ export const auth = betterAuth({
     // itself fail with FORBIDDEN. New users sign in after approval instead.
     autoSignIn: false,
     // Keep the default resetPasswordTokenExpiresIn (1 hour).
+    // Completing an emailed reset/invite link proves mailbox ownership, so mark
+    // the account verified. For an admin-created invite this is what flips the
+    // user from unverified→verified once they set their first password; for an
+    // ordinary reset the flag is already true, so this is idempotent.
+    onPasswordReset: async ({ user }) => {
+      try {
+        await client
+          .db()
+          .collection("user")
+          .updateOne({ _id: new ObjectId(user.id) }, { $set: { emailVerified: true } })
+      } catch (error) {
+        console.error(`[password-reset] Failed to mark ${user.email} verified:`, error)
+      }
+    },
     sendResetPassword: async ({ user, url }) => {
       if (process.env.NODE_ENV === "development") {
         console.log(`\n${"=".repeat(60)}`)
@@ -28,6 +60,21 @@ export const auth = betterAuth({
         console.log(`   URL: ${url}`)
         console.log(`${"=".repeat(60)}\n`)
       }
+
+      const resetHtml = `
+          <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #1a1a1a;">Reset your password</h2>
+            <p>We received a request to reset the password for your Orbit account. Click the link below to choose a new password.</p>
+            <p style="margin: 24px 0;">
+              <a href="${url}" style="display: inline-block; background: #FF5C00; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 500;">
+                Reset Password
+              </a>
+            </p>
+            <p style="color: #666; font-size: 14px;">This link expires in 1 hour. If you didn't request a password reset, you can safely ignore this email.</p>
+          </div>
+        `
+
+      if (await sendViaDevSmtp(user.email, "Reset your Orbit password", resetHtml)) return
 
       if (!process.env.RESEND_API_KEY) {
         if (process.env.NODE_ENV === "development") {
@@ -48,18 +95,7 @@ export const auth = betterAuth({
         from: fromEmail,
         to: user.email,
         subject: "Reset your Orbit password",
-        html: `
-          <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #1a1a1a;">Reset your password</h2>
-            <p>We received a request to reset the password for your Orbit account. Click the link below to choose a new password.</p>
-            <p style="margin: 24px 0;">
-              <a href="${url}" style="display: inline-block; background: #FF5C00; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 500;">
-                Reset Password
-              </a>
-            </p>
-            <p style="color: #666; font-size: 14px;">This link expires in 1 hour. If you didn't request a password reset, you can safely ignore this email.</p>
-          </div>
-        `,
+        html: resetHtml,
       })
     },
   },
@@ -72,6 +108,21 @@ export const auth = betterAuth({
         console.log(`   URL: ${url}`)
         console.log(`${"=".repeat(60)}\n`)
       }
+
+      const verifyHtml = `
+          <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #1a1a1a;">Verify your email address</h2>
+            <p>Your Orbit account has been approved! Click the link below to verify your email and start using Orbit.</p>
+            <p style="margin: 24px 0;">
+              <a href="${url}" style="display: inline-block; background: #FF5C00; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 500;">
+                Verify Email
+              </a>
+            </p>
+            <p style="color: #666; font-size: 14px;">If you didn't create an Orbit account, you can ignore this email.</p>
+          </div>
+        `
+
+      if (await sendViaDevSmtp(user.email, "Verify your Orbit account", verifyHtml)) return
 
       if (!process.env.RESEND_API_KEY) {
         if (process.env.NODE_ENV === "development") {
@@ -92,18 +143,7 @@ export const auth = betterAuth({
         from: fromEmail,
         to: user.email,
         subject: "Verify your Orbit account",
-        html: `
-          <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #1a1a1a;">Verify your email address</h2>
-            <p>Your Orbit account has been approved! Click the link below to verify your email and start using Orbit.</p>
-            <p style="margin: 24px 0;">
-              <a href="${url}" style="display: inline-block; background: #FF5C00; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 500;">
-                Verify Email
-              </a>
-            </p>
-            <p style="color: #666; font-size: 14px;">If you didn't create an Orbit account, you can ignore this email.</p>
-          </div>
-        `,
+        html: verifyHtml,
       })
     },
     sendOnSignUp: false,
@@ -113,9 +153,16 @@ export const auth = betterAuth({
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // 1 day (every 1 day session is updated)
     storeSessionInDatabase: true,
+    // Cookie cache intentionally DISABLED. When enabled it serves the signed
+    // session cookie (user + status) for up to maxAge WITHOUT a DB read, so a
+    // deactivated/revoked user keeps passing every getSession-based gate — the
+    // ~40 raw auth.api.getSession call sites (server data loaders and client
+    // useSession via /api/auth/get-session included) — until the cache expires.
+    // Session revocation on deactivate must take effect on the next request
+    // everywhere, so each getSession does one indexed DB lookup instead. See
+    // docs/plans/2026-07-11-platform-user-management.md (UAC 20).
     cookieCache: {
-      enabled: true,
-      maxAge: 60 * 5, // 5 minutes
+      enabled: false,
     },
   },
   user: {
@@ -163,6 +210,11 @@ export const auth = betterAuth({
           if (status === "rejected") {
             throw new APIError("FORBIDDEN", {
               message: "Your registration was not approved. Contact an administrator.",
+            })
+          }
+          if (status === "deactivated") {
+            throw new APIError("FORBIDDEN", {
+              message: "Your account has been deactivated. Contact an administrator.",
             })
           }
           if (

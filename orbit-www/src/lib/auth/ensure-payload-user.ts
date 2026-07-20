@@ -12,7 +12,7 @@ export interface BridgeSessionUser {
 }
 
 const VALID_ROLES = new Set(['super_admin', 'admin', 'user'])
-const VALID_STATUSES = new Set(['pending', 'approved', 'rejected'])
+const VALID_STATUSES = new Set(['pending', 'approved', 'rejected', 'deactivated'])
 
 async function findByEmail(payload: Payload, email: string): Promise<User | undefined> {
   const result = await payload.find({
