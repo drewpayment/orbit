@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { Payload } from 'payload'
+import type { Payload, Where } from 'payload'
 import type { DiscoveredEntity } from '@/payload-types'
 
 /**
@@ -161,13 +161,60 @@ async function resolveProviderInfo(
   return { owner: discovery.repo.owner }
 }
 
-/** Find the App that represents a repo in a workspace (Phase 1: repo-scoped). */
+/**
+ * Find the App that represents a repo (optionally a specific monorepo sub-app
+ * dir) in a workspace.
+ *
+ * When `path` is supplied, the lookup is path-scoped so two sub-apps discovered
+ * from one repo map to two distinct Apps (a root proposal keying only on
+ * owner+name would otherwise silently link the second proposal to the first
+ * proposal's App — silent data loss). A missing/'' `path` means the repo root:
+ * it matches both an App whose `repository.path` is '' and a legacy App created
+ * before this field existed (`repository.path` absent), so legacy root Apps keep
+ * matching root proposals. When `path` is `undefined` the lookup is repo-scoped
+ * (owner+name only) — the API import path, whose App linkage is not sub-app
+ * aware.
+ */
 async function findRepoApp(
   payload: Payload,
   workspaceId: string,
   owner: string,
   name: string,
+  path?: string,
 ): Promise<string | undefined> {
+  const and: Where[] = [
+    { workspace: { equals: workspaceId } },
+    { 'repository.owner': { equals: owner } },
+    { 'repository.name': { equals: name } },
+  ]
+  if (path !== undefined) {
+    and.push(
+      path === ''
+        ? { or: [{ 'repository.path': { equals: '' } }, { 'repository.path': { exists: false } }] }
+        : { 'repository.path': { equals: path } },
+    )
+  }
+  const res = await payload.find({
+    collection: 'apps',
+    where: { and },
+    limit: 1,
+    depth: 0,
+    overrideAccess: true,
+  })
+  return res.docs.length > 0 ? String(res.docs[0].id) : undefined
+}
+
+/**
+ * Fetch every App backing a repo in a workspace, with each App's monorepo
+ * sub-app `path` ('' = repo root). Feeds `pickNearestApp` so an API spec attaches
+ * to the App that actually owns its directory rather than an arbitrary sibling.
+ */
+async function findRepoApps(
+  payload: Payload,
+  workspaceId: string,
+  owner: string,
+  name: string,
+): Promise<{ id: string; path: string }[]> {
   const res = await payload.find({
     collection: 'apps',
     where: {
@@ -177,11 +224,52 @@ async function findRepoApp(
         { 'repository.name': { equals: name } },
       ],
     },
-    limit: 1,
+    limit: 100,
     depth: 0,
     overrideAccess: true,
   })
-  return res.docs.length > 0 ? String(res.docs[0].id) : undefined
+  return res.docs.map((d) => ({
+    id: String(d.id),
+    path: (d as { repository?: { path?: string | null } }).repository?.path ?? '',
+  }))
+}
+
+/**
+ * Whether `prefix` is a path-segment-boundary ancestor of `dir`: equal, or `dir`
+ * begins with `prefix + '/'`. So 'apps/api' is an ancestor of 'apps/api' and
+ * 'apps/api/docs' but NOT 'apps/api2'.
+ */
+function isPathAncestor(prefix: string, dir: string): boolean {
+  return dir === prefix || dir.startsWith(prefix + '/')
+}
+
+/**
+ * Pick the App a spec at `specDir` belongs to by nearest-ancestor match: the
+ * App whose sub-app `path` is the LONGEST segment-boundary prefix of `specDir`.
+ * A root App (path '' or absent) is an ancestor of everything and is the
+ * fallback when no deeper App matches; `undefined` when neither applies (the
+ * caller then creates an unlinked spec, matching the pre-monorepo behavior).
+ *
+ * Exported for direct unit testing — it is pure (no Payload).
+ */
+export function pickNearestApp(
+  apps: { id: string; path?: string | null }[],
+  specDir: string,
+): string | undefined {
+  let best: { id: string; depth: number } | undefined
+  let rootId: string | undefined
+  for (const app of apps) {
+    const p = app.path ?? ''
+    if (p === '') {
+      if (rootId === undefined) rootId = app.id
+      continue
+    }
+    if (isPathAncestor(p, specDir)) {
+      const depth = p.split('/').length
+      if (!best || depth > best.depth) best = { id: app.id, depth }
+    }
+  }
+  return best ? best.id : rootId
 }
 
 /**
@@ -206,9 +294,13 @@ export async function importDiscoveredService(
 
   const proposal = asRecord(discovery.proposal)
   const { name: repoName, url, defaultBranch } = discovery.repo
+  // The detection path is the monorepo sub-app dir ('' = repo root). It scopes
+  // both the App lookup and the App's stored repository.path so each sub-app in
+  // one repo becomes its own App instead of clobbering the first one.
+  const subPath = discovery.path || ''
   const providerInfo = await resolveProviderInfo(payload, discovery)
 
-  let appId = await findRepoApp(payload, workspaceId, providerInfo.owner, repoName)
+  let appId = await findRepoApp(payload, workspaceId, providerInfo.owner, repoName, subPath)
   if (!appId) {
     const installationId = relId(discovery.installation)
     const buildConfig = asRecord(proposal.buildConfig)
@@ -222,6 +314,7 @@ export async function importDiscoveredService(
         repository: {
           owner: providerInfo.owner,
           name: repoName,
+          ...(subPath ? { path: subPath } : {}),
           ...(url ? { url } : {}),
           ...(installationId ? { installationId } : {}),
           ...(providerInfo.provider ? { provider: providerInfo.provider } : {}),
@@ -297,7 +390,12 @@ export async function importDiscoveredApi(
   // attribution lives entirely on the linked App, so only the lookup owner
   // needs the ADO org (not the discovered project) to find the right App.
   const providerInfo = await resolveProviderInfo(payload, discovery)
-  const appId = await findRepoApp(payload, workspaceId, providerInfo.owner, repoName)
+  // A monorepo repo can back several sub-app Apps; attach the spec to the App
+  // that owns the spec's directory (nearest-ancestor path), not an arbitrary
+  // sibling. specDir is the spec's parent dir ('' at the repo root).
+  const specDir = specPath.includes('/') ? specPath.slice(0, specPath.lastIndexOf('/')) : ''
+  const appsForRepo = await findRepoApps(payload, workspaceId, providerInfo.owner, repoName)
+  const appId = pickNearestApp(appsForRepo, specDir)
 
   const existing = await payload.find({
     collection: 'api-schemas',

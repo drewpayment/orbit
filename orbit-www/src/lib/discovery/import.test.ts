@@ -7,6 +7,7 @@ import {
   importDiscoveredApi,
   importDiscoveredGlobalEntity,
   importDiscovery,
+  pickNearestApp,
 } from './import'
 
 // --- FakePayload -------------------------------------------------------------
@@ -97,6 +98,9 @@ function matchesWhere(doc: Doc, where: unknown): boolean {
       if (actualId !== cond.equals) return false
     } else if ('in' in cond) {
       if (!(cond.in as unknown[]).includes(actualId)) return false
+    } else if ('exists' in cond) {
+      const present = actualId !== undefined && actualId !== null
+      if (present !== cond.exists) return false
     }
   }
   return true
@@ -206,6 +210,97 @@ describe('importDiscoveredService', () => {
 
     expect(res).toEqual({ imported: true, ref: { collection: 'apps', id: 'app-x' } })
     expect(f.collections['apps']).toHaveLength(0)
+  })
+
+  it('creates a separate App per sub-app path from one monorepo repo (QA repro — no silent link to the first app)', async () => {
+    const f = fp()
+    const web = discovery({ id: 'disc-web', path: 'apps/web-next', proposal: { name: 'web-next' } })
+    const api = discovery({ id: 'disc-api', path: 'apps/api', proposal: { name: 'api' } })
+    f.collections['discovered-entities'] = [{ ...web } as Doc, { ...api } as Doc]
+
+    const r1 = await importDiscoveredService(payloadOf(f), web)
+    const r2 = await importDiscoveredService(payloadOf(f), api)
+
+    // Two distinct apps, one per sub-app dir.
+    expect(f.collections['apps']).toHaveLength(2)
+    expect(r1.ref!.id).not.toBe(r2.ref!.id)
+    const webApp = f.collections['apps'].find(
+      (a) => (a.repository as Record<string, unknown>).path === 'apps/web-next',
+    )!
+    const apiApp = f.collections['apps'].find(
+      (a) => (a.repository as Record<string, unknown>).path === 'apps/api',
+    )!
+    expect(webApp).toBeDefined()
+    expect(apiApp).toBeDefined()
+    // Each discovery row links to its OWN app.
+    const webRow = f.collections['discovered-entities'].find((r) => r.id === 'disc-web')!
+    const apiRow = f.collections['discovered-entities'].find((r) => r.id === 'disc-api')!
+    expect((webRow.importedRef as Record<string, unknown>).docId).toBe(webApp.id)
+    expect((apiRow.importedRef as Record<string, unknown>).docId).toBe(apiApp.id)
+  })
+
+  it('a sub-app proposal never links to the repo-root App (the data-loss bug)', async () => {
+    const f = fp()
+    // Legacy repo-root App with no repository.path.
+    f.collections['apps'] = [
+      { id: 'app-root', workspace: 'ws1', name: 'billing', repository: { owner: 'acme', name: 'billing' } },
+    ]
+    const api = discovery({ id: 'disc-api', path: 'apps/api', proposal: { name: 'api' } })
+    f.collections['discovered-entities'] = [{ ...api } as Doc]
+
+    const res = await importDiscoveredService(payloadOf(f), api)
+
+    expect(res.ref!.id).not.toBe('app-root')
+    expect(f.collections['apps']).toHaveLength(2)
+    const created = f.collections['apps'].find((a) => a.id === res.ref!.id)!
+    expect((created.repository as Record<string, unknown>).path).toBe('apps/api')
+  })
+
+  it('same-path proposal links to the existing sub-app App, no duplicate', async () => {
+    const f = fp()
+    f.collections['apps'] = [
+      {
+        id: 'app-api',
+        workspace: 'ws1',
+        name: 'api',
+        repository: { owner: 'acme', name: 'billing', path: 'apps/api' },
+      },
+    ]
+    const api = discovery({ id: 'disc-api', path: 'apps/api', proposal: { name: 'api' } })
+    f.collections['discovered-entities'] = [{ ...api } as Doc]
+
+    const res = await importDiscoveredService(payloadOf(f), api)
+
+    expect(res.ref).toEqual({ collection: 'apps', id: 'app-api' })
+    expect(f.collections['apps']).toHaveLength(1)
+    expect(f.collections['discovered-entities'][0].importedRef).toEqual({
+      collectionSlug: 'apps',
+      docId: 'app-api',
+    })
+  })
+
+  it('legacy App without repository.path is matched by a root-path proposal', async () => {
+    const f = fp()
+    f.collections['apps'] = [
+      { id: 'app-legacy', workspace: 'ws1', name: 'billing', repository: { owner: 'acme', name: 'billing' } },
+    ]
+    const root = discovery({ id: 'disc-root', path: '', proposal: { name: 'billing-svc' } })
+    f.collections['discovered-entities'] = [{ ...root } as Doc]
+
+    const res = await importDiscoveredService(payloadOf(f), root)
+
+    expect(res.ref).toEqual({ collection: 'apps', id: 'app-legacy' })
+    expect(f.collections['apps']).toHaveLength(1)
+  })
+
+  it('writes the sub-app path onto the created App repository group', async () => {
+    const f = fp()
+    const api = discovery({ id: 'disc-api', path: 'apps/api', proposal: { name: 'api' } })
+    f.collections['discovered-entities'] = [{ ...api } as Doc]
+
+    await importDiscoveredService(payloadOf(f), api)
+
+    expect((f.collections['apps'][0].repository as Record<string, unknown>).path).toBe('apps/api')
   })
 
   it('legacy imported row (collectionSlug only, no docId) backfills docId via the dedupe/App lookup', async () => {
@@ -344,6 +439,47 @@ describe('importDiscoveredService', () => {
     const repo = f.collections['apps'][0].repository as Record<string, unknown>
     expect(repo.provider).toBeUndefined()
     expect(repo.owner).toBe('my-project')
+  })
+})
+
+// --- pickNearestApp ----------------------------------------------------------
+
+describe('pickNearestApp', () => {
+  const monorepo = [
+    { id: 'root', path: '' },
+    { id: 'api', path: 'apps/api' },
+  ]
+
+  it('picks the nearest-ancestor app by longest path-segment prefix', () => {
+    expect(pickNearestApp(monorepo, 'apps/api')).toBe('api')
+    expect(pickNearestApp(monorepo, 'apps/api/docs')).toBe('api')
+  })
+
+  it('falls back to the root app when no deeper app is an ancestor', () => {
+    expect(pickNearestApp(monorepo, 'apps/web-next')).toBe('root')
+    expect(pickNearestApp(monorepo, '')).toBe('root')
+  })
+
+  it('respects segment boundaries — apps/api is not a prefix of apps/api2', () => {
+    expect(pickNearestApp(monorepo, 'apps/api2')).toBe('root')
+  })
+
+  it('returns undefined when there is no ancestor and no root app', () => {
+    expect(pickNearestApp([{ id: 'api', path: 'apps/api' }], 'apps/web-next')).toBeUndefined()
+  })
+
+  it('treats an absent/null path as the repo root', () => {
+    expect(pickNearestApp([{ id: 'legacy' }], 'apps/api')).toBe('legacy')
+    expect(pickNearestApp([{ id: 'legacy', path: null }], 'apps/api')).toBe('legacy')
+  })
+
+  it('picks the deepest among multiple ancestor apps', () => {
+    const apps = [
+      { id: 'root', path: '' },
+      { id: 'apps', path: 'apps' },
+      { id: 'api', path: 'apps/api' },
+    ]
+    expect(pickNearestApp(apps, 'apps/api/v1')).toBe('api')
   })
 })
 
@@ -506,6 +642,25 @@ describe('importDiscoveredApi', () => {
 
     expect(res).toEqual({ imported: true, ref: { collection: 'api-schemas', id: 'schema-x' } })
     expect(f.collections['api-schemas']).toHaveLength(0)
+  })
+
+  it('attaches a spec to the nearest-ancestor sub-app App, never another sub-app of the repo', async () => {
+    const f = fp()
+    f.collections['apps'] = [
+      { id: 'app-web', workspace: 'ws1', repository: { owner: 'acme', name: 'billing', path: 'apps/web-next' } },
+      { id: 'app-api', workspace: 'ws1', repository: { owner: 'acme', name: 'billing', path: 'apps/api' } },
+    ]
+    const d = discovery({
+      detectedKind: 'api',
+      path: 'apps/api',
+      proposal: { schemaType: 'openapi', specPath: 'apps/api/openapi.json', rawContent: 'openapi: 3.0.0' },
+    })
+    f.collections['discovered-entities'] = [{ ...d } as Doc]
+
+    const res = await importDiscoveredApi(payloadOf(f), d, { actorUserId: 'user-1' })
+
+    expect(res.imported).toBe(true)
+    expect(f.collections['api-schemas'][0].repository).toBe('app-api')
   })
 
   it('ADO: links the repository rel by resolved org, not the raw discovered project owner', async () => {
