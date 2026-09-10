@@ -11,8 +11,13 @@
  * a file from the author's preview. Anything it cannot read a path from is
  * skipped.
  *
- * Only `kind: "file"` entries are returned; other planned changes (repos,
- * catalog entities, topics) are summarised elsewhere in the dry-run panel.
+ * `parsePlanFileEntries` returns only `kind: "file"` entries;
+ * {@link parsePlanEntries} additionally returns every OTHER kind so the
+ * preview can list them generically. That split matters: the Go planner emits
+ * `skipped` (a step whose `if` evaluated false) and `unsupported` (a step with
+ * no `Plan()` implementation) alongside the substantive kinds, and it may add
+ * more. An unrecognised kind is surfaced, never dropped — a preview that
+ * quietly omits part of a template reads as complete when it is not.
  */
 
 export type FileChangeKind = 'added' | 'changed' | 'removed'
@@ -154,4 +159,64 @@ export function summarizeFileEntries(entries: PlanFileEntry[]): Record<FileChang
     },
     { added: 0, changed: 0, removed: 0 } as Record<FileChangeKind, number>,
   )
+}
+
+
+/** A planned change that is not a file — a repo, an entity, a skipped step, anything. */
+export interface PlanOtherEntry {
+  /** The planner's kind, lower-cased. Not restricted to a known set. */
+  kind: string
+  /** Best-effort label: the entry's name, step, target or id, falling back to the kind. */
+  name: string
+  /** The planner's own explanation, when it gave one (e.g. why a step was skipped). */
+  description: string | null
+  /**
+   * True for kinds that mean "this part of the template was NOT previewed" —
+   * `skipped` and `unsupported`. Drives the incomplete-preview warning.
+   */
+  incomplete: boolean
+}
+
+/**
+ * Kinds that represent an absence of preview rather than a planned change.
+ * `skipped`: the step's `if` evaluated false, so it never ran.
+ * `unsupported`: the action has no `Plan()` implementation to preview with.
+ */
+export const INCOMPLETE_PLAN_KINDS: readonly string[] = ['skipped', 'unsupported'] as const
+
+/** Split a run's `plan` into file changes and every other kind of planned change. */
+export function parsePlanEntries(plan: unknown): {
+  files: PlanFileEntry[]
+  others: PlanOtherEntry[]
+} {
+  const files: PlanFileEntry[] = []
+  const others: PlanOtherEntry[] = []
+
+  for (const raw of planArray(plan)) {
+    if (!isRecord(raw)) continue
+
+    const rawKind = firstString(raw, ['kind', 'type'])
+    if (rawKind === null) continue
+    const kind = rawKind.trim().toLowerCase()
+
+    if (kind === 'file') {
+      const fileEntry = parsePlanFileEntries([raw])[0]
+      if (fileEntry) files.push(fileEntry)
+      continue
+    }
+
+    others.push({
+      kind,
+      name: firstString(raw, ['name', 'step', 'target', 'path', 'id']) ?? kind,
+      description: firstString(raw, ['description', 'reason', 'detail', 'summary', 'note']),
+      incomplete: INCOMPLETE_PLAN_KINDS.includes(kind),
+    })
+  }
+
+  return { files, others }
+}
+
+/** Whether any part of the template went un-previewed, making the plan partial. */
+export function hasIncompletePreview(others: PlanOtherEntry[]): boolean {
+  return others.some((o) => o.incomplete)
 }

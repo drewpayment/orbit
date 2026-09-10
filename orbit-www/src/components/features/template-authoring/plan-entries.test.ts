@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { buildFileTree, parsePlanFileEntries } from './plan-entries'
+import {
+  buildFileTree,
+  hasIncompletePreview,
+  parsePlanEntries,
+  parsePlanFileEntries,
+} from './plan-entries'
 
 describe('parsePlanFileEntries', () => {
   it('returns nothing for an absent or non-plan value', () => {
@@ -103,5 +108,92 @@ describe('buildFileTree', () => {
     const tree = buildFileTree([{ path: 'go.mod', change: 'removed', detail: null }])
     expect(tree).toHaveLength(1)
     expect(tree[0]).toMatchObject({ name: 'go.mod', type: 'file', change: 'removed' })
+  })
+})
+
+describe('parsePlanEntries', () => {
+  it('splits file entries from every other kind', () => {
+    const { files, others } = parsePlanEntries([
+      { kind: 'file', path: 'src/main.go', op: 'create' },
+      { kind: 'repo', name: 'org/svc', op: 'create' },
+      { kind: 'entity', name: 'svc', description: 'Catalog entity' },
+    ])
+    expect(files.map((f) => f.path)).toEqual(['src/main.go'])
+    expect(others.map((o) => o.kind)).toEqual(['repo', 'entity'])
+  })
+
+  it('returns empty lists for a non-plan value', () => {
+    expect(parsePlanEntries(null)).toEqual({ files: [], others: [] })
+    expect(parsePlanEntries('nope')).toEqual({ files: [], others: [] })
+  })
+
+  it('reads a skipped step, which means the step never ran', () => {
+    const { others } = parsePlanEntries([
+      { kind: 'skipped', step: 'create-repo', reason: 'if evaluated false' },
+    ])
+    expect(others).toEqual([
+      {
+        kind: 'skipped',
+        name: 'create-repo',
+        description: 'if evaluated false',
+        incomplete: true,
+      },
+    ])
+  })
+
+  it('reads an unsupported entry, which means the step could not be previewed', () => {
+    const { others } = parsePlanEntries([
+      { kind: 'unsupported', name: 'kafka:topic:create', detail: 'no Plan() implementation' },
+    ])
+    expect(others[0]).toMatchObject({ kind: 'unsupported', incomplete: true })
+  })
+
+  it('marks only skipped and unsupported as incomplete', () => {
+    const { others } = parsePlanEntries([
+      { kind: 'repo', name: 'a' },
+      { kind: 'skipped', name: 'b' },
+      { kind: 'unsupported', name: 'c' },
+      { kind: 'entity', name: 'd' },
+    ])
+    expect(others.map((o) => o.incomplete)).toEqual([false, true, true, false])
+  })
+
+  it('keeps an unknown future kind rather than dropping it', () => {
+    // The Go side may add kinds; the preview must never silently omit one.
+    const { others } = parsePlanEntries([{ kind: 'dns-record', name: 'svc.example.com' }])
+    expect(others).toEqual([
+      { kind: 'dns-record', name: 'svc.example.com', description: null, incomplete: false },
+    ])
+  })
+
+  it('falls back through the name-ish keys, and to the kind itself', () => {
+    const name = (raw: Record<string, unknown>) => parsePlanEntries([raw]).others[0].name
+    expect(name({ kind: 'repo', name: 'by-name' })).toBe('by-name')
+    expect(name({ kind: 'repo', step: 'by-step' })).toBe('by-step')
+    expect(name({ kind: 'repo', target: 'by-target' })).toBe('by-target')
+    expect(name({ kind: 'repo', id: 'by-id' })).toBe('by-id')
+    expect(name({ kind: 'repo' })).toBe('repo')
+  })
+
+  it('normalises the kind to lower case', () => {
+    expect(parsePlanEntries([{ kind: 'SKIPPED', name: 'x' }]).others[0]).toMatchObject({
+      kind: 'skipped',
+      incomplete: true,
+    })
+  })
+
+  it('skips an entry with no readable kind at all', () => {
+    expect(parsePlanEntries([{ name: 'no kind' }, 'string', 42]).others).toEqual([])
+  })
+})
+
+describe('hasIncompletePreview', () => {
+  it('is true when anything was skipped or could not be previewed', () => {
+    expect(hasIncompletePreview([{ kind: 'skipped', name: 'a', description: null, incomplete: true }])).toBe(true)
+  })
+
+  it('is false for a fully-previewed plan', () => {
+    expect(hasIncompletePreview([{ kind: 'repo', name: 'a', description: null, incomplete: false }])).toBe(false)
+    expect(hasIncompletePreview([])).toBe(false)
   })
 })

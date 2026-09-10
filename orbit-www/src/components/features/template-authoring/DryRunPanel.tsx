@@ -36,7 +36,7 @@ import type { ParameterPage } from '@/lib/scaffolder/schema'
 import type { ActionRun } from '@/payload-types'
 import { parameterPageToSchemaFormPage } from './schema-ui-split'
 import { useRunPolling } from './use-run-polling'
-import { parsePlanFileEntries } from './plan-entries'
+import { parsePlanEntries } from './plan-entries'
 import { FileTreeDiff } from './FileTreeDiff'
 import type { FixtureRow } from './FixturesPanel'
 
@@ -95,7 +95,10 @@ export function DryRunPanel({
   const { run, error: pollError, isPolling } = useRunPolling(runId, getRun)
 
   const schemaPages = React.useMemo(() => pages.map(parameterPageToSchemaFormPage), [pages])
-  const planEntries = React.useMemo(() => parsePlanFileEntries(run?.plan), [run?.plan])
+  // Files and every other planned kind — including the planner's `skipped`
+  // and `unsupported` markers, which FileTreeDiff surfaces so a partial
+  // preview never reads as a complete one.
+  const plan = React.useMemo(() => parsePlanEntries(run?.plan), [run?.plan])
 
   // Record the succeeded run against its version exactly once. Keyed on the
   // run id so a re-render, a later poll, or a second dry run cannot re-fire it.
@@ -258,9 +261,9 @@ export function DryRunPanel({
 
           <div className="space-y-1.5">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Planned files
+              Planned changes
             </h4>
-            <FileTreeDiff entries={planEntries} />
+            <FileTreeDiff entries={plan.files} others={plan.others} />
           </div>
         </div>
       ) : null}
