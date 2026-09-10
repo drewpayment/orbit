@@ -214,6 +214,10 @@ export const CatalogEntities: CollectionConfig = {
             // this entity directly (no api-schemas/apps source), sourceId = the
             // discovered-entities dedupeKey. See lib/discovery/import.ts.
             { label: 'Scan', value: 'scan' },
+            // In-app template instantiation (Template Authoring Phase 0):
+            // sourceId = the originating Templates doc id. See
+            // POST /api/internal/templates/[id]/finalize.
+            { label: 'Template', value: 'template' },
           ],
         },
         {

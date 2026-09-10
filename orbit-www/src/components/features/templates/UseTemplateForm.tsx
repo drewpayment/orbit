@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,15 +19,11 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Loader2, AlertCircle, CheckCircle2, Info, ExternalLink } from 'lucide-react'
 import { startInstantiation, type GitHubInstallationHealth } from '@/app/actions/templates'
 import Link from 'next/link'
-
-interface TemplateVariable {
-  key: string
-  type: 'string' | 'number' | 'boolean' | 'select' | 'multiselect'
-  required: boolean
-  description?: string
-  default?: string | number | boolean
-  options?: Array<{ label: string; value: string }>
-}
+import { SchemaForm } from '@/components/forms/schema-form/SchemaForm'
+import {
+  templateVariablesToJsonSchema,
+  type TemplateVariable,
+} from '@/lib/templates/legacy-variables-adapter'
 
 interface Workspace {
   id: string
@@ -48,6 +44,23 @@ interface UseTemplateFormProps {
   githubInstallations: GitHubInstallationHealth[]
 }
 
+/**
+ * Instantiation form for a v1 git-backed template. Repository-details fields
+ * (name/description/org/workspace/private) stay hand-rolled — they aren't
+ * part of the template's own variable schema. Template *variables* are
+ * rendered by {@link SchemaForm} (Template Authoring Phase 2, Group A Task 6)
+ * fed a JSON Schema built from the legacy `TemplateVariable[]` via
+ * {@link templateVariablesToJsonSchema} — this is what fixes the old
+ * comma-separated-string `multiselect` hack (now a real tag input).
+ *
+ * SchemaForm is embedded with `as="div"` (no nested `<form>`) and its live
+ * values are mirrored into `variableValues` via `onChange`; the outer
+ * `<form>`'s submit reads that state, matching the original single-submit
+ * UX. Client-side validation of the variables (required/enum/etc.) still
+ * runs inside SchemaForm — but a variable field only visually flags an error
+ * on its own blur/interaction since there's no SchemaForm submit call here;
+ * the server (`startInstantiation`) remains the authority on the values.
+ */
 export function UseTemplateForm({
   templateId,
   templateName,
@@ -62,29 +75,17 @@ export function UseTemplateForm({
   const [workspaceId, setWorkspaceId] = useState(workspaces[0]?.id || '')
   const [githubOrg, setGithubOrg] = useState(githubOrgs[0]?.login || '')
   const [isPrivate, setIsPrivate] = useState(true)
-  const [variableValues, setVariableValues] = useState<Record<string, string | number | boolean>>(() => {
-    // Initialize with defaults
-    const defaults: Record<string, string | number | boolean> = {}
-    variables.forEach((v) => {
-      if (v.default !== undefined) {
-        defaults[v.key] = v.default
-      } else if (v.type === 'boolean') {
-        defaults[v.key] = false
-      } else if (v.type === 'number') {
-        defaults[v.key] = 0
-      } else {
-        defaults[v.key] = ''
-      }
-    })
-    return defaults
-  })
+
+  const { schema: variablesSchema, defaults: variableDefaults } = useMemo(
+    () => templateVariablesToJsonSchema(variables),
+    [variables],
+  )
+  const [variableValues, setVariableValues] =
+    useState<Record<string, unknown>>(variableDefaults)
+
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
-
-  const handleVariableChange = (key: string, value: string | number | boolean) => {
-    setVariableValues((prev) => ({ ...prev, [key]: value }))
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -93,10 +94,13 @@ export function UseTemplateForm({
     setIsSubmitting(true)
 
     try {
-      // Convert variable values to strings for the gRPC call
+      // Convert variable values to strings for the gRPC call. Array values
+      // (multiselect, now a real tag input via SchemaForm) join as a
+      // comma-separated string for backward compatibility with the v1
+      // instantiation contract.
       const stringVariables: Record<string, string> = {}
       for (const [key, value] of Object.entries(variableValues)) {
-        stringVariables[key] = String(value)
+        stringVariables[key] = Array.isArray(value) ? value.join(',') : String(value)
       }
 
       const result = await startInstantiation({
@@ -132,80 +136,6 @@ export function UseTemplateForm({
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setIsSubmitting(false)
-    }
-  }
-
-  const renderVariableInput = (variable: TemplateVariable) => {
-    const value = variableValues[variable.key]
-
-    switch (variable.type) {
-      case 'boolean':
-        return (
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id={variable.key}
-              checked={value as boolean}
-              onCheckedChange={(checked: boolean) => handleVariableChange(variable.key, !!checked)}
-              disabled={isSubmitting || success}
-            />
-            <Label htmlFor={variable.key} className="text-sm font-normal">
-              {variable.description || variable.key}
-            </Label>
-          </div>
-        )
-
-      case 'number':
-        return (
-          <Input
-            id={variable.key}
-            type="number"
-            value={value as number}
-            onChange={(e) => handleVariableChange(variable.key, parseInt(e.target.value, 10) || 0)}
-            disabled={isSubmitting || success}
-          />
-        )
-
-      case 'select':
-        return (
-          <Select
-            value={value as string}
-            onValueChange={(v) => handleVariableChange(variable.key, v)}
-            disabled={isSubmitting || success}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select an option" />
-            </SelectTrigger>
-            <SelectContent>
-              {variable.options?.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )
-
-      case 'multiselect':
-        // For simplicity, render as comma-separated input (full implementation would use multi-select component)
-        return (
-          <Input
-            id={variable.key}
-            placeholder="Comma-separated values"
-            value={value as string}
-            onChange={(e) => handleVariableChange(variable.key, e.target.value)}
-            disabled={isSubmitting || success}
-          />
-        )
-
-      default:
-        return (
-          <Input
-            id={variable.key}
-            value={value as string}
-            onChange={(e) => handleVariableChange(variable.key, e.target.value)}
-            disabled={isSubmitting || success}
-          />
-        )
     }
   }
 
@@ -406,19 +336,14 @@ export function UseTemplateForm({
               Configure the template variables. These will be substituted in your new repository.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {variables.map((variable) => (
-              <div key={variable.key} className="space-y-2">
-                <Label htmlFor={variable.key}>
-                  {variable.key}
-                  {variable.required && <span className="text-red-500 ml-1">*</span>}
-                </Label>
-                {renderVariableInput(variable)}
-                {variable.description && variable.type !== 'boolean' && (
-                  <p className="text-xs text-muted-foreground">{variable.description}</p>
-                )}
-              </div>
-            ))}
+          <CardContent>
+            <SchemaForm
+              as="div"
+              mode="single"
+              pages={[{ title: 'Template Variables', schema: variablesSchema }]}
+              values={variableDefaults}
+              onChange={setVariableValues}
+            />
           </CardContent>
         </Card>
       )}
