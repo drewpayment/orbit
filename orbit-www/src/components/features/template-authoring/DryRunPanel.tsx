@@ -89,7 +89,10 @@ export function DryRunPanel({
   const [startError, setStartError] = React.useState<string | null>(null)
   const [fixtureId, setFixtureId] = React.useState<string>(NO_FIXTURE)
 
-  const { run, error: pollError, isPolling } = useRunPolling<ActionRun>(runId, getRun)
+  // PR #105's hook is the single copy of this (my duplicate was dropped in
+  // reconciliation): no type parameter, `error` is an Error, and the interval
+  // lives in an options object.
+  const { run, error: pollError, isPolling } = useRunPolling(runId, getRun)
 
   const schemaPages = React.useMemo(() => pages.map(parameterPageToSchemaFormPage), [pages])
   const planEntries = React.useMemo(() => parsePlanFileEntries(run?.plan), [run?.plan])
@@ -183,7 +186,7 @@ export function DryRunPanel({
 
       {pollError ? (
         <Alert variant="destructive">
-          <AlertDescription>{pollError}</AlertDescription>
+          <AlertDescription>{pollError.message}</AlertDescription>
         </Alert>
       ) : null}
 

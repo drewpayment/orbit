@@ -20,6 +20,7 @@ import { validateDefinition, type ActionDescriptor, type ValidationResult } from
 import { RegistryUnavailableError } from '@/lib/scaffolder/registry-errors'
 import { listActions as listActionsRpc } from '@/lib/clients/template-client'
 import { executeRun } from '@/lib/actions/run'
+import { evaluateVisibleIf } from '@/lib/scaffolder/visible-if'
 import type {
   TemplateDefinition as TemplateDefinitionDoc,
   TemplateDefinitionVersion,
@@ -430,6 +431,55 @@ function collectSecretParamKeys(definitionJson: unknown): Set<string> {
   return secretKeys
 }
 
+/**
+ * True when `value` is EXACTLY the shape SchemaForm (`ui:secret` fields,
+ * PR #103) emits: `{ value: string, secret: true }` — no other own keys.
+ */
+function isSecretWrapper(value: unknown): value is { value: string; secret: true } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const keys = Object.keys(value as Record<string, unknown>)
+  if (keys.length !== 2 || !keys.includes('value') || !keys.includes('secret')) return false
+  const v = value as { value: unknown; secret: unknown }
+  return typeof v.value === 'string' && v.secret === true
+}
+
+/**
+ * BLOCKER: unwraps SchemaForm's `{ value, secret: true }` wrapper objects to
+ * their plain string BEFORE parameter validation and persistence.
+ *
+ * Two reasons this can't wait until later:
+ *  1. The Go worker's `StartScaffolderRun` needs the real secret STRING in
+ *     its `parameters` Struct, not a `{value,secret}` object.
+ *  2. `getRun`'s value-based redaction (steps[].output/plan/outputs) only
+ *     matches STRING values pulled from `run.inputs` — a stored wrapper
+ *     object would never populate that match set, so a secret echoed back
+ *     by the worker would never get redacted.
+ *
+ * Unwraps for every key flagged `ui:secret` in the version's definition
+ * AND, defensively, any value shaped exactly like the wrapper regardless of
+ * key — but a wrapper on a key that is NOT flagged secret is rejected
+ * outright (never silently unwrapped): submitting that shape on an
+ * ordinary field is either a client bug or an attempt to smuggle an object
+ * past a `type: 'string'` check, and neither should be tolerated quietly.
+ */
+function unwrapSecretParameters(
+  version: TemplateDefinitionVersion,
+  parameters: Record<string, unknown>,
+): Record<string, unknown> {
+  const secretKeys = collectSecretParamKeys(version.definitionJson)
+  const out: Record<string, unknown> = { ...parameters }
+  for (const [key, value] of Object.entries(out)) {
+    if (!isSecretWrapper(value)) continue
+    if (!secretKeys.has(key)) {
+      throw new Error(
+        `Invalid parameters: "${key}" is not a secret field and cannot be submitted as a {value, secret} wrapper.`,
+      )
+    }
+    out[key] = value.value
+  }
+  return out
+}
+
 const SECRET_PLACEHOLDER = '••••••••'
 
 /** Redact `ui:secret`-flagged top-level parameter keys from an inputs object for display/return to a caller. */
@@ -510,6 +560,15 @@ async function loadVersionAndDefinition(
  * field-prefixed message on the FIRST validation failure — startDryRun/
  * startRun call this before persisting anything, so a malformed submission
  * never becomes an action-run row.
+ *
+ * Follow-up from re-review: a property whose `ui:visibleIf` evaluates
+ * `false` against the SUBMITTED `parameters` is dropped from the merged
+ * `required` list before validating — PR #103's SchemaForm unregisters a
+ * hidden field from client-side submission entirely, so the server-side
+ * "required" check must not reject its absence, or every conditional field
+ * becomes impossible to submit. Uses `lib/scaffolder/visible-if.ts`
+ * (evaluator kept behaviourally aligned with the schema-form one — see that
+ * module's docblock).
  */
 function validateRunParameters(version: TemplateDefinitionVersion, parameters: Record<string, unknown>): void {
   const definitionJson = version.definitionJson as { spec?: { parameters?: unknown[] } } | null
@@ -525,10 +584,17 @@ function validateRunParameters(version: TemplateDefinitionVersion, parameters: R
     if (Array.isArray(p.required)) required.push(...p.required)
   }
 
+  const visibleRequired = required.filter((key) => {
+    const prop = properties[key] as Record<string, unknown> | undefined
+    const visibleIf = prop?.['ui:visibleIf']
+    if (typeof visibleIf !== 'string') return true // no condition — always required as declared
+    return evaluateVisibleIf(visibleIf, parameters)
+  })
+
   const schema = {
     type: 'object',
     properties,
-    required,
+    required: visibleRequired,
     additionalProperties: false,
   }
 
@@ -544,21 +610,19 @@ function validateRunParameters(version: TemplateDefinitionVersion, parameters: R
 }
 
 /**
- * Creates a `dryRun: true` action-run for a template version and dispatches
- * it. Manage-gated (dry runs are an authoring/preview tool, not the
- * published-template consumer flow — {@link startRun} is that).
+ * Shared dry-run creation core for {@link startDryRun} and {@link planRun} —
+ * everything AFTER authorization: resolve fixture/parameters, validate,
+ * provision the runner action, create + dispatch the `dryRun: true` run,
+ * and stamp `lastDryRunAt`. Callers must authorize BEFORE calling this.
  */
-export async function startDryRun(input: StartDryRunInput): Promise<{ runId: string }> {
-  const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  const isAdmin = await currentUserIsPlatformAdmin()
-
-  const { version, definition } = await loadVersionAndDefinition(payload, input.templateVersionId)
-  const workspaceId = relId(definition.workspace)
-  if (!(await canManageTemplateDefinitions(payload, uid, workspaceId, isAdmin))) {
-    throw new Error('You do not have permission to dry-run templates in this workspace.')
-  }
-
+async function createAndDispatchDryRun(
+  payload: PayloadClient,
+  uid: string,
+  version: TemplateDefinitionVersion,
+  definition: TemplateDefinitionDoc,
+  workspaceId: string | null,
+  input: StartDryRunInput,
+): Promise<{ runId: string }> {
   let parameters = input.parameters ?? {}
   if (input.fixtureId) {
     const fixture = (definition.fixtures ?? []).find((f) => f.id === input.fixtureId)
@@ -569,6 +633,7 @@ export async function startDryRun(input: StartDryRunInput): Promise<{ runId: str
         : {}
   }
 
+  parameters = unwrapSecretParameters(version, parameters)
   validateRunParameters(version, parameters)
 
   const action = await ensureRunnerAction(payload, definition)
@@ -603,14 +668,51 @@ export async function startDryRun(input: StartDryRunInput): Promise<{ runId: str
 }
 
 /**
- * Alias for {@link startDryRun} — the "Review" step of both the authoring
- * dry-run panel and the consumer run wizard plan the same way (a dry run IS
- * the plan). Kept as a separate export because Phase 2's plan names it
- * `planRun` distinctly (design §3.6/§4); if the two diverge later (e.g. a
- * plan-only mode that skips MinIO persistence), split the implementations
- * then.
+ * Creates a `dryRun: true` action-run for a template version and dispatches
+ * it. Manage-gated ALWAYS (dry runs are an authoring/preview tool over any
+ * draft, published, or deprecated version) — {@link planRun} is the
+ * consumer-facing sibling with a looser gate for published definitions.
  */
-export const planRun = startDryRun
+export async function startDryRun(input: StartDryRunInput): Promise<{ runId: string }> {
+  const payload = await getPayload({ config })
+  const uid = await requireUserId()
+  const isAdmin = await currentUserIsPlatformAdmin()
+
+  const { version, definition } = await loadVersionAndDefinition(payload, input.templateVersionId)
+  const workspaceId = relId(definition.workspace)
+  if (!(await canManageTemplateDefinitions(payload, uid, workspaceId, isAdmin))) {
+    throw new Error('You do not have permission to dry-run templates in this workspace.')
+  }
+
+  return createAndDispatchDryRun(payload, uid, version, definition, workspaceId, input)
+}
+
+/**
+ * The consumer run wizard's "Review" step (design §3.6/§4) — a dry run IS
+ * the plan, so this shares {@link startDryRun}'s creation/dispatch core but
+ * with a DIFFERENT, looser authorization: side-effect-free, so any active
+ * member may plan-run a PUBLISHED definition (`canRunTemplateDefinition`),
+ * without needing the manage/owner-admin gate `startDryRun` otherwise
+ * requires. A draft/deprecated definition still falls back to the manage
+ * gate — a consumer has no business previewing an unpublished template.
+ */
+export async function planRun(input: StartDryRunInput): Promise<{ runId: string }> {
+  const payload = await getPayload({ config })
+  const uid = await requireUserId()
+  const isAdmin = await currentUserIsPlatformAdmin()
+
+  const { version, definition } = await loadVersionAndDefinition(payload, input.templateVersionId)
+  const workspaceId = relId(definition.workspace)
+
+  const canPlanAsConsumer =
+    definition.status === 'published' &&
+    (await canRunTemplateDefinition(payload, uid, workspaceId, isAdmin))
+  if (!canPlanAsConsumer && !(await canManageTemplateDefinitions(payload, uid, workspaceId, isAdmin))) {
+    throw new Error('You do not have permission to dry-run templates in this workspace.')
+  }
+
+  return createAndDispatchDryRun(payload, uid, version, definition, workspaceId, input)
+}
 
 export interface StartRunInput {
   templateVersionId: string
@@ -638,7 +740,8 @@ export async function startRun(input: StartRunInput): Promise<{ runId: string; s
     throw new Error('This template is not published.')
   }
 
-  validateRunParameters(version, input.parameters ?? {})
+  const parameters = unwrapSecretParameters(version, input.parameters ?? {})
+  validateRunParameters(version, parameters)
 
   const action = await ensureRunnerAction(payload, definition)
   const policy = action.approvalPolicy ?? 'none'
@@ -651,7 +754,7 @@ export async function startRun(input: StartRunInput): Promise<{ runId: string; s
       workspace: workspaceId ?? '',
       templateVersion: version.id,
       dryRun: false,
-      inputs: input.parameters ?? {},
+      inputs: parameters,
       status: needsApproval ? 'awaiting-approval' : 'pending',
       triggeredBy: uid,
       trigger: 'manual',
@@ -702,6 +805,12 @@ export async function getRun(runId: string): Promise<ActionRun | null> {
 
   let run: ActionRun
   try {
+    // `depth: 1` populates `run.templateVersion` (one level) and `run.action`
+    // — the consumer run-detail page (`[slug]/run/[runId]/page.tsx`) relies
+    // on both WITHOUT a second fetch: `run.templateVersion.definition` for
+    // its cross-slug guard, and `run.action.approvalPolicy` for its
+    // `canApprove` computation. Raising or lowering this depth changes what
+    // that page can read directly — check it before changing this.
     run = await payload.findByID({ collection: 'action-runs', id: runId, depth: 1, overrideAccess: true })
   } catch {
     return null
@@ -736,6 +845,12 @@ export async function getRun(runId: string): Promise<ActionRun | null> {
             : {}),
           ...(secretValues.size > 0 && run.plan
             ? { plan: redactSecretValuesDeep(run.plan, secretValues) as ActionRun['plan'] }
+            : {}),
+          // MINOR: `outputs` (links/text, design §output) renders straight
+          // to the consumer run-detail page — a secret echoed there must be
+          // redacted exactly like steps[].output/plan.
+          ...(secretValues.size > 0 && run.outputs
+            ? { outputs: redactSecretValuesDeep(run.outputs, secretValues) as ActionRun['outputs'] }
             : {}),
         }
       }

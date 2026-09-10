@@ -1,137 +1,132 @@
-/**
- * `useRunPolling` — Template Authoring Phase 2, Task 15.
- *
- * Polls a template/action run every 2s while its status is non-terminal
- * (`pending | awaiting-approval | running`) and stops on a terminal status
- * (`succeeded | failed | cancelled`), on a fetch error, or when the run comes
- * back null (denied or deleted). Shared by the authoring dry-run panel
- * (Task 14) and the consumer run wizard/detail (Tasks 16-17), so its shape is
- * deliberately transport-agnostic: the caller passes the `getRun` server
- * action in rather than this hook importing one.
- *
- * Leak safety (adversarial-review item (e)): the timer is cleared on unmount
- * and whenever `runId` changes, and every in-flight response is checked
- * against a generation counter before it is allowed to touch state — a
- * response for a previous `runId` can never overwrite the current run or
- * restart a cancelled polling loop.
- */
 'use client'
 
+/**
+ * `useRunPolling` — client hook for live-ish run status (Phase 2 plan Task
+ * 15 / design §3.6). There is no streaming transport for `action-runs`
+ * (see plan §1 "Runs today poll, they don't stream" + §6 risk #1), so this
+ * polls a `getRun`-style server action every `intervalMs` (default
+ * {@link RUN_POLL_INTERVAL_MS}) while the run is in a non-terminal state
+ * (`pending`, `awaiting-approval`, `running`), and stops once it reaches a
+ * terminal state (`succeeded`/`failed`/`cancelled`, see
+ * {@link isTerminalRunStatus}).
+ *
+ * Used by both the authoring dry-run panel (Task 14) and the consumer run
+ * detail page (Task 17) — kept at this exact path/name/signature so either
+ * of two independently-authored worktrees' copies is interchangeable; see
+ * the coordination note in the Task 15/17 delegation. PR #105 review:
+ * additively extended with `isPolling`/`refresh` plus the exported
+ * `isTerminalRunStatus`/`RUN_POLL_INTERVAL_MS` helpers so a second copy
+ * (the authoring-shell branch's) can be dropped in favor of this one
+ * without call-site changes beyond adopting the new optional fields.
+ */
 import * as React from 'react'
 import type { ActionRun } from '@/payload-types'
 
-/**
- * The subset of a run this hook needs. Widened to `ActionRun` in practice;
- * kept structural so tests and the consumer wizard can pass a lighter object.
- */
-export type PollableRun = Pick<ActionRun, 'id' | 'status'> & Partial<ActionRun>
-
-export type RunStatus = PollableRun['status']
-
-const TERMINAL_STATUSES: readonly RunStatus[] = ['succeeded', 'failed', 'cancelled'] as const
-
-/** Whether a run status means the run will never change again. */
-export function isTerminalRunStatus(status: RunStatus | undefined | null): boolean {
-  return !!status && TERMINAL_STATUSES.includes(status)
-}
-
+/** Default poll interval in ms — also the plan's documented "every ~2s" cadence. */
 export const RUN_POLL_INTERVAL_MS = 2000
 
-export interface UseRunPollingResult<T extends PollableRun> {
-  run: T | null
-  error: string | null
-  /** True while a further poll is scheduled — false before start and after a terminal status. */
+const TERMINAL_STATUSES: ReadonlySet<string> = new Set(['succeeded', 'failed', 'cancelled'])
+
+/** Whether an `ActionRun.status` value (or any string) is a terminal run status. Null/undefined/unknown values are treated as non-terminal. */
+export function isTerminalRunStatus(status: string | null | undefined): boolean {
+  return !!status && TERMINAL_STATUSES.has(status)
+}
+
+export interface UseRunPollingOptions {
+  /** Poll interval in ms while the run is non-terminal. Defaults to {@link RUN_POLL_INTERVAL_MS}. */
+  intervalMs?: number
+}
+
+export interface UseRunPollingResult {
+  run: ActionRun | null
+  error: Error | null
+  /** True while the hook is actively polling (has a pending or scheduled fetch) — false once terminal, once errored, or when `runId` is null. */
   isPolling: boolean
-  /** Force an immediate refetch (e.g. after an approval action). */
-  refresh: () => void
+  /** Immediately re-fetches, bypassing the interval wait, and reschedules (or stops) based on the fresh result. A no-op when `runId` is null. */
+  refresh: () => Promise<void>
 }
 
 /**
- * @param runId  the run to watch, or null to watch nothing.
- * @param getRun a server action resolving the run, or null when it is gone.
- * @param intervalMs poll interval; defaults to 2000ms per the plan.
+ * Polls `getRun(runId)` while the run's `status` is non-terminal, stopping
+ * on a terminal status or when the hook unmounts. Passing `runId: null`
+ * disables polling entirely (e.g. before a run has been created).
  */
-export function useRunPolling<T extends PollableRun>(
-  runId: string | null | undefined,
-  getRun: (runId: string) => Promise<T | null>,
-  intervalMs: number = RUN_POLL_INTERVAL_MS,
-): UseRunPollingResult<T> {
-  const [run, setRun] = React.useState<T | null>(null)
-  const [error, setError] = React.useState<string | null>(null)
+export function useRunPolling(
+  runId: string | null,
+  getRun: (id: string) => Promise<ActionRun | null>,
+  opts?: UseRunPollingOptions,
+): UseRunPollingResult {
+  const intervalMs = opts?.intervalMs ?? RUN_POLL_INTERVAL_MS
+  const [run, setRun] = React.useState<ActionRun | null>(null)
+  const [error, setError] = React.useState<Error | null>(null)
   const [isPolling, setIsPolling] = React.useState(false)
 
-  // Keep the latest getRun in a ref so a caller passing an inline closure
-  // (the common case with server actions) does not restart polling on every
-  // render — only `runId` and `intervalMs` do.
+  // Keep the latest getRun without re-triggering the polling effect if the
+  // caller passes a fresh function identity on every render.
   const getRunRef = React.useRef(getRun)
-  React.useEffect(() => {
-    getRunRef.current = getRun
-  }, [getRun])
+  getRunRef.current = getRun
 
-  const [refreshNonce, setRefreshNonce] = React.useState(0)
-  const refresh = React.useCallback(() => setRefreshNonce((n) => n + 1), [])
+  // `doPollRef` lets `refresh()` invoke the SAME fetch-and-reschedule logic
+  // the effect's timer uses, without recreating the effect. It's reassigned
+  // on every effect run (new runId/intervalMs), and is a no-op when polling
+  // is disabled (`runId` is null).
+  const doPollRef = React.useRef<() => Promise<void>>(async () => {})
+  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
   React.useEffect(() => {
+    setRun(null)
+    setError(null)
+    setIsPolling(false)
+
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+
     if (!runId) {
-      setRun(null)
-      setError(null)
-      setIsPolling(false)
+      doPollRef.current = async () => {}
       return
     }
 
-    // Drop the previous run immediately. Without this, starting a second run
-    // leaves the first one's terminal status, steps and plan on screen until
-    // the first poll resolves — reading as if the NEW run had already passed.
-    setRun(null)
-
     let cancelled = false
-    let timer: ReturnType<typeof setTimeout> | null = null
 
-    const clear = () => {
-      if (timer !== null) {
-        clearTimeout(timer)
-        timer = null
+    async function doPoll() {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
       }
-    }
-
-    const tick = async () => {
-      let next: T | null
       try {
-        next = await getRunRef.current(runId)
+        const next = await getRunRef.current(runId as string)
+        if (cancelled) return
+        setError(null)
+        setRun(next)
+        if (next && !isTerminalRunStatus(next.status)) {
+          setIsPolling(true)
+          timerRef.current = setTimeout(doPoll, intervalMs)
+        } else {
+          setIsPolling(false)
+        }
       } catch (err) {
         if (cancelled) return
-        setError(err instanceof Error ? err.message : 'Failed to load the run.')
+        setError(err instanceof Error ? err : new Error(String(err)))
         setIsPolling(false)
-        return
+        // Stop polling on error — a persistent failure (e.g. permission
+        // denial, network error) would otherwise retry forever.
       }
-      if (cancelled) return
-
-      if (next === null) {
-        setError('Run not found.')
-        setIsPolling(false)
-        return
-      }
-
-      setRun(next)
-      setError(null)
-
-      if (isTerminalRunStatus(next.status)) {
-        setIsPolling(false)
-        return
-      }
-      // setTimeout (not setInterval) so a slow response can never stack polls.
-      timer = setTimeout(tick, intervalMs)
     }
 
-    setError(null)
-    setIsPolling(true)
-    void tick()
+    doPollRef.current = doPoll
+    void doPoll()
 
     return () => {
       cancelled = true
-      clear()
+      if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [runId, intervalMs, refreshNonce])
+  }, [runId, intervalMs])
+
+  const refresh = React.useCallback(async () => {
+    await doPollRef.current()
+  }, [])
 
   return { run, error, isPolling, refresh }
 }

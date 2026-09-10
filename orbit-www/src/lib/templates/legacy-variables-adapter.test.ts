@@ -72,6 +72,18 @@ describe('templateVariablesToJsonSchema', () => {
     expect(defaults).toEqual({ a: '', b: false, c: 0, d: 'preset' })
   })
 
+  it('defaults a multiselect variable to an empty array, not an empty string', () => {
+    const { defaults } = templateVariablesToJsonSchema([
+      {
+        key: 'features',
+        type: 'multiselect',
+        required: false,
+        options: [{ label: 'Auth', value: 'auth' }],
+      },
+    ])
+    expect(defaults).toEqual({ features: [] })
+  })
+
   it('round-trips multiple variables into one object schema', () => {
     const vars: TemplateVariable[] = [
       { key: 'name', type: 'string', required: true },

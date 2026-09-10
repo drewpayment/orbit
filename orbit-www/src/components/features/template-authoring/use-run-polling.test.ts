@@ -1,10 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, renderHook } from '@testing-library/react'
-import { useRunPolling, type PollableRun } from './use-run-polling'
-
-function run(status: PollableRun['status']): PollableRun {
-  return { id: 'run-1', status } as PollableRun
-}
+import { describe, expect, it, vi, afterEach } from 'vitest'
+import { renderHook, waitFor, act, cleanup } from '@testing-library/react'
+import { useRunPolling, isTerminalRunStatus, RUN_POLL_INTERVAL_MS } from './use-run-polling'
+import type { ActionRun } from '@/payload-types'
 
 afterEach(() => {
   cleanup()
@@ -12,142 +9,287 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+function run(overrides?: Partial<ActionRun>): ActionRun {
+  return {
+    id: 'run-1',
+    action: 'action-1',
+    workspace: 'ws-1',
+    status: 'pending',
+    updatedAt: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    ...overrides,
+  } as ActionRun
+}
+
 describe('useRunPolling', () => {
-  beforeEach(() => {
-    vi.useFakeTimers()
-  })
-
-  /** Flush the microtask queue so awaited getRun promises settle under fake timers. */
-  async function flush() {
-    await act(async () => {
-      await Promise.resolve()
-      await Promise.resolve()
-    })
-  }
-
-  async function advance(ms: number) {
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(ms)
-    })
-  }
-
-  it('does nothing while runId is null', async () => {
-    const getRun = vi.fn()
-    const { result } = renderHook(() => useRunPolling(null, getRun))
-    await advance(10_000)
-    expect(getRun).not.toHaveBeenCalled()
-    expect(result.current.run).toBeNull()
-    expect(result.current.isPolling).toBe(false)
-  })
-
-  it('fetches immediately when given a runId', async () => {
-    const getRun = vi.fn().mockResolvedValue(run('running'))
+  it('fetches immediately on mount', async () => {
+    const getRun = vi.fn().mockResolvedValue(run())
     const { result } = renderHook(() => useRunPolling('run-1', getRun))
-    await flush()
-    expect(getRun).toHaveBeenCalledTimes(1)
+
+    await waitFor(() => expect(result.current.run?.id).toBe('run-1'))
     expect(getRun).toHaveBeenCalledWith('run-1')
-    expect(result.current.run?.status).toBe('running')
   })
 
-  it('keeps polling every 2s while the status is non-terminal', async () => {
-    const getRun = vi.fn().mockResolvedValue(run('pending'))
+  it('does nothing when runId is null', () => {
+    const getRun = vi.fn()
+    renderHook(() => useRunPolling(null, getRun))
+    expect(getRun).not.toHaveBeenCalled()
+  })
+
+  it('polls every 2s by default while status is pending/awaiting-approval/running', async () => {
+    vi.useFakeTimers()
+    const getRun = vi
+      .fn()
+      .mockResolvedValueOnce(run({ status: 'pending' }))
+      .mockResolvedValueOnce(run({ status: 'running' }))
+      .mockResolvedValueOnce(run({ status: 'succeeded' }))
+
     renderHook(() => useRunPolling('run-1', getRun))
-    await flush()
+
+    await act(async () => {
+      await Promise.resolve()
+    })
     expect(getRun).toHaveBeenCalledTimes(1)
-    await advance(2000)
+
+    await act(async () => {
+      vi.advanceTimersByTime(2000)
+      await Promise.resolve()
+    })
     expect(getRun).toHaveBeenCalledTimes(2)
-    await advance(2000)
+
+    await act(async () => {
+      vi.advanceTimersByTime(2000)
+      await Promise.resolve()
+    })
     expect(getRun).toHaveBeenCalledTimes(3)
   })
 
-  it('polls through awaiting-approval', async () => {
-    const getRun = vi.fn().mockResolvedValue(run('awaiting-approval'))
-    renderHook(() => useRunPolling('run-1', getRun))
-    await flush()
-    await advance(2000)
-    expect(getRun).toHaveBeenCalledTimes(2)
-  })
+  it('stops polling once status is terminal (succeeded)', async () => {
+    vi.useFakeTimers()
+    const getRun = vi.fn().mockResolvedValue(run({ status: 'succeeded' }))
 
-  it('stops polling once the run succeeds', async () => {
-    const getRun = vi
-      .fn()
-      .mockResolvedValueOnce(run('running'))
-      .mockResolvedValue(run('succeeded'))
-    const { result } = renderHook(() => useRunPolling('run-1', getRun))
-    await flush()
-    await advance(2000)
-    expect(getRun).toHaveBeenCalledTimes(2)
-    await advance(10_000)
-    expect(getRun).toHaveBeenCalledTimes(2)
-    expect(result.current.run?.status).toBe('succeeded')
-    expect(result.current.isPolling).toBe(false)
-  })
-
-  it.each(['failed', 'cancelled'] as const)('stops polling on %s', async (terminal) => {
-    const getRun = vi.fn().mockResolvedValue(run(terminal))
     renderHook(() => useRunPolling('run-1', getRun))
-    await flush()
-    await advance(10_000)
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(getRun).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      vi.advanceTimersByTime(10_000)
+      await Promise.resolve()
+    })
+    // No further polls scheduled after a terminal status.
     expect(getRun).toHaveBeenCalledTimes(1)
   })
 
-  it('clears its timer on unmount so no fetch happens afterwards', async () => {
-    const getRun = vi.fn().mockResolvedValue(run('running'))
+  it('stops polling on failed and on cancelled', async () => {
+    vi.useFakeTimers()
+    for (const status of ['failed', 'cancelled'] as const) {
+      const getRun = vi.fn().mockResolvedValue(run({ status }))
+      const { unmount } = renderHook(() => useRunPolling('run-1', getRun))
+      await act(async () => {
+        await Promise.resolve()
+      })
+      await act(async () => {
+        vi.advanceTimersByTime(6000)
+        await Promise.resolve()
+      })
+      expect(getRun).toHaveBeenCalledTimes(1)
+      unmount()
+    }
+  })
+
+  it('cleans up its interval on unmount', async () => {
+    vi.useFakeTimers()
+    const getRun = vi.fn().mockResolvedValue(run({ status: 'running' }))
     const { unmount } = renderHook(() => useRunPolling('run-1', getRun))
-    await flush()
+
+    await act(async () => {
+      await Promise.resolve()
+    })
     expect(getRun).toHaveBeenCalledTimes(1)
+
     unmount()
-    await advance(20_000)
+
+    await act(async () => {
+      vi.advanceTimersByTime(10_000)
+      await Promise.resolve()
+    })
+    // No calls after unmount.
     expect(getRun).toHaveBeenCalledTimes(1)
   })
 
-  it('surfaces a fetch error and stops polling', async () => {
+  it('exposes an error and stops polling when getRun rejects', async () => {
+    vi.useFakeTimers()
     const getRun = vi.fn().mockRejectedValue(new Error('boom'))
     const { result } = renderHook(() => useRunPolling('run-1', getRun))
-    await flush()
-    expect(result.current.error).toBe('boom')
-    await advance(10_000)
+
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(result.current.error).toBeInstanceOf(Error)
+    expect(result.current.error?.message).toBe('boom')
+
+    await act(async () => {
+      vi.advanceTimersByTime(6000)
+      await Promise.resolve()
+    })
     expect(getRun).toHaveBeenCalledTimes(1)
-    expect(result.current.isPolling).toBe(false)
   })
 
-  it('treats a null run (denied or deleted) as terminal', async () => {
-    const getRun = vi.fn().mockResolvedValue(null)
-    const { result } = renderHook(() => useRunPolling('run-1', getRun))
-    await flush()
-    await advance(10_000)
+  it('respects a custom intervalMs', async () => {
+    vi.useFakeTimers()
+    const getRun = vi.fn().mockResolvedValue(run({ status: 'running' }))
+    renderHook(() => useRunPolling('run-1', getRun, { intervalMs: 500 }))
+
+    await act(async () => {
+      await Promise.resolve()
+    })
     expect(getRun).toHaveBeenCalledTimes(1)
-    expect(result.current.error).toMatch(/not found/i)
+
+    await act(async () => {
+      vi.advanceTimersByTime(500)
+      await Promise.resolve()
+    })
+    expect(getRun).toHaveBeenCalledTimes(2)
   })
 
-  it('restarts polling when the runId changes', async () => {
-    const getRun = vi.fn().mockResolvedValue(run('succeeded'))
+  it('restarts polling when runId changes', async () => {
+    vi.useFakeTimers()
+    const getRun = vi.fn().mockResolvedValue(run({ status: 'running' }))
     const { rerender } = renderHook(({ id }: { id: string | null }) => useRunPolling(id, getRun), {
       initialProps: { id: 'run-1' as string | null },
     })
-    await flush()
-    expect(getRun).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(getRun).toHaveBeenCalledWith('run-1')
+
     rerender({ id: 'run-2' })
-    await flush()
-    expect(getRun).toHaveBeenCalledTimes(2)
-    expect(getRun).toHaveBeenLastCalledWith('run-2')
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(getRun).toHaveBeenCalledWith('run-2')
   })
 
-  it('drops a response that arrives after the runId changed', async () => {
-    let resolveFirst: (v: PollableRun) => void = () => {}
-    const getRun = vi
-      .fn()
-      .mockImplementationOnce(() => new Promise<PollableRun>((r) => (resolveFirst = r)))
-      .mockResolvedValue({ ...run('succeeded'), id: 'run-2' })
-    const { result, rerender } = renderHook(
-      ({ id }: { id: string | null }) => useRunPolling(id, getRun),
-      { initialProps: { id: 'run-1' as string | null } },
-    )
-    await flush()
-    rerender({ id: 'run-2' })
-    await flush()
-    act(() => resolveFirst({ ...run('failed'), id: 'run-1' }))
-    await flush()
-    expect(result.current.run?.id).toBe('run-2')
+  it('exposes RUN_POLL_INTERVAL_MS as 2000', () => {
+    expect(RUN_POLL_INTERVAL_MS).toBe(2000)
+  })
+
+  describe('isTerminalRunStatus', () => {
+    it('is true for succeeded, failed, and cancelled', () => {
+      expect(isTerminalRunStatus('succeeded')).toBe(true)
+      expect(isTerminalRunStatus('failed')).toBe(true)
+      expect(isTerminalRunStatus('cancelled')).toBe(true)
+    })
+
+    it('is false for pending, running, and awaiting-approval', () => {
+      expect(isTerminalRunStatus('pending')).toBe(false)
+      expect(isTerminalRunStatus('running')).toBe(false)
+      expect(isTerminalRunStatus('awaiting-approval')).toBe(false)
+    })
+
+    it('is false for null/undefined/unknown values', () => {
+      expect(isTerminalRunStatus(null)).toBe(false)
+      expect(isTerminalRunStatus(undefined)).toBe(false)
+      expect(isTerminalRunStatus('something-else')).toBe(false)
+    })
+  })
+
+  describe('isPolling', () => {
+    it('is false when runId is null', () => {
+      const getRun = vi.fn()
+      const { result } = renderHook(() => useRunPolling(null, getRun))
+      expect(result.current.isPolling).toBe(false)
+    })
+
+    it('is true while the run is non-terminal, false once terminal', async () => {
+      vi.useFakeTimers()
+      const getRun = vi
+        .fn()
+        .mockResolvedValueOnce(run({ status: 'pending' }))
+        .mockResolvedValueOnce(run({ status: 'succeeded' }))
+      const { result } = renderHook(() => useRunPolling('run-1', getRun))
+
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(result.current.isPolling).toBe(true)
+
+      await act(async () => {
+        vi.advanceTimersByTime(2000)
+        await Promise.resolve()
+      })
+      expect(result.current.isPolling).toBe(false)
+    })
+
+    it('is false after a getRun rejection', async () => {
+      vi.useFakeTimers()
+      const getRun = vi.fn().mockRejectedValue(new Error('boom'))
+      const { result } = renderHook(() => useRunPolling('run-1', getRun))
+
+      await act(async () => {
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(result.current.isPolling).toBe(false)
+    })
+  })
+
+  describe('refresh', () => {
+    it('immediately re-fetches without waiting for the interval', async () => {
+      vi.useFakeTimers()
+      const getRun = vi.fn().mockResolvedValue(run({ status: 'running' }))
+      const { result } = renderHook(() => useRunPolling('run-1', getRun))
+
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(getRun).toHaveBeenCalledTimes(1)
+
+      await act(async () => {
+        await result.current.refresh()
+      })
+      expect(getRun).toHaveBeenCalledTimes(2)
+    })
+
+    it('updates run/error from the manual fetch and reschedules based on the new status', async () => {
+      vi.useFakeTimers()
+      const getRun = vi
+        .fn()
+        .mockResolvedValueOnce(run({ status: 'running' }))
+        .mockResolvedValueOnce(run({ status: 'succeeded' }))
+      const { result } = renderHook(() => useRunPolling('run-1', getRun))
+
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(result.current.run?.status).toBe('running')
+
+      await act(async () => {
+        await result.current.refresh()
+      })
+      expect(result.current.run?.status).toBe('succeeded')
+      expect(result.current.isPolling).toBe(false)
+
+      // No further automatic poll after refresh lands on a terminal status.
+      await act(async () => {
+        vi.advanceTimersByTime(10_000)
+        await Promise.resolve()
+      })
+      expect(getRun).toHaveBeenCalledTimes(2)
+    })
+
+    it('is a no-op when runId is null', async () => {
+      const getRun = vi.fn()
+      const { result } = renderHook(() => useRunPolling(null, getRun))
+      await act(async () => {
+        await result.current.refresh()
+      })
+      expect(getRun).not.toHaveBeenCalled()
+    })
   })
 })

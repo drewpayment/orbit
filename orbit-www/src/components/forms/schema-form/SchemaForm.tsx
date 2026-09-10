@@ -20,7 +20,15 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Form, FormField, FormItem, FormLabel, FormDescription, FormMessage } from '@/components/ui/form'
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormDescription,
+  FormMessage,
+} from '@/components/ui/form'
 import { jsonSchemaToZod } from './schema-to-zod'
 import { evaluateVisibleIf } from './visible-if'
 import { defaultFieldRegistry, type FieldRegistry } from './field-registry'
@@ -202,15 +210,71 @@ export function SchemaForm({
   const [activePage, setActivePage] = React.useState(0)
   const pagesToRender = mode === 'wizard' ? pages : [{ title: pages[0]?.title ?? '', schema: mergedSchema, uiSchema: mergedUiSchema }]
 
+  /**
+   * Strip hidden (visibleIf=false) fields' values from the submitted
+   * payload — they are already excluded from validation (`zodForVisible`),
+   * so a stale/leftover value from before a field was hidden should not
+   * silently ship either. Mirrors the server-side validator (PR #102),
+   * which also drops `required` for hidden fields.
+   */
+  function stripHiddenFieldValues(formValues: Record<string, unknown>): Record<string, unknown> {
+    const visible = computeVisible(entries, formValues)
+    const out: Record<string, unknown> = {}
+    for (const [key, val] of Object.entries(formValues)) {
+      if (entriesByName.has(key) && !visible.has(key)) continue
+      out[key] = val
+    }
+    return out
+  }
+
   function handleSubmit(formValues: Record<string, unknown>) {
-    onSubmit?.(applySecretFlags(formValues, mergedSchema, mergedUiSchema))
+    const stripped = stripHiddenFieldValues(formValues)
+    onSubmit?.(applySecretFlags(stripped, mergedSchema, mergedUiSchema))
+  }
+
+  /** Which wizard page (index) owns a given top-level field name, if any. */
+  function pageIndexForField(fieldName: string): number {
+    return pages.findIndex((page) =>
+      fieldEntries(page.schema, page.uiSchema).some((e) => e.name === fieldName),
+    )
+  }
+
+  /**
+   * react-hook-form's `handleSubmit` onInvalid callback: when final submit
+   * validation fails, jump the wizard to the first page that owns an
+   * errored field so the message is actually visible (a page tab click can
+   * navigate straight to a later page without validating earlier ones).
+   */
+  function handleInvalid(errors: FieldErrors) {
+    if (mode !== 'wizard' || pages.length <= 1) return
+    for (const fieldName of Object.keys(errors)) {
+      const pageIndex = pageIndexForField(fieldName)
+      if (pageIndex !== -1) {
+        setActivePage(pageIndex)
+        return
+      }
+    }
+  }
+
+  /**
+   * Wizard "Next": validates only the active page's fields via
+   * `form.trigger`, and blocks advancing on error — hidden fields on that
+   * page are excluded from the resolver's schema already, so they can never
+   * block Next.
+   */
+  async function handleNext() {
+    const page = pages[activePage]
+    if (!page) return
+    const fieldNames = fieldEntries(page.schema, page.uiSchema).map((e) => e.name)
+    const valid = fieldNames.length === 0 ? true : await form.trigger(fieldNames)
+    if (valid) setActivePage((p) => p + 1)
   }
 
   const Tag = as === 'div' ? 'div' : 'form'
   const tagProps =
     as === 'div'
       ? { className: 'space-y-6' }
-      : { id, onSubmit: form.handleSubmit(handleSubmit), className: 'space-y-6' }
+      : { id, onSubmit: form.handleSubmit(handleSubmit, handleInvalid), className: 'space-y-6' }
 
   return (
     <Form {...form}>
@@ -282,21 +346,31 @@ export function SchemaForm({
                       key={entry.name}
                       control={form.control}
                       name={entry.name}
-                      render={({ field, fieldState }) => (
+                      render={({ field }) => (
                         <FormItem>
                           <FormLabel>
                             {label}
                             {required && <span className="ml-0.5 text-destructive">*</span>}
                           </FormLabel>
-                          <FieldComponent
-                            id={field.name}
-                            schema={entry.schema}
-                            uiSchema={entry.uiSchema}
-                            value={field.value}
-                            onChange={field.onChange}
-                            onBlur={field.onBlur}
-                            aria-invalid={!!fieldState.error}
-                          />
+                          {/*
+                            FormControl (a Radix Slot) injects its own
+                            useId()-scoped id/aria-describedby/aria-invalid
+                            onto FieldComponent — do NOT pass an explicit
+                            `id` here. `id={field.name}` previously meant two
+                            SchemaForm instances rendering the same field name
+                            emitted duplicate DOM ids; FormControl's id is
+                            unique per FormItem instance regardless of field
+                            name reuse.
+                          */}
+                          <FormControl>
+                            <FieldComponent
+                              schema={entry.schema}
+                              uiSchema={entry.uiSchema}
+                              value={field.value}
+                              onChange={field.onChange}
+                              onBlur={field.onBlur}
+                            />
+                          </FormControl>
                           {entry.uiSchema?.['ui:help'] && (
                             <FormDescription>{entry.uiSchema['ui:help']}</FormDescription>
                           )}
@@ -317,7 +391,7 @@ export function SchemaForm({
               </Button>
             )}
             {mode === 'wizard' && pages.length > 1 && activePage < pages.length - 1 ? (
-              <Button type="button" onClick={() => setActivePage((p) => p + 1)}>
+              <Button type="button" onClick={handleNext}>
                 Next
               </Button>
             ) : (
