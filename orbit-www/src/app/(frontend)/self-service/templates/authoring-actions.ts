@@ -431,6 +431,55 @@ function collectSecretParamKeys(definitionJson: unknown): Set<string> {
   return secretKeys
 }
 
+/**
+ * True when `value` is EXACTLY the shape SchemaForm (`ui:secret` fields,
+ * PR #103) emits: `{ value: string, secret: true }` — no other own keys.
+ */
+function isSecretWrapper(value: unknown): value is { value: string; secret: true } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const keys = Object.keys(value as Record<string, unknown>)
+  if (keys.length !== 2 || !keys.includes('value') || !keys.includes('secret')) return false
+  const v = value as { value: unknown; secret: unknown }
+  return typeof v.value === 'string' && v.secret === true
+}
+
+/**
+ * BLOCKER: unwraps SchemaForm's `{ value, secret: true }` wrapper objects to
+ * their plain string BEFORE parameter validation and persistence.
+ *
+ * Two reasons this can't wait until later:
+ *  1. The Go worker's `StartScaffolderRun` needs the real secret STRING in
+ *     its `parameters` Struct, not a `{value,secret}` object.
+ *  2. `getRun`'s value-based redaction (steps[].output/plan/outputs) only
+ *     matches STRING values pulled from `run.inputs` — a stored wrapper
+ *     object would never populate that match set, so a secret echoed back
+ *     by the worker would never get redacted.
+ *
+ * Unwraps for every key flagged `ui:secret` in the version's definition
+ * AND, defensively, any value shaped exactly like the wrapper regardless of
+ * key — but a wrapper on a key that is NOT flagged secret is rejected
+ * outright (never silently unwrapped): submitting that shape on an
+ * ordinary field is either a client bug or an attempt to smuggle an object
+ * past a `type: 'string'` check, and neither should be tolerated quietly.
+ */
+function unwrapSecretParameters(
+  version: TemplateDefinitionVersion,
+  parameters: Record<string, unknown>,
+): Record<string, unknown> {
+  const secretKeys = collectSecretParamKeys(version.definitionJson)
+  const out: Record<string, unknown> = { ...parameters }
+  for (const [key, value] of Object.entries(out)) {
+    if (!isSecretWrapper(value)) continue
+    if (!secretKeys.has(key)) {
+      throw new Error(
+        `Invalid parameters: "${key}" is not a secret field and cannot be submitted as a {value, secret} wrapper.`,
+      )
+    }
+    out[key] = value.value
+  }
+  return out
+}
+
 const SECRET_PLACEHOLDER = '••••••••'
 
 /** Redact `ui:secret`-flagged top-level parameter keys from an inputs object for display/return to a caller. */
@@ -584,6 +633,7 @@ async function createAndDispatchDryRun(
         : {}
   }
 
+  parameters = unwrapSecretParameters(version, parameters)
   validateRunParameters(version, parameters)
 
   const action = await ensureRunnerAction(payload, definition)
@@ -690,7 +740,8 @@ export async function startRun(input: StartRunInput): Promise<{ runId: string; s
     throw new Error('This template is not published.')
   }
 
-  validateRunParameters(version, input.parameters ?? {})
+  const parameters = unwrapSecretParameters(version, input.parameters ?? {})
+  validateRunParameters(version, parameters)
 
   const action = await ensureRunnerAction(payload, definition)
   const policy = action.approvalPolicy ?? 'none'
@@ -703,7 +754,7 @@ export async function startRun(input: StartRunInput): Promise<{ runId: string; s
       workspace: workspaceId ?? '',
       templateVersion: version.id,
       dryRun: false,
-      inputs: input.parameters ?? {},
+      inputs: parameters,
       status: needsApproval ? 'awaiting-approval' : 'pending',
       triggeredBy: uid,
       trigger: 'manual',

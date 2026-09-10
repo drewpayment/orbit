@@ -467,6 +467,146 @@ describe('templates/authoring-actions', () => {
       expect(definition.usageCount).toBe(1)
     })
 
+    describe('BLOCKER: unwrap SchemaForm\'s {value, secret:true} wrapper before validation/persistence', () => {
+      const SECRET_PARAM_DEFINITION_JSON = {
+        apiVersion: 'orbit/v2',
+        kind: 'Template',
+        metadata: { name: 'go-service', title: 'Go service', owner: 'platform' },
+        spec: {
+          parameters: [
+            {
+              title: 'Basics',
+              properties: {
+                name: { type: 'string' },
+                token: { type: 'string', 'ui:secret': true },
+              },
+            },
+          ],
+          steps: [],
+        },
+      }
+
+      it('startDryRun unwraps a wrapped secret to a plain string before persisting; getRun redacts it everywhere', async () => {
+        const e = makeFakePayload({
+          'template-definitions': [{ ...DRAFT_DEFINITION, currentVersion: 'ver-secret' }],
+          'template-definition-versions': [
+            {
+              id: 'ver-secret',
+              definition: 'def-1',
+              workspace: WORKSPACE_ID,
+              versionNumber: 1,
+              definitionJson: SECRET_PARAM_DEFINITION_JSON,
+            },
+          ],
+        })
+        mockPayload = e.payload
+        const { startDryRun, getRun } = await import('./authoring-actions')
+
+        const result = await startDryRun({
+          templateVersionId: 'ver-secret',
+          parameters: { name: 'svc', token: { value: 'topsecret', secret: true } },
+        })
+
+        // Persisted as a plain string, not the wrapper object — the Go
+        // worker (and ajv's `type: 'string'` check) need the real value.
+        const run = await e.payload.findByID({ collection: 'action-runs', id: result.runId })
+        expect(run.inputs).toEqual({ name: 'svc', token: 'topsecret' })
+
+        // Simulate the value echoing into steps[].output/plan/outputs (as a
+        // real ScaffolderWorkflow response would) and confirm getRun's
+        // value-based redaction now fires — it only works because the
+        // stored input is a plain string, not a wrapper object.
+        await e.payload.update({
+          collection: 'action-runs',
+          id: result.runId,
+          data: {
+            steps: [{ id: 's1', status: 'succeeded', output: { echoedToken: 'topsecret' } }],
+            outputs: { text: 'topsecret' },
+          },
+        })
+
+        const fetched = await getRun(result.runId)
+        expect((fetched!.inputs as Record<string, unknown>).token).toBe('••••••••')
+        const steps = fetched!.steps as { output?: Record<string, unknown> }[]
+        expect(steps[0].output?.echoedToken).toBe('••••••••')
+        expect((fetched!.outputs as { text?: string }).text).toBe('••••••••')
+      })
+
+      it('startRun also unwraps the wrapped secret before persisting', async () => {
+        const e = makeFakePayload({
+          'template-definitions': [PUBLISHED_DEFINITION],
+          'template-definition-versions': [
+            {
+              id: 'ver-secret-2',
+              definition: 'def-2',
+              workspace: WORKSPACE_ID,
+              versionNumber: 1,
+              definitionJson: SECRET_PARAM_DEFINITION_JSON,
+            },
+          ],
+        })
+        mockPayload = e.payload
+        const { startRun } = await import('./authoring-actions')
+
+        const result = await startRun({
+          templateVersionId: 'ver-secret-2',
+          parameters: { name: 'svc', token: { value: 'topsecret', secret: true } },
+        })
+
+        const run = await e.payload.findByID({ collection: 'action-runs', id: result.runId })
+        expect(run.inputs).toEqual({ name: 'svc', token: 'topsecret' })
+      })
+
+      it('rejects a {value, secret:true} wrapper submitted on a NON-secret key, before persisting anything', async () => {
+        const e = makeFakePayload({
+          'template-definitions': [{ ...DRAFT_DEFINITION, currentVersion: 'ver-secret' }],
+          'template-definition-versions': [
+            {
+              id: 'ver-secret',
+              definition: 'def-1',
+              workspace: WORKSPACE_ID,
+              versionNumber: 1,
+              definitionJson: SECRET_PARAM_DEFINITION_JSON,
+            },
+          ],
+        })
+        mockPayload = e.payload
+        const { startDryRun } = await import('./authoring-actions')
+
+        await expect(
+          startDryRun({
+            templateVersionId: 'ver-secret',
+            parameters: { name: { value: 'sneaky', secret: true }, token: 'plain-secret-ok' },
+          }),
+        ).rejects.toThrow(/name/i)
+        expect(e.create.mock.calls.some((c) => c[0].collection === 'action-runs')).toBe(false)
+      })
+
+      it('accepts a secret field already submitted as a plain string (no wrapper required)', async () => {
+        const e = makeFakePayload({
+          'template-definitions': [{ ...DRAFT_DEFINITION, currentVersion: 'ver-secret' }],
+          'template-definition-versions': [
+            {
+              id: 'ver-secret',
+              definition: 'def-1',
+              workspace: WORKSPACE_ID,
+              versionNumber: 1,
+              definitionJson: SECRET_PARAM_DEFINITION_JSON,
+            },
+          ],
+        })
+        mockPayload = e.payload
+        const { startDryRun } = await import('./authoring-actions')
+
+        const result = await startDryRun({
+          templateVersionId: 'ver-secret',
+          parameters: { name: 'svc', token: 'already-plain' },
+        })
+        const run = await e.payload.findByID({ collection: 'action-runs', id: result.runId })
+        expect(run.inputs).toEqual({ name: 'svc', token: 'already-plain' })
+      })
+    })
+
     describe('MAJOR 3: parameter validation against spec.parameters before persisting', () => {
       function env() {
         return makeFakePayload({
