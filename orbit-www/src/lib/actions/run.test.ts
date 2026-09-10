@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { Payload } from 'payload'
+import { ConnectError, Code } from '@connectrpc/connect'
 import { executeRun, readLogs } from './run'
 import { BUILTIN_HANDLERS } from './builtins'
 
@@ -491,6 +492,70 @@ describe('executeRun — scaffolder dispatch', () => {
     const run = await payload.findByID({ collection: 'action-runs', id: 'run-scaffolder-7' })
     expect(run.status).toBe('failed')
     expect(run.error).toMatch(/worker unreachable/)
+  })
+
+  it('treats a gRPC AlreadyExists (retried dispatch, REJECT_DUPLICATE) as success: attaches the deterministic workflowId, leaves status running', async () => {
+    mockStartScaffolderRun.mockRejectedValue(
+      new ConnectError('workflow already started', Code.AlreadyExists),
+    )
+    const { payload } = makeStatefulPayload({
+      collections: {
+        actions: [SCAFFOLDER_ACTION],
+        'template-definitions': [PUBLISHED_TEMPLATE_DEFINITION],
+        'template-definition-versions': [TEMPLATE_VERSION],
+        'action-runs': [
+          {
+            id: 'run-scaffolder-9',
+            action: 'act-scaffolder',
+            workspace: 'ws-1',
+            templateVersion: 'ver-1',
+            inputs: {},
+            status: 'pending',
+            dryRun: false,
+            logs: [],
+          },
+        ],
+      },
+    })
+
+    await executeRun(payload, 'run-scaffolder-9')
+
+    const run = await payload.findByID({ collection: 'action-runs', id: 'run-scaffolder-9' })
+    // Success path: NOT failed, workflowId is the same deterministic id the
+    // Go side (ScaffolderRunIDPrefix + RunID) would have assigned on the
+    // original dispatch.
+    expect(run.status).toBe('running')
+    expect(run.workflowId).toBe('scaffolder-run-run-scaffolder-9')
+    expect(readLogs(run).some((l) => /already started/i.test(l.message))).toBe(true)
+  })
+
+  it('other connect error codes (e.g. Internal) still fail the run, not just plain Errors', async () => {
+    mockStartScaffolderRun.mockRejectedValue(new ConnectError('worker exploded', Code.Internal))
+    const { payload } = makeStatefulPayload({
+      collections: {
+        actions: [SCAFFOLDER_ACTION],
+        'template-definitions': [PUBLISHED_TEMPLATE_DEFINITION],
+        'template-definition-versions': [TEMPLATE_VERSION],
+        'action-runs': [
+          {
+            id: 'run-scaffolder-10',
+            action: 'act-scaffolder',
+            workspace: 'ws-1',
+            templateVersion: 'ver-1',
+            inputs: {},
+            status: 'pending',
+            dryRun: false,
+            logs: [],
+          },
+        ],
+      },
+    })
+
+    await executeRun(payload, 'run-scaffolder-10')
+
+    const run = await payload.findByID({ collection: 'action-runs', id: 'run-scaffolder-10' })
+    expect(run.status).toBe('failed')
+    expect(run.error).toMatch(/worker exploded/)
   })
 
   it('DEFENSE IN DEPTH: refuses to dispatch when the run\'s recorded templateVersion belongs to a DIFFERENT definition than backend.ref', async () => {

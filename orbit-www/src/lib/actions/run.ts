@@ -4,6 +4,17 @@ import type { Action, ActionRun } from '@/payload-types'
 import { BUILTIN_HANDLERS, type BuiltinHandlerContext } from './builtins'
 import { startScaffolderRun } from '@/lib/clients/template-client'
 import type { JsonObject } from '@bufbuild/protobuf'
+import { ConnectError, Code } from '@connectrpc/connect'
+
+/**
+ * The Go repository service assigns scaffolder workflow ids as
+ * `ScaffolderRunIDPrefix + RunID` (services/repository/cmd/server/main.go,
+ * `StartScaffolderWorkflow` — `feat/scaffolder-workflow`). Duplicated here
+ * ONLY for the AlreadyExists retry path below, where the Go side's error
+ * response carries no workflowId to read back — the id is otherwise fully
+ * deterministic from the run id, so reconstructing it is safe.
+ */
+const SCAFFOLDER_RUN_ID_PREFIX = 'scaffolder-run-'
 
 /**
  * Action execution runner (IDP refocus P3).
@@ -284,20 +295,38 @@ export async function executeRun(payload: Payload, runId: string): Promise<void>
         'info',
         `Dispatching ${run.dryRun ? 'dry run' : 'run'} of "${definition.name}" v${definitionVersionId} via ScaffolderWorkflow.`,
       )
-      const result = await startScaffolderRun({
-        runId,
-        definitionVersionId,
-        workspaceId,
-        userId,
-        // The `inputs` JSON column is already plain JSON-compatible data —
-        // it's a structural JsonObject even though Payload types it loosely.
-        parameters: inputs as unknown as JsonObject,
-        dryRun: run.dryRun ?? false,
-      })
-      append('info', `Started ScaffolderWorkflow ${result.workflowId}.`)
+      let workflowId: string
+      try {
+        const result = await startScaffolderRun({
+          runId,
+          definitionVersionId,
+          workspaceId,
+          userId,
+          // The `inputs` JSON column is already plain JSON-compatible data —
+          // it's a structural JsonObject even though Payload types it loosely.
+          parameters: inputs as unknown as JsonObject,
+          dryRun: run.dryRun ?? false,
+        })
+        workflowId = result.workflowId
+        append('info', `Started ScaffolderWorkflow ${workflowId}.`)
+      } catch (dispatchErr) {
+        // The repository service starts the ScaffolderWorkflow with
+        // WorkflowIDReusePolicy REJECT_DUPLICATE +
+        // WorkflowExecutionErrorWhenAlreadyStarted=true, so a RETRIED
+        // dispatch for a run already started (e.g. this handler re-invoked
+        // after its own write-back was interrupted) comes back as
+        // Code.AlreadyExists, not a real failure — the workflow IS running,
+        // just not under THIS call. Attach to it instead of failing the run.
+        if (ConnectError.from(dispatchErr).code === Code.AlreadyExists) {
+          workflowId = SCAFFOLDER_RUN_ID_PREFIX + runId
+          append('info', 'ScaffolderWorkflow already started; attached to existing run.')
+        } else {
+          throw dispatchErr
+        }
+      }
       // The Go worker owns terminal status from here (writes back via
       // /api/internal/action-runs/[id]/status) — leave status "running".
-      await writeRun(payload, runId, logs, { workflowId: result.workflowId })
+      await writeRun(payload, runId, logs, { workflowId })
       return
     }
 
