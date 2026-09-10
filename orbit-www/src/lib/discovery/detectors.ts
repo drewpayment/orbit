@@ -31,15 +31,25 @@ export interface Detection {
  * Well-known paths/globs the Go scanner must fetch so these detectors have
  * content to work with.
  *
- * KEEP IN SYNC with the fetch list in
+ * KEEP IN SYNC with `classifyWellKnown` in
  * `temporal-workflows/internal/activities/catalog_scan_activities.go`.
  * Any pattern added here must be fetched there, or the corresponding detector
  * silently downgrades to a filename-only (medium) match or misses entirely.
+ *
+ * Monorepo-aware collection: the Go scanner fetches .orbit.yaml/.orbit.yml and
+ * build/container manifests (Dockerfile, package.json, go.mod, pom.xml,
+ * Cargo.toml, pyproject.toml, requirements.txt, docker-compose*) in sub-app
+ * directories, bounded to directory depth 3 (root = depth 0). The recursive
+ * globs below therefore reflect a depth-3 Go-side cap, not unbounded recursion.
+ * catalog-info.yaml stays root-only (fetched but not parsed). API specs and
+ * k8s/Helm yaml are matched at any depth.
  */
 export const DISCOVERY_FETCH_PATTERNS: string[] = [
-  // Tier 1 self-declaring manifests
+  // Tier 1 self-declaring manifests (root + sub-app dirs up to depth 3)
   '.orbit.yaml',
   '.orbit.yml',
+  '**/.orbit.yaml',
+  '**/.orbit.yml',
   // API specs (root + common doc/api locations)
   'openapi.yaml',
   'openapi.yml',
@@ -61,18 +71,24 @@ export const DISCOVERY_FETCH_PATTERNS: string[] = [
   'schema.graphql',
   '**/*.graphql',
   '**/*.gql',
-  // Containerization signals
+  // Containerization signals (Dockerfile + compose; sub-app dirs up to depth 3)
   'Dockerfile',
   '**/Dockerfile',
   'docker-compose.yml',
   'docker-compose.yaml',
+  '**/docker-compose.yml',
+  '**/docker-compose.yaml',
   'compose.yml',
   'compose.yaml',
+  '**/compose.yml',
+  '**/compose.yaml',
   'k8s/**',
   'kubernetes/**',
   'deploy/**',
+  'deployments/**',
   'manifests/**',
-  // Build manifests (language/framework)
+  'charts/**',
+  // Build manifests (language/framework); recursive globs capped at depth 3 Go-side
   'package.json',
   '**/package.json',
   'go.mod',
@@ -474,7 +490,28 @@ function isContainerFile(base: string): boolean {
   )
 }
 
-const K8S_DIR_RE = /(^|\/)(k8s|kubernetes|deploy|manifests)\//
+/**
+ * Directory segments that mark a Kubernetes/Helm manifest tree. Keep in sync
+ * with the Go scanner's k8s branch (classifyWellKnown in
+ * temporal-workflows/internal/activities/catalog_scan_activities.go).
+ */
+const K8S_DIR_SEGMENTS = new Set([
+  'k8s',
+  'kubernetes',
+  'deploy',
+  'deployments',
+  'manifests',
+  'charts',
+])
+
+/**
+ * Maximum non-root directory depth (segments in the scope dir) at which a
+ * heuristic service is proposed. Mirrors the Go scanner's `maxManifestDepth`
+ * (root = depth 0, "a/b/c" = depth 3 allowed, "a/b/c/d" excluded): the Go worker
+ * never fetches build-manifest content below that depth, and the documented
+ * sync-pair invariant bounds discovery at depth 3.
+ */
+export const MAX_SUBDIR_SERVICE_DEPTH = 3
 
 interface ServiceScope {
   container?: EvidenceEntry
@@ -505,10 +542,16 @@ export function detectService(bundle: EvidenceBundle): Detection[] {
         const scope = scopeOf(path)
         if (!scope.build) scope.build = { entry: { detector: 'build-manifest', file: path }, info }
       }
-    } else if (K8S_DIR_RE.test(path)) {
-      // Anchor a k8s scope at the parent of the k8s/… directory.
-      const dir = path.replace(K8S_DIR_RE, (m, p1) => (p1 ? p1 : '')).replace(/\/.*$/, '')
-      const anchor = dir === path ? dirOf(path) : dir
+    } else {
+      // A k8s/Helm manifest lives under a recognised directory segment (never
+      // the filename). Anchor the service scope at the path prefix BEFORE that
+      // marker segment: apps/svc/k8s/x.yaml → "apps/svc"; k8s/x.yaml → "" (root).
+      const segs = path.split('/')
+      const markerIdx = segs.findIndex(
+        (s, i) => i < segs.length - 1 && K8S_DIR_SEGMENTS.has(s),
+      )
+      if (markerIdx === -1) continue
+      const anchor = segs.slice(0, markerIdx).join('/')
       let scope = scopes.get(anchor)
       if (!scope) {
         scope = {}
@@ -523,6 +566,22 @@ export function detectService(bundle: EvidenceBundle): Detection[] {
     const hasContainer = !!scope.container || !!scope.k8s
     const hasBuild = !!scope.build
     if (!hasContainer && !hasBuild) continue
+
+    // Root-vs-subdir asymmetry. A single signal at the repo root is a strong
+    // service hint — that directory IS the app. But a lone build manifest in a
+    // subdirectory is usually just a workspace package in a pnpm/turbo monorepo;
+    // emitting one proposal per package would flood /discovery. So a non-root
+    // scope must show ≥2 distinct signal classes (build manifest, container
+    // file, k8s-dir evidence) before it proposes a service, and must sit within
+    // the depth cap the Go scanner fetches (MAX_SUBDIR_SERVICE_DEPTH). Root
+    // behavior is unchanged.
+    if (dir !== '') {
+      const depth = dir.split('/').length
+      if (depth > MAX_SUBDIR_SERVICE_DEPTH) continue
+      const signalClasses =
+        (scope.build ? 1 : 0) + (scope.container ? 1 : 0) + (scope.k8s ? 1 : 0)
+      if (signalClasses < 2) continue
+    }
 
     const evidence: EvidenceEntry[] = []
     if (scope.container) evidence.push(scope.container)

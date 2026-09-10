@@ -256,6 +256,15 @@ export const Apps: CollectionConfig = {
           type: 'text',
         },
         {
+          name: 'path',
+          type: 'text',
+          admin: {
+            description:
+              'Monorepo sub-app directory relative to the repo root (e.g. "apps/api"). ' +
+              'Empty/absent = repo root. Distinguishes multiple apps discovered from one repo.',
+          },
+        },
+        {
           name: 'url',
           type: 'text',
         },
