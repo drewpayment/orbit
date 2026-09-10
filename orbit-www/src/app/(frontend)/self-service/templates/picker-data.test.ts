@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   getEntitiesForWorkspace,
   getReposForConnection,
+  getSkeletonsForWorkspace,
   getTeamsForWorkspace,
 } from './picker-data'
 
@@ -11,8 +12,9 @@ function fakePayload(overrides: {
   entities?: Array<Record<string, unknown>>
   gitConnections?: Record<string, Record<string, unknown>>
   users?: Array<Record<string, unknown>>
+  skeletons?: Array<Record<string, unknown>>
 }) {
-  const { workspaceMembers = [], entities = [], gitConnections = {}, users = [] } = overrides
+  const { workspaceMembers = [], entities = [], gitConnections = {}, users = [], skeletons = [] } = overrides
 
   return {
     find: vi.fn(async ({ collection, where }: { collection: string; where?: Record<string, unknown> }) => {
@@ -43,6 +45,15 @@ function fakePayload(overrides: {
           if (workspaceClause !== undefined && e.workspace !== workspaceClause) return false
           if (kindClause !== undefined && e.kind !== kindClause) return false
           if (sourceTypeClause && !sourceTypeClause.includes(e.sourceType)) return false
+          return true
+        })
+        return { docs }
+      }
+      if (collection === 'template-skeletons') {
+        const and = (where?.and as Array<Record<string, { equals?: unknown }>>) ?? []
+        const workspaceClause = and.find((c) => c.workspace)?.workspace?.equals
+        const docs = skeletons.filter((s) => {
+          if (workspaceClause !== undefined && s.workspace !== workspaceClause) return false
           return true
         })
         return { docs }
@@ -156,5 +167,49 @@ describe('getReposForConnection', () => {
 
     const result = await getReposForConnection(payload as never, 'caller', 'ws-1', 'conn-1')
     expect(result).toEqual([])
+  })
+})
+
+describe('getSkeletonsForWorkspace', () => {
+  it('returns skeletons for the workspace when the caller is a member', async () => {
+    const payload = fakePayload({
+      workspaceMembers: [{ id: 'm1', workspace: 'ws-1', user: 'caller', role: 'member', status: 'active' }],
+      skeletons: [
+        {
+          id: 's1',
+          workspace: 'ws-1',
+          name: 'Go service',
+          slug: 'go-service',
+          totalSize: 1234,
+          files: [{ path: 'main.go' }, { path: 'go.mod' }],
+        },
+        { id: 's2', workspace: 'ws-2', name: 'Other workspace', slug: 'other', totalSize: 0, files: [] },
+      ],
+    })
+
+    const result = await getSkeletonsForWorkspace(payload as never, 'caller', 'ws-1')
+    expect(result).toEqual([{ id: 's1', name: 'Go service', slug: 'go-service', totalSize: 1234, fileCount: 2 }])
+  })
+
+  it('returns empty when the caller is not a member of the requested workspace (never leaks another workspace’s rows)', async () => {
+    const payload = fakePayload({
+      workspaceMembers: [],
+      skeletons: [
+        { id: 's1', workspace: 'ws-1', name: 'Go service', slug: 'go-service', totalSize: 1234, files: [] },
+      ],
+    })
+
+    const result = await getSkeletonsForWorkspace(payload as never, 'caller', 'ws-1')
+    expect(result).toEqual([])
+  })
+
+  it('handles a skeleton with no files array without throwing', async () => {
+    const payload = fakePayload({
+      workspaceMembers: [{ id: 'm1', workspace: 'ws-1', user: 'caller', role: 'member', status: 'active' }],
+      skeletons: [{ id: 's1', workspace: 'ws-1', name: 'Empty', slug: 'empty', totalSize: 0 }],
+    })
+
+    const result = await getSkeletonsForWorkspace(payload as never, 'caller', 'ws-1')
+    expect(result).toEqual([{ id: 's1', name: 'Empty', slug: 'empty', totalSize: 0, fileCount: 0 }])
   })
 })

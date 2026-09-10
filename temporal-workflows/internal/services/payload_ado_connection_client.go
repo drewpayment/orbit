@@ -72,15 +72,28 @@ var ErrConnectionNotConfigured = errors.New("git connection has no usable creden
 // GetConnectionToken resolves a git-connections doc id to its decrypted
 // credentials + ADO coordinates. Each call re-reads the connection (no
 // caching). The token it returns is sensitive.
-func (c *PayloadADOConnectionClient) GetConnectionToken(ctx context.Context, connectionID string) (ADOConnectionToken, error) {
+//
+// workspaceID scopes the lookup: the internal token route only returns a
+// token when the connection is authorized for that workspace (its
+// allowedWorkspaces), 404ing otherwise exactly as it would for an unknown
+// connection id. This is what stops a run in one workspace from resolving
+// another workspace's PAT — callers MUST pass the workspace the caller is
+// actually acting on, never an empty string as a way to bypass the check.
+// workspaceID is required; a caller with no workspace context at all (a
+// platform-wide read, if one is ever added) must be reviewed on its own
+// merits rather than passing "".
+func (c *PayloadADOConnectionClient) GetConnectionToken(ctx context.Context, connectionID, workspaceID string) (ADOConnectionToken, error) {
 	if c.baseURL == "" {
 		return ADOConnectionToken{}, errors.New("ado connection client: base URL not configured")
 	}
 	if connectionID == "" {
 		return ADOConnectionToken{}, errors.New("ado connection client: connectionID required")
 	}
+	if workspaceID == "" {
+		return ADOConnectionToken{}, errors.New("ado connection client: workspaceID required")
+	}
 
-	buf, err := json.Marshal(map[string]string{"connectionId": connectionID})
+	buf, err := json.Marshal(map[string]string{"connectionId": connectionID, "workspaceId": workspaceID})
 	if err != nil {
 		return ADOConnectionToken{}, fmt.Errorf("ado connection client: marshal: %w", err)
 	}

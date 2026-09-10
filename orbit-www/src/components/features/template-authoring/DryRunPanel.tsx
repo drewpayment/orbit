@@ -60,6 +60,8 @@ export interface DryRunPanelProps {
   recordSuccessfulDryRun: (versionId: string, runId: string) => Promise<{ recorded: boolean }>
   /** Fired once the succeeded run has been recorded against the version. */
   onGateSatisfied?: () => void
+  /** The template definition's own workspace — see `parameterPageToSchemaFormPage`'s doc comment. */
+  workspaceId?: string
 }
 
 type StepStatus = NonNullable<ActionRun['steps']>[number]['status']
@@ -88,6 +90,7 @@ export function DryRunPanel({
   getRun,
   recordSuccessfulDryRun,
   onGateSatisfied,
+  workspaceId,
 }: DryRunPanelProps) {
   const [runId, setRunId] = React.useState<string | null>(null)
   const [starting, setStarting] = React.useState(false)
@@ -99,7 +102,10 @@ export function DryRunPanel({
   // lives in an options object.
   const { run, error: pollError, isPolling } = useRunPolling(runId, getRun)
 
-  const schemaPages = React.useMemo(() => pages.map(parameterPageToSchemaFormPage), [pages])
+  const schemaPages = React.useMemo(
+    () => pages.map((p) => parameterPageToSchemaFormPage(p, workspaceId)),
+    [pages, workspaceId],
+  )
   // Files and every other planned kind — including the planner's `skipped`
   // and `unsupported` markers, which FileTreeDiff surfaces so a partial
   // preview never reads as a complete one.

@@ -1,5 +1,209 @@
 [
   {
+    "name": "ado:pipeline:create",
+    "family": "ado",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ado:pipeline:create input",
+      "type": "object",
+      "properties": {
+        "connection": {
+          "type": "string",
+          "minLength": 1,
+          "description": "GitConnections id of the Azure DevOps connection used to authenticate this call."
+        },
+        "project": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Azure DevOps project that will own the new pipeline."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Pipeline (build definition) name."
+        },
+        "repoId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Azure DevOps repository id (or name) the pipeline is defined in."
+        },
+        "yamlPath": {
+          "type": "string",
+          "minLength": 1,
+          "default": "azure-pipelines.yml",
+          "description": "Path (within the repository) to the pipeline YAML file. This action does not generate pipeline YAML content — the file must already exist in the repository (e.g. from an earlier fs:render/git:push step); a missing file surfaces as an Azure DevOps API error."
+        }
+      },
+      "required": [
+        "connection",
+        "project",
+        "name",
+        "repoId"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ado:pipeline:create output",
+      "type": "object",
+      "properties": {
+        "pipelineUrl": {
+          "type": "string",
+          "description": "Web URL of the created pipeline."
+        },
+        "pipelineId": {
+          "type": "string",
+          "description": "Azure DevOps pipeline (build definition) id."
+        }
+      },
+      "required": [
+        "pipelineUrl",
+        "pipelineId"
+      ],
+      "additionalProperties": false
+    },
+    "supportsPlan": true
+  },
+  {
+    "name": "ado:pr:open",
+    "family": "ado",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ado:pr:open input",
+      "type": "object",
+      "properties": {
+        "connection": {
+          "type": "string",
+          "minLength": 1,
+          "description": "GitConnections id of the Azure DevOps connection used to authenticate this call."
+        },
+        "project": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Azure DevOps project the repository belongs to."
+        },
+        "repoId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Azure DevOps repository id (or name) to open the pull request against."
+        },
+        "sourceBranch": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Branch containing the change, with or without a refs/heads/ prefix."
+        },
+        "targetBranch": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Branch the pull request merges into, with or without a refs/heads/ prefix."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Pull request title."
+        },
+        "description": {
+          "type": "string",
+          "description": "Pull request description."
+        }
+      },
+      "required": [
+        "connection",
+        "project",
+        "repoId",
+        "sourceBranch",
+        "targetBranch",
+        "title"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ado:pr:open output",
+      "type": "object",
+      "properties": {
+        "prUrl": {
+          "type": "string",
+          "description": "Web URL of the created pull request."
+        },
+        "prId": {
+          "type": "string",
+          "description": "Azure DevOps pull request id."
+        }
+      },
+      "required": [
+        "prUrl",
+        "prId"
+      ],
+      "additionalProperties": false
+    },
+    "supportsPlan": true
+  },
+  {
+    "name": "ado:repo:create",
+    "family": "ado",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ado:repo:create input",
+      "type": "object",
+      "properties": {
+        "connection": {
+          "type": "string",
+          "minLength": 1,
+          "description": "GitConnections id of the Azure DevOps connection used to authenticate this call."
+        },
+        "project": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Azure DevOps project that will own the new repository."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.-]+$",
+          "description": "Repository name."
+        }
+      },
+      "required": [
+        "connection",
+        "project",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ado:repo:create output",
+      "type": "object",
+      "properties": {
+        "repoUrl": {
+          "type": "string",
+          "description": "Web URL of the created repository."
+        },
+        "repoId": {
+          "type": "string",
+          "description": "Azure DevOps repository id (used by ado:pr:open and ado:pipeline:create)."
+        },
+        "cloneUrl": {
+          "type": "string",
+          "description": "Remote (clone) URL of the created repository."
+        },
+        "project": {
+          "type": "string",
+          "description": "Azure DevOps project the repository was created in."
+        }
+      },
+      "required": [
+        "repoUrl",
+        "repoId",
+        "cloneUrl",
+        "project"
+      ],
+      "additionalProperties": false
+    },
+    "supportsPlan": true
+  },
+  {
     "name": "agent:run",
     "family": "agent",
     "inputSchema": {

@@ -95,6 +95,8 @@ export interface TemplateEditorActions {
 export interface TemplateEditorShellProps {
   definitionId: string
   status: 'draft' | 'published' | 'deprecated'
+  /** The definition's own workspace — threaded into every Orbit picker rendered by this shell (parameters preview, steps, dry-run panel) so they can scope their lookups. */
+  workspaceId: string
   initialDefinition: TemplateDefinition
   currentVersionId: string | null
   /** Publish-gate facts for the current version, as persisted. */
@@ -131,6 +133,7 @@ function isBuilderTab(tab: EditorTab): tab is BuilderTab {
 export function TemplateEditorShell({
   definitionId,
   status,
+  workspaceId,
   initialDefinition,
   currentVersionId,
   currentVersionValidated,
@@ -360,7 +363,7 @@ export function TemplateEditorShell({
                   <ParametersBuilder pages={definition.spec.parameters} dispatch={dispatch} />
                   <div className="rounded-md border p-3">
                     <h3 className="mb-2 text-sm font-semibold">Preview</h3>
-                    <ParametersPreview pages={definition.spec.parameters} />
+                    <ParametersPreview pages={definition.spec.parameters} workspaceId={workspaceId} />
                   </div>
                 </div>
               </TabsContent>
@@ -374,7 +377,12 @@ export function TemplateEditorShell({
                     </AlertDescription>
                   </Alert>
                 ) : null}
-                <StepsBuilder definition={definition} dispatch={dispatch} registry={registry} />
+                <StepsBuilder
+                  definition={definition}
+                  dispatch={dispatch}
+                  registry={registry}
+                  workspaceId={workspaceId}
+                />
               </TabsContent>
 
               <TabsContent value="output" className="mt-4">
@@ -422,6 +430,7 @@ export function TemplateEditorShell({
                       startDryRun={actions.startDryRun}
                       getRun={actions.getRun}
                       recordSuccessfulDryRun={actions.recordSuccessfulDryRun}
+                      workspaceId={workspaceId}
                       onGateSatisfied={() => {
                         setGateDryRun(true)
                         router.refresh()

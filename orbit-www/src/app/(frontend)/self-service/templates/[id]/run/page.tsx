@@ -67,7 +67,7 @@ export default async function RunTemplatePage({ params }: PageProps) {
   const parsed = TemplateDefinitionSchema.safeParse(version.definitionJson)
   if (!parsed.success) notFound()
 
-  const pages = parsed.data.spec.parameters.map(parameterPageToSchemaFormPage)
+  const pages = parsed.data.spec.parameters.map((p) => parameterPageToSchemaFormPage(p, workspaceId))
 
   return (
     <SidebarProvider>
