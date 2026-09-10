@@ -1527,4 +1527,30 @@ describe('runScorecardEvaluation — golden-path-provenance rule integration', (
     expect(result?.passed).toBe(false)
     expect(result?.detail).toContain('kafka-topic')
   })
+
+  it('fails, fail-closed, when the template-definitions lookup throws a non-"not found" error', async () => {
+    const fp = new FakePayload()
+    setUp(fp)
+    fp.collections['catalog-entities'] = [
+      {
+        id: 'e1',
+        kind: 'service',
+        workspace: 'ws1',
+        source: { type: 'scaffolder-run', sourceTemplateDefinition: 'tmpl-1' },
+      },
+    ]
+    const originalFindByID = fp.findByID.bind(fp)
+    fp.findByID = (async (args: { collection: string; id: string }) => {
+      if (args.collection === 'template-definitions') {
+        throw new Error('connection reset')
+      }
+      return originalFindByID(args)
+    }) as typeof fp.findByID
+
+    await runScorecardEvaluation(fp as unknown as Payload, 'sc1', { captureSnapshots: false })
+
+    const result = fp.collections['scorecard-rule-results'].find((r) => r.entity === 'e1')
+    expect(result?.passed).toBe(false)
+    expect(result?.detail).toBeTruthy()
+  })
 })

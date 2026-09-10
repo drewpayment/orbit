@@ -6,6 +6,7 @@ import configPromise from '@payload-config'
 import { validateInternalApiKey } from '@/lib/auth/internal-api-auth'
 import { slugify, uniqueSlug } from '@/lib/catalog/entity-crud'
 import { ENTITY_KINDS, type EntityKind } from '@/collections/catalog/constants'
+import type { TemplateDefinition, TemplateDefinitionVersion } from '@/payload-types'
 
 /**
  * POST /api/internal/catalog-entities
@@ -79,6 +80,16 @@ function isNonEmptyString(v: unknown): v is string {
   return typeof v === 'string' && v.trim() !== ''
 }
 
+/** Normalise a relationship value (id string or populated doc) to its id, or null. */
+function relationId(v: unknown): string | null {
+  if (v == null) return null
+  if (typeof v === 'string') return v
+  if (typeof v === 'object' && 'id' in (v as Record<string, unknown>)) {
+    return String((v as { id: unknown }).id)
+  }
+  return null
+}
+
 export async function POST(request: NextRequest) {
   const authError = validateInternalApiKey(request.headers.get('X-API-Key'))
   if (authError) return authError
@@ -120,6 +131,12 @@ export async function POST(request: NextRequest) {
   const templateVersionId = isNonEmptyString(body.templateVersionId)
     ? (body.templateVersionId as string)
     : undefined
+  if (templateVersionId && !templateDefinitionId) {
+    return NextResponse.json(
+      { error: 'templateVersionId requires templateDefinitionId' },
+      { status: 400 },
+    )
+  }
 
   if (!(ENTITY_KINDS as readonly string[]).includes(kind)) {
     return NextResponse.json(
@@ -169,6 +186,54 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'workspace not found' }, { status: 422 })
       }
       throw err
+    }
+
+    if (templateDefinitionId) {
+      let definitionDoc: TemplateDefinition
+      try {
+        definitionDoc = await payload.findByID({
+          collection: 'template-definitions',
+          id: templateDefinitionId,
+          depth: 0,
+          overrideAccess: true,
+        })
+      } catch (err) {
+        if (err instanceof Error && err.message.toLowerCase().includes('not found')) {
+          return NextResponse.json({ error: 'templateDefinitionId not found' }, { status: 422 })
+        }
+        throw err
+      }
+      const definitionWorkspaceId = relationId(definitionDoc.workspace)
+      if (definitionWorkspaceId !== workspaceId) {
+        return NextResponse.json(
+          { error: 'templateDefinitionId does not belong to workspaceId' },
+          { status: 422 },
+        )
+      }
+
+      if (templateVersionId) {
+        let versionDoc: TemplateDefinitionVersion
+        try {
+          versionDoc = await payload.findByID({
+            collection: 'template-definition-versions',
+            id: templateVersionId,
+            depth: 0,
+            overrideAccess: true,
+          })
+        } catch (err) {
+          if (err instanceof Error && err.message.toLowerCase().includes('not found')) {
+            return NextResponse.json({ error: 'templateVersionId not found' }, { status: 422 })
+          }
+          throw err
+        }
+        const versionDefinitionId = relationId(versionDoc.definition)
+        if (versionDefinitionId !== templateDefinitionId) {
+          return NextResponse.json(
+            { error: 'templateVersionId does not belong to templateDefinitionId' },
+            { status: 422 },
+          )
+        }
+      }
     }
 
     const existing = await payload.find({
