@@ -35,6 +35,19 @@ export interface SchemaFormProps {
   /** Hide the built-in submit button (e.g. an embedded read-only preview). */
   hideSubmit?: boolean
   submitLabel?: string
+  /**
+   * `id` on the rendered `<form>` — lets a caller place a submit button
+   * elsewhere in the DOM (e.g. a dialog footer) via `<button form={id}>`
+   * while still hiding SchemaForm's own submit button with `hideSubmit`.
+   */
+  id?: string
+  /**
+   * Render as a `<div>` instead of a `<form>` — for embedding SchemaForm's
+   * fields inside a caller-owned `<form>` (HTML forbids nested `<form>`s).
+   * Implies no submit button/handler of its own; the caller reads live
+   * values via `onChange` and owns the actual submit. Defaults to `'form'`.
+   */
+  as?: 'form' | 'div'
 }
 
 interface FieldEntry {
@@ -132,6 +145,8 @@ export function SchemaForm({
   mode = pages.length > 1 ? 'wizard' : 'single',
   hideSubmit = false,
   submitLabel = 'Submit',
+  id,
+  as = 'form',
 }: SchemaFormProps) {
   const { schema: mergedSchema, uiSchema: mergedUiSchema } = React.useMemo(
     () => mergePages(pages),
@@ -178,12 +193,15 @@ export function SchemaForm({
     onSubmit?.(applySecretFlags(formValues, entries))
   }
 
+  const Tag = as === 'div' ? 'div' : 'form'
+  const tagProps =
+    as === 'div'
+      ? { className: 'space-y-6' }
+      : { id, onSubmit: form.handleSubmit(handleSubmit), className: 'space-y-6' }
+
   return (
     <Form {...form}>
-      <form
-        onSubmit={form.handleSubmit(handleSubmit)}
-        className="space-y-6"
-      >
+      <Tag {...tagProps}>
         {mode === 'wizard' && pages.length > 1 && (
           <div className="flex gap-2 border-b pb-2">
             {pages.map((page, i) => (
@@ -225,6 +243,7 @@ export function SchemaForm({
                           fieldRegistry={fieldRegistry}
                           hideSubmit
                           mode="single"
+                          as="div"
                         />
                       </div>
                     )
@@ -262,7 +281,7 @@ export function SchemaForm({
             </div>
           ))}
 
-        {!hideSubmit && (
+        {!hideSubmit && as === 'form' && (
           <div className="flex justify-end gap-2">
             {mode === 'wizard' && pages.length > 1 && activePage > 0 && (
               <Button type="button" variant="outline" onClick={() => setActivePage((p) => p - 1)}>
@@ -278,7 +297,7 @@ export function SchemaForm({
             )}
           </div>
         )}
-      </form>
+      </Tag>
     </Form>
   )
 }

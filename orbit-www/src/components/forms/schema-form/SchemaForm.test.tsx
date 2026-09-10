@@ -173,6 +173,22 @@ describe('SchemaForm', () => {
   })
 })
 
+describe('SchemaForm as="div"', () => {
+  it('renders no <form> and no submit button, for embedding inside a caller-owned form', () => {
+    const { container } = render(
+      <SchemaForm
+        pages={onePage({
+          schema: { type: 'object', properties: { name: { type: 'string', title: 'Name' } } },
+        })}
+        as="div"
+      />,
+    )
+    expect(container.querySelector('form')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /submit/i })).not.toBeInTheDocument()
+    expect(screen.getByText('Name')).toBeInTheDocument()
+  })
+})
+
 describe('SchemaForm within', () => {
   it('renders a submit button inside a <form>', () => {
     const { container } = render(<SchemaForm pages={onePage({ schema: { type: 'object', properties: {} } })} />)
