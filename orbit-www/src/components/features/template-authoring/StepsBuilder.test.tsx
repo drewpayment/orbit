@@ -128,4 +128,43 @@ describe('StepsBuilder', () => {
     fireEvent.click(screen.getByRole('button', { name: /configure inputs/i }))
     expect(screen.getByText(/isn't in the registry/i)).toBeInTheDocument()
   })
+
+  it('warns before removing a step that later steps depend on, instead of dispatching immediately', () => {
+    const dispatch = vi.fn()
+    const def = definition([
+      { id: 'repo', name: 'Repo', action: 'github:repo:create-from-template', input: {} },
+      { id: 'push', name: 'Push', action: 'fs:render', input: { url: '${{ steps.repo.output.repoUrl }}' } },
+    ])
+    render(<StepsBuilder definition={def} dispatch={dispatch} registry={registry} />)
+    const removeButtons = screen.getAllByRole('button', { name: /remove step/i })
+    fireEvent.click(removeButtons[0]) // remove "repo", which "push" depends on
+
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert')).toHaveTextContent(/break a reference in: push/i)
+
+    fireEvent.click(screen.getByRole('button', { name: /remove anyway/i }))
+    expect(dispatch).toHaveBeenCalledWith({ type: 'REMOVE_STEP', id: 'repo' })
+  })
+
+  it('cancelling the removal warning does not dispatch', () => {
+    const dispatch = vi.fn()
+    const def = definition([
+      { id: 'repo', name: 'Repo', action: 'github:repo:create-from-template', input: {} },
+      { id: 'push', name: 'Push', action: 'fs:render', input: { url: '${{ steps.repo.output.repoUrl }}' } },
+    ])
+    render(<StepsBuilder definition={def} dispatch={dispatch} registry={registry} />)
+    fireEvent.click(screen.getAllByRole('button', { name: /remove step/i })[0])
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('removes a step with no dependents immediately, without a warning', () => {
+    const dispatch = vi.fn()
+    const def = definition([{ id: 's1', name: 'Step 1', action: 'fs:render', input: {} }])
+    render(<StepsBuilder definition={def} dispatch={dispatch} registry={registry} />)
+    fireEvent.click(screen.getByRole('button', { name: /remove step/i }))
+    expect(dispatch).toHaveBeenCalledWith({ type: 'REMOVE_STEP', id: 's1' })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
 })

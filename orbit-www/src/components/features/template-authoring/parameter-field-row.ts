@@ -164,6 +164,22 @@ export function propertyFromRow(row: ParameterFieldRow): ParameterProperty {
 }
 
 /**
+ * True when renaming a field from `currentName` to `newName` would collide
+ * with a sibling field already on the page. A field "renamed" to its own
+ * current name is never a collision. Shared by `builder-state.ts`'s
+ * `UPDATE_FIELD` reducer (the authoritative no-op guard) and
+ * `ParametersBuilder`'s inline validation (so the UI can warn before even
+ * dispatching).
+ */
+export function isDuplicateFieldName(
+  existingNames: string[],
+  currentName: string,
+  newName: string,
+): boolean {
+  return newName !== currentName && existingNames.includes(newName)
+}
+
+/**
  * Validate a page's rows, returning the first human-readable error or `null`.
  * Names must be identifier-safe and unique within the page.
  */

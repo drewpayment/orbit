@@ -13,7 +13,12 @@
  * shape and `SchemaForm`'s `{ schema, uiSchema }` props.
  *
  * All actions return new arrays/objects — the reducer never mutates `state`
- * or any nested array/object in place.
+ * or any nested array/object in place. `UPDATE_FIELD` is the one action that
+ * can be a true no-op: renaming a field to a name already used by a sibling
+ * on the same page returns the exact same `state` reference (not a shallow
+ * copy) so React's `useReducer` bails out of re-rendering — see
+ * `isDuplicateFieldName` and `ParametersBuilder`'s inline collision warning,
+ * which mirrors this same check so it can warn before even dispatching.
  */
 import YAML from 'yaml'
 import {
@@ -25,6 +30,7 @@ import {
   type MetadataSchema,
 } from '@/lib/scaffolder/schema'
 import type { z } from 'zod'
+import { isDuplicateFieldName } from './parameter-field-row'
 
 export type TemplateMetadata = z.infer<typeof MetadataSchema>
 
@@ -162,18 +168,28 @@ export function templateBuilderReducer(
     }
 
     case 'UPDATE_FIELD': {
-      const pages = updatePage(state.spec.parameters, action.pageIndex, (page) => {
-        if (!(action.name in page.properties)) return page
-        const newName = action.renameTo ?? action.name
+      const page = state.spec.parameters[action.pageIndex]
+      if (!page || !(action.name in page.properties)) return state
+
+      const newName = action.renameTo ?? action.name
+      if (isDuplicateFieldName(Object.keys(page.properties), action.name, newName)) {
+        // Renaming to a name a sibling field already uses would silently
+        // drop that sibling. Return the SAME state reference (not a shallow
+        // copy) so `useReducer` bails out of re-rendering entirely — this is
+        // a true no-op, not just an unchanged-looking new object.
+        return state
+      }
+
+      const pages = updatePage(state.spec.parameters, action.pageIndex, (p) => {
         const properties: Record<string, ParameterProperty> = {}
-        for (const [key, value] of Object.entries(page.properties)) {
+        for (const [key, value] of Object.entries(p.properties)) {
           if (key === action.name) {
             properties[newName] = action.property
           } else {
             properties[key] = value
           }
         }
-        let required = page.required
+        let required = p.required
         if (required) {
           required = required.map((n) => (n === action.name ? newName : n))
           if (action.required === false) required = required.filter((n) => n !== newName)
@@ -181,7 +197,7 @@ export function templateBuilderReducer(
         if (action.required === true) {
           required = [...(required ?? []).filter((n) => n !== newName), newName]
         }
-        return { ...page, properties, required }
+        return { ...p, properties, required }
       })
       return { ...state, spec: { ...state.spec, parameters: pages } }
     }

@@ -17,7 +17,7 @@ import type { TemplateDefinition, Step } from '@/lib/scaffolder/schema'
 import type { ActionDescriptor } from '@/lib/scaffolder/validate'
 import type { BuilderAction } from './builder-state'
 import { getExpressionCandidates, type ExpressionCandidate } from './expression-autocomplete'
-import { generateStepId, groupRegistryByFamily } from './step-builder-logic'
+import { findStepReferences, generateStepId, groupRegistryByFamily, type StepReference } from './step-builder-logic'
 import { stepInputSchemaToSchemaFormPage } from './schema-ui-split'
 import { ExpressionInput } from './ExpressionInput'
 import { SchemaForm } from '@/components/forms/schema-form/SchemaForm'
@@ -84,6 +84,7 @@ export function StepsBuilder({ definition, dispatch, registry }: StepsBuilderPro
           stepCount={steps.length}
           descriptor={registryById.get(step.action)}
           candidates={getExpressionCandidates(definition, index, registry)}
+          dependents={findStepReferences(definition, step.id)}
           dispatch={dispatch}
         />
       ))}
@@ -144,6 +145,7 @@ function StepRow({
   stepCount,
   descriptor,
   candidates,
+  dependents,
   dispatch,
 }: {
   step: Step
@@ -151,9 +153,11 @@ function StepRow({
   stepCount: number
   descriptor: ActionDescriptor | undefined
   candidates: ExpressionCandidate[]
+  dependents: StepReference[]
   dispatch: React.Dispatch<BuilderAction>
 }) {
   const [expanded, setExpanded] = React.useState(false)
+  const [confirmingRemoval, setConfirmingRemoval] = React.useState(false)
   const fieldRegistry = React.useMemo(() => buildExpressionAwareRegistry(candidates), [candidates])
   const inputPage = React.useMemo(
     () => (descriptor ? stepInputSchemaToSchemaFormPage('Inputs', descriptor.inputSchema) : undefined),
@@ -162,6 +166,18 @@ function StepRow({
 
   function patch(fields: Partial<Step>) {
     dispatch({ type: 'UPDATE_STEP', id: step.id, patch: fields })
+  }
+
+  function removeStep() {
+    dispatch({ type: 'REMOVE_STEP', id: step.id })
+  }
+
+  function handleRemoveClick() {
+    if (dependents.length > 0) {
+      setConfirmingRemoval(true)
+    } else {
+      removeStep()
+    }
   }
 
   return (
@@ -201,18 +217,28 @@ function StepRow({
           >
             <ChevronDown className="h-4 w-4" />
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="Remove step"
-            onClick={() => dispatch({ type: 'REMOVE_STEP', id: step.id })}
-          >
+          <Button type="button" variant="ghost" size="icon" aria-label="Remove step" onClick={handleRemoveClick}>
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
+        {confirmingRemoval && (
+          <div role="alert" className="space-y-2 rounded-md border border-destructive/50 bg-destructive/10 p-3">
+            <p className="text-sm text-destructive">
+              Removing this step will break {dependents.length === 1 ? 'a reference' : 'references'} in:{' '}
+              {dependents.map((d) => d.sourceLabel).join(', ')}.
+            </p>
+            <div className="flex gap-2">
+              <Button type="button" variant="destructive" size="sm" onClick={removeStep}>
+                Remove anyway
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmingRemoval(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
         <div>
           <Label htmlFor={`${step.id}-if`}>Run if (optional expression)</Label>
           <ExpressionInput
