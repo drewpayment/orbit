@@ -3,6 +3,7 @@ package workflows
 import (
 	"time"
 
+	"go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
@@ -25,9 +26,16 @@ type TemplateInstantiationInput struct {
 	InstallationID   string            `json:"installationId"`   // GitHub App installation ID for authentication
 }
 
-// TemplateInstantiationResult contains the workflow result
+// TemplateInstantiationResult contains the workflow result.
+//
+// Status is one of:
+//   - "completed": instantiation finished successfully.
+//   - "failed": a non-cancellation error occurred; Error holds details.
+//   - "cancelled": the workflow was canceled (e.g. via the CancelInstantiation
+//     RPC); Error holds a fixed explanatory message. template_server.go's
+//     parseWorkflowStatus maps this to WORKFLOW_STATUS_CANCELLED.
 type TemplateInstantiationResult struct {
-	Status   string // "completed", "failed"
+	Status   string // "completed", "failed", "cancelled"
 	RepoURL  string // URL of the created repository
 	RepoName string // Name of the created repository
 	Error    string // Error message if failed
@@ -106,6 +114,32 @@ const (
 	ActivityFinalizeInstantiation      = "FinalizeInstantiation"
 )
 
+// cancelledResult returns the fixed "cancelled" result used whenever the
+// workflow observes a cancellation with nothing to clean up.
+func cancelledResult() (*TemplateInstantiationResult, error) {
+	return &TemplateInstantiationResult{Status: "cancelled", Error: "instantiation cancelled"}, nil
+}
+
+// handleCancellation performs best-effort cleanup of the work directory on a
+// disconnected context (the workflow's own ctx is already canceled at this
+// point, so activities scheduled on it would never run) and returns a clean
+// "cancelled" result. workDir may be empty (cancellation before a clone ever
+// produced one) — CleanupWorkDir treats an empty/missing path as a no-op.
+func handleCancellation(ctx workflow.Context, logger log.Logger, activityOptions workflow.ActivityOptions, workDir string) (*TemplateInstantiationResult, error) {
+	cleanupCtx, cancel := workflow.NewDisconnectedContext(ctx)
+	defer cancel()
+	cleanupCtx = workflow.WithActivityOptions(cleanupCtx, activityOptions)
+
+	if cleanupErr := workflow.ExecuteActivity(cleanupCtx, ActivityCleanupWorkDir, workDir).Get(cleanupCtx, nil); cleanupErr != nil {
+		logger.Warn("Best-effort work directory cleanup failed after cancellation", "error", cleanupErr, "workDir", workDir)
+	}
+
+	return &TemplateInstantiationResult{
+		Status: "cancelled",
+		Error:  "instantiation cancelled",
+	}, nil
+}
+
 // TemplateInstantiationWorkflow orchestrates repository creation from templates
 func TemplateInstantiationWorkflow(ctx workflow.Context, input TemplateInstantiationInput) (*TemplateInstantiationResult, error) {
 	logger := workflow.GetLogger(ctx)
@@ -150,6 +184,10 @@ func TemplateInstantiationWorkflow(ctx workflow.Context, input TemplateInstantia
 
 	err = workflow.ExecuteActivity(ctx, ActivityValidateInstantiationInput, input).Get(ctx, nil)
 	if err != nil {
+		if temporal.IsCanceledError(err) {
+			logger.Info("Template instantiation cancelled during input validation")
+			return cancelledResult()
+		}
 		logger.Error("Input validation failed", "error", err)
 		return &TemplateInstantiationResult{
 			Status: "failed",
@@ -168,6 +206,10 @@ func TemplateInstantiationWorkflow(ctx workflow.Context, input TemplateInstantia
 
 		err = workflow.ExecuteActivity(ctx, ActivityCreateRepoFromTemplate, input).Get(ctx, &repoResult)
 		if err != nil {
+			if temporal.IsCanceledError(err) {
+				logger.Info("Template instantiation cancelled while creating repo from template")
+				return cancelledResult()
+			}
 			logger.Error("Failed to create repo from template", "error", err)
 			return &TemplateInstantiationResult{
 				Status: "failed",
@@ -185,6 +227,10 @@ func TemplateInstantiationWorkflow(ctx workflow.Context, input TemplateInstantia
 		// Step 2: Create empty repository
 		err = workflow.ExecuteActivity(ctx, ActivityCreateEmptyRepo, input).Get(ctx, &repoResult)
 		if err != nil {
+			if temporal.IsCanceledError(err) {
+				logger.Info("Template instantiation cancelled while creating empty repository")
+				return handleCancellation(ctx, logger, activityOptions, "")
+			}
 			logger.Error("Failed to create empty repo", "error", err)
 			return &TemplateInstantiationResult{
 				Status: "failed",
@@ -200,6 +246,10 @@ func TemplateInstantiationWorkflow(ctx workflow.Context, input TemplateInstantia
 		var workDir string
 		err = workflow.ExecuteActivity(ctx, ActivityCloneTemplateRepo, input).Get(ctx, &workDir)
 		if err != nil {
+			if temporal.IsCanceledError(err) {
+				logger.Info("Template instantiation cancelled while cloning template repository")
+				return handleCancellation(ctx, logger, activityOptions, workDir)
+			}
 			logger.Error("Failed to clone template", "error", err)
 			return &TemplateInstantiationResult{
 				Status: "failed",
@@ -219,6 +269,10 @@ func TemplateInstantiationWorkflow(ctx workflow.Context, input TemplateInstantia
 		var applyResult ApplyTemplateVariablesResult
 		err = workflow.ExecuteActivity(ctx, ActivityApplyTemplateVariables, applyInput).Get(ctx, &applyResult)
 		if err != nil {
+			if temporal.IsCanceledError(err) {
+				logger.Info("Template instantiation cancelled while applying template variables")
+				return handleCancellation(ctx, logger, activityOptions, workDir)
+			}
 			logger.Error("Failed to apply variables", "error", err)
 			// Clean up work directory
 			_ = workflow.ExecuteActivity(ctx, ActivityCleanupWorkDir, workDir).Get(ctx, nil)
@@ -243,6 +297,10 @@ func TemplateInstantiationWorkflow(ctx workflow.Context, input TemplateInstantia
 		}
 		err = workflow.ExecuteActivity(ctx, ActivityPushToNewRepo, pushInput).Get(ctx, nil)
 		if err != nil {
+			if temporal.IsCanceledError(err) {
+				logger.Info("Template instantiation cancelled while pushing to new repository")
+				return handleCancellation(ctx, logger, activityOptions, workDir)
+			}
 			logger.Error("Failed to push to repo", "error", err)
 			// Clean up work directory
 			_ = workflow.ExecuteActivity(ctx, ActivityCleanupWorkDir, workDir).Get(ctx, nil)
@@ -269,6 +327,12 @@ func TemplateInstantiationWorkflow(ctx workflow.Context, input TemplateInstantia
 	}
 	err = workflow.ExecuteActivity(ctx, ActivityFinalizeInstantiation, finalizeInput).Get(ctx, nil)
 	if err != nil {
+		if temporal.IsCanceledError(err) {
+			// The work directory (if any) was already cleaned up above before
+			// this step; nothing left to clean up here.
+			logger.Info("Template instantiation cancelled while finalizing")
+			return cancelledResult()
+		}
 		logger.Error("Failed to finalize instantiation", "error", err)
 		return &TemplateInstantiationResult{
 			Status: "failed",
