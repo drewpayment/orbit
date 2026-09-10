@@ -1,11 +1,11 @@
 ---
 title: Repository Templates
-description: Create services from org-approved templates with automated CI/CD and K8s manifests.
+description: Create services from org-approved templates with variable substitution and catalog lineage.
 ---
 
 # Repository Templates
 
-Orbit's template system lets platform teams publish approved service blueprints that developers can instantiate with a few clicks. Every new service starts with the right structure, CI/CD, observability, and documentation.
+Orbit's template system lets platform teams publish approved service blueprints that developers can instantiate with a few clicks. Every new service starts with the structure, CI/CD configuration, and documentation the template ships with.
 
 ![Templates Catalog](/screenshots/templates.png)
 
@@ -15,11 +15,13 @@ Orbit's template system lets platform teams publish approved service blueprints 
 2. Orbit indexes the template, extracting language, category, and complexity metadata
 3. **Developers** browse the Template Catalog and select a template
 4. Orbit uses a **Temporal workflow** to:
+   - Create the new repository in the team's GitHub org
    - Clone the template repository
-   - Apply variable substitutions (service name, team, namespace)
-   - Initialize the new repo in the team's GitHub org
-   - Set up branch protection, CI/CD, and integrations
-5. The new service is tracked as an **Application** with lineage back to the template
+   - Apply variable substitutions to file contents and file/directory names
+   - Push the rendered files to the new repository
+5. The new service is registered as a **catalog entity** with `source.type: template`, giving it lineage back to the originating template
+
+Orbit does not configure branch protection, CI/CD, or third-party integrations during instantiation. Anything the template ships with (for example a `.github/workflows` directory) is copied and rendered as-is.
 
 ## Template Metadata
 
@@ -43,9 +45,17 @@ Orbit clones the repository and extracts metadata. Templates can include variabl
 
 When instantiating a template, Orbit replaces placeholders in:
 
-- File contents
+- File contents (text files only; binary files are copied unchanged)
 - File and directory names
-- CI/CD configuration
+
+Files that contain template syntax Orbit should leave alone (for example Helm charts) can be excluded with a `rawFiles` list of glob patterns in `orbit-template.yaml`:
+
+```yaml
+rawFiles:
+  - charts/*.yaml
+```
+
+Files that fail to render (for example an unresolved `{{ .Values.x }}` outside a `rawFiles` match) are left unchanged and reported as skipped in the instantiation log.
 
 Common variables include:
 
