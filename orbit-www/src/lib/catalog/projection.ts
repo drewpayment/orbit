@@ -68,8 +68,10 @@ interface EntityData {
  * fields the projection owns (name, slug, kind, workspace, health) are always
  * written; curation fields (description, lifecycle, links, metadata) are
  * SET-IF-ABSENT — written only when the existing row has no human-entered value
- * — so re-projecting a source never clobbers manual edits. `source`, `tier` and
- * `owner` are never written by the projection. Pure + unit-tested.
+ * — so re-projecting a source never clobbers manual edits. `source`, `tier`,
+ * `owner`, `subtype` and `runtime` are never written by the projection (the
+ * latter two are pure human curation), so they are always preserved on re-sync.
+ * Pure + unit-tested.
  */
 export function mergeProjectionUpdate(
   existing: {
@@ -77,6 +79,10 @@ export function mergeProjectionUpdate(
     lifecycle?: string | null
     links?: unknown[] | null
     metadata?: unknown
+    // Present on the row but never touched here — projection owns identity, not
+    // these curation refinements. Typed loosely so callers can pass the raw doc.
+    subtype?: unknown
+    runtime?: unknown
   },
   data: EntityData,
 ): Record<string, unknown> {

@@ -11,8 +11,10 @@ import {
   GitBranch,
   Link2,
   Pencil,
+  Server,
   Users,
 } from 'lucide-react'
+import { RUNTIME_PLATFORM_OPTIONS } from '@/collections/catalog/constants'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -59,6 +61,11 @@ const linkTypeIcon: Record<string, typeof BookText> = {
   other: Link2,
 }
 
+/** Human label for a runtime platform value ("home-server" → "Home server"). */
+function runtimePlatformLabel(platform: string): string {
+  return RUNTIME_PLATFORM_OPTIONS.find((o) => o.value === platform)?.label ?? platform
+}
+
 function MetaRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4 py-2 text-sm">
@@ -76,6 +83,11 @@ export function EntityDetail({ entity, relations, docs, canManage }: EntityDetai
   const health = entity.health ?? 'unknown'
   const owner = entity.owner && typeof entity.owner === 'object' ? entity.owner : null
   const links = entity.links ?? []
+  const runtime = entity.runtime ?? null
+  const hasRuntime = !!(
+    runtime &&
+    (runtime.url?.trim() || runtime.platform || runtime.notes?.trim())
+  )
 
   // Overall entity score (Entity Scores & Golden Paths) — fetched once here
   // so it can be surfaced prominently in the header, and handed down to the
@@ -133,6 +145,9 @@ export function EntityDetail({ entity, relations, docs, canManage }: EntityDetai
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline">{meta.label}</Badge>
+            {entity.subtype && (
+              <span className="text-sm text-muted-foreground">{entity.subtype}</span>
+            )}
             {lifecycle && (
               <Badge variant={lifecycleVariant[lifecycle] ?? 'secondary'} className="capitalize">
                 {lifecycle}
@@ -242,6 +257,43 @@ export function EntityDetail({ entity, relations, docs, canManage }: EntityDetai
               </CardContent>
             </Card>
           </div>
+
+          {hasRuntime && runtime && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <Server className="h-4 w-4 text-muted-foreground" />
+                  Runtime
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="divide-y">
+                {runtime.url?.trim() && (
+                  <MetaRow label="URL">
+                    <a
+                      href={runtime.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-primary hover:underline"
+                    >
+                      <span className="truncate">{runtime.url}</span>
+                      <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                    </a>
+                  </MetaRow>
+                )}
+                {runtime.platform && (
+                  <MetaRow label="Platform">
+                    <span>{runtimePlatformLabel(runtime.platform)}</span>
+                  </MetaRow>
+                )}
+                {runtime.notes && (
+                  <div className="py-2 text-sm">
+                    <p className="mb-1 text-muted-foreground">Notes</p>
+                    <p className="whitespace-pre-wrap">{runtime.notes}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           <div className="space-y-2">
             <h2 className="text-sm font-medium text-muted-foreground">Neighbourhood</h2>

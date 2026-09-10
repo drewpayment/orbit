@@ -1,5 +1,6 @@
 import type { CatalogEntity } from '@/payload-types'
 import type { EntityKind } from '@/collections/catalog/constants'
+import { RUNTIME_PLATFORM_OPTIONS } from '@/collections/catalog/constants'
 
 /**
  * Pure, React-free helpers for the catalog EntityForm (WP2). Kept out of the
@@ -37,6 +38,22 @@ export const LINK_TYPE_OPTIONS: { value: EntityLinkType; label: string }[] = [
   { value: 'repository', label: 'Repository' },
   { value: 'other', label: 'Other' },
 ]
+
+// Re-export the runtime-platform vocabulary from the framework-light constants
+// so the form imports one thing from here (mirrors LIFECYCLE/TIER co-location).
+export { RUNTIME_PLATFORM_OPTIONS }
+
+/** Per-kind subtype placeholder hints; falls back to a generic suggestion. */
+const SUBTYPE_PLACEHOLDERS: Partial<Record<EntityKind, string>> = {
+  datastore: 'postgresql, redis, s3…',
+  resource: 'iot-device, bucket, queue…',
+  service: 'website, worker, cron…',
+}
+
+/** Example subtype text for a kind (drives the form input placeholder). */
+export function subtypePlaceholder(kind: EntityKind): string {
+  return SUBTYPE_PLACEHOLDERS[kind] ?? 'A short refinement of the kind'
+}
 
 /**
  * Sentinel `<Select>` value for the "Global (no workspace)" option. A select

@@ -3,6 +3,7 @@ import {
   LIFECYCLE_OPTIONS,
   TIER_OPTIONS,
   LINK_TYPE_OPTIONS,
+  RUNTIME_PLATFORM_OPTIONS,
   GLOBAL_WORKSPACE_VALUE,
   newLinkRow,
   linksToRows,
@@ -12,6 +13,7 @@ import {
   rowsToLinks,
   isSourceLocked,
   sourceProvenanceLabel,
+  subtypePlaceholder,
   buildWorkspaceOptions,
   workspaceSelectionToId,
   idToWorkspaceSelection,
@@ -39,6 +41,35 @@ describe('option lists', () => {
       'repository',
       'other',
     ])
+  })
+
+  it('exposes the six runtime platforms with human labels', () => {
+    expect(RUNTIME_PLATFORM_OPTIONS.map((o) => o.value)).toEqual([
+      'kubernetes',
+      'vps',
+      'home-server',
+      'paas',
+      'serverless',
+      'other',
+    ])
+    expect(RUNTIME_PLATFORM_OPTIONS.find((o) => o.value === 'home-server')?.label).toBe(
+      'Home server',
+    )
+    expect(RUNTIME_PLATFORM_OPTIONS.every((o) => o.label.length > 0)).toBe(true)
+  })
+})
+
+describe('subtypePlaceholder', () => {
+  it('suggests per-kind examples for the kinds with curated hints', () => {
+    expect(subtypePlaceholder('datastore')).toMatch(/postgresql/i)
+    expect(subtypePlaceholder('resource')).toMatch(/iot-device/i)
+    expect(subtypePlaceholder('service')).toMatch(/website/i)
+  })
+
+  it('falls back to a generic hint for other kinds', () => {
+    const generic = subtypePlaceholder('team')
+    expect(generic.length).toBeGreaterThan(0)
+    expect(generic).not.toMatch(/postgresql/i)
   })
 })
 

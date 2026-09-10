@@ -3556,6 +3556,10 @@ export interface CatalogEntity {
   description?: string | null;
   kind: 'service' | 'api' | 'resource' | 'datastore' | 'kafka-topic' | 'domain' | 'system' | 'team' | 'environment';
   /**
+   * Free-form refinement of kind, e.g. postgresql (datastore), iot-device (resource), website (service).
+   */
+  subtype?: string | null;
+  /**
    * Security enclave the entity belongs to (absent = global).
    */
   workspace?: (string | null) | Workspace;
@@ -3579,6 +3583,23 @@ export interface CatalogEntity {
         id?: string | null;
       }[]
     | null;
+  /**
+   * Where this entity runs and how to reach it. Topology lives in runs-in relations; this is the human-facing pointer.
+   */
+  runtime?: {
+    /**
+     * Deployed URL — where to reach this entity.
+     */
+    url?: string | null;
+    /**
+     * Hosting substrate (kubernetes, vps, home-server, …).
+     */
+    platform?: ('kubernetes' | 'vps' | 'home-server' | 'paas' | 'serverless' | 'other') | null;
+    /**
+     * Free-form operational notes (access, quirks).
+     */
+    notes?: string | null;
+  };
   /**
    * Provenance back to the backing collection this row projects from.
    */
@@ -5948,6 +5969,7 @@ export interface CatalogEntitiesSelect<T extends boolean = true> {
   slug?: T;
   description?: T;
   kind?: T;
+  subtype?: T;
   workspace?: T;
   owner?: T;
   lifecycle?: T;
@@ -5959,6 +5981,13 @@ export interface CatalogEntitiesSelect<T extends boolean = true> {
         url?: T;
         type?: T;
         id?: T;
+      };
+  runtime?:
+    | T
+    | {
+        url?: T;
+        platform?: T;
+        notes?: T;
       };
   source?:
     | T

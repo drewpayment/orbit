@@ -3,11 +3,14 @@ import {
   slugify,
   uniqueSlug,
   validateLinks,
+  validateSubtype,
+  validateRuntime,
   validateCreateInput,
   validateUpdatePatch,
   validateRelationInput,
   PROJECTION_LOCKED_FIELDS,
   CURATION_FIELDS,
+  SUBTYPE_MAX_LENGTH,
   type CreateEntityInput,
 } from './entity-crud'
 
@@ -60,6 +63,52 @@ describe('field-ownership constants', () => {
     )
     expect(overlap).toEqual([])
   })
+
+  it('treats subtype and runtime as curation fields (editable on projected entities)', () => {
+    expect(CURATION_FIELDS).toContain('subtype')
+    expect(CURATION_FIELDS).toContain('runtime')
+  })
+})
+
+describe('validateSubtype', () => {
+  it('passes for absent / empty subtype', () => {
+    expect(validateSubtype(undefined)).toBeNull()
+    expect(validateSubtype(null)).toBeNull()
+    expect(validateSubtype('')).toBeNull()
+  })
+
+  it('passes for a free-text value within the length cap', () => {
+    expect(validateSubtype('postgresql')).toBeNull()
+    expect(validateSubtype('iot-device')).toBeNull()
+    expect(validateSubtype('x'.repeat(SUBTYPE_MAX_LENGTH))).toBeNull()
+  })
+
+  it('rejects an over-length subtype (trimmed)', () => {
+    expect(validateSubtype('x'.repeat(SUBTYPE_MAX_LENGTH + 1))).toMatch(/subtype/i)
+  })
+})
+
+describe('validateRuntime', () => {
+  it('passes for absent runtime or an empty group', () => {
+    expect(validateRuntime(undefined)).toBeNull()
+    expect(validateRuntime(null)).toBeNull()
+    expect(validateRuntime({})).toBeNull()
+  })
+
+  it('passes for a valid url + platform', () => {
+    expect(validateRuntime({ url: 'https://app.example.com', platform: 'kubernetes' })).toBeNull()
+    expect(validateRuntime({ platform: 'home-server', notes: 'rack in the closet' })).toBeNull()
+  })
+
+  it('rejects a non-http(s) runtime url', () => {
+    expect(validateRuntime({ url: 'ftp://x.dev' })).toMatch(/http/i)
+  })
+
+  it('rejects an unknown platform', () => {
+    expect(
+      validateRuntime({ platform: 'mainframe' as never }),
+    ).toMatch(/platform/i)
+  })
 })
 
 describe('validateLinks', () => {
@@ -107,6 +156,33 @@ describe('validateCreateInput', () => {
   it('surfaces link errors', () => {
     expect(validateCreateInput({ ...base, links: [{ label: 'x', url: 'nope' }] })).toMatch(/http/i)
   })
+
+  it('passes for a valid create carrying subtype + runtime', () => {
+    expect(
+      validateCreateInput({
+        ...base,
+        kind: 'datastore',
+        subtype: 'postgresql',
+        runtime: { url: 'https://db.internal:5432', platform: 'home-server', notes: 'primary' },
+      }),
+    ).toBeNull()
+  })
+
+  it('surfaces an over-length subtype', () => {
+    expect(
+      validateCreateInput({ ...base, subtype: 'x'.repeat(SUBTYPE_MAX_LENGTH + 1) }),
+    ).toMatch(/subtype/i)
+  })
+
+  it('surfaces an invalid runtime url', () => {
+    expect(validateCreateInput({ ...base, runtime: { url: 'not-a-url' } })).toMatch(/http/i)
+  })
+
+  it('surfaces an invalid runtime platform', () => {
+    expect(
+      validateCreateInput({ ...base, runtime: { platform: 'mainframe' as never } }),
+    ).toMatch(/platform/i)
+  })
 })
 
 describe('validateUpdatePatch', () => {
@@ -125,6 +201,22 @@ describe('validateUpdatePatch', () => {
     expect(
       validateUpdatePatch('apps', { description: 'human note', links: [], tier: 'tier-1' }),
     ).toBeNull()
+  })
+
+  it('allows subtype + runtime curation on a projected (apps) entity', () => {
+    expect(
+      validateUpdatePatch('apps', {
+        subtype: 'website',
+        runtime: { url: 'https://acme.dev', platform: 'paas' },
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects invalid subtype / runtime on any entity', () => {
+    expect(
+      validateUpdatePatch('manual', { subtype: 'x'.repeat(SUBTYPE_MAX_LENGTH + 1) }),
+    ).toMatch(/subtype/i)
+    expect(validateUpdatePatch('manual', { runtime: { url: 'nope' } })).toMatch(/http/i)
   })
 
   it('rejects an empty name on a manual entity', () => {
