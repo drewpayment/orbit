@@ -234,8 +234,10 @@ func main() {
 	tokenService := services.NewPayloadTokenService(orbitAPIURL, orbitInternalAPIKey)
 
 	// Create and register template activities
+	templateClient := services.NewPayloadTemplateClient(orbitAPIURL, orbitInternalAPIKey, logger)
 	templateActivities := activities.NewTemplateActivities(
 		tokenService,
+		templateClient,
 		templateWorkDir,
 		logger,
 	)
