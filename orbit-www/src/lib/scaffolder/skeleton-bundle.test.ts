@@ -26,4 +26,12 @@ describe('skeleton-bundle (pure, client-safe)', () => {
     expect(MAX_SKELETON_FILES).toBe(50)
     expect(MAX_SKELETON_TOTAL_BYTES).toBe(1_000_000)
   })
+
+  it('accepts a file with empty content as valid, with size 0', () => {
+    const result = validateSkeletonBundle([{ path: '.gitkeep', content: '' }])
+    expect(result.ok).toBe(true)
+    expect(result.errors).toEqual([])
+    expect(result.files).toEqual([{ path: '.gitkeep', content: '', size: 0, isBinary: false }])
+    expect(result.totalSize).toBe(0)
+  })
 })

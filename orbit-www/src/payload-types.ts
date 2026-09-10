@@ -890,6 +890,14 @@ export interface TemplateDefinition {
     | null;
   usageCount?: number | null;
   lastDryRunAt?: string | null;
+  /**
+   * Drift status from the last scheduled re-dry-run sweep (P4.G). Never set by a manual "Preview" dry run.
+   */
+  lastDryRunStatus?: ('unknown' | 'ok' | 'drifted' | 'failed') | null;
+  /**
+   * Content hash of the last scheduled sweep dry run plan, used to detect drift.
+   */
+  lastDryRunPlanHash?: string | null;
   createdBy?: (string | null) | User;
   updatedAt: string;
   createdAt: string;
@@ -1040,9 +1048,9 @@ export interface ActionRun {
   error?: string | null;
   triggeredBy?: (string | null) | User;
   /**
-   * P4 automations create runs with trigger=automation.
+   * P4 automations create runs with trigger=automation; the P4.G scheduled re-dry-run sweep uses scheduled-sweep.
    */
-  trigger?: ('manual' | 'automation') | null;
+  trigger?: ('manual' | 'automation' | 'scheduled-sweep') | null;
   /**
    * The automation that created this run (P4.1; set when trigger=automation).
    */
@@ -1253,7 +1261,7 @@ export interface TemplateSkeleton {
      * Relative path within the bundle, e.g. "src/index.ts". No leading "/", no ".." segments.
      */
     path: string;
-    content: string;
+    content?: string | null;
     /**
      * UTF-8 byte length of content, computed server-side.
      */
@@ -5151,6 +5159,8 @@ export interface TemplateDefinitionsSelect<T extends boolean = true> {
       };
   usageCount?: T;
   lastDryRunAt?: T;
+  lastDryRunStatus?: T;
+  lastDryRunPlanHash?: T;
   createdBy?: T;
   updatedAt?: T;
   createdAt?: T;

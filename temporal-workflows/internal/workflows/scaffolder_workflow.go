@@ -1,9 +1,12 @@
 package workflows
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -14,6 +17,13 @@ import (
 	"github.com/drewpayment/orbit/temporal-workflows/internal/activities"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/scaffolder"
 )
+
+// scaffolderSweepTrigger is the ScaffolderWorkflowInput.Trigger value
+// TemplateDryRunSweepWorkflow's TriggerTemplateDryRun activity sets (Phase 4
+// Task G). finish() only records lastDryRunStatus/lastDryRunPlanHash when
+// DryRun is true AND Trigger equals this exact value — a person's "Preview"
+// click leaves Trigger empty and must never touch those fields.
+const scaffolderSweepTrigger = "scheduled-sweep"
 
 // Run statuses, re-exported from the engine package so this file reads
 // naturally. scaffolder owns them because the dispatch activities are checked
@@ -83,6 +93,12 @@ type ScaffolderWorkflowInput struct {
 	UserEmail     string `json:"userEmail,omitempty"`
 	UserName      string `json:"userName,omitempty"`
 	DryRun        bool   `json:"dryRun"`
+	// Trigger distinguishes what started this run: empty/"manual" for a
+	// person's "Preview"/"Run" click, "scheduled-sweep" for
+	// TemplateDryRunSweepWorkflow's automated re-dry-run (Phase 4 Task G).
+	// finish() only records the sweep's drift fields when DryRun &&
+	// Trigger == scaffolderSweepTrigger — see recordSweepResult.
+	Trigger string `json:"trigger,omitempty"`
 }
 
 // ScaffolderWorkflowResult is the run outcome.
@@ -603,12 +619,60 @@ func (r *scaffolderRun) finish(ctx workflow.Context, actCtx workflow.Context, st
 
 	r.writeProgress(actCtx, status, "", nil)
 
+	// Phase 4 Task G: only a sweep-triggered DRY run records drift status. A
+	// human "Preview" (Trigger unset) and a REAL run (DryRun false, even one
+	// the sweep triggered — the sweep only ever triggers dry runs today, but
+	// the guard is explicit rather than assumed) never reach this.
+	if r.input.DryRun && r.input.Trigger == scaffolderSweepTrigger {
+		r.recordSweepResult(actCtx, status)
+	}
+
 	return &ScaffolderWorkflowResult{
 		Status:  status,
 		Outputs: r.outputs,
 		Plan:    r.plan,
 		Error:   errMsg,
 	}, nil
+}
+
+// recordSweepResult writes this dry run's drift outcome back to its
+// template-definitions doc. Best-effort like writeProgress: a failed write
+// never fails the run, since the run itself already completed.
+func (r *scaffolderRun) recordSweepResult(ctx workflow.Context, status string) {
+	in := activities.RecordSweepResultInput{
+		DefinitionID: r.input.DefinitionID,
+		Failed:       status == ScaffolderStatusFailed,
+		PlanHash:     computePlanHash(r.plan),
+	}
+	if err := workflow.ExecuteActivity(ctx, activities.ActivityScaffolderRecordSweepResult, in).Get(ctx, nil); err != nil {
+		r.logger.Warn("Failed to record scheduled-sweep dry run result",
+			"runId", r.input.RunID, "definitionId", r.input.DefinitionID, "error", err)
+	}
+}
+
+// computePlanHash returns a stable content hash of a dry run's planned
+// changes, used to detect drift between two sweep runs of the same
+// definition. Sorted first so entry REORDERING (which carries no semantic
+// meaning — a plan is a set of effects, not a sequence with significance
+// beyond step order, which stays fixed per-definition anyway) never reads as
+// drift; a coarse hash of kind+name+description, not a full diff — a
+// template whose plan changes for a reason other than its listed
+// PlannedChange[] content (e.g. a Kafka topic name embedded only in a
+// non-file action's side effect) will not be flagged by this first cut (see
+// the phase plan §7/§11's noted limitation).
+func computePlanHash(plan []scaffolder.PlannedChange) string {
+	entries := make([]string, len(plan))
+	for i, c := range plan {
+		entries[i] = c.Kind + "\x00" + c.Name + "\x00" + c.Description
+	}
+	sort.Strings(entries)
+
+	h := sha256.New()
+	for _, e := range entries {
+		h.Write([]byte(e))
+		h.Write([]byte{'\n'})
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // finishCancelled cleans up and reports the terminal status on a disconnected

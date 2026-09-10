@@ -80,7 +80,7 @@ export async function GET(
     const rawFiles = Array.isArray(doc.files) ? doc.files : []
     const files = manifestOnly
       ? rawFiles.map((f) => ({ path: f.path, size: f.size }))
-      : rawFiles.map((f) => ({ path: f.path, size: f.size, content: f.content }))
+      : rawFiles.map((f) => ({ path: f.path, size: f.size, content: f.content ?? '' }))
 
     return NextResponse.json({
       id: doc.id,
