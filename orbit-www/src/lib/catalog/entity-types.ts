@@ -38,6 +38,10 @@ export interface EntityTypeDefinition {
   goldenPath: {
     summary: string | null
     docsUrl: string | null
+    /** Id of the approved paved-path `template-definitions` row for this
+     *  kind, or null when none is configured. Read by the
+     *  golden-path-provenance scorecard rule (lib/scorecards/evaluate.ts). */
+    templateDefinition: string | null
     requiredRelations: RequiredRelationExpectation[]
     requiredMetadata: RequiredMetadataExpectation[]
   }
@@ -57,6 +61,7 @@ export const DEFAULT_ENTITY_TYPE: Omit<EntityTypeDefinition, 'kind' | 'displayNa
   goldenPath: {
     summary: null,
     docsUrl: null,
+    templateDefinition: null,
     requiredRelations: [],
     requiredMetadata: [],
   },
@@ -73,10 +78,21 @@ function defaultDefinitionFor(kind: EntityKind): EntityTypeDefinition {
     goldenPath: {
       summary: DEFAULT_ENTITY_TYPE.goldenPath.summary,
       docsUrl: DEFAULT_ENTITY_TYPE.goldenPath.docsUrl,
+      templateDefinition: DEFAULT_ENTITY_TYPE.goldenPath.templateDefinition,
       requiredRelations: [],
       requiredMetadata: [],
     },
   }
+}
+
+/** Normalise a relationship value (id string, populated doc, or nullish) to its id. */
+function relIdOrNull(v: unknown): string | null {
+  if (v == null) return null
+  if (typeof v === 'string') return v
+  if (typeof v === 'object' && 'id' in (v as Record<string, unknown>)) {
+    return String((v as { id: unknown }).id)
+  }
+  return null
 }
 
 /**
@@ -98,6 +114,8 @@ export function mergeEntityType(row: EntityType | null | undefined, kind: Entity
     goldenPath: {
       summary: row.goldenPath?.summary ?? base.goldenPath.summary,
       docsUrl: row.goldenPath?.docsUrl ?? base.goldenPath.docsUrl,
+      templateDefinition:
+        relIdOrNull(row.goldenPath?.templateDefinition) ?? base.goldenPath.templateDefinition,
       requiredRelations: (row.goldenPath?.requiredRelations ?? []).map((r) => ({
         relationType: r.relationType,
         direction: r.direction ?? 'either',

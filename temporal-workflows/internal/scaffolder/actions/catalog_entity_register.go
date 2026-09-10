@@ -40,13 +40,15 @@ type catalogEntityLinkInput struct {
 }
 
 type catalogEntityRegisterInput struct {
-	WorkspaceID string                   `json:"workspaceId"`
-	Kind        string                   `json:"kind"`
-	Name        string                   `json:"name"`
-	Owner       string                   `json:"owner"`
-	Links       []catalogEntityLinkInput `json:"links"`
-	SourceType  string                   `json:"sourceType"`
-	SourceID    string                   `json:"sourceId"`
+	WorkspaceID          string                   `json:"workspaceId"`
+	Kind                 string                   `json:"kind"`
+	Name                 string                   `json:"name"`
+	Owner                string                   `json:"owner"`
+	Links                []catalogEntityLinkInput `json:"links"`
+	SourceType           string                   `json:"sourceType"`
+	SourceID             string                   `json:"sourceId"`
+	TemplateDefinitionID string                   `json:"templateDefinitionId"`
+	TemplateVersionID    string                   `json:"templateVersionId"`
 }
 
 type catalogEntityRegisterOutput struct {
@@ -105,6 +107,8 @@ func (a *CatalogEntityRegister) Execute(ctx context.Context, rc scaffolder.Actio
 			Type:     in.SourceType,
 			SourceID: in.SourceID,
 		},
+		TemplateDefinitionID: in.TemplateDefinitionID,
+		TemplateVersionID:    in.TemplateVersionID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("catalog:entity:register: %w", err)

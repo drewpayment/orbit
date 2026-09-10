@@ -1146,6 +1146,14 @@ export interface CatalogEntity {
      * ID of the backing row in the source collection.
      */
     sourceId?: string | null;
+    /**
+     * The template definition this entity was scaffolded from, if any.
+     */
+    sourceTemplateDefinition?: (string | null) | TemplateDefinition;
+    /**
+     * The specific template version this entity was scaffolded from, if any.
+     */
+    sourceTemplateVersion?: (string | null) | TemplateDefinitionVersion;
   };
   /**
    * Freeform, queryable by scorecard rules (P2).
@@ -4029,6 +4037,10 @@ export interface EntityType {
      */
     docsUrl?: string | null;
     /**
+     * The approved paved-path template that should produce entities of this kind. Used by the golden-path-provenance scorecard check.
+     */
+    templateDefinition?: (string | null) | TemplateDefinition;
+    /**
      * Structural expectations checked against the entity’s actual relations.
      */
     requiredRelations?:
@@ -4155,7 +4167,7 @@ export interface ScorecardRule {
    * Ladder rung this rule belongs to (matches a scorecard level name).
    */
   level?: string | null;
-  type: 'field-presence' | 'relation-check' | 'threshold' | 'entity-score';
+  type: 'field-presence' | 'relation-check' | 'threshold' | 'entity-score' | 'golden-path-provenance';
   /**
    * Rule definition interpreted by the evaluator per type (see collection doc).
    */
@@ -6187,6 +6199,8 @@ export interface CatalogEntitiesSelect<T extends boolean = true> {
     | {
         type?: T;
         sourceId?: T;
+        sourceTemplateDefinition?: T;
+        sourceTemplateVersion?: T;
       };
   metadata?: T;
   health?: T;
@@ -6228,6 +6242,7 @@ export interface EntityTypesSelect<T extends boolean = true> {
     | {
         summary?: T;
         docsUrl?: T;
+        templateDefinition?: T;
         requiredRelations?:
           | T
           | {

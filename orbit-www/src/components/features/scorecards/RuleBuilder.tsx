@@ -382,6 +382,16 @@ function RuleTypeFields({ form, onChange, onPathChange }: RuleTypeFieldsProps) {
     return <EntityScoreFields form={form} onChange={onChange} />
   }
 
+  if (form.type === 'golden-path-provenance') {
+    return (
+      <p className="text-sm text-muted-foreground">
+        No fields to configure. This rule passes when the entity&apos;s recorded source
+        template matches its kind&apos;s golden-path template and that template is
+        published.
+      </p>
+    )
+  }
+
   // threshold
   const ops = thresholdOpsForPath(form.path)
   return (

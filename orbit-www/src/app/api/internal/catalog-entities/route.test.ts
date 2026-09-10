@@ -272,4 +272,43 @@ describe('POST /api/internal/catalog-entities', () => {
     expect(firstJson.entityId).not.toBe(secondJson.entityId)
     expect(fp.collections['catalog-entities']).toHaveLength(2)
   })
+
+  it('stores templateDefinitionId/templateVersionId as source.sourceTemplateDefinition/sourceTemplateVersion when provided', async () => {
+    const fp = new FakePayload()
+    seedWorkspace(fp)
+    vi.mocked(getPayload).mockResolvedValue(p(fp))
+
+    const res = await POST(
+      req('test-api-key', {
+        ...validBody(),
+        templateDefinitionId: 'tmpl-1',
+        templateVersionId: 'tmpl-1-v2',
+      }),
+    )
+    expect(res.status).toBe(201)
+    const json = await res.json()
+    const entity = fp.collections['catalog-entities'].find((d) => d.id === json.entityId)
+    expect(
+      (entity?.source as { sourceTemplateDefinition?: string }).sourceTemplateDefinition,
+    ).toBe('tmpl-1')
+    expect((entity?.source as { sourceTemplateVersion?: string }).sourceTemplateVersion).toBe(
+      'tmpl-1-v2',
+    )
+  })
+
+  it('omits sourceTemplateDefinition/sourceTemplateVersion when not provided', async () => {
+    const fp = new FakePayload()
+    seedWorkspace(fp)
+    vi.mocked(getPayload).mockResolvedValue(p(fp))
+
+    const res = await POST(req('test-api-key', validBody()))
+    const json = await res.json()
+    const entity = fp.collections['catalog-entities'].find((d) => d.id === json.entityId)
+    expect(
+      (entity?.source as { sourceTemplateDefinition?: string }).sourceTemplateDefinition,
+    ).toBeUndefined()
+    expect(
+      (entity?.source as { sourceTemplateVersion?: string }).sourceTemplateVersion,
+    ).toBeUndefined()
+  })
 })

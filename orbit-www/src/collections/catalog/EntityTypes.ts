@@ -88,6 +88,15 @@ export const EntityTypes: CollectionConfig = {
         { name: 'summary', type: 'textarea', admin: { description: 'Narrative for leaders.' } },
         { name: 'docsUrl', type: 'text', admin: { description: 'Link to the paved-road docs/template.' } },
         {
+          name: 'templateDefinition',
+          type: 'relationship',
+          relationTo: 'template-definitions',
+          admin: {
+            description:
+              'The approved paved-path template that should produce entities of this kind. Used by the golden-path-provenance scorecard check.',
+          },
+        },
+        {
           name: 'requiredRelations',
           type: 'array',
           admin: { description: 'Structural expectations checked against the entity’s actual relations.' },

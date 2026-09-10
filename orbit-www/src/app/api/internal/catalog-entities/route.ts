@@ -28,6 +28,11 @@ import { ENTITY_KINDS, type EntityKind } from '@/collections/catalog/constants'
  *                              // metadata.owner instead.
  *     links?: [{ title: string, url: string }],
  *     source: { type: string, sourceId: string },
+ *     templateDefinitionId?: string,  // stored as catalog-entities
+ *                                      // source.sourceTemplateDefinition
+ *                                      // (Template Authoring Phase 4, Task E)
+ *     templateVersionId?: string,     // stored as
+ *                                      // source.sourceTemplateVersion
  *   }
  *
  * `source.type` must be one of the CatalogEntities `source.type` select
@@ -109,6 +114,12 @@ export async function POST(request: NextRequest) {
   const sourceType = source.type as string
   const sourceId = source.sourceId as string
   const owner = isNonEmptyString(body.owner) ? (body.owner as string) : undefined
+  const templateDefinitionId = isNonEmptyString(body.templateDefinitionId)
+    ? (body.templateDefinitionId as string)
+    : undefined
+  const templateVersionId = isNonEmptyString(body.templateVersionId)
+    ? (body.templateVersionId as string)
+    : undefined
 
   if (!(ENTITY_KINDS as readonly string[]).includes(kind)) {
     return NextResponse.json(
@@ -198,7 +209,12 @@ export async function POST(request: NextRequest) {
         slug,
         kind: kind as EntityKind,
         workspace: workspaceId,
-        source: { type: sourceType as SourceType, sourceId },
+        source: {
+          type: sourceType as SourceType,
+          sourceId,
+          ...(templateDefinitionId ? { sourceTemplateDefinition: templateDefinitionId } : {}),
+          ...(templateVersionId ? { sourceTemplateVersion: templateVersionId } : {}),
+        },
         ...(links ? { links } : {}),
         ...(owner ? { metadata: { owner } } : {}),
       },

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { findStepReferences, generateStepId, groupRegistryByFamily } from './step-builder-logic'
+import {
+  defaultStepInput,
+  findStepReferences,
+  generateStepId,
+  groupRegistryByFamily,
+} from './step-builder-logic'
 import type { ActionDescriptor } from '@/lib/scaffolder/validate'
 import type { TemplateDefinition } from '@/lib/scaffolder/schema'
 
@@ -56,6 +61,20 @@ function definition(overrides: Partial<TemplateDefinition['spec']>): TemplateDef
     spec: { parameters: [], steps: [], ...overrides },
   }
 }
+
+describe('defaultStepInput', () => {
+  it('defaults catalog:entity:register to reference the current template id/version', () => {
+    expect(defaultStepInput('catalog:entity:register')).toEqual({
+      templateDefinitionId: '${{ template.id }}',
+      templateVersionId: '${{ template.versionId }}',
+    })
+  })
+
+  it('every other action gets an empty input, unchanged from before', () => {
+    expect(defaultStepInput('github:repo:create-from-template')).toEqual({})
+    expect(defaultStepInput('fs:render')).toEqual({})
+  })
+})
 
 describe('findStepReferences', () => {
   it('finds a later step whose input references the removed step\'s output', () => {
