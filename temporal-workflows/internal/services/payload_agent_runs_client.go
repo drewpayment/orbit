@@ -13,10 +13,15 @@ import (
 	"time"
 )
 
-// ErrNoDefaultLLMProvider is returned by Create when the target workspace has
-// no LLM provider configured, so an `agent:run` template step cannot start
-// the infra agent (Phase 4 Task D).
-var ErrNoDefaultLLMProvider = errors.New("no LLM provider configured for this workspace")
+// ErrNoDefaultLLMProvider is returned by Create when the route could not
+// resolve a single LLM provider for the target workspace, so an `agent:run`
+// template step cannot start the infra agent (Phase 4 Task D). Two distinct
+// server-side conditions map to it: no provider configured at all
+// (NO_LLM_PROVIDER), or more than one with none marked `isDefault`
+// (AMBIGUOUS_LLM_PROVIDER) — Create wraps the server's actual message so
+// callers see which one occurred, not a generic "no provider" that would be
+// misleading for the ambiguous case.
+var ErrNoDefaultLLMProvider = errors.New("could not resolve an LLM provider for this workspace")
 
 // PayloadAgentRunsClient PATCHes the orbit-www AgentRuns row for a workflow
 // id. Used by the workflow's UpdateAgentRun activity to keep the audit
@@ -150,7 +155,16 @@ func (c *PayloadAgentRunsClient) Create(ctx context.Context, in CreateAgentRunIn
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	if resp.StatusCode == http.StatusUnprocessableEntity {
-		return CreateAgentRunResult{}, ErrNoDefaultLLMProvider
+		var errBody struct {
+			Error string `json:"error"`
+			Code  string `json:"code"`
+		}
+		_ = json.Unmarshal(respBody, &errBody)
+		msg := errBody.Error
+		if msg == "" {
+			msg = string(respBody)
+		}
+		return CreateAgentRunResult{}, fmt.Errorf("%s: %w", msg, ErrNoDefaultLLMProvider)
 	}
 	if resp.StatusCode/100 != 2 {
 		return CreateAgentRunResult{}, fmt.Errorf("agent-runs create: HTTP %d: %s", resp.StatusCode, string(respBody))

@@ -21,11 +21,15 @@ import { validateInternalApiKey } from '@/lib/auth/internal-api-auth'
  *
  * Body: { workspaceId, userId, workflowId, title?, initialPrompt }
  *
- * Resolves the workspace's default LLM provider (`isDefault: true`,
- * falling back to the first configured provider for that workspace); 422s
- * with code NO_LLM_PROVIDER if the workspace has none configured — the
- * caller (ScaffolderAgentRunActivities.CreateAgentRun) treats that as
- * non-retryable, since no retry fixes a missing provider.
+ * Resolves the workspace's LLM provider: `isDefault: true` wins outright;
+ * with no default set, a workspace with exactly one configured provider
+ * uses it implicitly (there is nothing to disambiguate); a workspace with
+ * more than one provider and no default is a configuration error the
+ * caller must fix, not a guess this route should make — 422s with code
+ * AMBIGUOUS_LLM_PROVIDER. 422s with code NO_LLM_PROVIDER if the workspace
+ * has none configured. Both are treated as non-retryable by the caller
+ * (ScaffolderAgentRunActivities.CreateAgentRun), since no retry fixes
+ * either.
  *
  * Idempotent on workflowId (unique-indexed on the collection): a retried
  * Temporal activity attempt returns the existing row rather than erroring
@@ -78,14 +82,28 @@ export async function POST(request: NextRequest) {
     })
     let provider = defaultProvider.docs[0]
     if (!provider) {
-      const anyProvider = await payload.find({
+      // No default set. A single provider is unambiguous and used
+      // implicitly; two or more with no default is a configuration gap the
+      // workspace owner must resolve (mark one as default) rather than a
+      // guess this route should make silently.
+      const allProviders = await payload.find({
         collection: 'llm-providers',
         where: { workspace: { equals: workspaceId } },
-        limit: 1,
+        limit: 2,
         sort: 'createdAt',
         overrideAccess: true,
       })
-      provider = anyProvider.docs[0]
+      if (allProviders.docs.length > 1) {
+        return NextResponse.json(
+          {
+            error:
+              'multiple LLM providers are configured for this workspace with none marked default',
+            code: 'AMBIGUOUS_LLM_PROVIDER',
+          },
+          { status: 422 },
+        )
+      }
+      provider = allProviders.docs[0]
     }
     if (!provider) {
       return NextResponse.json(

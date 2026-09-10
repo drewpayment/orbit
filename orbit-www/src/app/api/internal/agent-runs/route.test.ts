@@ -79,16 +79,29 @@ describe('POST /api/internal/agent-runs', () => {
     expect(createArgs.overrideAccess).toBe(true)
   })
 
-  it('falls back to any provider in the workspace when none is marked default', async () => {
+  it('uses the sole provider implicitly when the workspace has exactly one and none is marked default', async () => {
     mockPayload.find
-      .mockResolvedValueOnce({ docs: [] })
+      .mockResolvedValueOnce({ docs: [] }) // idempotency check
       .mockResolvedValueOnce({ docs: [] }) // no default
-      .mockResolvedValueOnce({ docs: [{ id: 'llm-fallback' }] }) // any provider
+      .mockResolvedValueOnce({ docs: [{ id: 'llm-sole' }] }) // exactly one provider (limit: 2 returns 1)
 
     const res = await POST(makeRequest(workerBody))
     expect(res.status).toBe(201)
     const json = await res.json()
-    expect(json.llmProviderId).toBe('llm-fallback')
+    expect(json.llmProviderId).toBe('llm-sole')
+  })
+
+  it('returns 422 AMBIGUOUS_LLM_PROVIDER when the workspace has multiple providers and none is default', async () => {
+    mockPayload.find
+      .mockResolvedValueOnce({ docs: [] }) // idempotency check
+      .mockResolvedValueOnce({ docs: [] }) // no default
+      .mockResolvedValueOnce({ docs: [{ id: 'llm-a' }, { id: 'llm-b' }] }) // two candidates, ambiguous
+
+    const res = await POST(makeRequest(workerBody))
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.code).toBe('AMBIGUOUS_LLM_PROVIDER')
+    expect(mockPayload.create).not.toHaveBeenCalled()
   })
 
   it('returns 422 NO_LLM_PROVIDER when the workspace has no LLM provider configured', async () => {
