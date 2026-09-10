@@ -5,6 +5,7 @@ import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import type { Where } from 'payload'
 import { validateInternalApiKey } from '@/lib/auth/internal-api-auth'
+import { resolveVirtualClusterOwnership } from '@/lib/kafka/virtual-cluster-ownership'
 
 
 /**
@@ -57,6 +58,187 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       { error: 'Internal server error', code: 'INTERNAL_ERROR' },
       { status: 500 }
+    )
+  }
+}
+
+/**
+ * POST /api/internal/kafka-topics
+ *
+ * Creates the kafka-topics row for the kafka:topic:provision scaffolder
+ * action (see temporal-workflows'
+ * services.PayloadKafkaTopicClient / actions.KafkaTopicProvision). The row
+ * is created directly in `provisioning` status — the normal
+ * pending-approval → human-approve flow the Kafka UI drives is bypassed
+ * here, since a scaffolder step is expected to provision immediately; a
+ * template author who wants a gate uses a separate `approval:request` step
+ * ahead of it.
+ *
+ * Body:
+ *   {
+ *     workspaceId: string,
+ *     virtualClusterId: string,
+ *     name: string,
+ *     description?: string,
+ *     environment?: string,      // defaults to "dev"
+ *     partitions?: number,       // defaults to 3
+ *     retentionMs?: number,
+ *     owner?: string,            // kafka-topics has no owner field today;
+ *                                 // stored as a tag (owner:<value>)
+ *   }
+ *
+ * A `virtualClusterId` that doesn't resolve to a kafka-virtual-clusters doc,
+ * OR that resolves to one owned by a different workspace than the caller's
+ * `workspaceId`, returns 404 { code: 'NOT_FOUND' } — both cases look
+ * identical to the caller so a workspace can never probe for another
+ * workspace's cluster ids. Ownership (direct `workspace`, or legacy
+ * `application`-owned) is resolved by
+ * lib/kafka/virtual-cluster-ownership.ts, since `overrideAccess: true`
+ * bypasses KafkaVirtualClusters.ts's own access rule. The Go client maps
+ * this 404 to ErrKafkaVirtualClusterNotFound, which the action treats as
+ * scaffolder.ErrInvalidInput (non-retryable).
+ *
+ * Idempotency: a row already created for the same
+ * (workspace, virtualCluster, name) is returned as-is (200) rather than
+ * duplicated — a Temporal retry of the kafka:topic:provision step is safe
+ * to re-run.
+ *
+ * `fullTopicName` is set at creation time as `${topicPrefix}${name}`
+ * (matching `app/actions/kafka-topics.ts`'s `createTopic`), and the
+ * response also carries `topicPrefix` on its own so the Go action can pass
+ * it straight into `KafkaTopicProvisionInput.TopicPrefix` without a second
+ * lookup — `ProvisionTopic` computes the physical name the same way
+ * (`TopicPrefix + TopicName`).
+ *
+ * Response: 201 { id, status, fullTopicName, partitions, topicPrefix } on
+ * create, or 200 with the same shape on the idempotent already-exists path.
+ */
+export async function POST(request: NextRequest) {
+  const authError = validateInternalApiKey(request.headers.get('X-API-Key'))
+  if (authError) return authError
+
+  let body: Record<string, unknown>
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 })
+  }
+
+  const requiredStrings = ['workspaceId', 'virtualClusterId', 'name']
+  for (const field of requiredStrings) {
+    if (typeof body[field] !== 'string' || (body[field] as string).trim() === '') {
+      return NextResponse.json({ error: `${field} required` }, { status: 400 })
+    }
+  }
+
+  const workspaceId = body.workspaceId as string
+  const virtualClusterId = body.virtualClusterId as string
+  const name = body.name as string
+  const description = typeof body.description === 'string' ? body.description : undefined
+  const environment =
+    typeof body.environment === 'string' && body.environment.trim() !== ''
+      ? body.environment
+      : 'dev'
+  const partitions =
+    typeof body.partitions === 'number' && Number.isFinite(body.partitions) && body.partitions > 0
+      ? Math.floor(body.partitions)
+      : 3
+  const retentionMs =
+    typeof body.retentionMs === 'number' && Number.isFinite(body.retentionMs) && body.retentionMs > 0
+      ? Math.floor(body.retentionMs)
+      : undefined
+  const owner = typeof body.owner === 'string' && body.owner.trim() !== '' ? body.owner : undefined
+
+  try {
+    const payload = await getPayload({ config: configPromise })
+
+    let virtualCluster: Record<string, unknown>
+    try {
+      virtualCluster = (await payload.findByID({
+        collection: 'kafka-virtual-clusters',
+        id: virtualClusterId,
+        depth: 1,
+        overrideAccess: true,
+      })) as unknown as Record<string, unknown>
+    } catch {
+      return NextResponse.json(
+        { error: 'virtual cluster not found', code: 'NOT_FOUND' },
+        { status: 404 },
+      )
+    }
+
+    const ownership = await resolveVirtualClusterOwnership(payload, virtualCluster)
+    if (ownership.workspaceId !== workspaceId) {
+      // Same response as "doesn't exist" — a caller must never be able to
+      // distinguish "no such cluster" from "that cluster belongs to someone
+      // else" by probing ids.
+      return NextResponse.json(
+        { error: 'virtual cluster not found', code: 'NOT_FOUND' },
+        { status: 404 },
+      )
+    }
+    const topicPrefix = ownership.topicPrefix
+    const fullTopicName = `${topicPrefix}${name}`
+
+    const existing = await payload.find({
+      collection: 'kafka-topics',
+      where: {
+        and: [
+          { workspace: { equals: workspaceId } },
+          { virtualCluster: { equals: virtualClusterId } },
+          { name: { equals: name } },
+        ],
+      },
+      limit: 1,
+      depth: 0,
+      overrideAccess: true,
+    })
+    if (existing.docs.length > 0) {
+      const doc = existing.docs[0]
+      return NextResponse.json({
+        id: String(doc.id),
+        status: doc.status,
+        fullTopicName: doc.fullTopicName ?? '',
+        partitions: doc.partitions,
+        topicPrefix,
+      })
+    }
+
+    const created = await payload.create({
+      collection: 'kafka-topics',
+      data: {
+        workspace: workspaceId,
+        virtualCluster: virtualClusterId,
+        name,
+        description,
+        environment,
+        partitions,
+        replicationFactor: 3,
+        ...(retentionMs !== undefined ? { retentionMs } : {}),
+        status: 'provisioning',
+        approvalRequired: false,
+        createdVia: 'api',
+        fullTopicName,
+        ...(owner ? { tags: [{ tag: `owner:${owner}` }] } : {}),
+      },
+      overrideAccess: true,
+    })
+
+    return NextResponse.json(
+      {
+        id: String(created.id),
+        status: created.status,
+        fullTopicName: created.fullTopicName ?? '',
+        partitions: created.partitions,
+        topicPrefix,
+      },
+      { status: 201 },
+    )
+  } catch (error) {
+    console.error('[Internal API] Kafka topic create error:', error)
+    return NextResponse.json(
+      { error: 'Internal server error', code: 'INTERNAL_ERROR' },
+      { status: 500 },
     )
   }
 }

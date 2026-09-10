@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "kafka:topic:provision output",
+  "type": "object",
+  "properties": {
+    "topicId": {
+      "type": "string",
+      "description": "kafka-topics Payload doc id."
+    },
+    "topicName": {
+      "type": "string",
+      "description": "Topic name as requested."
+    },
+    "physicalName": {
+      "type": "string",
+      "description": "Physical topic name on the Kafka cluster, once provisioned."
+    },
+    "clusterId": {
+      "type": "string",
+      "description": "kafka-virtual-clusters doc id the topic was provisioned on."
+    }
+  },
+  "required": ["topicId", "topicName", "clusterId"],
+  "additionalProperties": false
+}

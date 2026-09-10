@@ -74,7 +74,7 @@ func TestKafkaActivities_UpdateTopicStatus(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, capturedPath, "/kafka-topics/topic-123")
 		assert.Equal(t, "active", capturedData["status"])
-		assert.Nil(t, capturedData["physicalName"])
+		assert.Nil(t, capturedData["fullTopicName"])
 		assert.Nil(t, capturedData["provisioningError"])
 	})
 
@@ -99,7 +99,7 @@ func TestKafkaActivities_UpdateTopicStatus(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, "active", capturedData["status"])
-		assert.Equal(t, "myws-myapp-dev-events", capturedData["physicalName"])
+		assert.Equal(t, "myws-myapp-dev-events", capturedData["fullTopicName"])
 	})
 
 	t.Run("includes error message when provided", func(t *testing.T) {
