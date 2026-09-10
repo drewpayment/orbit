@@ -209,18 +209,56 @@ export async function executeRun(payload: Payload, runId: string): Promise<void>
       if (!backendRef) {
         throw new Error('scaffolder backend requires backend.ref (a template-definitions doc id).')
       }
+
+      // BLOCKER 1: a scaffolder-backed run must have come through
+      // startDryRun/startRun (self-service/templates/authoring-actions.ts) —
+      // those are the only callers that record `templateVersion` on the run
+      // and enforce the RBAC/publish gates BEFORE creating it. A run that
+      // reached here via the generic Actions catalog (runAction is now
+      // rejected at the source for this backend type, but defend in depth
+      // here too) has no templateVersion — refuse it.
+      const runTemplateVersionId = relId(run.templateVersion)
+      if (!runTemplateVersionId) {
+        throw new Error(
+          'This run has no templateVersion recorded — scaffolder runs must be created via ' +
+            'startDryRun/startRun, not dispatched directly.',
+        )
+      }
+
       const definition = await payload.findByID({
         collection: 'template-definitions',
         id: backendRef,
         depth: 0,
         overrideAccess: true,
       })
-      const definitionVersionId = relId(definition.currentVersion)
-      if (!definitionVersionId) {
+
+      // BLOCKER 1: a REAL (non-dry) run may only dispatch a published
+      // definition — an unpublished draft has not passed the publish gate
+      // (validated + successful dry run of the reviewed version).
+      if (!run.dryRun && definition.status !== 'published') {
         throw new Error(
-          `Template definition "${definition.name}" has no current version to run.`,
+          `Template definition "${definition.name}" is not published (status: ${definition.status}) — ` +
+            'only dry runs may execute an unpublished draft.',
         )
       }
+
+      // BLOCKER 2: tenant isolation. The definition, the run, and the
+      // backing Action must all agree on the workspace — refuse a
+      // cross-tenant dispatch rather than silently running one tenant's
+      // template against another's workspace id.
+      const definitionWorkspaceId = relId(definition.workspace)
+      const actionWorkspaceId = relId(action.workspace)
+      if (definitionWorkspaceId !== workspaceId || definitionWorkspaceId !== actionWorkspaceId) {
+        throw new Error(
+          `Workspace mismatch: run.workspace=${workspaceId}, action.workspace=${actionWorkspaceId}, ` +
+            `template-definitions.workspace=${definitionWorkspaceId} — refusing a cross-tenant dispatch.`,
+        )
+      }
+
+      // MAJOR 4: dispatch the version the run was actually created/reviewed
+      // against, NOT the definition's current version — currentVersion may
+      // have moved on since an approval-gated run was queued.
+      const definitionVersionId = runTemplateVersionId
       const userId = relId(run.triggeredBy) ?? ''
       append(
         'info',

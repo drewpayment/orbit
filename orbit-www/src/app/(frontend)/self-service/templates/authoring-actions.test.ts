@@ -151,7 +151,12 @@ const DEFINITION_JSON = {
   apiVersion: 'orbit/v2',
   kind: 'Template',
   metadata: { name: 'go-service', title: 'Go service', owner: 'platform' },
-  spec: { parameters: [{ title: 'Basics', properties: { name: { type: 'string' } } }], steps: [] },
+  spec: {
+    parameters: [
+      { title: 'Basics', required: ['name'], properties: { name: { type: 'string' } } },
+    ],
+    steps: [],
+  },
 }
 
 describe('templates/authoring-actions', () => {
@@ -335,6 +340,17 @@ describe('templates/authoring-actions', () => {
       expect(result.ok).toBe(true)
     })
 
+    it('MINOR: validateTemplateDefinition reports a registry outage as a validation error, not a thrown exception', async () => {
+      mockListActionsRpc.mockRejectedValue(new Error('gRPC deadline exceeded'))
+      const env = makeFakePayload()
+      mockPayload = env.payload
+      const { validateTemplateDefinition } = await import('./authoring-actions')
+
+      const result = await validateTemplateDefinition(DEFINITION_JSON)
+      expect(result.ok).toBe(false)
+      expect(result.errors[0].message).toMatch(/unavailable/i)
+    })
+
     it('listActionRegistry maps the gRPC response and caches for subsequent calls', async () => {
       mockListActionsRpc.mockResolvedValue({
         actions: [
@@ -451,6 +467,86 @@ describe('templates/authoring-actions', () => {
       expect(definition.usageCount).toBe(1)
     })
 
+    describe('MAJOR 3: parameter validation against spec.parameters before persisting', () => {
+      function env() {
+        return makeFakePayload({
+          'template-definitions': [{ ...DRAFT_DEFINITION, currentVersion: 'ver-1' }],
+          'template-definition-versions': [
+            {
+              id: 'ver-1',
+              definition: 'def-1',
+              workspace: WORKSPACE_ID,
+              versionNumber: 1,
+              definitionJson: DEFINITION_JSON,
+            },
+          ],
+        })
+      }
+
+      it('rejects a missing required parameter and does not create a run', async () => {
+        const e = env()
+        mockPayload = e.payload
+        const { startDryRun } = await import('./authoring-actions')
+
+        await expect(startDryRun({ templateVersionId: 'ver-1', parameters: {} })).rejects.toThrow(
+          /name/i,
+        )
+        expect(e.create.mock.calls.some((c) => c[0].collection === 'action-runs')).toBe(false)
+      })
+
+      it('rejects a parameter of the wrong type', async () => {
+        const e = env()
+        mockPayload = e.payload
+        const { startDryRun } = await import('./authoring-actions')
+
+        await expect(
+          startDryRun({ templateVersionId: 'ver-1', parameters: { name: 12345 } }),
+        ).rejects.toThrow(/name/i)
+      })
+
+      it('rejects an unknown extra parameter key', async () => {
+        const e = env()
+        mockPayload = e.payload
+        const { startDryRun } = await import('./authoring-actions')
+
+        await expect(
+          startDryRun({
+            templateVersionId: 'ver-1',
+            parameters: { name: 'svc', notInSchema: 'sneaky' },
+          }),
+        ).rejects.toThrow(/notInSchema|additional/i)
+      })
+
+      it('accepts valid parameters', async () => {
+        const e = env()
+        mockPayload = e.payload
+        const { startDryRun } = await import('./authoring-actions')
+
+        const result = await startDryRun({ templateVersionId: 'ver-1', parameters: { name: 'svc' } })
+        expect(result.runId).toBeTruthy()
+      })
+
+      it('startRun applies the same validation before creating a real run', async () => {
+        const e = makeFakePayload({
+          'template-definitions': [PUBLISHED_DEFINITION],
+          'template-definition-versions': [
+            {
+              id: 'ver-2',
+              definition: 'def-2',
+              workspace: WORKSPACE_ID,
+              versionNumber: 1,
+              definitionJson: DEFINITION_JSON,
+            },
+          ],
+        })
+        mockPayload = e.payload
+        const { startRun } = await import('./authoring-actions')
+
+        await expect(startRun({ templateVersionId: 'ver-2', parameters: {} })).rejects.toThrow(/name/i)
+        expect(e.create.mock.calls.some((c) => c[0].collection === 'action-runs')).toBe(false)
+      })
+    })
+
     it('getRun redacts ui:secret parameter values before returning', async () => {
       const secretDefinitionJson = {
         ...DEFINITION_JSON,
@@ -490,6 +586,53 @@ describe('templates/authoring-actions', () => {
       expect((run!.inputs as Record<string, unknown>).name).toBe('svc')
       expect((run!.inputs as Record<string, unknown>).token).not.toBe('super-secret-value')
       expect((run!.inputs as Record<string, unknown>).token).toBe('••••••••')
+    })
+
+    it('MINOR: getRun also redacts a secret value if it leaks into steps[].output or plan', async () => {
+      const secretDefinitionJson = {
+        ...DEFINITION_JSON,
+        spec: {
+          ...DEFINITION_JSON.spec,
+          parameters: [
+            {
+              title: 'Basics',
+              properties: { token: { type: 'string', 'ui:secret': true } },
+            },
+          ],
+        },
+      }
+      const env = makeFakePayload({
+        'template-definition-versions': [
+          {
+            id: 'ver-4',
+            definition: 'def-4',
+            workspace: WORKSPACE_ID,
+            versionNumber: 1,
+            definitionJson: secretDefinitionJson,
+          },
+        ],
+        'action-runs': [
+          {
+            id: 'run-2',
+            action: 'act-1',
+            workspace: WORKSPACE_ID,
+            templateVersion: 'ver-4',
+            status: 'succeeded',
+            inputs: { token: 'super-secret-value' },
+            steps: [{ id: 's1', status: 'succeeded', output: { echoedToken: 'super-secret-value' } }],
+            plan: { changes: [{ description: 'uses super-secret-value verbatim is NOT matched (substring)' }], token: 'super-secret-value' },
+          },
+        ],
+      })
+      mockPayload = env.payload
+      const { getRun } = await import('./authoring-actions')
+
+      const run = await getRun('run-2')
+      expect(run).not.toBeNull()
+      const steps = run!.steps as { output?: Record<string, unknown> }[]
+      expect(steps[0].output?.echoedToken).toBe('••••••••')
+      const plan = run!.plan as { token?: string }
+      expect(plan.token).toBe('••••••••')
     })
 
     it('getRun scopes to the caller\'s workspace access', async () => {
