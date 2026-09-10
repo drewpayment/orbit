@@ -577,7 +577,9 @@ func TestParseStepTimeout(t *testing.T) {
 func (s *ScaffolderWorkflowTestSuite) TestDryRunSkipsStepsThatDependOnEarlierOutput() {
 	in := baseInput(twoStepDefinition())
 	in.DryRun = true
-	in.Definition.Spec.Output = nil
+	// spec.output is deliberately left in place: it reads
+	// steps.create.output.repoUrl, which a dry run never produces, and must be
+	// reported as unpreviewable rather than failing the whole preview.
 
 	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
 	res := s.result()
@@ -595,9 +597,12 @@ func (s *ScaffolderWorkflowTestSuite) TestDryRunSkipsStepsThatDependOnEarlierOut
 			unsupported = append(unsupported, c)
 		}
 	}
-	s.Require().Len(unsupported, 1)
+	s.Require().Len(unsupported, 2, "the log step and the run output are both unpreviewable")
 	s.Equal("log", unsupported[0].Name)
 	s.Contains(unsupported[0].Description, "earlier step")
+	s.Equal("output", unsupported[1].Name)
+	s.Contains(unsupported[1].Description, "cannot be previewed")
+	s.Empty(res.Outputs, "an unpreviewable output must not be reported as a real one")
 
 	logStep, ok := stepByID(s.lastProgress().Steps, "log")
 	s.Require().True(ok)
@@ -668,4 +673,99 @@ func (s *ScaffolderWorkflowTestSuite) TestRunLogRecordsStepLifecycle() {
 	// A resolved step input can carry an installation token; it must never
 	// reach the run log.
 	s.NotContains(joined, "orders", "resolved step input must not be logged")
+}
+
+// --- dry-run escape must not mask real authoring errors ---------------------
+
+// The escape hatch keys off the FAILING reference, not off the expression
+// mentioning steps.* somewhere. A step that reads a prior step's output AND a
+// misspelled parameter must still fail the dry run: masking it would report a
+// broken template as previewed clean.
+func (s *ScaffolderWorkflowTestSuite) TestDryRunStillFailsOnABadParameterAlongsideAStepRef() {
+	in := baseInput(twoStepDefinition())
+	in.DryRun = true
+	in.Definition.Spec.Output = nil
+	in.Definition.Spec.Steps[1].Input = json.RawMessage(
+		`{"message":"made ${{ steps.create.output.repoUrl }} for ${{ parameters.misspelled }}"}`)
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusFailed, res.Status)
+	s.Contains(res.Error, "parameters.misspelled")
+}
+
+func (s *ScaffolderWorkflowTestSuite) TestDryRunStillFailsOnABadParameterInACondition() {
+	in := baseInput(twoStepDefinition())
+	in.DryRun = true
+	in.Definition.Spec.Output = nil
+	in.Definition.Spec.Steps[0].If = "${{ parameters.misspelled }}"
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusFailed, res.Status)
+	s.Contains(res.Error, "parameters.misspelled")
+	s.Empty(s.stubs.planned)
+}
+
+// A structural error is never an unresolved path, so it fails even in a dry run.
+func (s *ScaffolderWorkflowTestSuite) TestDryRunStillFailsOnAnUnknownNamespace() {
+	in := baseInput(twoStepDefinition())
+	in.DryRun = true
+	in.Definition.Spec.Output = nil
+	in.Definition.Spec.Steps[0].Input = json.RawMessage(`{"name":"${{ nope.x }}"}`)
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusFailed, res.Status)
+	s.Contains(res.Error, "unknown namespace")
+}
+
+// A quoted filter argument used to break the old text-scanning escape check,
+// because the raw JSON escapes its quotes. Keying off the typed error removes
+// that exposure entirely.
+func (s *ScaffolderWorkflowTestSuite) TestDryRunHandlesQuotedFilterArguments() {
+	in := baseInput(twoStepDefinition())
+	in.DryRun = true
+	in.Definition.Spec.Output = nil
+	in.Definition.Spec.Steps = in.Definition.Spec.Steps[:1]
+	in.Definition.Spec.Steps[0].Input = json.RawMessage(
+		`{"name":"${{ parameters.absent | default(\"fallback\") }}"}`)
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusSucceeded, res.Status)
+	s.Require().Len(s.stubs.planned, 1)
+	s.JSONEq(`{"name":"fallback"}`, string(s.stubs.planned[0].Input))
+}
+
+// A live run resolves spec.output normally; only a dry run gets the escape.
+func (s *ScaffolderWorkflowTestSuite) TestLiveRunStillFailsOnAnUnresolvableOutput() {
+	def := twoStepDefinition()
+	def.Spec.Output = &scaffolder.Output{Text: "${{ steps.create.output.nothingHere }}"}
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, baseInput(def))
+	res := s.result()
+
+	s.Equal(ScaffolderStatusFailed, res.Status)
+	s.Contains(res.Error, "failed to resolve output")
+}
+
+func (s *ScaffolderWorkflowTestSuite) TestRunLogEntriesCarryTheWorkflowClock() {
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, baseInput(twoStepDefinition()))
+	s.Equal(ScaffolderStatusSucceeded, s.result().Status)
+
+	var seen int
+	for _, p := range s.stubs.progress {
+		for _, l := range p.AppendLogs {
+			seen++
+			s.NotEmpty(l.TS, "every log line must carry a timestamp: %s", l.Message)
+			_, err := time.Parse(time.RFC3339, l.TS)
+			s.NoError(err, "timestamp must be RFC3339: %s", l.TS)
+		}
+	}
+	s.Positive(seen)
 }

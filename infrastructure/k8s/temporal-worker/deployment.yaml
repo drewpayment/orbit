@@ -5,6 +5,15 @@ metadata:
   name: temporal-worker
   namespace: orbit
 spec:
+  # DO NOT scale: scaffolder runs share a node-local work dir.
+  #
+  # A v2 template run clones into, renders in and pushes from one directory
+  # under TEMPLATE_WORK_DIR, and nothing pins a run's activities to one pod.
+  # With more than one replica a later step can land on a pod where that
+  # directory does not exist, and cleanup can delete a directory on the wrong
+  # pod while leaving the real one behind. Raising this requires a Temporal
+  # session (workflow.NewSessionContext) or a shared RWX volume first — see
+  # ScaffolderActivities' "KNOWN LIMITATION" comment.
   replicas: 1
   selector:
     matchLabels:

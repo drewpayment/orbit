@@ -39,6 +39,16 @@ spec:
                   key: ORBIT_SVC_AUTH_SECRET
             - name: ORBIT_SVC_AUTH_ENFORCE
               value: "true"
+            # StartScaffolderRun reads the stored v2 template definition from
+            # orbit-www's internal API. Without ORBIT_INTERNAL_API_KEY the RPC
+            # answers FailedPrecondition instead of starting a run it cannot feed.
+            - name: ORBIT_API_URL
+              value: http://orbit-www:3000
+            - name: ORBIT_INTERNAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: ORBIT_INTERNAL_API_KEY
           resources:
             requests:
               memory: 64Mi

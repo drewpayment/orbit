@@ -2,6 +2,7 @@ package workflows
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -48,6 +49,10 @@ const stepHeartbeatTimeout = 2 * time.Minute
 // validation, the run-status writeback and work dir cleanup. None of them
 // heartbeat, so they deliberately run without a heartbeat timeout.
 const bookkeepingTimeout = 5 * time.Minute
+
+// maxStepTimeout caps a step's declared `timeout`. Without a ceiling, a
+// definition could pin a worker slot for the workflow's whole run timeout.
+const maxStepTimeout = 2 * time.Hour
 
 // maxStepAttempts bounds retries for a step whose action failed for a reason
 // that might be transient. Definition and expression errors never reach a
@@ -132,12 +137,9 @@ func ScaffolderWorkflow(ctx workflow.Context, input ScaffolderWorkflowInput) (*S
 		},
 	})
 
-	// Claim the run before anything else can fail: this records the workflow id
-	// so the UI can cancel, and flips the run to running with every step
-	// pending. Registering the query handler first would leave an orphaned
-	// `pending` run with no workflow id if registration failed.
-	run.writeProgress(bookkeepingCtx, ScaffolderStatusRunning, info.WorkflowExecution.ID, nil)
-
+	// Register the query handler first: it is pure workflow-local setup, and
+	// doing it before the first activity means a progress query issued while
+	// the claiming write is still in flight is answered instead of rejected.
 	if err := workflow.SetQueryHandler(ctx, ScaffolderProgressQuery, func() (ScaffolderProgress, error) {
 		return run.progress(), nil
 	}); err != nil {
@@ -145,6 +147,12 @@ func ScaffolderWorkflow(ctx workflow.Context, input ScaffolderWorkflowInput) (*S
 		return run.finish(ctx, bookkeepingCtx, ScaffolderStatusFailed,
 			"failed to set up progress tracking: "+err.Error())
 	}
+
+	// Claim the run before any work happens: this records the workflow id so
+	// the UI can cancel, and flips the run to running with every step pending.
+	// It stays ahead of validation so a rejected definition still leaves a run
+	// that can be found and explained.
+	run.writeProgress(bookkeepingCtx, ScaffolderStatusRunning, info.WorkflowExecution.ID, nil)
 
 	// Step activities heartbeat (clone, render, push), so they carry a
 	// heartbeat timeout. WaitForCancellation makes a cancelled step's future
@@ -189,10 +197,27 @@ func ScaffolderWorkflow(ctx workflow.Context, input ScaffolderWorkflowInput) (*S
 	}
 
 	outputs, err := resolveDefinitionOutput(run.exprCtx, input.Definition.Spec.Output)
-	if err != nil {
-		return run.finish(ctx, bookkeepingCtx, ScaffolderStatusFailed, "failed to resolve output: "+err.Error())
+	outputSkippable, outputErr := run.dryRunSkippable(err, func(c scaffolder.Ctx) error {
+		_, e := resolveDefinitionOutput(c, input.Definition.Spec.Output)
+		return e
+	})
+	switch {
+	case outputSkippable:
+		// spec.output almost always reads a step's output, and a dry run
+		// produces none. Report it the same way an unpreviewable step is
+		// reported rather than failing an otherwise complete preview.
+		run.plan = append(run.plan, scaffolder.PlannedChange{
+			Kind:        "unsupported",
+			Name:        "output",
+			Description: "the run output cannot be previewed: it depends on a step's output",
+		})
+		run.appendLog(ctx, "warn", "run output cannot be previewed: it depends on a step's output")
+		run.logger.Info("Scaffolder run output not previewable in a dry run", "reason", err)
+	case outputErr != nil:
+		return run.finish(ctx, bookkeepingCtx, ScaffolderStatusFailed, "failed to resolve output: "+outputErr.Error())
+	default:
+		run.outputs = outputs
 	}
-	run.outputs = outputs
 
 	return run.finish(ctx, bookkeepingCtx, ScaffolderStatusSucceeded, "")
 }
@@ -252,19 +277,23 @@ func (r *scaffolderRun) runStep(ctx workflow.Context, stepBaseCtx workflow.Conte
 
 	if step.If != "" {
 		want, err := scaffolder.EvalBool(r.exprCtx, step.If)
-		switch {
-		case err != nil && r.unplannable(step.If, step.Input):
-			r.markUnplannable(ctx, idx, step, err)
-			return false, ""
-		case err != nil:
-			r.failStep(idx, err.Error())
-			return false, fmt.Sprintf("step %q: %v", step.ID, err)
+		if err != nil {
+			skippable, realErr := r.dryRunSkippable(err, func(c scaffolder.Ctx) error {
+				_, e := scaffolder.EvalBool(c, step.If)
+				return e
+			})
+			if skippable {
+				r.markUnplannable(ctx, idx, step, err)
+				return false, ""
+			}
+			r.failStep(idx, realErr.Error())
+			return false, fmt.Sprintf("step %q: %v", step.ID, realErr)
 		}
 		if !want {
 			r.steps[idx].Status = stepStatusSkipped
 			r.steps[idx].FinishedAt = workflowNow(ctx)
 			r.logger.Info("Scaffolder step skipped", "stepId", step.ID, "if", step.If)
-			r.appendLog("info", fmt.Sprintf("step %s (%s) skipped: condition is false", step.ID, step.Action))
+			r.appendLog(ctx, "info", fmt.Sprintf("step %s (%s) skipped: condition is false", step.ID, step.Action))
 			return false, ""
 		}
 	}
@@ -281,17 +310,21 @@ func (r *scaffolderRun) runStep(ctx workflow.Context, stepBaseCtx workflow.Conte
 		// step's output cannot resolve. That is a limit of previewing, not a
 		// broken definition: record the step as unplannable and keep going,
 		// the same way an action that cannot Plan is recorded.
-		if r.unplannable(step.If, step.Input) {
+		skippable, realErr := r.dryRunSkippable(err, func(c scaffolder.Ctx) error {
+			_, e := scaffolder.ResolveJSON(c, step.Input)
+			return e
+		})
+		if skippable {
 			r.markUnplannable(ctx, idx, step, err)
 			return false, ""
 		}
-		r.failStep(idx, err.Error())
-		return false, fmt.Sprintf("step %q: %v", step.ID, err)
+		r.failStep(idx, realErr.Error())
+		return false, fmt.Sprintf("step %q: %v", step.ID, realErr)
 	}
 
 	r.steps[idx].Status = stepStatusRunning
 	r.steps[idx].StartedAt = workflowNow(ctx)
-	r.appendLog("info", fmt.Sprintf("step %s (%s) started", step.ID, step.Action))
+	r.appendLog(ctx, "info", fmt.Sprintf("step %s (%s) started", step.ID, step.Action))
 
 	stepCtx := workflow.WithStartToCloseTimeout(stepBaseCtx, timeout)
 	activityName := activities.ActivityScaffolderExecuteStep
@@ -340,34 +373,48 @@ func (r *scaffolderRun) runStep(ctx workflow.Context, stepBaseCtx workflow.Conte
 		// Get on it would return immediately) and is bounded by the step's own
 		// start-to-close timeout. WaitForCancellation on the activity options
 		// is what makes the future settle only once the action has returned.
+		// Tell the run record a cancel is in flight before the wait, so the UI
+		// does not sit on a stale "running" for however long the step takes to
+		// stop. `action-runs.status` has no `cancelling` member, so this is a
+		// log line on the still-running status rather than a new state.
 		waitCtx, cancelWait := workflow.NewDisconnectedContext(ctx)
+		waitBookkeeping := workflow.WithActivityOptions(waitCtx, workflow.ActivityOptions{
+			StartToCloseTimeout: bookkeepingTimeout,
+			RetryPolicy: &temporal.RetryPolicy{
+				MaximumAttempts:        maxStepAttempts,
+				NonRetryableErrorTypes: []string{activities.ErrTypeScaffolderInvalid},
+			},
+		})
+		r.appendLog(ctx, "warn", fmt.Sprintf("cancel requested; waiting for step %s (%s) to stop", step.ID, step.Action))
+		r.writeProgress(waitBookkeeping, ScaffolderStatusRunning, "", nil)
+
 		_ = future.Get(waitCtx, nil)
 		cancelWait()
 
 		r.failStep(idx, "cancelled")
-		r.appendLog("warn", fmt.Sprintf("step %s (%s) cancelled", step.ID, step.Action))
+		r.appendLog(ctx, "warn", fmt.Sprintf("step %s (%s) cancelled", step.ID, step.Action))
 		return true, ""
 	}
 	if activityErr != nil {
 		if temporal.IsCanceledError(activityErr) {
 			r.failStep(idx, "cancelled")
-			r.appendLog("warn", fmt.Sprintf("step %s (%s) cancelled", step.ID, step.Action))
+			r.appendLog(ctx, "warn", fmt.Sprintf("step %s (%s) cancelled", step.ID, step.Action))
 			return true, ""
 		}
 		r.failStep(idx, activityErr.Error())
 		if step.ContinueOnError {
 			r.logger.Warn("Scaffolder step failed but continueOnError is set",
 				"stepId", step.ID, "action", step.Action, "error", activityErr)
-			r.appendLog("warn", fmt.Sprintf("step %s (%s) failed, continuing: %v", step.ID, step.Action, activityErr))
+			r.appendLog(ctx, "warn", fmt.Sprintf("step %s (%s) failed, continuing: %v", step.ID, step.Action, activityErr))
 			return false, ""
 		}
-		r.appendLog("error", fmt.Sprintf("step %s (%s) failed: %v", step.ID, step.Action, activityErr))
+		r.appendLog(ctx, "error", fmt.Sprintf("step %s (%s) failed: %v", step.ID, step.Action, activityErr))
 		return false, fmt.Sprintf("step %q (%s) failed: %v", step.ID, step.Action, activityErr)
 	}
 
 	r.steps[idx].Status = stepStatusSucceeded
 	r.steps[idx].FinishedAt = workflowNow(ctx)
-	r.appendLog("info", fmt.Sprintf("step %s (%s) succeeded", step.ID, step.Action))
+	r.appendLog(ctx, "info", fmt.Sprintf("step %s (%s) succeeded", step.ID, step.Action))
 
 	if r.input.DryRun {
 		if planResult.Unsupported {
@@ -393,15 +440,36 @@ func (r *scaffolderRun) runStep(ctx workflow.Context, stepBaseCtx workflow.Conte
 	return false, ""
 }
 
-// unplannable reports whether a resolution failure is only a consequence of
-// dry-running: the step reads a prior step's output, which no dry run produces.
-// Outside a dry run it is always false, so a genuinely broken reference still
-// fails the run.
-func (r *scaffolderRun) unplannable(condition string, input json.RawMessage) bool {
-	if !r.input.DryRun {
-		return false
+// dryRunSkippable decides whether a resolution failure is only a consequence
+// of dry-running, and returns the error the run should fail with otherwise.
+//
+// A dry run produces no step output, so `${{ steps.x.output.y }}` never
+// resolves. That alone is not enough to skip: resolution stops at the FIRST
+// bad reference, so an expression reading both a prior step's output and a
+// misspelled parameter would look step-dependent while actually being broken.
+// So when the failing reference is in the `steps` namespace, the expression is
+// re-resolved with step outputs assumed present; only if THAT succeeds is the
+// step genuinely unpreviewable.
+//
+// A structural error (unknown namespace, malformed steps reference) is not an
+// UnresolvedPathError and always fails the run, dry or not.
+func (r *scaffolderRun) dryRunSkippable(err error, recheck func(scaffolder.Ctx) error) (bool, error) {
+	if !r.input.DryRun || err == nil {
+		return false, err
 	}
-	return referencesStepOutput(scaffolder.NormalizeCondition(condition)) || referencesStepOutput(string(input))
+	var unresolved *scaffolder.UnresolvedPathError
+	if !errors.As(err, &unresolved) || unresolved.Namespace() != "steps" {
+		return false, err
+	}
+
+	assumed := r.exprCtx
+	assumed.AssumeStepOutputs = true
+	if realErr := recheck(assumed); realErr != nil {
+		// Something other than the step reference is broken. Report that,
+		// not the step reference that happened to fail first.
+		return false, realErr
+	}
+	return true, nil
 }
 
 // markUnplannable records a step the dry run could not preview.
@@ -414,35 +482,22 @@ func (r *scaffolderRun) markUnplannable(ctx workflow.Context, idx int, step scaf
 		Name:        step.ID,
 		Description: fmt.Sprintf("%s cannot be previewed: it depends on an earlier step's output", step.Action),
 	})
-	r.appendLog("warn", fmt.Sprintf("step %s (%s) cannot be previewed: it depends on an earlier step's output", step.ID, step.Action))
+	r.appendLog(ctx, "warn", fmt.Sprintf("step %s (%s) cannot be previewed: it depends on an earlier step's output", step.ID, step.Action))
 	r.logger.Info("Scaffolder step not previewable in a dry run",
 		"stepId", step.ID, "action", step.Action, "reason", cause)
-}
-
-// referencesStepOutput reports whether s contains a `${{ steps.… }}` reference.
-// A malformed expression is treated as no reference: the caller then surfaces
-// the original resolution error, which says more.
-func referencesStepOutput(s string) bool {
-	if !scaffolder.HasExpression(s) {
-		return false
-	}
-	refs, err := scaffolder.ExtractReferences(s)
-	if err != nil {
-		return false
-	}
-	for _, ref := range refs {
-		if len(ref.Path) > 0 && ref.Path[0] == "steps" {
-			return true
-		}
-	}
-	return false
 }
 
 // appendLog queues one line for the next progress writeback. Only step
 // lifecycle transitions are logged — never a resolved step input, which can
 // carry an installation token or another credential.
-func (r *scaffolderRun) appendLog(level, message string) {
-	r.pendingLogs = append(r.pendingLogs, activities.ScaffolderLogEntry{Level: level, Message: message})
+func (r *scaffolderRun) appendLog(ctx workflow.Context, level, message string) {
+	r.pendingLogs = append(r.pendingLogs, activities.ScaffolderLogEntry{
+		// The deterministic workflow clock, never time.Now: the activity would
+		// otherwise stamp a replay-unstable timestamp on every line.
+		TS:      workflowNow(ctx),
+		Level:   level,
+		Message: message,
+	})
 }
 
 // failStep records a step failure without deciding the run's fate.
@@ -586,6 +641,9 @@ func parseStepTimeout(raw string, def time.Duration) (time.Duration, error) {
 	}
 	if d <= 0 {
 		return 0, fmt.Errorf("invalid timeout %q: must be positive", raw)
+	}
+	if d > maxStepTimeout {
+		return 0, fmt.Errorf("invalid timeout %q: must not exceed %s", raw, maxStepTimeout)
 	}
 	return d, nil
 }

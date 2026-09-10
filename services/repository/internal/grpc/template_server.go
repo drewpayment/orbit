@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"errors"
 
 	"connectrpc.com/connect"
 
@@ -27,7 +28,16 @@ type TemporalClientInterface interface {
 type ScaffolderTemporalClient interface {
 	StartScaffolderWorkflow(ctx context.Context, in types.ScaffolderWorkflowInput) (string, error)
 	QueryScaffolderProgress(ctx context.Context, workflowID string) (*types.ScaffolderProgress, error)
+	// ScaffolderRunWorkspace returns the workspace a run was started for,
+	// read from the workflow's memo. GetRunProgress and CancelRun take only a
+	// workflow id, so this is the only way to scope them to a tenant.
+	// It returns ErrScaffolderRunNotFound for an unknown or expired run.
+	ScaffolderRunWorkspace(ctx context.Context, workflowID string) (string, error)
 }
+
+// ErrScaffolderRunNotFound is returned when a workflow id does not resolve, so
+// the handlers can answer NotFound rather than Internal.
+var ErrScaffolderRunNotFound = errors.New("scaffolder run not found")
 
 // PayloadClientInterface defines the interface for Payload CMS operations
 type PayloadClientInterface interface {

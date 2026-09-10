@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"connectrpc.com/connect"
@@ -145,11 +146,24 @@ func (s *TemplateServer) StartScaffolderRun(ctx context.Context, req *connect.Re
 	return connect.NewResponse(&templatev1.StartScaffolderRunResponse{WorkflowId: workflowID}), nil
 }
 
-// GetRunProgress answers with the workflow's current per-step snapshot.
-func (s *TemplateServer) GetRunProgress(ctx context.Context, req *connect.Request[templatev1.GetRunProgressRequest]) (*connect.Response[templatev1.GetRunProgressResponse], error) {
-	workflowID := req.Msg.GetWorkflowId()
+// ScaffolderRunIDPrefix is the workflow-id prefix StartScaffolderWorkflow
+// assigns. Requiring it stops these handlers being used as a generic
+// query/cancel surface over every workflow in the namespace.
+const ScaffolderRunIDPrefix = "scaffolder-run-"
+
+// authorizeScaffolderRun resolves the run's workspace from its memo and checks
+// it against the caller's verified identity.
+//
+// GetRunProgress and CancelRun carry only a workflow id, so without this a
+// caller could read another tenant's run outputs or cancel their run by
+// guessing an id (which is derived from the ActionRuns doc id).
+func (s *TemplateServer) authorizeScaffolderRun(ctx context.Context, workflowID string) (ScaffolderTemporalClient, error) {
 	if workflowID == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("workflow_id is required"))
+	}
+	if !strings.HasPrefix(workflowID, ScaffolderRunIDPrefix) {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("workflow_id must be a scaffolder run (%s…)", ScaffolderRunIDPrefix))
 	}
 	if s.temporalClient == nil {
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("temporal is unavailable"))
@@ -157,11 +171,41 @@ func (s *TemplateServer) GetRunProgress(ctx context.Context, req *connect.Reques
 	scaffolderTemporal, ok := s.temporalClient.(ScaffolderTemporalClient)
 	if !ok {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			errors.New("the configured temporal client cannot query scaffolder runs"))
+			errors.New("the configured temporal client cannot serve scaffolder runs"))
+	}
+
+	workspaceID, err := scaffolderTemporal.ScaffolderRunWorkspace(ctx, workflowID)
+	if err != nil {
+		if errors.Is(err, ErrScaffolderRunNotFound) {
+			return nil, connect.NewError(connect.CodeNotFound, err)
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if workspaceID == "" {
+		// A run started before the memo existed, or by something that did not
+		// set it. Fail closed rather than serving an unscoped run.
+		return nil, connect.NewError(connect.CodePermissionDenied,
+			errors.New("scaffolder run has no workspace memo; refusing to serve it unscoped"))
+	}
+	if err := svcauth.EnforceWorkspace(ctx, workspaceID); err != nil {
+		return nil, connect.NewError(connect.CodePermissionDenied, err)
+	}
+	return scaffolderTemporal, nil
+}
+
+// GetRunProgress answers with the workflow's current per-step snapshot.
+func (s *TemplateServer) GetRunProgress(ctx context.Context, req *connect.Request[templatev1.GetRunProgressRequest]) (*connect.Response[templatev1.GetRunProgressResponse], error) {
+	workflowID := req.Msg.GetWorkflowId()
+	scaffolderTemporal, err := s.authorizeScaffolderRun(ctx, workflowID)
+	if err != nil {
+		return nil, err
 	}
 
 	progress, err := scaffolderTemporal.QueryScaffolderProgress(ctx, workflowID)
 	if err != nil {
+		if errors.Is(err, ErrScaffolderRunNotFound) {
+			return nil, connect.NewError(connect.CodeNotFound, err)
+		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
@@ -192,14 +236,14 @@ func (s *TemplateServer) GetRunProgress(ctx context.Context, req *connect.Reques
 // CancelRun cancels an in-progress scaffolder run.
 func (s *TemplateServer) CancelRun(ctx context.Context, req *connect.Request[templatev1.CancelRunRequest]) (*connect.Response[templatev1.CancelRunResponse], error) {
 	workflowID := req.Msg.GetWorkflowId()
-	if workflowID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("workflow_id is required"))
-	}
-	if s.temporalClient == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("temporal is unavailable"))
+	if _, err := s.authorizeScaffolderRun(ctx, workflowID); err != nil {
+		return nil, err
 	}
 
 	if err := s.temporalClient.CancelWorkflow(ctx, workflowID); err != nil {
+		if errors.Is(err, ErrScaffolderRunNotFound) {
+			return nil, connect.NewError(connect.CodeNotFound, err)
+		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&templatev1.CancelRunResponse{Success: true}), nil

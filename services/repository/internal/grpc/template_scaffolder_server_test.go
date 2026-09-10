@@ -29,6 +29,11 @@ func (m *MockScaffolderTemporalClient) StartScaffolderWorkflow(ctx context.Conte
 	return args.String(0), args.Error(1)
 }
 
+func (m *MockScaffolderTemporalClient) ScaffolderRunWorkspace(ctx context.Context, workflowID string) (string, error) {
+	args := m.Called(ctx, workflowID)
+	return args.String(0), args.Error(1)
+}
+
 func (m *MockScaffolderTemporalClient) QueryScaffolderProgress(ctx context.Context, workflowID string) (*types.ScaffolderProgress, error) {
 	args := m.Called(ctx, workflowID)
 	if args.Get(0) == nil {
@@ -216,7 +221,7 @@ func TestStartScaffolderRun_AcceptsNilParameters(t *testing.T) {
 	temporalMock := new(MockScaffolderTemporalClient)
 	temporalMock.On("StartScaffolderWorkflow", mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) { got = args.Get(1).(types.ScaffolderWorkflowInput) }).
-		Return("wf-1", nil)
+		Return("scaffolder-run-1", nil)
 
 	req := validScaffolderRequest()
 	req.Parameters = nil
@@ -233,7 +238,8 @@ func TestStartScaffolderRun_AcceptsNilParameters(t *testing.T) {
 
 func TestGetRunProgress_MapsTheQuerySnapshot(t *testing.T) {
 	temporalMock := new(MockScaffolderTemporalClient)
-	temporalMock.On("QueryScaffolderProgress", mock.Anything, "wf-1").Return(&types.ScaffolderProgress{
+	temporalMock.On("ScaffolderRunWorkspace", mock.Anything, "scaffolder-run-1").Return("ws-1", nil)
+	temporalMock.On("QueryScaffolderProgress", mock.Anything, "scaffolder-run-1").Return(&types.ScaffolderProgress{
 		Status: "succeeded",
 		Steps: []types.ScaffolderStepProgress{
 			{ID: "create", Name: "Create repo", Status: "succeeded"},
@@ -243,10 +249,10 @@ func TestGetRunProgress_MapsTheQuerySnapshot(t *testing.T) {
 	}, nil)
 
 	server := NewTemplateServer(temporalMock, nil)
-	resp, err := server.GetRunProgress(context.Background(), connect.NewRequest(&templatev1.GetRunProgressRequest{WorkflowId: "wf-1"}))
+	resp, err := server.GetRunProgress(authCtx(), connect.NewRequest(&templatev1.GetRunProgressRequest{WorkflowId: "scaffolder-run-1"}))
 
 	require.NoError(t, err)
-	assert.Equal(t, "wf-1", resp.Msg.WorkflowId)
+	assert.Equal(t, "scaffolder-run-1", resp.Msg.WorkflowId)
 	assert.Equal(t, templatev1.WorkflowStatus_WORKFLOW_STATUS_COMPLETED, resp.Msg.Status)
 	require.Len(t, resp.Msg.Steps, 2)
 	assert.Equal(t, "create", resp.Msg.Steps[0].Id)
@@ -273,11 +279,12 @@ func TestGetRunProgress_MapsStatusStrings(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.in, func(t *testing.T) {
 			temporalMock := new(MockScaffolderTemporalClient)
-			temporalMock.On("QueryScaffolderProgress", mock.Anything, "wf-1").
+			temporalMock.On("ScaffolderRunWorkspace", mock.Anything, "scaffolder-run-1").Return("ws-1", nil)
+			temporalMock.On("QueryScaffolderProgress", mock.Anything, "scaffolder-run-1").
 				Return(&types.ScaffolderProgress{Status: tt.in}, nil)
 
 			server := NewTemplateServer(temporalMock, nil)
-			resp, err := server.GetRunProgress(context.Background(), connect.NewRequest(&templatev1.GetRunProgressRequest{WorkflowId: "wf-1"}))
+			resp, err := server.GetRunProgress(authCtx(), connect.NewRequest(&templatev1.GetRunProgressRequest{WorkflowId: "scaffolder-run-1"}))
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, resp.Msg.Status)
 		})
@@ -286,25 +293,26 @@ func TestGetRunProgress_MapsStatusStrings(t *testing.T) {
 
 func TestGetRunProgress_ReportsTheRunError(t *testing.T) {
 	temporalMock := new(MockScaffolderTemporalClient)
-	temporalMock.On("QueryScaffolderProgress", mock.Anything, "wf-1").
+	temporalMock.On("ScaffolderRunWorkspace", mock.Anything, "scaffolder-run-1").Return("ws-1", nil)
+	temporalMock.On("QueryScaffolderProgress", mock.Anything, "scaffolder-run-1").
 		Return(&types.ScaffolderProgress{Status: "failed", Error: "step create failed"}, nil)
 
 	server := NewTemplateServer(temporalMock, nil)
-	resp, err := server.GetRunProgress(context.Background(), connect.NewRequest(&templatev1.GetRunProgressRequest{WorkflowId: "wf-1"}))
+	resp, err := server.GetRunProgress(authCtx(), connect.NewRequest(&templatev1.GetRunProgressRequest{WorkflowId: "scaffolder-run-1"}))
 	require.NoError(t, err)
 	assert.Equal(t, "step create failed", resp.Msg.ErrorMessage)
 }
 
 func TestGetRunProgress_RequiresWorkflowID(t *testing.T) {
 	server := NewTemplateServer(new(MockScaffolderTemporalClient), nil)
-	_, err := server.GetRunProgress(context.Background(), connect.NewRequest(&templatev1.GetRunProgressRequest{}))
+	_, err := server.GetRunProgress(authCtx(), connect.NewRequest(&templatev1.GetRunProgressRequest{}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeInvalidArgument, connectCode(t, err))
 }
 
 func TestGetRunProgress_WithoutTemporalIsUnavailable(t *testing.T) {
 	server := NewTemplateServer(nil, nil)
-	_, err := server.GetRunProgress(context.Background(), connect.NewRequest(&templatev1.GetRunProgressRequest{WorkflowId: "wf-1"}))
+	_, err := server.GetRunProgress(authCtx(), connect.NewRequest(&templatev1.GetRunProgressRequest{WorkflowId: "scaffolder-run-1"}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeUnavailable, connectCode(t, err))
 }
@@ -313,10 +321,11 @@ func TestGetRunProgress_WithoutTemporalIsUnavailable(t *testing.T) {
 
 func TestCancelRun_Success(t *testing.T) {
 	temporalMock := new(MockScaffolderTemporalClient)
-	temporalMock.On("CancelWorkflow", mock.Anything, "wf-1").Return(nil)
+	temporalMock.On("ScaffolderRunWorkspace", mock.Anything, "scaffolder-run-1").Return("ws-1", nil)
+	temporalMock.On("CancelWorkflow", mock.Anything, "scaffolder-run-1").Return(nil)
 
 	server := NewTemplateServer(temporalMock, nil)
-	resp, err := server.CancelRun(context.Background(), connect.NewRequest(&templatev1.CancelRunRequest{WorkflowId: "wf-1"}))
+	resp, err := server.CancelRun(authCtx(), connect.NewRequest(&templatev1.CancelRunRequest{WorkflowId: "scaffolder-run-1"}))
 
 	require.NoError(t, err)
 	assert.True(t, resp.Msg.Success)
@@ -325,17 +334,18 @@ func TestCancelRun_Success(t *testing.T) {
 
 func TestCancelRun_RequiresWorkflowID(t *testing.T) {
 	server := NewTemplateServer(new(MockScaffolderTemporalClient), nil)
-	_, err := server.CancelRun(context.Background(), connect.NewRequest(&templatev1.CancelRunRequest{}))
+	_, err := server.CancelRun(authCtx(), connect.NewRequest(&templatev1.CancelRunRequest{}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeInvalidArgument, connectCode(t, err))
 }
 
 func TestCancelRun_PropagatesFailure(t *testing.T) {
 	temporalMock := new(MockScaffolderTemporalClient)
-	temporalMock.On("CancelWorkflow", mock.Anything, "wf-1").Return(errors.New("no such workflow"))
+	temporalMock.On("ScaffolderRunWorkspace", mock.Anything, "scaffolder-run-1").Return("ws-1", nil)
+	temporalMock.On("CancelWorkflow", mock.Anything, "scaffolder-run-1").Return(errors.New("no such workflow"))
 
 	server := NewTemplateServer(temporalMock, nil)
-	_, err := server.CancelRun(context.Background(), connect.NewRequest(&templatev1.CancelRunRequest{WorkflowId: "wf-1"}))
+	_, err := server.CancelRun(authCtx(), connect.NewRequest(&templatev1.CancelRunRequest{WorkflowId: "scaffolder-run-1"}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeInternal, connectCode(t, err))
 }
@@ -422,4 +432,90 @@ func TestStartScaffolderRun_RejectsAnUnauthenticatedCaller(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, connect.CodePermissionDenied, connectCode(t, err))
 	defMock.AssertNotCalled(t, "GetDefinitionVersion", mock.Anything, mock.Anything)
+}
+
+// --- run-scoped authorization (Q3) ------------------------------------------
+
+func TestScaffolderRunHandlers_RejectAnotherWorkspacesRun(t *testing.T) {
+	// The run belongs to ws-2; the caller is authorized only for ws-1.
+	newServer := func(t *testing.T) (*TemplateServer, *MockScaffolderTemporalClient) {
+		t.Helper()
+		m := new(MockScaffolderTemporalClient)
+		m.On("ScaffolderRunWorkspace", mock.Anything, "scaffolder-run-1").Return("ws-2", nil)
+		return NewTemplateServer(m, nil), m
+	}
+
+	t.Run("GetRunProgress", func(t *testing.T) {
+		server, m := newServer(t)
+		_, err := server.GetRunProgress(authCtx(), connect.NewRequest(&templatev1.GetRunProgressRequest{WorkflowId: "scaffolder-run-1"}))
+		require.Error(t, err)
+		assert.Equal(t, connect.CodePermissionDenied, connectCode(t, err))
+		m.AssertNotCalled(t, "QueryScaffolderProgress", mock.Anything, mock.Anything)
+	})
+
+	t.Run("CancelRun", func(t *testing.T) {
+		server, m := newServer(t)
+		_, err := server.CancelRun(authCtx(), connect.NewRequest(&templatev1.CancelRunRequest{WorkflowId: "scaffolder-run-1"}))
+		require.Error(t, err)
+		assert.Equal(t, connect.CodePermissionDenied, connectCode(t, err))
+		m.AssertNotCalled(t, "CancelWorkflow", mock.Anything, mock.Anything)
+	})
+}
+
+func TestScaffolderRunHandlers_RejectARunWithNoWorkspaceMemo(t *testing.T) {
+	m := new(MockScaffolderTemporalClient)
+	m.On("ScaffolderRunWorkspace", mock.Anything, "scaffolder-run-1").Return("", nil)
+
+	server := NewTemplateServer(m, nil)
+	_, err := server.GetRunProgress(authCtx(), connect.NewRequest(&templatev1.GetRunProgressRequest{WorkflowId: "scaffolder-run-1"}))
+
+	require.Error(t, err)
+	assert.Equal(t, connect.CodePermissionDenied, connectCode(t, err),
+		"an unscoped run must fail closed, not be served to anyone")
+	m.AssertNotCalled(t, "QueryScaffolderProgress", mock.Anything, mock.Anything)
+}
+
+func TestScaffolderRunHandlers_RejectANonScaffolderWorkflowID(t *testing.T) {
+	// These handlers must not become a generic query/cancel surface over every
+	// workflow in the namespace.
+	for _, id := range []string{"template-instantiation-foo-123", "agent-run-9", "wf-1"} {
+		t.Run(id, func(t *testing.T) {
+			m := new(MockScaffolderTemporalClient)
+			server := NewTemplateServer(m, nil)
+
+			_, err := server.CancelRun(authCtx(), connect.NewRequest(&templatev1.CancelRunRequest{WorkflowId: id}))
+			require.Error(t, err)
+			assert.Equal(t, connect.CodeInvalidArgument, connectCode(t, err))
+
+			_, err = server.GetRunProgress(authCtx(), connect.NewRequest(&templatev1.GetRunProgressRequest{WorkflowId: id}))
+			require.Error(t, err)
+			assert.Equal(t, connect.CodeInvalidArgument, connectCode(t, err))
+
+			m.AssertNotCalled(t, "ScaffolderRunWorkspace", mock.Anything, mock.Anything)
+		})
+	}
+}
+
+func TestScaffolderRunHandlers_UnknownRunIsNotFound(t *testing.T) {
+	m := new(MockScaffolderTemporalClient)
+	m.On("ScaffolderRunWorkspace", mock.Anything, "scaffolder-run-gone").
+		Return("", ErrScaffolderRunNotFound)
+
+	server := NewTemplateServer(m, nil)
+	_, err := server.GetRunProgress(authCtx(), connect.NewRequest(&templatev1.GetRunProgressRequest{WorkflowId: "scaffolder-run-gone"}))
+
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeNotFound, connectCode(t, err))
+}
+
+func TestScaffolderRunHandlers_RejectAnUnauthenticatedCaller(t *testing.T) {
+	m := new(MockScaffolderTemporalClient)
+	m.On("ScaffolderRunWorkspace", mock.Anything, "scaffolder-run-1").Return("ws-1", nil)
+
+	server := NewTemplateServer(m, nil)
+	_, err := server.GetRunProgress(context.Background(), connect.NewRequest(&templatev1.GetRunProgressRequest{WorkflowId: "scaffolder-run-1"}))
+
+	require.Error(t, err)
+	assert.Equal(t, connect.CodePermissionDenied, connectCode(t, err))
+	m.AssertNotCalled(t, "QueryScaffolderProgress", mock.Anything, mock.Anything)
 }

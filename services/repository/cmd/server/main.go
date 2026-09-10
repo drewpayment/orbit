@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,7 +12,9 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/converter"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
@@ -175,16 +178,55 @@ func (tc *TemporalClient) StartTemplateWorkflow(ctx context.Context, input inter
 // creates before dispatching, so a retried dispatch of the same run reuses the
 // id instead of starting a second workflow against one run record.
 func (tc *TemporalClient) StartScaffolderWorkflow(ctx context.Context, in types.ScaffolderWorkflowInput) (string, error) {
-	workflowID := fmt.Sprintf("scaffolder-run-%s", in.RunID)
+	workflowID := grpcserver.ScaffolderRunIDPrefix + in.RunID
 
 	we, err := tc.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:        workflowID,
 		TaskQueue: "orbit-workflows",
+		// The memo is what lets GetRunProgress and CancelRun scope themselves
+		// to a tenant: both RPCs carry only a workflow id, so the run's own
+		// workspace has to be readable without querying the workflow (which
+		// would work only while it is running).
+		Memo: map[string]interface{}{
+			scaffolderWorkspaceMemoKey: in.WorkspaceID,
+		},
 	}, types.ScaffolderWorkflowName, in)
 	if err != nil {
 		return "", fmt.Errorf("failed to start scaffolder workflow: %w", err)
 	}
 	return we.GetID(), nil
+}
+
+// scaffolderWorkspaceMemoKey names the memo field carrying a run's workspace.
+const scaffolderWorkspaceMemoKey = "workspaceId"
+
+// ScaffolderRunWorkspace reads a run's workspace from its workflow memo.
+// DescribeWorkflowExecution answers for closed runs too, so progress and
+// cancel stay scoped after a run finishes.
+func (tc *TemporalClient) ScaffolderRunWorkspace(ctx context.Context, workflowID string) (string, error) {
+	desc, err := tc.client.DescribeWorkflowExecution(ctx, workflowID, "")
+	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return "", grpcserver.ErrScaffolderRunNotFound
+		}
+		return "", fmt.Errorf("failed to describe scaffolder run: %w", err)
+	}
+
+	info := desc.GetWorkflowExecutionInfo()
+	if info == nil || info.GetMemo() == nil {
+		return "", nil
+	}
+	payload, ok := info.GetMemo().GetFields()[scaffolderWorkspaceMemoKey]
+	if !ok {
+		return "", nil
+	}
+
+	var workspaceID string
+	if err := converter.GetDefaultDataConverter().FromPayload(payload, &workspaceID); err != nil {
+		return "", fmt.Errorf("failed to decode scaffolder run workspace memo: %w", err)
+	}
+	return workspaceID, nil
 }
 
 // QueryScaffolderProgress queries a scaffolder run's per-step snapshot.

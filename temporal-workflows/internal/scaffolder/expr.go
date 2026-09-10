@@ -21,7 +21,25 @@ type Ctx struct {
 	Workspace  map[string]any
 	Template   map[string]any
 	RunID      string
+	// AssumeStepOutputs makes any unresolved `steps.<id>.output.<key>` yield
+	// StepOutputPlaceholder instead of failing.
+	//
+	// It exists for one job: letting the dry-run planner ask "would this
+	// expression resolve if the steps had run?". A dry run produces no step
+	// output, so a reference to one always fails — but resolution stops at the
+	// FIRST bad reference, so a genuine authoring error sitting behind a step
+	// reference would otherwise be indistinguishable from it. Re-resolving with
+	// this set answers the question exactly.
+	//
+	// Never set it on the context a real run resolves against: it would turn a
+	// broken reference into a placeholder string in live output.
+	AssumeStepOutputs bool
 }
+
+// StepOutputPlaceholder is the stand-in value an unresolved step output takes
+// when Ctx.AssumeStepOutputs is set. It is a fixed string so the substitution
+// stays deterministic.
+const StepOutputPlaceholder = "<step output>"
 
 // StepOutput is one completed step's output, keyed by step id in Ctx.Steps.
 type StepOutput struct {
@@ -33,6 +51,31 @@ type Filter struct {
 	Name   string
 	Arg    any
 	HasArg bool
+}
+
+// UnresolvedPathError reports a reference whose path is absent from the
+// evaluation context. It carries the path so a caller can tell WHICH reference
+// failed and in which namespace, instead of pattern-matching on message text or
+// re-scanning the surrounding document.
+//
+// The dry-run planner relies on this: a missing `steps.*` reference is expected
+// when previewing (no step has run), while a missing `parameters.*` reference
+// is a real authoring error that must still fail the run.
+type UnresolvedPathError struct {
+	Path []string
+}
+
+func (e *UnresolvedPathError) Error() string {
+	return fmt.Sprintf("unresolved expression path %q", strings.Join(e.Path, "."))
+}
+
+// Namespace is the first path segment ("parameters", "steps", …), or "" for an
+// empty path.
+func (e *UnresolvedPathError) Namespace() string {
+	if len(e.Path) == 0 {
+		return ""
+	}
+	return e.Path[0]
 }
 
 // Reference is a parsed `${{ }}` expression: a dotted path plus its filters.
@@ -462,7 +505,7 @@ func evalReference(ctx Ctx, ref Reference) (any, error) {
 	}
 	if !found {
 		if !ref.HasDefault {
-			return nil, fmt.Errorf("unresolved expression path %q", strings.Join(ref.Path, "."))
+			return nil, &UnresolvedPathError{Path: append([]string(nil), ref.Path...)}
 		}
 		val = nil
 	}
@@ -509,9 +552,15 @@ func lookup(ctx Ctx, path []string) (any, bool, error) {
 		}
 		step, ok := ctx.Steps[path[1]]
 		if !ok {
+			if ctx.AssumeStepOutputs {
+				return StepOutputPlaceholder, true, nil
+			}
 			return nil, false, nil
 		}
 		v, found := descend(step.Output, path[3:])
+		if !found && ctx.AssumeStepOutputs {
+			return StepOutputPlaceholder, true, nil
+		}
 		return v, found, nil
 	default:
 		return nil, false, fmt.Errorf("unknown namespace %q in expression %q", path[0], joined)

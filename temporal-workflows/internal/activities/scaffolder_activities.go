@@ -59,6 +59,18 @@ const (
 	previewMaxFiles = 5000
 )
 
+// previewsDirName and previewDirPrefix name the dry-run preview scratch area,
+// a sibling of the run work dirs under the worker's base directory.
+const (
+	previewsDirName  = "previews"
+	previewDirPrefix = "orbit-scaffolder-preview-"
+)
+
+// previewSweepGrace is how long an orphaned preview directory is left alone
+// before CleanupRun removes it. It must comfortably exceed the longest plausible
+// PlanStep, or the sweep could delete a preview another run is still filling.
+const previewSweepGrace = 6 * time.Hour
+
 // ScaffolderStorage is the subset of clients.StorageClient the dry-run
 // preview needs. An interface keeps the activity testable without MinIO.
 type ScaffolderStorage interface {
@@ -248,7 +260,15 @@ func (a *ScaffolderActivities) PlanStep(ctx context.Context, in ScaffolderStepIn
 	// routinely the work dir root — a destination inside it would make the
 	// copy walk into its own output and recurse until the path length blows
 	// up, rewriting the whole tree at every level.
-	destDir, err := os.MkdirTemp("", "orbit-scaffolder-preview-*")
+	//
+	// It lives under baseDir/previews rather than the system temp dir so it
+	// shares the worker's configured scratch volume, and so CleanupRun can
+	// sweep anything a crashed attempt left behind.
+	previewRoot := a.previewRoot()
+	if err := os.MkdirAll(previewRoot, 0o755); err != nil {
+		return nil, fmt.Errorf("plan step %q: create preview root: %w", in.StepID, err)
+	}
+	destDir, err := os.MkdirTemp(previewRoot, previewDirPrefix+"*")
 	if err != nil {
 		return nil, fmt.Errorf("plan step %q: create preview dir: %w", in.StepID, err)
 	}
@@ -345,7 +365,40 @@ func (a *ScaffolderActivities) CleanupRun(_ context.Context, in CleanupScaffolde
 		return fmt.Errorf("cleanup scaffolder run %s: %w", in.RunID, err)
 	}
 	a.logger.Debug("scaffolder run work dir removed", slog.String("runId", in.RunID), slog.String("workDir", dir))
+
+	a.sweepStalePreviews()
 	return nil
+}
+
+// sweepStalePreviews removes preview directories a crashed or killed attempt
+// left behind. PlanStep removes its own on every path, so anything still here
+// past the grace period is orphaned. Best effort: a run must never fail
+// because someone else's leftovers could not be removed.
+func (a *ScaffolderActivities) sweepStalePreviews() {
+	root := a.previewRoot()
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-previewSweepGrace)
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), previewDirPrefix) {
+			continue
+		}
+		info, err := e.Info()
+		// Skip anything still young: a preview for another run may be in
+		// flight right now on this worker.
+		if err != nil || info.ModTime().After(cutoff) {
+			continue
+		}
+		stale := filepath.Join(root, e.Name())
+		if err := os.RemoveAll(stale); err != nil {
+			a.logger.Warn("failed to remove a stale scaffolder preview dir",
+				slog.String("dir", stale), slog.String("error", err.Error()))
+			continue
+		}
+		a.logger.Debug("removed a stale scaffolder preview dir", slog.String("dir", stale))
+	}
 }
 
 // ValidateDefinition statically validates a definition against the live action
@@ -407,6 +460,12 @@ func (a *ScaffolderActivities) prepare(ctx context.Context, in ScaffolderStepInp
 		},
 	})
 	return action, rc, nil
+}
+
+// previewRoot holds every dry-run preview directory. It is a sibling of the
+// run work dirs, never inside one.
+func (a *ScaffolderActivities) previewRoot() string {
+	return filepath.Join(a.baseDir, previewsDirName)
 }
 
 // runWorkDir is the per-run scratch directory. The run id is sanitised so a
@@ -619,27 +678,59 @@ func planStepError(in ScaffolderStepInput, err error) error {
 	return wrapped
 }
 
-// secretValuePattern matches credential-shaped substrings in free text: a
-// query parameter or assignment whose name looks secret, and the GitHub token
-// prefixes, which are recognisable on their own.
-var secretValuePattern = regexp.MustCompile(
-	`(?i)((?:token|secret|password|passwd|api[_-]?key|credential|authorization)["']?\s*[=:]\s*["']?)([^\s"'&]+)` +
-		`|(gh[pousr]_[A-Za-z0-9]{16,})`)
+// Credential shapes recognised in free text.
+//
+// A short, purely alphabetic value is deliberately NOT redacted: it cannot be
+// told apart from an ordinary word, and mangling readable errors to chase it
+// would cost more than it saves. Provider tokens are covered regardless by
+// secretTokenPattern.
+//
+// secretAssignmentPattern matches `<secret-ish name> = <value>` and
+// `<secret-ish name>: <value>`, including a leading auth scheme
+// ("Bearer", "Basic", "token") which must be KEPT — eating the scheme word
+// while publishing the token after it is worse than not redacting at all.
+// The value class excludes "@" so a URL's host survives
+// (https://x-access-token:TOK@github.com/o/r keeps github.com/o/r), and
+// excludes brackets so re-running redaction cannot chew its own
+// "[redacted]" output.
+//
+// secretTokenPattern matches provider tokens that are self-identifying, so
+// they are redacted wherever they appear: GitHub (ghp_/gho_/ghu_/ghs_/ghr_
+// and the newer github_pat_), GitLab (glpat-), and long opaque base64-ish
+// strings that look like an Azure DevOps PAT.
+var (
+	// vc is the value character class: no whitespace or quoting, no "@" (so a
+	// URL's host survives), no brackets (so re-running cannot chew an earlier
+	// "[redacted]").
+	secretValueChars = `[^\s"'&@,;)\[\]{}]`
+
+	secretAssignmentPattern = regexp.MustCompile(
+		`(?i)\b((?:access[_-]?token|refresh[_-]?token|id[_-]?token|token|secret|password|passwd|pwd|api[_-]?key|apikey|credential|private[_-]?key|authorization|auth)` +
+			`["']?\s*[=:]\s*["']?(?:(?:bearer|basic|token)\s+)?)` +
+			// The value must look like a credential, not like a word: either
+			// it carries a digit or symbol, or it is long enough that no
+			// ordinary word would reach it. Without this the optional scheme
+			// above can backtrack and redact "Bearer" itself, publishing the
+			// token that follows.
+			`(` + secretValueChars + `{5,}[0-9_\-+/=.]` + secretValueChars + `*` +
+			`|` + secretValueChars + `{12,})`)
+
+	secretTokenPattern = regexp.MustCompile(
+		`\b(gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9\-_]{16,}|[A-Za-z0-9]{52})\b`)
+)
 
 // redactSecretsInText scrubs credential-shaped substrings from a free-text
 // message. It is a backstop for text this code did not compose (an action's
 // error string), not a substitute for keeping secrets out of messages.
+//
+// It errs toward keeping the message readable: only the value is replaced, so
+// the reader still sees which field leaked and what the surrounding error was.
 func redactSecretsInText(s string) string {
 	if s == "" {
 		return s
 	}
-	return secretValuePattern.ReplaceAllStringFunc(s, func(match string) string {
-		groups := secretValuePattern.FindStringSubmatch(match)
-		if groups[3] != "" {
-			return redactedPlaceholder
-		}
-		return groups[1] + redactedPlaceholder
-	})
+	out := secretAssignmentPattern.ReplaceAllString(s, "${1}"+redactedPlaceholder)
+	return secretTokenPattern.ReplaceAllString(out, redactedPlaceholder)
 }
 
 // nonRetryable marks err as a failure no retry can fix.

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -538,8 +539,11 @@ func TestScaffolderActivities_PlanStep_PreviewDirIsOutsideTheWorkDir(t *testing.
 	require.NoError(t, err)
 
 	require.Len(t, action.gotDestDirs, 1)
-	assert.False(t, strings.HasPrefix(action.gotDestDirs[0], base+string(filepath.Separator)),
-		"preview dir %q must not be inside the run work dir %q", action.gotDestDirs[0], base)
+	// The preview lives under the worker's base dir, but never inside the
+	// RUN work dir — that containment is what caused the recursion.
+	runDir := filepath.Join(base, "scaffolder-run-run-1")
+	assert.False(t, strings.HasPrefix(action.gotDestDirs[0], runDir+string(filepath.Separator)),
+		"preview dir %q must not be inside the run work dir %q", action.gotDestDirs[0], runDir)
 	assert.NoDirExists(t, action.gotDestDirs[0])
 }
 
@@ -611,30 +615,104 @@ func TestScaffolderActivities_WriteRunProgress_RedactsSecretsInStepErrors(t *tes
 }
 
 func TestRedactSecretsInText(t *testing.T) {
+	const ghToken = "ghp_abcdefghij0123456789"
+
 	tests := []struct {
-		name       string
-		in         string
-		wantAbsent string
-		wantSame   bool
+		name string
+		in   string
+		// mustNotContain is the secret that has to disappear.
+		mustNotContain string
+		// mustContain are fragments that must survive, so a redacted message
+		// is still diagnosable.
+		mustContain []string
+		// unchanged asserts the input is returned verbatim.
+		unchanged bool
 	}{
-		{name: "leaves ordinary text alone", in: "clone failed: repository not found", wantSame: true},
-		{name: "leaves an empty string alone", in: "", wantSame: true},
-		{name: "scrubs a token query parameter", in: "url?access_token=ghp_abcdefghij0123456789", wantAbsent: "ghp_abcdefghij0123456789"},
-		{name: "scrubs an assignment", in: `password: "hunter2hunter2"`, wantAbsent: "hunter2hunter2"},
-		{name: "scrubs a bare github token", in: "auth failed for ghs_abcdefghij0123456789", wantAbsent: "ghs_abcdefghij0123456789"},
-		{name: "scrubs an api key", in: "apiKey=sk-live-0123456789", wantAbsent: "sk-live-0123456789"},
+		{name: "leaves ordinary text alone", in: "clone failed: repository not found", unchanged: true},
+		{name: "leaves an empty string alone", in: "", unchanged: true},
+		{
+			name:           "keeps the Bearer scheme and redacts only the token",
+			in:             "Authorization: Bearer " + ghToken + " rejected",
+			mustNotContain: ghToken,
+			mustContain:    []string{"Authorization:", "Bearer", "rejected"},
+		},
+		{
+			name:           "keeps the Basic scheme",
+			in:             "authorization: Basic dXNlcjpwYXNzd29yZDEyMzQ1",
+			mustNotContain: "dXNlcjpwYXNzd29yZDEyMzQ1",
+			mustContain:    []string{"Basic"},
+		},
+		{
+			name:           "keeps the host in a credentialed git URL",
+			in:             "clone https://x-access-token:" + ghToken + "@github.com/acme/svc.git failed",
+			mustNotContain: ghToken,
+			mustContain:    []string{"github.com/acme/svc.git", "failed"},
+		},
+		{
+			name:           "scrubs a token query parameter but keeps the path",
+			in:             "GET https://api.example.com/repos?access_token=" + ghToken + " -> 401",
+			mustNotContain: ghToken,
+			mustContain:    []string{"api.example.com/repos", "401"},
+		},
+		{
+			name:           "scrubs a fine-grained github pat",
+			in:             "auth failed for github_pat_11ABCDEFG0abcdefghijklmnop",
+			mustNotContain: "github_pat_11ABCDEFG0abcdefghijklmnop",
+		},
+		{
+			name:           "scrubs a gitlab pat",
+			in:             "push rejected: glpat-ABCDEFGHIJ0123456789",
+			mustNotContain: "glpat-ABCDEFGHIJ0123456789",
+		},
+		{
+			name:           "scrubs an azure devops style pat",
+			in:             "ado auth failed with abcdefghij0123456789abcdefghij0123456789abcdefghij01",
+			mustNotContain: "abcdefghij0123456789abcdefghij0123456789abcdefghij01",
+		},
+		{
+			name:           "scrubs a quoted password assignment",
+			in:             `password: "hunter2hunter2"`,
+			mustNotContain: "hunter2hunter2",
+		},
+		{
+			name:           "scrubs an api key",
+			in:             "apiKey=sk-live-0123456789",
+			mustNotContain: "sk-live-0123456789",
+		},
+		{
+			// The false positive the reviewer asked about: "Secret" here names
+			// a Kubernetes object, and "not" is not a credential. Redacting it
+			// costs nothing but must not mangle the rest of the message.
+			name:        "keeps a Kubernetes Secret not-found message readable",
+			in:          `Secret: not found in namespace orbit`,
+			mustContain: []string{"Secret:", "namespace orbit"},
+		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := redactSecretsInText(tt.in)
-			if tt.wantSame {
+
+			if tt.unchanged {
 				assert.Equal(t, tt.in, got)
 				return
 			}
-			assert.NotContains(t, got, tt.wantAbsent)
-			assert.Contains(t, got, redactedPlaceholder)
+			if tt.mustNotContain != "" {
+				assert.NotContains(t, got, tt.mustNotContain)
+				assert.Contains(t, got, redactedPlaceholder)
+			}
+			for _, frag := range tt.mustContain {
+				assert.Contains(t, got, frag, "redaction destroyed a diagnosable fragment")
+			}
 		})
 	}
+}
+
+// Redaction must be stable: running it twice must not keep chewing the text.
+func TestRedactSecretsInText_IsIdempotent(t *testing.T) {
+	in := "Authorization: Bearer ghp_abcdefghij0123456789 rejected"
+	once := redactSecretsInText(in)
+	assert.Equal(t, once, redactSecretsInText(once))
 }
 
 func TestCollectPreview_BoundsFileCount(t *testing.T) {
@@ -647,4 +725,44 @@ func TestCollectPreview_BoundsFileCount(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, preview.Files, previewMaxFiles)
 	assert.True(t, preview.Truncated)
+}
+
+func TestScaffolderActivities_CleanupRun_SweepsStalePreviews(t *testing.T) {
+	base := t.TempDir()
+	a := NewScaffolderActivities(scaffolder.NewRegistry(), nil, nil, base, nil)
+
+	previews := filepath.Join(base, previewsDirName)
+	require.NoError(t, os.MkdirAll(previews, 0o755))
+
+	stale := filepath.Join(previews, previewDirPrefix+"orphaned")
+	fresh := filepath.Join(previews, previewDirPrefix+"inflight")
+	unrelated := filepath.Join(previews, "someone-elses-dir")
+	for _, d := range []string{stale, fresh, unrelated} {
+		require.NoError(t, os.MkdirAll(d, 0o755))
+	}
+	old := time.Now().Add(-previewSweepGrace - time.Hour)
+	require.NoError(t, os.Chtimes(stale, old, old))
+	require.NoError(t, os.Chtimes(unrelated, old, old))
+
+	require.NoError(t, a.CleanupRun(context.Background(), CleanupScaffolderRunInput{RunID: "run-1"}))
+
+	assert.NoDirExists(t, stale, "an orphaned preview past the grace period must be swept")
+	assert.DirExists(t, fresh, "a preview another run may still be filling must be left alone")
+	assert.DirExists(t, unrelated, "the sweep must only touch its own prefix")
+}
+
+func TestScaffolderActivities_PlanStep_PreviewLivesUnderTheSweptRoot(t *testing.T) {
+	action := &fakePreviewAction{fakeAction: fakeAction{name: "fs:render"}, files: map[string]string{"a.txt": "a"}}
+	base := t.TempDir()
+	a := NewScaffolderActivities(scaffolder.NewRegistry(action), nil, newFakeStorage(), base, nil)
+
+	_, err := a.PlanStep(context.Background(), ScaffolderStepInput{RunID: "run-1", StepID: "render", Action: "fs:render", DryRun: true})
+	require.NoError(t, err)
+
+	require.Len(t, action.gotDestDirs, 1)
+	dest := action.gotDestDirs[0]
+	assert.Equal(t, filepath.Join(base, previewsDirName), filepath.Dir(dest),
+		"previews must sit under the swept root, not the system temp dir")
+	assert.NotContains(t, dest, "scaffolder-run-", "and never inside a run work dir")
+	assert.NoDirExists(t, dest)
 }
