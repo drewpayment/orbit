@@ -156,4 +156,42 @@ describe('RunWizard', () => {
     await waitFor(() => expect(screen.getByText(/not published/i)).toBeInTheDocument())
     expect(push).not.toHaveBeenCalled()
   })
+
+  it('surfaces the server-side parameter-validation error ("Invalid parameters: ...") on submit', async () => {
+    const planRun = vi.fn().mockResolvedValue({ runId: 'run-preview' })
+    const startRun = vi.fn().mockRejectedValue(new Error("Invalid parameters: name: must NOT have fewer than 1 characters"))
+    render(
+      <RunWizard
+        slug="go-service"
+        templateVersionId="ver-1"
+        pages={onePage}
+        planRun={planRun}
+        startRun={startRun}
+        getRun={vi.fn().mockResolvedValue(baseRun())}
+      />,
+    )
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'my-svc' } })
+    fireEvent.click(screen.getByRole('button', { name: /review/i }))
+    await waitFor(() => screen.getByRole('button', { name: /^submit$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^submit$/i }))
+    await waitFor(() => expect(screen.getByText(/Invalid parameters:.*must NOT have fewer than 1 characters/i)).toBeInTheDocument())
+    expect(push).not.toHaveBeenCalled()
+  })
+
+  it('surfaces the same server-side parameter-validation error in the review preview banner', async () => {
+    const planRun = vi.fn().mockRejectedValue(new Error('Invalid parameters: unexpected additional property'))
+    render(
+      <RunWizard
+        slug="go-service"
+        templateVersionId="ver-1"
+        pages={onePage}
+        planRun={planRun}
+        startRun={vi.fn()}
+        getRun={vi.fn()}
+      />,
+    )
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'my-svc' } })
+    fireEvent.click(screen.getByRole('button', { name: /review/i }))
+    await waitFor(() => expect(screen.getByText(/Invalid parameters: unexpected additional property/i)).toBeInTheDocument())
+  })
 })
