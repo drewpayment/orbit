@@ -430,9 +430,10 @@ func main() {
 	}
 
 	scaffolderRegistry := scaffolder.NewRegistry(actions.DefaultActions(actions.Deps{
-		TokenService:   tokenService,
-		CatalogClient:  services.NewPayloadCatalogEntityClient(orbitAPIURL, orbitInternalAPIKey, logger),
-		SkeletonClient: services.NewPayloadSkeletonClient(orbitAPIURL, orbitInternalAPIKey, logger),
+		TokenService:    tokenService,
+		CatalogClient:   services.NewPayloadCatalogEntityClient(orbitAPIURL, orbitInternalAPIKey, logger),
+		ApiSchemaClient: services.NewPayloadApiSchemaClient(orbitAPIURL, orbitInternalAPIKey, logger),
+		SkeletonClient:  services.NewPayloadSkeletonClient(orbitAPIURL, orbitInternalAPIKey, logger),
 	})...)
 	if err := scaffolderRegistry.ValidateSchemas(); err != nil {
 		// A broken action schema is a platform bug: fail at startup rather
