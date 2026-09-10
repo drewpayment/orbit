@@ -1,7 +1,11 @@
 // orbit-www/src/collections/TemplateDefinitions.ts
 import type { CollectionConfig, Where } from 'payload'
-import { getMemberWorkspaceIds } from '@/lib/access/workspace-access'
-import { memberCreate, docWorkspaceMutate } from '@/lib/access/collection-access'
+import {
+  getMemberWorkspaceIds,
+  getAdminOrOwnerWorkspaceIds,
+  isPlatformAdmin,
+} from '@/lib/access/workspace-access'
+import { manageCreate, docWorkspaceMutate } from '@/lib/access/collection-access'
 
 /**
  * TemplateDefinitions — the v2 Scaffolder document (In-App Template
@@ -33,23 +37,54 @@ export const TemplateDefinitions: CollectionConfig = {
     description: 'Self-service template definitions (v2 Scaffolder engine).',
   },
   access: {
-    // Read: identical visibility policy to Templates.ts — public, own
-    // workspace, or explicitly shared with a workspace the caller belongs to.
+    // Read: `published` rows follow Templates.ts's visibility policy
+    // (public / own workspace / explicitly shared). Non-published rows
+    // (`draft`, `deprecated`) are NEVER exposed by visibility alone — design
+    // §3.2: "Drafts are only visible to authors [and workspace admins]" — so
+    // they're additionally gated to the row's author or a workspace
+    // owner/admin of the row's OWN workspace, regardless of `visibility`.
+    // A `visibility: public` draft must stay invisible to outsiders.
     read: async ({ req: { user, payload } }) => {
       if (!user) return false
 
       const betterAuthId = user.betterAuthId
       const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
+      const adminOrOwnerWorkspaceIds = betterAuthId
+        ? await getAdminOrOwnerWorkspaceIds(payload, betterAuthId)
+        : []
 
       return {
         or: [
-          { visibility: { equals: 'public' } },
-          { workspace: { in: workspaceIds } },
-          { sharedWith: { in: workspaceIds } },
+          {
+            and: [
+              { status: { equals: 'published' } },
+              {
+                or: [
+                  { visibility: { equals: 'public' } },
+                  { workspace: { in: workspaceIds } },
+                  { sharedWith: { in: workspaceIds } },
+                ],
+              },
+            ],
+          },
+          {
+            and: [
+              { status: { not_equals: 'published' } },
+              {
+                or: [
+                  { createdBy: { equals: user.id } },
+                  { workspace: { in: adminOrOwnerWorkspaceIds } },
+                ],
+              },
+            ],
+          },
         ],
       } as Where
     },
-    create: memberCreate(),
+    // Create/author: workspace owner/admin only (design §3.7 — authoring is
+    // gated higher than plain membership; running a published template is
+    // the self-service surface, not authoring one).
+    create: manageCreate(['owner', 'admin']),
     update: docWorkspaceMutate('template-definitions', ['owner', 'admin']),
     delete: docWorkspaceMutate('template-definitions', ['owner', 'admin']),
   },
@@ -218,6 +253,43 @@ export const TemplateDefinitions: CollectionConfig = {
 
         if (operation === 'create' && req.user && !data.createdBy) {
           data.createdBy = req.user.id
+        }
+
+        return data
+      },
+    ],
+    // Defense-in-depth (design §3.7: "Publish / deprecate: workspace admin;
+    // PLATFORM ADMIN required for visibility: shared|public"). Runs
+    // regardless of the caller — application code going through
+    // lib/scaffolder/versions.ts's publishVersion() enforces this too, but a
+    // direct payload.update({ overrideAccess: true }) call must not be able
+    // to slip a shared/public template into `published` for a non-admin.
+    //
+    // A write with no `req.user` at all (an internal script/worker using
+    // overrideAccess) is allowed ONLY when it explicitly opts in via
+    // `req.context.allowSharedPublicPublish === true` — silence is treated
+    // as unauthorized, not as an implicit bypass.
+    beforeChange: [
+      ({ data, originalDoc, req }) => {
+        if (!data) return data
+
+        const nextVisibility = (data.visibility ?? originalDoc?.visibility) as string | undefined
+        const nextStatus = (data.status ?? originalDoc?.status) as string | undefined
+        const isRestrictedVisibility = nextVisibility === 'shared' || nextVisibility === 'public'
+
+        if (nextStatus === 'published' && isRestrictedVisibility) {
+          if (req.user) {
+            if (!isPlatformAdmin(req.user)) {
+              throw new Error(
+                'Only a platform admin may publish a template-definition with visibility "shared" or "public".',
+              )
+            }
+          } else if (req.context?.allowSharedPublicPublish !== true) {
+            throw new Error(
+              'Only a platform admin may publish a template-definition with visibility "shared" or "public" ' +
+                '(no req.user on this write, and req.context.allowSharedPublicPublish was not set).',
+            )
+          }
         }
 
         return data

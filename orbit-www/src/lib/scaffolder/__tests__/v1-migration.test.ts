@@ -107,4 +107,60 @@ describe('mapV1TemplateToV2Definition', () => {
     const b = mapV1TemplateToV2Definition(template(), baseManifest)
     expect(a).toEqual(b)
   })
+
+  it('derives the repo-name parameter from a projectName variable when serviceName/name are absent', () => {
+    const manifest: TemplateManifest = {
+      ...baseManifest,
+      variables: [
+        { key: 'projectName', type: 'string', required: true },
+        { key: 'description', type: 'string', required: false },
+      ],
+    }
+    const def = mapV1TemplateToV2Definition(template({ isGitHubTemplate: true }), manifest)
+    const repoStep = def.spec.steps.find((s) => s.action === 'github:repo:create-from-template')
+    expect(repoStep?.input.name).toBe('${{ parameters.projectName }}')
+
+    const catalogStep = def.spec.steps.find((s) => s.action === 'catalog:entity:register')
+    expect(catalogStep?.input.name).toBe('${{ parameters.projectName }}')
+  })
+
+  it('falls back to the first required string variable when no preferred key matches', () => {
+    const manifest: TemplateManifest = {
+      ...baseManifest,
+      variables: [
+        { key: 'region', type: 'string', required: false },
+        { key: 'clusterId', type: 'string', required: true },
+        { key: 'replicas', type: 'number', required: true },
+      ],
+    }
+    const def = mapV1TemplateToV2Definition(template({ isGitHubTemplate: true }), manifest)
+    const repoStep = def.spec.steps.find((s) => s.action === 'github:repo:create-from-template')
+    expect(repoStep?.input.name).toBe('${{ parameters.clusterId }}')
+  })
+
+  it('falls back to the first string variable when there is no required string variable', () => {
+    const manifest: TemplateManifest = {
+      ...baseManifest,
+      variables: [
+        { key: 'replicas', type: 'number', required: true },
+        { key: 'region', type: 'string', required: false },
+      ],
+    }
+    const def = mapV1TemplateToV2Definition(template({ isGitHubTemplate: true }), manifest)
+    const repoStep = def.spec.steps.find((s) => s.action === 'github:repo:create-from-template')
+    expect(repoStep?.input.name).toBe('${{ parameters.region }}')
+  })
+
+  it('throws loudly instead of emitting a dangling reference when there is no candidate variable at all', () => {
+    const manifest: TemplateManifest = {
+      ...baseManifest,
+      variables: [{ key: 'replicas', type: 'number', required: true }],
+    }
+    expect(() => mapV1TemplateToV2Definition(template(), manifest)).toThrow(/repo.?name|candidate/i)
+  })
+
+  it('throws loudly when the manifest declares no variables at all', () => {
+    const manifest: TemplateManifest = { ...baseManifest, variables: [] }
+    expect(() => mapV1TemplateToV2Definition(template(), manifest)).toThrow()
+  })
 })

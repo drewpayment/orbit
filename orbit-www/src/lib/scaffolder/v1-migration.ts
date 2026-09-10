@@ -26,6 +26,17 @@ export function mapV1TemplateToV2Definition(
 ): TemplateDefinition {
   const parameterPage = variablesToParameterPage(manifest.variables ?? [])
 
+  const repoNameKey = findRepoNameVariable(parameterPage)
+  if (!repoNameKey) {
+    throw new Error(
+      `mapV1TemplateToV2Definition: template "${template.slug}" has no candidate variable for the ` +
+        'repo-name parameter (checked name/serviceName/projectName/appName/repoName, then any required ' +
+        'string variable, then any string variable) — refusing to emit a definition with a dangling ' +
+        '${{ parameters.* }} reference. Add a string variable to the v1 manifest before migrating.',
+    )
+  }
+  const repoNameExpr = `\${{ parameters.${repoNameKey} }}`
+
   const steps: TemplateDefinition['spec']['steps'] = template.isGitHubTemplate
     ? [
         {
@@ -35,7 +46,7 @@ export function mapV1TemplateToV2Definition(
           input: {
             repoUrl: template.repoUrl,
             defaultBranch: template.defaultBranch ?? 'main',
-            name: variableExpr(parameterPage, 'name') ?? '${{ parameters.serviceName }}',
+            name: repoNameExpr,
           },
         },
       ]
@@ -45,7 +56,7 @@ export function mapV1TemplateToV2Definition(
           name: 'Create repository',
           action: 'github:repo:create',
           input: {
-            name: variableExpr(parameterPage, 'name') ?? '${{ parameters.serviceName }}',
+            name: repoNameExpr,
           },
         },
         {
@@ -77,7 +88,7 @@ export function mapV1TemplateToV2Definition(
     action: 'catalog:entity:register',
     input: {
       kind: manifest.metadata.categories?.[0] ?? 'service',
-      name: variableExpr(parameterPage, 'name') ?? '${{ parameters.serviceName }}',
+      name: repoNameExpr,
       source: { type: 'template', sourceId: template.id },
       links: [{ title: 'Repository', url: '${{ steps.repo.output.repoUrl }}' }],
     },
@@ -159,11 +170,34 @@ function variableToJsonSchemaProperty(v: TemplateVariable): Record<string, unkno
   }
 }
 
-/** Best-effort lookup: does the parameter page have a "name"-ish key we can reference by exact key? */
-function variableExpr(
-  page: TemplateDefinition['spec']['parameters'][number],
-  hint: 'name',
-): string | undefined {
-  if (hint === 'name' && 'name' in page.properties) return '${{ parameters.name }}'
+/** Preference order (case-insensitive key match) for the repo-name parameter. */
+const PREFERRED_REPO_NAME_KEYS = ['name', 'servicename', 'projectname', 'appname', 'reponame']
+
+/**
+ * Deterministically picks which parameter feeds the repo/entity `name` input
+ * for the migrated steps. In order:
+ *   1. a variable whose key case-insensitively matches one of
+ *      name/serviceName/projectName/appName/repoName (in that preference order),
+ *   2. else the first REQUIRED string variable (declaration order),
+ *   3. else the first string variable at all (declaration order).
+ * Returns undefined when no candidate exists — the caller must refuse to emit
+ * a definition with a dangling `${{ parameters.* }}` reference in that case.
+ */
+function findRepoNameVariable(page: TemplateDefinition['spec']['parameters'][number]): string | undefined {
+  const entries = Object.entries(page.properties)
+  const isString = (prop: unknown) => (prop as { type?: string } | undefined)?.type === 'string'
+
+  for (const preferred of PREFERRED_REPO_NAME_KEYS) {
+    const match = entries.find(([key]) => key.toLowerCase() === preferred)
+    if (match) return match[0]
+  }
+
+  const required = new Set(page.required ?? [])
+  const firstRequiredString = entries.find(([key, prop]) => required.has(key) && isString(prop))
+  if (firstRequiredString) return firstRequiredString[0]
+
+  const firstString = entries.find(([, prop]) => isString(prop))
+  if (firstString) return firstString[0]
+
   return undefined
 }

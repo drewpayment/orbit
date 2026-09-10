@@ -79,20 +79,47 @@ export async function createDraftVersion(payload: Payload, input: CreateDraftVer
 export interface PublishVersionInput {
   definitionId: string
   versionId: string
-  userId: string
+  /**
+   * The user requesting the publish. `isPlatformAdmin` must reflect
+   * `isPlatformAdmin(req.user)` from `lib/access/workspace-access.ts` at the
+   * call site — this helper does not itself look the user up.
+   */
+  actor: { userId: string; isPlatformAdmin: boolean }
 }
 
 /**
  * Enforces the publish gate (design §3.2, phase-1 plan §2.4): a version may
  * only become the definition's `currentVersion` / `published` state if BOTH
  * (a) `validatedAt` is set (static validation passed) AND (b) `dryRunRunId`
- * points at an `action-runs` row that (i) succeeded AND (ii) was itself a
- * run of THIS version — a succeeded dry run of a different, stale version
- * cannot satisfy the gate.
+ * points at an `action-runs` row that (i) succeeded, (ii) was itself a
+ * run of THIS version, AND (iii) has `dryRun === true` — a succeeded dry
+ * run of a different, stale version cannot satisfy the gate, and neither
+ * can a succeeded REAL (non-dry) run.
+ *
+ * Also enforces design §3.7's authoring permission: publishing a definition
+ * whose `visibility` is `shared` or `public` requires `actor.isPlatformAdmin`
+ * — a workspace owner/admin may publish a `workspace`-visibility template on
+ * their own, but crossing tenant boundaries needs platform-admin sign-off.
+ * This mirrors (and is backed by) the `beforeChange` hook on
+ * `TemplateDefinitions` itself, which rejects the same write at the
+ * collection layer even if a caller bypasses this helper.
  */
 export async function publishVersion(payload: Payload, input: PublishVersionInput) {
-  const { definitionId, versionId, userId } = input
-  void userId
+  const { definitionId, versionId, actor } = input
+
+  const definition = await payload.findByID({
+    collection: 'template-definitions',
+    id: definitionId,
+    depth: 0,
+    overrideAccess: true,
+  })
+
+  const isRestrictedVisibility = definition.visibility === 'shared' || definition.visibility === 'public'
+  if (isRestrictedVisibility && !actor.isPlatformAdmin) {
+    throw new Error(
+      `Publish gate failed: only a platform admin may publish a template-definition with visibility "${definition.visibility}"`,
+    )
+  }
 
   const version = await payload.findByID({
     collection: 'template-definition-versions',
@@ -135,11 +162,23 @@ export async function publishVersion(payload: Payload, input: PublishVersionInpu
     throw new Error(`Publish gate failed: recorded dry run ${dryRunRunId} did not succeed (status: ${run.status})`)
   }
 
+  if (run.dryRun !== true) {
+    throw new Error(
+      `Publish gate failed: recorded run ${dryRunRunId} is not a dry run (dryRun: ${run.dryRun}) — a real run cannot satisfy the dry-run gate`,
+    )
+  }
+
   return payload.update({
     collection: 'template-definitions',
     id: definitionId,
     data: { status: 'published', currentVersion: versionId },
     overrideAccess: true,
+    // The actor check above already authorized this shared/public publish (or
+    // visibility isn't restricted) — tell the collection's beforeChange hook
+    // this write is coming from an authorized internal path, since a Local
+    // API call made with overrideAccess and no `user` option has no req.user
+    // for that hook to check.
+    context: { allowSharedPublicPublish: true },
   })
 }
 
