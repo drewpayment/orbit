@@ -39,6 +39,13 @@ type ScaffolderWorkflowInput struct {
 	UserEmail     string `json:"userEmail,omitempty"`
 	UserName      string `json:"userName,omitempty"`
 	DryRun        bool   `json:"dryRun"`
+	// Trigger distinguishes what started this run: empty/"manual" for a
+	// person's "Preview"/"Run" click (via StartScaffolderRun's gRPC path),
+	// "scheduled-sweep" for TemplateDryRunSweepWorkflow's automated re-dry-run
+	// (Phase 4 Task G). ScaffolderWorkflow.finish() only records
+	// lastDryRunStatus/lastDryRunPlanHash when DryRun && Trigger ==
+	// "scheduled-sweep" — a manual preview must never touch those fields.
+	Trigger string `json:"trigger,omitempty"`
 }
 
 // ScaffolderStepProgress is one step's state in a run.

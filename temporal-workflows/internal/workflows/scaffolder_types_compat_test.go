@@ -43,6 +43,7 @@ func TestScaffolderWorkflowInput_MatchesSharedType(t *testing.T) {
 		UserEmail:           "dev@acme.test",
 		UserName:            "Dev",
 		DryRun:              true,
+		Trigger:             "scheduled-sweep",
 	}
 	wire, err := json.Marshal(sent)
 	require.NoError(t, err)
@@ -61,6 +62,7 @@ func TestScaffolderWorkflowInput_MatchesSharedType(t *testing.T) {
 	assert.Equal(t, sent.UserEmail, got.UserEmail)
 	assert.Equal(t, sent.UserName, got.UserName)
 	assert.Equal(t, sent.DryRun, got.DryRun)
+	assert.Equal(t, sent.Trigger, got.Trigger)
 	assert.Equal(t, sent.Parameters, got.Parameters)
 	assert.Equal(t, def.APIVersion, got.Definition.APIVersion)
 	assert.Equal(t, def.Metadata.Name, got.Definition.Metadata.Name)
