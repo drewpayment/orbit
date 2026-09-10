@@ -265,3 +265,21 @@ export const defaultFieldRegistry = createFieldRegistry()
 export function registerField(name: string, component: FieldComponent): void {
   defaultFieldRegistry.register(name, component)
 }
+
+// ---------------------------------------------------------------------------
+// Orbit-native pickers (Task 5) — registered under the design-doc names so
+// `ui:field: OrbitTeamPicker` etc. resolves automatically. Imported lazily
+// here (rather than at field-registry module scope importing the picker
+// files, which import server actions) is unnecessary in Next.js — server
+// action imports are fine from a 'use client' module — but kept as a
+// dedicated call so it's easy to see what's pre-registered vs. app-defined.
+// ---------------------------------------------------------------------------
+import { OrbitEntityPicker } from './fields/OrbitEntityPicker'
+import { OrbitRepoPicker } from './fields/OrbitRepoPicker'
+import { OrbitTeamPicker } from './fields/OrbitTeamPicker'
+import { OrbitWorkspacePicker } from './fields/OrbitWorkspacePicker'
+
+defaultFieldRegistry.register('OrbitTeamPicker', OrbitTeamPicker)
+defaultFieldRegistry.register('OrbitWorkspacePicker', OrbitWorkspacePicker)
+defaultFieldRegistry.register('OrbitEntityPicker', OrbitEntityPicker)
+defaultFieldRegistry.register('OrbitRepoPicker', OrbitRepoPicker)
