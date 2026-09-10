@@ -6,8 +6,13 @@
  *
  * Pure, framework-free — used by `ParametersBuilder`/`ParametersPreview`
  * (Task 10) and `StepsBuilder` (Task 11, for rendering a step's registry
- * `inputSchema` — which is plain JSON Schema with no inline `ui:*`, so
- * `splitProperty` is a no-op there beyond stripping `type`/schema keys).
+ * `inputSchema`). A registry `inputSchema` is a plain Go-side JSON Schema,
+ * but an action is free to attach the same inline `ui:*` vocabulary on a
+ * property (e.g. `{ type: 'string', 'ui:widget': 'textarea' }` for a
+ * multi-line field — see `api:schema:register`'s `content` input) —
+ * `stepInputSchemaToSchemaFormPage` splits those out via `splitProperty`
+ * exactly like `parameterPageToSchemaFormPage` does, so they render the same
+ * way a hand-authored parameter page's `ui:*` keys do.
  */
 import type { ParameterPage, Step } from '@/lib/scaffolder/schema'
 import type { ParameterProperty } from './builder-state'
@@ -52,13 +57,34 @@ export function parameterPageToSchemaFormPage(page: ParameterPage): SchemaFormPa
   }
 }
 
-/** Convert a step's registry `inputSchema` (plain JSON Schema, no inline `ui:*`) to a single-page form. */
+/**
+ * Convert a step's registry `inputSchema` to a single-page form, splitting
+ * any inline `ui:*` keys a property carries into the page's `uiSchema` (same
+ * transform `parameterPageToSchemaFormPage` applies to authored parameter
+ * pages) so e.g. `ui:widget: 'textarea'` on an action's input actually
+ * resolves to the textarea field component instead of being silently
+ * ignored.
+ */
 export function stepInputSchemaToSchemaFormPage(
   title: string,
   inputSchema: Record<string, unknown>,
 ): SchemaFormPage {
   const schema = inputSchema as JsonSchema
-  return { title, schema: { type: 'object', properties: schema.properties ?? {}, required: schema.required ?? [] } }
+  const rawProperties = (schema.properties ?? {}) as Record<string, ParameterProperty>
+  const properties: Record<string, JsonSchema> = {}
+  const uiSchema: UiSchema = {}
+  for (const [name, property] of Object.entries(rawProperties)) {
+    const { schema: propSchema, ui } = splitProperty(property)
+    properties[name] = propSchema
+    if (Object.keys(ui).length > 0) {
+      ;(uiSchema as Record<string, UiFieldSchema>)[name] = ui
+    }
+  }
+  return {
+    title,
+    schema: { type: 'object', properties, required: schema.required ?? [] },
+    uiSchema,
+  }
 }
 
 /** True when a leaf JSON-Schema type may hold a `${{ }}` expression value (design §2.6: string/number fields). */

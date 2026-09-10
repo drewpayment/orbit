@@ -27,8 +27,15 @@ interface APISpecViewerProps {
   version?: string
   /** Additional class names */
   className?: string
-  /** When 'graphql', the spec is rendered as raw SDL instead of fed to Scalar */
-  schemaType?: 'openapi' | 'asyncapi' | 'graphql'
+  /**
+   * When 'graphql', the spec is rendered as raw SDL instead of fed to Scalar.
+   * 'proto' also falls through to the default (Scalar-fed) branch below —
+   * Scalar has no protobuf renderer, so a proto spec shows Scalar's own
+   * parse-error state rather than a dedicated view. Format-specific proto
+   * rendering is out of scope for `api:schema:register`'s v1 (design
+   * doc §4.1); tracked as a follow-up alongside the scoped-out generator step.
+   */
+  schemaType?: 'openapi' | 'asyncapi' | 'graphql' | 'proto'
 }
 
 function parseSpec(content: string): { spec: Record<string, unknown> | null; error: string | null } {

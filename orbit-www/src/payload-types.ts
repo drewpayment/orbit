@@ -3821,9 +3821,9 @@ export interface ApiSchema {
    */
   visibility: 'private' | 'workspace' | 'public';
   /**
-   * Schema format (OpenAPI, AsyncAPI, GraphQL supported)
+   * Schema format (OpenAPI, AsyncAPI, GraphQL, Protocol Buffers supported)
    */
-  schemaType: 'openapi' | 'asyncapi' | 'graphql';
+  schemaType: 'openapi' | 'asyncapi' | 'graphql' | 'proto';
   /**
    * Current version string (from OpenAPI info.version)
    */
@@ -3871,6 +3871,16 @@ export interface ApiSchema {
    * Path to OpenAPI spec in repository (e.g., docs/openapi.yaml)
    */
   repositoryPath?: string | null;
+  /**
+   * Where this schema came from — set by /api/internal/api-schemas for a scaffolder-run-registered schema, otherwise "manual".
+   */
+  source?: {
+    type?: ('manual' | 'scaffolder-run') | null;
+    /**
+     * Identifies the specific producer, e.g. the scaffolder run id.
+     */
+    sourceId?: string | null;
+  };
   /**
    * User who created this API schema
    */
@@ -6136,6 +6146,12 @@ export interface ApiSchemasSelect<T extends boolean = true> {
       };
   repository?: T;
   repositoryPath?: T;
+  source?:
+    | T
+    | {
+        type?: T;
+        sourceId?: T;
+      };
   createdBy?: T;
   lastEditedBy?: T;
   specTitle?: T;
