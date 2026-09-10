@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "fetch:orbit-skeleton output",
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Absolute path where the skeleton bundle was written."
+    },
+    "files": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Relative paths of the files written, in bundle order."
+    }
+  },
+  "required": ["path", "files"],
+  "additionalProperties": false
+}

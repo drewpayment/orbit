@@ -198,6 +198,56 @@
     "supportsPlan": true
   },
   {
+    "name": "fetch:orbit-skeleton",
+    "family": "fetch",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "fetch:orbit-skeleton input",
+      "type": "object",
+      "properties": {
+        "skeletonId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Payload id of the template-skeletons document to fetch.",
+          "ui:field": "OrbitSkeletonPicker",
+          "ui:help": "Choose an Orbit-hosted skeleton bundle from this workspace."
+        },
+        "path": {
+          "type": "string",
+          "description": "Subdirectory, relative to the run's work directory, to write the bundle into. Defaults to a name derived from `skeletonId`."
+        }
+      },
+      "required": [
+        "skeletonId"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "fetch:orbit-skeleton output",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Absolute path where the skeleton bundle was written."
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Relative paths of the files written, in bundle order."
+        }
+      },
+      "required": [
+        "path",
+        "files"
+      ],
+      "additionalProperties": false
+    },
+    "supportsPlan": true
+  },
+  {
     "name": "fs:render",
     "family": "fs",
     "inputSchema": {

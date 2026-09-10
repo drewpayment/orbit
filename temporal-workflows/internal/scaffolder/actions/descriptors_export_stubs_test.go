@@ -21,3 +21,13 @@ type stubCatalogClient struct{}
 func (stubCatalogClient) RegisterEntity(context.Context, services.CatalogEntityRegisterInput) (*services.CatalogEntityRegisterResult, error) {
 	return nil, errors.New("stub")
 }
+
+type stubSkeletonClient struct{}
+
+func (stubSkeletonClient) GetSkeletonManifest(context.Context, string, string) (*services.SkeletonBundle, error) {
+	return nil, errors.New("stub")
+}
+
+func (stubSkeletonClient) GetSkeletonBundle(context.Context, string, string) (*services.SkeletonBundle, error) {
+	return nil, errors.New("stub")
+}

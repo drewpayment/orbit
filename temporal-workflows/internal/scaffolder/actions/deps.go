@@ -54,4 +54,8 @@ type Deps struct {
 	// CatalogClient registers entities for catalog:entity:register. That
 	// action is omitted from DefaultActions when this is nil.
 	CatalogClient CatalogEntityClient
+	// SkeletonClient fetches Orbit-hosted template skeleton bundles for
+	// fetch:orbit-skeleton. That action is omitted from DefaultActions when
+	// this is nil.
+	SkeletonClient services.SkeletonClient
 }
