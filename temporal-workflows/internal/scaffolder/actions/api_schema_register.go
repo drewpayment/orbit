@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -116,6 +117,16 @@ func (a *ApiSchemaRegister) Execute(ctx context.Context, rc scaffolder.ActionRun
 		},
 	})
 	if err != nil {
+		// A 4xx (other than the "route not implemented" 404 sentinel) means
+		// orbit-www rejected the request as sent — e.g. an unknown
+		// workspace, a malformed body. Retrying the identical request would
+		// fail identically, so this is a definition problem, not a
+		// transient one: wrap it as ErrInvalidInput so the dispatch
+		// activity raises it non-retryable instead of burning the retry
+		// budget on every attempt.
+		if errors.Is(err, services.ErrApiSchemasBadRequest) {
+			return nil, fmt.Errorf("api:schema:register: %w: %v", scaffolder.ErrInvalidInput, err)
+		}
 		return nil, fmt.Errorf("api:schema:register: %w", err)
 	}
 

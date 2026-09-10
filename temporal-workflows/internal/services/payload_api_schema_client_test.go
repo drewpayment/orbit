@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -83,6 +84,37 @@ func TestPayloadApiSchemaClient_SurfacesNon2xxBody(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "HTTP 500")
+	// A 500 is transient — the route did not reject the request as sent —
+	// so it must NOT be classified as ErrApiSchemasBadRequest.
+	assert.False(t, errors.Is(err, ErrApiSchemasBadRequest))
+}
+
+func TestPayloadApiSchemaClient_Maps4xxToBadRequestSentinel(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		status int
+	}{
+		{"400 malformed body", http.StatusBadRequest},
+		{"422 unknown workspace", http.StatusUnprocessableEntity},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, `{"error":"boom"}`, tt.status)
+			}))
+			defer srv.Close()
+
+			client := NewPayloadApiSchemaClient(srv.URL, "k", nil)
+			_, err := client.RegisterSchema(context.Background(), ApiSchemaRegisterInput{
+				WorkspaceID: "ws-1", UserID: "user-1", Name: "n", SchemaType: "openapi", Content: "c",
+			})
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, ErrApiSchemasBadRequest))
+		})
+	}
 }
 
 func TestPayloadApiSchemaClient_RejectsMissingFieldsBeforeRequest(t *testing.T) {

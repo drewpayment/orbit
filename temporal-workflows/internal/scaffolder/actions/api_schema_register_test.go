@@ -3,6 +3,7 @@ package actions
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -124,6 +125,29 @@ func TestApiSchemaRegister_ClientError(t *testing.T) {
 	_, err := a.Execute(context.Background(), runCtxWorkspace("ws-1"), json.RawMessage(
 		`{"name":"n","schemaType":"openapi","content":"c"}`))
 	assert.ErrorContains(t, err, "route not implemented")
+}
+
+func TestApiSchemaRegister_ClientBadRequest_WrapsAsErrInvalidInput(t *testing.T) {
+	// A 422 (unknown workspace) or 400 (malformed body) means the route
+	// rejected the request as sent — retrying would fail identically, so
+	// Execute must wrap it as scaffolder.ErrInvalidInput (non-retryable).
+	client := &fakeApiSchemaClient{err: fmt.Errorf("register api schema: HTTP 422: workspace not found: %w", services.ErrApiSchemasBadRequest)}
+	a := NewApiSchemaRegister(client)
+	_, err := a.Execute(context.Background(), runCtxWorkspace("ws-1"), json.RawMessage(
+		`{"name":"n","schemaType":"openapi","content":"c"}`))
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, scaffolder.ErrInvalidInput))
+}
+
+func TestApiSchemaRegister_ClientTransientError_DoesNotWrapAsErrInvalidInput(t *testing.T) {
+	// A 500 (or network error) IS worth retrying — it must not be classified
+	// as ErrInvalidInput.
+	client := &fakeApiSchemaClient{err: fmt.Errorf("register api schema: HTTP 500: boom")}
+	a := NewApiSchemaRegister(client)
+	_, err := a.Execute(context.Background(), runCtxWorkspace("ws-1"), json.RawMessage(
+		`{"name":"n","schemaType":"openapi","content":"c"}`))
+	require.Error(t, err)
+	assert.False(t, errors.Is(err, scaffolder.ErrInvalidInput))
 }
 
 func TestApiSchemaRegister_Plan(t *testing.T) {

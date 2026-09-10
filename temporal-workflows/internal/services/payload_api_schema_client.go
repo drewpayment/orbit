@@ -22,7 +22,7 @@ type ApiSchemaSource struct {
 
 // ApiSchemaRegisterInput is the body of POST /api/internal/api-schemas.
 type ApiSchemaRegisterInput struct {
-	WorkspaceID string          `json:"workspaceId"`
+	WorkspaceID string `json:"workspaceId"`
 	// UserID is the Payload `users` id recorded as `createdBy` on the
 	// created api-schemas/api-schema-versions rows — both fields are
 	// required on those collections with no default outside a request
@@ -48,6 +48,13 @@ type ApiSchemaRegisterResult struct {
 // registration route hasn't been deployed yet (HTTP 404).
 var ErrApiSchemasAPINotImplemented = errors.New("orbit-www has no POST /api/internal/api-schemas route yet")
 
+// ErrApiSchemasBadRequest wraps any other 4xx response from the route (e.g.
+// 400 for a malformed body, 422 for an unknown workspace) — the route
+// rejected the request as it was sent, and retrying the identical request
+// would fail identically. Callers use errors.Is to distinguish this from a
+// transient failure (5xx, network error) that IS worth retrying.
+var ErrApiSchemasBadRequest = errors.New("orbit-www rejected the api-schemas request")
+
 // PayloadApiSchemaClient calls orbit-www's internal API to register an API
 // schema produced by a scaffolder run (the api:schema:register action).
 //
@@ -58,6 +65,9 @@ var ErrApiSchemasAPINotImplemented = errors.New("orbit-www has no POST /api/inte
 //	Body:   ApiSchemaRegisterInput (JSON)
 //	201:    ApiSchemaRegisterResult (JSON)
 //	404:    route not implemented — surfaced as ErrApiSchemasAPINotImplemented
+//	4xx:    (other than 404) request rejected as sent — surfaced as
+//	        ErrApiSchemasBadRequest; api:schema:register wraps this as
+//	        scaffolder.ErrInvalidInput so Temporal does not retry it
 //
 // Idempotent on (workspaceId, source.type, source.sourceId, name), same
 // convention as PayloadCatalogEntityClient / catalog-entities.
@@ -122,6 +132,9 @@ func (c *PayloadApiSchemaClient) RegisterSchema(ctx context.Context, in ApiSchem
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, ErrApiSchemasAPINotImplemented
+	}
+	if resp.StatusCode/100 == 4 {
+		return nil, fmt.Errorf("register api schema: HTTP %d: %s: %w", resp.StatusCode, string(respBody), ErrApiSchemasBadRequest)
 	}
 	if resp.StatusCode/100 != 2 {
 		return nil, fmt.Errorf("register api schema: HTTP %d: %s", resp.StatusCode, string(respBody))
