@@ -34,15 +34,36 @@ export function mergeProperty(schema: JsonSchema, ui?: UiFieldSchema): Parameter
   return { ...(schema as Record<string, unknown>), ...(ui as Record<string, unknown> | undefined) }
 }
 
-/** Convert one wire-format `ParameterPage` into a `SchemaForm`-ready page. */
-export function parameterPageToSchemaFormPage(page: ParameterPage): SchemaFormPage {
+/**
+ * Merges `workspaceId` into a field's `ui:options` without disturbing any
+ * `ui:options` the field already carries (e.g. `OrbitEntityPicker`'s `kind`).
+ * A no-op when `workspaceId` is omitted, so existing callers that don't pass
+ * one are unaffected.
+ */
+function withWorkspaceId(ui: UiFieldSchema, workspaceId: string | undefined): UiFieldSchema {
+  if (!workspaceId) return ui
+  const existingOptions = (ui as Record<string, unknown>)['ui:options'] as Record<string, unknown> | undefined
+  return { ...ui, 'ui:options': { ...existingOptions, workspaceId } } as UiFieldSchema
+}
+
+/**
+ * Convert one wire-format `ParameterPage` into a `SchemaForm`-ready page.
+ *
+ * `workspaceId`, when passed, is injected into `ui:options.workspaceId` for
+ * every `ui:*`-tagged property (Orbit pickers read `ui:options.workspaceId`
+ * — see `orbit-picker-types.ts` — and have no other channel to learn which
+ * workspace to scope their lookup to). Callers that render a live picker
+ * (the run wizard, the parameters live preview) must pass this or every
+ * Orbit picker on the page renders permanently empty.
+ */
+export function parameterPageToSchemaFormPage(page: ParameterPage, workspaceId?: string): SchemaFormPage {
   const properties: Record<string, JsonSchema> = {}
   const uiSchema: UiSchema = {}
   for (const [name, property] of Object.entries(page.properties)) {
     const { schema, ui } = splitProperty(property)
     properties[name] = schema
     if (Object.keys(ui).length > 0) {
-      ;(uiSchema as Record<string, UiFieldSchema>)[name] = ui
+      ;(uiSchema as Record<string, UiFieldSchema>)[name] = withWorkspaceId(ui, workspaceId)
     }
   }
   return {
@@ -62,10 +83,16 @@ export function parameterPageToSchemaFormPage(page: ParameterPage): SchemaFormPa
  * `skeletonId`, Phase 3 Task 5). Split each property with {@link
  * splitProperty}, same as {@link parameterPageToSchemaFormPage}, so
  * `SchemaForm`'s registry-driven field resolution sees the `ui:field`.
+ *
+ * `workspaceId`, when passed, is injected into `ui:options.workspaceId` for
+ * every `ui:*`-tagged input (see {@link parameterPageToSchemaFormPage}'s doc
+ * comment) — `StepsBuilder` must pass the template definition's workspace so
+ * a step's `OrbitSkeletonPicker`/etc. can actually list something.
  */
 export function stepInputSchemaToSchemaFormPage(
   title: string,
   inputSchema: Record<string, unknown>,
+  workspaceId?: string,
 ): SchemaFormPage {
   const schema = inputSchema as JsonSchema
   const rawProperties = (schema.properties ?? {}) as Record<string, ParameterProperty>
@@ -75,7 +102,7 @@ export function stepInputSchemaToSchemaFormPage(
     const { schema: propSchema, ui } = splitProperty(property)
     properties[name] = propSchema
     if (Object.keys(ui).length > 0) {
-      ;(uiSchema as Record<string, UiFieldSchema>)[name] = ui
+      ;(uiSchema as Record<string, UiFieldSchema>)[name] = withWorkspaceId(ui, workspaceId)
     }
   }
   return {

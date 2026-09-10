@@ -61,8 +61,17 @@ function collectExpressionPaths(value: unknown, out: Set<string> = new Set()): S
   return out
 }
 
-/** True when the whole string value is a single expression (not embedded in other text). */
-function isExpressionOnly(value: unknown): value is string {
+/**
+ * True when the whole string value is a single expression (not embedded in
+ * other text). Exported so field-rendering code (`StepsBuilder.tsx`'s
+ * expression-aware field registry) can route an expression-valued input to
+ * `ExpressionInput` even when its `ui:field` names a picker — a picker
+ * can't render a `${{ }}` reference, and a stored expression must stay
+ * visible/editable rather than being silently hidden behind an unselected
+ * Select. Kept as the single source of truth for "is this a whole
+ * expression" rather than a second ad-hoc regex.
+ */
+export function isExpressionOnly(value: unknown): value is string {
   return typeof value === 'string' && WHOLE_EXPRESSION_RE.test(value)
 }
 

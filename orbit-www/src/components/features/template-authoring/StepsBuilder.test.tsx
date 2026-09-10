@@ -341,6 +341,90 @@ describe('StepsBuilder (collapsible step bodies)', () => {
     // fallback) instead of the registered stub picker button.
     expect(screen.getByText('stub-picker')).toBeInTheDocument()
   })
+
+  it('renders the picker for a plain id value, but the expression input for a ${{ }} expression value, on the same ui:field-tagged step input', () => {
+    const StubPickerField = ({ id, onChange }: FieldComponentProps) => (
+      <button type="button" id={id} onClick={() => onChange('picked-value')}>
+        stub-picker
+      </button>
+    )
+    registerField('__TestStubPicker', StubPickerField)
+
+    const registryWithPicker: ActionDescriptor[] = [
+      descriptor({
+        id: 'test:stub-picker',
+        family: 'utility',
+        name: 'Stub picker action',
+        inputSchema: {
+          type: 'object',
+          properties: { thing: { type: 'string', 'ui:field': '__TestStubPicker' } },
+        },
+      }),
+    ]
+
+    // Plain id value: the picker renders.
+    const plainDef = definition([
+      { id: 's1', name: 'Step 1', action: 'test:stub-picker', input: { thing: 'sk-1' } },
+    ])
+    const { unmount } = render(
+      <StepsBuilder definition={plainDef} dispatch={vi.fn()} registry={registryWithPicker} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /expand step/i }))
+    fireEvent.click(screen.getByRole('button', { name: /configure inputs/i }))
+    expect(screen.getByText('stub-picker')).toBeInTheDocument()
+    expect(screen.queryByDisplayValue(/steps\.x\.output\.id/)).not.toBeInTheDocument()
+    unmount()
+
+    // Expression value: the expression input renders instead, showing the
+    // expression text — the picker must not hide it.
+    const exprDef = definition([
+      {
+        id: 's1',
+        name: 'Step 1',
+        action: 'test:stub-picker',
+        input: { thing: '${{ steps.x.output.id }}' },
+      },
+    ])
+    render(<StepsBuilder definition={exprDef} dispatch={vi.fn()} registry={registryWithPicker} />)
+    fireEvent.click(screen.getByRole('button', { name: /expand step/i }))
+    fireEvent.click(screen.getByRole('button', { name: /configure inputs/i }))
+    expect(screen.getByDisplayValue('${{ steps.x.output.id }}')).toBeInTheDocument()
+    expect(screen.queryByText('stub-picker')).not.toBeInTheDocument()
+  })
+
+  it('threads workspaceId through to a step input\'s ui:options (real gap: without this, a step\'s OrbitSkeletonPicker renders empty)', () => {
+    const WorkspaceIdEchoField = ({ id, uiSchema }: FieldComponentProps) => (
+      <span id={id}>workspace: {String(uiSchema?.['ui:options']?.workspaceId ?? 'none')}</span>
+    )
+    registerField('__TestWorkspaceIdEcho', WorkspaceIdEchoField)
+
+    const registryWithPicker: ActionDescriptor[] = [
+      descriptor({
+        id: 'test:workspace-echo',
+        family: 'utility',
+        name: 'Workspace echo action',
+        inputSchema: {
+          type: 'object',
+          properties: { skeletonId: { type: 'string', 'ui:field': '__TestWorkspaceIdEcho' } },
+        },
+      }),
+    ]
+    const dispatch = vi.fn()
+    const def = definition([{ id: 's1', name: 'Step 1', action: 'test:workspace-echo', input: {} }])
+    render(
+      <StepsBuilder
+        definition={def}
+        dispatch={dispatch}
+        registry={registryWithPicker}
+        workspaceId="ws-42"
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /expand step/i }))
+    fireEvent.click(screen.getByRole('button', { name: /configure inputs/i }))
+
+    expect(screen.getByText('workspace: ws-42')).toBeInTheDocument()
+  })
 })
 
 // --- Live-reducer harness for behavior (e.g. "just added" state) that a

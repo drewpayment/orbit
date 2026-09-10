@@ -82,6 +82,51 @@ describe('stepInputSchemaToSchemaFormPage', () => {
     expect(page.uiSchema?.skeletonId).toEqual({ 'ui:field': 'OrbitSkeletonPicker' })
     expect(page.uiSchema && 'plain' in page.uiSchema).toBe(false)
   })
+
+  it('injects workspaceId into ui:options for every ui:*-tagged property when a workspaceId is passed, without clobbering existing ui:options', () => {
+    const page = stepInputSchemaToSchemaFormPage(
+      'Configure step',
+      {
+        type: 'object',
+        properties: {
+          skeletonId: { type: 'string', 'ui:field': 'OrbitSkeletonPicker' },
+          kind: { type: 'string', 'ui:field': 'OrbitEntityPicker', 'ui:options': { kind: 'service' } },
+          plain: { type: 'string' },
+        },
+      },
+      'ws-42',
+    )
+    expect(page.uiSchema?.skeletonId).toEqual({
+      'ui:field': 'OrbitSkeletonPicker',
+      'ui:options': { workspaceId: 'ws-42' },
+    })
+    expect(page.uiSchema?.kind).toEqual({
+      'ui:field': 'OrbitEntityPicker',
+      'ui:options': { kind: 'service', workspaceId: 'ws-42' },
+    })
+    expect(page.uiSchema && 'plain' in page.uiSchema).toBe(false)
+  })
+
+  it('leaves ui:options untouched when no workspaceId is passed', () => {
+    const page = stepInputSchemaToSchemaFormPage('Configure step', {
+      type: 'object',
+      properties: { skeletonId: { type: 'string', 'ui:field': 'OrbitSkeletonPicker' } },
+    })
+    expect(page.uiSchema?.skeletonId).toEqual({ 'ui:field': 'OrbitSkeletonPicker' })
+  })
+})
+
+describe('parameterPageToSchemaFormPage workspaceId injection', () => {
+  it('injects workspaceId into ui:options for a parameter page too, same as stepInputSchemaToSchemaFormPage', () => {
+    const page = parameterPageToSchemaFormPage(
+      {
+        title: 'Basics',
+        properties: { owner: { type: 'string', 'ui:field': 'OrbitTeamPicker' } },
+      },
+      'ws-7',
+    )
+    expect(page.uiSchema?.owner).toEqual({ 'ui:field': 'OrbitTeamPicker', 'ui:options': { workspaceId: 'ws-7' } })
+  })
 })
 
 describe('isExpressionCapable / expressionCapableFieldNames', () => {

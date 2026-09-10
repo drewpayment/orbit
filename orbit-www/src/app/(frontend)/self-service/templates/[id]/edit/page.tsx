@@ -68,7 +68,7 @@ export default async function EditTemplatePage({ params }: PageProps) {
 
   const workspaceId =
     typeof definition.workspace === 'string' ? definition.workspace : definition.workspace?.id
-  if (!(await canManageTemplateDefinitions(payload, uid, workspaceId, isAdmin))) {
+  if (!workspaceId || !(await canManageTemplateDefinitions(payload, uid, workspaceId, isAdmin))) {
     notFound()
   }
 
@@ -156,6 +156,7 @@ export default async function EditTemplatePage({ params }: PageProps) {
           <TemplateEditorShell
             definitionId={definition.id}
             status={definition.status}
+            workspaceId={workspaceId}
             initialDefinition={initialDefinition}
             currentVersionId={currentVersionId}
             currentVersionValidated={!!version?.validatedAt}

@@ -94,4 +94,22 @@ describe('OrbitSkeletonPicker', () => {
     await user.click(option)
     expect(onChange).toHaveBeenCalledWith('sk-1')
   })
+
+  it('shows the option matching a controlled `value` as selected once options load', async () => {
+    const fetcher = vi.fn().mockResolvedValue([
+      { id: 'sk-1', name: 'Go service', slug: 'go-service', totalSize: 2048, fileCount: 4 },
+      { id: 'sk-2', name: 'Node service', slug: 'node-service', totalSize: 512, fileCount: 2 },
+    ])
+    render(
+      <OrbitSkeletonPicker
+        {...baseProps({
+          value: 'sk-1',
+          uiSchema: { 'ui:options': { workspaceId: 'ws-1', fetcher } },
+        })}
+      />,
+    )
+
+    await waitFor(() => expect(fetcher).toHaveBeenCalled())
+    expect(await screen.findByText(/Go service/)).toBeInTheDocument()
+  })
 })
