@@ -13,32 +13,28 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
-  normalizeInputSchema,
-  type ActionInputField,
-} from '@/lib/actions/input-schema'
+import { normalizeInputSchema } from '@/lib/actions/input-schema'
+import { inputSchemaToJsonSchema } from '@/lib/actions/input-schema-to-json-schema'
+import { SchemaForm } from '@/components/forms/schema-form/SchemaForm'
 import { runAction } from '@/app/(frontend)/self-service/actions'
 import type { ActionSummary } from '@/app/(frontend)/self-service/actions'
 import { approvalPolicyLabel } from './action-ui'
 
+const RUN_ACTION_FORM_ID = 'run-action-dialog-form'
+
 /**
- * Run dialog for a self-service Action (IDP refocus P3). Renders a form derived
- * from the Action's `inputSchema.fields` — text→Input, textarea→Textarea,
- * number→number Input, boolean→Checkbox, select→Select — then dispatches
+ * Run dialog for a self-service Action (IDP refocus P3). Renders a
+ * {@link SchemaForm} derived from the Action's `inputSchema.fields` via
+ * {@link inputSchemaToJsonSchema} (Template Authoring Phase 2, Group A Task 6
+ * — migrated off the hand-rolled field switch), then dispatches
  * {@link runAction}. On success it routes to the new run's detail page; the
- * server action is the source of truth for validation, so field errors surface
- * via toast.
+ * server action is the source of truth for validation, so field errors
+ * surface via toast in addition to SchemaForm's own client-side validation.
+ *
+ * SchemaForm's own submit button is hidden (`hideSubmit`) so Cancel/Run can
+ * sit together in the dialog footer; the footer's Run button submits the
+ * form by id (`form={RUN_ACTION_FORM_ID}`), which works even with zero
+ * fields (an empty-but-valid form still submits normally).
  */
 export function RunActionDialog({
   action,
@@ -50,26 +46,19 @@ export function RunActionDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const router = useRouter()
-  const schema = useMemo(() => normalizeInputSchema(action.inputSchema), [action.inputSchema])
-  const fields = schema.fields
+  const normalized = useMemo(() => normalizeInputSchema(action.inputSchema), [action.inputSchema])
+  const { schema, uiSchema } = useMemo(() => inputSchemaToJsonSchema(normalized), [normalized])
 
-  const [values, setValues] = useState<Record<string, unknown>>({})
   const [submitting, setSubmitting] = useState(false)
 
   const approvalNote = approvalPolicyLabel(action.approvalPolicy)
 
-  function setField(name: string, value: unknown) {
-    setValues((prev) => ({ ...prev, [name]: value }))
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+  async function handleSubmit(values: Record<string, unknown>) {
     setSubmitting(true)
     try {
       const { runId } = await runAction({ actionId: action.id, inputs: values })
       toast.success(`Started "${action.name}"`)
       onOpenChange(false)
-      setValues({})
       router.push(`/self-service/runs/${runId}`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to start action')
@@ -86,116 +75,43 @@ export function RunActionDialog({
           {action.description && <DialogDescription>{action.description}</DialogDescription>}
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {fields.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              This action takes no inputs. Run it to start a new execution.
-            </p>
-          ) : (
-            fields.map((field) => (
-              <ActionField
-                key={field.name}
-                field={field}
-                value={values[field.name]}
-                onChange={(v) => setField(field.name, v)}
-              />
-            ))
-          )}
+        {normalized.fields.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            This action takes no inputs. Run it to start a new execution.
+          </p>
+        ) : (
+          <SchemaForm
+            id={RUN_ACTION_FORM_ID}
+            pages={[{ title: action.name, schema, uiSchema }]}
+            mode="single"
+            hideSubmit
+            onSubmit={handleSubmit}
+          />
+        )}
 
-          {approvalNote && (
-            <p className="rounded-md border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-              Requires {approvalNote.toLowerCase()} before it executes.
-            </p>
-          )}
+        {approvalNote && (
+          <p className="rounded-md border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+            Requires {approvalNote.toLowerCase()} before it executes.
+          </p>
+        )}
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={submitting}>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+            Cancel
+          </Button>
+          {normalized.fields.length === 0 ? (
+            <Button type="button" disabled={submitting} onClick={() => handleSubmit({})}>
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
               {submitting ? 'Starting…' : 'Run action'}
             </Button>
-          </DialogFooter>
-        </form>
+          ) : (
+            <Button type="submit" form={RUN_ACTION_FORM_ID} disabled={submitting}>
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+              {submitting ? 'Starting…' : 'Run action'}
+            </Button>
+          )}
+        </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
-}
-
-/** Renders one input row from an {@link ActionInputField}. */
-function ActionField({
-  field,
-  value,
-  onChange,
-}: {
-  field: ActionInputField
-  value: unknown
-  onChange: (value: unknown) => void
-}) {
-  const id = `action-field-${field.name}`
-
-  if (field.type === 'boolean') {
-    return (
-      <div className="flex items-start gap-2">
-        <Checkbox
-          id={id}
-          checked={value === true}
-          onCheckedChange={(checked) => onChange(checked === true)}
-        />
-        <div className="space-y-1 leading-none">
-          <Label htmlFor={id} className="cursor-pointer">
-            {field.label}
-            {field.required && <span className="ml-0.5 text-destructive">*</span>}
-          </Label>
-          {field.help && <p className="text-xs text-muted-foreground">{field.help}</p>}
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-1.5">
-      <Label htmlFor={id}>
-        {field.label}
-        {field.required && <span className="ml-0.5 text-destructive">*</span>}
-      </Label>
-
-      {field.type === 'textarea' ? (
-        <Textarea
-          id={id}
-          value={typeof value === 'string' ? value : ''}
-          placeholder={field.placeholder}
-          required={field.required}
-          onChange={(e) => onChange(e.target.value)}
-        />
-      ) : field.type === 'select' ? (
-        <Select value={typeof value === 'string' ? value : ''} onValueChange={onChange}>
-          <SelectTrigger id={id}>
-            <SelectValue placeholder={field.placeholder ?? 'Select…'} />
-          </SelectTrigger>
-          <SelectContent>
-            {(field.options ?? []).map((opt) => (
-              <SelectItem key={opt} value={opt}>
-                {opt}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      ) : (
-        <Input
-          id={id}
-          type={field.type === 'number' ? 'number' : 'text'}
-          value={
-            value === undefined || value === null ? '' : (value as string | number)
-          }
-          placeholder={field.placeholder}
-          required={field.required}
-          onChange={(e) => onChange(e.target.value)}
-        />
-      )}
-
-      {field.help && <p className="text-xs text-muted-foreground">{field.help}</p>}
-    </div>
   )
 }
