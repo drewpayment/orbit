@@ -151,7 +151,8 @@
         "url": {
           "type": "string",
           "minLength": 1,
-          "description": "Git remote URL to clone."
+          "pattern": "^(https?://|ssh://|[A-Za-z0-9_][A-Za-z0-9_.-]*@[A-Za-z0-9_.-]+:).+$",
+          "description": "Git remote URL to clone: http(s)://, ssh://, or user@host:path form. file://, ext:: and bare local paths are refused."
         },
         "ref": {
           "type": "string",
@@ -256,7 +257,8 @@
         "repoUrl": {
           "type": "string",
           "minLength": 1,
-          "description": "Remote URL to push to."
+          "pattern": "^(https?://|ssh://|[A-Za-z0-9_][A-Za-z0-9_.-]*@[A-Za-z0-9_.-]+:).+$",
+          "description": "Remote URL to push to: http(s)://, ssh://, or user@host:path form. file://, ext:: and bare local paths are refused."
         },
         "branch": {
           "type": "string",
