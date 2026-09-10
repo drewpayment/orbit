@@ -31,7 +31,27 @@ const githubRepoCreate: ActionDescriptor = {
   supportsPlan: true,
 }
 
-const registry = [debugLog, githubRepoCreate]
+const debugLogItems: ActionDescriptor = {
+  id: 'debug:log-items',
+  family: 'utility',
+  name: 'Log items',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      items: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: { count: { type: 'number' } },
+        },
+      },
+    },
+  },
+  outputSchema: { type: 'object', properties: {} },
+  supportsPlan: true,
+}
+
+const registry = [debugLog, githubRepoCreate, debugLogItems]
 
 function def(overrides: Partial<TemplateDefinition['spec']>): TemplateDefinition {
   return {
@@ -159,6 +179,120 @@ describe('validateDefinition', () => {
     })
     const result = validateDefinition(d, registry)
     expect(result.ok).toBe(true)
+  })
+
+  it('recognizes a dashed step id in expression references (steps.<id> allows hyphens, matching StepSchema)', () => {
+    const d = def({
+      steps: [
+        { id: 'create-repo', name: 'Create repo', action: 'github:repo:create', input: { name: 'x' } },
+        {
+          id: 'log',
+          name: 'Log',
+          action: 'debug:log',
+          input: { message: '${{ steps.create-repo.output.repoUrl }}' },
+        },
+      ],
+    })
+    const result = validateDefinition(d, registry)
+    expect(result.ok).toBe(true)
+    expect(result.errors).toEqual([])
+  })
+
+  it('actually parses (not silently drops) a dashed step reference — an unknown dashed step id still errors', () => {
+    // Proves the expression grammar recognizes the whole "steps.create-repo.output.x"
+    // path rather than failing to match at the hyphen and silently ignoring the
+    // expression entirely (which would also produce `ok: true` for the wrong reason).
+    const d = def({
+      steps: [
+        {
+          id: 'log',
+          name: 'Log',
+          action: 'debug:log',
+          input: { message: '${{ steps.no-such-step.output.x }}' },
+        },
+      ],
+    })
+    const result = validateDefinition(d, registry)
+    expect(result.ok).toBe(false)
+    expect(result.errors.some((e) => e.message.includes('no-such-step'))).toBe(true)
+  })
+
+  it('accepts a step "if" that is exactly one whole expression', () => {
+    const d = def({
+      parameters: [{ title: 'Service', properties: { needsTopic: { type: 'boolean' } } }],
+      steps: [
+        { id: 'log', name: 'Log', action: 'debug:log', input: { message: 'x' }, if: '${{ parameters.needsTopic }}' },
+      ],
+    })
+    const result = validateDefinition(d, registry)
+    expect(result.ok).toBe(true)
+    expect(result.errors).toEqual([])
+  })
+
+  it('rejects a step "if" with surrounding literal text (not a whole expression)', () => {
+    const d = def({
+      steps: [
+        {
+          id: 'log',
+          name: 'Log',
+          action: 'debug:log',
+          input: { message: 'x' },
+          if: 'yes ${{ parameters.name }}',
+        },
+      ],
+    })
+    const result = validateDefinition(d, registry)
+    expect(result.ok).toBe(false)
+    expect(result.errors.some((e) => /whole expression/i.test(e.message))).toBe(true)
+  })
+
+  it('rejects a step "if" containing multiple expressions', () => {
+    const d = def({
+      steps: [
+        {
+          id: 'log',
+          name: 'Log',
+          action: 'debug:log',
+          input: { message: 'x' },
+          if: '${{ parameters.name }}${{ user.email }}',
+        },
+      ],
+    })
+    const result = validateDefinition(d, registry)
+    expect(result.ok).toBe(false)
+    expect(result.errors.some((e) => /whole expression/i.test(e.message))).toBe(true)
+  })
+
+  it('treats expressions nested inside objects inside arrays as expression holes, not literals (check 4)', () => {
+    const d = def({
+      parameters: [{ title: 'Service', properties: { n: { type: 'number' } } }],
+      steps: [
+        {
+          id: 'x',
+          name: 'X',
+          action: 'debug:log-items',
+          input: { items: [{ count: '${{ parameters.n }}' }] },
+        },
+      ],
+    })
+    const result = validateDefinition(d, registry)
+    expect(result.ok).toBe(true)
+    expect(result.errors).toEqual([])
+  })
+
+  it('still validates literal (non-expression) values nested inside arrays/objects', () => {
+    const d = def({
+      steps: [
+        {
+          id: 'x',
+          name: 'X',
+          action: 'debug:log-items',
+          input: { items: [{ count: 'not-a-number' }] },
+        },
+      ],
+    })
+    const result = validateDefinition(d, registry)
+    expect(result.ok).toBe(false)
   })
 
   it('collects all errors instead of failing fast', () => {

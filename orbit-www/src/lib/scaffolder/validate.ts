@@ -32,9 +32,18 @@ export interface ValidationResult {
  * `workspace`, `template`, `run`) plus a small filter chain per design §4.2 —
  * the TS validator only needs the dotted path, not the filters, since
  * filters don't change reference validity.
+ *
+ * Each path segment is `[A-Za-z_][A-Za-z0-9_-]*` — this MUST stay aligned
+ * with the Go grammar (`temporal-workflows/internal/scaffolder/expr.go`) and
+ * with `StepSchema`'s id pattern (`^[a-z][a-z0-9-]*$`, schema.ts): a step id
+ * may contain hyphens (`create-repo`), and `steps.create-repo.output.x` must
+ * be recognized as a reference, not silently dropped because `\w` excludes
+ * `-`.
  */
-const EXPRESSION_RE = /\$\{\{\s*([a-zA-Z_][\w.]*)(?:\s*\|[^}]*)?\s*\}\}/g
-const WHOLE_EXPRESSION_RE = /^\$\{\{\s*[a-zA-Z_][\w.]*(?:\s*\|[^}]*)?\s*\}\}$/
+const PATH_SEGMENT = '[A-Za-z_][A-Za-z0-9_-]*'
+const PATH_PATTERN = `${PATH_SEGMENT}(?:\\.${PATH_SEGMENT})*`
+const EXPRESSION_RE = new RegExp(`\\$\\{\\{\\s*(${PATH_PATTERN})(?:\\s*\\|[^}]*)?\\s*\\}\\}`, 'g')
+const WHOLE_EXPRESSION_RE = new RegExp(`^\\$\\{\\{\\s*${PATH_PATTERN}(?:\\s*\\|[^}]*)?\\s*\\}\\}$`)
 
 /** Recursively walk a value (string/array/object) collecting every `${{ path }}` reference. */
 function collectExpressionPaths(value: unknown, out: Set<string> = new Set()): Set<string> {
@@ -55,6 +64,70 @@ function collectExpressionPaths(value: unknown, out: Set<string> = new Set()): S
 /** True when the whole string value is a single expression (not embedded in other text). */
 function isExpressionOnly(value: unknown): value is string {
   return typeof value === 'string' && WHOLE_EXPRESSION_RE.test(value)
+}
+
+/** True when `value` is, or anywhere contains, an expression-only string leaf. */
+function containsExpressionHole(value: unknown): boolean {
+  if (isExpressionOnly(value)) return true
+  if (Array.isArray(value)) return value.some(containsExpressionHole)
+  if (value && typeof value === 'object') return Object.values(value).some(containsExpressionHole)
+  return false
+}
+
+/**
+ * Validates `value` against `schema`, treating any expression-only string —
+ * however deeply nested inside objects/arrays — as a hole that always
+ * passes, rather than a literal to type-check. Recurses through
+ * `type: 'object'` (via `properties`) and `type: 'array'` (via a singular
+ * `items` schema) so an expression nested inside an array of objects (e.g.
+ * `{ items: [{ count: "${{ parameters.n }}" }] }`) is skipped at the leaf,
+ * not smuggled whole into ajv where it would fail the leaf's declared type.
+ * Falls back to skipping (not validating) any structure ajv can't be safely
+ * pointed at without risking that false positive.
+ */
+function validateValueAgainstSchema(
+  ajv: Ajv,
+  value: unknown,
+  schema: unknown,
+  path: string,
+  errors: ValidationError[],
+): void {
+  if (isExpressionOnly(value)) return
+  if (!schema || typeof schema !== 'object') return
+  const s = schema as { type?: string; properties?: Record<string, unknown>; items?: unknown }
+
+  if (Array.isArray(value) && s.type === 'array' && s.items && typeof s.items === 'object' && !Array.isArray(s.items)) {
+    value.forEach((item, idx) => validateValueAgainstSchema(ajv, item, s.items, `${path}[${idx}]`, errors))
+    return
+  }
+
+  if (
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    s.type === 'object' &&
+    s.properties &&
+    typeof s.properties === 'object'
+  ) {
+    for (const [key, propValue] of Object.entries(value as Record<string, unknown>)) {
+      if (key in s.properties) {
+        validateValueAgainstSchema(ajv, propValue, s.properties[key], `${path}.${key}`, errors)
+      }
+    }
+    return
+  }
+
+  // Leaf, or a compound value we don't have enough schema structure to
+  // recurse into safely. If it contains an expression hole anywhere, we
+  // can't validate it without a false positive — skip rather than guess.
+  if (containsExpressionHole(value)) return
+
+  const validateFn = ajv.compile(schema as object)
+  if (!validateFn(value)) {
+    for (const err of validateFn.errors ?? []) {
+      errors.push({ path, message: err.message ?? `invalid value at ${path}` })
+    }
+  }
 }
 
 /**
@@ -158,26 +231,33 @@ export function validateDefinition(
       errors.push({ path: `${stepPath}.action`, message: `Unknown action "${step.action}"` })
     }
 
-    // Check 2: expression references in `if` and `input`.
-    for (const path of collectExpressionPaths(step.if)) validateExpressionPath(path, i, stepPath)
+    // Check 2: expression references in `if` and `input`. `if` is evaluated
+    // in a whole-expression boolean context (design §4.1/§6.1, Go's
+    // EvalBool) — it must be EXACTLY one `${{ }}` expression, no surrounding
+    // literal text and no multiple expressions concatenated.
+    if (step.if !== undefined) {
+      if (!isExpressionOnly(step.if)) {
+        errors.push({
+          path: `${stepPath}.if`,
+          message:
+            'step "if" must be exactly one whole expression (e.g. "${{ parameters.x }}") — ' +
+            'no surrounding text and no multiple expressions',
+        })
+      } else {
+        for (const path of collectExpressionPaths(step.if)) validateExpressionPath(path, i, stepPath)
+      }
+    }
     for (const path of collectExpressionPaths(step.input)) validateExpressionPath(path, i, stepPath)
 
-    // Check 4: literal (non-expression) input fields against the action's InputSchema.
+    // Check 4: literal (non-expression) input fields against the action's
+    // InputSchema — expression holes are skipped at whatever depth they
+    // occur, not just at the top level.
     if (descriptor) {
       const props = (descriptor.inputSchema?.properties ?? {}) as Record<string, unknown>
       for (const [key, value] of Object.entries(step.input)) {
-        if (isExpressionOnly(value)) continue
         const propSchema = props[key]
         if (!propSchema || typeof propSchema !== 'object') continue
-        const validateProp = ajv.compile(propSchema as object)
-        if (!validateProp(value)) {
-          for (const err of validateProp.errors ?? []) {
-            errors.push({
-              path: `${stepPath}.input.${key}`,
-              message: err.message ?? `invalid value for "${key}"`,
-            })
-          }
-        }
+        validateValueAgainstSchema(ajv, value, propSchema, `${stepPath}.input.${key}`, errors)
       }
     }
   })
