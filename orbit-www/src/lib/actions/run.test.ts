@@ -268,6 +268,9 @@ const DRAFT_TEMPLATE_DEFINITION = {
   status: 'draft',
 }
 
+/** The version the run actually recorded — belongs to def-1, per the fixtures above. */
+const TEMPLATE_VERSION = { id: 'ver-1', definition: 'def-1', workspace: 'ws-1' }
+
 describe('executeRun — scaffolder dispatch', () => {
   beforeEach(() => {
     mockStartScaffolderRun.mockReset()
@@ -282,6 +285,7 @@ describe('executeRun — scaffolder dispatch', () => {
         // the version it was created/reviewed against (ver-1), not whatever
         // is current at dispatch time (MAJOR 4).
         'template-definitions': [{ ...PUBLISHED_TEMPLATE_DEFINITION, currentVersion: 'ver-2' }],
+        'template-definition-versions': [TEMPLATE_VERSION],
         'action-runs': [
           {
             id: 'run-scaffolder-1',
@@ -321,6 +325,7 @@ describe('executeRun — scaffolder dispatch', () => {
       collections: {
         actions: [SCAFFOLDER_ACTION],
         'template-definitions': [DRAFT_TEMPLATE_DEFINITION],
+        'template-definition-versions': [TEMPLATE_VERSION],
         'action-runs': [
           {
             id: 'run-scaffolder-2',
@@ -347,6 +352,7 @@ describe('executeRun — scaffolder dispatch', () => {
       collections: {
         actions: [SCAFFOLDER_ACTION],
         'template-definitions': [DRAFT_TEMPLATE_DEFINITION],
+        'template-definition-versions': [TEMPLATE_VERSION],
         'action-runs': [
           {
             id: 'run-scaffolder-3',
@@ -404,6 +410,7 @@ describe('executeRun — scaffolder dispatch', () => {
       collections: {
         actions: [SCAFFOLDER_ACTION],
         'template-definitions': [{ ...PUBLISHED_TEMPLATE_DEFINITION, workspace: 'ws-OTHER-TENANT' }],
+        'template-definition-versions': [TEMPLATE_VERSION],
         'action-runs': [
           {
             id: 'run-scaffolder-5',
@@ -433,6 +440,7 @@ describe('executeRun — scaffolder dispatch', () => {
       collections: {
         actions: [{ ...SCAFFOLDER_ACTION, workspace: 'ws-ANOTHER-TENANT' }],
         'template-definitions': [PUBLISHED_TEMPLATE_DEFINITION],
+        'template-definition-versions': [TEMPLATE_VERSION],
         'action-runs': [
           {
             id: 'run-scaffolder-6',
@@ -462,6 +470,7 @@ describe('executeRun — scaffolder dispatch', () => {
       collections: {
         actions: [SCAFFOLDER_ACTION],
         'template-definitions': [PUBLISHED_TEMPLATE_DEFINITION],
+        'template-definition-versions': [TEMPLATE_VERSION],
         'action-runs': [
           {
             id: 'run-scaffolder-7',
@@ -482,6 +491,38 @@ describe('executeRun — scaffolder dispatch', () => {
     const run = await payload.findByID({ collection: 'action-runs', id: 'run-scaffolder-7' })
     expect(run.status).toBe('failed')
     expect(run.error).toMatch(/worker unreachable/)
+  })
+
+  it('DEFENSE IN DEPTH: refuses to dispatch when the run\'s recorded templateVersion belongs to a DIFFERENT definition than backend.ref', async () => {
+    mockStartScaffolderRun.mockResolvedValue({ workflowId: 'wf-should-not-be-called' })
+    const { payload } = makeStatefulPayload({
+      collections: {
+        actions: [SCAFFOLDER_ACTION], // backend.ref: 'def-1'
+        'template-definitions': [PUBLISHED_TEMPLATE_DEFINITION, { ...PUBLISHED_TEMPLATE_DEFINITION, id: 'def-9' }],
+        // ver-1 belongs to def-9, NOT def-1 — a mismatch the run's own
+        // workspace field wouldn't catch (both definitions share ws-1).
+        'template-definition-versions': [{ id: 'ver-1', definition: 'def-9', workspace: 'ws-1' }],
+        'action-runs': [
+          {
+            id: 'run-scaffolder-8',
+            action: 'act-scaffolder',
+            workspace: 'ws-1',
+            templateVersion: 'ver-1',
+            inputs: {},
+            status: 'pending',
+            dryRun: false,
+            logs: [],
+          },
+        ],
+      },
+    })
+
+    await executeRun(payload, 'run-scaffolder-8')
+
+    expect(mockStartScaffolderRun).not.toHaveBeenCalled()
+    const run = await payload.findByID({ collection: 'action-runs', id: 'run-scaffolder-8' })
+    expect(run.status).toBe('failed')
+    expect(run.error).toMatch(/definition/i)
   })
 })
 

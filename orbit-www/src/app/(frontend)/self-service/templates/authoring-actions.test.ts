@@ -545,6 +545,94 @@ describe('templates/authoring-actions', () => {
         await expect(startRun({ templateVersionId: 'ver-2', parameters: {} })).rejects.toThrow(/name/i)
         expect(e.create.mock.calls.some((c) => c[0].collection === 'action-runs')).toBe(false)
       })
+
+      // Follow-up from re-review: PR #103 (feat/schema-form) unregisters a
+      // ui:visibleIf-hidden field from client submission — the server-side
+      // required check must not reject its absence, or every conditional
+      // field becomes impossible to submit once that UI ships.
+      it('does NOT reject a missing required field whose ui:visibleIf evaluates false', async () => {
+        const conditionalDefinitionJson = {
+          apiVersion: 'orbit/v2',
+          kind: 'Template',
+          metadata: { name: 'go-service', title: 'Go service', owner: 'platform' },
+          spec: {
+            parameters: [
+              {
+                title: 'Basics',
+                required: ['name', 'dockerTag'],
+                properties: {
+                  name: { type: 'string' },
+                  useDocker: { type: 'boolean' },
+                  dockerTag: { type: 'string', 'ui:visibleIf': '${{ parameters.useDocker }}' },
+                },
+              },
+            ],
+            steps: [],
+          },
+        }
+        const e = makeFakePayload({
+          'template-definitions': [{ ...DRAFT_DEFINITION, currentVersion: 'ver-cond' }],
+          'template-definition-versions': [
+            {
+              id: 'ver-cond',
+              definition: 'def-1',
+              workspace: WORKSPACE_ID,
+              versionNumber: 1,
+              definitionJson: conditionalDefinitionJson,
+            },
+          ],
+        })
+        mockPayload = e.payload
+        const { startDryRun } = await import('./authoring-actions')
+
+        // useDocker is false/absent -> dockerTag stays hidden -> its absence
+        // must NOT trigger a "required" validation error.
+        const result = await startDryRun({
+          templateVersionId: 'ver-cond',
+          parameters: { name: 'svc', useDocker: false },
+        })
+        expect(result.runId).toBeTruthy()
+      })
+
+      it('DOES reject a missing required field once its ui:visibleIf evaluates true', async () => {
+        const conditionalDefinitionJson = {
+          apiVersion: 'orbit/v2',
+          kind: 'Template',
+          metadata: { name: 'go-service', title: 'Go service', owner: 'platform' },
+          spec: {
+            parameters: [
+              {
+                title: 'Basics',
+                required: ['name', 'dockerTag'],
+                properties: {
+                  name: { type: 'string' },
+                  useDocker: { type: 'boolean' },
+                  dockerTag: { type: 'string', 'ui:visibleIf': '${{ parameters.useDocker }}' },
+                },
+              },
+            ],
+            steps: [],
+          },
+        }
+        const e = makeFakePayload({
+          'template-definitions': [{ ...DRAFT_DEFINITION, currentVersion: 'ver-cond2' }],
+          'template-definition-versions': [
+            {
+              id: 'ver-cond2',
+              definition: 'def-1',
+              workspace: WORKSPACE_ID,
+              versionNumber: 1,
+              definitionJson: conditionalDefinitionJson,
+            },
+          ],
+        })
+        mockPayload = e.payload
+        const { startDryRun } = await import('./authoring-actions')
+
+        await expect(
+          startDryRun({ templateVersionId: 'ver-cond2', parameters: { name: 'svc', useDocker: true } }),
+        ).rejects.toThrow(/dockerTag/i)
+      })
     })
 
     it('getRun redacts ui:secret parameter values before returning', async () => {

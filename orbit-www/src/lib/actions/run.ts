@@ -232,6 +232,26 @@ export async function executeRun(payload: Payload, runId: string): Promise<void>
         overrideAccess: true,
       })
 
+      // Defense in depth: the run's recorded templateVersion must actually
+      // belong to the definition the backing Action's backend.ref points
+      // at. Neither the workspace checks below nor the caller's RBAC catch
+      // a version/definition mismatch within the SAME workspace (e.g. a
+      // tampered or mis-assigned templateVersion pointing at a sibling
+      // definition's version) — this is the one place that does.
+      const version = await payload.findByID({
+        collection: 'template-definition-versions',
+        id: runTemplateVersionId,
+        depth: 0,
+        overrideAccess: true,
+      })
+      const versionDefinitionId = relId(version.definition)
+      if (versionDefinitionId !== backendRef) {
+        throw new Error(
+          `Run's templateVersion (${runTemplateVersionId}) belongs to definition ` +
+            `${versionDefinitionId ?? 'unknown'}, not backend.ref's definition ${backendRef} — refusing to dispatch.`,
+        )
+      }
+
       // BLOCKER 1: a REAL (non-dry) run may only dispatch a published
       // definition — an unpublished draft has not passed the publish gate
       // (validated + successful dry run of the reviewed version).
