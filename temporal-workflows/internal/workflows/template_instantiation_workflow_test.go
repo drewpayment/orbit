@@ -27,8 +27,8 @@ func stubCloneTemplateRepo(ctx context.Context, input TemplateInstantiationInput
 	return "", nil
 }
 
-func stubApplyTemplateVariables(ctx context.Context, input ApplyTemplateVariablesActivityInput) error {
-	return nil
+func stubApplyTemplateVariables(ctx context.Context, input ApplyTemplateVariablesActivityInput) (*ApplyTemplateVariablesResult, error) {
+	return &ApplyTemplateVariablesResult{}, nil
 }
 
 func stubPushToNewRepo(ctx context.Context, input PushToNewRepoActivityInput) error {
@@ -81,17 +81,17 @@ func (s *TemplateInstantiationWorkflowTestSuite) AfterTest(suiteName, testName s
 
 func (s *TemplateInstantiationWorkflowTestSuite) TestTemplateInstantiation_GitHubTemplate_Success() {
 	input := TemplateInstantiationInput{
-		TemplateID:        "template-123",
-		WorkspaceID:       "workspace-456",
-		TargetOrg:         "my-org",
-		RepositoryName:    "new-service",
-		Description:       "A new service",
-		IsPrivate:         true,
-		IsGitHubTemplate:  true,
-		SourceRepoOwner:   "template-org",
-		SourceRepoName:    "service-template",
-		Variables:         map[string]string{"service_name": "new-service"},
-		UserID:            "user-789",
+		TemplateID:       "template-123",
+		WorkspaceID:      "workspace-456",
+		TargetOrg:        "my-org",
+		RepositoryName:   "new-service",
+		Description:      "A new service",
+		IsPrivate:        true,
+		IsGitHubTemplate: true,
+		SourceRepoOwner:  "template-org",
+		SourceRepoName:   "service-template",
+		Variables:        map[string]string{"service_name": "new-service"},
+		UserID:           "user-789",
 	}
 
 	// Mock activities
@@ -115,18 +115,18 @@ func (s *TemplateInstantiationWorkflowTestSuite) TestTemplateInstantiation_GitHu
 
 func (s *TemplateInstantiationWorkflowTestSuite) TestTemplateInstantiation_CloneFallback_Success() {
 	input := TemplateInstantiationInput{
-		TemplateID:        "template-123",
-		WorkspaceID:       "workspace-456",
-		TargetOrg:         "my-org",
-		RepositoryName:    "new-service",
-		Description:       "A new service",
-		IsPrivate:         true,
-		IsGitHubTemplate:  false, // Not a GitHub template
-		SourceRepoOwner:   "template-org",
-		SourceRepoName:    "service-template",
-		SourceRepoURL:     "https://github.com/template-org/service-template",
-		Variables:         map[string]string{"service_name": "new-service"},
-		UserID:            "user-789",
+		TemplateID:       "template-123",
+		WorkspaceID:      "workspace-456",
+		TargetOrg:        "my-org",
+		RepositoryName:   "new-service",
+		Description:      "A new service",
+		IsPrivate:        true,
+		IsGitHubTemplate: false, // Not a GitHub template
+		SourceRepoOwner:  "template-org",
+		SourceRepoName:   "service-template",
+		SourceRepoURL:    "https://github.com/template-org/service-template",
+		Variables:        map[string]string{"service_name": "new-service"},
+		UserID:           "user-789",
 	}
 
 	// Mock activities for clone fallback path
@@ -136,7 +136,7 @@ func (s *TemplateInstantiationWorkflowTestSuite) TestTemplateInstantiation_Clone
 		RepoName: "new-service",
 	}, nil)
 	s.env.OnActivity(stubCloneTemplateRepo, mock.Anything, mock.Anything).Return("/tmp/work/new-service", nil)
-	s.env.OnActivity(stubApplyTemplateVariables, mock.Anything, mock.Anything).Return(nil)
+	s.env.OnActivity(stubApplyTemplateVariables, mock.Anything, mock.Anything).Return(&ApplyTemplateVariablesResult{}, nil)
 	s.env.OnActivity(stubPushToNewRepo, mock.Anything, mock.Anything).Return(nil)
 	s.env.OnActivity(stubCleanupWorkDir, mock.Anything, mock.Anything).Return(nil)
 	s.env.OnActivity(stubFinalizeInstantiation, mock.Anything, mock.Anything).Return(nil)

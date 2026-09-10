@@ -69,6 +69,14 @@ type ApplyTemplateVariablesActivityInput struct {
 	Variables map[string]string
 }
 
+// ApplyTemplateVariablesResult mirrors
+// activities.ApplyTemplateVariablesResult field-for-field — the workflow
+// package duplicates the activity's structs by hand since Temporal's JSON
+// data converter serializes/deserializes by field name.
+type ApplyTemplateVariablesResult struct {
+	SkippedFiles []string
+}
+
 type PushToNewRepoActivityInput struct {
 	WorkDir string
 	RepoURL string
@@ -208,7 +216,8 @@ func TemplateInstantiationWorkflow(ctx workflow.Context, input TemplateInstantia
 			WorkDir:   workDir,
 			Variables: input.Variables,
 		}
-		err = workflow.ExecuteActivity(ctx, ActivityApplyTemplateVariables, applyInput).Get(ctx, nil)
+		var applyResult ApplyTemplateVariablesResult
+		err = workflow.ExecuteActivity(ctx, ActivityApplyTemplateVariables, applyInput).Get(ctx, &applyResult)
 		if err != nil {
 			logger.Error("Failed to apply variables", "error", err)
 			// Clean up work directory
@@ -217,6 +226,10 @@ func TemplateInstantiationWorkflow(ctx workflow.Context, input TemplateInstantia
 				Status: "failed",
 				Error:  "failed to apply template variables: " + err.Error(),
 			}, err
+		}
+		if len(applyResult.SkippedFiles) > 0 {
+			logger.Warn("Some template files could not be rendered and were left unchanged",
+				"skippedFiles", applyResult.SkippedFiles)
 		}
 
 		// Step 5: Push to new repository
