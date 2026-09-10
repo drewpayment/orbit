@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 
+	"github.com/drewpayment/orbit/temporal-workflows/internal/activities"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/services"
 )
 
-// stubTokenService, stubCatalogClient, stubApiSchemaClient and
+// stubTokenService, stubCatalogClient, stubADOConnectionClient,
+// stubKafkaTopicClient, stubKafkaProvisioner, stubApiSchemaClient and
 // stubSkeletonClient exist only so DefaultActions returns its full set in
 // TestDescriptorActions_CoversEveryDefaultAction. None is ever called.
 type stubTokenService struct{}
@@ -26,6 +28,22 @@ type stubADOConnectionClient struct{}
 
 func (stubADOConnectionClient) GetConnectionToken(context.Context, string, string) (services.ADOConnectionToken, error) {
 	return services.ADOConnectionToken{}, errors.New("stub")
+}
+
+type stubKafkaTopicClient struct{}
+
+func (stubKafkaTopicClient) CreateTopic(context.Context, services.KafkaTopicCreateInput) (services.KafkaTopicDoc, error) {
+	return services.KafkaTopicDoc{}, errors.New("stub")
+}
+
+type stubKafkaProvisioner struct{}
+
+func (stubKafkaProvisioner) ProvisionTopic(context.Context, activities.KafkaTopicProvisionInput) (*activities.KafkaTopicProvisionOutput, error) {
+	return nil, errors.New("stub")
+}
+
+func (stubKafkaProvisioner) UpdateTopicStatus(context.Context, activities.KafkaUpdateTopicStatusInput) error {
+	return errors.New("stub")
 }
 
 type stubApiSchemaClient struct{}

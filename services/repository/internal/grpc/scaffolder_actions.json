@@ -876,5 +876,89 @@
       "additionalProperties": false
     },
     "supportsPlan": false
+  },
+  {
+    "name": "kafka:topic:provision",
+    "family": "kafka",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "kafka:topic:provision input",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.-]+$",
+          "description": "Topic name."
+        },
+        "virtualClusterId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "kafka-virtual-clusters doc id the topic is provisioned on."
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Team or user that owns the topic. kafka-topics has no owner field today; stored as a topic tag (owner:\u003cvalue\u003e)."
+        },
+        "partitions": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 3,
+          "description": "Number of partitions."
+        },
+        "retentionMs": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Retention period in milliseconds."
+        },
+        "description": {
+          "type": "string",
+          "description": "Topic description."
+        },
+        "environment": {
+          "type": "string",
+          "minLength": 1,
+          "default": "dev",
+          "description": "Target environment. kafka-topics.environment is required; defaults to \"dev\" when omitted."
+        }
+      },
+      "required": [
+        "name",
+        "virtualClusterId",
+        "owner"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "kafka:topic:provision output",
+      "type": "object",
+      "properties": {
+        "topicId": {
+          "type": "string",
+          "description": "kafka-topics Payload doc id."
+        },
+        "topicName": {
+          "type": "string",
+          "description": "Topic name as requested."
+        },
+        "physicalName": {
+          "type": "string",
+          "description": "Physical topic name on the Kafka cluster, once provisioned."
+        },
+        "clusterId": {
+          "type": "string",
+          "description": "kafka-virtual-clusters doc id the topic was provisioned on."
+        }
+      },
+      "required": [
+        "topicId",
+        "topicName",
+        "clusterId"
+      ],
+      "additionalProperties": false
+    },
+    "supportsPlan": true
   }
 ]

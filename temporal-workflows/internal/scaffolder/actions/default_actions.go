@@ -14,6 +14,8 @@ import "github.com/drewpayment/orbit/temporal-workflows/internal/scaffolder"
 //   - catalog:entity:register needs deps.CatalogClient; omitted without one.
 //   - ado:repo:create, ado:pr:open, ado:pipeline:create need
 //     deps.ADOConnectionClient; omitted without one.
+//   - kafka:topic:provision needs both deps.KafkaTopicClient and
+//     deps.KafkaProvisioner; omitted unless both are set.
 //   - api:schema:register needs deps.ApiSchemaClient; omitted without one.
 //   - fetch:orbit-skeleton needs deps.SkeletonClient; omitted without one.
 //
@@ -54,6 +56,10 @@ func DefaultActions(deps Deps) []scaffolder.Action {
 		)
 	}
 
+	if deps.KafkaTopicClient != nil && deps.KafkaProvisioner != nil {
+		out = append(out, NewKafkaTopicProvision(deps.KafkaTopicClient, deps.KafkaProvisioner))
+	}
+
 	if deps.ApiSchemaClient != nil {
 		out = append(out, NewApiSchemaRegister(deps.ApiSchemaClient))
 	}
@@ -90,6 +96,7 @@ func DescriptorActions() []scaffolder.Action {
 		NewADORepoCreate(nil, nil),
 		NewADOPROpen(nil, nil),
 		NewADOPipelineCreate(nil, nil),
+		NewKafkaTopicProvision(nil, nil),
 		NewApiSchemaRegister(nil),
 		NewFetchOrbitSkeleton(nil),
 	}

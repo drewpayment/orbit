@@ -43,6 +43,8 @@ func TestDescriptorActions_CoversEveryDefaultAction(t *testing.T) {
 		TokenService:        stubTokenService{},
 		CatalogClient:       stubCatalogClient{},
 		ADOConnectionClient: stubADOConnectionClient{},
+		KafkaTopicClient:    stubKafkaTopicClient{},
+		KafkaProvisioner:    stubKafkaProvisioner{},
 		ApiSchemaClient:     stubApiSchemaClient{},
 		SkeletonClient:      stubSkeletonClient{},
 	})...)
