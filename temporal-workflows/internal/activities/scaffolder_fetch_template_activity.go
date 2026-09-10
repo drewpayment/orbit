@@ -67,6 +67,13 @@ type ScaffolderResolveTemplateVersionResult struct {
 // definition and version both belong to the calling run's own workspace —
 // the same tenant-isolation check StartScaffolderRun applies to a top-level
 // run.
+//
+// The owning definition's published status is checked in BOTH the
+// current-version path and the pinned-`version` path: a `fetch:template`
+// step must never compose in a draft or deprecated template just because
+// the author happened to pin an old version id, so GetDefinition (and its
+// status/workspace checks) always runs first, regardless of whether
+// `version` was supplied.
 func (a *ScaffolderFetchTemplateActivities) ResolveTemplateVersion(ctx context.Context, in ScaffolderResolveTemplateVersionInput) (*ScaffolderResolveTemplateVersionResult, error) {
 	if a.client == nil {
 		return nil, nonRetryable(errors.New("fetch:template: template definitions client not configured"))
@@ -75,21 +82,22 @@ func (a *ScaffolderFetchTemplateActivities) ResolveTemplateVersion(ctx context.C
 		return nil, nonRetryable(errors.New("fetch:template: workspaceId and templateDefinitionId required"))
 	}
 
+	def, err := a.client.GetDefinition(ctx, in.TemplateDefinitionID)
+	if err != nil {
+		if errors.Is(err, services.ErrTemplateDefinitionNotFound) {
+			return nil, nonRetryable(fmt.Errorf("fetch:template: %w", err))
+		}
+		return nil, fmt.Errorf("fetch:template: resolve definition: %w", err)
+	}
+	if def.WorkspaceID != "" && def.WorkspaceID != in.WorkspaceID {
+		return nil, nonRetryable(fmt.Errorf("fetch:template: template %s belongs to a different workspace", in.TemplateDefinitionID))
+	}
+	if def.Status != "published" {
+		return nil, nonRetryable(fmt.Errorf("fetch:template: template %s is not published", in.TemplateDefinitionID))
+	}
+
 	versionID := strings.TrimSpace(in.Version)
 	if versionID == "" {
-		def, err := a.client.GetDefinition(ctx, in.TemplateDefinitionID)
-		if err != nil {
-			if errors.Is(err, services.ErrTemplateDefinitionNotFound) {
-				return nil, nonRetryable(fmt.Errorf("fetch:template: %w", err))
-			}
-			return nil, fmt.Errorf("fetch:template: resolve definition: %w", err)
-		}
-		if def.WorkspaceID != "" && def.WorkspaceID != in.WorkspaceID {
-			return nil, nonRetryable(fmt.Errorf("fetch:template: template %s belongs to a different workspace", in.TemplateDefinitionID))
-		}
-		if def.Status != "published" {
-			return nil, nonRetryable(fmt.Errorf("fetch:template: template %s is not published", in.TemplateDefinitionID))
-		}
 		if strings.TrimSpace(def.CurrentVersionID) == "" {
 			return nil, nonRetryable(fmt.Errorf("fetch:template: template %s has no published version", in.TemplateDefinitionID))
 		}
@@ -110,14 +118,14 @@ func (a *ScaffolderFetchTemplateActivities) ResolveTemplateVersion(ctx context.C
 		return nil, nonRetryable(fmt.Errorf("fetch:template: version %s belongs to a different workspace", versionID))
 	}
 
-	var def scaffolder.Definition
-	if err := json.Unmarshal(version.DefinitionJSON, &def); err != nil {
+	var doc scaffolder.Definition
+	if err := json.Unmarshal(version.DefinitionJSON, &doc); err != nil {
 		return nil, nonRetryable(fmt.Errorf("fetch:template: decode definition: %w", err))
 	}
 
 	return &ScaffolderResolveTemplateVersionResult{
 		DefinitionVersionID: versionID,
 		DefinitionID:        in.TemplateDefinitionID,
-		Definition:          def,
+		Definition:          doc,
 	}, nil
 }

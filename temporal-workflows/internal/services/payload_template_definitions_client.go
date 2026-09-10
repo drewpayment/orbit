@@ -12,9 +12,10 @@ import (
 	"time"
 )
 
-// ErrTemplateDefinitionNotFound is returned when a template-definitions id
-// doesn't resolve.
-var ErrTemplateDefinitionNotFound = errors.New("template definition not found")
+// ErrTemplateDefinitionNotFound is declared in payload_template_sweep_client.go
+// (Phase 4 Task G) — reused here rather than redeclared, since both clients
+// address the same template-definitions collection and "not found" means
+// the same thing either way.
 
 // ErrTemplateDefinitionVersionNotFound is returned when a
 // template-definition-versions id doesn't resolve. Distinct from
