@@ -6,7 +6,9 @@ require (
 	github.com/drewpayment/orbit/proto v0.0.0-20251227152417-f7ff7038c7ec
 	github.com/drewpayment/orbit/services/kafka v0.0.0-20260116014526-29dc97591248
 	github.com/minio/minio-go/v7 v7.0.98
+	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/stretchr/testify v1.11.1
+	go.temporal.io/api v1.24.0
 	go.temporal.io/sdk v1.25.1
 	google.golang.org/grpc v1.78.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -43,7 +45,6 @@ require (
 	github.com/twmb/franz-go v1.20.6 // indirect
 	github.com/twmb/franz-go/pkg/kadm v1.17.1 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.12.0 // indirect
-	go.temporal.io/api v1.24.0 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/crypto v0.46.0 // indirect
