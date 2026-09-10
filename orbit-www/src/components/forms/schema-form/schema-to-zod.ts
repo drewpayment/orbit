@@ -55,6 +55,21 @@ function numberSchema(schema: JsonSchema): z.ZodTypeAny {
   if (typeof schema.minimum === 'number') s = s.min(schema.minimum)
   if (typeof schema.maximum === 'number') s = s.max(schema.maximum)
   if (typeof schema.multipleOf === 'number') s = s.multipleOf(schema.multipleOf)
+
+  if (schema.enum && schema.enum.length > 0) {
+    // The enum constraint replaces the range/multipleOf checks above (a
+    // fixed set of allowed values is strictly narrower than any of those),
+    // but must still enforce integer-ness for `type: "integer"` — a literal
+    // union of numbers alone wouldn't reject a non-integer that happens to
+    // not be one of the literals for an unrelated reason.
+    const literals = schema.enum.map((v) => z.literal(Number(v))) as [
+      z.ZodLiteral<number>,
+      ...z.ZodLiteral<number>[],
+    ]
+    const union = z.union(literals)
+    return schema.type === 'integer' ? z.intersection(s, union) : union
+  }
+
   return s
 }
 

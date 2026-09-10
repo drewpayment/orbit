@@ -20,7 +20,7 @@ export interface TemplateVariable {
 export interface LegacyVariablesConversion {
   schema: JsonSchema
   /** Default values matching the legacy `UseTemplateForm`'s useState initializer. */
-  defaults: Record<string, string | number | boolean>
+  defaults: Record<string, string | number | boolean | string[]>
 }
 
 function variableToPropertySchema(variable: TemplateVariable): JsonSchema {
@@ -50,10 +50,13 @@ function variableToPropertySchema(variable: TemplateVariable): JsonSchema {
 }
 
 /** Legacy default-value fallback, matching `UseTemplateForm`'s original useState initializer. */
-function legacyDefault(variable: TemplateVariable): string | number | boolean {
+function legacyDefault(variable: TemplateVariable): string | number | boolean | string[] {
   if (variable.default !== undefined) return variable.default
   if (variable.type === 'boolean') return false
   if (variable.type === 'number') return 0
+  // multiselect renders as SchemaForm's tag input (array of string) — an
+  // empty string here would be a type mismatch, not just a "no value yet".
+  if (variable.type === 'multiselect') return []
   return ''
 }
 
@@ -62,7 +65,7 @@ export function templateVariablesToJsonSchema(
 ): LegacyVariablesConversion {
   const properties: Record<string, JsonSchema> = {}
   const required: string[] = []
-  const defaults: Record<string, string | number | boolean> = {}
+  const defaults: Record<string, string | number | boolean | string[]> = {}
 
   for (const variable of variables) {
     properties[variable.key] = variableToPropertySchema(variable)
