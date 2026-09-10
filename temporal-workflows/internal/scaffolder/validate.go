@@ -621,11 +621,13 @@ func stripExpressions(v any, path []pathSeg, stripped *[][]pathSeg) (any, bool) 
 // `true`, so the null placeholder left by stripExpressions type-checks while
 // `required` and `additionalProperties` keep their bite.
 //
-// It walks `properties` and `items` to reach the declaring node, then relaxes
-// that location inside the node's combinator branches too. A location reachable
-// only through `$ref` or `patternProperties` is left alone; the worst case
-// there is a spurious finding on an exotic schema, and every action schema in
-// this repo is a flat object.
+// It walks `properties`, a schema-valued `additionalProperties` (for objects
+// whose keys are the template author's own names, e.g. fs:render's `values`),
+// and `items` to reach the declaring node, then relaxes that location inside
+// the node's combinator branches too. A location reachable only through `$ref`
+// or `patternProperties` is left alone; the worst case there is a spurious
+// finding on an exotic schema, and every action schema in this repo is a flat
+// object.
 func relaxSchema(schema map[string]any, stripped [][]pathSeg) {
 	for _, p := range stripped {
 		node := schema
@@ -650,17 +652,23 @@ func relaxSchema(schema map[string]any, stripped [][]pathSeg) {
 	}
 }
 
-// schemaChild descends one path segment into a schema node.
+// schemaChild descends one path segment into a schema node. A key not
+// declared under `properties` falls back to a schema-valued
+// `additionalProperties`, which governs every dynamically-named key alike
+// (fs:render's `values`, keyed by the author's own variable names).
 func schemaChild(node map[string]any, seg pathSeg) (map[string]any, bool) {
 	if seg.isIdx {
 		return schemaChildAtIndex(node, seg.index)
 	}
-	props, ok := node["properties"].(map[string]any)
-	if !ok {
-		return nil, false
+	if props, ok := node["properties"].(map[string]any); ok {
+		if child, ok := props[seg.key].(map[string]any); ok {
+			return child, true
+		}
 	}
-	child, ok := props[seg.key].(map[string]any)
-	return child, ok
+	if ap, ok := node["additionalProperties"].(map[string]any); ok {
+		return ap, true
+	}
+	return nil, false
 }
 
 // schemaChildAtIndex returns the schema node governing one array element,
@@ -712,13 +720,33 @@ func deepCopyJSON(v map[string]any) map[string]any {
 }
 
 // relaxProperty sets a declared property's subschema to `true` in node and in
-// any combinator branch of node that declares it. An undeclared property is
-// deliberately left alone so additionalProperties still rejects it.
+// any combinator branch of node that declares it.
+//
+// A name not declared under `properties` is, by default, left alone so
+// `additionalProperties` still rejects it as an undeclared property. But when
+// `additionalProperties` is itself a schema (not `false`) — an object like
+// fs:render's `values`, whose keys are the template author's own names rather
+// than a fixed set — name IS one of those dynamic, legitimately-additional
+// keys, and it is added to `properties` as `true` instead. JSON Schema
+// resolves overlap between `properties` and `additionalProperties` in favour
+// of `properties`, so this exempts only this one key from
+// `additionalProperties` while every other dynamic key on the same object
+// keeps being checked against it.
 func relaxProperty(node map[string]any, name string) {
 	if props, ok := node["properties"].(map[string]any); ok {
 		if _, declared := props[name]; declared {
 			props[name] = true
+			forEachBranch(node, func(sub map[string]any) { relaxProperty(sub, name) })
+			return
 		}
+	}
+	if _, ok := node["additionalProperties"].(map[string]any); ok {
+		props, ok := node["properties"].(map[string]any)
+		if !ok {
+			props = map[string]any{}
+			node["properties"] = props
+		}
+		props[name] = true
 	}
 	forEachBranch(node, func(sub map[string]any) { relaxProperty(sub, name) })
 }
