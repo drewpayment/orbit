@@ -125,15 +125,43 @@ func TestPayloadTemplateDefinitionClient_RejectsAnEmptyID(t *testing.T) {
 func TestPayloadTemplateDefinitionClient_DistinguishesAnAbsentRoute(t *testing.T) {
 	t.Parallel()
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
-		w.WriteHeader(http.StatusNotFound)
-		_, _ = w.Write([]byte("<!DOCTYPE html><html><body>404</body></html>"))
-	}))
-	defer srv.Close()
+	tests := []struct {
+		name        string
+		body        string
+		contentType string
+		wantErrIs   error
+	}{
+		{
+			name:      "the route's own not-found",
+			body:      `{"error":"template definition version not found"}`,
+			wantErrIs: ErrTemplateDefinitionVersionNotFound,
+		},
+		{
+			// What Next.js serves for an unrouted path.
+			name:        "an HTML 404 from the framework",
+			body:        "<!DOCTYPE html><html><body>404: This page could not be found.</body></html>",
+			contentType: "text/html",
+			wantErrIs:   ErrIdentityRouteUnavailable,
+		},
+		{name: "an empty 404 body", body: "", wantErrIs: ErrIdentityRouteUnavailable},
+		{name: "valid JSON with no error key", body: `{"message":"nope"}`, wantErrIs: ErrIdentityRouteUnavailable},
+	}
 
-	client := NewPayloadTemplateDefinitionClient(srv.URL, "k")
-	_, err := client.GetDefinitionVersion(context.Background(), "ver-1")
-	require.True(t, errors.Is(err, ErrIdentityRouteUnavailable), "got %v", err)
-	require.False(t, errors.Is(err, ErrTemplateDefinitionVersionNotFound))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				if tt.contentType != "" {
+					w.Header().Set("Content-Type", tt.contentType)
+				}
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer srv.Close()
+
+			client := NewPayloadTemplateDefinitionClient(srv.URL, "k")
+			_, err := client.GetDefinitionVersion(context.Background(), "ver-1")
+			require.True(t, errors.Is(err, tt.wantErrIs), "got %v", err)
+		})
+	}
 }
