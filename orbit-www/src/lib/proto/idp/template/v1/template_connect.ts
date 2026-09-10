@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CancelRequest, CancelResponse, GetProgressRequest, GetProgressResponse, ListAvailableOrgsRequest, ListAvailableOrgsResponse, StartInstantiationRequest, StartInstantiationResponse } from "./template_pb.js";
+import { CancelRequest, CancelResponse, CancelRunRequest, CancelRunResponse, GetProgressRequest, GetProgressResponse, GetRunProgressRequest, GetRunProgressResponse, ListActionsRequest, ListActionsResponse, ListAvailableOrgsRequest, ListAvailableOrgsResponse, StartInstantiationRequest, StartInstantiationResponse, StartScaffolderRunRequest, StartScaffolderRunResponse } from "./template_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -56,6 +56,51 @@ export const TemplateService = {
       name: "ListAvailableOrgs",
       I: ListAvailableOrgsRequest,
       O: ListAvailableOrgsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Start a new v2 ScaffolderWorkflow run for a published template definition version
+     *
+     * @generated from rpc idp.template.v1.TemplateService.StartScaffolderRun
+     */
+    startScaffolderRun: {
+      name: "StartScaffolderRun",
+      I: StartScaffolderRunRequest,
+      O: StartScaffolderRunResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Get the current step-by-step progress of a scaffolder run
+     *
+     * @generated from rpc idp.template.v1.TemplateService.GetRunProgress
+     */
+    getRunProgress: {
+      name: "GetRunProgress",
+      I: GetRunProgressRequest,
+      O: GetRunProgressResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Cancel an in-progress scaffolder run
+     *
+     * @generated from rpc idp.template.v1.TemplateService.CancelRun
+     */
+    cancelRun: {
+      name: "CancelRun",
+      I: CancelRunRequest,
+      O: CancelRunResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * List the action registry descriptors known to the worker (for definition
+     * validation and Phase 2 authoring UI autocomplete)
+     *
+     * @generated from rpc idp.template.v1.TemplateService.ListActions
+     */
+    listActions: {
+      name: "ListActions",
+      I: ListActionsRequest,
+      O: ListActionsResponse,
       kind: MethodKind.Unary,
     },
   }
