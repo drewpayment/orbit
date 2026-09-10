@@ -218,6 +218,11 @@ export const CatalogEntities: CollectionConfig = {
             // sourceId = the originating Templates doc id. See
             // POST /api/internal/templates/[id]/finalize.
             { label: 'Template', value: 'template' },
+            // Scaffolder action run (Template Authoring Phase 1): the
+            // catalog:entity:register action registered this entity directly
+            // from a scaffolder run, sourceId = the run id. See
+            // POST /api/internal/catalog-entities.
+            { label: 'Scaffolder Run', value: 'scaffolder-run' },
           ],
         },
         {

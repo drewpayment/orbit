@@ -1140,7 +1140,7 @@ export interface CatalogEntity {
    * Provenance back to the backing collection this row projects from.
    */
   source: {
-    type: 'manual' | 'apps' | 'api-schemas' | 'kafka' | 'sync' | 'scan' | 'template';
+    type: 'manual' | 'apps' | 'api-schemas' | 'kafka' | 'sync' | 'scan' | 'template' | 'scaffolder-run';
     /**
      * ID of the backing row in the source collection.
      */
