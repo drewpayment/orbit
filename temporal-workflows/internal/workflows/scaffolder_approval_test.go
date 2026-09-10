@@ -188,6 +188,11 @@ func (s *ScaffolderWorkflowTestSuite) TestApprovalStep_DryRunNeverOpensARowOrWai
 	s.Require().Len(res.Plan, 2)
 	s.Equal("unsupported", res.Plan[0].Kind)
 	s.Equal("gate", res.Plan[0].Name)
+
+	gate, ok := stepByID(s.lastProgress().Steps, "gate")
+	s.Require().True(ok)
+	s.Equal(stepStatusSkipped, gate.Status,
+		"the step summary must not report succeeded for a step the dry run never evaluated")
 }
 
 // --- if condition -------------------------------------------------------------

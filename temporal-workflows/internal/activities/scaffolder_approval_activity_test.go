@@ -40,13 +40,14 @@ func TestScaffolderApprovalActivities_OpenApproval(t *testing.T) {
 		a := NewScaffolderApprovalActivities(fake, nil)
 
 		res, err := a.OpenApproval(context.Background(), ScaffolderOpenApprovalInput{
-			WorkspaceID: "ws-1",
-			WorkflowID:  "wf-1",
-			RunID:       "run-1",
-			ApprovalID:  "run-1:gate",
-			StepID:      "gate",
-			Message:     "please review",
-			Approvers:   []string{"a@x.com"},
+			WorkspaceID:          "ws-1",
+			WorkflowID:           "wf-1",
+			RunID:                "run-1",
+			ApprovalID:           "run-1:gate",
+			StepID:               "gate",
+			Message:              "please review",
+			Approvers:            []string{"a@x.com"},
+			TemplateDefinitionID: "tmpl-1",
 		})
 
 		require.NoError(t, err)
@@ -54,6 +55,8 @@ func TestScaffolderApprovalActivities_OpenApproval(t *testing.T) {
 		assert.Equal(t, "ws-1", fake.openIn.WorkspaceID)
 		assert.Equal(t, "run-1:gate", fake.openIn.ApprovalID)
 		assert.Equal(t, "custom", fake.openIn.Kind)
+		assert.Equal(t, "tmpl-1", fake.openIn.Payload["templateDefinitionId"],
+			"the template definition id must ride in the payload so /platform/approvals can build a run-page link")
 	})
 
 	t.Run("missing required fields is non-retryable", func(t *testing.T) {

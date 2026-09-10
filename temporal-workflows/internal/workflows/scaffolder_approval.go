@@ -83,7 +83,12 @@ func approvalStepID(runID, stepID string) string {
 // Called only from runApprovalStep, AFTER its `if` check — a skipped step
 // never reaches here, so this function has no `if` handling of its own.
 func (r *scaffolderRun) planApprovalStep(ctx workflow.Context, idx int, step scaffolder.Step) {
-	r.steps[idx].Status = stepStatusSucceeded
+	// stepStatusSkipped, not stepStatusSucceeded: the step was never
+	// evaluated, so reporting it as succeeded would contradict the plan
+	// entry below (kind "unsupported") and mislead the per-step status
+	// summary the UI renders alongside the plan. This mirrors
+	// markUnplannable's status choice for the same reason.
+	r.steps[idx].Status = stepStatusSkipped
 	r.steps[idx].FinishedAt = workflowNow(ctx)
 	r.plan = append(r.plan, scaffolder.PlannedChange{
 		Kind:        "unsupported",
@@ -178,13 +183,14 @@ func (r *scaffolderRun) runApprovalStep(ctx workflow.Context, bookkeepingCtx wor
 
 	var openResult activities.ScaffolderOpenApprovalResult
 	openErr := workflow.ExecuteActivity(bookkeepingCtx, activities.ActivityScaffolderOpenApproval, activities.ScaffolderOpenApprovalInput{
-		WorkspaceID: r.input.WorkspaceID,
-		WorkflowID:  workflow.GetInfo(ctx).WorkflowExecution.ID,
-		RunID:       r.input.RunID,
-		ApprovalID:  approvalID,
-		StepID:      step.ID,
-		Message:     in.Message,
-		Approvers:   in.Approvers,
+		WorkspaceID:          r.input.WorkspaceID,
+		WorkflowID:           workflow.GetInfo(ctx).WorkflowExecution.ID,
+		RunID:                r.input.RunID,
+		ApprovalID:           approvalID,
+		StepID:               step.ID,
+		Message:              in.Message,
+		Approvers:            in.Approvers,
+		TemplateDefinitionID: r.input.DefinitionID,
 	}).Get(bookkeepingCtx, &openResult)
 	if openErr != nil {
 		if temporal.IsCanceledError(openErr) {
