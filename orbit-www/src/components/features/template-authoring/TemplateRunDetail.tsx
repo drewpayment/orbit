@@ -145,7 +145,7 @@ function OutputLink({ link }: { link: OutputLinkLike }) {
   if (link.entity) {
     return (
       <Link
-        href={`/catalog/${link.entity}`}
+        href={`/catalog/${encodeURIComponent(link.entity)}`}
         className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
       >
         {label}

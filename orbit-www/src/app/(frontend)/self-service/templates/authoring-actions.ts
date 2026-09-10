@@ -746,6 +746,13 @@ export async function getRun(runId: string): Promise<ActionRun | null> {
           ...(secretValues.size > 0 && run.plan
             ? { plan: redactSecretValuesDeep(run.plan, secretValues) as ActionRun['plan'] }
             : {}),
+          // Consumer run-detail surfaces (Phase 2 Task 17) render
+          // `run.outputs.links[]` directly to the caller — a secret input
+          // echoed into a step's declared output (same class of leak as
+          // steps[]/plan above) must be redacted here too.
+          ...(secretValues.size > 0 && run.outputs
+            ? { outputs: redactSecretValuesDeep(run.outputs, secretValues) as ActionRun['outputs'] }
+            : {}),
         }
       }
     } catch {
