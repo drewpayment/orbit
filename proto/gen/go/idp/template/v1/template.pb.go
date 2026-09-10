@@ -1126,12 +1126,19 @@ func (x *ListActionsResponse) GetActions() []*ActionDescriptor {
 }
 
 type ResolveScaffolderApprovalRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	WorkflowId    string                 `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	ApprovalId    string                 `protobuf:"bytes,2,opt,name=approval_id,json=approvalId,proto3" json:"approval_id,omitempty"` // matches the step's generated approval id, disambiguates multiple approval:request steps
-	Approved      bool                   `protobuf:"varint,3,opt,name=approved,proto3" json:"approved,omitempty"`
-	ApproverId    string                 `protobuf:"bytes,4,opt,name=approver_id,json=approverId,proto3" json:"approver_id,omitempty"`
-	Comment       string                 `protobuf:"bytes,5,opt,name=comment,proto3" json:"comment,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	WorkflowId string                 `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	ApprovalId string                 `protobuf:"bytes,2,opt,name=approval_id,json=approvalId,proto3" json:"approval_id,omitempty"` // matches the step's generated approval id, disambiguates multiple approval:request steps
+	Approved   bool                   `protobuf:"varint,3,opt,name=approved,proto3" json:"approved,omitempty"`
+	ApproverId string                 `protobuf:"bytes,4,opt,name=approver_id,json=approverId,proto3" json:"approver_id,omitempty"`
+	Comment    string                 `protobuf:"bytes,5,opt,name=comment,proto3" json:"comment,omitempty"`
+	// The run's workspace. Not used by the server for authorization (the
+	// server resolves the run's true workspace from the Temporal workflow
+	// memo via authorizeScaffolderRun, the same as GetRunProgress/CancelRun) —
+	// it exists so the orbit-www gRPC auth interceptor can read a workspace id
+	// off this request message and mint a token carrying the matching `wid`
+	// claim, the same way StartScaffolderRunRequest's workspace_id does.
+	WorkspaceId   string `protobuf:"bytes,6,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1197,6 +1204,13 @@ func (x *ResolveScaffolderApprovalRequest) GetApproverId() string {
 func (x *ResolveScaffolderApprovalRequest) GetComment() string {
 	if x != nil {
 		return x.Comment
+	}
+	return ""
+}
+
+func (x *ResolveScaffolderApprovalRequest) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
 	}
 	return ""
 }
@@ -1410,7 +1424,7 @@ const file_idp_template_v1_template_proto_rawDesc = "" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\"\x14\n" +
 	"\x12ListActionsRequest\"R\n" +
 	"\x13ListActionsResponse\x12;\n" +
-	"\aactions\x18\x01 \x03(\v2!.idp.template.v1.ActionDescriptorR\aactions\"\xbb\x01\n" +
+	"\aactions\x18\x01 \x03(\v2!.idp.template.v1.ActionDescriptorR\aactions\"\xde\x01\n" +
 	" ResolveScaffolderApprovalRequest\x12\x1f\n" +
 	"\vworkflow_id\x18\x01 \x01(\tR\n" +
 	"workflowId\x12\x1f\n" +
@@ -1419,7 +1433,8 @@ const file_idp_template_v1_template_proto_rawDesc = "" +
 	"\bapproved\x18\x03 \x01(\bR\bapproved\x12\x1f\n" +
 	"\vapprover_id\x18\x04 \x01(\tR\n" +
 	"approverId\x12\x18\n" +
-	"\acomment\x18\x05 \x01(\tR\acomment\"=\n" +
+	"\acomment\x18\x05 \x01(\tR\acomment\x12!\n" +
+	"\fworkspace_id\x18\x06 \x01(\tR\vworkspaceId\"=\n" +
 	"!ResolveScaffolderApprovalResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\"\xbd\x01\n" +
 	"\x10ActionDescriptor\x12\x12\n" +

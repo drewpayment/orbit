@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getPayload } from 'payload'
 import config from '@payload-config'
+import { buildReviewLink } from '@/lib/approvals/review-link'
 
 import { getPayloadUserFromSession } from '@/lib/auth/session'
 import {
@@ -80,21 +81,36 @@ export default async function PlatformApprovalsPage() {
   })
 
   type WorkspaceRef = { id: string; name?: string; slug?: string }
-  const rows = result.docs.map((doc) => ({
-    id: doc.id,
-    workflowId: doc.workflowId,
-    runId: doc.runId ?? '',
-    approvalId: doc.approvalId,
-    kind: doc.kind,
-    title: doc.title,
-    bodyMarkdown: doc.bodyMarkdown ?? '',
-    reviewerRounds: doc.reviewerRounds ?? 0,
-    createdAt: doc.createdAt,
-    workspace:
-      typeof doc.workspace === 'object' && doc.workspace !== null
-        ? (doc.workspace as WorkspaceRef)
-        : { id: String(doc.workspace ?? ''), name: '', slug: '' },
-  }))
+  const rows = result.docs.map((doc) => {
+    const payload =
+      doc.payload && typeof doc.payload === 'object' ? (doc.payload as Record<string, unknown>) : {}
+    // The scaffolder's `approval:request` step writes its own "custom" row
+    // (ScaffolderOpenApproval — temporal-workflows/internal/activities/
+    // scaffolder_approval_activity.go) and stamps templateDefinitionId in
+    // the payload precisely so this page can build a link to the template
+    // run page instead of the infra-agent chat thread that every other
+    // "custom" row (and every other kind) still points at.
+    const templateDefinitionId =
+      typeof payload.templateDefinitionId === 'string' && payload.templateDefinitionId
+        ? payload.templateDefinitionId
+        : null
+    return {
+      id: doc.id,
+      workflowId: doc.workflowId,
+      runId: doc.runId ?? '',
+      approvalId: doc.approvalId,
+      kind: doc.kind,
+      title: doc.title,
+      bodyMarkdown: doc.bodyMarkdown ?? '',
+      reviewerRounds: doc.reviewerRounds ?? 0,
+      createdAt: doc.createdAt,
+      templateDefinitionId,
+      workspace:
+        typeof doc.workspace === 'object' && doc.workspace !== null
+          ? (doc.workspace as WorkspaceRef)
+          : { id: String(doc.workspace ?? ''), name: '', slug: '' },
+    }
+  })
 
   // Bucket by workspace for the table — mirrors how a reviewer mentally
   // groups when triaging.
@@ -156,6 +172,7 @@ function ApprovalsTable({
     title: string
     reviewerRounds: number
     createdAt: string
+    templateDefinitionId: string | null
     workspace: { id: string; name?: string; slug?: string }
   }>
 }) {
@@ -175,9 +192,13 @@ function ApprovalsTable({
         <tbody>
           {rows.map((row) => {
             const slug = row.workspace.slug ?? row.workspace.id
-            const reviewLink = row.runId
-              ? `/workspaces/${slug}/infra-agent/${row.runId}#approval-${row.approvalId}`
-              : `/workspaces/${slug}/infra-agent`
+            const reviewLink = buildReviewLink({
+              kind: row.kind,
+              templateDefinitionId: row.templateDefinitionId,
+              workspaceSlug: slug,
+              runId: row.runId,
+              approvalId: row.approvalId,
+            })
             return (
               <tr key={row.id} className="border-b last:border-b-0 hover:bg-muted/40">
                 <td className="py-3 pr-3 align-top">

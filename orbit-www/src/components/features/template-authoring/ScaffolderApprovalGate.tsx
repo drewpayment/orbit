@@ -42,7 +42,11 @@ export function ScaffolderApprovalGate({ runId, approvalId, message, canApprove 
   async function handle(approved: boolean) {
     setPending(approved ? 'approve' : 'reject')
     try {
-      await resolveScaffolderApproval(runId, approvalId, approved, comment.trim() || undefined)
+      const result = await resolveScaffolderApproval(runId, approvalId, approved, comment.trim() || undefined)
+      if (!result.ok) {
+        toast.error(result.errors?.[0] ?? `Failed to ${approved ? 'approve' : 'reject'} step`)
+        return
+      }
       toast.success(approved ? 'Step approved' : 'Step rejected')
       router.refresh()
     } catch (err) {

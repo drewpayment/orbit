@@ -83,7 +83,12 @@ func approvalStepID(runID, stepID string) string {
 // Called only from runApprovalStep, AFTER its `if` check — a skipped step
 // never reaches here, so this function has no `if` handling of its own.
 func (r *scaffolderRun) planApprovalStep(ctx workflow.Context, idx int, step scaffolder.Step) {
-	r.steps[idx].Status = stepStatusSucceeded
+	// stepStatusSkipped, not stepStatusSucceeded: the step was never
+	// evaluated, so reporting it as succeeded would contradict the plan
+	// entry below (kind "unsupported") and mislead the per-step status
+	// summary the UI renders alongside the plan. This mirrors
+	// markUnplannable's status choice for the same reason.
+	r.steps[idx].Status = stepStatusSkipped
 	r.steps[idx].FinishedAt = workflowNow(ctx)
 	r.plan = append(r.plan, scaffolder.PlannedChange{
 		Kind:        "unsupported",
@@ -177,14 +182,28 @@ func (r *scaffolderRun) runApprovalStep(ctx workflow.Context, bookkeepingCtx wor
 	r.writeProgress(bookkeepingCtx, ScaffolderStatusAwaitingApproval, "", nil)
 
 	var openResult activities.ScaffolderOpenApprovalResult
+	// RunID/TemplateDefinitionID are the ROOT run's — the only run with a
+	// Payload action-runs document and a run-detail page — even when this
+	// step is executing inside a `fetch:template`-nested child workflow,
+	// where r.input.RunID/DefinitionID are the nested (synthetic, page-less)
+	// values instead. WorkflowID is deliberately NOT the root's: it is
+	// THIS execution's own real Temporal workflow id (root's or a nested
+	// child's, whichever is actually parked waiting on the signal below),
+	// since that is what ResolveScaffolderApproval must target to reach it.
+	// approvalID itself also stays keyed off r.input.RunID (not the root),
+	// unrelated to either of these: it only has to be unique WITHIN this one
+	// workflow execution's own signal channel, which per-nested-run RunID
+	// already guarantees regardless of how many sibling nested runs share a
+	// step id.
 	openErr := workflow.ExecuteActivity(bookkeepingCtx, activities.ActivityScaffolderOpenApproval, activities.ScaffolderOpenApprovalInput{
-		WorkspaceID: r.input.WorkspaceID,
-		WorkflowID:  workflow.GetInfo(ctx).WorkflowExecution.ID,
-		RunID:       r.input.RunID,
-		ApprovalID:  approvalID,
-		StepID:      step.ID,
-		Message:     in.Message,
-		Approvers:   in.Approvers,
+		WorkspaceID:          r.input.WorkspaceID,
+		WorkflowID:           workflow.GetInfo(ctx).WorkflowExecution.ID,
+		RunID:                r.rootRunID(),
+		ApprovalID:           approvalID,
+		StepID:               step.ID,
+		Message:              in.Message,
+		Approvers:            in.Approvers,
+		TemplateDefinitionID: r.rootDefinitionID(),
 	}).Get(bookkeepingCtx, &openResult)
 	if openErr != nil {
 		if temporal.IsCanceledError(openErr) {

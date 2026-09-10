@@ -106,6 +106,20 @@ type ScaffolderWorkflowInput struct {
 	// finish() only records the sweep's drift fields when DryRun &&
 	// Trigger == scaffolderSweepTrigger — see recordSweepResult.
 	Trigger string `json:"trigger,omitempty"`
+	// RootRunID/RootDefinitionID identify the OUTERMOST run and template
+	// definition of a (possibly `fetch:template`-nested) execution — the
+	// only run that has a Payload action-runs document and a
+	// /self-service/templates/<id>/run/<runId> page. Empty for a top-level
+	// run: scaffolderRun.rootRunID/rootDefinitionID treat empty as "this
+	// input already IS the root" and fall back to RunID/DefinitionID, so
+	// existing callers (StartScaffolderRun, tests) that never set these two
+	// fields are unaffected. runFetchTemplateStep copies its own resolved
+	// root forward into every nested child's input unchanged, so an
+	// arbitrarily deep composition chain still points back at the same
+	// top-level run no matter how many `fetch:template` levels an
+	// `approval:request` step ends up nested at.
+	RootRunID        string `json:"rootRunId,omitempty"`
+	RootDefinitionID string `json:"rootDefinitionId,omitempty"`
 }
 
 // ScaffolderWorkflowResult is the run outcome.
@@ -340,6 +354,31 @@ func newScaffolderRun(input ScaffolderWorkflowInput, logger log.Logger) *scaffol
 		run.stepIndex[step.ID] = i
 	}
 	return run
+}
+
+// rootRunID returns the id of the Payload action-runs document this
+// execution ultimately belongs to: its own RunID for a top-level run, or the
+// ancestor chain's already-resolved RootRunID for a `fetch:template`-nested
+// run, which has no action-runs document of its own (see
+// runFetchTemplateStep's doc comment) — its synthetic RunID exists only for
+// its work directory and expression context, never for anything a human
+// links to.
+func (r *scaffolderRun) rootRunID() string {
+	if r.input.RootRunID != "" {
+		return r.input.RootRunID
+	}
+	return r.input.RunID
+}
+
+// rootDefinitionID is rootRunID's template-definition counterpart — the
+// definition whose /self-service/templates/<id>/run/<runId> page actually
+// renders this run, as opposed to whatever nested definition a
+// `fetch:template` step is currently composing in.
+func (r *scaffolderRun) rootDefinitionID() string {
+	if r.input.RootDefinitionID != "" {
+		return r.input.RootDefinitionID
+	}
+	return r.input.DefinitionID
 }
 
 // runStep evaluates a step's condition, resolves its input and dispatches it.

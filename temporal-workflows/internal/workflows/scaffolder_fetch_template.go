@@ -199,6 +199,16 @@ func (r *scaffolderRun) runFetchTemplateStep(ctx workflow.Context, bookkeepingCt
 		UserName:            r.input.UserName,
 		DryRun:              r.input.DryRun,
 		TemplateStack:       append(append([]string{}, r.input.TemplateStack...), resolveResult.DefinitionVersionID),
+		// Carried forward UNCHANGED, never re-derived from this (possibly
+		// already-nested) run: rootRunID()/rootDefinitionID() already
+		// resolve to the top-level run whether r is itself the root or an
+		// intermediate nesting level, so every descendant in an
+		// arbitrarily deep composition chain ends up pointing at the same
+		// one root — see scaffolder_workflow.go's ScaffolderWorkflowInput
+		// doc comment and runApprovalStep's use of these for the
+		// pending-approvals row.
+		RootRunID:        r.rootRunID(),
+		RootDefinitionID: r.rootDefinitionID(),
 	}
 
 	childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{

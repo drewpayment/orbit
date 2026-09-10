@@ -207,6 +207,7 @@ describe('templates/run-actions', () => {
     const GATE = {
       id: 'gate-1',
       workflowId: 'scaffolder-run-run-1',
+      runId: 'run-1',
       approvalId: 'run-1:gate',
       status: 'pending',
       title: 'Approval',
@@ -223,14 +224,58 @@ describe('templates/run-actions', () => {
 
       const result = await resolveScaffolderApproval('run-1', 'run-1:gate', true, 'lgtm')
 
-      expect(result).toEqual({ runId: 'run-1' })
+      expect(result).toEqual({ ok: true, runId: 'run-1' })
       expect(rpc).toHaveBeenCalledWith({
         workflowId: 'scaffolder-run-run-1',
         approvalId: 'run-1:gate',
         approved: true,
         approverId: 'user-1',
         comment: 'lgtm',
+        workspaceId: WORKSPACE_ID,
       })
+    })
+
+    it('signals the gate row\'s OWN workflowId, not the root run\'s, for a fetch:template-nested gate', async () => {
+      // A gate opened inside a fetch:template-nested child workflow carries
+      // the root run's id (runId) but the CHILD's own real Temporal
+      // workflow id (workflowId) — deliberately different from the root
+      // run's action-runs doc, which is what run.workflowId would give.
+      const nestedGate = {
+        ...GATE,
+        workflowId: 'scaffolder-run-run-1-compose',
+        approvalId: 'run-1:compose:gate',
+      }
+      const env = makeFakePayload({ 'action-runs': [RUN], 'pending-approvals': [nestedGate] })
+      env.setMembershipRole('owner')
+      mockPayload = env.payload
+      mockSessionUser = { id: 'user-1', email: 'owner@example.com' }
+      const { resolveScaffolderApproval } = await import('./run-actions')
+      const { resolveScaffolderApproval: rpc } = await import('@/lib/clients/template-client')
+
+      const result = await resolveScaffolderApproval('run-1', 'run-1:compose:gate', true)
+
+      expect(result).toEqual({ ok: true, runId: 'run-1' })
+      expect(rpc).toHaveBeenCalledWith(
+        expect.objectContaining({ workflowId: 'scaffolder-run-run-1-compose' }),
+      )
+    })
+
+    it('surfaces an RPC failure as {ok: false, errors} instead of throwing', async () => {
+      const env = makeFakePayload({ 'action-runs': [RUN], 'pending-approvals': [GATE] })
+      env.setMembershipRole('owner')
+      mockPayload = env.payload
+      mockSessionUser = { id: 'user-1', email: 'owner@example.com' }
+      const { resolveScaffolderApproval: rpc } = await import('@/lib/clients/template-client')
+      vi.mocked(rpc).mockRejectedValueOnce(
+        new Error('[permission_denied] token has no workspace claim for a workspace-scoped request'),
+      )
+      const { resolveScaffolderApproval } = await import('./run-actions')
+
+      const result = await resolveScaffolderApproval('run-1', 'run-1:gate', true)
+
+      expect(result.ok).toBe(false)
+      expect(result.runId).toBe('run-1')
+      expect(result.errors?.[0]).toMatch(/workspace claim/i)
     })
 
     it('calls the RPC when the caller is listed by email in approvers, even as a plain member', async () => {
@@ -290,6 +335,7 @@ describe('templates/run-actions', () => {
     const GATE = {
       id: 'gate-1',
       workflowId: 'scaffolder-run-run-1',
+      runId: 'run-1',
       approvalId: 'run-1:gate',
       status: 'pending',
       title: 'Approval',

@@ -50,13 +50,18 @@ func NewScaffolderApprovalActivities(client PendingApprovalsOpener, logger *slog
 
 // ScaffolderOpenApprovalInput is the activity input for OpenApproval.
 type ScaffolderOpenApprovalInput struct {
-	WorkspaceID string   `json:"workspaceId"`
-	WorkflowID  string   `json:"workflowId"`
-	RunID       string   `json:"runId"`
-	ApprovalID  string   `json:"approvalId"`
-	StepID      string   `json:"stepId"`
-	Message     string   `json:"message"`
-	Approvers   []string `json:"approvers,omitempty"`
+	WorkspaceID string `json:"workspaceId"`
+	WorkflowID  string `json:"workflowId"`
+	RunID       string `json:"runId"`
+	ApprovalID  string `json:"approvalId"`
+	StepID      string `json:"stepId"`
+	Message     string `json:"message"`
+	// TemplateDefinitionID is the scaffolder template definition this run
+	// executed. Carried in the row's payload so /platform/approvals can build
+	// a deep link to the run page (/self-service/templates/<id>/run/<runId>)
+	// without a second lookup from the approvals list.
+	TemplateDefinitionID string   `json:"templateDefinitionId"`
+	Approvers            []string `json:"approvers,omitempty"`
 }
 
 // ScaffolderOpenApprovalResult carries the created row's id, needed by
@@ -83,9 +88,10 @@ func (a *ScaffolderApprovalActivities) OpenApproval(ctx context.Context, in Scaf
 		Title:        fmt.Sprintf("Template run approval: %s", in.StepID),
 		BodyMarkdown: in.Message,
 		Payload: map[string]any{
-			"message":   in.Message,
-			"approvers": in.Approvers,
-			"stepId":    in.StepID,
+			"message":              in.Message,
+			"approvers":            in.Approvers,
+			"stepId":               in.StepID,
+			"templateDefinitionId": in.TemplateDefinitionID,
 		},
 	})
 	if err != nil {

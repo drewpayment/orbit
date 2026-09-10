@@ -128,7 +128,7 @@ export async function resolveScaffolderApproval(
   approvalId: string,
   approved: boolean,
   comment?: string,
-): Promise<{ runId: string }> {
+): Promise<{ ok: boolean; runId: string; errors?: string[] }> {
   const payload = await getPayload({ config })
   const user = await getCurrentUser()
   const uid = user?.id
@@ -145,10 +145,21 @@ export async function resolveScaffolderApproval(
   if (!workspaceId) throw new Error('Run not found')
   if (!run.workflowId) throw new Error('This run has not been dispatched yet.')
 
+  // Looked up by (runId, approvalId), NOT (workflowId, approvalId): a gate
+  // opened inside a `fetch:template`-nested child workflow stamps the ROOT
+  // run's id here (ScaffolderOpenApproval / scaffolder_approval.go's
+  // runApprovalStep — the row's `runId` is always the outermost run's
+  // action-runs doc id) but its OWN real Temporal workflow id in
+  // `workflowId`, which for a nested gate is the CHILD's id, not this root
+  // run's `run.workflowId`. Filtering on the root run id (this function's
+  // `runId` param, exactly what the row carries either way) is what still
+  // finds a nested gate; the row's own `workflowId` — read below, never
+  // `run.workflowId` — is what the RPC actually needs to signal the right
+  // execution.
   const gates = await payload.find({
     collection: 'pending-approvals',
     where: {
-      and: [{ workflowId: { equals: run.workflowId } }, { approvalId: { equals: approvalId } }],
+      and: [{ runId: { equals: runId } }, { approvalId: { equals: approvalId } }],
     },
     limit: 1,
     depth: 0,
@@ -156,6 +167,7 @@ export async function resolveScaffolderApproval(
   })
   const gate = gates.docs[0]
   if (!gate) throw new Error('Approval gate not found')
+  if (!gate.workflowId) throw new Error('Approval gate not found')
 
   const gatePayload =
     gate.payload && typeof gate.payload === 'object' && !Array.isArray(gate.payload)
@@ -170,15 +182,31 @@ export async function resolveScaffolderApproval(
     throw new Error('You do not have permission to resolve this approval gate.')
   }
 
-  await resolveScaffolderApprovalRPC({
-    workflowId: run.workflowId,
-    approvalId,
-    approved,
-    approverId: uid,
-    comment,
-  })
+  // The RPC call itself is the one failure mode a caller who passed every
+  // check above can still legitimately hit (the workflow already finished,
+  // the worker is unavailable, a transient gRPC error, …), so it's caught
+  // here and reported as a normal `{ ok: false }` result rather than an
+  // uncaught throw — a `ConnectError` crossing the server-action boundary
+  // otherwise surfaces to the client as an opaque 500, not the error message
+  // the UI's toast wants to show.
+  try {
+    await resolveScaffolderApprovalRPC({
+      workflowId: gate.workflowId,
+      approvalId,
+      approved,
+      approverId: uid,
+      comment,
+      workspaceId,
+    })
+  } catch (err) {
+    return {
+      ok: false,
+      runId,
+      errors: [err instanceof Error ? err.message : 'Failed to resolve the approval gate.'],
+    }
+  }
 
-  return { runId }
+  return { ok: true, runId }
 }
 
 /** One `approval:request` step's gate info, for the run-detail page's UI. */
@@ -216,10 +244,15 @@ export async function getScaffolderApprovalGates(
   if (!workspaceId || !run.workflowId) return {}
   if (!(await canRunTemplateDefinition(payload, uid, workspaceId, isAdmin))) return {}
 
+  // By `runId` (this root run's action-runs doc id), not `workflowId` — see
+  // the identical comment in `resolveScaffolderApproval` above. A gate
+  // opened inside a `fetch:template`-nested child carries the CHILD's real
+  // workflow id, not this root run's `run.workflowId`, but always carries
+  // the root's `runId`.
   const gates = await payload.find({
     collection: 'pending-approvals',
     where: {
-      and: [{ workflowId: { equals: run.workflowId } }, { status: { equals: 'pending' } }],
+      and: [{ runId: { equals: runId } }, { status: { equals: 'pending' } }],
     },
     limit: 50,
     depth: 0,

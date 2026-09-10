@@ -12,6 +12,7 @@ vi.mock('@/app/(frontend)/self-service/actions', () => ({
 }))
 vi.mock('@/app/(frontend)/self-service/templates/run-actions', () => ({
   resolveScaffolderApproval: vi.fn(),
+  getScaffolderApprovalGates: vi.fn().mockResolvedValue({}),
 }))
 
 afterEach(() => {
@@ -168,6 +169,41 @@ describe('TemplateRunDetail', () => {
 
     expect(screen.getByText('Please review the plan')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /approve/i })).not.toBeInTheDocument()
+  })
+
+  it('shows the Approve/Reject gate once polling observes an awaiting-approval step, even with no initial gates snapshot', async () => {
+    // Reproduces the SPA-navigation bug: the run wizard's Submit does a
+    // client-side router.push while the run is still `pending`/`running`,
+    // so the server component's ONE-TIME `gates` snapshot is empty — the
+    // real gate info only exists once polling later observes the step at
+    // `awaiting-approval`.
+    const getRun = vi.fn().mockResolvedValue(runWithAwaitingStep())
+    const getGates = vi.fn().mockResolvedValue({
+      gate: { approvalId: 'run-1:gate', message: 'Please review the plan', approvers: [], canApprove: true },
+    })
+
+    render(<TemplateRunDetail initialRun={run({ status: 'running' })} getRun={getRun} getGates={getGates} />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /approve/i })).toBeInTheDocument())
+    expect(screen.getByText('Please review the plan')).toBeInTheDocument()
+    expect(getGates).toHaveBeenCalledWith('run-1')
+  })
+
+  it('does not refetch gates once every awaiting step already has an entry', async () => {
+    const getRun = vi.fn().mockResolvedValue(runWithAwaitingStep())
+    const getGates = vi.fn().mockResolvedValue({})
+
+    render(
+      <TemplateRunDetail
+        initialRun={runWithAwaitingStep()}
+        getRun={getRun}
+        getGates={getGates}
+        gates={{ gate: { approvalId: 'run-1:gate', message: 'Please review', approvers: [], canApprove: true } }}
+      />,
+    )
+
+    await waitFor(() => expect(getRun).toHaveBeenCalled())
+    expect(getGates).not.toHaveBeenCalled()
   })
 
   it('calls resolveScaffolderApproval with the run id, approval id and decision on Approve', async () => {
