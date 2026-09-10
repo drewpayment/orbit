@@ -27,8 +27,8 @@ func stubCloneTemplateRepo(ctx context.Context, input TemplateInstantiationInput
 	return "", nil
 }
 
-func stubApplyTemplateVariables(ctx context.Context, input ApplyTemplateVariablesActivityInput) error {
-	return nil
+func stubApplyTemplateVariables(ctx context.Context, input ApplyTemplateVariablesActivityInput) (*ApplyTemplateVariablesResult, error) {
+	return &ApplyTemplateVariablesResult{}, nil
 }
 
 func stubPushToNewRepo(ctx context.Context, input PushToNewRepoActivityInput) error {
@@ -136,7 +136,7 @@ func (s *TemplateInstantiationWorkflowTestSuite) TestTemplateInstantiation_Clone
 		RepoName: "new-service",
 	}, nil)
 	s.env.OnActivity(stubCloneTemplateRepo, mock.Anything, mock.Anything).Return("/tmp/work/new-service", nil)
-	s.env.OnActivity(stubApplyTemplateVariables, mock.Anything, mock.Anything).Return(nil)
+	s.env.OnActivity(stubApplyTemplateVariables, mock.Anything, mock.Anything).Return(&ApplyTemplateVariablesResult{}, nil)
 	s.env.OnActivity(stubPushToNewRepo, mock.Anything, mock.Anything).Return(nil)
 	s.env.OnActivity(stubCleanupWorkDir, mock.Anything, mock.Anything).Return(nil)
 	s.env.OnActivity(stubFinalizeInstantiation, mock.Anything, mock.Anything).Return(nil)

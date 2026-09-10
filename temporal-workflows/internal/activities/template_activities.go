@@ -12,7 +12,10 @@ import (
 	"regexp"
 	"strings"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/drewpayment/orbit/temporal-workflows/internal/services"
+	"github.com/drewpayment/orbit/temporal-workflows/internal/templating"
 )
 
 // TemplateInstantiationInput contains all parameters needed for template instantiation
@@ -43,6 +46,79 @@ type CreateRepoResult struct {
 type ApplyTemplateVariablesActivityInput struct {
 	WorkDir   string
 	Variables map[string]string
+}
+
+// ApplyTemplateVariablesResult reports files that could not be rendered as a
+// template (content or name). Such files are left byte-for-byte unmodified;
+// this is not a fatal condition for the activity as a whole.
+type ApplyTemplateVariablesResult struct {
+	SkippedFiles []string
+}
+
+// templateManifest is the subset of orbit-template.yaml/.yml this activity
+// reads. Parsed best-effort: a missing or malformed manifest simply yields
+// an empty rawFiles list rather than failing the activity.
+type templateManifest struct {
+	RawFiles []string `yaml:"rawFiles"`
+}
+
+// loadRawFilePatterns best-effort reads orbit-template.yaml (or .yml) from
+// workDir's root and returns its rawFiles glob patterns. Any error (missing
+// file, malformed YAML) yields an empty, non-fatal result.
+func loadRawFilePatterns(workDir string, logger *slog.Logger) []string {
+	for _, name := range []string{"orbit-template.yaml", "orbit-template.yml"} {
+		data, err := os.ReadFile(filepath.Join(workDir, name))
+		if err != nil {
+			continue
+		}
+		var manifest templateManifest
+		if err := yaml.Unmarshal(data, &manifest); err != nil {
+			logger.Warn("Failed to parse template manifest for rawFiles, ignoring", "file", name, "error", err)
+			return nil
+		}
+		return manifest.RawFiles
+	}
+	return nil
+}
+
+// matchesRawFilePattern reports whether relPath matches any of the given
+// filepath.Match glob patterns. Patterns are single-segment (no `**`); a
+// pattern like "charts/*.yaml" matches "charts/values.yaml" but not
+// "charts/nested/values.yaml" — filepath.Match's documented limitation.
+func matchesRawFilePattern(relPath string, patterns []string) bool {
+	for _, pattern := range patterns {
+		if ok, err := filepath.Match(pattern, relPath); err == nil && ok {
+			return true
+		}
+	}
+	return false
+}
+
+// isBinaryContent applies the existing null-byte heuristic to a content
+// sample.
+func isBinaryContent(content []byte) bool {
+	sampleSize := 512
+	if len(content) < sampleSize {
+		sampleSize = len(content)
+	}
+	return strings.Contains(string(content[:sampleSize]), "\x00")
+}
+
+// isSafeRenderedName reports whether a rendered file/dir name is safe to use
+// as a single path segment: non-empty and free of path separators or ".."
+// (guards against a malicious/misconfigured template variable value, e.g.
+// {"SERVICE_NAME": "../../etc"}, escaping the work directory via rename).
+func isSafeRenderedName(name string) bool {
+	if name == "" {
+		return false
+	}
+	if name == "." || name == ".." {
+		return false
+	}
+	if strings.ContainsAny(name, `/\`) {
+		return false
+	}
+	return true
 }
 
 // PushToNewRepoActivityInput contains parameters for pushing to new repository
@@ -247,56 +323,86 @@ func (a *TemplateActivities) CloneTemplateRepo(ctx context.Context, input Templa
 	return workDir, nil
 }
 
-// ApplyTemplateVariables substitutes {{variable}} patterns in all text files
-func (a *TemplateActivities) ApplyTemplateVariables(ctx context.Context, input ApplyTemplateVariablesActivityInput) error {
+// ApplyTemplateVariables substitutes template variables into file contents
+// and file/directory names throughout the work directory, using the
+// templating engine (real Go text/template + curated FuncMap). Files
+// matching a rawFiles glob pattern from orbit-template.yaml are skipped
+// entirely (content and name). A file that fails to parse/execute as a
+// template is left unmodified and reported in the result's SkippedFiles;
+// this is not a fatal condition for the activity.
+func (a *TemplateActivities) ApplyTemplateVariables(ctx context.Context, input ApplyTemplateVariablesActivityInput) (*ApplyTemplateVariablesResult, error) {
 	a.logger.Info("Applying template variables", "workDir", input.WorkDir, "variableCount", len(input.Variables))
 
+	result := &ApplyTemplateVariablesResult{}
+
+	// No variables means no bare tokens can match and no dot-context is
+	// meaningful; skip entirely rather than attempting to parse arbitrary
+	// Go-template syntax in files that were never meant to be rendered.
 	if len(input.Variables) == 0 {
 		a.logger.Info("No variables to apply, skipping")
-		return nil
+		return result, nil
 	}
 
-	// Walk through all files in the work directory
+	rawPatterns := loadRawFilePatterns(input.WorkDir, a.logger)
+
+	var allPaths []string
+
+	// Pass 1: content substitution (top-down walk). Collect every visited
+	// path (files and dirs) along the way for the rename pass below.
 	err := filepath.WalkDir(input.WorkDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 
-		// Skip directories
+		if path != input.WorkDir {
+			allPaths = append(allPaths, path)
+		}
+
 		if d.IsDir() {
 			return nil
 		}
 
-		// Read file content
+		// Symlinks: do not follow, do not attempt to render their target
+		// content (a dangling or absolute-path symlink could point outside
+		// WorkDir); treat like a raw/binary file for content purposes.
+		if d.Type()&fs.ModeSymlink != 0 {
+			a.logger.Debug("Skipping content render for symlink", "path", path)
+			return nil
+		}
+
+		relPath, relErr := filepath.Rel(input.WorkDir, path)
+		if relErr != nil {
+			return fmt.Errorf("failed to compute relative path for %s: %w", path, relErr)
+		}
+
+		if matchesRawFilePattern(relPath, rawPatterns) {
+			a.logger.Debug("Skipping raw-file-matched content", "path", relPath)
+			return nil
+		}
+
 		content, err := os.ReadFile(path)
 		if err != nil {
 			return fmt.Errorf("failed to read file %s: %w", path, err)
 		}
 
-		// Skip binary files (heuristic: if file contains null bytes in first 512 bytes)
-		sampleSize := 512
-		if len(content) < sampleSize {
-			sampleSize = len(content)
-		}
-		if strings.Contains(string(content[:sampleSize]), "\x00") {
-			a.logger.Debug("Skipping binary file", "path", path)
+		if isBinaryContent(content) {
+			a.logger.Debug("Skipping binary file content", "path", path)
 			return nil
 		}
 
-		// Apply variable substitutions
-		contentStr := string(content)
-		modified := false
-		for key, value := range input.Variables {
-			placeholder := fmt.Sprintf("{{%s}}", key)
-			if strings.Contains(contentStr, placeholder) {
-				contentStr = strings.ReplaceAll(contentStr, placeholder, value)
-				modified = true
-			}
+		rendered, renderErr := templating.Render(string(content), input.Variables)
+		if renderErr != nil {
+			a.logger.Warn("Failed to render template file, leaving unchanged", "path", path, "error", renderErr)
+			result.SkippedFiles = append(result.SkippedFiles, path)
+			return nil
 		}
 
-		// Write back if modified
-		if modified {
-			if err := os.WriteFile(path, []byte(contentStr), d.Type().Perm()); err != nil {
+		if rendered != string(content) {
+			info, statErr := d.Info()
+			if statErr != nil {
+				return fmt.Errorf("failed to stat file %s: %w", path, statErr)
+			}
+			if err := os.WriteFile(path, []byte(rendered), info.Mode().Perm()); err != nil {
 				return fmt.Errorf("failed to write file %s: %w", path, err)
 			}
 			a.logger.Debug("Applied variables to file", "path", path)
@@ -304,13 +410,58 @@ func (a *TemplateActivities) ApplyTemplateVariables(ctx context.Context, input A
 
 		return nil
 	})
-
 	if err != nil {
-		return fmt.Errorf("failed to apply template variables: %w", err)
+		return nil, fmt.Errorf("failed to apply template variables: %w", err)
 	}
 
-	a.logger.Info("Template variables applied successfully")
-	return nil
+	// Pass 2: rename file/dir base names, deepest-first. allPaths was
+	// collected in top-down (pre-)order by WalkDir, so iterating it in
+	// reverse visits children before their parents — a valid bottom-up
+	// order without a second directory walk.
+	for i := len(allPaths) - 1; i >= 0; i-- {
+		oldPath := allPaths[i]
+
+		dir := filepath.Dir(oldPath)
+		base := filepath.Base(oldPath)
+
+		relPath, relErr := filepath.Rel(input.WorkDir, oldPath)
+		if relErr != nil {
+			a.logger.Warn("Failed to compute relative path for rename, skipping", "path", oldPath, "error", relErr)
+			result.SkippedFiles = append(result.SkippedFiles, oldPath)
+			continue
+		}
+		if matchesRawFilePattern(relPath, rawPatterns) {
+			continue
+		}
+
+		newBase, renderErr := templating.RenderName(base, input.Variables)
+		if renderErr != nil {
+			a.logger.Warn("Failed to render name, leaving unchanged", "path", oldPath, "error", renderErr)
+			result.SkippedFiles = append(result.SkippedFiles, oldPath)
+			continue
+		}
+
+		if newBase == base {
+			continue
+		}
+
+		if !isSafeRenderedName(newBase) {
+			a.logger.Warn("Rendered name is unsafe (path separator or '..'), leaving unchanged", "path", oldPath, "renderedName", newBase)
+			result.SkippedFiles = append(result.SkippedFiles, oldPath)
+			continue
+		}
+
+		newPath := filepath.Join(dir, newBase)
+		if err := os.Rename(oldPath, newPath); err != nil {
+			a.logger.Warn("Failed to rename path, leaving unchanged", "path", oldPath, "newPath", newPath, "error", err)
+			result.SkippedFiles = append(result.SkippedFiles, oldPath)
+			continue
+		}
+		a.logger.Debug("Renamed path", "oldPath", oldPath, "newPath", newPath)
+	}
+
+	a.logger.Info("Template variables applied", "skippedFiles", len(result.SkippedFiles))
+	return result, nil
 }
 
 // PushToNewRepo initializes git, adds all files, commits, and pushes to the new repository
