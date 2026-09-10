@@ -53,7 +53,7 @@ describe('RunWizard', () => {
   it('renders the parameter form first when there are pages', () => {
     render(
       <RunWizard
-        templateRef="go-service"
+        templateId="go-service"
         templateVersionId="ver-1"
         pages={onePage}
         planRun={vi.fn()}
@@ -70,7 +70,7 @@ describe('RunWizard', () => {
 
     render(
       <RunWizard
-        templateRef="go-service"
+        templateId="go-service"
         templateVersionId="ver-1"
         pages={onePage}
         planRun={planRun}
@@ -92,7 +92,7 @@ describe('RunWizard', () => {
 
     render(
       <RunWizard
-        templateRef="go-service"
+        templateId="go-service"
         templateVersionId="ver-1"
         pages={onePage}
         planRun={planRun}
@@ -121,7 +121,7 @@ describe('RunWizard', () => {
     const planRun = vi.fn().mockResolvedValue({ runId: 'run-preview' })
     render(
       <RunWizard
-        templateRef="go-service"
+        templateId="go-service"
         templateVersionId="ver-1"
         pages={[]}
         planRun={planRun}
@@ -136,7 +136,7 @@ describe('RunWizard', () => {
     const planRun = vi.fn().mockResolvedValue({ runId: 'run-preview' })
     render(
       <RunWizard
-        templateRef="go-service"
+        templateId="go-service"
         templateVersionId="ver-1"
         pages={onePage}
         planRun={planRun}
@@ -156,7 +156,7 @@ describe('RunWizard', () => {
     const startRun = vi.fn().mockRejectedValue(new Error('not published'))
     render(
       <RunWizard
-        templateRef="go-service"
+        templateId="go-service"
         templateVersionId="ver-1"
         pages={onePage}
         planRun={planRun}
@@ -177,7 +177,7 @@ describe('RunWizard', () => {
     const startRun = vi.fn().mockRejectedValue(new Error("Invalid parameters: name: must NOT have fewer than 1 characters"))
     render(
       <RunWizard
-        templateRef="go-service"
+        templateId="go-service"
         templateVersionId="ver-1"
         pages={onePage}
         planRun={planRun}
@@ -199,7 +199,7 @@ describe('RunWizard', () => {
 
     render(
       <RunWizard
-        templateRef="go-service"
+        templateId="go-service"
         templateVersionId="ver-1"
         pages={pageWithSecret}
         planRun={planRun}
@@ -227,7 +227,7 @@ describe('RunWizard', () => {
     const planRun = vi.fn().mockRejectedValue(new Error('Invalid parameters: unexpected additional property'))
     render(
       <RunWizard
-        templateRef="go-service"
+        templateId="go-service"
         templateVersionId="ver-1"
         pages={onePage}
         planRun={planRun}

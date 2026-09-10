@@ -18,18 +18,23 @@ import { RunWizard } from '@/components/features/template-authoring/RunWizard'
 import type { TemplateDefinitionVersion } from '@/payload-types'
 
 interface PageProps {
+  // Named `id` (not `slug`) to match `/self-service/templates/[id]/edit`
+  // (the authoring-shell route) — Next.js requires one consistent dynamic
+  // segment name per path across all routes sharing that path. The value
+  // can be either a definition's Payload id OR its slug;
+  // `getTemplateDefinitionByIdOrSlug` resolves both.
   params: Promise<{ id: string }>
 }
 
 /**
  * Consumer run wizard entry point (Phase 2 plan Task 16). Resolves the
- * PUBLISHED template by id (slug as a fallback), re-checks `canRunTemplateDefinition`
+ * PUBLISHED template by id or slug, re-checks `canRunTemplateDefinition`
  * explicitly (defense in depth — `getTemplateDefinitionByIdOrSlug` already
  * gates this, but a route whose entire purpose is "run this template"
  * checks the run permission directly rather than solely trusting a shared
  * loader's internal gate), and 404s on any denial or non-published status
  * rather than redirecting (never leaks whether an unpublished/nonexistent
- * id or slug exists).
+ * id/slug exists).
  */
 export default async function RunTemplatePage({ params }: PageProps) {
   const { id } = await params
@@ -85,7 +90,7 @@ export default async function RunTemplatePage({ params }: PageProps) {
           </div>
 
           <RunWizard
-            templateRef={id}
+            templateId={id}
             templateVersionId={version.id}
             pages={pages}
             planRun={planRun}
