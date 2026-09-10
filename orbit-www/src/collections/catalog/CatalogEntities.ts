@@ -233,6 +233,32 @@ export const CatalogEntities: CollectionConfig = {
             description: 'ID of the backing row in the source collection.',
           },
         },
+        // Template provenance (Template Authoring Phase 4, Task E): additive
+        // fields recording which template definition/version produced this
+        // entity, when it was registered via catalog:entity:register from a
+        // scaffolder run. Deliberately separate from `type`/`sourceId` above
+        // (which already have a fixed meaning) — a `template` or
+        // `scaffolder-run` source may or may not carry these, and non-template
+        // sources (manual, apps, sync, scan) never do. Read by the
+        // golden-path-provenance scorecard rule
+        // (lib/scorecards/evaluate.ts) to assert an entity was built from its
+        // kind's approved, published paved-path template.
+        {
+          name: 'sourceTemplateDefinition',
+          type: 'relationship',
+          relationTo: 'template-definitions',
+          admin: {
+            description: 'The template definition this entity was scaffolded from, if any.',
+          },
+        },
+        {
+          name: 'sourceTemplateVersion',
+          type: 'relationship',
+          relationTo: 'template-definition-versions',
+          admin: {
+            description: 'The specific template version this entity was scaffolded from, if any.',
+          },
+        },
       ],
     },
     {

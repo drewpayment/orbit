@@ -17,7 +17,13 @@ import type { TemplateDefinition, Step } from '@/lib/scaffolder/schema'
 import type { ActionDescriptor } from '@/lib/scaffolder/validate'
 import type { BuilderAction } from './builder-state'
 import { getExpressionCandidates, type ExpressionCandidate } from './expression-autocomplete'
-import { findStepReferences, generateStepId, groupRegistryByFamily, type StepReference } from './step-builder-logic'
+import {
+  defaultStepInput,
+  findStepReferences,
+  generateStepId,
+  groupRegistryByFamily,
+  type StepReference,
+} from './step-builder-logic'
 import { stepInputSchemaToSchemaFormPage } from './schema-ui-split'
 import { ExpressionInput } from './ExpressionInput'
 import { SchemaForm } from '@/components/forms/schema-form/SchemaForm'
@@ -113,7 +119,12 @@ export function StepsBuilder({ definition, dispatch, registry }: StepsBuilderPro
       steps.map((s) => s.id),
       descriptor.id,
     )
-    const step: Step = { id, name: descriptor.name, action: descriptor.id, input: {} }
+    const step: Step = {
+      id,
+      name: descriptor.name,
+      action: descriptor.id,
+      input: defaultStepInput(descriptor.id),
+    }
     dispatch({ type: 'ADD_STEP', step })
     setJustAddedId(id)
   }

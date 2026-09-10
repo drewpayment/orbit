@@ -36,6 +36,15 @@ type CatalogEntityRegisterInput struct {
 	Owner       string              `json:"owner,omitempty"`
 	Links       []CatalogEntityLink `json:"links,omitempty"`
 	Source      CatalogEntitySource `json:"source"`
+	// TemplateDefinitionID/TemplateVersionID are optional provenance fields
+	// (Template Authoring Phase 4, Task E): the template definition/version
+	// this entity was scaffolded from, when the catalog:entity:register step
+	// was authored from a template composition context. Stored server-side as
+	// the additive catalog-entities `source.sourceTemplateDefinition`/
+	// `source.sourceTemplateVersion` relationships — NOT part of `Source`
+	// above, which already has a fixed meaning (see the collection doc).
+	TemplateDefinitionID string `json:"templateDefinitionId,omitempty"`
+	TemplateVersionID    string `json:"templateVersionId,omitempty"`
 }
 
 // CatalogEntityRegisterResult is the response of
