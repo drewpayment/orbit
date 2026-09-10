@@ -19,6 +19,7 @@ import { useForm, type FieldErrors, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
 import { Form, FormField, FormItem, FormLabel, FormDescription, FormMessage } from '@/components/ui/form'
 import { jsonSchemaToZod } from './schema-to-zod'
 import { evaluateVisibleIf } from './visible-if'
@@ -122,15 +123,27 @@ function computeVisible(
   return visible
 }
 
-/** Wrap `ui:secret` fields' values as `{ value, secret: true }` on emit. */
+/**
+ * Wrap `ui:secret` fields' values as `{ value, secret: true }` on emit —
+ * recurses into nested `object` properties so a secret field inside a
+ * grouped/nested schema is redacted too, not just top-level fields.
+ */
 function applySecretFlags(
   values: Record<string, unknown>,
-  entries: FieldEntry[],
+  schema: JsonSchema,
+  uiSchema?: UiSchema,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = { ...values }
-  for (const entry of entries) {
-    if (entry.uiSchema?.['ui:secret'] && typeof out[entry.name] === 'string') {
-      out[entry.name] = { value: out[entry.name] as string, secret: true as const }
+  for (const entry of fieldEntries(schema, uiSchema)) {
+    const current = out[entry.name]
+    if (entry.schema?.type === 'object' && current && typeof current === 'object') {
+      out[entry.name] = applySecretFlags(
+        current as Record<string, unknown>,
+        entry.schema,
+        undefined,
+      )
+    } else if (entry.uiSchema?.['ui:secret'] && typeof current === 'string') {
+      out[entry.name] = { value: current, secret: true as const }
     }
   }
   return out
@@ -190,7 +203,7 @@ export function SchemaForm({
   const pagesToRender = mode === 'wizard' ? pages : [{ title: pages[0]?.title ?? '', schema: mergedSchema, uiSchema: mergedUiSchema }]
 
   function handleSubmit(formValues: Record<string, unknown>) {
-    onSubmit?.(applySecretFlags(formValues, entries))
+    onSubmit?.(applySecretFlags(formValues, mergedSchema, mergedUiSchema))
   }
 
   const Tag = as === 'div' ? 'div' : 'form'
@@ -233,9 +246,24 @@ export function SchemaForm({
                   const required = (mergedSchema.required ?? []).includes(entry.name)
 
                   if (entry.schema.type === 'object') {
+                    // Not wrapped in <FormField>/<FormItem> (no single RHF
+                    // field name applies to a whole group) — use a plain
+                    // <Label> rather than <FormLabel>, which requires that
+                    // context and would otherwise render a dangling
+                    // `htmlFor="undefined-form-item"`.
+                    //
+                    // KNOWN LIMITATION: nested object properties don't yet
+                    // receive a uiSchema (the ui: vocabulary — visibleIf,
+                    // widget, secret, order — only applies to top-level
+                    // fields today). A field nested inside a group can't be
+                    // marked `ui:secret` and therefore isn't redacted by
+                    // applySecretFlags below. Flagged as a follow-up; no
+                    // template UI in this repo authors nested object
+                    // properties yet (UseTemplateForm/RunActionDialog are
+                    // both flat schemas).
                     return (
                       <div key={entry.name} className="space-y-2 rounded-md border p-4">
-                        <FormLabel>{label}</FormLabel>
+                        <Label>{label}</Label>
                         <SchemaForm
                           pages={[{ title: label, schema: entry.schema }]}
                           values={(watched[entry.name] as Record<string, unknown>) ?? {}}

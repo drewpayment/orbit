@@ -90,11 +90,35 @@ export async function getTeamsForWorkspace(
     sort: 'role',
   })
 
-  return members.docs.map((m) => ({
-    id: String(m.user),
-    label: String(m.user),
-    description: String(m.role ?? 'member'),
-  }))
+  // `workspace-members.user` stores a Better-Auth id (plain text, not a
+  // Payload relationship — see the module doc comment), so it never
+  // populates via `depth`. Resolve display names with a second lookup
+  // against `users.betterAuthId` rather than showing raw ids in the picker.
+  const memberIds = members.docs.map((m) => String(m.user))
+  const nameByBetterAuthId = new Map<string, string>()
+  if (memberIds.length > 0) {
+    const users = await payload.find({
+      collection: 'users',
+      where: { betterAuthId: { in: memberIds } },
+      limit: memberIds.length,
+      depth: 0,
+      overrideAccess: true,
+    })
+    for (const u of users.docs) {
+      const key = String((u as { betterAuthId?: unknown }).betterAuthId ?? '')
+      const name = (u as { name?: string; email?: string }).name || (u as { email?: string }).email
+      if (key && name) nameByBetterAuthId.set(key, name)
+    }
+  }
+
+  return members.docs.map((m) => {
+    const userId = String(m.user)
+    return {
+      id: userId,
+      label: nameByBetterAuthId.get(userId) ?? userId,
+      description: String(m.role ?? 'member'),
+    }
+  })
 }
 
 // ---------------------------------------------------------------------------

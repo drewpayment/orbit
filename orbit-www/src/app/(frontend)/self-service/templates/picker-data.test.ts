@@ -10,8 +10,9 @@ function fakePayload(overrides: {
   workspaceMembers?: Array<Record<string, unknown>>
   entities?: Array<Record<string, unknown>>
   gitConnections?: Record<string, Record<string, unknown>>
+  users?: Array<Record<string, unknown>>
 }) {
-  const { workspaceMembers = [], entities = [], gitConnections = {} } = overrides
+  const { workspaceMembers = [], entities = [], gitConnections = {}, users = [] } = overrides
 
   return {
     find: vi.fn(async ({ collection, where }: { collection: string; where?: Record<string, unknown> }) => {
@@ -26,6 +27,11 @@ function fakePayload(overrides: {
           if (statusClause !== undefined && m.status !== statusClause) return false
           return true
         })
+        return { docs }
+      }
+      if (collection === 'users') {
+        const inClause = (where?.betterAuthId as { in?: unknown[] } | undefined)?.in ?? []
+        const docs = users.filter((u) => inClause.includes(u.betterAuthId))
         return { docs }
       }
       if (collection === 'catalog-entities') {
@@ -61,6 +67,25 @@ describe('getTeamsForWorkspace (workspace members proxy — no teams collection 
 
     const result = await getTeamsForWorkspace(payload as never, 'caller', 'ws-1')
     expect(result.map((r) => r.id)).toEqual(['caller', 'other'])
+  })
+
+  it('resolves a display name from the users collection instead of showing the raw Better-Auth id', async () => {
+    const payload = fakePayload({
+      workspaceMembers: [{ id: 'm1', workspace: 'ws-1', user: 'caller', role: 'owner', status: 'active' }],
+      users: [{ betterAuthId: 'caller', name: 'Ada Lovelace', email: 'ada@example.com' }],
+    })
+
+    const result = await getTeamsForWorkspace(payload as never, 'caller', 'ws-1')
+    expect(result).toEqual([{ id: 'caller', label: 'Ada Lovelace', description: 'owner' }])
+  })
+
+  it('falls back to the raw id when no matching user doc is found', async () => {
+    const payload = fakePayload({
+      workspaceMembers: [{ id: 'm1', workspace: 'ws-1', user: 'caller', role: 'member', status: 'active' }],
+    })
+
+    const result = await getTeamsForWorkspace(payload as never, 'caller', 'ws-1')
+    expect(result).toEqual([{ id: 'caller', label: 'caller', description: 'member' }])
   })
 
   it('returns empty when the caller is not an active member of the requested workspace (RBAC scoping)', async () => {

@@ -173,6 +173,37 @@ describe('SchemaForm', () => {
   })
 })
 
+describe('SchemaForm nested object fields', () => {
+  it('recurses into a nested SchemaForm and does not render a dangling htmlFor on the group label', () => {
+    const { container } = render(
+      <SchemaForm
+        pages={onePage({
+          schema: {
+            type: 'object',
+            properties: {
+              address: {
+                type: 'object',
+                title: 'Address',
+                properties: { city: { type: 'string', title: 'City' } },
+              },
+            },
+          },
+        })}
+      />,
+    )
+
+    expect(screen.getByText('Address')).toBeInTheDocument()
+    expect(screen.getByText('City')).toBeInTheDocument()
+    // The group label must not be a <FormLabel> pointing at a
+    // FormField/FormItem context it isn't inside — no id should ever
+    // resolve to the literal "undefined-form-item".
+    const labels = Array.from(container.querySelectorAll('label'))
+    for (const label of labels) {
+      expect(label.getAttribute('for')).not.toBe('undefined-form-item')
+    }
+  })
+})
+
 describe('SchemaForm as="div"', () => {
   it('renders no <form> and no submit button, for embedding inside a caller-owned form', () => {
     const { container } = render(
