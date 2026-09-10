@@ -19,7 +19,7 @@ func TestADOPROpen_Execute(t *testing.T) {
 	client := &fakeADORepoClient{prResult: &services.ADOPullRequestResult{PRID: "42", PRURL: "https://dev.azure.com/acme/proj/_git/orders/pullrequest/42"}}
 	a := NewADOPROpen(conn, adoFactory(client))
 
-	raw, err := a.Execute(context.Background(), runCtxWithWorkspace("ws-1"), json.RawMessage(`{"connection":"c","project":"proj","repoId":"repo-1","sourceBranch":"feature/x","targetBranch":"main","title":"Add x","description":"d"}`))
+	raw, err := a.Execute(context.Background(), runCtxWithADOWorkspace("ws-1"), json.RawMessage(`{"connection":"c","project":"proj","repoId":"repo-1","sourceBranch":"feature/x","targetBranch":"main","title":"Add x","description":"d"}`))
 	require.NoError(t, err)
 
 	var out adoPROpenOutput
@@ -54,7 +54,7 @@ func TestADOPROpen_ClientError_NotFoundIsInvalidInput(t *testing.T) {
 	conn := &fakeADOConnectionClient{conn: services.ADOConnectionToken{Organization: "acme", BaseURL: "u", AuthMode: "basic-pat", Token: "t"}}
 	client := &fakeADORepoClient{prErr: fmt.Errorf("%w: azure devops HTTP 404", services.ErrADOInvalidInput)}
 	a := NewADOPROpen(conn, adoFactory(client))
-	_, err := a.Execute(context.Background(), runCtxWithWorkspace("ws-1"), json.RawMessage(`{"connection":"c","project":"proj","repoId":"repo-1","sourceBranch":"a","targetBranch":"b","title":"t"}`))
+	_, err := a.Execute(context.Background(), runCtxWithADOWorkspace("ws-1"), json.RawMessage(`{"connection":"c","project":"proj","repoId":"repo-1","sourceBranch":"a","targetBranch":"b","title":"t"}`))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, scaffolder.ErrInvalidInput)
 }

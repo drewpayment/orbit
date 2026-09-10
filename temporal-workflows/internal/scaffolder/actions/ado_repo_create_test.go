@@ -25,11 +25,12 @@ func (f *fakeADOConnectionClient) GetConnectionToken(_ context.Context, connecti
 	return f.conn, f.err
 }
 
-// runCtxWithWorkspace is the ADO actions' variant of runCtx: every ado:*
+// runCtxWithADOWorkspace is the ADO actions' variant of runCtx: every ado:*
 // action requires rc.WorkspaceID to scope its connection lookup (see
 // resolveADOConnection), so Execute-path tests use this instead of the
-// bare runCtx().
-func runCtxWithWorkspace(workspaceID string) scaffolder.ActionRunContext {
+// bare runCtx(). (Named distinctly from fetch_orbit_skeleton_test.go's own
+// runCtxWithWorkspace(t, dir, workspaceID) helper, whose signature differs.)
+func runCtxWithADOWorkspace(workspaceID string) scaffolder.ActionRunContext {
 	return scaffolder.NewActionRunContext(scaffolder.ActionRunContext{RunID: "run-1", WorkspaceID: workspaceID})
 }
 
@@ -92,7 +93,7 @@ func TestADORepoCreate_Execute(t *testing.T) {
 	}}
 	a := NewADORepoCreate(conn, adoFactory(client))
 
-	raw, err := a.Execute(context.Background(), runCtxWithWorkspace("ws-1"), json.RawMessage(`{"connection":"conn-1","project":"proj","name":"orders"}`))
+	raw, err := a.Execute(context.Background(), runCtxWithADOWorkspace("ws-1"), json.RawMessage(`{"connection":"conn-1","project":"proj","name":"orders"}`))
 	require.NoError(t, err)
 
 	var out adoRepoCreateOutput
@@ -125,7 +126,7 @@ func TestADORepoCreate_MissingFields(t *testing.T) {
 func TestADORepoCreate_ConnectionNotFound_IsInvalidInput(t *testing.T) {
 	conn := &fakeADOConnectionClient{err: services.ErrConnectionNotFound}
 	a := NewADORepoCreate(conn, adoFactory(&fakeADORepoClient{}))
-	_, err := a.Execute(context.Background(), runCtxWithWorkspace("ws-1"), json.RawMessage(`{"connection":"missing","project":"proj","name":"orders"}`))
+	_, err := a.Execute(context.Background(), runCtxWithADOWorkspace("ws-1"), json.RawMessage(`{"connection":"missing","project":"proj","name":"orders"}`))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, scaffolder.ErrInvalidInput)
 }
@@ -133,7 +134,7 @@ func TestADORepoCreate_ConnectionNotFound_IsInvalidInput(t *testing.T) {
 func TestADORepoCreate_NetworkError_IsRetryable(t *testing.T) {
 	conn := &fakeADOConnectionClient{err: fmt.Errorf("dial tcp: timeout")}
 	a := NewADORepoCreate(conn, adoFactory(&fakeADORepoClient{}))
-	_, err := a.Execute(context.Background(), runCtxWithWorkspace("ws-1"), json.RawMessage(`{"connection":"c","project":"proj","name":"orders"}`))
+	_, err := a.Execute(context.Background(), runCtxWithADOWorkspace("ws-1"), json.RawMessage(`{"connection":"c","project":"proj","name":"orders"}`))
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, scaffolder.ErrInvalidInput)
 }
@@ -142,7 +143,7 @@ func TestADORepoCreate_ClientError_WrapsInvalidInput(t *testing.T) {
 	conn := &fakeADOConnectionClient{conn: services.ADOConnectionToken{Organization: "acme", BaseURL: "u", AuthMode: "basic-pat", Token: "t"}}
 	client := &fakeADORepoClient{repoErr: fmt.Errorf("%w: azure devops HTTP 404", services.ErrADOInvalidInput)}
 	a := NewADORepoCreate(conn, adoFactory(client))
-	_, err := a.Execute(context.Background(), runCtxWithWorkspace("ws-1"), json.RawMessage(`{"connection":"c","project":"proj","name":"orders"}`))
+	_, err := a.Execute(context.Background(), runCtxWithADOWorkspace("ws-1"), json.RawMessage(`{"connection":"c","project":"proj","name":"orders"}`))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, scaffolder.ErrInvalidInput)
 }

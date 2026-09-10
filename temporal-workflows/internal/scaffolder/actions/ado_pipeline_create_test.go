@@ -19,7 +19,7 @@ func TestADOPipelineCreate_Execute(t *testing.T) {
 	client := &fakeADORepoClient{pipeResult: &services.ADOPipelineResult{PipelineID: "7", PipelineURL: "https://dev.azure.com/acme/proj/_build?definitionId=7"}}
 	a := NewADOPipelineCreate(conn, adoFactory(client))
 
-	raw, err := a.Execute(context.Background(), runCtxWithWorkspace("ws-1"), json.RawMessage(`{"connection":"c","project":"proj","name":"orders-ci","repoId":"repo-1"}`))
+	raw, err := a.Execute(context.Background(), runCtxWithADOWorkspace("ws-1"), json.RawMessage(`{"connection":"c","project":"proj","name":"orders-ci","repoId":"repo-1"}`))
 	require.NoError(t, err)
 
 	var out adoPipelineCreateOutput
@@ -38,7 +38,7 @@ func TestADOPipelineCreate_CustomYAMLPath(t *testing.T) {
 	conn := &fakeADOConnectionClient{conn: services.ADOConnectionToken{Organization: "acme", BaseURL: "u", AuthMode: "basic-pat", Token: "t"}}
 	client := &fakeADORepoClient{pipeResult: &services.ADOPipelineResult{PipelineID: "1", PipelineURL: "u"}}
 	a := NewADOPipelineCreate(conn, adoFactory(client))
-	_, err := a.Execute(context.Background(), runCtxWithWorkspace("ws-1"), json.RawMessage(`{"connection":"c","project":"proj","name":"n","repoId":"r","yamlPath":"ci/pipeline.yml"}`))
+	_, err := a.Execute(context.Background(), runCtxWithADOWorkspace("ws-1"), json.RawMessage(`{"connection":"c","project":"proj","name":"n","repoId":"r","yamlPath":"ci/pipeline.yml"}`))
 	require.NoError(t, err)
 	assert.Equal(t, "ci/pipeline.yml", client.gotYAMLPath)
 }
@@ -66,7 +66,7 @@ func TestADOPipelineCreate_MissingYAMLFile_SurfacesADOError(t *testing.T) {
 	conn := &fakeADOConnectionClient{conn: services.ADOConnectionToken{Organization: "acme", BaseURL: "u", AuthMode: "basic-pat", Token: "t"}}
 	client := &fakeADORepoClient{pipeErr: fmt.Errorf("%w: azure devops HTTP 404", services.ErrADOInvalidInput)}
 	a := NewADOPipelineCreate(conn, adoFactory(client))
-	_, err := a.Execute(context.Background(), runCtxWithWorkspace("ws-1"), json.RawMessage(`{"connection":"c","project":"proj","name":"n","repoId":"r","yamlPath":"missing.yml"}`))
+	_, err := a.Execute(context.Background(), runCtxWithADOWorkspace("ws-1"), json.RawMessage(`{"connection":"c","project":"proj","name":"n","repoId":"r","yamlPath":"missing.yml"}`))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, scaffolder.ErrInvalidInput)
 	assert.Contains(t, err.Error(), "404")

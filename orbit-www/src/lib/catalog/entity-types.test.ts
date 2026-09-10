@@ -40,7 +40,13 @@ describe('mergeEntityType', () => {
       description: null,
       baseValue: 50,
       scoringWeight: 1,
-      goldenPath: { summary: null, docsUrl: null, requiredRelations: [], requiredMetadata: [] },
+      goldenPath: {
+        summary: null,
+        docsUrl: null,
+        templateDefinition: null,
+        requiredRelations: [],
+        requiredMetadata: [],
+      },
     })
   })
 
@@ -58,6 +64,7 @@ describe('mergeEntityType', () => {
       goldenPath: {
         summary: 'Deploy via the platform template.',
         docsUrl: 'https://docs.example.com/paved-road/service',
+        templateDefinition: 'tmpl-1',
         requiredRelations: [
           { relationType: 'owns', direction: 'from', targetKind: 'team', min: 1 },
         ],
@@ -75,6 +82,7 @@ describe('mergeEntityType', () => {
       goldenPath: {
         summary: 'Deploy via the platform template.',
         docsUrl: 'https://docs.example.com/paved-road/service',
+        templateDefinition: 'tmpl-1',
         requiredRelations: [
           { relationType: 'owns', direction: 'from', targetKind: 'team', min: 1 },
         ],
@@ -95,7 +103,13 @@ describe('mergeEntityType', () => {
       description: null,
       baseValue: 80,
       scoringWeight: 1,
-      goldenPath: { summary: null, docsUrl: null, requiredRelations: [], requiredMetadata: [] },
+      goldenPath: {
+        summary: null,
+        docsUrl: null,
+        templateDefinition: null,
+        requiredRelations: [],
+        requiredMetadata: [],
+      },
     })
   })
 
@@ -133,12 +147,35 @@ describe('mergeEntityType', () => {
     expect(def.goldenPath.requiredMetadata).toEqual([{ path: 'metadata.tier', label: null }])
   })
 
+  it('goldenPath.templateDefinition falls back to null when the row omits it', () => {
+    const row = entityTypeRow({
+      goldenPath: {
+        summary: 'x',
+        requiredRelations: [],
+        requiredMetadata: [],
+      } as unknown as EntityType['goldenPath'],
+    })
+    expect(mergeEntityType(row, 'service').goldenPath.templateDefinition).toBeNull()
+  })
+
+  it('goldenPath.templateDefinition normalises a populated relationship doc to its id', () => {
+    const row = entityTypeRow({
+      goldenPath: {
+        templateDefinition: { id: 'tmpl-42' },
+        requiredRelations: [],
+        requiredMetadata: [],
+      } as unknown as EntityType['goldenPath'],
+    })
+    expect(mergeEntityType(row, 'service').goldenPath.templateDefinition).toBe('tmpl-42')
+  })
+
   it('DEFAULT_ENTITY_TYPE matches the plan literals (baseValue 50, scoringWeight 1)', () => {
     expect(DEFAULT_ENTITY_TYPE.baseValue).toBe(50)
     expect(DEFAULT_ENTITY_TYPE.scoringWeight).toBe(1)
     expect(DEFAULT_ENTITY_TYPE.goldenPath).toEqual({
       summary: null,
       docsUrl: null,
+      templateDefinition: null,
       requiredRelations: [],
       requiredMetadata: [],
     })
