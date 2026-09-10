@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "fetch:orbit-skeleton input",
+  "type": "object",
+  "properties": {
+    "skeletonId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Payload id of the template-skeletons document to fetch."
+    },
+    "path": {
+      "type": "string",
+      "description": "Subdirectory, relative to the run's work directory, to write the bundle into. Defaults to a name derived from `skeletonId`."
+    }
+  },
+  "required": ["skeletonId"],
+  "additionalProperties": false
+}
