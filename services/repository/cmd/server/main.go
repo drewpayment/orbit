@@ -35,6 +35,12 @@ type Config struct {
 	TemporalHost string
 	AuthSecret   []byte
 	AuthEnforce  bool
+	// OrbitAPIURL and OrbitInternalAPIKey let StartScaffolderRun read a stored
+	// v2 template definition from orbit-www's internal API. Without the key,
+	// the scaffolder RPCs answer FailedPrecondition instead of starting a run
+	// that could never authenticate.
+	OrbitAPIURL         string
+	OrbitInternalAPIKey string
 }
 
 func loadConfig() *Config {
@@ -61,12 +67,19 @@ func loadConfig() *Config {
 		log.Fatalf("FATAL: %v (set ORBIT_SVC_AUTH_SECRET; generate with `openssl rand -base64 48`)", err)
 	}
 
+	orbitAPIURL := os.Getenv("ORBIT_API_URL")
+	if orbitAPIURL == "" {
+		orbitAPIURL = "http://localhost:3000"
+	}
+
 	return &Config{
-		GRPCPort:     grpcPort,
-		HTTPPort:     httpPort,
-		TemporalHost: temporalHost,
-		AuthSecret:   authSecret,
-		AuthEnforce:  os.Getenv("ORBIT_SVC_AUTH_ENFORCE") != "false",
+		GRPCPort:            grpcPort,
+		HTTPPort:            httpPort,
+		TemporalHost:        temporalHost,
+		AuthSecret:          authSecret,
+		AuthEnforce:         os.Getenv("ORBIT_SVC_AUTH_ENFORCE") != "false",
+		OrbitAPIURL:         orbitAPIURL,
+		OrbitInternalAPIKey: os.Getenv("ORBIT_INTERNAL_API_KEY"),
 	}
 }
 
@@ -125,21 +138,21 @@ func (tc *TemporalClient) StartTemplateWorkflow(ctx context.Context, input inter
 	}
 
 	workflowInput := types.TemplateInstantiationInput{
-		TemplateID:       req.TemplateId,
-		WorkspaceID:      req.WorkspaceId,
-		TargetOrg:        req.TargetOrg,
-		RepositoryName:   req.RepositoryName,
-		Description:      req.Description,
-		IsPrivate:        req.IsPrivate,
-		Variables:        req.Variables,
-		UserID:           req.UserId,
+		TemplateID:     req.TemplateId,
+		WorkspaceID:    req.WorkspaceId,
+		TargetOrg:      req.TargetOrg,
+		RepositoryName: req.RepositoryName,
+		Description:    req.Description,
+		IsPrivate:      req.IsPrivate,
+		Variables:      req.Variables,
+		UserID:         req.UserId,
 		// Template source info from request
 		IsGitHubTemplate: req.IsGithubTemplate,
 		SourceRepoOwner:  req.SourceRepoOwner,
 		SourceRepoName:   req.SourceRepoName,
 		SourceRepoURL:    req.SourceRepoUrl,
 		// GitHub authentication
-		InstallationID:   req.GithubInstallationId,
+		InstallationID: req.GithubInstallationId,
 	}
 
 	workflowID := fmt.Sprintf("template-instantiation-%s-%d", req.RepositoryName, time.Now().Unix())
@@ -154,6 +167,38 @@ func (tc *TemporalClient) StartTemplateWorkflow(ctx context.Context, input inter
 	}
 
 	return we.GetID(), nil
+}
+
+// StartScaffolderWorkflow starts a v2 ScaffolderWorkflow.
+//
+// The workflow id is derived from the ActionRuns doc id, which orbit-www
+// creates before dispatching, so a retried dispatch of the same run reuses the
+// id instead of starting a second workflow against one run record.
+func (tc *TemporalClient) StartScaffolderWorkflow(ctx context.Context, in types.ScaffolderWorkflowInput) (string, error) {
+	workflowID := fmt.Sprintf("scaffolder-run-%s", in.RunID)
+
+	we, err := tc.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: "orbit-workflows",
+	}, types.ScaffolderWorkflowName, in)
+	if err != nil {
+		return "", fmt.Errorf("failed to start scaffolder workflow: %w", err)
+	}
+	return we.GetID(), nil
+}
+
+// QueryScaffolderProgress queries a scaffolder run's per-step snapshot.
+func (tc *TemporalClient) QueryScaffolderProgress(ctx context.Context, workflowID string) (*types.ScaffolderProgress, error) {
+	resp, err := tc.client.QueryWorkflow(ctx, workflowID, "", types.ScaffolderProgressQuery)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query scaffolder run: %w", err)
+	}
+
+	var progress types.ScaffolderProgress
+	if err := resp.Get(&progress); err != nil {
+		return nil, fmt.Errorf("failed to decode scaffolder progress: %w", err)
+	}
+	return &progress, nil
 }
 
 // QueryWorkflow queries a workflow for progress
@@ -424,7 +469,15 @@ func main() {
 	if temporalClient != nil {
 		templateTemporal = temporalClient
 	}
-	templateServer := grpcserver.NewTemplateServer(templateTemporal, payloadClient)
+	var templateServerOpts []grpcserver.TemplateServerOption
+	if cfg.OrbitInternalAPIKey != "" {
+		templateServerOpts = append(templateServerOpts, grpcserver.WithTemplateDefinitionClient(
+			grpcserver.NewPayloadTemplateDefinitionClient(cfg.OrbitAPIURL, cfg.OrbitInternalAPIKey),
+		))
+	} else {
+		log.Println("Warning: ORBIT_INTERNAL_API_KEY is unset; StartScaffolderRun will be unavailable")
+	}
+	templateServer := grpcserver.NewTemplateServer(templateTemporal, payloadClient, templateServerOpts...)
 	templatePath, templateHandler := templatev1connect.NewTemplateServiceHandler(templateServer, authInterceptor)
 	mux.Handle(templatePath, templateHandler)
 	log.Println("TemplateService registered (Connect)")

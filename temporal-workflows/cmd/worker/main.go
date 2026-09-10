@@ -22,6 +22,8 @@ import (
 	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/sandbox/k8s"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/agent/sandbox/local"
 	internalClients "github.com/drewpayment/orbit/temporal-workflows/internal/clients"
+	"github.com/drewpayment/orbit/temporal-workflows/internal/scaffolder"
+	"github.com/drewpayment/orbit/temporal-workflows/internal/scaffolder/actions"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/services"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/workflows"
 	"github.com/drewpayment/orbit/temporal-workflows/pkg/agentcontract"
@@ -413,6 +415,51 @@ func main() {
 			log.Printf("Warning: Failed to ensure bucket exists: %v", err)
 		}
 	}
+
+	// --- v2 scaffolder engine (docs/plans/2026-09-09-template-authoring-phase-1-engine.md) ---
+	//
+	// Registered here rather than next to the v1 template block because the
+	// dry-run preview needs the storage client, which is built above.
+	//
+	// storageClient is a typed nil when MinIO is unavailable, so it is copied
+	// into the interface only when non-nil: a typed nil would satisfy an
+	// `!= nil` check and turn "storage offline" into a nil-pointer panic.
+	var scaffolderStorage activities.ScaffolderStorage
+	if storageClient != nil {
+		scaffolderStorage = storageClient
+	}
+
+	scaffolderRegistry := scaffolder.NewRegistry(actions.DefaultActions(actions.Deps{
+		TokenService:  tokenService,
+		CatalogClient: services.NewPayloadCatalogEntityClient(orbitAPIURL, orbitInternalAPIKey, logger),
+	})...)
+	if err := scaffolderRegistry.ValidateSchemas(); err != nil {
+		// A broken action schema is a platform bug: fail at startup rather
+		// than surfacing it later as a validation finding against whichever
+		// template happened to use the action.
+		log.Fatalf("Scaffolder action registry is invalid: %v", err)
+	}
+
+	scaffolderActivities := activities.NewScaffolderActivities(
+		scaffolderRegistry,
+		services.NewPayloadActionRunClient(orbitAPIURL, orbitInternalAPIKey, logger),
+		scaffolderStorage,
+		templateWorkDir,
+		logger,
+	)
+	w.RegisterWorkflow(workflows.ScaffolderWorkflow)
+	w.RegisterActivityWithOptions(scaffolderActivities.ExecuteStep,
+		activity.RegisterOptions{Name: activities.ActivityScaffolderExecuteStep})
+	w.RegisterActivityWithOptions(scaffolderActivities.PlanStep,
+		activity.RegisterOptions{Name: activities.ActivityScaffolderPlanStep})
+	w.RegisterActivityWithOptions(scaffolderActivities.WriteRunProgress,
+		activity.RegisterOptions{Name: activities.ActivityScaffolderWriteRunProgress})
+	w.RegisterActivityWithOptions(scaffolderActivities.CleanupRun,
+		activity.RegisterOptions{Name: activities.ActivityScaffolderCleanupRun})
+	w.RegisterActivityWithOptions(scaffolderActivities.ValidateDefinition,
+		activity.RegisterOptions{Name: activities.ActivityScaffolderValidateDefinition})
+	log.Printf("Scaffolder engine registered with %d actions (dry-run preview storage: %t)",
+		len(scaffolderRegistry.Names()), scaffolderStorage != nil)
 
 	// Register decommissioning/cleanup workflows
 	w.RegisterWorkflow(workflows.ApplicationDecommissioningWorkflow)

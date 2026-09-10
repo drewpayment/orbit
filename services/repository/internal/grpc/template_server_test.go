@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	templatev1 "github.com/drewpayment/orbit/proto/gen/go/idp/template/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	templatev1 "github.com/drewpayment/orbit/proto/gen/go/idp/template/v1"
 )
 
 // MockTemporalClient is a mock for Temporal workflow operations

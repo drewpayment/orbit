@@ -7,6 +7,7 @@ import (
 
 	templatev1 "github.com/drewpayment/orbit/proto/gen/go/idp/template/v1"
 	"github.com/drewpayment/orbit/proto/gen/go/idp/template/v1/templatev1connect"
+	"github.com/drewpayment/orbit/temporal-workflows/pkg/types"
 )
 
 // TemporalClientInterface defines the interface for Temporal workflow operations
@@ -14,6 +15,18 @@ type TemporalClientInterface interface {
 	StartTemplateWorkflow(ctx context.Context, input interface{}) (string, error)
 	QueryWorkflow(ctx context.Context, workflowID, queryType string) (interface{}, error)
 	CancelWorkflow(ctx context.Context, workflowID string) error
+}
+
+// ScaffolderTemporalClient adds the v2 engine's entry points. It is a separate
+// interface, checked at call time, so the v1 handlers and their existing tests
+// keep working with a client that only implements TemporalClientInterface.
+//
+// Both methods are typed (rather than v1's interface{} + map decoding) because
+// the workflow input and the progress snapshot have fixed shapes, mirrored in
+// temporal-workflows/pkg/types for exactly this cross-module use.
+type ScaffolderTemporalClient interface {
+	StartScaffolderWorkflow(ctx context.Context, in types.ScaffolderWorkflowInput) (string, error)
+	QueryScaffolderProgress(ctx context.Context, workflowID string) (*types.ScaffolderProgress, error)
 }
 
 // PayloadClientInterface defines the interface for Payload CMS operations
@@ -40,16 +53,32 @@ type InstallationData struct {
 // TemplateServer implements the TemplateService Connect/gRPC server
 type TemplateServer struct {
 	templatev1connect.UnimplementedTemplateServiceHandler
-	temporalClient TemporalClientInterface
-	payloadClient  PayloadClientInterface
+	temporalClient   TemporalClientInterface
+	payloadClient    PayloadClientInterface
+	definitionClient TemplateDefinitionClientInterface
+}
+
+// TemplateServerOption configures optional collaborators. New dependencies are
+// added this way so the v1 call sites and their tests keep compiling.
+type TemplateServerOption func(*TemplateServer)
+
+// WithTemplateDefinitionClient supplies the reader StartScaffolderRun uses to
+// fetch a stored v2 definition. Without it, StartScaffolderRun answers
+// FailedPrecondition rather than starting a run with no definition.
+func WithTemplateDefinitionClient(c TemplateDefinitionClientInterface) TemplateServerOption {
+	return func(s *TemplateServer) { s.definitionClient = c }
 }
 
 // NewTemplateServer creates a new TemplateServer instance
-func NewTemplateServer(temporalClient TemporalClientInterface, payloadClient PayloadClientInterface) *TemplateServer {
-	return &TemplateServer{
+func NewTemplateServer(temporalClient TemporalClientInterface, payloadClient PayloadClientInterface, opts ...TemplateServerOption) *TemplateServer {
+	s := &TemplateServer{
 		temporalClient: temporalClient,
 		payloadClient:  payloadClient,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // StartInstantiation initiates a new template instantiation workflow
