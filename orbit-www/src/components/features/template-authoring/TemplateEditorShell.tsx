@@ -108,6 +108,22 @@ export interface TemplateEditorShellProps {
 
 type BuilderTab = 'parameters' | 'steps' | 'output'
 
+/**
+ * `metadata.name` must match `/^[a-z][a-z0-9-]*$/` (lib/scaffolder/schema.ts).
+ * Normalizing on blur keeps a stray capital or space from failing the save
+ * with a raw Zod message and from putting the YAML panel into a parse error
+ * on every keystroke.
+ */
+function slugifyIdentifier(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+/** Anchor id on the metadata card, so a metadata validation error can jump to it. */
+const METADATA_PANEL_ID = 'template-metadata-panel'
+
 function isBuilderTab(tab: EditorTab): tab is BuilderTab {
   return tab === 'parameters' || tab === 'steps' || tab === 'output'
 }
@@ -229,7 +245,7 @@ export function TemplateEditorShell({
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     anchor.href = url
-    anchor.download = `${definition.metadata.name || 'orbit-template'}.yaml`
+    anchor.download = `${slugifyIdentifier(definition.metadata.name) || 'orbit-template'}.yaml`
     document.body.appendChild(anchor)
     anchor.click()
     anchor.remove()
@@ -237,9 +253,14 @@ export function TemplateEditorShell({
   }
 
   function onJumpTo(target: JumpTarget) {
-    // Best-effort, per the plan: switch to the owning tab. The builders do not
-    // expose per-field focus, so a deeper jump is a follow-up.
-    if (isBuilderTab(target.tab)) setTab(target.tab)
+    // Best-effort, per the plan: switch to the owning tab, or scroll the
+    // metadata card into view. The builders do not expose per-field focus, so
+    // a deeper jump than that is a follow-up.
+    if (isBuilderTab(target.tab)) {
+      setTab(target.tab)
+      return
+    }
+    document.getElementById(METADATA_PANEL_ID)?.scrollIntoView({ block: 'center' })
   }
 
   const publishBlockers: string[] = []
@@ -252,7 +273,7 @@ export function TemplateEditorShell({
 
   return (
     <TooltipProvider>
-      <div className="space-y-4 pb-24">
+      <div className="space-y-4">
         {banner ? (
           <Alert variant={banner.kind === 'error' ? 'destructive' : 'default'}>
             <AlertDescription>{banner.text}</AlertDescription>
@@ -260,7 +281,7 @@ export function TemplateEditorShell({
         ) : null}
 
         {/* Metadata */}
-        <Card>
+        <Card id={METADATA_PANEL_ID}>
           <CardContent className="grid gap-4 pt-6 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="meta-name">Identifier</Label>
@@ -268,7 +289,16 @@ export function TemplateEditorShell({
                 id="meta-name"
                 value={definition.metadata.name}
                 onChange={(e) => dispatch({ type: 'SET_METADATA', metadata: { name: e.target.value } })}
+                onBlur={(e) => {
+                  const normalized = slugifyIdentifier(e.target.value)
+                  if (normalized !== e.target.value) {
+                    dispatch({ type: 'SET_METADATA', metadata: { name: normalized } })
+                  }
+                }}
               />
+              <p className="text-xs text-muted-foreground">
+                Lowercase letters, digits and dashes.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="meta-title">Title</Label>
@@ -407,11 +437,27 @@ export function TemplateEditorShell({
           {yamlOpen ? (
             <div className="min-w-0">
               <Card className="lg:sticky lg:top-4">
-                <CardContent className="pt-6">
+                {/*
+                  An explicit height matters: YamlView's Monaco instance sizes
+                  itself to its container, and inside an auto-height card it
+                  measures ~0 on mount and never relayouts, collapsing the
+                  editor to a sliver.
+                */}
+                <CardContent className="flex h-[70vh] flex-col pt-6">
                   <h3 className="mb-2 text-sm font-semibold">YAML</h3>
                   <YamlView
                     definition={definition}
-                    onReplaceAll={(next) => dispatch({ type: 'REPLACE_ALL', definition: next })}
+                    /*
+                      Normalized through createInitialBuilderState so a YAML
+                      round trip lands in the same key order the reducer's own
+                      state uses. Dispatching the raw parse result instead
+                      reorders `metadata` (the Zod schema and the reducer's
+                      EMPTY-merge disagree on where `description` sits), which
+                      made a no-op YAML edit flip `dirty` forever.
+                    */
+                    onReplaceAll={(next) =>
+                      dispatch({ type: 'REPLACE_ALL', definition: createInitialBuilderState(next) })
+                    }
                   />
                 </CardContent>
               </Card>
@@ -419,9 +465,14 @@ export function TemplateEditorShell({
           ) : null}
         </div>
 
-        {/* Bottom bar */}
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-          <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-2">
+        {/*
+          Bottom bar. Sticky inside the content column rather than
+          `fixed inset-x-0`, which spans the whole window and covers the app
+          sidebar. The negative margin lets it bleed to the edges of the
+          page's padding while staying inside the content area.
+        */}
+        <div className="sticky bottom-0 z-20 -mx-8 border-t bg-background/95 px-8 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+          <div className="flex flex-wrap items-center gap-2">
             <Badge variant={dirty ? 'secondary' : 'outline'}>
               {dirty ? 'Unsaved changes' : 'Saved'}
             </Badge>

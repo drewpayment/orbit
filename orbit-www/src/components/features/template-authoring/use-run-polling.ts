@@ -79,6 +79,11 @@ export function useRunPolling<T extends PollableRun>(
       return
     }
 
+    // Drop the previous run immediately. Without this, starting a second run
+    // leaves the first one's terminal status, steps and plan on screen until
+    // the first poll resolves — reading as if the NEW run had already passed.
+    setRun(null)
+
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | null = null
 

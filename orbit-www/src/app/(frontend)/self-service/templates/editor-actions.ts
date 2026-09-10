@@ -247,18 +247,31 @@ export async function listRunnableTemplates(): Promise<TemplateListItem[]> {
   return result.docs.map((d) => toListItem(d, names, uid))
 }
 
+export interface ListAuthorableTemplatesInput {
+  /** Only definitions the caller created. Applied in the QUERY, not after the row cap. */
+  mine?: boolean
+}
+
 /**
- * Non-published (draft/deprecated) templates the caller may MANAGE — the
- * "Drafts" tab. Scoped to workspaces where the caller is owner/admin; drafts
- * are never visible to plain members (design §3.2).
+ * Templates the caller may MANAGE — the "Drafts" tab. Scoped to workspaces
+ * where the caller is owner/admin, so drafts are never visible to plain
+ * members (design §3.2).
+ *
+ * Published definitions are included deliberately: they are the only rows
+ * that carry a Deprecate affordance, and the Run tab links to `/run`, so
+ * excluding them here would leave a published template with no reachable
+ * management screen at all.
  */
-export async function listAuthorableTemplates(): Promise<TemplateListItem[]> {
+export async function listAuthorableTemplates(
+  input: ListAuthorableTemplatesInput = {},
+): Promise<TemplateListItem[]> {
   const payload = await getPayload({ config })
   const uid = (await getCurrentUser())?.id
   if (!uid) return []
   const isAdmin = await currentUserIsPlatformAdmin()
 
-  const and: Where[] = [{ status: { not_equals: 'published' } }]
+  const and: Where[] = []
+  if (input.mine) and.push({ createdBy: { equals: uid } })
   if (!isAdmin) {
     const manageable = await getManageableTemplateWorkspaces()
     if (manageable.length === 0) return []
@@ -267,7 +280,9 @@ export async function listAuthorableTemplates(): Promise<TemplateListItem[]> {
 
   const result = await payload.find({
     collection: 'template-definitions',
-    where: { and },
+    // A platform admin listing everything has no clauses at all; `{ and: [] }`
+    // is not a valid Payload where, so omit it entirely in that case.
+    where: and.length > 0 ? { and } : {},
     sort: '-updatedAt',
     limit: 200,
     depth: 0,

@@ -97,7 +97,10 @@ async function RunTab() {
         <TemplateCard
           key={item.id}
           item={item}
-          href={`/self-service/templates/${encodeURIComponent(item.slug)}/run`}
+          // The route parameter is the definition id, not the slug: Next.js
+          // forbids two different slug names ([id] vs [slug]) at the same
+          // dynamic path, and the editor route needs an id.
+          href={`/self-service/templates/${item.id}/run`}
           cta="Run"
         />
       ))}
@@ -106,8 +109,10 @@ async function RunTab() {
 }
 
 async function DraftsTab({ filter }: { filter: DraftFilter }) {
-  const all = await listAuthorableTemplates()
-  const items = filter === 'mine' ? all.filter((t) => t.mine) : all
+  // `mine` is pushed into the query rather than filtered here: the list is
+  // capped at 200 rows, so post-filtering a truncated page could hide an
+  // author's own drafts behind 200 newer ones and render "no drafts".
+  const items = await listAuthorableTemplates({ mine: filter === 'mine' })
 
   if (items.length === 0) {
     return (
@@ -150,9 +155,8 @@ function TabLink({ href, active, children }: { href: string; active: boolean; ch
   )
 }
 
-async function NewTemplateButton() {
-  const workspaces = await getManageableTemplateWorkspaces()
-  if (workspaces.length === 0) return null
+function NewTemplateButton({ canAuthor }: { canAuthor: boolean }) {
+  if (!canAuthor) return null
   return (
     <Button asChild size="sm">
       <Link href="/self-service/templates/new">
@@ -170,7 +174,9 @@ export default async function TemplatesPage({ searchParams }: PageProps) {
 
   // Gate the Drafts tab on the same RBAC as the CTA — a member who manages no
   // workspace never sees a drafts affordance, and the server actions behind it
-  // return nothing for them regardless.
+  // return nothing for them regardless. Resolved once here and passed down:
+  // server actions are not covered by request memoization, so calling this
+  // from each child would re-run its membership queries per child.
   const manageable = await getManageableTemplateWorkspaces()
   const canAuthor = manageable.length > 0
   const activeTab: Tab = tab === 'drafts' && !canAuthor ? 'run' : tab
@@ -196,9 +202,7 @@ export default async function TemplatesPage({ searchParams }: PageProps) {
                   Paved paths developers can run, authored and versioned in Orbit.
                 </p>
               </div>
-              <Suspense fallback={null}>
-                <NewTemplateButton />
-              </Suspense>
+              <NewTemplateButton canAuthor={canAuthor} />
             </div>
           </div>
 

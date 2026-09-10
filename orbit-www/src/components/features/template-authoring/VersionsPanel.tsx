@@ -36,10 +36,34 @@ export interface VersionsPanelProps {
   versions: VersionRow[]
 }
 
+/** Newest against the one before it — the comparison an author almost always wants. */
+function defaultSelection(versions: VersionRow[]): { left: string; right: string } {
+  return {
+    left: versions[1]?.id ?? versions[0]?.id ?? '',
+    right: versions[0]?.id ?? '',
+  }
+}
+
 export function VersionsPanel({ versions }: VersionsPanelProps) {
-  // Default to comparing the newest against the one before it.
-  const [leftId, setLeftId] = React.useState<string>(() => versions[1]?.id ?? versions[0]?.id ?? '')
-  const [rightId, setRightId] = React.useState<string>(() => versions[0]?.id ?? '')
+  // Saving a draft adds a version and re-renders this panel with a longer
+  // list. A plain `useState` initializer would not re-run, leaving both
+  // selectors pinned to whatever existed at mount — after the very first save
+  // that means "v1 to v1" and a permanent "pick two different versions".
+  // Reset the selection during render (the supported React pattern) whenever
+  // the set of versions changes.
+  const versionsKey = versions.map((v) => v.id).join(',')
+  const [selection, setSelection] = React.useState(() => ({
+    ...defaultSelection(versions),
+    key: versionsKey,
+  }))
+  if (selection.key !== versionsKey) {
+    setSelection({ ...defaultSelection(versions), key: versionsKey })
+  }
+
+  const leftId = selection.left
+  const rightId = selection.right
+  const setLeftId = (id: string) => setSelection((s) => ({ ...s, left: id }))
+  const setRightId = (id: string) => setSelection((s) => ({ ...s, right: id }))
 
   const byId = React.useMemo(() => new Map(versions.map((v) => [v.id, v])), [versions])
   const diff = React.useMemo(() => {
