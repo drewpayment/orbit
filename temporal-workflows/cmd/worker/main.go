@@ -434,6 +434,7 @@ func main() {
 		CatalogClient:    services.NewPayloadCatalogEntityClient(orbitAPIURL, orbitInternalAPIKey, logger),
 		KafkaTopicClient: services.NewPayloadKafkaTopicClient(orbitAPIURL, orbitInternalAPIKey, logger),
 		KafkaProvisioner: kafkaActivities,
+		SkeletonClient:   services.NewPayloadSkeletonClient(orbitAPIURL, orbitInternalAPIKey, logger),
 	})...)
 	if err := scaffolderRegistry.ValidateSchemas(); err != nil {
 		// A broken action schema is a platform bug: fail at startup rather

@@ -38,3 +38,13 @@ func (stubKafkaProvisioner) ProvisionTopic(context.Context, activities.KafkaTopi
 func (stubKafkaProvisioner) UpdateTopicStatus(context.Context, activities.KafkaUpdateTopicStatusInput) error {
 	return errors.New("stub")
 }
+
+type stubSkeletonClient struct{}
+
+func (stubSkeletonClient) GetSkeletonManifest(context.Context, string, string) (*services.SkeletonBundle, error) {
+	return nil, errors.New("stub")
+}
+
+func (stubSkeletonClient) GetSkeletonBundle(context.Context, string, string) (*services.SkeletonBundle, error) {
+	return nil, errors.New("stub")
+}
