@@ -189,3 +189,73 @@ func (s *ScaffolderWorkflowTestSuite) TestApprovalStep_DryRunNeverOpensARowOrWai
 	s.Equal("unsupported", res.Plan[0].Kind)
 	s.Equal("gate", res.Plan[0].Name)
 }
+
+// --- if condition -------------------------------------------------------------
+
+func (s *ScaffolderWorkflowTestSuite) TestApprovalStep_IfFalseSkipsWithoutOpeningOrWaiting() {
+	def := approvalDefinition()
+	def.Spec.Steps[0].If = "${{ parameters.wantApproval }}"
+	// A skipped gate produces no output (same as a generic skipped step), so
+	// the next step must not reference it.
+	def.Spec.Steps[1].Input = json.RawMessage(`{"message":"no approval needed"}`)
+	in := baseInput(def)
+	in.Parameters["wantApproval"] = false
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusSucceeded, res.Status)
+	s.Empty(s.stubs.opened, "a skipped gate must never open a pending-approvals row")
+	s.Empty(s.stubs.resolved)
+	s.Require().Len(s.stubs.executed, 1, "the run must continue past a skipped gate")
+
+	gate, ok := stepByID(s.lastProgress().Steps, "gate")
+	s.Require().True(ok)
+	s.Equal(stepStatusSkipped, gate.Status)
+}
+
+func (s *ScaffolderWorkflowTestSuite) TestApprovalStep_IfTrueOpensTheGate() {
+	def := approvalDefinition()
+	def.Spec.Steps[0].If = "${{ parameters.wantApproval }}"
+	in := baseInput(def)
+	in.Parameters["wantApproval"] = true
+	approvalID := approvalStepID(in.RunID, "gate")
+	s.signalApproval(approvalID, true, "approver@example.com", "", time.Millisecond)
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusSucceeded, res.Status)
+	s.Require().Len(s.stubs.opened, 1, "a true condition must still open the gate")
+}
+
+func (s *ScaffolderWorkflowTestSuite) TestApprovalStep_MalformedIfFailsTheRun() {
+	def := approvalDefinition()
+	def.Spec.Steps[0].If = "${{ bogus.unknownNamespace }}"
+	in := baseInput(def)
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusFailed, res.Status)
+	s.Empty(s.stubs.opened, "the run must fail before ever opening the gate")
+	s.Empty(s.stubs.executed)
+}
+
+func (s *ScaffolderWorkflowTestSuite) TestApprovalStep_DryRunIfFalseRecordsSkippedNotUnsupported() {
+	def := approvalDefinition()
+	def.Spec.Steps[0].If = "${{ parameters.wantApproval }}"
+	def.Spec.Output = nil
+	in := baseInput(def)
+	in.DryRun = true
+	in.Parameters["wantApproval"] = false
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusSucceeded, res.Status)
+	s.Empty(s.stubs.opened)
+	s.Require().NotEmpty(res.Plan)
+	s.Equal("skipped", res.Plan[0].Kind, "a skipped-by-condition step is a distinct plan entry from an unplannable one")
+	s.Equal("gate", res.Plan[0].Name)
+}
