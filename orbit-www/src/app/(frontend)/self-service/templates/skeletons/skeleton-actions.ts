@@ -60,9 +60,12 @@ async function currentUserIsPlatformAdmin(): Promise<boolean> {
  */
 function extractPayloadErrors(err: unknown): string[] {
   if (err && typeof err === 'object' && 'data' in err) {
-    const data = (err as { data?: { errors?: { message?: string }[] } }).data
+    const data = (err as { data?: { errors?: { path?: string; message?: string }[] } }).data
     if (Array.isArray(data?.errors) && data.errors.length > 0) {
-      return data.errors.map((e) => e.message ?? 'Invalid value.')
+      return data.errors.map((e) => {
+        const message = e.message ?? 'Invalid value.'
+        return e.path ? `${e.path}: ${message}` : message
+      })
     }
   }
   if (err instanceof Error) return [err.message]
@@ -194,7 +197,7 @@ export async function getSkeleton(id: string): Promise<SkeletonDetail | null> {
     name: doc.name,
     slug: doc.slug,
     description: doc.description ?? '',
-    files: (doc.files ?? []).map((f) => ({ path: f.path, content: f.content })),
+    files: (doc.files ?? []).map((f) => ({ path: f.path, content: f.content ?? '' })),
     version: doc.version ?? 1,
     totalSize: doc.totalSize ?? 0,
   }

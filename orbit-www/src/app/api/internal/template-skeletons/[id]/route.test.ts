@@ -146,4 +146,16 @@ describe('GET /api/internal/template-skeletons/[id]', () => {
     })
     expect(JSON.stringify(json)).not.toContain('package main')
   })
+
+  it('coerces a null/undefined content (empty skeleton file) to "" so the Go worker always receives a string', async () => {
+    mockPayload.findByID.mockResolvedValueOnce({
+      ...skeletonDoc,
+      files: [{ path: '.gitkeep', content: null, size: 0, isBinary: false }],
+    })
+    const res = await GET(req('https://x/api/internal/template-skeletons/sk-1?workspaceId=ws-1'), {
+      params: Promise.resolve({ id: 'sk-1' }),
+    })
+    const json = await res.json()
+    expect(json.files).toEqual([{ path: '.gitkeep', size: 0, content: '' }])
+  })
 })

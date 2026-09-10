@@ -1261,7 +1261,7 @@ export interface TemplateSkeleton {
      * Relative path within the bundle, e.g. "src/index.ts". No leading "/", no ".." segments.
      */
     path: string;
-    content: string;
+    content?: string | null;
     /**
      * UTF-8 byte length of content, computed server-side.
      */

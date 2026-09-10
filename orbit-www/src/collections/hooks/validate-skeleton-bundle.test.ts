@@ -104,4 +104,11 @@ describe('validateSkeletonBundle', () => {
     const result = validateSkeletonBundle([{ path: 'a.bin', content: 'x', isBinary: true }])
     expect(result.files[0].isBinary).toBe(false)
   })
+
+  it('accepts an empty-content file (e.g. a freshly added file, or .gitkeep) with size 0', () => {
+    const result = validateSkeletonBundle([file('.gitkeep', '')])
+    expect(result.ok).toBe(true)
+    expect(result.errors).toEqual([])
+    expect(result.files).toEqual([{ path: '.gitkeep', content: '', size: 0, isBinary: false }])
+  })
 })

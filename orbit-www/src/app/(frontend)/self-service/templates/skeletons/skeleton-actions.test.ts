@@ -247,6 +247,50 @@ describe('skeletons/skeleton-actions', () => {
     expect(result.errors.join(' ')).toContain('at most 50 files')
   })
 
+  it('createSkeleton surfaces a field-scoped ValidationError with its path prefixed on the message', async () => {
+    // Mirrors the real error Payload throws when a `files[].content`
+    // (empty-string) native `required` validation fails — `path` names the
+    // exact field, and the caller-facing message must carry it so authors
+    // can tell WHICH file/field failed rather than seeing a bare "This
+    // field is required."
+    const fake = makeFakePayload({ membershipRole: 'owner' })
+    fake.create.mockRejectedValueOnce(
+      new ValidationError({ errors: [{ path: 'files.0.content', message: 'This field is required.' }] }),
+    )
+    mockPayload = fake.payload
+    const { createSkeleton } = await import('./skeleton-actions')
+    const result = await createSkeleton({
+      workspaceId: WORKSPACE_ID,
+      name: 'New',
+      slug: 'new',
+      files: [{ path: 'README.md', content: '' }],
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('expected failure')
+    expect(result.errors).toEqual(['files.0.content: This field is required.'])
+  })
+
+  it('createSkeleton passes an empty-content file through to Payload unchanged (no trimming/undefined coercion)', async () => {
+    const fake = makeFakePayload({ membershipRole: 'owner' })
+    mockPayload = fake.payload
+    const { createSkeleton } = await import('./skeleton-actions')
+    const result = await createSkeleton({
+      workspaceId: WORKSPACE_ID,
+      name: 'New skeleton',
+      slug: 'new-skeleton',
+      files: [
+        { path: 'README.md', content: '' },
+        { path: 'main.go', content: 'package main' },
+      ],
+    })
+    expect(result.ok).toBe(true)
+    expect(fake.create).toHaveBeenCalledTimes(1)
+    const callArgs = fake.create.mock.calls[0][0] as { data: { files: { path: string; content: unknown }[] } }
+    expect(callArgs.data.files[0]).toEqual({ path: 'README.md', content: '' })
+    expect(callArgs.data.files[0].content).not.toBeUndefined()
+    expect(callArgs.data.files[1]).toEqual({ path: 'main.go', content: 'package main' })
+  })
+
   it('saveSkeleton rejects a plain member', async () => {
     const fake = makeFakePayload({ membershipRole: 'member' })
     fake.col('template-skeletons').set('skel-1', { ...SKELETON_ROW })
