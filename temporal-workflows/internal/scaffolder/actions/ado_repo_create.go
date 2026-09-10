@@ -73,7 +73,7 @@ func (a *ADORepoCreate) Execute(ctx context.Context, rc scaffolder.ActionRunCont
 	if err != nil {
 		return nil, err
 	}
-	org, authHeader, baseURL, err := resolveADOConnection(ctx, a.connectionClient, in.Connection, "ado:repo:create")
+	org, authHeader, baseURL, err := resolveADOConnection(ctx, a.connectionClient, in.Connection, rc.WorkspaceID, "ado:repo:create")
 	if err != nil {
 		return nil, err
 	}

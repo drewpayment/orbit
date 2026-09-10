@@ -82,7 +82,7 @@ func (a *ADOPipelineCreate) Execute(ctx context.Context, rc scaffolder.ActionRun
 	if err != nil {
 		return nil, err
 	}
-	org, authHeader, baseURL, err := resolveADOConnection(ctx, a.connectionClient, in.Connection, "ado:pipeline:create")
+	org, authHeader, baseURL, err := resolveADOConnection(ctx, a.connectionClient, in.Connection, rc.WorkspaceID, "ado:pipeline:create")
 	if err != nil {
 		return nil, err
 	}

@@ -74,7 +74,7 @@ func (a *ADOPROpen) Execute(ctx context.Context, rc scaffolder.ActionRunContext,
 	if err != nil {
 		return nil, err
 	}
-	org, authHeader, baseURL, err := resolveADOConnection(ctx, a.connectionClient, in.Connection, "ado:pr:open")
+	org, authHeader, baseURL, err := resolveADOConnection(ctx, a.connectionClient, in.Connection, rc.WorkspaceID, "ado:pr:open")
 	if err != nil {
 		return nil, err
 	}

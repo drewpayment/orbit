@@ -102,6 +102,55 @@ describe('POST /api/internal/git-connections/token — auth', () => {
     expect(res.status).toBe(404)
     expect((await res.json()).code).toBe('NOT_FOUND')
   })
+
+  it('returns 400 when workspaceId is not a string', async () => {
+    const res = await POST(req('test-api-key', { connectionId: 'conn-1', workspaceId: 42 }))
+    expect(res.status).toBe(400)
+  })
+})
+
+describe('POST /api/internal/git-connections/token — workspace scoping', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns 200 when workspaceId matches an allowedWorkspaces entry', async () => {
+    const f = new FakePayload()
+    f.collections['git-connections'] = [conn({ allowedWorkspaces: ['ws-1', 'ws-2'] })]
+    vi.mocked(getPayload).mockResolvedValue(p(f))
+
+    const res = await POST(req('test-api-key', { connectionId: 'conn-1', workspaceId: 'ws-1' }))
+    expect(res.status).toBe(200)
+  })
+
+  it('returns 404 when workspaceId does not match allowedWorkspaces', async () => {
+    const f = new FakePayload()
+    f.collections['git-connections'] = [conn({ allowedWorkspaces: ['ws-1'] })]
+    vi.mocked(getPayload).mockResolvedValue(p(f))
+
+    const res = await POST(req('test-api-key', { connectionId: 'conn-1', workspaceId: 'ws-other' }))
+    expect(res.status).toBe(404)
+    expect((await res.json()).code).toBe('NOT_FOUND')
+  })
+
+  it('returns 404 when the connection has no allowedWorkspaces and a workspaceId is requested (fail closed)', async () => {
+    const f = new FakePayload()
+    f.collections['git-connections'] = [conn()] // no allowedWorkspaces field
+    vi.mocked(getPayload).mockResolvedValue(p(f))
+
+    const res = await POST(req('test-api-key', { connectionId: 'conn-1', workspaceId: 'ws-1' }))
+    expect(res.status).toBe(404)
+    expect((await res.json()).code).toBe('NOT_FOUND')
+  })
+
+  it('omitting workspaceId keeps today\'s unscoped behavior', async () => {
+    const f = new FakePayload()
+    f.collections['git-connections'] = [conn({ allowedWorkspaces: ['ws-1'] })]
+    vi.mocked(getPayload).mockResolvedValue(p(f))
+
+    const res = await POST(req('test-api-key', { connectionId: 'conn-1' }))
+    expect(res.status).toBe(200)
+  })
 })
 
 describe('resolveConnectionToken', () => {
@@ -145,6 +194,34 @@ describe('resolveConnectionToken', () => {
     f.collections['git-connections'] = [conn({ credentials: { pat: 'corrupt' } })]
     const res = await resolveConnectionToken(p(f), 'conn-1', decryptStub)
     expect(res).toMatchObject({ ok: false, status: 500, code: 'DECRYPT_FAILED' })
+  })
+
+  it('authorizes when workspaceId is in allowedWorkspaces', async () => {
+    const f = new FakePayload()
+    f.collections['git-connections'] = [conn({ allowedWorkspaces: ['ws-1', 'ws-2'] })]
+    const res = await resolveConnectionToken(p(f), 'conn-1', decryptStub, undefined, 'ws-2')
+    expect(res).toMatchObject({ ok: true })
+  })
+
+  it('rejects (404) when workspaceId is not in allowedWorkspaces', async () => {
+    const f = new FakePayload()
+    f.collections['git-connections'] = [conn({ allowedWorkspaces: ['ws-1'] })]
+    const res = await resolveConnectionToken(p(f), 'conn-1', decryptStub, undefined, 'ws-other')
+    expect(res).toMatchObject({ ok: false, status: 404, code: 'NOT_FOUND' })
+  })
+
+  it('rejects (404) when workspaceId is requested but allowedWorkspaces is unset (fail closed)', async () => {
+    const f = new FakePayload()
+    f.collections['git-connections'] = [conn()]
+    const res = await resolveConnectionToken(p(f), 'conn-1', decryptStub, undefined, 'ws-1')
+    expect(res).toMatchObject({ ok: false, status: 404, code: 'NOT_FOUND' })
+  })
+
+  it('tolerates populated allowedWorkspaces objects ({ id }) in addition to raw ids', async () => {
+    const f = new FakePayload()
+    f.collections['git-connections'] = [conn({ allowedWorkspaces: [{ id: 'ws-1' }] })]
+    const res = await resolveConnectionToken(p(f), 'conn-1', decryptStub, undefined, 'ws-1')
+    expect(res).toMatchObject({ ok: true })
   })
 })
 

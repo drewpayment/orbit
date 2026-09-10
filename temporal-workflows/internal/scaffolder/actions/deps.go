@@ -40,7 +40,7 @@ type CatalogEntityClient interface {
 // PAT/bearer token. Mirrors TokenService's role for GitHub. Satisfied by
 // *services.PayloadADOConnectionClient.
 type ADOConnectionClient interface {
-	GetConnectionToken(ctx context.Context, connectionID string) (services.ADOConnectionToken, error)
+	GetConnectionToken(ctx context.Context, connectionID, workspaceID string) (services.ADOConnectionToken, error)
 }
 
 // ADORepoClient is the subset of services.ADOWriteClient the ado:* actions
