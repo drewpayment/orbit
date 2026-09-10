@@ -1,0 +1,279 @@
+import { describe, expect, it } from 'vitest'
+import {
+  createInitialBuilderState,
+  moveArrayItem,
+  parseDefinitionYaml,
+  serializeDefinition,
+  templateBuilderReducer,
+  type BuilderAction,
+} from './builder-state'
+import type { TemplateDefinition } from '@/lib/scaffolder/schema'
+
+function fixtureDefinition(): TemplateDefinition {
+  return {
+    apiVersion: 'orbit/v2',
+    kind: 'Template',
+    metadata: {
+      name: 'backend-service',
+      title: 'New Backend Service',
+      description: 'Go service on the paved road',
+      tags: ['go', 'service'],
+      owner: 'team:platform',
+      targetKind: 'service',
+    },
+    spec: {
+      parameters: [
+        {
+          title: 'Service',
+          required: ['name'],
+          properties: {
+            name: { type: 'string', pattern: '^[a-z]+$', 'ui:help': 'kebab-case' },
+            owner: { type: 'string', 'ui:field': 'OrbitTeamPicker' },
+          },
+        },
+      ],
+      steps: [
+        {
+          id: 'repo',
+          name: 'Create repository',
+          action: 'github:repo:create-from-template',
+          input: { name: '${{ parameters.name }}' },
+        },
+        {
+          id: 'topic',
+          name: 'Provision topic',
+          action: 'kafka:topic:provision',
+          input: { name: '${{ parameters.name }}' },
+          if: '${{ parameters.needsTopic }}',
+          continueOnError: true,
+          timeout: '5m',
+        },
+      ],
+      output: { links: [{ title: 'Repository', url: '${{ steps.repo.output.repoUrl }}' }] },
+    },
+  }
+}
+
+describe('moveArrayItem', () => {
+  it('moves an item forward', () => {
+    expect(moveArrayItem(['a', 'b', 'c'], 0, 1)).toEqual(['b', 'a', 'c'])
+  })
+  it('moves an item backward', () => {
+    expect(moveArrayItem(['a', 'b', 'c'], 2, -1)).toEqual(['a', 'c', 'b'])
+  })
+  it('clamps out-of-bounds moves to a no-op', () => {
+    expect(moveArrayItem(['a', 'b'], 0, -1)).toEqual(['a', 'b'])
+    expect(moveArrayItem(['a', 'b'], 1, 1)).toEqual(['a', 'b'])
+  })
+})
+
+describe('templateBuilderReducer', () => {
+  it('SET_METADATA merges into existing metadata', () => {
+    const state = createInitialBuilderState({ metadata: { name: 'x', title: 'X', owner: 'o' } })
+    const next = templateBuilderReducer(state, {
+      type: 'SET_METADATA',
+      metadata: { title: 'Y', description: 'd' },
+    })
+    expect(next.metadata).toEqual({ name: 'x', title: 'Y', owner: 'o', description: 'd' })
+    // original state untouched
+    expect(state.metadata.title).toBe('X')
+  })
+
+  it('ADD_PARAMETER_PAGE appends a page by default', () => {
+    const state = createInitialBuilderState()
+    const next = templateBuilderReducer(state, { type: 'ADD_PARAMETER_PAGE', title: 'Service' })
+    expect(next.spec.parameters).toEqual([{ title: 'Service', properties: {} }])
+    expect(state.spec.parameters).toEqual([])
+  })
+
+  it('REMOVE_PARAMETER_PAGE removes by index', () => {
+    let state = createInitialBuilderState()
+    state = templateBuilderReducer(state, { type: 'ADD_PARAMETER_PAGE', title: 'A' })
+    state = templateBuilderReducer(state, { type: 'ADD_PARAMETER_PAGE', title: 'B' })
+    const next = templateBuilderReducer(state, { type: 'REMOVE_PARAMETER_PAGE', index: 0 })
+    expect(next.spec.parameters.map((p) => p.title)).toEqual(['B'])
+  })
+
+  it('REORDER_PARAMETER_PAGE reorders pages', () => {
+    let state = createInitialBuilderState()
+    state = templateBuilderReducer(state, { type: 'ADD_PARAMETER_PAGE', title: 'A' })
+    state = templateBuilderReducer(state, { type: 'ADD_PARAMETER_PAGE', title: 'B' })
+    const next = templateBuilderReducer(state, {
+      type: 'REORDER_PARAMETER_PAGE',
+      index: 1,
+      delta: -1,
+    })
+    expect(next.spec.parameters.map((p) => p.title)).toEqual(['B', 'A'])
+  })
+
+  it('UPDATE_PARAMETER_PAGE renames a page title', () => {
+    let state = createInitialBuilderState()
+    state = templateBuilderReducer(state, { type: 'ADD_PARAMETER_PAGE', title: 'A' })
+    const next = templateBuilderReducer(state, { type: 'UPDATE_PARAMETER_PAGE', index: 0, title: 'Renamed' })
+    expect(next.spec.parameters[0].title).toBe('Renamed')
+  })
+
+  it('ADD_FIELD adds a property and marks it required', () => {
+    let state = createInitialBuilderState()
+    state = templateBuilderReducer(state, { type: 'ADD_PARAMETER_PAGE', title: 'A' })
+    const next = templateBuilderReducer(state, {
+      type: 'ADD_FIELD',
+      pageIndex: 0,
+      name: 'foo',
+      property: { type: 'string' },
+      required: true,
+    })
+    expect(next.spec.parameters[0].properties.foo).toEqual({ type: 'string' })
+    expect(next.spec.parameters[0].required).toEqual(['foo'])
+  })
+
+  it('UPDATE_FIELD can rename a field while preserving key order', () => {
+    let state = createInitialBuilderState()
+    state = templateBuilderReducer(state, { type: 'ADD_PARAMETER_PAGE', title: 'A' })
+    state = templateBuilderReducer(state, {
+      type: 'ADD_FIELD',
+      pageIndex: 0,
+      name: 'a',
+      property: { type: 'string' },
+    })
+    state = templateBuilderReducer(state, {
+      type: 'ADD_FIELD',
+      pageIndex: 0,
+      name: 'b',
+      property: { type: 'string' },
+    })
+    const next = templateBuilderReducer(state, {
+      type: 'UPDATE_FIELD',
+      pageIndex: 0,
+      name: 'a',
+      renameTo: 'renamed',
+      property: { type: 'number' },
+      required: true,
+    })
+    expect(Object.keys(next.spec.parameters[0].properties)).toEqual(['renamed', 'b'])
+    expect(next.spec.parameters[0].properties.renamed).toEqual({ type: 'number' })
+    expect(next.spec.parameters[0].required).toEqual(['renamed'])
+  })
+
+  it('REMOVE_FIELD removes the property and clears it from required', () => {
+    let state = createInitialBuilderState()
+    state = templateBuilderReducer(state, { type: 'ADD_PARAMETER_PAGE', title: 'A' })
+    state = templateBuilderReducer(state, {
+      type: 'ADD_FIELD',
+      pageIndex: 0,
+      name: 'a',
+      property: { type: 'string' },
+      required: true,
+    })
+    const next = templateBuilderReducer(state, { type: 'REMOVE_FIELD', pageIndex: 0, name: 'a' })
+    expect(next.spec.parameters[0].properties).toEqual({})
+    expect(next.spec.parameters[0].required).toEqual([])
+  })
+
+  it('REORDER_FIELD reorders fields within a page', () => {
+    let state = createInitialBuilderState()
+    state = templateBuilderReducer(state, { type: 'ADD_PARAMETER_PAGE', title: 'A' })
+    state = templateBuilderReducer(state, {
+      type: 'ADD_FIELD',
+      pageIndex: 0,
+      name: 'a',
+      property: { type: 'string' },
+    })
+    state = templateBuilderReducer(state, {
+      type: 'ADD_FIELD',
+      pageIndex: 0,
+      name: 'b',
+      property: { type: 'string' },
+    })
+    const next = templateBuilderReducer(state, {
+      type: 'REORDER_FIELD',
+      pageIndex: 0,
+      index: 0,
+      delta: 1,
+    })
+    expect(Object.keys(next.spec.parameters[0].properties)).toEqual(['b', 'a'])
+  })
+
+  it('ADD_STEP/UPDATE_STEP/REMOVE_STEP/REORDER_STEP round-trip', () => {
+    let state = createInitialBuilderState()
+    const step1: BuilderAction = {
+      type: 'ADD_STEP',
+      step: { id: 's1', name: 'Step 1', action: 'fs:render', input: {} },
+    }
+    const step2: BuilderAction = {
+      type: 'ADD_STEP',
+      step: { id: 's2', name: 'Step 2', action: 'fs:render', input: {} },
+    }
+    state = templateBuilderReducer(state, step1)
+    state = templateBuilderReducer(state, step2)
+    expect(state.spec.steps.map((s) => s.id)).toEqual(['s1', 's2'])
+
+    state = templateBuilderReducer(state, {
+      type: 'UPDATE_STEP',
+      id: 's1',
+      patch: { name: 'Renamed' },
+    })
+    expect(state.spec.steps[0].name).toBe('Renamed')
+
+    state = templateBuilderReducer(state, { type: 'REORDER_STEP', index: 0, delta: 1 })
+    expect(state.spec.steps.map((s) => s.id)).toEqual(['s2', 's1'])
+
+    state = templateBuilderReducer(state, { type: 'REMOVE_STEP', id: 's2' })
+    expect(state.spec.steps.map((s) => s.id)).toEqual(['s1'])
+  })
+
+  it('SET_OUTPUT replaces the output block', () => {
+    let state = createInitialBuilderState()
+    state = templateBuilderReducer(state, {
+      type: 'SET_OUTPUT',
+      output: { links: [{ title: 'Repo', url: 'x' }] },
+    })
+    expect(state.spec.output).toEqual({ links: [{ title: 'Repo', url: 'x' }] })
+    state = templateBuilderReducer(state, { type: 'SET_OUTPUT', output: undefined })
+    expect(state.spec.output).toBeUndefined()
+  })
+
+  it('REPLACE_ALL swaps in a whole new definition', () => {
+    const state = createInitialBuilderState()
+    const replacement = fixtureDefinition()
+    const next = templateBuilderReducer(state, { type: 'REPLACE_ALL', definition: replacement })
+    expect(next).toEqual(replacement)
+  })
+
+  it('does not mutate the previous state object for any action type', () => {
+    const state = createInitialBuilderState({ metadata: { name: 'x', title: 'X', owner: 'o' } })
+    const frozen = JSON.parse(JSON.stringify(state))
+    templateBuilderReducer(state, { type: 'ADD_PARAMETER_PAGE', title: 'A' })
+    expect(state).toEqual(frozen)
+  })
+})
+
+describe('serialize -> REPLACE_ALL -> serialize idempotence', () => {
+  it('round-trips a full definition through YAML without loss', () => {
+    const original = fixtureDefinition()
+    const yamlText = serializeDefinition(original)
+
+    const parsed = parseDefinitionYaml(yamlText)
+    expect(parsed.ok).toBe(true)
+    expect(parsed.error).toBeUndefined()
+
+    const state = createInitialBuilderState()
+    const next = templateBuilderReducer(state, { type: 'REPLACE_ALL', definition: parsed.definition! })
+
+    expect(next).toEqual(original)
+    expect(serializeDefinition(next)).toBe(yamlText)
+  })
+
+  it('rejects invalid YAML without producing a definition', () => {
+    const result = parseDefinitionYaml('not: [valid, yaml')
+    expect(result.ok).toBe(false)
+    expect(result.definition).toBeUndefined()
+    expect(result.error).toBeTruthy()
+  })
+
+  it('rejects YAML that parses but fails shape validation', () => {
+    const result = parseDefinitionYaml('apiVersion: orbit/v2\nkind: Template\n')
+    expect(result.ok).toBe(false)
+    expect(result.error).toBeTruthy()
+  })
+})
