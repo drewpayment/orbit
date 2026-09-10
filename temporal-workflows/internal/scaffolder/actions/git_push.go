@@ -17,17 +17,25 @@ var gitPushInputSchema []byte
 //go:embed git_push.output.schema.json
 var gitPushOutputSchema []byte
 
+// pushFunc matches activities.PushRepo's signature. A field of this type
+// lets tests substitute a fake so Execute's orchestration (parsing,
+// validation, token resolution, error wrapping) can be exercised without
+// shelling out to git — the git mechanics themselves are covered directly
+// against activities.PushRepo's own tests.
+type pushFunc func(ctx context.Context, in activities.PushRepoInput) error
+
 // GitPush wraps activities.PushRepo: it pushes whatever is at `path` to
 // `repoUrl`, generalizing the v1 PushToNewRepo activity from "push a
 // freshly rendered template" to "push whatever is at path".
 type GitPush struct {
 	tokenService TokenService
+	push         pushFunc
 }
 
 // NewGitPush constructs the git:push action. tokenService may be nil: it is
 // only consulted when a step's `installationId` input is set.
 func NewGitPush(tokenService TokenService) *GitPush {
-	return &GitPush{tokenService: tokenService}
+	return &GitPush{tokenService: tokenService, push: activities.PushRepo}
 }
 
 type gitPushInput struct {
@@ -99,7 +107,7 @@ func (a *GitPush) Execute(ctx context.Context, rc scaffolder.ActionRunContext, i
 	}
 
 	rc.Heartbeat("git:push", in.RepoURL)
-	if err := activities.PushRepo(ctx, activities.PushRepoInput{
+	if err := a.push(ctx, activities.PushRepoInput{
 		WorkDir:       in.Path,
 		RepoURL:       in.RepoURL,
 		Branch:        branch,
@@ -124,6 +132,9 @@ func parseGitPushInput(raw json.RawMessage) (gitPushInput, error) {
 	}
 	if strings.TrimSpace(in.RepoURL) == "" {
 		return in, fmt.Errorf("git:push: `repoUrl` is required")
+	}
+	if !activities.IsSafeGitURL(in.RepoURL) {
+		return in, fmt.Errorf("git:push: `repoUrl` must be http(s)://, ssh://, or user@host:path form")
 	}
 	return in, nil
 }

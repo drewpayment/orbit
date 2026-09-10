@@ -11,6 +11,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// allowLocalGitProtocol lets a test's own local bare-path fixtures (a
+// TempDir standing in for a real remote) pass the protocol.file.allow=never
+// guard runGitCommand always sets. GIT_ALLOW_PROTOCOL, when set, overrides
+// -c protocol.*.allow entirely — this is a test-only escape hatch, never set
+// in production, so it does not weaken gitProtocolGuardArgs there.
+func allowLocalGitProtocol(t *testing.T) {
+	t.Helper()
+	t.Setenv("GIT_ALLOW_PROTOCOL", "file:http:https:ssh")
+}
+
 func initBareRemote(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -42,6 +52,7 @@ func initSourceRepo(t *testing.T) string {
 }
 
 func TestCloneGitRepo_Success(t *testing.T) {
+	allowLocalGitProtocol(t)
 	src := initSourceRepo(t)
 	dest := filepath.Join(t.TempDir(), "checkout")
 
@@ -52,6 +63,7 @@ func TestCloneGitRepo_Success(t *testing.T) {
 }
 
 func TestCloneGitRepo_WithRef(t *testing.T) {
+	allowLocalGitProtocol(t)
 	src := initSourceRepo(t)
 	dest := filepath.Join(t.TempDir(), "checkout")
 
@@ -71,12 +83,14 @@ func TestCloneGitRepo_RejectsFlagLikeURL(t *testing.T) {
 }
 
 func TestCloneGitRepo_RejectsFlagLikeRef(t *testing.T) {
+	allowLocalGitProtocol(t)
 	src := initSourceRepo(t)
 	err := CloneGitRepo(context.Background(), filepath.Join(t.TempDir(), "d"), src, "--evil", "")
 	assert.Error(t, err)
 }
 
 func TestCloneGitRepo_CleansUpOnFailure(t *testing.T) {
+	allowLocalGitProtocol(t)
 	dest := filepath.Join(t.TempDir(), "checkout")
 	err := CloneGitRepo(context.Background(), dest, "/nonexistent/repo/path", "", "")
 	require.Error(t, err)
@@ -84,7 +98,30 @@ func TestCloneGitRepo_CleansUpOnFailure(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "destination should be cleaned up on clone failure")
 }
 
+// TestCloneGitRepo_RejectsFileTransportByDefault is the regression test for
+// the protocol guard itself: without allowLocalGitProtocol's override, a
+// bare local path — indistinguishable at the git-transport level from
+// file:// — must be refused, not silently cloned.
+func TestCloneGitRepo_RejectsFileTransportByDefault(t *testing.T) {
+	src := initSourceRepo(t)
+	dest := filepath.Join(t.TempDir(), "checkout")
+
+	err := CloneGitRepo(context.Background(), dest, src, "", "")
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "not allowed")
+	_, statErr := os.Stat(dest)
+	assert.True(t, os.IsNotExist(statErr), "destination should be cleaned up on a refused clone")
+}
+
+func TestCloneGitRepo_RejectsExtTransport(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "checkout")
+	err := CloneGitRepo(context.Background(), dest, "ext::sh -c touch%20/tmp/pwned", "", "")
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "not allowed")
+}
+
 func TestPushRepo_InitsCommitsAndPushes(t *testing.T) {
+	allowLocalGitProtocol(t)
 	remote := initBareRemote(t)
 	workDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(workDir, "file.txt"), []byte("content"), 0644))
@@ -103,6 +140,7 @@ func TestPushRepo_InitsCommitsAndPushes(t *testing.T) {
 }
 
 func TestPushRepo_ReusesExistingGitDir(t *testing.T) {
+	allowLocalGitProtocol(t)
 	remote := initBareRemote(t)
 	workDir := t.TempDir()
 	run := func(args ...string) {
@@ -128,6 +166,7 @@ func TestPushRepo_RequiresWorkDirAndRepoURL(t *testing.T) {
 }
 
 func TestPushRepo_RejectsFlagLikeBranch(t *testing.T) {
+	allowLocalGitProtocol(t)
 	remote := initBareRemote(t)
 	workDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(workDir, "file.txt"), []byte("content"), 0644))
@@ -135,8 +174,46 @@ func TestPushRepo_RejectsFlagLikeBranch(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// TestPushRepo_RejectsFileTransportByDefault is the push-side regression
+// test mirroring TestCloneGitRepo_RejectsFileTransportByDefault.
+func TestPushRepo_RejectsFileTransportByDefault(t *testing.T) {
+	remote := initBareRemote(t)
+	workDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "file.txt"), []byte("content"), 0644))
+
+	err := PushRepo(context.Background(), PushRepoInput{WorkDir: workDir, RepoURL: remote, Branch: "main"})
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "not allowed")
+}
+
 func TestInjectGitToken(t *testing.T) {
 	assert.Equal(t, "https://x-access-token:tok@github.com/o/r.git", injectGitToken("https://github.com/o/r.git", "tok"))
 	assert.Equal(t, "https://github.com/o/r.git", injectGitToken("https://github.com/o/r.git", ""))
 	assert.Equal(t, "git@github.com:o/r.git", injectGitToken("git@github.com:o/r.git", "tok"), "non-https remotes are left unchanged")
+}
+
+func TestIsSafeGitURL(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+		want bool
+	}{
+		{"https", "https://github.com/acme/orders.git", true},
+		{"http", "http://internal-git.example.com/acme/orders.git", true},
+		{"ssh scheme", "ssh://git@github.com/acme/orders.git", true},
+		{"scp-like", "git@github.com:acme/orders.git", true},
+		{"scp-like with dots and dashes", "deploy-bot@git.example.co:team/repo.git", true},
+		{"file scheme", "file:///etc/passwd", false},
+		{"ext transport", "ext::sh -c touch%20/tmp/pwned", false},
+		{"bare absolute path", "/etc/passwd", false},
+		{"bare relative path", "../../etc/passwd", false},
+		{"empty", "", false},
+		{"ftp scheme", "ftp://example.com/repo.git", false},
+		{"whitespace padded https", "  https://github.com/acme/orders.git  ", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, IsSafeGitURL(tt.url))
+		})
+	}
 }

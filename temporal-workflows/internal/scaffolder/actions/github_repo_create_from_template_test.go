@@ -20,7 +20,10 @@ func runCtxWithWorkDir(t *testing.T, dir string) scaffolder.ActionRunContext {
 
 func TestGitHubRepoCreateFromTemplate_Execute(t *testing.T) {
 	// The "created repository" is a real local git repo so CloneGitRepo has
-	// something to clone.
+	// something to clone. Local bare-path fixtures need
+	// protocol.file.allow=never overridden — see allowLocalGitProtocol in
+	// internal/activities/git_shared_test.go for why.
+	t.Setenv("GIT_ALLOW_PROTOCOL", "file:http:https:ssh")
 	srcDir := t.TempDir()
 	repo := filepath.Join(srcDir, "repo")
 	require.NoError(t, os.MkdirAll(repo, 0755))

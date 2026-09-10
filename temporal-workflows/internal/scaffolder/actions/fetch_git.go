@@ -18,16 +18,24 @@ var fetchGitInputSchema []byte
 //go:embed fetch_git.output.schema.json
 var fetchGitOutputSchema []byte
 
+// cloneFunc matches activities.CloneGitRepo's signature. A field of this
+// type lets tests substitute a fake so Execute's orchestration (parsing,
+// validation, token resolution, error wrapping) can be exercised without
+// shelling out to git — the git mechanics themselves are covered directly
+// against activities.CloneGitRepo's own tests.
+type cloneFunc func(ctx context.Context, destDir, sourceURL, ref, token string) error
+
 // FetchGit clones a git repository into a scoped directory under the run's
 // work directory, so a later fs:render/git:push step can operate on it.
 type FetchGit struct {
 	tokenService TokenService
+	clone        cloneFunc
 }
 
 // NewFetchGit constructs the fetch:git action. tokenService may be nil: it
 // is only consulted when a step's `installationId` input is set.
 func NewFetchGit(tokenService TokenService) *FetchGit {
-	return &FetchGit{tokenService: tokenService}
+	return &FetchGit{tokenService: tokenService, clone: activities.CloneGitRepo}
 }
 
 type fetchGitInput struct {
@@ -94,7 +102,7 @@ func (a *FetchGit) Execute(ctx context.Context, rc scaffolder.ActionRunContext, 
 	}
 
 	rc.Heartbeat("fetch:git", in.URL)
-	if err := activities.CloneGitRepo(ctx, dest, in.URL, in.Ref, token); err != nil {
+	if err := a.clone(ctx, dest, in.URL, in.Ref, token); err != nil {
 		return nil, fmt.Errorf("fetch:git: %w", err)
 	}
 
@@ -110,6 +118,9 @@ func parseFetchGitInput(raw json.RawMessage) (fetchGitInput, error) {
 	}
 	if strings.TrimSpace(in.URL) == "" {
 		return in, fmt.Errorf("fetch:git: `url` is required")
+	}
+	if !activities.IsSafeGitURL(in.URL) {
+		return in, fmt.Errorf("fetch:git: `url` must be http(s)://, ssh://, or user@host:path form")
 	}
 	return in, nil
 }
