@@ -78,7 +78,20 @@ func (a *FSRender) Execute(_ context.Context, rc scaffolder.ActionRunContext, in
 
 // Plan renders a throwaway copy of path and reports one PlannedChange per
 // file whose content or name would change, without touching path itself.
-func (a *FSRender) Plan(_ context.Context, rc scaffolder.ActionRunContext, input json.RawMessage) ([]scaffolder.PlannedChange, error) {
+func (a *FSRender) Plan(ctx context.Context, rc scaffolder.ActionRunContext, input json.RawMessage) ([]scaffolder.PlannedChange, error) {
+	tempCopy, err := os.MkdirTemp("", "orbit-fs-render-plan-*")
+	if err != nil {
+		return nil, fmt.Errorf("fs:render: create temp copy: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(tempCopy) }()
+
+	return a.PlanPreview(ctx, rc, input, tempCopy)
+}
+
+// PlanPreview implements scaffolder.PlanPreviewer: it renders a copy of path
+// into destDir, which the caller owns, so the rendered tree survives the call
+// and can be persisted for the dry-run diff viewer.
+func (a *FSRender) PlanPreview(_ context.Context, rc scaffolder.ActionRunContext, input json.RawMessage, destDir string) ([]scaffolder.PlannedChange, error) {
 	in, err := parseFSRenderInput(input)
 	if err != nil {
 		return nil, err
@@ -86,19 +99,16 @@ func (a *FSRender) Plan(_ context.Context, rc scaffolder.ActionRunContext, input
 	if err := requireWithinWorkDir(rc.WorkDir, in.Path); err != nil {
 		return nil, fmt.Errorf("fs:render: %w", err)
 	}
-
-	tempCopy, err := os.MkdirTemp("", "orbit-fs-render-plan-*")
-	if err != nil {
-		return nil, fmt.Errorf("fs:render: create temp copy: %w", err)
+	if strings.TrimSpace(destDir) == "" {
+		return nil, fmt.Errorf("fs:render: a preview destination directory is required")
 	}
-	defer func() { _ = os.RemoveAll(tempCopy) }()
 
-	if err := copyDir(in.Path, tempCopy); err != nil {
+	if err := copyDir(in.Path, destDir); err != nil {
 		return nil, fmt.Errorf("fs:render: copy source for planning: %w", err)
 	}
 
-	rawPatterns := activities.LoadRawFilePatterns(tempCopy, rc.Logger)
-	res, err := templating.RenderDir(tempCopy, in.Values, rawPatterns, rc.Logger)
+	rawPatterns := activities.LoadRawFilePatterns(destDir, rc.Logger)
+	res, err := templating.RenderDir(destDir, in.Values, rawPatterns, rc.Logger)
 	if err != nil {
 		return nil, fmt.Errorf("fs:render: %w", err)
 	}

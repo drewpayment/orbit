@@ -89,3 +89,17 @@ type PlanDeclarer interface {
 type FamilyDeclarer interface {
 	Family() string
 }
+
+// PlanPreviewer is implemented by actions whose dry run produces a file tree
+// worth keeping for the Phase 2 diff viewer. The dispatch activity supplies an
+// empty destination directory, and the action renders into it instead of into
+// a throwaway temp dir, so the caller can persist the result.
+//
+// An action that implements this is declaring that its dry run is only useful
+// when the preview can actually be stored: the activity fails the step rather
+// than silently planning without a preview.
+type PlanPreviewer interface {
+	// PlanPreview renders into destDir, which the caller creates and owns
+	// (including deleting it). It returns the same changes Plan would.
+	PlanPreview(ctx context.Context, rc ActionRunContext, input json.RawMessage, destDir string) ([]PlannedChange, error)
+}
