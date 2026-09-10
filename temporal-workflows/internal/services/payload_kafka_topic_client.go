@@ -35,10 +35,20 @@ type KafkaTopicCreateInput struct {
 // KafkaTopicDoc is the subset of a kafka-topics row the scaffolder action
 // needs back from the create call.
 type KafkaTopicDoc struct {
-	ID            string `json:"id"`
-	Status        string `json:"status"`
+	ID         string `json:"id"`
+	Status     string `json:"status"`
+	Partitions int    `json:"partitions"`
+	// FullTopicName is `${topicPrefix}${name}`, set by the route at create
+	// time and refreshed by KafkaActivitiesImpl.UpdateTopicStatus once
+	// ProvisionTopic confirms it.
 	FullTopicName string `json:"fullTopicName"`
-	Partitions    int    `json:"partitions"`
+	// TopicPrefix is the owning virtual cluster's prefix for physical topic
+	// names, e.g. "acme-dev-". The route resolves it once (it already has
+	// to look up the cluster to check workspace ownership), so the action
+	// can pass it straight into KafkaTopicProvisionInput.TopicPrefix
+	// without a second lookup — ProvisionTopic computes the same physical
+	// name (TopicPrefix + TopicName) itself.
+	TopicPrefix string `json:"topicPrefix"`
 }
 
 // PayloadKafkaTopicClient talks to orbit-www's internal kafka-topics API on

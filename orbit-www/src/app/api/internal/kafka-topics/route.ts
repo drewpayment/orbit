@@ -5,6 +5,7 @@ import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import type { Where } from 'payload'
 import { validateInternalApiKey } from '@/lib/auth/internal-api-auth'
+import { resolveVirtualClusterOwnership } from '@/lib/kafka/virtual-cluster-ownership'
 
 
 /**
@@ -86,9 +87,15 @@ export async function GET(request: NextRequest) {
  *                                 // stored as a tag (owner:<value>)
  *   }
  *
- * A `virtualClusterId` that doesn't resolve to a kafka-virtual-clusters doc
- * returns 404 { code: 'NOT_FOUND' } — the Go client maps this specifically
- * to ErrKafkaVirtualClusterNotFound, which the action treats as
+ * A `virtualClusterId` that doesn't resolve to a kafka-virtual-clusters doc,
+ * OR that resolves to one owned by a different workspace than the caller's
+ * `workspaceId`, returns 404 { code: 'NOT_FOUND' } — both cases look
+ * identical to the caller so a workspace can never probe for another
+ * workspace's cluster ids. Ownership (direct `workspace`, or legacy
+ * `application`-owned) is resolved by
+ * lib/kafka/virtual-cluster-ownership.ts, since `overrideAccess: true`
+ * bypasses KafkaVirtualClusters.ts's own access rule. The Go client maps
+ * this 404 to ErrKafkaVirtualClusterNotFound, which the action treats as
  * scaffolder.ErrInvalidInput (non-retryable).
  *
  * Idempotency: a row already created for the same
@@ -96,8 +103,15 @@ export async function GET(request: NextRequest) {
  * duplicated — a Temporal retry of the kafka:topic:provision step is safe
  * to re-run.
  *
- * Response: 201 { id, status, fullTopicName, partitions } on create, or 200
- * with the same shape on the idempotent already-exists path.
+ * `fullTopicName` is set at creation time as `${topicPrefix}${name}`
+ * (matching `app/actions/kafka-topics.ts`'s `createTopic`), and the
+ * response also carries `topicPrefix` on its own so the Go action can pass
+ * it straight into `KafkaTopicProvisionInput.TopicPrefix` without a second
+ * lookup — `ProvisionTopic` computes the physical name the same way
+ * (`TopicPrefix + TopicName`).
+ *
+ * Response: 201 { id, status, fullTopicName, partitions, topicPrefix } on
+ * create, or 200 with the same shape on the idempotent already-exists path.
  */
 export async function POST(request: NextRequest) {
   const authError = validateInternalApiKey(request.headers.get('X-API-Key'))
@@ -138,19 +152,33 @@ export async function POST(request: NextRequest) {
   try {
     const payload = await getPayload({ config: configPromise })
 
+    let virtualCluster: Record<string, unknown>
     try {
-      await payload.findByID({
+      virtualCluster = (await payload.findByID({
         collection: 'kafka-virtual-clusters',
         id: virtualClusterId,
-        depth: 0,
+        depth: 1,
         overrideAccess: true,
-      })
+      })) as unknown as Record<string, unknown>
     } catch {
       return NextResponse.json(
         { error: 'virtual cluster not found', code: 'NOT_FOUND' },
         { status: 404 },
       )
     }
+
+    const ownership = await resolveVirtualClusterOwnership(payload, virtualCluster)
+    if (ownership.workspaceId !== workspaceId) {
+      // Same response as "doesn't exist" — a caller must never be able to
+      // distinguish "no such cluster" from "that cluster belongs to someone
+      // else" by probing ids.
+      return NextResponse.json(
+        { error: 'virtual cluster not found', code: 'NOT_FOUND' },
+        { status: 404 },
+      )
+    }
+    const topicPrefix = ownership.topicPrefix
+    const fullTopicName = `${topicPrefix}${name}`
 
     const existing = await payload.find({
       collection: 'kafka-topics',
@@ -172,6 +200,7 @@ export async function POST(request: NextRequest) {
         status: doc.status,
         fullTopicName: doc.fullTopicName ?? '',
         partitions: doc.partitions,
+        topicPrefix,
       })
     }
 
@@ -189,6 +218,7 @@ export async function POST(request: NextRequest) {
         status: 'provisioning',
         approvalRequired: false,
         createdVia: 'api',
+        fullTopicName,
         ...(owner ? { tags: [{ tag: `owner:${owner}` }] } : {}),
       },
       overrideAccess: true,
@@ -200,6 +230,7 @@ export async function POST(request: NextRequest) {
         status: created.status,
         fullTopicName: created.fullTopicName ?? '',
         partitions: created.partitions,
+        topicPrefix,
       },
       { status: 201 },
     )

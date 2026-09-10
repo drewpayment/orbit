@@ -51,6 +51,7 @@ function getPath(doc: Doc, path: string): unknown {
 class FakePayload {
   collections: Record<string, Doc[]> = {
     'kafka-virtual-clusters': [],
+    'kafka-applications': [],
     'kafka-topics': [],
   }
   private counter = 1
@@ -86,9 +87,23 @@ class FakePayload {
 
 const p = (f: FakePayload) => f as unknown as Payload
 
+// Defaults to direct ownership by ws-1, matching validBody()'s workspaceId,
+// with a topicPrefix so fullTopicName / physicalName assertions are exact.
 function seedVirtualCluster(fp: FakePayload, overrides: Partial<Doc> = {}) {
-  const doc: Doc = { id: 'vc-1', name: 'primary', ...overrides }
+  const doc: Doc = {
+    id: 'vc-1',
+    name: 'primary',
+    workspace: 'ws-1',
+    topicPrefix: 'dev-acme-',
+    ...overrides,
+  }
   fp.collections['kafka-virtual-clusters'].push(doc)
+  return doc
+}
+
+function seedApplication(fp: FakePayload, overrides: Partial<Doc> = {}) {
+  const doc: Doc = { id: 'app-1', name: 'orders-app', workspace: 'ws-1', ...overrides }
+  fp.collections['kafka-applications'].push(doc)
   return doc
 }
 
@@ -151,6 +166,30 @@ describe('POST /api/internal/kafka-topics', () => {
     expect(json.code).toBe('NOT_FOUND')
   })
 
+  it('returns 404 when the virtual cluster is directly owned by a different workspace', async () => {
+    const fp = new FakePayload()
+    seedVirtualCluster(fp, { workspace: 'ws-other' })
+    vi.mocked(getPayload).mockResolvedValue(p(fp))
+
+    const res = await POST(req('test-api-key', validBody()))
+    expect(res.status).toBe(404)
+    const json = await res.json()
+    expect(json.code).toBe('NOT_FOUND')
+    expect(fp.collections['kafka-topics']).toHaveLength(0)
+  })
+
+  it('returns 404 when a legacy application-owned cluster belongs to a different workspace', async () => {
+    const fp = new FakePayload()
+    seedApplication(fp, { id: 'app-1', workspace: 'ws-other' })
+    seedVirtualCluster(fp, { workspace: undefined, application: 'app-1' })
+    vi.mocked(getPayload).mockResolvedValue(p(fp))
+
+    const res = await POST(req('test-api-key', validBody()))
+    expect(res.status).toBe(404)
+    const json = await res.json()
+    expect(json.code).toBe('NOT_FOUND')
+  })
+
   it('creates a kafka topic on the happy path', async () => {
     const fp = new FakePayload()
     seedVirtualCluster(fp)
@@ -162,6 +201,8 @@ describe('POST /api/internal/kafka-topics', () => {
     expect(typeof json.id).toBe('string')
     expect(json.status).toBe('provisioning')
     expect(json.partitions).toBe(3)
+    expect(json.topicPrefix).toBe('dev-acme-')
+    expect(json.fullTopicName).toBe('dev-acme-orders')
 
     const topic = fp.collections['kafka-topics'].find((d) => d.id === json.id)
     expect(topic).toBeDefined()
@@ -170,7 +211,21 @@ describe('POST /api/internal/kafka-topics', () => {
     expect(topic?.environment).toBe('dev')
     expect(topic?.replicationFactor).toBe(3)
     expect(topic?.approvalRequired).toBe(false)
+    expect(topic?.fullTopicName).toBe('dev-acme-orders')
     expect(topic?.tags).toEqual([{ tag: 'owner:team-payments' }])
+  })
+
+  it('resolves ownership and topicPrefix through a legacy application-owned cluster', async () => {
+    const fp = new FakePayload()
+    seedApplication(fp, { id: 'app-1', workspace: 'ws-1' })
+    seedVirtualCluster(fp, { workspace: undefined, application: 'app-1', topicPrefix: 'legacy-' })
+    vi.mocked(getPayload).mockResolvedValue(p(fp))
+
+    const res = await POST(req('test-api-key', validBody()))
+    expect(res.status).toBe(201)
+    const json = await res.json()
+    expect(json.topicPrefix).toBe('legacy-')
+    expect(json.fullTopicName).toBe('legacy-orders')
   })
 
   it('honours custom partitions, retentionMs, and environment', async () => {

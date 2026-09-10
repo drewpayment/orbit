@@ -133,6 +133,7 @@ func (a *KafkaTopicProvision) Execute(ctx context.Context, rc scaffolder.ActionR
 	provisionOutput, err := a.provisioner.ProvisionTopic(ctx, activities.KafkaTopicProvisionInput{
 		TopicID:           doc.ID,
 		VirtualClusterID:  in.VirtualClusterID,
+		TopicPrefix:       doc.TopicPrefix,
 		TopicName:         in.Name,
 		Partitions:        in.Partitions,
 		ReplicationFactor: kafkaTopicDefaultReplicationFactor,

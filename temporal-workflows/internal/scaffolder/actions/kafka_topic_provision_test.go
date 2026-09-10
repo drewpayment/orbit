@@ -60,7 +60,7 @@ func (f *fakeKafkaProvisioner) UpdateTopicStatus(_ context.Context, input activi
 // --- tests ---------------------------------------------------------------------
 
 func TestKafkaTopicProvision_Execute_Success(t *testing.T) {
-	topics := &fakeKafkaTopicClient{doc: services.KafkaTopicDoc{ID: "topic-1", Status: "provisioning"}}
+	topics := &fakeKafkaTopicClient{doc: services.KafkaTopicDoc{ID: "topic-1", Status: "provisioning", TopicPrefix: "dev.acme."}}
 	provisioner := &fakeKafkaProvisioner{provisionOut: &activities.KafkaTopicProvisionOutput{
 		TopicID:      "topic-1",
 		PhysicalName: "dev.acme.orders",
@@ -89,6 +89,7 @@ func TestKafkaTopicProvision_Execute_Success(t *testing.T) {
 
 	assert.Equal(t, "topic-1", provisioner.gotProvisionInput.TopicID)
 	assert.Equal(t, "vc-1", provisioner.gotProvisionInput.VirtualClusterID)
+	assert.Equal(t, "dev.acme.", provisioner.gotProvisionInput.TopicPrefix)
 	assert.Equal(t, "orders", provisioner.gotProvisionInput.TopicName)
 	assert.Equal(t, 3, provisioner.gotProvisionInput.Partitions)
 
@@ -96,6 +97,41 @@ func TestKafkaTopicProvision_Execute_Success(t *testing.T) {
 	require.Len(t, provisioner.updateCalls, 1)
 	assert.Equal(t, "active", provisioner.updateCalls[0].Status)
 	assert.Equal(t, "dev.acme.orders", provisioner.updateCalls[0].PhysicalName)
+}
+
+// fakeKafkaProvisionerPrefixAware computes PhysicalName the same way the
+// real ProvisionTopic does (TopicPrefix + TopicName), so tests can assert
+// the action threads the virtual cluster's topicPrefix through correctly
+// rather than just echoing a canned output.
+type fakeKafkaProvisionerPrefixAware struct {
+	updateCalls []activities.KafkaUpdateTopicStatusInput
+}
+
+func (f *fakeKafkaProvisionerPrefixAware) ProvisionTopic(_ context.Context, input activities.KafkaTopicProvisionInput) (*activities.KafkaTopicProvisionOutput, error) {
+	return &activities.KafkaTopicProvisionOutput{
+		TopicID:      input.TopicID,
+		PhysicalName: input.TopicPrefix + input.TopicName,
+	}, nil
+}
+
+func (f *fakeKafkaProvisionerPrefixAware) UpdateTopicStatus(_ context.Context, input activities.KafkaUpdateTopicStatusInput) error {
+	f.updateCalls = append(f.updateCalls, input)
+	return nil
+}
+
+func TestKafkaTopicProvision_Execute_PhysicalNameUsesTopicPrefix(t *testing.T) {
+	topics := &fakeKafkaTopicClient{doc: services.KafkaTopicDoc{ID: "topic-1", Status: "provisioning", TopicPrefix: "acme-dev-"}}
+	provisioner := &fakeKafkaProvisionerPrefixAware{}
+	a := NewKafkaTopicProvision(topics, provisioner)
+
+	raw, err := a.Execute(context.Background(), runCtx(), json.RawMessage(`{"name":"orders","virtualClusterId":"vc-1","owner":"team-payments"}`))
+	require.NoError(t, err)
+
+	var out kafkaTopicProvisionOutput
+	require.NoError(t, json.Unmarshal(raw, &out))
+	assert.Equal(t, "acme-dev-orders", out.PhysicalName)
+	require.Len(t, provisioner.updateCalls, 1)
+	assert.Equal(t, "acme-dev-orders", provisioner.updateCalls[0].PhysicalName)
 }
 
 func TestKafkaTopicProvision_Execute_CustomPartitionsAndRetention(t *testing.T) {
