@@ -1,0 +1,541 @@
+[
+  {
+    "name": "catalog:entity:register",
+    "family": "catalog",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "catalog:entity:register input",
+      "type": "object",
+      "properties": {
+        "workspaceId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Workspace the entity belongs to."
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Catalog entity kind, e.g. \"app\"."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Entity display name."
+        },
+        "owner": {
+          "type": "string",
+          "description": "Owning team or user."
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "title",
+              "url"
+            ],
+            "additionalProperties": false
+          },
+          "description": "Links shown on the entity's catalog page."
+        },
+        "sourceType": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Producer kind, e.g. \"scaffolder-run\"."
+        },
+        "sourceId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Identifies the specific producer, e.g. the run id."
+        }
+      },
+      "required": [
+        "workspaceId",
+        "kind",
+        "name",
+        "sourceType",
+        "sourceId"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "catalog:entity:register output",
+      "type": "object",
+      "properties": {
+        "entityId": {
+          "type": "string",
+          "description": "Id of the registered catalog entity."
+        }
+      },
+      "required": [
+        "entityId"
+      ],
+      "additionalProperties": false
+    },
+    "supportsPlan": true
+  },
+  {
+    "name": "debug:log",
+    "family": "debug",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "debug:log input",
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Text to write to the run log."
+        },
+        "level": {
+          "type": "string",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
+          "default": "info",
+          "description": "Log level."
+        },
+        "data": {
+          "type": "object",
+          "description": "Structured fields logged alongside the message.",
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "debug:log output",
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "The message that was logged."
+        },
+        "level": {
+          "type": "string",
+          "description": "The level it was logged at."
+        }
+      },
+      "required": [
+        "message",
+        "level"
+      ],
+      "additionalProperties": false
+    },
+    "supportsPlan": true
+  },
+  {
+    "name": "fetch:git",
+    "family": "fetch",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "fetch:git input",
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(https?://|ssh://|[A-Za-z0-9_][A-Za-z0-9_.-]*@[A-Za-z0-9_.-]+:).+$",
+          "description": "Git remote URL to clone: http(s)://, ssh://, or user@host:path form. file://, ext:: and bare local paths are refused."
+        },
+        "ref": {
+          "type": "string",
+          "description": "Branch, tag or commit to check out. Defaults to the remote's default branch."
+        },
+        "path": {
+          "type": "string",
+          "description": "Subdirectory, relative to the run's work directory, to clone into. Defaults to a name derived from `url`."
+        },
+        "installationId": {
+          "type": "string",
+          "description": "GitHub App installation id used to obtain a token, for a private repository. Omit for a public clone."
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "fetch:git output",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Absolute path where the repository was cloned."
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "supportsPlan": true
+  },
+  {
+    "name": "fs:render",
+    "family": "fs",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "fs:render input",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Directory to render in place, inside the run's work directory — file/dir names and content are substituted using `values`. Typically a prior step's `path` or `checkout` output."
+        },
+        "values": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Template variables available as {{.KEY}} (and, for an exact KEY match, bare {{KEY}})."
+        }
+      },
+      "required": [
+        "path",
+        "values"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "fs:render output",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "The rendered directory (same as the input `path`)."
+        },
+        "skippedFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Absolute paths of files left unmodified because they could not be rendered as a template."
+        }
+      },
+      "required": [
+        "path",
+        "skippedFiles"
+      ],
+      "additionalProperties": false
+    },
+    "supportsPlan": true
+  },
+  {
+    "name": "git:push",
+    "family": "git",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "git:push input",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Directory to push, inside the run's work directory. Initialized with `git init` if it has no .git directory yet."
+        },
+        "repoUrl": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(https?://|ssh://|[A-Za-z0-9_][A-Za-z0-9_.-]*@[A-Za-z0-9_.-]+:).+$",
+          "description": "Remote URL to push to: http(s)://, ssh://, or user@host:path form. file://, ext:: and bare local paths are refused."
+        },
+        "branch": {
+          "type": "string",
+          "default": "main",
+          "description": "Remote branch to push HEAD to."
+        },
+        "commitMessage": {
+          "type": "string",
+          "default": "Initial commit from template",
+          "description": "Commit message for the staged changes."
+        },
+        "installationId": {
+          "type": "string",
+          "description": "GitHub App installation id used to obtain a token. Omit for an unauthenticated push."
+        }
+      },
+      "required": [
+        "path",
+        "repoUrl"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "git:push output",
+      "type": "object",
+      "properties": {
+        "repoUrl": {
+          "type": "string",
+          "description": "The remote that was pushed to."
+        },
+        "branch": {
+          "type": "string",
+          "description": "The branch that was pushed."
+        }
+      },
+      "required": [
+        "repoUrl",
+        "branch"
+      ],
+      "additionalProperties": false
+    },
+    "supportsPlan": true
+  },
+  {
+    "name": "github:repo:create",
+    "family": "github",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "github:repo:create input",
+      "type": "object",
+      "properties": {
+        "org": {
+          "type": "string",
+          "minLength": 1,
+          "description": "GitHub org or user that will own the new repository."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.-]+$",
+          "description": "Repository name."
+        },
+        "description": {
+          "type": "string",
+          "description": "Repository description."
+        },
+        "private": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether the new repository is private."
+        },
+        "installationId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "GitHub App installation id used to obtain a token for this call."
+        }
+      },
+      "required": [
+        "org",
+        "name",
+        "installationId"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "github:repo:create output",
+      "type": "object",
+      "properties": {
+        "repoUrl": {
+          "type": "string",
+          "description": "HTML URL of the created repository."
+        },
+        "repoName": {
+          "type": "string",
+          "description": "Name of the created repository."
+        }
+      },
+      "required": [
+        "repoUrl",
+        "repoName"
+      ],
+      "additionalProperties": false
+    },
+    "supportsPlan": true
+  },
+  {
+    "name": "github:repo:create-from-template",
+    "family": "github",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "github:repo:create-from-template input",
+      "type": "object",
+      "properties": {
+        "sourceOwner": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Owner of the GitHub template repository."
+        },
+        "sourceRepo": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Name of the GitHub template repository."
+        },
+        "targetOrg": {
+          "type": "string",
+          "minLength": 1,
+          "description": "GitHub org or user that will own the new repository."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.-]+$",
+          "description": "Name for the new repository."
+        },
+        "description": {
+          "type": "string",
+          "description": "Repository description."
+        },
+        "private": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether the new repository is private."
+        },
+        "installationId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "GitHub App installation id used to obtain a token for this call, and to clone the result."
+        }
+      },
+      "required": [
+        "sourceOwner",
+        "sourceRepo",
+        "targetOrg",
+        "name",
+        "installationId"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "github:repo:create-from-template output",
+      "type": "object",
+      "properties": {
+        "repoUrl": {
+          "type": "string",
+          "description": "HTML URL of the created repository."
+        },
+        "repoName": {
+          "type": "string",
+          "description": "Name of the created repository."
+        },
+        "checkout": {
+          "type": "string",
+          "description": "Absolute path, under the run's work directory, where the new repository was cloned for later render/push steps."
+        }
+      },
+      "required": [
+        "repoUrl",
+        "repoName",
+        "checkout"
+      ],
+      "additionalProperties": false
+    },
+    "supportsPlan": true
+  },
+  {
+    "name": "http:request",
+    "family": "http",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "http:request input",
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Absolute http or https URL. Private, loopback, link-local and metadata addresses are refused."
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "GET",
+            "HEAD",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ],
+          "default": "GET",
+          "description": "HTTP method. Case-insensitive."
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Request headers. Never put secrets here; reference a connection instead."
+        },
+        "body": {
+          "type": "string",
+          "description": "Request body, sent as-is."
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120,
+          "default": 30,
+          "description": "Total request timeout."
+        },
+        "maxResponseBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10485760,
+          "default": 1048576,
+          "description": "Response body cap. A longer body is truncated, not an error."
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "http:request output",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "integer",
+          "description": "HTTP status code."
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Response headers; repeated values are joined with \", \"."
+        },
+        "body": {
+          "type": "string",
+          "description": "Response body, capped at maxResponseBytes."
+        },
+        "truncated": {
+          "type": "boolean",
+          "description": "True when the body hit the cap."
+        }
+      },
+      "required": [
+        "status",
+        "headers",
+        "body",
+        "truncated"
+      ],
+      "additionalProperties": false
+    },
+    "supportsPlan": false
+  }
+]

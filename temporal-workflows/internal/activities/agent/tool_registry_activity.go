@@ -73,15 +73,15 @@ type RegisterPendingToolResult struct {
 }
 
 type ResolveAgentToolInput struct {
-	ID         string
+	ID string
 	// WorkspaceID is the resolving workflow's workspace. The orbit-www
 	// resolve route uses it to reject (409) resolutions whose workspace
 	// doesn't match the tool's owning workspace, so a signal can't be
 	// replayed against a tool in another tenant.
 	WorkspaceID string
-	Approved   bool
-	ResolvedBy string
-	Reason     string
+	Approved    bool
+	ResolvedBy  string
+	Reason      string
 
 	// Edited* fields are populated when the reviewer approved with edits
 	// (commit α). Empty values mean "leave the agent's proposal

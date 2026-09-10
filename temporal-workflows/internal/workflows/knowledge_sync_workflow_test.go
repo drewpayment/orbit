@@ -42,7 +42,7 @@ func (s *KnowledgeSyncWorkflowTestSuite) TestKnowledgeSyncWorkflow_Success() {
 		SpaceID:      "space-456",
 		TargetSystem: "confluence",
 		Credentials: map[string]string{
-			"api_key": "test-key",
+			"api_key":  "test-key",
 			"base_url": "https://test.atlassian.net",
 		},
 	}

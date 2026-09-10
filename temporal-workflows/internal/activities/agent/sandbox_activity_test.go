@@ -168,9 +168,9 @@ func TestHTTPRequest_AllowlistEnforced(t *testing.T) {
 
 func TestParseGitHubURL(t *testing.T) {
 	cases := []struct {
-		in           string
-		owner, repo  string
-		ok           bool
+		in          string
+		owner, repo string
+		ok          bool
 	}{
 		{"https://github.com/drewpayment/orbit", "drewpayment", "orbit", true},
 		{"https://github.com/drewpayment/orbit.git", "drewpayment", "orbit", true},

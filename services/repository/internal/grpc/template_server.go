@@ -2,11 +2,13 @@ package grpc
 
 import (
 	"context"
+	"errors"
 
 	"connectrpc.com/connect"
 
 	templatev1 "github.com/drewpayment/orbit/proto/gen/go/idp/template/v1"
 	"github.com/drewpayment/orbit/proto/gen/go/idp/template/v1/templatev1connect"
+	"github.com/drewpayment/orbit/temporal-workflows/pkg/types"
 )
 
 // TemporalClientInterface defines the interface for Temporal workflow operations
@@ -15,6 +17,32 @@ type TemporalClientInterface interface {
 	QueryWorkflow(ctx context.Context, workflowID, queryType string) (interface{}, error)
 	CancelWorkflow(ctx context.Context, workflowID string) error
 }
+
+// ScaffolderTemporalClient adds the v2 engine's entry points. It is a separate
+// interface, checked at call time, so the v1 handlers and their existing tests
+// keep working with a client that only implements TemporalClientInterface.
+//
+// Both methods are typed (rather than v1's interface{} + map decoding) because
+// the workflow input and the progress snapshot have fixed shapes, mirrored in
+// temporal-workflows/pkg/types for exactly this cross-module use.
+type ScaffolderTemporalClient interface {
+	StartScaffolderWorkflow(ctx context.Context, in types.ScaffolderWorkflowInput) (string, error)
+	QueryScaffolderProgress(ctx context.Context, workflowID string) (*types.ScaffolderProgress, error)
+	// ScaffolderRunWorkspace returns the workspace a run was started for,
+	// read from the workflow's memo. GetRunProgress and CancelRun take only a
+	// workflow id, so this is the only way to scope them to a tenant.
+	// It returns ErrScaffolderRunNotFound for an unknown or expired run.
+	ScaffolderRunWorkspace(ctx context.Context, workflowID string) (string, error)
+}
+
+// ErrScaffolderRunNotFound is returned when a workflow id does not resolve, so
+// the handlers can answer NotFound rather than Internal.
+var ErrScaffolderRunNotFound = errors.New("scaffolder run not found")
+
+// ErrScaffolderRunAlreadyDispatched is returned when a run id has already been
+// dispatched. One ActionRun maps to one workflow for its whole life, so this is
+// a caller error (AlreadyExists), not a platform failure.
+var ErrScaffolderRunAlreadyDispatched = errors.New("scaffolder run has already been dispatched")
 
 // PayloadClientInterface defines the interface for Payload CMS operations
 type PayloadClientInterface interface {
@@ -40,16 +68,41 @@ type InstallationData struct {
 // TemplateServer implements the TemplateService Connect/gRPC server
 type TemplateServer struct {
 	templatev1connect.UnimplementedTemplateServiceHandler
-	temporalClient TemporalClientInterface
-	payloadClient  PayloadClientInterface
+	temporalClient   TemporalClientInterface
+	payloadClient    PayloadClientInterface
+	definitionClient TemplateDefinitionClientInterface
+	actionRunClient  ActionRunClientInterface
+}
+
+// TemplateServerOption configures optional collaborators. New dependencies are
+// added this way so the v1 call sites and their tests keep compiling.
+type TemplateServerOption func(*TemplateServer)
+
+// WithTemplateDefinitionClient supplies the reader StartScaffolderRun uses to
+// fetch a stored v2 definition. Without it, StartScaffolderRun answers
+// FailedPrecondition rather than starting a run with no definition.
+func WithTemplateDefinitionClient(c TemplateDefinitionClientInterface) TemplateServerOption {
+	return func(s *TemplateServer) { s.definitionClient = c }
+}
+
+// WithActionRunClient supplies the reader StartScaffolderRun uses to prove a
+// run belongs to the caller's workspace and to seed the run's user/workspace
+// expression context. Without it, StartScaffolderRun answers
+// FailedPrecondition rather than dispatching a run it cannot vouch for.
+func WithActionRunClient(c ActionRunClientInterface) TemplateServerOption {
+	return func(s *TemplateServer) { s.actionRunClient = c }
 }
 
 // NewTemplateServer creates a new TemplateServer instance
-func NewTemplateServer(temporalClient TemporalClientInterface, payloadClient PayloadClientInterface) *TemplateServer {
-	return &TemplateServer{
+func NewTemplateServer(temporalClient TemporalClientInterface, payloadClient PayloadClientInterface, opts ...TemplateServerOption) *TemplateServer {
+	s := &TemplateServer{
 		temporalClient: temporalClient,
 		payloadClient:  payloadClient,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // StartInstantiation initiates a new template instantiation workflow

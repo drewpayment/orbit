@@ -14,11 +14,11 @@ import (
 
 // mockLaunchClient implements LaunchClientInterface for testing.
 type mockLaunchClient struct {
-	startWorkflowFn     func(ctx context.Context, input *StartLaunchInput) (string, error)
-	queryProgressFn     func(ctx context.Context, workflowID string) (*LaunchProgressResult, error)
-	signalApprovalFn    func(ctx context.Context, workflowID string, approved bool, approvedBy, notes string) error
-	signalDeorbitFn     func(ctx context.Context, workflowID string, requestedBy, reason string) error
-	signalAbortFn       func(ctx context.Context, workflowID string, requestedBy string) error
+	startWorkflowFn  func(ctx context.Context, input *StartLaunchInput) (string, error)
+	queryProgressFn  func(ctx context.Context, workflowID string) (*LaunchProgressResult, error)
+	signalApprovalFn func(ctx context.Context, workflowID string, approved bool, approvedBy, notes string) error
+	signalDeorbitFn  func(ctx context.Context, workflowID string, requestedBy, reason string) error
+	signalAbortFn    func(ctx context.Context, workflowID string, requestedBy string) error
 }
 
 func (m *mockLaunchClient) StartLaunchWorkflow(ctx context.Context, input *StartLaunchInput) (string, error) {

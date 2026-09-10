@@ -15,11 +15,11 @@ import (
 )
 
 // TestInstantiatePattern_HappyPath drives the full Phase-3 dispatch:
-//   1. agent calls instantiate_pattern with valid parameters
-//   2. workflow fetches the pattern, creates a row, transitions through
-//      validating → provisioning → active
-//   3. expanded shell primitive runs and captures stdout into outputs
-//   4. final UpdateStatus(active, outputs) lands on the row
+//  1. agent calls instantiate_pattern with valid parameters
+//  2. workflow fetches the pattern, creates a row, transitions through
+//     validating → provisioning → active
+//  3. expanded shell primitive runs and captures stdout into outputs
+//  4. final UpdateStatus(active, outputs) lands on the row
 func TestInstantiatePattern_HappyPath(t *testing.T) {
 	suite := &testsuite.WorkflowTestSuite{}
 	env := suite.NewTestWorkflowEnvironment()

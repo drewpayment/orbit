@@ -451,6 +451,10 @@ services:
       - TEMPLATE_WORK_DIR=/tmp/orbit-templates
       - ORBIT_SVC_AUTH_SECRET=${ORBIT_SVC_AUTH_SECRET:?ORBIT_SVC_AUTH_SECRET is required — see DEV_SETUP.md}
       - ORBIT_SVC_AUTH_ENFORCE=${ORBIT_SVC_AUTH_ENFORCE:-true}
+      # StartScaffolderRun reads the stored v2 template definition from
+      # orbit-www's internal API; without the key that RPC is unavailable.
+      - ORBIT_API_URL=${ORBIT_API_URL:-http://host.docker.internal:3000}
+      - ORBIT_INTERNAL_API_KEY=${ORBIT_INTERNAL_API_KEY:?ORBIT_INTERNAL_API_KEY is required — see DEV_SETUP.md}
     depends_on:
       temporal-server:
         condition: service_healthy

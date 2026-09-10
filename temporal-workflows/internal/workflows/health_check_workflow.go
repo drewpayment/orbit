@@ -137,7 +137,7 @@ func HealthCheckWorkflow(ctx workflow.Context, input HealthCheckWorkflowInput) e
 			return workflow.NewContinueAsNewError(ctx, HealthCheckWorkflow, HealthCheckWorkflowInput{
 				AppID:           input.AppID,
 				HealthConfig:    input.HealthConfig,
-				ChecksPerformed: 0, // Reset counter
+				ChecksPerformed: 0,          // Reset counter
 				LastResult:      lastResult, // Preserve last result for query continuity
 			})
 		}

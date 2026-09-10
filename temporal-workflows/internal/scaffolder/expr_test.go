@@ -2,6 +2,8 @@ package scaffolder
 
 import (
 	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -323,4 +325,81 @@ func TestSingleExpression(t *testing.T) {
 
 	_, err = SingleExpression("${{ parameters.name")
 	assert.ErrorContains(t, err, "unterminated")
+}
+
+// TestUnresolvedPathError_CarriesTheFailingPath pins the contract the dry-run
+// planner depends on: a missing reference must say WHICH path failed, so a
+// missing `steps.*` (expected while previewing) is distinguishable from a
+// missing `parameters.*` (a real authoring error).
+func TestUnresolvedPathError_CarriesTheFailingPath(t *testing.T) {
+	ctx := Ctx{
+		Parameters: map[string]any{"name": "orders", "nested": map[string]any{"a": 1}},
+		Steps:      map[string]StepOutput{"done": {Output: map[string]any{"url": "u"}}},
+		User:       map[string]any{},
+		Workspace:  map[string]any{},
+		Template:   map[string]any{},
+	}
+
+	tests := []struct {
+		name          string
+		expr          string
+		wantNamespace string
+		wantPath      string
+		wantTyped     bool
+	}{
+		{name: "missing step output", expr: `${{ steps.later.output.path }}`, wantTyped: true, wantNamespace: "steps", wantPath: "steps.later.output.path"},
+		{name: "missing key on a step that ran", expr: `${{ steps.done.output.nope }}`, wantTyped: true, wantNamespace: "steps", wantPath: "steps.done.output.nope"},
+		{name: "missing parameter", expr: `${{ parameters.nope }}`, wantTyped: true, wantNamespace: "parameters", wantPath: "parameters.nope"},
+		{name: "wrong nested parameter path", expr: `${{ parameters.nested.b }}`, wantTyped: true, wantNamespace: "parameters", wantPath: "parameters.nested.b"},
+		{name: "traversal into a scalar", expr: `${{ parameters.name.deeper }}`, wantTyped: true, wantNamespace: "parameters", wantPath: "parameters.name.deeper"},
+		// Structural errors are NOT unresolved paths: they are malformed
+		// references, and default() cannot mask them either.
+		{name: "unknown namespace", expr: `${{ nope.x }}`, wantTyped: false},
+		{name: "malformed steps reference", expr: `${{ steps.done.nope.x }}`, wantTyped: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Resolve(ctx, tt.expr)
+			require.Error(t, err)
+
+			var upe *UnresolvedPathError
+			if !tt.wantTyped {
+				require.False(t, errors.As(err, &upe), "structural error must not be an UnresolvedPathError: %v", err)
+				return
+			}
+			require.True(t, errors.As(err, &upe), "expected an UnresolvedPathError, got %T: %v", err, err)
+			assert.Equal(t, tt.wantNamespace, upe.Namespace())
+			assert.Equal(t, tt.wantPath, strings.Join(upe.Path, "."))
+		})
+	}
+}
+
+// The typed error must survive the wrapping every caller applies, or the
+// planner's errors.As check silently stops matching.
+func TestUnresolvedPathError_SurvivesWrapping(t *testing.T) {
+	ctx := Ctx{Parameters: map[string]any{}, Steps: map[string]StepOutput{}}
+
+	var upe *UnresolvedPathError
+
+	// ResolveJSON wraps with the failing field path.
+	_, err := ResolveJSON(ctx, json.RawMessage(`{"outer":{"inner":"${{ steps.a.output.b }}"}}`))
+	require.Error(t, err)
+	require.True(t, errors.As(err, &upe), "ResolveJSON lost the typed error: %v", err)
+	assert.Equal(t, "steps", upe.Namespace())
+
+	// EvalBool wraps with an "if:" prefix.
+	_, err = EvalBool(ctx, `${{ steps.a.output.b }}`)
+	require.Error(t, err)
+	require.True(t, errors.As(err, &upe), "EvalBool lost the typed error: %v", err)
+	assert.Equal(t, "steps", upe.Namespace())
+}
+
+// A default() makes a missing path resolve, so no error is produced at all —
+// including when the argument is a quoted string containing escapes.
+func TestUnresolvedPathError_NotRaisedWhenDefaultApplies(t *testing.T) {
+	ctx := Ctx{Parameters: map[string]any{}, Steps: map[string]StepOutput{}}
+	got, err := Resolve(ctx, `${{ steps.a.output.b | default("z") }}`)
+	require.NoError(t, err)
+	assert.Equal(t, "z", got)
 }

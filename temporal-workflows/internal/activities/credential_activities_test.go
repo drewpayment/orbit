@@ -18,12 +18,12 @@ func testLogger() *slog.Logger {
 
 // mockBifrostClient implements the BifrostCredentialClient interface for testing
 type mockBifrostClient struct {
-	upsertCalled   bool
-	upsertConfig   *gatewayv1.CredentialConfig
-	upsertErr      error
-	revokeCalled   bool
-	revokeID       string
-	revokeErr      error
+	upsertCalled bool
+	upsertConfig *gatewayv1.CredentialConfig
+	upsertErr    error
+	revokeCalled bool
+	revokeID     string
+	revokeErr    error
 }
 
 func (m *mockBifrostClient) UpsertCredential(ctx context.Context, cred *gatewayv1.CredentialConfig) error {

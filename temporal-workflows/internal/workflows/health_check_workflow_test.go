@@ -263,7 +263,7 @@ func TestHealthCheckWorkflow_QueryBeforeFirstCheck(t *testing.T) {
 
 	// Delay the activity so query happens before first check
 	env.OnActivity(stubPerformHealthCheck, mock.Anything, mock.Anything).
-		After(200 * time.Millisecond).
+		After(200*time.Millisecond).
 		Return(activities.HealthCheckResult{
 			Status:       "healthy",
 			StatusCode:   200,

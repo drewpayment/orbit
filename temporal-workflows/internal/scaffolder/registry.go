@@ -192,3 +192,19 @@ func schemaPropertyNames(schema json.RawMessage) ([]string, error) {
 	sort.Strings(out)
 	return out, nil
 }
+
+// ExportDescriptorsJSON renders a registry built from actions as the stable,
+// indented JSON document the repository service embeds to serve ListActions.
+//
+// It validates the schemas first: exporting a broken schema would ship the bug
+// to every consumer of the descriptor file.
+func ExportDescriptorsJSON(actions []Action) ([]byte, error) {
+	r := NewRegistry(actions...)
+	if err := r.ValidateSchemas(); err != nil {
+		return nil, err
+	}
+	// Descriptors() is already sorted by name, and the schema bytes come
+	// straight from each action's embedded file, so the output is stable for a
+	// given set of actions.
+	return json.MarshalIndent(r.Descriptors(), "", "  ")
+}

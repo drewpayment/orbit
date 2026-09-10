@@ -159,10 +159,10 @@ func TestApproveWithEdits_RejectsBuiltInNameCollision(t *testing.T) {
 			{
 				ToolCalls: []providers.ToolCall{
 					{ID: "tc-reg", Name: ToolRegisterTool, Arguments: map[string]any{
-						"name":          "deploy_safe",
-						"description":   "x",
-						"template_kind": "shell",
-						"template_json": `{"command":"echo {{thing}}"}`,
+						"name":              "deploy_safe",
+						"description":       "x",
+						"template_kind":     "shell",
+						"template_json":     `{"command":"echo {{thing}}"}`,
 						"input_schema_json": `{"type":"object","properties":{"thing":{"type":"string"}}}`,
 					}},
 				},

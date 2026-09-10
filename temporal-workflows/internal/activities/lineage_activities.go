@@ -31,9 +31,9 @@ type ProcessActivityBatchInput struct {
 
 // ProcessActivityBatchOutput is the output of processing activity records
 type ProcessActivityBatchOutput struct {
-	ProcessedCount int    `json:"processedCount"`
-	FailedCount    int    `json:"failedCount"`
-	NewEdgesCount  int    `json:"newEdgesCount"`
+	ProcessedCount int `json:"processedCount"`
+	FailedCount    int `json:"failedCount"`
+	NewEdgesCount  int `json:"newEdgesCount"`
 }
 
 // ResetStale24hMetricsInput is the input for resetting stale 24h metrics
@@ -218,12 +218,12 @@ func (a *LineageActivitiesImpl) processRecord(ctx context.Context, record Client
 		existingMessagesLast24h := getIntValue(existingEdge, "messagesLast24h")
 
 		updateData := map[string]any{
-			"bytesAllTime":       existingBytesTotal + record.Bytes,
-			"messagesAllTime":    existingMessagesTotal + record.MessageCount,
-			"bytesLast24h":     existingBytesLast24h + record.Bytes,
-			"messagesLast24h":  existingMessagesLast24h + record.MessageCount,
-			"lastSeen":         now,
-			"isActive":         true,
+			"bytesAllTime":    existingBytesTotal + record.Bytes,
+			"messagesAllTime": existingMessagesTotal + record.MessageCount,
+			"bytesLast24h":    existingBytesLast24h + record.Bytes,
+			"messagesLast24h": existingMessagesLast24h + record.MessageCount,
+			"lastSeen":        now,
+			"isActive":        true,
 		}
 
 		// Add consumer group if present
@@ -241,8 +241,8 @@ func (a *LineageActivitiesImpl) processRecord(ctx context.Context, record Client
 			"topic":                topicID,
 			"direction":            record.Direction,
 			"workspace":            workspaceID,
-			"bytesAllTime":           record.Bytes,
-			"messagesAllTime":        record.MessageCount,
+			"bytesAllTime":         record.Bytes,
+			"messagesAllTime":      record.MessageCount,
 			"bytesLast24h":         record.Bytes,
 			"messagesLast24h":      record.MessageCount,
 			"lastSeen":             now,
@@ -511,8 +511,8 @@ func (a *LineageActivitiesImpl) aggregateTopicSnapshot(topicID, workspaceID, dat
 		if direction == "produce" {
 			producers = append(producers, map[string]any{
 				"serviceAccountId": serviceAccountID,
-				"bytesAllTime":       bytesAllTime,
-				"messagesAllTime":    messagesAllTime,
+				"bytesAllTime":     bytesAllTime,
+				"messagesAllTime":  messagesAllTime,
 			})
 			totalBytesIn += bytesAllTime
 			totalMessagesIn += messagesAllTime
@@ -526,8 +526,8 @@ func (a *LineageActivitiesImpl) aggregateTopicSnapshot(topicID, workspaceID, dat
 			consumers = append(consumers, map[string]any{
 				"serviceAccountId": serviceAccountID,
 				"consumerGroupId":  consumerGroupID,
-				"bytesAllTime":       bytesAllTime,
-				"messagesAllTime":    messagesAllTime,
+				"bytesAllTime":     bytesAllTime,
+				"messagesAllTime":  messagesAllTime,
 			})
 			totalBytesOut += bytesAllTime
 			totalMessagesOut += messagesAllTime

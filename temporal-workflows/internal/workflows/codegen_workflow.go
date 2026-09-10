@@ -29,7 +29,7 @@ var (
 type CodeGenerationWorkflowInput struct {
 	WorkspaceID   string
 	SchemaID      string
-	SchemaType    string   // "protobuf", "openapi", "graphql"
+	SchemaType    string // "protobuf", "openapi", "graphql"
 	SchemaContent string
 	Languages     []string // ["go", "typescript", "python", "java"]
 }

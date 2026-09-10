@@ -146,10 +146,10 @@ type AgentToolEdits struct {
 // populated only when an edited row was written. EditedFields lists which
 // fields the route observed actually changed.
 type ResolveResult struct {
-	ID                  string   `json:"id"`
-	Status              string   `json:"status"`
-	AgentToolVersionID  string   `json:"agentToolVersionId,omitempty"`
-	EditedFields        []string `json:"editedFields,omitempty"`
+	ID                 string   `json:"id"`
+	Status             string   `json:"status"`
+	AgentToolVersionID string   `json:"agentToolVersionId,omitempty"`
+	EditedFields       []string `json:"editedFields,omitempty"`
 }
 
 // Resolve flips a pending row to approved or rejected. When edits is

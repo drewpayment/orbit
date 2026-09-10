@@ -20,9 +20,9 @@ type SetVirtualClustersReadOnlyInput struct {
 
 // SetVirtualClustersReadOnlyResult is the result of setting virtual clusters to read-only
 type SetVirtualClustersReadOnlyResult struct {
-	Success                   bool     `json:"success"`
-	UpdatedVirtualClusterIDs  []string `json:"updatedVirtualClusterIds"`
-	Error                     string   `json:"error,omitempty"`
+	Success                  bool     `json:"success"`
+	UpdatedVirtualClusterIDs []string `json:"updatedVirtualClusterIds"`
+	Error                    string   `json:"error,omitempty"`
 }
 
 // CheckApplicationStatusInput is the input for checking application status

@@ -75,13 +75,13 @@ type AnalyzeRepositoryInput struct {
 }
 
 type AnalyzeRepositoryResult struct {
-	Detected        bool                     `json:"detected"`
-	Language        string                   `json:"language"`
-	LanguageVersion string                   `json:"languageVersion"`
-	Framework       string                   `json:"framework"`
-	BuildCommand    string                   `json:"buildCommand"`
-	StartCommand    string                   `json:"startCommand"`
-	Error           string                   `json:"error,omitempty"`
+	Detected        bool                      `json:"detected"`
+	Language        string                    `json:"language"`
+	LanguageVersion string                    `json:"languageVersion"`
+	Framework       string                    `json:"framework"`
+	BuildCommand    string                    `json:"buildCommand"`
+	StartCommand    string                    `json:"startCommand"`
+	Error           string                    `json:"error,omitempty"`
 	PackageManager  *types.PackageManagerInfo `json:"packageManager,omitempty"`
 }
 

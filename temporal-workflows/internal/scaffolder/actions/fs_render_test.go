@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/drewpayment/orbit/temporal-workflows/internal/scaffolder"
@@ -115,4 +116,48 @@ func TestCopyDir(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(dst, "nested", "a.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, "a", string(content))
+}
+
+// TestFSRender_PlanPreview_LeavesRenderedTreeBehind pins the contract the
+// dry-run dispatch activity depends on: PlanPreview must render into the
+// caller's directory (so the tree can be uploaded for the diff viewer) and
+// must leave the real work dir untouched.
+func TestFSRender_PlanPreview_LeavesRenderedTreeBehind(t *testing.T) {
+	workDir := t.TempDir()
+	src := filepath.Join(workDir, "repo")
+	require.NoError(t, os.MkdirAll(src, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(src, "README.md"), []byte("# {{ .serviceName }}"), 0o644))
+
+	dest := filepath.Join(t.TempDir(), "preview")
+	require.NoError(t, os.MkdirAll(dest, 0o755))
+
+	a := NewFSRender()
+	rc := scaffolder.NewActionRunContext(scaffolder.ActionRunContext{WorkDir: workDir})
+	input := json.RawMessage(`{"path":` + strconv.Quote(src) + `,"values":{"serviceName":"orders"}}`)
+
+	changes, err := a.PlanPreview(context.Background(), rc, input, dest)
+	require.NoError(t, err)
+	require.NotEmpty(t, changes)
+
+	rendered, err := os.ReadFile(filepath.Join(dest, "README.md"))
+	require.NoError(t, err)
+	assert.Equal(t, "# orders", string(rendered))
+
+	original, err := os.ReadFile(filepath.Join(src, "README.md"))
+	require.NoError(t, err)
+	assert.Equal(t, "# {{ .serviceName }}", string(original), "planning must not mutate the work dir")
+}
+
+func TestFSRender_PlanPreview_RequiresDestination(t *testing.T) {
+	workDir := t.TempDir()
+	src := filepath.Join(workDir, "repo")
+	require.NoError(t, os.MkdirAll(src, 0o755))
+
+	a := NewFSRender()
+	rc := scaffolder.NewActionRunContext(scaffolder.ActionRunContext{WorkDir: workDir})
+	input := json.RawMessage(`{"path":` + strconv.Quote(src) + `,"values":{"a":"b"}}`)
+
+	_, err := a.PlanPreview(context.Background(), rc, input, "  ")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "preview destination directory is required")
 }

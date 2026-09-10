@@ -59,7 +59,7 @@ func (a *FSRender) Execute(_ context.Context, rc scaffolder.ActionRunContext, in
 		return nil, err
 	}
 	if err := requireWithinWorkDir(rc.WorkDir, in.Path); err != nil {
-		return nil, fmt.Errorf("fs:render: %w", err)
+		return nil, fmt.Errorf("fs:render: %w: %v", scaffolder.ErrInvalidInput, err)
 	}
 	rc.Heartbeat("fs:render", in.Path)
 
@@ -78,27 +78,37 @@ func (a *FSRender) Execute(_ context.Context, rc scaffolder.ActionRunContext, in
 
 // Plan renders a throwaway copy of path and reports one PlannedChange per
 // file whose content or name would change, without touching path itself.
-func (a *FSRender) Plan(_ context.Context, rc scaffolder.ActionRunContext, input json.RawMessage) ([]scaffolder.PlannedChange, error) {
-	in, err := parseFSRenderInput(input)
-	if err != nil {
-		return nil, err
-	}
-	if err := requireWithinWorkDir(rc.WorkDir, in.Path); err != nil {
-		return nil, fmt.Errorf("fs:render: %w", err)
-	}
-
+func (a *FSRender) Plan(ctx context.Context, rc scaffolder.ActionRunContext, input json.RawMessage) ([]scaffolder.PlannedChange, error) {
 	tempCopy, err := os.MkdirTemp("", "orbit-fs-render-plan-*")
 	if err != nil {
 		return nil, fmt.Errorf("fs:render: create temp copy: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(tempCopy) }()
 
-	if err := copyDir(in.Path, tempCopy); err != nil {
+	return a.PlanPreview(ctx, rc, input, tempCopy)
+}
+
+// PlanPreview implements scaffolder.PlanPreviewer: it renders a copy of path
+// into destDir, which the caller owns, so the rendered tree survives the call
+// and can be persisted for the dry-run diff viewer.
+func (a *FSRender) PlanPreview(_ context.Context, rc scaffolder.ActionRunContext, input json.RawMessage, destDir string) ([]scaffolder.PlannedChange, error) {
+	in, err := parseFSRenderInput(input)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireWithinWorkDir(rc.WorkDir, in.Path); err != nil {
+		return nil, fmt.Errorf("fs:render: %w: %v", scaffolder.ErrInvalidInput, err)
+	}
+	if strings.TrimSpace(destDir) == "" {
+		return nil, fmt.Errorf("fs:render: a preview destination directory is required")
+	}
+
+	if err := copyDir(in.Path, destDir); err != nil {
 		return nil, fmt.Errorf("fs:render: copy source for planning: %w", err)
 	}
 
-	rawPatterns := activities.LoadRawFilePatterns(tempCopy, rc.Logger)
-	res, err := templating.RenderDir(tempCopy, in.Values, rawPatterns, rc.Logger)
+	rawPatterns := activities.LoadRawFilePatterns(destDir, rc.Logger)
+	res, err := templating.RenderDir(destDir, in.Values, rawPatterns, rc.Logger)
 	if err != nil {
 		return nil, fmt.Errorf("fs:render: %w", err)
 	}
@@ -156,14 +166,14 @@ func parseFSRenderInput(raw json.RawMessage) (fsRenderInput, error) {
 	var in fsRenderInput
 	if len(strings.TrimSpace(string(raw))) > 0 {
 		if err := json.Unmarshal(raw, &in); err != nil {
-			return in, fmt.Errorf("fs:render: decode input: %w", err)
+			return in, fmt.Errorf("fs:render: %w: decode input: %v", scaffolder.ErrInvalidInput, err)
 		}
 	}
 	if strings.TrimSpace(in.Path) == "" {
-		return in, fmt.Errorf("fs:render: `path` is required")
+		return in, fmt.Errorf("fs:render: %w: `path` is required", scaffolder.ErrInvalidInput)
 	}
 	if len(in.Values) == 0 {
-		return in, fmt.Errorf("fs:render: `values` is required")
+		return in, fmt.Errorf("fs:render: %w: `values` is required", scaffolder.ErrInvalidInput)
 	}
 	return in, nil
 }

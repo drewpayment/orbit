@@ -40,3 +40,28 @@ func DefaultActions(deps Deps) []scaffolder.Action {
 
 	return out
 }
+
+// DescriptorActions returns every production action, including the ones
+// DefaultActions omits when their dependency is missing.
+//
+// It exists only to export the registry's descriptors (names and JSON
+// schemas), which are static per action and do not touch any dependency. The
+// returned actions are wired with nil deps and MUST NOT be executed: use
+// DefaultActions for anything that runs.
+//
+// The repository service serves ListActions from a JSON file generated off
+// this list, because temporal-workflows/internal/... is not importable across
+// the module boundary and depending on the whole worker module there would
+// drag in the Temporal SDK and minio for a set of static schemas.
+func DescriptorActions() []scaffolder.Action {
+	return []scaffolder.Action{
+		NewDebugLog(),
+		NewHTTPRequest(),
+		NewFSRender(),
+		NewFetchGit(nil),
+		NewGitPush(nil),
+		NewGitHubRepoCreate(nil, nil),
+		NewGitHubRepoCreateFromTemplate(nil, nil),
+		NewCatalogEntityRegister(nil),
+	}
+}

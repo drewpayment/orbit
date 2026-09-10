@@ -32,9 +32,9 @@ func (noopToolOutputSigniller) SignalToolOutput(context.Context, string, string,
 // http, repo inspect). They share one SandboxExecutor whose Backend()
 // determines whether commands run locally (dev) or in K8s (prod).
 type SandboxActivities struct {
-	executor      sandbox.SandboxExecutor
-	outputSignal  ToolOutputSigniller
-	logger        *slog.Logger
+	executor     sandbox.SandboxExecutor
+	outputSignal ToolOutputSigniller
+	logger       *slog.Logger
 
 	// MaxOutputBytes caps stdout/stderr returned to the model. Defaults to
 	// 16384. Output above this size is truncated with a notice appended.
@@ -87,21 +87,21 @@ type TeardownSandboxInput struct {
 
 // SandboxedShellInput runs one shell command inside the sandbox.
 type SandboxedShellInput struct {
-	WorkflowID string
-	RunID      string // populated by the workflow; needed to address signal-back when streaming output
-	CallID     string // tool call id; ties streaming output back to the right chat bubble
-	Command    string
-	WorkingDir string
-	EnvOverrides map[string]string
+	WorkflowID     string
+	RunID          string // populated by the workflow; needed to address signal-back when streaming output
+	CallID         string // tool call id; ties streaming output back to the right chat bubble
+	Command        string
+	WorkingDir     string
+	EnvOverrides   map[string]string
 	TimeoutSeconds int
 }
 
 type SandboxedShellResult struct {
-	ExitCode    int
-	Stdout      string
-	Stderr      string
-	DurationMs  int64
-	Truncated   bool
+	ExitCode   int
+	Stdout     string
+	Stderr     string
+	DurationMs int64
+	Truncated  bool
 }
 
 // --- activities ---

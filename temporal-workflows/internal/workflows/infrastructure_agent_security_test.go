@@ -260,11 +260,11 @@ func TestSecurity_RegisteredToolShellArgQuotingNeutralizesMetacharacters(t *test
 		func(_ context.Context, _ agentactivity.ListApprovedToolsInput) (agentactivity.ListApprovedToolsResult, error) {
 			return agentactivity.ListApprovedToolsResult{
 				Tools: []agentactivity.ApprovedAgentTool{{
-					ID:           "tool-1",
-					Name:         "greet",
-					Description:  "Greet someone",
-					TemplateKind: "shell",
-					TemplateJSON: `{"command":"echo hello {{name}}"}`,
+					ID:              "tool-1",
+					Name:            "greet",
+					Description:     "Greet someone",
+					TemplateKind:    "shell",
+					TemplateJSON:    `{"command":"echo hello {{name}}"}`,
 					InputSchemaJSON: `{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}`,
 				}},
 			}, nil

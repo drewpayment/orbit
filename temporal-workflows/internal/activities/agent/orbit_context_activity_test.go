@@ -9,12 +9,12 @@ import (
 )
 
 type fakeOrbitContextClient struct {
-	apps      []services.AppSummary
-	app       services.AppDetails
-	accounts  []services.CloudAccountSummary
-	listErr   error
-	getErr    error
-	acctsErr  error
+	apps                     []services.AppSummary
+	app                      services.AppDetails
+	accounts                 []services.CloudAccountSummary
+	listErr                  error
+	getErr                   error
+	acctsErr                 error
 	gotWorkspaceID, gotAppID string
 }
 
@@ -70,7 +70,7 @@ func TestOrbitGetApp_HappyPath(t *testing.T) {
 	fc := &fakeOrbitContextClient{
 		app: services.AppDetails{
 			ID: "a-1", Name: "checkout", Status: "active",
-			Repository: &services.AppRepository{URL: "https://github.com/x/y"},
+			Repository:   &services.AppRepository{URL: "https://github.com/x/y"},
 			HealthConfig: map[string]any{"url": "https://example.com/health"},
 		},
 	}

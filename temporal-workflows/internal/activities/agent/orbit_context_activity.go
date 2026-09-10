@@ -53,10 +53,10 @@ type OrbitListAppsResult struct {
 
 // OrbitApp is the wire-friendly form returned to the agent.
 type OrbitApp struct {
-	ID          string             `json:"id"`
-	Name        string             `json:"name"`
-	Description string             `json:"description"`
-	Status      string             `json:"status"`
+	ID          string              `json:"id"`
+	Name        string              `json:"name"`
+	Description string              `json:"description"`
+	Status      string              `json:"status"`
 	Repository  *OrbitAppRepository `json:"repository,omitempty"`
 }
 

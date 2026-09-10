@@ -48,12 +48,12 @@ type RepoInspectInput struct {
 
 // RepoInspectResult is what flows back to the agent.
 type RepoInspectResult struct {
-	Source      string                 // "github_api" | "shallow_clone"
+	Source      string // "github_api" | "shallow_clone"
 	Revision    string
-	TruncatedAt int                    // 0 if not truncated
+	TruncatedAt int // 0 if not truncated
 	Tree        []RepoTreeEntry
-	Files       map[string]string      // path -> content (truncated per-file)
-	CloneRef    string                 // sandbox path (only set when Source=="shallow_clone")
+	Files       map[string]string // path -> content (truncated per-file)
+	CloneRef    string            // sandbox path (only set when Source=="shallow_clone")
 }
 
 // RepoTreeEntry is one path in the tree listing.

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,7 +12,10 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/converter"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
@@ -35,6 +39,12 @@ type Config struct {
 	TemporalHost string
 	AuthSecret   []byte
 	AuthEnforce  bool
+	// OrbitAPIURL and OrbitInternalAPIKey let StartScaffolderRun read a stored
+	// v2 template definition from orbit-www's internal API. Without the key,
+	// the scaffolder RPCs answer FailedPrecondition instead of starting a run
+	// that could never authenticate.
+	OrbitAPIURL         string
+	OrbitInternalAPIKey string
 }
 
 func loadConfig() *Config {
@@ -61,12 +71,19 @@ func loadConfig() *Config {
 		log.Fatalf("FATAL: %v (set ORBIT_SVC_AUTH_SECRET; generate with `openssl rand -base64 48`)", err)
 	}
 
+	orbitAPIURL := os.Getenv("ORBIT_API_URL")
+	if orbitAPIURL == "" {
+		orbitAPIURL = "http://localhost:3000"
+	}
+
 	return &Config{
-		GRPCPort:     grpcPort,
-		HTTPPort:     httpPort,
-		TemporalHost: temporalHost,
-		AuthSecret:   authSecret,
-		AuthEnforce:  os.Getenv("ORBIT_SVC_AUTH_ENFORCE") != "false",
+		GRPCPort:            grpcPort,
+		HTTPPort:            httpPort,
+		TemporalHost:        temporalHost,
+		AuthSecret:          authSecret,
+		AuthEnforce:         os.Getenv("ORBIT_SVC_AUTH_ENFORCE") != "false",
+		OrbitAPIURL:         orbitAPIURL,
+		OrbitInternalAPIKey: os.Getenv("ORBIT_INTERNAL_API_KEY"),
 	}
 }
 
@@ -125,21 +142,21 @@ func (tc *TemporalClient) StartTemplateWorkflow(ctx context.Context, input inter
 	}
 
 	workflowInput := types.TemplateInstantiationInput{
-		TemplateID:       req.TemplateId,
-		WorkspaceID:      req.WorkspaceId,
-		TargetOrg:        req.TargetOrg,
-		RepositoryName:   req.RepositoryName,
-		Description:      req.Description,
-		IsPrivate:        req.IsPrivate,
-		Variables:        req.Variables,
-		UserID:           req.UserId,
+		TemplateID:     req.TemplateId,
+		WorkspaceID:    req.WorkspaceId,
+		TargetOrg:      req.TargetOrg,
+		RepositoryName: req.RepositoryName,
+		Description:    req.Description,
+		IsPrivate:      req.IsPrivate,
+		Variables:      req.Variables,
+		UserID:         req.UserId,
 		// Template source info from request
 		IsGitHubTemplate: req.IsGithubTemplate,
 		SourceRepoOwner:  req.SourceRepoOwner,
 		SourceRepoName:   req.SourceRepoName,
 		SourceRepoURL:    req.SourceRepoUrl,
 		// GitHub authentication
-		InstallationID:   req.GithubInstallationId,
+		InstallationID: req.GithubInstallationId,
 	}
 
 	workflowID := fmt.Sprintf("template-instantiation-%s-%d", req.RepositoryName, time.Now().Unix())
@@ -154,6 +171,101 @@ func (tc *TemporalClient) StartTemplateWorkflow(ctx context.Context, input inter
 	}
 
 	return we.GetID(), nil
+}
+
+// StartScaffolderWorkflow starts a v2 ScaffolderWorkflow.
+//
+// The workflow id is derived from the ActionRuns doc id, which orbit-www
+// creates before dispatching, so a retried dispatch of the same run reuses the
+// id instead of starting a second workflow against one run record.
+func (tc *TemporalClient) StartScaffolderWorkflow(ctx context.Context, in types.ScaffolderWorkflowInput) (string, error) {
+	workflowID := grpcserver.ScaffolderRunIDPrefix + in.RunID
+
+	we, err := tc.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: "orbit-workflows",
+		// The memo is what lets GetRunProgress and CancelRun scope themselves
+		// to a tenant: both RPCs carry only a workflow id, so the run's own
+		// workspace has to be readable without querying the workflow (which
+		// would work only while it is running).
+		Memo: map[string]interface{}{
+			scaffolderWorkspaceMemoKey: in.WorkspaceID,
+		},
+		// One ActionRun doc is dispatched exactly once, ever: a re-run is a
+		// new ActionRun, not a second dispatch of an old one. Rejecting a
+		// duplicate stops a re-used run id stamping a second workflow (and a
+		// second workspace memo) over the first.
+		//
+		// WorkflowExecutionErrorWhenAlreadyStarted must be set explicitly:
+		// it defaults to false, which would return the EXISTING run with a
+		// nil error and make the rejection silent.
+		WorkflowIDReusePolicy:                    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		WorkflowExecutionErrorWhenAlreadyStarted: true,
+	}, types.ScaffolderWorkflowName, in)
+	if err != nil {
+		var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
+		if errors.As(err, &alreadyStarted) {
+			return "", grpcserver.ErrScaffolderRunAlreadyDispatched
+		}
+		return "", fmt.Errorf("failed to start scaffolder workflow: %w", err)
+	}
+	return we.GetID(), nil
+}
+
+// isTemporalNotFound reports whether err means the workflow does not exist (or
+// has aged out of retention), so the handlers can answer NotFound instead of
+// Internal.
+func isTemporalNotFound(err error) bool {
+	var notFound *serviceerror.NotFound
+	return errors.As(err, &notFound)
+}
+
+// scaffolderWorkspaceMemoKey names the memo field carrying a run's workspace.
+const scaffolderWorkspaceMemoKey = "workspaceId"
+
+// ScaffolderRunWorkspace reads a run's workspace from its workflow memo.
+// DescribeWorkflowExecution answers for closed runs too, so progress and
+// cancel stay scoped after a run finishes.
+func (tc *TemporalClient) ScaffolderRunWorkspace(ctx context.Context, workflowID string) (string, error) {
+	desc, err := tc.client.DescribeWorkflowExecution(ctx, workflowID, "")
+	if err != nil {
+		if isTemporalNotFound(err) {
+			return "", grpcserver.ErrScaffolderRunNotFound
+		}
+		return "", fmt.Errorf("failed to describe scaffolder run: %w", err)
+	}
+
+	info := desc.GetWorkflowExecutionInfo()
+	if info == nil || info.GetMemo() == nil {
+		return "", nil
+	}
+	payload, ok := info.GetMemo().GetFields()[scaffolderWorkspaceMemoKey]
+	if !ok {
+		return "", nil
+	}
+
+	var workspaceID string
+	if err := converter.GetDefaultDataConverter().FromPayload(payload, &workspaceID); err != nil {
+		return "", fmt.Errorf("failed to decode scaffolder run workspace memo: %w", err)
+	}
+	return workspaceID, nil
+}
+
+// QueryScaffolderProgress queries a scaffolder run's per-step snapshot.
+func (tc *TemporalClient) QueryScaffolderProgress(ctx context.Context, workflowID string) (*types.ScaffolderProgress, error) {
+	resp, err := tc.client.QueryWorkflow(ctx, workflowID, "", types.ScaffolderProgressQuery)
+	if err != nil {
+		if isTemporalNotFound(err) {
+			return nil, grpcserver.ErrScaffolderRunNotFound
+		}
+		return nil, fmt.Errorf("failed to query scaffolder run: %w", err)
+	}
+
+	var progress types.ScaffolderProgress
+	if err := resp.Get(&progress); err != nil {
+		return nil, fmt.Errorf("failed to decode scaffolder progress: %w", err)
+	}
+	return &progress, nil
 }
 
 // QueryWorkflow queries a workflow for progress
@@ -194,9 +306,17 @@ func max(a, b int) int {
 	return b
 }
 
-// CancelWorkflow cancels a running workflow
+// CancelWorkflow cancels a running workflow. An unknown or aged-out workflow
+// id is reported with the NotFound sentinel so the handlers do not report a
+// stale link as an internal failure.
 func (tc *TemporalClient) CancelWorkflow(ctx context.Context, workflowID string) error {
-	return tc.client.CancelWorkflow(ctx, workflowID, "")
+	if err := tc.client.CancelWorkflow(ctx, workflowID, ""); err != nil {
+		if isTemporalNotFound(err) {
+			return grpcserver.ErrScaffolderRunNotFound
+		}
+		return err
+	}
+	return nil
 }
 
 // StartDeploymentWorkflow starts a deployment workflow
@@ -424,7 +544,20 @@ func main() {
 	if temporalClient != nil {
 		templateTemporal = temporalClient
 	}
-	templateServer := grpcserver.NewTemplateServer(templateTemporal, payloadClient)
+	var templateServerOpts []grpcserver.TemplateServerOption
+	if cfg.OrbitInternalAPIKey != "" {
+		templateServerOpts = append(templateServerOpts,
+			grpcserver.WithTemplateDefinitionClient(
+				grpcserver.NewPayloadTemplateDefinitionClient(cfg.OrbitAPIURL, cfg.OrbitInternalAPIKey),
+			),
+			grpcserver.WithActionRunClient(
+				grpcserver.NewPayloadActionRunClient(cfg.OrbitAPIURL, cfg.OrbitInternalAPIKey),
+			),
+		)
+	} else {
+		log.Println("Warning: ORBIT_INTERNAL_API_KEY is unset; StartScaffolderRun will be unavailable")
+	}
+	templateServer := grpcserver.NewTemplateServer(templateTemporal, payloadClient, templateServerOpts...)
 	templatePath, templateHandler := templatev1connect.NewTemplateServiceHandler(templateServer, authInterceptor)
 	mux.Handle(templatePath, templateHandler)
 	log.Println("TemplateService registered (Connect)")

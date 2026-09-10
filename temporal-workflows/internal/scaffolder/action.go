@@ -15,7 +15,13 @@ var ErrNoPlan = errors.New("action does not support dry-run planning")
 // PlannedChange is one side effect an action would cause, surfaced in the
 // dry-run plan.
 type PlannedChange struct {
-	Kind        string `json:"kind"` // repo | entity | topic | file | pr | log | unsupported
+	// Kind is repo | entity | topic | file | pr | log | unsupported | skipped.
+	//
+	// "unsupported" means the step could not be previewed (the action has no
+	// Plan, or planning failed); "skipped" means it will not run at all, e.g.
+	// its `if` condition is false. Both exist so a plan never has a silent gap
+	// that reads as "this step changes nothing".
+	Kind        string `json:"kind"`
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 }
@@ -89,3 +95,28 @@ type PlanDeclarer interface {
 type FamilyDeclarer interface {
 	Family() string
 }
+
+// PlanPreviewer is implemented by actions whose dry run produces a file tree
+// worth keeping for the Phase 2 diff viewer. The dispatch activity supplies an
+// empty destination directory, and the action renders into it instead of into
+// a throwaway temp dir, so the caller can persist the result.
+//
+// An action that implements this is declaring that its dry run is only useful
+// when the preview can actually be stored: the activity fails the step rather
+// than silently planning without a preview.
+type PlanPreviewer interface {
+	// PlanPreview renders into destDir, which the caller creates and owns
+	// (including deleting it). It returns the same changes Plan would.
+	PlanPreview(ctx context.Context, rc ActionRunContext, input json.RawMessage, destDir string) ([]PlannedChange, error)
+}
+
+// ErrInvalidInput marks an action failure caused by the step's input rather
+// than by the world: a missing required field, a malformed value, a path
+// outside the run's work dir. The dispatch activity raises these as
+// non-retryable, so a broken definition fails once instead of burning the
+// whole retry budget.
+//
+// Wrap it with %w:
+//
+//	return fmt.Errorf("fs:render: %w: `path` is required", scaffolder.ErrInvalidInput)
+var ErrInvalidInput = errors.New("invalid action input")

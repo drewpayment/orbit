@@ -13,9 +13,9 @@ type fakePatternsClient struct {
 	listErr        error
 	listedCategory string
 
-	registered    services.RegisterPendingPatternInput
-	registerID    string
-	registerErr   error
+	registered  services.RegisterPendingPatternInput
+	registerID  string
+	registerErr error
 
 	resolved       bool
 	resolveErr     error
