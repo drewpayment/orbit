@@ -486,7 +486,14 @@ func (r *scaffolderRun) runStep(ctx workflow.Context, stepBaseCtx workflow.Conte
 				Description: fmt.Sprintf("%s cannot be previewed", step.Action),
 			})
 		}
-		r.plan = append(r.plan, planResult.Changes...)
+		// Action-provided entries are scrubbed on the way in, not only on the
+		// way out to the run record: r.plan is also what the progress query
+		// serves and what the workflow result carries.
+		for _, change := range planResult.Changes {
+			change.Name = scaffolder.RedactText(change.Name)
+			change.Description = scaffolder.RedactText(change.Description)
+			r.plan = append(r.plan, change)
+		}
 		// A planned step produces no output, so nothing enters the expression
 		// context: a dry run must not let a later step read a value that will
 		// not exist in the real run.

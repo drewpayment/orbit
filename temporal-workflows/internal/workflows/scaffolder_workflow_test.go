@@ -1070,3 +1070,31 @@ func (s *ScaffolderWorkflowTestSuite) TestDryRunPlanRedactsATokenBearingError() 
 		s.NotContains(c.Description, "ghp_abcdefghij0123456789")
 	}
 }
+
+// An action composes plan entries from its own input, which can carry a
+// credential (a clone URL, say). Those are scrubbed as they enter the plan, so
+// the progress query and the workflow result are safe too — not only the
+// persisted copy.
+func (s *ScaffolderWorkflowTestSuite) TestDryRunRedactsActionProvidedPlanEntries() {
+	in := baseInput(twoStepDefinition())
+	in.DryRun = true
+	in.Definition.Spec.Output = nil
+	in.Definition.Spec.Steps = in.Definition.Spec.Steps[:1]
+
+	s.stubs.planFn = func(activities.ScaffolderStepInput) (*activities.ScaffolderPlanResult, error) {
+		return &activities.ScaffolderPlanResult{Changes: []scaffolder.PlannedChange{{
+			Kind:        "repo",
+			Name:        "clone https://x-access-token:ghp_abcdefghij0123456789@github.com/acme/svc.git",
+			Description: "password=hunter2hunter2",
+		}}}, nil
+	}
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+	s.Equal(ScaffolderStatusSucceeded, res.Status)
+
+	s.Require().Len(res.Plan, 1)
+	s.NotContains(res.Plan[0].Name, "ghp_abcdefghij0123456789")
+	s.Contains(res.Plan[0].Name, "github.com/acme/svc.git")
+	s.NotContains(res.Plan[0].Description, "hunter2hunter2")
+}
