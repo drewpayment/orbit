@@ -179,9 +179,10 @@ export const APISchemas: CollectionConfig = {
         { label: 'OpenAPI', value: 'openapi' },
         { label: 'AsyncAPI', value: 'asyncapi' },
         { label: 'GraphQL', value: 'graphql' },
+        { label: 'Protocol Buffers', value: 'proto' },
       ],
       admin: {
-        description: 'Schema format (OpenAPI, AsyncAPI, GraphQL supported)',
+        description: 'Schema format (OpenAPI, AsyncAPI, GraphQL, Protocol Buffers supported)',
       },
     },
     {
@@ -278,6 +279,32 @@ export const APISchemas: CollectionConfig = {
       admin: {
         description: 'Path to OpenAPI spec in repository (e.g., docs/openapi.yaml)',
       },
+    },
+    {
+      name: 'source',
+      type: 'group',
+      admin: {
+        description: 'Where this schema came from — set by /api/internal/api-schemas for a scaffolder-run-registered schema, otherwise "manual".',
+        position: 'sidebar',
+      },
+      fields: [
+        {
+          name: 'type',
+          type: 'select',
+          defaultValue: 'manual',
+          options: [
+            { label: 'Manual', value: 'manual' },
+            { label: 'Scaffolder run', value: 'scaffolder-run' },
+          ],
+        },
+        {
+          name: 'sourceId',
+          type: 'text',
+          admin: {
+            description: 'Identifies the specific producer, e.g. the scaffolder run id.',
+          },
+        },
+      ],
     },
     {
       name: 'createdBy',

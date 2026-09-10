@@ -44,6 +44,7 @@ func TestDescriptorActions_CoversEveryDefaultAction(t *testing.T) {
 		CatalogClient:    stubCatalogClient{},
 		KafkaTopicClient: stubKafkaTopicClient{},
 		KafkaProvisioner: stubKafkaProvisioner{},
+		ApiSchemaClient:  stubApiSchemaClient{},
 		SkeletonClient:   stubSkeletonClient{},
 	})...)
 	descriptors := scaffolder.NewRegistry(actions.DescriptorActions()...)

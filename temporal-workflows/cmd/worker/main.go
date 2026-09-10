@@ -434,6 +434,7 @@ func main() {
 		CatalogClient:    services.NewPayloadCatalogEntityClient(orbitAPIURL, orbitInternalAPIKey, logger),
 		KafkaTopicClient: services.NewPayloadKafkaTopicClient(orbitAPIURL, orbitInternalAPIKey, logger),
 		KafkaProvisioner: kafkaActivities,
+		ApiSchemaClient:  services.NewPayloadApiSchemaClient(orbitAPIURL, orbitInternalAPIKey, logger),
 		SkeletonClient:   services.NewPayloadSkeletonClient(orbitAPIURL, orbitInternalAPIKey, logger),
 	})...)
 	if err := scaffolderRegistry.ValidateSchemas(); err != nil {
