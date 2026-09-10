@@ -59,23 +59,51 @@ export interface MigrationPlanItem {
   definition: TemplateDefinition
 }
 
+export interface MigrationPlanFailure {
+  templateId: string
+  slug: string
+  error: string
+}
+
+export interface MigrationPlan {
+  items: MigrationPlanItem[]
+  failures: MigrationPlanFailure[]
+}
+
 /**
  * Pure planning function: given every `templates` row and the set of
  * template ids that already have a `template-definitions.migratedFrom`
  * match, returns the definitions that still need to be created. This is
  * what both `--dry-run` and `--apply` execute — the operator command is
  * auditable because the plan is identical either way.
+ *
+ * `mapV1TemplateToV2Definition` can throw for a template whose v1 manifest
+ * has no candidate repo-name variable (fix #4 — it refuses to emit a
+ * dangling `${{ parameters.* }}` reference). One unmappable template must
+ * not abort the whole run: its error is collected into `failures` and
+ * planning continues for every other template.
  */
-export function planMigration(templates: Template[], alreadyMigratedTemplateIds: Set<string>): MigrationPlanItem[] {
-  const plan: MigrationPlanItem[] = []
+export function planMigration(templates: Template[], alreadyMigratedTemplateIds: Set<string>): MigrationPlan {
+  const items: MigrationPlanItem[] = []
+  const failures: MigrationPlanFailure[] = []
+
   for (const template of templates) {
     if (alreadyMigratedTemplateIds.has(template.id)) continue
-    const manifest = buildManifestFromTemplateRow(template)
-    const definition = mapV1TemplateToV2Definition(template, manifest)
-    const workspaceId = typeof template.workspace === 'string' ? template.workspace : template.workspace.id
-    plan.push({ templateId: template.id, slug: template.slug, workspaceId, definition })
+    try {
+      const manifest = buildManifestFromTemplateRow(template)
+      const definition = mapV1TemplateToV2Definition(template, manifest)
+      const workspaceId = typeof template.workspace === 'string' ? template.workspace : template.workspace.id
+      items.push({ templateId: template.id, slug: template.slug, workspaceId, definition })
+    } catch (err) {
+      failures.push({
+        templateId: template.id,
+        slug: template.slug,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
   }
-  return plan
+
+  return { items, failures }
 }
 
 async function fetchAllTemplates(payload: Payload): Promise<Template[]> {
@@ -155,18 +183,26 @@ export async function main(): Promise<void> {
     fetchAlreadyMigratedTemplateIds(payload),
   ])
 
-  const plan = planMigration(templates, alreadyMigrated)
+  const { items, failures } = planMigration(templates, alreadyMigrated)
 
   console.log(
     JSON.stringify({
       mode: apply ? 'apply' : 'dry-run',
       totalTemplates: templates.length,
       alreadyMigrated: alreadyMigrated.size,
-      toMigrate: plan.length,
+      toMigrate: items.length,
+      unmappable: failures.length,
     }),
   )
 
-  for (const item of plan) {
+  if (failures.length > 0) {
+    console.log('  the following templates could not be mapped and were skipped:')
+    for (const failure of failures) {
+      console.log(`    templates/${failure.templateId} (${failure.slug}): ${failure.error}`)
+    }
+  }
+
+  for (const item of items) {
     if (apply) {
       await applyPlanItem(payload, item)
       console.log(`  migrated templates/${item.templateId} (${item.slug})`)
@@ -178,9 +214,16 @@ export async function main(): Promise<void> {
 
   if (apply) {
     const verification = planMigration(templates, await fetchAlreadyMigratedTemplateIds(payload))
-    if (verification.length > 0) {
-      throw new Error(`${verification.length} template(s) still unmigrated after apply — not idempotent`)
+    // Only unmigrated PLANNABLE templates indicate a real idempotency bug —
+    // the same unmappable templates will still fail on every re-run and must
+    // not be treated as a not-idempotent regression.
+    if (verification.items.length > 0) {
+      throw new Error(`${verification.items.length} template(s) still unmigrated after apply — not idempotent`)
     }
+  }
+
+  if (failures.length > 0) {
+    process.exitCode = 1
   }
 }
 
