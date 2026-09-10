@@ -2,6 +2,8 @@ import 'server-only'
 import type { Payload } from 'payload'
 import type { Action, ActionRun } from '@/payload-types'
 import { BUILTIN_HANDLERS, type BuiltinHandlerContext } from './builtins'
+import { startScaffolderRun } from '@/lib/clients/template-client'
+import type { JsonObject } from '@bufbuild/protobuf'
 
 /**
  * Action execution runner (IDP refocus P3).
@@ -67,7 +69,7 @@ async function writeRun(
   payload: Payload,
   runId: string,
   logs: RunLogEntry[],
-  patch: Partial<Pick<ActionRun, 'status' | 'outputs' | 'error' | 'entity'>>,
+  patch: Partial<Pick<ActionRun, 'status' | 'outputs' | 'error' | 'entity' | 'workflowId'>>,
 ): Promise<void> {
   await payload.update({
     collection: 'action-runs',
@@ -200,6 +202,44 @@ export async function executeRun(payload: Payload, runId: string): Promise<void>
           error: `Webhook returned HTTP ${status}.`,
         })
       }
+      return
+    }
+
+    if (backendType === 'scaffolder') {
+      if (!backendRef) {
+        throw new Error('scaffolder backend requires backend.ref (a template-definitions doc id).')
+      }
+      const definition = await payload.findByID({
+        collection: 'template-definitions',
+        id: backendRef,
+        depth: 0,
+        overrideAccess: true,
+      })
+      const definitionVersionId = relId(definition.currentVersion)
+      if (!definitionVersionId) {
+        throw new Error(
+          `Template definition "${definition.name}" has no current version to run.`,
+        )
+      }
+      const userId = relId(run.triggeredBy) ?? ''
+      append(
+        'info',
+        `Dispatching ${run.dryRun ? 'dry run' : 'run'} of "${definition.name}" v${definitionVersionId} via ScaffolderWorkflow.`,
+      )
+      const result = await startScaffolderRun({
+        runId,
+        definitionVersionId,
+        workspaceId,
+        userId,
+        // The `inputs` JSON column is already plain JSON-compatible data —
+        // it's a structural JsonObject even though Payload types it loosely.
+        parameters: inputs as unknown as JsonObject,
+        dryRun: run.dryRun ?? false,
+      })
+      append('info', `Started ScaffolderWorkflow ${result.workflowId}.`)
+      // The Go worker owns terminal status from here (writes back via
+      // /api/internal/action-runs/[id]/status) — leave status "running".
+      await writeRun(payload, runId, logs, { workflowId: result.workflowId })
       return
     }
 
