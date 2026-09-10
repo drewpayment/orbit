@@ -37,10 +37,19 @@ type Filter struct {
 
 // Reference is a parsed `${{ }}` expression: a dotted path plus its filters.
 type Reference struct {
-	Raw        string   // the expression body, e.g. `parameters.name | upper`
-	Path       []string // dotted path segments, e.g. ["parameters", "name"]
-	Filters    []Filter
-	HasDefault bool // a default(x) filter is present, so a missing path is tolerated
+	Raw     string   // the expression body, e.g. `parameters.name | upper`
+	Path    []string // dotted path segments, e.g. ["parameters", "name"]
+	Filters []Filter
+	// HasDefault reports that a default(x) filter is present anywhere in the
+	// chain, which is what lets a missing path resolve at all.
+	//
+	// A default only rescues a missing path when it is the FIRST filter: a
+	// missing path resolves to nil, and every other filter errors on nil rather
+	// than passing it along. The static validator rejects a default that is not
+	// first, and nothing is lost by that rule — default() also replaces the
+	// empty string, so `x | default("svc") | kebabCase` covers both the missing
+	// and the empty case, which `x | kebabCase | default("svc")` does not.
+	HasDefault bool
 }
 
 const (
@@ -98,22 +107,36 @@ func ResolveJSON(ctx Ctx, raw json.RawMessage) (json.RawMessage, error) {
 // whole-string `${{ }}` expression or a bare dotted path; mixed literal text is
 // rejected because `if` is single-expression truthiness only (plan §13).
 func EvalBool(ctx Ctx, expr string) (bool, error) {
-	trimmed := NormalizeCondition(expr)
-	if trimmed == "" {
-		return false, fmt.Errorf("if: empty expression")
-	}
-	spans, err := scanExpressions(trimmed)
+	ref, err := SingleExpression(expr)
 	if err != nil {
 		return false, fmt.Errorf("if: %w", err)
 	}
-	if len(spans) != 1 || spans[0].start != 0 || spans[0].end != len(trimmed) {
-		return false, fmt.Errorf("if: must be a single expression, got %q", expr)
-	}
-	val, err := evalReference(ctx, spans[0].ref)
+	val, err := evalReference(ctx, ref)
 	if err != nil {
 		return false, fmt.Errorf("if: %w", err)
 	}
 	return truthy(val), nil
+}
+
+// SingleExpression parses a condition that must be exactly one expression
+// covering the whole string, after NormalizeCondition. Mixed literal text is
+// rejected because `if` is single-expression truthiness only (plan §13).
+//
+// EvalBool and the static validator both go through here, so a condition the
+// validator accepts is one EvalBool can evaluate.
+func SingleExpression(expr string) (Reference, error) {
+	trimmed := NormalizeCondition(expr)
+	if trimmed == "" {
+		return Reference{}, fmt.Errorf("empty expression")
+	}
+	spans, err := scanExpressions(trimmed)
+	if err != nil {
+		return Reference{}, err
+	}
+	if len(spans) != 1 || spans[0].start != 0 || spans[0].end != len(trimmed) {
+		return Reference{}, fmt.Errorf("must be a single expression covering the whole value, got %q", expr)
+	}
+	return spans[0].ref, nil
 }
 
 // NormalizeCondition puts a step's `if` into its canonical form. A bare dotted
@@ -315,6 +338,13 @@ func parseReference(body string) (Reference, error) {
 	return ref, nil
 }
 
+// validIdent reports whether one dotted path segment is well formed.
+//
+// The grammar is: a letter or underscore, then letters, digits, underscores or
+// hyphens. This is wider than plan §4.2's sketch, which used `[\w.]*` and so
+// excluded the hyphen. The hyphen is required, because step ids are kebab-case
+// (`^[a-z][a-z0-9-]*$`), and `${{ steps.my-step.output.x }}` has to parse. The
+// TypeScript validator accepts the same grammar.
 func validIdent(s string) bool {
 	if s == "" {
 		return false
@@ -342,6 +372,9 @@ func parseFilter(s, raw string) (Filter, error) {
 		}
 		name = strings.TrimSpace(s[:open])
 		arg = strings.TrimSpace(s[open+1 : len(s)-1])
+		if arg == "" {
+			return Filter{}, fmt.Errorf("filter %s() requires an argument in expression %q", name, raw)
+		}
 		hasArg = true
 	}
 	if !validIdent(name) {

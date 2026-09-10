@@ -408,3 +408,82 @@ func TestValidateParameterUIExpressions(t *testing.T) {
 	def.Spec.Parameters[0].Properties["topicName"] = json.RawMessage(`{"type":"string","ui:visibleIf":"${{ steps.repo.output.repoUrl }}"}`)
 	assert.Contains(t, messages(Validate(def, testRegistry())), "unknown step")
 }
+
+// --- review round 2 -------------------------------------------------------
+
+func arrayRegistry() *Registry {
+	return NewRegistry(&schemaAction{
+		name: "array:thing",
+		in:   `{"type":"object","properties":{"items":{"type":"array","items":{"type":"object","properties":{"count":{"type":"number"},"label":{"type":"string"}},"required":["count"]}},"tags":{"type":"array","items":{"type":"string"}}},"required":["items"]}`,
+		out:  `{"type":"object","properties":{"ok":{"type":"boolean"}}}`,
+	})
+}
+
+func arrayStep(input string) *Definition {
+	def := validDefinition()
+	def.Spec.Output = nil
+	def.Spec.Steps = []Step{{ID: "a", Name: "a", Action: "array:thing", Input: json.RawMessage(input)}}
+	return def
+}
+
+func TestValidateExpressionInsideObjectInsideArray(t *testing.T) {
+	reg := arrayRegistry()
+
+	// The probe from review: an expression nested in an object inside an array
+	// must not be type-checked as the literal string it is written as.
+	def := arrayStep(`{"items":[{"count":"${{ parameters.name }}"}]}`)
+	assert.Empty(t, Validate(def, reg), messages(Validate(def, reg)))
+
+	// Siblings and later elements are still checked.
+	def = arrayStep(`{"items":[{"count":"${{ parameters.name }}","label":7}]}`)
+	assert.Contains(t, messages(Validate(def, reg)), "label")
+
+	def = arrayStep(`{"items":[{"count":"${{ parameters.name }}"},{"count":"literal"}]}`)
+	assert.NotEmpty(t, Validate(def, reg), "a literal string in a number field must still fail")
+
+	// A whole element that is an expression.
+	def = arrayStep(`{"items":["${{ parameters.name }}"]}`)
+	assert.Empty(t, Validate(def, reg), messages(Validate(def, reg)))
+
+	// References inside arrays are still resolved against the reference graph.
+	def = arrayStep(`{"items":[{"count":"${{ parameters.ghost }}"}]}`)
+	assert.Contains(t, messages(Validate(def, reg)), "no parameter named")
+
+	// A scalar array of expressions.
+	def = arrayStep(`{"items":[],"tags":["${{ parameters.name }}","literal"]}`)
+	assert.Empty(t, Validate(def, reg), messages(Validate(def, reg)))
+}
+
+func TestValidateConditionMustBeASingleExpression(t *testing.T) {
+	// EvalBool requires exactly one expression covering the whole string, so
+	// the validator has to enforce the same rule or the run dies on it.
+	def := validDefinition()
+	def.Spec.Steps[1].If = "${{ parameters.private }} and more"
+	assert.Contains(t, messages(Validate(def, testRegistry())), "single expression")
+
+	def = validDefinition()
+	def.Spec.Steps[1].If = "${{ parameters.private }}${{ parameters.name }}"
+	assert.Contains(t, messages(Validate(def, testRegistry())), "single expression")
+
+	def = validDefinition()
+	def.Spec.Steps[1].If = "  ${{ parameters.private }}  "
+	assert.Empty(t, Validate(def, testRegistry()))
+}
+
+func TestValidateDefaultMustBeTheFirstFilter(t *testing.T) {
+	def := validDefinition()
+	def.Spec.Steps[1].Input = json.RawMessage(`{"message":"${{ parameters.name | upper | default('x') }}"}`)
+	assert.Contains(t, messages(Validate(def, testRegistry())), "default(")
+
+	def = validDefinition()
+	def.Spec.Steps[1].Input = json.RawMessage(`{"message":"${{ parameters.name | default('x') | upper }}"}`)
+	assert.Empty(t, Validate(def, testRegistry()), messages(Validate(def, testRegistry())))
+}
+
+func TestValidateDashedStepIDReference(t *testing.T) {
+	def := validDefinition()
+	def.Spec.Steps[0].ID = "my-step"
+	def.Spec.Steps[1].Input = json.RawMessage(`{"message":"${{ steps.my-step.output.repoUrl }}"}`)
+	def.Spec.Output = nil
+	assert.Empty(t, Validate(def, testRegistry()), messages(Validate(def, testRegistry())))
+}
