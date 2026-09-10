@@ -64,4 +64,8 @@ type Deps struct {
 	// ApiSchemaClient registers API schemas for api:schema:register. That
 	// action is omitted from DefaultActions when this is nil.
 	ApiSchemaClient ApiSchemaClient
+	// SkeletonClient fetches Orbit-hosted template skeleton bundles for
+	// fetch:orbit-skeleton. That action is omitted from DefaultActions when
+	// this is nil.
+	SkeletonClient services.SkeletonClient
 }

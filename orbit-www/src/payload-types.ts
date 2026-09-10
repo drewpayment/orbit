@@ -82,6 +82,7 @@ export interface Config {
     templates: Template;
     'template-definitions': TemplateDefinition;
     'template-definition-versions': TemplateDefinitionVersion;
+    'template-skeletons': TemplateSkeleton;
     apps: App;
     deployments: Deployment;
     'deployment-generators': DeploymentGenerator;
@@ -163,6 +164,7 @@ export interface Config {
     templates: TemplatesSelect<false> | TemplatesSelect<true>;
     'template-definitions': TemplateDefinitionsSelect<false> | TemplateDefinitionsSelect<true>;
     'template-definition-versions': TemplateDefinitionVersionsSelect<false> | TemplateDefinitionVersionsSelect<true>;
+    'template-skeletons': TemplateSkeletonsSelect<false> | TemplateSkeletonsSelect<true>;
     apps: AppsSelect<false> | AppsSelect<true>;
     deployments: DeploymentsSelect<false> | DeploymentsSelect<true>;
     'deployment-generators': DeploymentGeneratorsSelect<false> | DeploymentGeneratorsSelect<true>;
@@ -1220,6 +1222,49 @@ export interface Automation {
    * When this automation last created a run.
    */
   lastTriggeredAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Orbit-hosted file bundles authored in-app for the fetch:orbit-skeleton action.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "template-skeletons".
+ */
+export interface TemplateSkeleton {
+  id: string;
+  workspace: string | Workspace;
+  name: string;
+  slug: string;
+  description?: string | null;
+  /**
+   * At most 50 files, 1 MB total (UTF-8 bytes), text-only. Enforced server-side.
+   */
+  files: {
+    /**
+     * Relative path within the bundle, e.g. "src/index.ts". No leading "/", no ".." segments.
+     */
+    path: string;
+    content: string;
+    /**
+     * UTF-8 byte length of content, computed server-side.
+     */
+    size?: number | null;
+    /**
+     * Always false in v1 — binary files are out of scope. Kept for forward compat.
+     */
+    isBinary?: boolean | null;
+    id?: string | null;
+  }[];
+  /**
+   * Optimistic-concurrency/cache-bust counter, bumped on every save. Not a history.
+   */
+  version?: number | null;
+  /**
+   * Sum of files[].size, computed server-side.
+   */
+  totalSize?: number | null;
+  createdBy?: (string | null) | User;
   updatedAt: string;
   createdAt: string;
 }
@@ -4491,6 +4536,10 @@ export interface PayloadLockedDocument {
         value: string | TemplateDefinitionVersion;
       } | null)
     | ({
+        relationTo: 'template-skeletons';
+        value: string | TemplateSkeleton;
+      } | null)
+    | ({
         relationTo: 'apps';
         value: string | App;
       } | null)
@@ -5107,6 +5156,30 @@ export interface TemplateDefinitionVersionsSelect<T extends boolean = true> {
   changeNote?: T;
   validatedAt?: T;
   dryRunRunId?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "template-skeletons_select".
+ */
+export interface TemplateSkeletonsSelect<T extends boolean = true> {
+  workspace?: T;
+  name?: T;
+  slug?: T;
+  description?: T;
+  files?:
+    | T
+    | {
+        path?: T;
+        content?: T;
+        size?: T;
+        isBinary?: T;
+        id?: T;
+      };
+  version?: T;
+  totalSize?: T;
+  createdBy?: T;
   updatedAt?: T;
   createdAt?: T;
 }

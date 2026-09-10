@@ -43,6 +43,7 @@ func TestDescriptorActions_CoversEveryDefaultAction(t *testing.T) {
 		TokenService:    stubTokenService{},
 		CatalogClient:   stubCatalogClient{},
 		ApiSchemaClient: stubApiSchemaClient{},
+		SkeletonClient:  stubSkeletonClient{},
 	})...)
 	descriptors := scaffolder.NewRegistry(actions.DescriptorActions()...)
 

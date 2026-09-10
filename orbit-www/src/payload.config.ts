@@ -23,6 +23,7 @@ import { UserWorkspaceRoles } from './collections/UserWorkspaceRoles'
 import { Templates } from './collections/Templates'
 import { TemplateDefinitions } from './collections/TemplateDefinitions'
 import { TemplateDefinitionVersions } from './collections/TemplateDefinitionVersions'
+import { TemplateSkeletons } from './collections/TemplateSkeletons'
 import { Apps } from './collections/Apps'
 import { Deployments } from './collections/Deployments'
 import { DeploymentGenerators } from './collections/DeploymentGenerators'
@@ -126,6 +127,7 @@ export default buildConfig({
     Templates,
     TemplateDefinitions,
     TemplateDefinitionVersions,
+    TemplateSkeletons,
     Apps,
     Deployments,
     DeploymentGenerators,
