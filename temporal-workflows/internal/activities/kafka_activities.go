@@ -391,9 +391,11 @@ func (a *KafkaActivitiesImpl) UpdateTopicStatus(ctx context.Context, input Kafka
 		"status": input.Status,
 	}
 
-	// Include physical name if provided
+	// Include physical name if provided. KafkaTopics.ts has no `physicalName`
+	// field — the collection field is `fullTopicName` — so this must PATCH
+	// that key, not "physicalName" (a stray key Payload silently ignores).
 	if input.PhysicalName != "" {
-		data["physicalName"] = input.PhysicalName
+		data["fullTopicName"] = input.PhysicalName
 	}
 
 	// Include error message if provided
