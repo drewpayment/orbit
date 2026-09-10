@@ -95,8 +95,17 @@ export function EditAPIClient({ api, workspaceSlug: _workspaceSlug, userId }: Ed
       ? 'GraphQL Schema'
       : api.schemaType === 'asyncapi'
         ? 'AsyncAPI Specification'
-        : 'OpenAPI Specification'
-  const editorLanguage = api.schemaType === 'graphql' ? 'graphql' : 'yaml'
+        : api.schemaType === 'proto'
+          ? 'Protocol Buffers Schema'
+          : 'OpenAPI Specification'
+  // Monaco's bundled basic-languages set registers Protocol Buffers under
+  // the language id "proto" (its "protobuf" string is only a display alias,
+  // not a valid id for Editor's `language` prop) — verified in
+  // node_modules/monaco-editor/esm/vs/basic-languages/protobuf/protobuf.contribution.js.
+  // Fall back to 'plaintext' for any future schemaType this branch doesn't
+  // yet know about, rather than silently reusing 'yaml'.
+  const editorLanguage =
+    api.schemaType === 'graphql' ? 'graphql' : api.schemaType === 'proto' ? 'proto' : api.schemaType === 'openapi' || api.schemaType === 'asyncapi' ? 'yaml' : 'plaintext'
 
   // Validate content when it changes
   React.useEffect(() => {

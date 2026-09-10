@@ -64,6 +64,21 @@ describe('stepInputSchemaToSchemaFormPage', () => {
     expect(page.title).toBe('Configure step')
     expect(page.schema.properties).toEqual({ name: { type: 'string' } })
     expect(page.schema.required).toEqual(['name'])
+    // a property with no ui:* keys gets no uiSchema entry
+    expect(page.uiSchema && 'name' in page.uiSchema).toBe(false)
+  })
+
+  it('splits an inline ui:widget on a registry property into uiSchema (e.g. api:schema:register\'s `content` textarea hint)', () => {
+    const page = stepInputSchemaToSchemaFormPage('Configure step', {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        content: { type: 'string', minLength: 1, 'ui:widget': 'textarea' },
+      },
+      required: ['name', 'content'],
+    })
+    expect(page.schema.properties?.content).toEqual({ type: 'string', minLength: 1 })
+    expect(page.uiSchema?.content).toEqual({ 'ui:widget': 'textarea' })
   })
 })
 

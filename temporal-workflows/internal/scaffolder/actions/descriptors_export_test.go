@@ -40,9 +40,10 @@ func TestScaffolderDescriptorsExport_MatchesCheckedInFile(t *testing.T) {
 func TestDescriptorActions_CoversEveryDefaultAction(t *testing.T) {
 	// Fully-wired deps produce the largest DefaultActions set.
 	full := scaffolder.NewRegistry(actions.DefaultActions(actions.Deps{
-		TokenService:   stubTokenService{},
-		CatalogClient:  stubCatalogClient{},
-		SkeletonClient: stubSkeletonClient{},
+		TokenService:    stubTokenService{},
+		CatalogClient:   stubCatalogClient{},
+		ApiSchemaClient: stubApiSchemaClient{},
+		SkeletonClient:  stubSkeletonClient{},
 	})...)
 	descriptors := scaffolder.NewRegistry(actions.DescriptorActions()...)
 

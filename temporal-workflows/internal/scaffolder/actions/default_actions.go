@@ -12,6 +12,7 @@ import "github.com/drewpayment/orbit/temporal-workflows/internal/scaffolder"
 //     the two github:repo:* actions are omitted without a TokenService since
 //     they always require GitHub auth.
 //   - catalog:entity:register needs deps.CatalogClient; omitted without one.
+//   - api:schema:register needs deps.ApiSchemaClient; omitted without one.
 //   - fetch:orbit-skeleton needs deps.SkeletonClient; omitted without one.
 //
 // debug:log and http:request take no dependencies and are always included.
@@ -37,6 +38,10 @@ func DefaultActions(deps Deps) []scaffolder.Action {
 
 	if deps.CatalogClient != nil {
 		out = append(out, NewCatalogEntityRegister(deps.CatalogClient))
+	}
+
+	if deps.ApiSchemaClient != nil {
+		out = append(out, NewApiSchemaRegister(deps.ApiSchemaClient))
 	}
 
 	if deps.SkeletonClient != nil {
@@ -68,6 +73,7 @@ func DescriptorActions() []scaffolder.Action {
 		NewGitHubRepoCreate(nil, nil),
 		NewGitHubRepoCreateFromTemplate(nil, nil),
 		NewCatalogEntityRegister(nil),
+		NewApiSchemaRegister(nil),
 		NewFetchOrbitSkeleton(nil),
 	}
 }
