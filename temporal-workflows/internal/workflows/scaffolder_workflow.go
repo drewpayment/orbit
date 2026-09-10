@@ -44,6 +44,11 @@ const defaultStepTimeout = 10 * time.Minute
 // rc.Heartbeat during clones, renders and pushes.
 const stepHeartbeatTimeout = 2 * time.Minute
 
+// bookkeepingTimeout bounds the activities that are not template steps:
+// validation, the run-status writeback and work dir cleanup. None of them
+// heartbeat, so they deliberately run without a heartbeat timeout.
+const bookkeepingTimeout = 5 * time.Minute
+
 // maxStepAttempts bounds retries for a step whose action failed for a reason
 // that might be transient. Definition and expression errors never reach a
 // retry: they are raised as non-retryable application errors, or handled in
@@ -98,6 +103,8 @@ type scaffolderRun struct {
 	errorMsg string
 	// stepIndex maps a step id to its slot in steps.
 	stepIndex map[string]int
+	// pendingLogs accumulates lifecycle lines between progress writebacks.
+	pendingLogs []activities.ScaffolderLogEntry
 }
 
 // ScaffolderWorkflow runs a v2 template definition: one activity per step,
@@ -112,74 +119,88 @@ func ScaffolderWorkflow(ctx workflow.Context, input ScaffolderWorkflowInput) (*S
 	logger := workflow.GetLogger(ctx)
 	info := workflow.GetInfo(ctx)
 
-	run := newScaffolderRun(ctx, input, logger)
+	run := newScaffolderRun(input, logger)
 
-	if err := workflow.SetQueryHandler(ctx, ScaffolderProgressQuery, func() (ScaffolderProgress, error) {
-		return run.progress(), nil
-	}); err != nil {
-		logger.Error("Failed to register the scaffolder progress query", "error", err)
-		return &ScaffolderWorkflowResult{
-			Status: ScaffolderStatusFailed,
-			Error:  "failed to set up progress tracking: " + err.Error(),
-		}, nil
-	}
-
-	actCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: defaultStepTimeout,
-		HeartbeatTimeout:    stepHeartbeatTimeout,
+	// Bookkeeping activities (validate, progress writeback, cleanup) do not
+	// heartbeat, so they get their own options: a heartbeat timeout here would
+	// fail them for not doing something they never do.
+	bookkeepingCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: bookkeepingTimeout,
 		RetryPolicy: &temporal.RetryPolicy{
 			MaximumAttempts:        maxStepAttempts,
 			NonRetryableErrorTypes: []string{activities.ErrTypeScaffolderInvalid},
 		},
 	})
 
-	// The first writeback claims the run: it records the workflow id so the UI
-	// can cancel, and flips the run to running with every step pending.
-	run.writeProgress(actCtx, ScaffolderStatusRunning, info.WorkflowExecution.ID, nil)
+	// Claim the run before anything else can fail: this records the workflow id
+	// so the UI can cancel, and flips the run to running with every step
+	// pending. Registering the query handler first would leave an orphaned
+	// `pending` run with no workflow id if registration failed.
+	run.writeProgress(bookkeepingCtx, ScaffolderStatusRunning, info.WorkflowExecution.ID, nil)
+
+	if err := workflow.SetQueryHandler(ctx, ScaffolderProgressQuery, func() (ScaffolderProgress, error) {
+		return run.progress(), nil
+	}); err != nil {
+		logger.Error("Failed to register the scaffolder progress query", "error", err)
+		return run.finish(ctx, bookkeepingCtx, ScaffolderStatusFailed,
+			"failed to set up progress tracking: "+err.Error())
+	}
+
+	// Step activities heartbeat (clone, render, push), so they carry a
+	// heartbeat timeout. WaitForCancellation makes a cancelled step's future
+	// settle only once the action has actually stopped, which is what lets
+	// cleanup safely delete the work dir it was writing into.
+	stepBaseCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: defaultStepTimeout,
+		HeartbeatTimeout:    stepHeartbeatTimeout,
+		WaitForCancellation: true,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts:        maxStepAttempts,
+			NonRetryableErrorTypes: []string{activities.ErrTypeScaffolderInvalid},
+		},
+	})
 
 	// Static validation runs in an activity (see ValidateDefinition's doc for
 	// why) and its findings fail the run without a retry.
 	var validation *activities.ValidateDefinitionResult
-	err := workflow.ExecuteActivity(actCtx, activities.ActivityScaffolderValidateDefinition,
-		activities.ValidateDefinitionInput{Definition: input.Definition}).Get(actCtx, &validation)
+	err := workflow.ExecuteActivity(bookkeepingCtx, activities.ActivityScaffolderValidateDefinition,
+		activities.ValidateDefinitionInput{Definition: input.Definition}).Get(bookkeepingCtx, &validation)
 	switch {
 	case err != nil && temporal.IsCanceledError(err):
 		return run.finishCancelled(ctx)
 	case err != nil:
-		return run.finish(ctx, actCtx, ScaffolderStatusFailed, "definition validation failed: "+err.Error())
+		return run.finish(ctx, bookkeepingCtx, ScaffolderStatusFailed, "definition validation failed: "+err.Error())
 	case validation != nil && len(validation.Errors) > 0:
-		return run.finish(ctx, actCtx, ScaffolderStatusFailed,
+		return run.finish(ctx, bookkeepingCtx, ScaffolderStatusFailed,
 			"definition is not executable: "+strings.Join(validation.Errors, "; "))
 	}
 
 	for i := range input.Definition.Spec.Steps {
 		step := input.Definition.Spec.Steps[i]
 
-		proceed, cancelled, failure := run.runStep(ctx, actCtx, step)
+		cancelled, failure := run.runStep(ctx, stepBaseCtx, step)
 		switch {
 		case cancelled:
 			return run.finishCancelled(ctx)
 		case failure != "":
-			return run.finish(ctx, actCtx, ScaffolderStatusFailed, failure)
-		case !proceed:
-			// continueOnError swallowed a step failure; keep going.
+			return run.finish(ctx, bookkeepingCtx, ScaffolderStatusFailed, failure)
 		}
-		run.writeProgress(actCtx, ScaffolderStatusRunning, "", nil)
+		run.writeProgress(bookkeepingCtx, ScaffolderStatusRunning, "", nil)
 	}
 
 	outputs, err := resolveDefinitionOutput(run.exprCtx, input.Definition.Spec.Output)
 	if err != nil {
-		return run.finish(ctx, actCtx, ScaffolderStatusFailed, "failed to resolve output: "+err.Error())
+		return run.finish(ctx, bookkeepingCtx, ScaffolderStatusFailed, "failed to resolve output: "+err.Error())
 	}
 	run.outputs = outputs
 
-	return run.finish(ctx, actCtx, ScaffolderStatusSucceeded, "")
+	return run.finish(ctx, bookkeepingCtx, ScaffolderStatusSucceeded, "")
 }
 
 // newScaffolderRun seeds the expression context and the per-step progress
 // slice. Every namespace is a plain map, so an expression can never reach into
 // Go state (see scaffolder.Ctx).
-func newScaffolderRun(ctx workflow.Context, input ScaffolderWorkflowInput, logger log.Logger) *scaffolderRun {
+func newScaffolderRun(input ScaffolderWorkflowInput, logger log.Logger) *scaffolderRun {
 	params := input.Parameters
 	if params == nil {
 		params = map[string]any{}
@@ -215,52 +236,64 @@ func newScaffolderRun(ctx workflow.Context, input ScaffolderWorkflowInput, logge
 		})
 		run.stepIndex[step.ID] = i
 	}
-	_ = ctx
 	return run
 }
 
 // runStep evaluates a step's condition, resolves its input and dispatches it.
 //
-// It returns (proceed, cancelled, failure): proceed is false when the step
-// failed but continueOnError let the run carry on; cancelled is true when the
-// workflow was cancelled; failure is a non-empty message when the run must
-// stop.
-func (r *scaffolderRun) runStep(ctx workflow.Context, actCtx workflow.Context, step scaffolder.Step) (bool, bool, string) {
+// It returns (cancelled, failure): cancelled is true when the workflow was
+// cancelled; failure is a non-empty message when the run must stop. A step that
+// failed under continueOnError returns ("", false) so the run carries on.
+func (r *scaffolderRun) runStep(ctx workflow.Context, stepBaseCtx workflow.Context, step scaffolder.Step) (bool, string) {
 	idx, ok := r.stepIndex[step.ID]
 	if !ok {
-		return false, false, fmt.Sprintf("step %q: no progress slot", step.ID)
+		return false, fmt.Sprintf("step %q: no progress slot", step.ID)
 	}
 
 	if step.If != "" {
 		want, err := scaffolder.EvalBool(r.exprCtx, step.If)
-		if err != nil {
+		switch {
+		case err != nil && r.unplannable(step.If, step.Input):
+			r.markUnplannable(ctx, idx, step, err)
+			return false, ""
+		case err != nil:
 			r.failStep(idx, err.Error())
-			return false, false, fmt.Sprintf("step %q: %v", step.ID, err)
+			return false, fmt.Sprintf("step %q: %v", step.ID, err)
 		}
 		if !want {
 			r.steps[idx].Status = stepStatusSkipped
 			r.steps[idx].FinishedAt = workflowNow(ctx)
 			r.logger.Info("Scaffolder step skipped", "stepId", step.ID, "if", step.If)
-			return true, false, ""
+			r.appendLog("info", fmt.Sprintf("step %s (%s) skipped: condition is false", step.ID, step.Action))
+			return false, ""
 		}
 	}
 
 	timeout, err := parseStepTimeout(step.Timeout, defaultStepTimeout)
 	if err != nil {
 		r.failStep(idx, err.Error())
-		return false, false, fmt.Sprintf("step %q: %v", step.ID, err)
+		return false, fmt.Sprintf("step %q: %v", step.ID, err)
 	}
 
 	resolvedInput, err := scaffolder.ResolveJSON(r.exprCtx, step.Input)
 	if err != nil {
+		// During a dry run no step produces output, so a reference to a prior
+		// step's output cannot resolve. That is a limit of previewing, not a
+		// broken definition: record the step as unplannable and keep going,
+		// the same way an action that cannot Plan is recorded.
+		if r.unplannable(step.If, step.Input) {
+			r.markUnplannable(ctx, idx, step, err)
+			return false, ""
+		}
 		r.failStep(idx, err.Error())
-		return false, false, fmt.Sprintf("step %q: %v", step.ID, err)
+		return false, fmt.Sprintf("step %q: %v", step.ID, err)
 	}
 
 	r.steps[idx].Status = stepStatusRunning
 	r.steps[idx].StartedAt = workflowNow(ctx)
+	r.appendLog("info", fmt.Sprintf("step %s (%s) started", step.ID, step.Action))
 
-	stepCtx := workflow.WithStartToCloseTimeout(actCtx, timeout)
+	stepCtx := workflow.WithStartToCloseTimeout(stepBaseCtx, timeout)
 	activityName := activities.ActivityScaffolderExecuteStep
 	if r.input.DryRun {
 		activityName = activities.ActivityScaffolderPlanStep
@@ -299,25 +332,42 @@ func (r *scaffolderRun) runStep(ctx workflow.Context, actCtx workflow.Context, s
 	sel.Select(ctx)
 
 	if cancelled {
+		// The activity is still running: ctx.Done() only means the cancel was
+		// *requested*. Wait for the step to actually stop before returning,
+		// or cleanup would delete the work dir out from under a live clone or
+		// render, leaving a half-written tree nothing ever removes. The wait
+		// uses a disconnected context (the workflow's own is cancelled, so a
+		// Get on it would return immediately) and is bounded by the step's own
+		// start-to-close timeout. WaitForCancellation on the activity options
+		// is what makes the future settle only once the action has returned.
+		waitCtx, cancelWait := workflow.NewDisconnectedContext(ctx)
+		_ = future.Get(waitCtx, nil)
+		cancelWait()
+
 		r.failStep(idx, "cancelled")
-		return false, true, ""
+		r.appendLog("warn", fmt.Sprintf("step %s (%s) cancelled", step.ID, step.Action))
+		return true, ""
 	}
 	if activityErr != nil {
 		if temporal.IsCanceledError(activityErr) {
 			r.failStep(idx, "cancelled")
-			return false, true, ""
+			r.appendLog("warn", fmt.Sprintf("step %s (%s) cancelled", step.ID, step.Action))
+			return true, ""
 		}
 		r.failStep(idx, activityErr.Error())
 		if step.ContinueOnError {
 			r.logger.Warn("Scaffolder step failed but continueOnError is set",
 				"stepId", step.ID, "action", step.Action, "error", activityErr)
-			return false, false, ""
+			r.appendLog("warn", fmt.Sprintf("step %s (%s) failed, continuing: %v", step.ID, step.Action, activityErr))
+			return false, ""
 		}
-		return false, false, fmt.Sprintf("step %q (%s) failed: %v", step.ID, step.Action, activityErr)
+		r.appendLog("error", fmt.Sprintf("step %s (%s) failed: %v", step.ID, step.Action, activityErr))
+		return false, fmt.Sprintf("step %q (%s) failed: %v", step.ID, step.Action, activityErr)
 	}
 
 	r.steps[idx].Status = stepStatusSucceeded
 	r.steps[idx].FinishedAt = workflowNow(ctx)
+	r.appendLog("info", fmt.Sprintf("step %s (%s) succeeded", step.ID, step.Action))
 
 	if r.input.DryRun {
 		if planResult.Unsupported {
@@ -331,7 +381,7 @@ func (r *scaffolderRun) runStep(ctx workflow.Context, actCtx workflow.Context, s
 		// A planned step produces no output, so nothing enters the expression
 		// context: a dry run must not let a later step read a value that will
 		// not exist in the real run.
-		return true, false, ""
+		return false, ""
 	}
 
 	out := execResult.Output
@@ -340,7 +390,59 @@ func (r *scaffolderRun) runStep(ctx workflow.Context, actCtx workflow.Context, s
 	}
 	r.steps[idx].Output = out
 	r.exprCtx.Steps[step.ID] = scaffolder.StepOutput{Output: out}
-	return true, false, ""
+	return false, ""
+}
+
+// unplannable reports whether a resolution failure is only a consequence of
+// dry-running: the step reads a prior step's output, which no dry run produces.
+// Outside a dry run it is always false, so a genuinely broken reference still
+// fails the run.
+func (r *scaffolderRun) unplannable(condition string, input json.RawMessage) bool {
+	if !r.input.DryRun {
+		return false
+	}
+	return referencesStepOutput(scaffolder.NormalizeCondition(condition)) || referencesStepOutput(string(input))
+}
+
+// markUnplannable records a step the dry run could not preview.
+func (r *scaffolderRun) markUnplannable(ctx workflow.Context, idx int, step scaffolder.Step, cause error) {
+	r.steps[idx].Status = stepStatusSkipped
+	r.steps[idx].FinishedAt = workflowNow(ctx)
+	r.steps[idx].Error = cause.Error()
+	r.plan = append(r.plan, scaffolder.PlannedChange{
+		Kind:        "unsupported",
+		Name:        step.ID,
+		Description: fmt.Sprintf("%s cannot be previewed: it depends on an earlier step's output", step.Action),
+	})
+	r.appendLog("warn", fmt.Sprintf("step %s (%s) cannot be previewed: it depends on an earlier step's output", step.ID, step.Action))
+	r.logger.Info("Scaffolder step not previewable in a dry run",
+		"stepId", step.ID, "action", step.Action, "reason", cause)
+}
+
+// referencesStepOutput reports whether s contains a `${{ steps.… }}` reference.
+// A malformed expression is treated as no reference: the caller then surfaces
+// the original resolution error, which says more.
+func referencesStepOutput(s string) bool {
+	if !scaffolder.HasExpression(s) {
+		return false
+	}
+	refs, err := scaffolder.ExtractReferences(s)
+	if err != nil {
+		return false
+	}
+	for _, ref := range refs {
+		if len(ref.Path) > 0 && ref.Path[0] == "steps" {
+			return true
+		}
+	}
+	return false
+}
+
+// appendLog queues one line for the next progress writeback. Only step
+// lifecycle transitions are logged — never a resolved step input, which can
+// carry an installation token or another credential.
+func (r *scaffolderRun) appendLog(level, message string) {
+	r.pendingLogs = append(r.pendingLogs, activities.ScaffolderLogEntry{Level: level, Message: message})
 }
 
 // failStep records a step failure without deciding the run's fate.
@@ -416,7 +518,12 @@ func (r *scaffolderRun) finishCancelled(ctx workflow.Context) (*ScaffolderWorkfl
 //
 // Writes are strictly sequential (each awaits the previous), so a terminal
 // status can never be overtaken by a later per-step write.
-func (r *scaffolderRun) writeProgress(ctx workflow.Context, status, workflowID string, logs []activities.ScaffolderLogEntry) {
+func (r *scaffolderRun) writeProgress(ctx workflow.Context, status, workflowID string, extraLogs []activities.ScaffolderLogEntry) {
+	logs := append(r.pendingLogs, extraLogs...)
+	// Drain before the call: a failed writeback must not replay the same lines
+	// on the next one, since the route appends rather than replaces.
+	r.pendingLogs = nil
+
 	in := activities.WriteRunProgressInput{
 		RunID:      r.input.RunID,
 		Status:     status,

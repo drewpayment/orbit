@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -520,4 +521,130 @@ func TestScaffolderActivities_ValidateDefinition(t *testing.T) {
 			assert.Equal(t, first.Errors, again.Errors, "findings must be replay-stable")
 		}
 	})
+}
+
+// --- regression guards for the adversarial review ---------------------------
+
+// TestScaffolderActivities_PlanStep_PreviewDirIsOutsideTheWorkDir pins the fix
+// for a self-recursion bug: fs:render's source is routinely the work dir root,
+// so a preview destination inside it made copyDir walk into its own output and
+// recurse until the path length blew up.
+func TestScaffolderActivities_PlanStep_PreviewDirIsOutsideTheWorkDir(t *testing.T) {
+	action := &fakePreviewAction{fakeAction: fakeAction{name: "fs:render"}, files: map[string]string{"a.txt": "a"}}
+	base := t.TempDir()
+	a := NewScaffolderActivities(scaffolder.NewRegistry(action), nil, newFakeStorage(), base, nil)
+
+	_, err := a.PlanStep(context.Background(), ScaffolderStepInput{RunID: "run-1", StepID: "render", Action: "fs:render", DryRun: true})
+	require.NoError(t, err)
+
+	require.Len(t, action.gotDestDirs, 1)
+	assert.False(t, strings.HasPrefix(action.gotDestDirs[0], base+string(filepath.Separator)),
+		"preview dir %q must not be inside the run work dir %q", action.gotDestDirs[0], base)
+	assert.NoDirExists(t, action.gotDestDirs[0])
+}
+
+func TestScaffolderActivities_ExecuteStep_InvalidInputIsNonRetryable(t *testing.T) {
+	action := &fakeAction{
+		name: "test:picky",
+		execute: func(scaffolder.ActionRunContext, json.RawMessage) (json.RawMessage, error) {
+			return nil, fmt.Errorf("test:picky: %w: `path` is required", scaffolder.ErrInvalidInput)
+		},
+	}
+	a := newTestScaffolderActivities(t, nil, nil, action)
+
+	_, err := a.ExecuteStep(context.Background(), ScaffolderStepInput{RunID: "run-1", StepID: "s1", Action: "test:picky"})
+	require.Error(t, err)
+	assertNonRetryable(t, err)
+	assert.Contains(t, err.Error(), "`path` is required")
+}
+
+func TestScaffolderActivities_PlanStep_InvalidInputIsNonRetryable(t *testing.T) {
+	action := &fakeAction{
+		name: "test:picky",
+		plan: func(scaffolder.ActionRunContext, json.RawMessage) ([]scaffolder.PlannedChange, error) {
+			return nil, fmt.Errorf("test:picky: %w: `path` is required", scaffolder.ErrInvalidInput)
+		},
+	}
+	a := newTestScaffolderActivities(t, nil, nil, action)
+
+	_, err := a.PlanStep(context.Background(), ScaffolderStepInput{RunID: "run-1", StepID: "s1", Action: "test:picky", DryRun: true})
+	require.Error(t, err)
+	assertNonRetryable(t, err)
+}
+
+func TestScaffolderActivities_WriteRunProgress_RedactsRunOutputs(t *testing.T) {
+	writer := &fakeRunWriter{}
+	a := newTestScaffolderActivities(t, nil, writer)
+
+	require.NoError(t, a.WriteRunProgress(context.Background(), WriteRunProgressInput{
+		RunID:  "run-1",
+		Status: "succeeded",
+		Outputs: map[string]any{
+			"text":        "created https://example.com/x",
+			"accessToken": "ghs_supersecret",
+		},
+	}))
+
+	out := writer.calls[0].in.Outputs
+	assert.Equal(t, "created https://example.com/x", out["text"])
+	assert.Equal(t, redactedPlaceholder, out["accessToken"],
+		"spec.output is author-written and can name a credential-bearing step output")
+}
+
+func TestScaffolderActivities_WriteRunProgress_RedactsSecretsInStepErrors(t *testing.T) {
+	writer := &fakeRunWriter{}
+	a := newTestScaffolderActivities(t, nil, writer)
+
+	require.NoError(t, a.WriteRunProgress(context.Background(), WriteRunProgressInput{
+		RunID: "run-1",
+		Steps: []ScaffolderStepProgress{{
+			ID:     "s1",
+			Status: "failed",
+			Error:  "GET https://api.example.com/x?access_token=ghp_abcdefghij0123456789 failed: 401",
+		}},
+	}))
+
+	tail := writer.calls[0].in.Steps[0].LogTail
+	assert.NotContains(t, tail, "ghp_abcdefghij0123456789")
+	assert.Contains(t, tail, redactedPlaceholder)
+	assert.Contains(t, tail, "failed: 401", "the useful part of the message must survive")
+}
+
+func TestRedactSecretsInText(t *testing.T) {
+	tests := []struct {
+		name       string
+		in         string
+		wantAbsent string
+		wantSame   bool
+	}{
+		{name: "leaves ordinary text alone", in: "clone failed: repository not found", wantSame: true},
+		{name: "leaves an empty string alone", in: "", wantSame: true},
+		{name: "scrubs a token query parameter", in: "url?access_token=ghp_abcdefghij0123456789", wantAbsent: "ghp_abcdefghij0123456789"},
+		{name: "scrubs an assignment", in: `password: "hunter2hunter2"`, wantAbsent: "hunter2hunter2"},
+		{name: "scrubs a bare github token", in: "auth failed for ghs_abcdefghij0123456789", wantAbsent: "ghs_abcdefghij0123456789"},
+		{name: "scrubs an api key", in: "apiKey=sk-live-0123456789", wantAbsent: "sk-live-0123456789"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := redactSecretsInText(tt.in)
+			if tt.wantSame {
+				assert.Equal(t, tt.in, got)
+				return
+			}
+			assert.NotContains(t, got, tt.wantAbsent)
+			assert.Contains(t, got, redactedPlaceholder)
+		})
+	}
+}
+
+func TestCollectPreview_BoundsFileCount(t *testing.T) {
+	dir := t.TempDir()
+	for i := 0; i < previewMaxFiles+50; i++ {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, fmt.Sprintf("f%05d.txt", i)), nil, 0o644))
+	}
+
+	preview, err := collectPreview("run-1", "s1", dir)
+	require.NoError(t, err)
+	assert.Len(t, preview.Files, previewMaxFiles)
+	assert.True(t, preview.Truncated)
 }

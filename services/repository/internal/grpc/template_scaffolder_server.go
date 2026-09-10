@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	templatev1 "github.com/drewpayment/orbit/proto/gen/go/idp/template/v1"
+	"github.com/drewpayment/orbit/proto/pkg/svcauth"
 	"github.com/drewpayment/orbit/temporal-workflows/pkg/types"
 )
 
@@ -87,6 +88,13 @@ func (s *TemplateServer) StartScaffolderRun(ctx context.Context, req *connect.Re
 	if msg.GetWorkspaceId() == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("workspace_id is required"))
 	}
+	// Close GO-H2: the request's workspace id must match the workspace the
+	// verified caller identity is authorized for. Without this, the
+	// version-vs-request comparison below proves nothing, since both sides
+	// come from the same untrusted request.
+	if err := svcauth.EnforceWorkspace(ctx, msg.GetWorkspaceId()); err != nil {
+		return nil, connect.NewError(connect.CodePermissionDenied, err)
+	}
 	if s.definitionClient == nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			errors.New("template definition client is not configured"))
@@ -108,9 +116,9 @@ func (s *TemplateServer) StartScaffolderRun(ctx context.Context, req *connect.Re
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	// A version belongs to exactly one workspace. Running it under a different
-	// one would let a caller execute another tenant's template against their
-	// own workspace, so refuse rather than trusting the request's workspace id.
+	// A version belongs to exactly one workspace. Combined with the identity
+	// check above (which pins workspace_id to the caller's own workspace),
+	// this refuses to run another tenant's template.
 	if version.WorkspaceID != "" && version.WorkspaceID != msg.GetWorkspaceId() {
 		return nil, connect.NewError(connect.CodePermissionDenied,
 			errors.New("template definition version belongs to a different workspace"))

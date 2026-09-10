@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -52,6 +53,10 @@ const redactedPlaceholder = "[redacted]"
 const (
 	previewMaxFileBytes  = 512 << 10
 	previewMaxTotalBytes = 8 << 20
+	// previewMaxFiles bounds the manifest independently of its byte size:
+	// hundreds of thousands of empty files would each pass the byte checks and
+	// still build one enormous in-memory JSON document.
+	previewMaxFiles = 5000
 )
 
 // ScaffolderStorage is the subset of clients.StorageClient the dry-run
@@ -150,6 +155,17 @@ type CleanupScaffolderRunInput struct {
 
 // ScaffolderActivities dispatches v2 template steps through the action
 // registry and writes progress back to orbit-www.
+//
+// KNOWN LIMITATION — single-worker work dir. Steps of one run share a local
+// directory under baseDir (fetch:git clones into it, fs:render renders it,
+// git:push pushes it). Nothing pins a run's activities to one worker, so with
+// more than one worker replica on the "orbit-workflows" task queue a later
+// step can land on a host where that directory does not exist, and
+// CleanupRun can delete a directory on the wrong host while leaving the real
+// one behind. This is safe on today's single-replica deployment. Fixing it
+// properly means a Temporal session (workflow.NewSessionContext) pinning a
+// run's steps to one worker, or shared storage for the work dir; either is a
+// deliberate change to worker configuration and is tracked as follow-up work.
 type ScaffolderActivities struct {
 	registry *scaffolder.Registry
 	runs     ActionRunStatusWriter
@@ -184,9 +200,12 @@ func (a *ScaffolderActivities) ExecuteStep(ctx context.Context, in ScaffolderSte
 
 	raw, err := action.Execute(ctx, rc, in.Input)
 	if err != nil {
-		// The action's own failure may well be transient (a 503 from GitHub,
-		// a flaky clone), so it stays retryable under the caller's bounded
-		// retry policy rather than being classified here.
+		// An action that declares its failure as an input error will never
+		// succeed on retry; anything else may be transient (a 503 from GitHub,
+		// a flaky clone) and stays retryable under the bounded policy.
+		if errors.Is(err, scaffolder.ErrInvalidInput) {
+			return nil, nonRetryable(fmt.Errorf("step %q (%s): %w", in.StepID, in.Action, err))
+		}
 		return nil, fmt.Errorf("step %q (%s): %w", in.StepID, in.Action, err)
 	}
 
@@ -213,7 +232,7 @@ func (a *ScaffolderActivities) PlanStep(ctx context.Context, in ScaffolderStepIn
 			return &ScaffolderPlanResult{Unsupported: true}, nil
 		}
 		if err != nil {
-			return nil, fmt.Errorf("plan step %q (%s): %w", in.StepID, in.Action, err)
+			return nil, planStepError(in, err)
 		}
 		return &ScaffolderPlanResult{Changes: changes}, nil
 	}
@@ -224,18 +243,20 @@ func (a *ScaffolderActivities) PlanStep(ctx context.Context, in ScaffolderStepIn
 		return nil, nonRetryable(fmt.Errorf("plan step %q (%s): dry-run preview unavailable: storage offline", in.StepID, in.Action))
 	}
 
-	destDir := filepath.Join(a.runWorkDir(in.RunID), "preview", sanitizePathSegment(in.StepID))
-	if err := os.RemoveAll(destDir); err != nil {
-		return nil, fmt.Errorf("plan step %q: clear preview dir: %w", in.StepID, err)
-	}
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
+	// The preview directory MUST live outside the run work dir. A previewing
+	// action copies its source tree into destDir, and fs:render's source is
+	// routinely the work dir root — a destination inside it would make the
+	// copy walk into its own output and recurse until the path length blows
+	// up, rewriting the whole tree at every level.
+	destDir, err := os.MkdirTemp("", "orbit-scaffolder-preview-*")
+	if err != nil {
 		return nil, fmt.Errorf("plan step %q: create preview dir: %w", in.StepID, err)
 	}
 	defer func() { _ = os.RemoveAll(destDir) }()
 
 	changes, err := previewer.PlanPreview(ctx, rc, in.Input, destDir)
 	if err != nil {
-		return nil, fmt.Errorf("plan step %q (%s): %w", in.StepID, in.Action, err)
+		return nil, planStepError(in, err)
 	}
 
 	preview, err := collectPreview(in.RunID, in.StepID, destDir)
@@ -272,7 +293,11 @@ func (a *ScaffolderActivities) WriteRunProgress(ctx context.Context, in WriteRun
 		body.Error = &in.Error
 	}
 	if in.Outputs != nil {
-		body.Outputs = in.Outputs
+		// spec.output is author-written and can name a step output that holds
+		// a credential, so the persisted copy goes through the same redaction
+		// as step output.
+		redacted, _ := redactSecrets(in.Outputs).(map[string]any)
+		body.Outputs = redacted
 	}
 	if in.Steps != nil {
 		body.Steps = toActionRunSteps(in.Steps)
@@ -436,7 +461,10 @@ func toActionRunSteps(steps []ScaffolderStepProgress) []services.ActionRunStep {
 			Status:     s.Status,
 			StartedAt:  s.StartedAt,
 			FinishedAt: s.FinishedAt,
-			LogTail:    s.Error,
+			// An action error can quote the input it choked on (a URL with a
+			// token in the query string, say), so the persisted tail is
+			// scrubbed of anything that looks like a secret.
+			LogTail: redactSecretsInText(s.Error),
 		}
 		if s.Output != nil {
 			redacted, _ := redactSecrets(s.Output).(map[string]any)
@@ -546,6 +574,11 @@ func collectPreview(runID, stepID, destDir string) (*scaffolderPreview, error) {
 		if err != nil {
 			return err
 		}
+		if len(preview.Files) >= previewMaxFiles {
+			preview.Truncated = true
+			return fs.SkipAll
+		}
+
 		entry := scaffolderPreviewFile{Path: rel, Size: info.Size(), Encoding: "utf8"}
 
 		switch {
@@ -574,6 +607,39 @@ func collectPreview(runID, stepID, destDir string) (*scaffolderPreview, error) {
 
 	sort.Slice(preview.Files, func(i, j int) bool { return preview.Files[i].Path < preview.Files[j].Path })
 	return preview, nil
+}
+
+// planStepError wraps a planning failure, marking it non-retryable when the
+// action blamed its input.
+func planStepError(in ScaffolderStepInput, err error) error {
+	wrapped := fmt.Errorf("plan step %q (%s): %w", in.StepID, in.Action, err)
+	if errors.Is(err, scaffolder.ErrInvalidInput) {
+		return nonRetryable(wrapped)
+	}
+	return wrapped
+}
+
+// secretValuePattern matches credential-shaped substrings in free text: a
+// query parameter or assignment whose name looks secret, and the GitHub token
+// prefixes, which are recognisable on their own.
+var secretValuePattern = regexp.MustCompile(
+	`(?i)((?:token|secret|password|passwd|api[_-]?key|credential|authorization)["']?\s*[=:]\s*["']?)([^\s"'&]+)` +
+		`|(gh[pousr]_[A-Za-z0-9]{16,})`)
+
+// redactSecretsInText scrubs credential-shaped substrings from a free-text
+// message. It is a backstop for text this code did not compose (an action's
+// error string), not a substitute for keeping secrets out of messages.
+func redactSecretsInText(s string) string {
+	if s == "" {
+		return s
+	}
+	return secretValuePattern.ReplaceAllStringFunc(s, func(match string) string {
+		groups := secretValuePattern.FindStringSubmatch(match)
+		if groups[3] != "" {
+			return redactedPlaceholder
+		}
+		return groups[1] + redactedPlaceholder
+	})
 }
 
 // nonRetryable marks err as a failure no retry can fix.

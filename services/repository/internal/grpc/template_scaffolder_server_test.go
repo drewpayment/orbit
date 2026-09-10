@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	templatev1 "github.com/drewpayment/orbit/proto/gen/go/idp/template/v1"
+	"github.com/drewpayment/orbit/proto/pkg/svcauth"
 	"github.com/drewpayment/orbit/temporal-workflows/pkg/types"
 )
 
@@ -72,6 +73,16 @@ func validScaffolderRequest() *templatev1.StartScaffolderRunRequest {
 	}
 }
 
+// authCtx carries a verified identity for workspace ws-1, the way the
+// service-auth interceptor would in production. EnforceWorkspace rejects a
+// request with no identity, so every StartScaffolderRun test needs one.
+func authCtx() context.Context {
+	return svcauth.WithIdentity(context.Background(), svcauth.Identity{
+		UserID:      "user-1",
+		WorkspaceID: "ws-1",
+	})
+}
+
 func connectCode(t *testing.T, err error) connect.Code {
 	t.Helper()
 	var cErr *connect.Error
@@ -92,7 +103,7 @@ func TestStartScaffolderRun_Success(t *testing.T) {
 		Return("scaffolder-run-1", nil)
 
 	server := NewTemplateServer(temporalMock, nil, WithTemplateDefinitionClient(defMock))
-	resp, err := server.StartScaffolderRun(context.Background(), connect.NewRequest(validScaffolderRequest()))
+	resp, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(validScaffolderRequest()))
 
 	require.NoError(t, err)
 	assert.Equal(t, "scaffolder-run-1", resp.Msg.WorkflowId)
@@ -129,7 +140,7 @@ func TestStartScaffolderRun_ValidatesRequiredFields(t *testing.T) {
 			tt.mutate(req)
 
 			server := NewTemplateServer(temporalMock, nil, WithTemplateDefinitionClient(defMock))
-			_, err := server.StartScaffolderRun(context.Background(), connect.NewRequest(req))
+			_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(req))
 
 			require.Error(t, err)
 			assert.Equal(t, connect.CodeInvalidArgument, connectCode(t, err))
@@ -147,7 +158,7 @@ func TestStartScaffolderRun_UnknownVersionIsNotFound(t *testing.T) {
 		Return(nil, ErrTemplateDefinitionVersionNotFound)
 
 	server := NewTemplateServer(temporalMock, nil, WithTemplateDefinitionClient(defMock))
-	_, err := server.StartScaffolderRun(context.Background(), connect.NewRequest(validScaffolderRequest()))
+	_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(validScaffolderRequest()))
 
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, connectCode(t, err))
@@ -159,7 +170,7 @@ func TestStartScaffolderRun_VersionFetchFailureIsInternal(t *testing.T) {
 	defMock.On("GetDefinitionVersion", mock.Anything, "ver-1").Return(nil, errors.New("payload down"))
 
 	server := NewTemplateServer(new(MockScaffolderTemporalClient), nil, WithTemplateDefinitionClient(defMock))
-	_, err := server.StartScaffolderRun(context.Background(), connect.NewRequest(validScaffolderRequest()))
+	_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(validScaffolderRequest()))
 
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeInternal, connectCode(t, err))
@@ -173,16 +184,16 @@ func TestStartScaffolderRun_VersionOutsideRequestedWorkspaceIsDenied(t *testing.
 
 	temporalMock := new(MockScaffolderTemporalClient)
 	server := NewTemplateServer(temporalMock, nil, WithTemplateDefinitionClient(defMock))
-	_, err := server.StartScaffolderRun(context.Background(), connect.NewRequest(validScaffolderRequest()))
+	_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(validScaffolderRequest()))
 
 	require.Error(t, err)
 	assert.Equal(t, connect.CodePermissionDenied, connectCode(t, err))
 	temporalMock.AssertNotCalled(t, "StartScaffolderWorkflow", mock.Anything, mock.Anything)
 }
 
-func TestStartScaffolderRun_WithoutDefinitionClientIsUnimplemented(t *testing.T) {
+func TestStartScaffolderRun_WithoutDefinitionClientIsFailedPrecondition(t *testing.T) {
 	server := NewTemplateServer(new(MockScaffolderTemporalClient), nil)
-	_, err := server.StartScaffolderRun(context.Background(), connect.NewRequest(validScaffolderRequest()))
+	_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(validScaffolderRequest()))
 
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeFailedPrecondition, connectCode(t, err))
@@ -191,7 +202,7 @@ func TestStartScaffolderRun_WithoutDefinitionClientIsUnimplemented(t *testing.T)
 func TestStartScaffolderRun_WithoutTemporalIsUnavailable(t *testing.T) {
 	defMock := new(MockDefinitionClient)
 	server := NewTemplateServer(nil, nil, WithTemplateDefinitionClient(defMock))
-	_, err := server.StartScaffolderRun(context.Background(), connect.NewRequest(validScaffolderRequest()))
+	_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(validScaffolderRequest()))
 
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeUnavailable, connectCode(t, err))
@@ -211,7 +222,7 @@ func TestStartScaffolderRun_AcceptsNilParameters(t *testing.T) {
 	req.Parameters = nil
 
 	server := NewTemplateServer(temporalMock, nil, WithTemplateDefinitionClient(defMock))
-	_, err := server.StartScaffolderRun(context.Background(), connect.NewRequest(req))
+	_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(req))
 
 	require.NoError(t, err)
 	assert.NotNil(t, got.Parameters, "a template with no parameters must still run")
@@ -377,4 +388,38 @@ func TestListActions_IsSortedAndStable(t *testing.T) {
 	for i := range first.Msg.Actions {
 		assert.Equal(t, first.Msg.Actions[i].Name, second.Msg.Actions[i].Name)
 	}
+}
+
+// --- tenant isolation -------------------------------------------------------
+
+func TestStartScaffolderRun_RejectsAnotherWorkspace(t *testing.T) {
+	temporalMock := new(MockScaffolderTemporalClient)
+	defMock := new(MockDefinitionClient)
+
+	// A caller authorized for ws-1 asking to run in ws-2. Both the workspace
+	// id and the version id are request-supplied, so only the identity check
+	// can catch this.
+	req := validScaffolderRequest()
+	req.WorkspaceId = "ws-2"
+
+	server := NewTemplateServer(temporalMock, nil, WithTemplateDefinitionClient(defMock))
+	_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(req))
+
+	require.Error(t, err)
+	assert.Equal(t, connect.CodePermissionDenied, connectCode(t, err))
+	defMock.AssertNotCalled(t, "GetDefinitionVersion", mock.Anything, mock.Anything)
+	temporalMock.AssertNotCalled(t, "StartScaffolderWorkflow", mock.Anything, mock.Anything)
+}
+
+func TestStartScaffolderRun_RejectsAnUnauthenticatedCaller(t *testing.T) {
+	defMock := new(MockDefinitionClient)
+	server := NewTemplateServer(new(MockScaffolderTemporalClient), nil, WithTemplateDefinitionClient(defMock))
+
+	// No identity in the context: the interceptor did not run, or the token
+	// carried no workspace. Fail closed.
+	_, err := server.StartScaffolderRun(context.Background(), connect.NewRequest(validScaffolderRequest()))
+
+	require.Error(t, err)
+	assert.Equal(t, connect.CodePermissionDenied, connectCode(t, err))
+	defMock.AssertNotCalled(t, "GetDefinitionVersion", mock.Anything, mock.Anything)
 }

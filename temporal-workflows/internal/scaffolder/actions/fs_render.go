@@ -59,7 +59,7 @@ func (a *FSRender) Execute(_ context.Context, rc scaffolder.ActionRunContext, in
 		return nil, err
 	}
 	if err := requireWithinWorkDir(rc.WorkDir, in.Path); err != nil {
-		return nil, fmt.Errorf("fs:render: %w", err)
+		return nil, fmt.Errorf("fs:render: %w: %v", scaffolder.ErrInvalidInput, err)
 	}
 	rc.Heartbeat("fs:render", in.Path)
 
@@ -97,7 +97,7 @@ func (a *FSRender) PlanPreview(_ context.Context, rc scaffolder.ActionRunContext
 		return nil, err
 	}
 	if err := requireWithinWorkDir(rc.WorkDir, in.Path); err != nil {
-		return nil, fmt.Errorf("fs:render: %w", err)
+		return nil, fmt.Errorf("fs:render: %w: %v", scaffolder.ErrInvalidInput, err)
 	}
 	if strings.TrimSpace(destDir) == "" {
 		return nil, fmt.Errorf("fs:render: a preview destination directory is required")
@@ -166,14 +166,14 @@ func parseFSRenderInput(raw json.RawMessage) (fsRenderInput, error) {
 	var in fsRenderInput
 	if len(strings.TrimSpace(string(raw))) > 0 {
 		if err := json.Unmarshal(raw, &in); err != nil {
-			return in, fmt.Errorf("fs:render: decode input: %w", err)
+			return in, fmt.Errorf("fs:render: %w: decode input: %v", scaffolder.ErrInvalidInput, err)
 		}
 	}
 	if strings.TrimSpace(in.Path) == "" {
-		return in, fmt.Errorf("fs:render: `path` is required")
+		return in, fmt.Errorf("fs:render: %w: `path` is required", scaffolder.ErrInvalidInput)
 	}
 	if len(in.Values) == 0 {
-		return in, fmt.Errorf("fs:render: `values` is required")
+		return in, fmt.Errorf("fs:render: %w: `values` is required", scaffolder.ErrInvalidInput)
 	}
 	return in, nil
 }

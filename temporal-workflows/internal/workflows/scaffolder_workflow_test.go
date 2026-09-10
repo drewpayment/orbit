@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -549,4 +550,122 @@ func TestParseStepTimeout(t *testing.T) {
 			require.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// --- regression guards for the adversarial review ---------------------------
+
+// Cancellation ordering note.
+//
+// ScaffolderWorkflow sets WaitForCancellation on step activities and, on
+// ctx.Done(), waits for the step future on a disconnected context before
+// returning, so cleanup cannot delete the work dir out from under a live clone
+// or render. That ordering is NOT observable here: the SDK's test environment
+// resolves a cancelled activity's future immediately —
+// testWorkflowEnvironmentImpl.RequestCancelActivity fires
+// handle.callback(nil, NewCanceledError()) without consulting
+// waitForCancelRequest (internal_workflow_testsuite.go:833) — whereas a real
+// server gates completion on it (internal_event_handlers.go:690).
+//
+// So TestCancellationMidRunCleansUpAndReportsCancelled below covers the
+// observable half (status, cleanup, terminal writeback on a disconnected
+// context); the wait itself is only exercised against a real server.
+
+// TestDryRunSkipsStepsThatDependOnEarlierOutput covers the canonical
+// fetch -> render -> push shape: no step produces output during a dry run, so
+// a reference to a prior step must downgrade that step to "unsupported"
+// instead of failing the whole preview.
+func (s *ScaffolderWorkflowTestSuite) TestDryRunSkipsStepsThatDependOnEarlierOutput() {
+	in := baseInput(twoStepDefinition())
+	in.DryRun = true
+	in.Definition.Spec.Output = nil
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusSucceeded, res.Status,
+		"a step that cannot be previewed must not fail the dry run")
+
+	// Only the first step could be planned.
+	s.Require().Len(s.stubs.planned, 1)
+	s.Equal("create", s.stubs.planned[0].StepID)
+
+	var unsupported []scaffolder.PlannedChange
+	for _, c := range res.Plan {
+		if c.Kind == "unsupported" {
+			unsupported = append(unsupported, c)
+		}
+	}
+	s.Require().Len(unsupported, 1)
+	s.Equal("log", unsupported[0].Name)
+	s.Contains(unsupported[0].Description, "earlier step")
+
+	logStep, ok := stepByID(s.lastProgress().Steps, "log")
+	s.Require().True(ok)
+	s.Equal("skipped", logStep.Status)
+}
+
+// A live run must still fail on the same reference: only a dry run has the
+// excuse that no step produced output.
+func (s *ScaffolderWorkflowTestSuite) TestLiveRunStillFailsOnAnUnresolvableStepReference() {
+	def := twoStepDefinition()
+	def.Spec.Output = nil
+	s.stubs.executeFn = func(activities.ScaffolderStepInput) (*activities.ScaffolderStepResult, error) {
+		return &activities.ScaffolderStepResult{Output: map[string]any{"other": "x"}}, nil
+	}
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, baseInput(def))
+	res := s.result()
+
+	s.Equal(ScaffolderStatusFailed, res.Status)
+	s.Contains(res.Error, "steps.create.output.repoUrl")
+}
+
+// TestRunClaimedBeforeAnythingElseCanFail: the first writeback records the
+// workflow id, so a run can always be found and cancelled from the UI.
+func (s *ScaffolderWorkflowTestSuite) TestRunIsClaimedWithWorkflowIDFirst() {
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, baseInput(twoStepDefinition()))
+	s.Equal(ScaffolderStatusSucceeded, s.result().Status)
+
+	s.Require().NotEmpty(s.stubs.progress)
+	first := s.stubs.progress[0]
+	s.Equal("running", first.Status)
+	s.NotEmpty(first.WorkflowID, "the claiming write must record the workflow id")
+	for _, st := range first.Steps {
+		s.Equal("pending", st.Status, "the claiming write happens before any step runs")
+	}
+}
+
+func (s *ScaffolderWorkflowTestSuite) TestRunLogRecordsStepLifecycle() {
+	def := twoStepDefinition()
+	def.Spec.Steps[1].If = "${{ parameters.wantLog }}"
+	def.Spec.Output = nil
+	in := baseInput(def)
+	in.Parameters["wantLog"] = false
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	s.Equal(ScaffolderStatusSucceeded, s.result().Status)
+
+	var lines []string
+	for _, p := range s.stubs.progress {
+		for _, l := range p.AppendLogs {
+			lines = append(lines, l.Message)
+		}
+	}
+	joined := strings.Join(lines, "\n")
+	s.Contains(joined, "step create (github:repo:create) started")
+	s.Contains(joined, "step create (github:repo:create) succeeded")
+	s.Contains(joined, "step log (debug:log) skipped")
+
+	// Logs are append-only on the route, so a line must never be sent twice.
+	seen := map[string]int{}
+	for _, l := range lines {
+		seen[l]++
+	}
+	for line, n := range seen {
+		s.Equal(1, n, "log line sent %d times: %s", n, line)
+	}
+
+	// A resolved step input can carry an installation token; it must never
+	// reach the run log.
+	s.NotContains(joined, "orders", "resolved step input must not be logged")
 }

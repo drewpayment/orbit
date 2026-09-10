@@ -52,6 +52,38 @@ type PayloadTemplateDefinitionClient struct {
 	httpClient *http.Client
 }
 
+// Accepted document identifiers. Duplicated from
+// temporal-workflows/internal/scaffolder (not importable across the module
+// boundary) so a v1 or malformed document is rejected at dispatch time with a
+// clear message, rather than deep inside the workflow after the run record has
+// already flipped to running.
+const (
+	definitionAPIVersionV2 = "orbit/v2"
+	definitionKindTemplate = "Template"
+)
+
+// checkDefinitionHeader rejects a stored document the v2 engine cannot run.
+// The body is otherwise passed through untouched: this service does not
+// interpret template definitions.
+func checkDefinitionHeader(versionID string, raw json.RawMessage) error {
+	var header struct {
+		APIVersion string `json:"apiVersion"`
+		Kind       string `json:"kind"`
+	}
+	if err := json.Unmarshal(raw, &header); err != nil {
+		return fmt.Errorf("get template definition version %s: definitionJson is not an object: %w", versionID, err)
+	}
+	if header.APIVersion != definitionAPIVersionV2 {
+		return fmt.Errorf("get template definition version %s: unsupported apiVersion %q, want %q",
+			versionID, header.APIVersion, definitionAPIVersionV2)
+	}
+	if header.Kind != definitionKindTemplate {
+		return fmt.Errorf("get template definition version %s: unsupported kind %q, want %q",
+			versionID, header.Kind, definitionKindTemplate)
+	}
+	return nil
+}
+
 // NewPayloadTemplateDefinitionClient builds a client against orbit-www.
 func NewPayloadTemplateDefinitionClient(baseURL, apiKey string) *PayloadTemplateDefinitionClient {
 	return &PayloadTemplateDefinitionClient{
@@ -105,6 +137,9 @@ func (c *PayloadTemplateDefinitionClient) GetDefinitionVersion(ctx context.Conte
 	}
 	if len(env.Version.DefinitionJSON) == 0 || string(env.Version.DefinitionJSON) == "null" {
 		return nil, fmt.Errorf("get template definition version %s: definitionJson is empty", versionID)
+	}
+	if err := checkDefinitionHeader(versionID, env.Version.DefinitionJSON); err != nil {
+		return nil, err
 	}
 
 	return &TemplateDefinitionVersionData{

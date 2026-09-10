@@ -103,3 +103,14 @@ type PlanPreviewer interface {
 	// (including deleting it). It returns the same changes Plan would.
 	PlanPreview(ctx context.Context, rc ActionRunContext, input json.RawMessage, destDir string) ([]PlannedChange, error)
 }
+
+// ErrInvalidInput marks an action failure caused by the step's input rather
+// than by the world: a missing required field, a malformed value, a path
+// outside the run's work dir. The dispatch activity raises these as
+// non-retryable, so a broken definition fails once instead of burning the
+// whole retry budget.
+//
+// Wrap it with %w:
+//
+//	return fmt.Errorf("fs:render: %w: `path` is required", scaffolder.ErrInvalidInput)
+var ErrInvalidInput = errors.New("invalid action input")
