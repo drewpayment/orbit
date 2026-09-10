@@ -38,6 +38,14 @@ import { slugify, uniqueSlug } from '@/lib/catalog/entity-crud'
  * rather than duplicated — a Temporal activity retry of api:schema:register
  * is safe to re-run. A fresh create returns 201.
  *
+ * Cross-run duplicates: source.sourceId is the Temporal run id, so a
+ * DIFFERENT run (e.g. re-running the same published template with the same
+ * serviceName) never matches the idempotency check above. If a row with the
+ * same canonical slug or the same name already exists in the workspace and
+ * was not created by this run, this route responds 409
+ * `{ error, code: 'ALREADY_EXISTS', slug }` instead of creating a second
+ * row — no silent duplication, no auto-suffixed slug across runs.
+ *
  * Content hashing: the created api-schema-versions row is NOT given an
  * explicit contentHash here — APISchemaVersions.ts's own beforeValidate hook
  * computes it (`sha256(rawContent)`) whenever contentHash is unset, so this
@@ -187,6 +195,46 @@ export async function POST(request: NextRequest) {
     }
 
     const slugBase = slugify(name) || (schemaType as RegisterableSchemaType)
+
+    // Cross-run duplicate detection (design decision, see PR discussion on
+    // duplicate `api-schemas` rows from re-running a published template):
+    // the idempotency check above only matches within the SAME run (it keys
+    // on source.sourceId, which is the Temporal run id) so a Temporal retry
+    // of this action is safe to re-run. But a *different* run registering
+    // the same logical schema (e.g. re-running a template with the same
+    // serviceName) must NOT silently create a second row — it must fail
+    // loudly. A row is treated as "the same schema" when it already has the
+    // exact same canonical slug OR the exact same name in this workspace,
+    // as long as it wasn't created by this run (that case is already
+    // handled above as a same-run retry).
+    const conflictCandidates = await payload.find({
+      collection: 'api-schemas',
+      where: {
+        and: [
+          { workspace: { equals: workspaceId } },
+          { or: [{ slug: { equals: slugBase } }, { name: { equals: name } }] },
+        ],
+      },
+      limit: 10,
+      depth: 0,
+      overrideAccess: true,
+    })
+    const conflict = conflictCandidates.docs.find((d) => {
+      const docSource = (d as { source?: { type?: string; sourceId?: string } }).source
+      return docSource?.sourceId !== sourceId || docSource?.type !== sourceType
+    })
+    if (conflict) {
+      const conflictSlug = String(conflict.slug ?? slugBase)
+      return NextResponse.json(
+        {
+          error: `API schema "${conflictSlug}" already exists in this workspace`,
+          code: 'ALREADY_EXISTS',
+          slug: conflictSlug,
+        },
+        { status: 409 },
+      )
+    }
+
     const slugCandidates = await payload.find({
       collection: 'api-schemas',
       where: {
