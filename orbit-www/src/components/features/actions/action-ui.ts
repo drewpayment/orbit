@@ -17,6 +17,7 @@ import {
   Radio,
   Sparkles,
   Play,
+  FileCode,
 } from 'lucide-react'
 import type { Action, ActionRun } from '@/payload-types'
 
@@ -32,6 +33,7 @@ export const BACKEND_TYPE_LABEL: Record<ActionBackendType, string> = {
   'temporal-launch': 'Launch',
   'kafka-provision': 'Kafka topic',
   agent: 'Agent',
+  scaffolder: 'Template (v2)',
 }
 
 export function backendTypeLabel(type: string): string {
@@ -47,6 +49,7 @@ export const BACKEND_TYPE_ICON: Record<ActionBackendType, LucideIcon> = {
   'temporal-launch': Rocket,
   'kafka-provision': Radio,
   agent: Sparkles,
+  scaffolder: FileCode,
 }
 
 export function backendTypeIcon(type: string): LucideIcon {

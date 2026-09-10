@@ -22,6 +22,7 @@ export const ACTION_BACKEND_TYPES = [
   'temporal-launch',
   'kafka-provision',
   'agent',
+  'scaffolder',
 ] as const satisfies readonly BackendType[]
 
 // Compile-time guard: fails if the collection union gains a type not listed above.
@@ -100,6 +101,14 @@ export const BACKEND_TYPE_META: Record<BackendType, BackendTypeMeta> = {
     refHelp: 'The agent prompt reference to drive. Not yet executed (deferred).',
     refPlaceholder: 'provision-namespace',
     deferred: true,
+  },
+  scaffolder: {
+    value: 'scaffolder',
+    label: 'Scaffolder (template)',
+    refLabel: 'Template definition id',
+    refHelp: 'The template-definitions doc this action runs via the v2 ScaffolderWorkflow.',
+    refPlaceholder: '66f0c2a1e4b0c9d1a2b3c4d5',
+    deferred: false,
   },
 }
 

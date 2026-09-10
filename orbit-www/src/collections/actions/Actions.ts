@@ -11,11 +11,16 @@ import {
  *
  * An Action declares an input form (`inputSchema`), an `approvalPolicy`, and a
  * `backend` that says how it executes. `backend.type` discriminates the
- * executor — locally-runnable ones (`builtin`, `webhook`) run in the TS layer
- * today; the `temporal-*` / `kafka-provision` / `agent` types WRAP existing
- * Temporal workflows and are dispatched by the (deferred) Go ActionDispatch
- * workflow — no existing workflow is rewritten. Running an Action produces an
- * `action-runs` row.
+ * executor — locally-runnable ones (`builtin`, `webhook`, `scaffolder`) run in
+ * the TS layer today; the `temporal-*` / `kafka-provision` / `agent` types WRAP
+ * existing Temporal workflows and are dispatched by the (deferred) Go
+ * ActionDispatch workflow — no existing workflow is rewritten. Running an
+ * Action produces an `action-runs` row.
+ *
+ * `scaffolder` (In-App Template Authoring, phase-1 plan §9.1) dispatches to the
+ * v2 ScaffolderWorkflow via `TemplateService.StartScaffolderRun`; `backend.ref`
+ * is a `template-definitions` doc id. It replaces `temporal-template` over
+ * time — `temporal-template` stays deferred/unwired.
  *
  * Authoring (defining Actions) is gated on workspace owner/admin; RUNNING an
  * Action is available to any workspace member (that's self-service) and is
@@ -32,6 +37,7 @@ export const ACTION_BACKEND_TYPES = [
   'temporal-launch',
   'kafka-provision',
   'agent',
+  'scaffolder',
 ] as const
 
 export const Actions: CollectionConfig = {
