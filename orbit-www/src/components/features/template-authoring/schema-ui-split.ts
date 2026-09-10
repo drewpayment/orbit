@@ -108,7 +108,7 @@ export function stepInputSchemaToSchemaFormPage(
   return {
     title,
     schema: { type: 'object', properties, required: schema.required ?? [] },
-    uiSchema: Object.keys(uiSchema).length > 0 ? uiSchema : undefined,
+    uiSchema,
   }
 }
 
