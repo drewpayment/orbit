@@ -21,6 +21,21 @@ const onePage: SchemaFormPage[] = [
   },
 ]
 
+const pageWithSecret: SchemaFormPage[] = [
+  {
+    title: 'Basics',
+    schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', title: 'Name' },
+        token: { type: 'string', title: 'API token' },
+      },
+      required: ['name', 'token'],
+    },
+    uiSchema: { token: { 'ui:secret': true } },
+  },
+]
+
 function baseRun(overrides?: Partial<ActionRun>): ActionRun {
   return {
     id: 'run-preview',
@@ -176,6 +191,36 @@ describe('RunWizard', () => {
     fireEvent.click(screen.getByRole('button', { name: /^submit$/i }))
     await waitFor(() => expect(screen.getByText(/Invalid parameters:.*must NOT have fewer than 1 characters/i)).toBeInTheDocument())
     expect(push).not.toHaveBeenCalled()
+  })
+
+  it('passes SchemaForm\'s {value, secret:true} wrapper through to startRun unmodified (server unwraps/redacts, not the client)', async () => {
+    const planRun = vi.fn().mockResolvedValue({ runId: 'run-preview' })
+    const startRun = vi.fn().mockResolvedValue({ runId: 'run-real', status: 'pending' })
+
+    render(
+      <RunWizard
+        slug="go-service"
+        templateVersionId="ver-1"
+        pages={pageWithSecret}
+        planRun={planRun}
+        startRun={startRun}
+        getRun={vi.fn().mockResolvedValue(baseRun())}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText(/^Name/i), { target: { value: 'my-svc' } })
+    fireEvent.change(screen.getByLabelText(/API token/i), { target: { value: 'topsecret' } })
+    fireEvent.click(screen.getByRole('button', { name: /review/i }))
+
+    await waitFor(() => screen.getByRole('button', { name: /^submit$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^submit$/i }))
+
+    await waitFor(() =>
+      expect(startRun).toHaveBeenCalledWith({
+        templateVersionId: 'ver-1',
+        parameters: { name: 'my-svc', token: { value: 'topsecret', secret: true } },
+      }),
+    )
   })
 
   it('surfaces the same server-side parameter-validation error in the review preview banner', async () => {
