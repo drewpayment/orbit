@@ -6,11 +6,18 @@
  * as the authoring audit trail: which snapshot is current, which passed
  * validation, and which has a recorded dry run — the two facts the publish
  * gate turns on.
+ *
+ * The version list renders as a compact, scrollable stack (one line per
+ * version) so eight-plus versions don't dominate the page, and the compare
+ * diff sits behind a collapsed-by-default trigger — most visits to this
+ * panel are "what's here", not "diff two versions".
  */
 'use client'
 
 import * as React from 'react'
+import { ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
   Select,
   SelectContent,
@@ -19,7 +26,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import { diffDefinitions, hasChanges } from './version-diff'
+import { diffDefinitions, foldUnchanged, hasChanges } from './version-diff'
 
 export interface VersionRow {
   id: string
@@ -60,18 +67,21 @@ export function VersionsPanel({ versions }: VersionsPanelProps) {
     setSelection({ ...defaultSelection(versions), key: versionsKey })
   }
 
+  const [compareOpen, setCompareOpen] = React.useState(false)
+
   const leftId = selection.left
   const rightId = selection.right
   const setLeftId = (id: string) => setSelection((s) => ({ ...s, left: id }))
   const setRightId = (id: string) => setSelection((s) => ({ ...s, right: id }))
 
   const byId = React.useMemo(() => new Map(versions.map((v) => [v.id, v])), [versions])
-  const diff = React.useMemo(() => {
+  const rawDiff = React.useMemo(() => {
     const left = byId.get(leftId)
     const right = byId.get(rightId)
     if (!left || !right || left.id === right.id) return null
     return diffDefinitions(left.definitionJson, right.definitionJson)
   }, [byId, leftId, rightId])
+  const diff = React.useMemo(() => (rawDiff ? foldUnchanged(rawDiff) : null), [rawDiff])
 
   if (versions.length === 0) {
     return (
@@ -85,80 +95,87 @@ export function VersionsPanel({ versions }: VersionsPanelProps) {
     <div className="space-y-4">
       <h3 className="text-sm font-semibold">Versions</h3>
 
-      <ul className="space-y-1.5">
+      <ul className="max-h-56 space-y-1 overflow-auto pr-1">
         {versions.map((v) => (
-          <li key={v.id} className="rounded-md border px-3 py-2 text-sm">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-medium">v{v.versionNumber}</span>
-              <span className="flex items-center gap-1">
-                {v.isCurrent ? <Badge variant="default">Current</Badge> : null}
-                {v.validatedAt ? <Badge variant="secondary">Validated</Badge> : null}
-                {v.dryRunRunId ? <Badge variant="secondary">Dry run</Badge> : null}
-              </span>
-            </div>
-            {v.changeNote ? (
-              <p className="mt-0.5 truncate text-xs text-muted-foreground">{v.changeNote}</p>
-            ) : null}
+          <li
+            key={v.id}
+            className="flex items-center justify-between gap-2 rounded-md border px-3 py-1.5 text-sm"
+          >
+            <span className="flex min-w-0 items-baseline gap-2">
+              <span className="shrink-0 font-medium">v{v.versionNumber}</span>
+              {v.changeNote ? (
+                <span className="truncate text-xs text-muted-foreground">{v.changeNote}</span>
+              ) : null}
+            </span>
+            <span className="flex shrink-0 items-center gap-1">
+              {v.isCurrent ? <Badge variant="default">Current</Badge> : null}
+              {v.validatedAt ? <Badge variant="secondary">Validated</Badge> : null}
+              {v.dryRunRunId ? <Badge variant="secondary">Dry run</Badge> : null}
+            </span>
           </li>
         ))}
       </ul>
 
       {versions.length > 1 ? (
-        <div className="space-y-2 border-t pt-3">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Compare
-          </h4>
-          <div className="flex items-center gap-2">
-            <Select value={leftId} onValueChange={setLeftId}>
-              <SelectTrigger aria-label="Compare from">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {versions.map((v) => (
-                  <SelectItem key={v.id} value={v.id}>
-                    v{v.versionNumber}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <span className="text-xs text-muted-foreground">to</span>
-            <Select value={rightId} onValueChange={setRightId}>
-              <SelectTrigger aria-label="Compare to">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {versions.map((v) => (
-                  <SelectItem key={v.id} value={v.id}>
-                    v{v.versionNumber}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        <Collapsible open={compareOpen} onOpenChange={setCompareOpen} className="space-y-2 border-t pt-3">
+          <CollapsibleTrigger className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground">
+            <ChevronRight className={cn('h-3.5 w-3.5 transition-transform', compareOpen && 'rotate-90')} />
+            Compare versions
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Select value={leftId} onValueChange={setLeftId}>
+                <SelectTrigger aria-label="Compare from">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {versions.map((v) => (
+                    <SelectItem key={v.id} value={v.id}>
+                      v{v.versionNumber}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-xs text-muted-foreground">to</span>
+              <Select value={rightId} onValueChange={setRightId}>
+                <SelectTrigger aria-label="Compare to">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {versions.map((v) => (
+                    <SelectItem key={v.id} value={v.id}>
+                      v{v.versionNumber}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-          {diff === null ? (
-            <p className="text-sm text-muted-foreground">Pick two different versions.</p>
-          ) : !hasChanges(diff) ? (
-            <p className="text-sm text-muted-foreground">These versions are identical.</p>
-          ) : (
-            <pre className="max-h-96 overflow-auto rounded-md border bg-muted/30 p-2 text-xs">
-              {diff.map((line, i) => (
-                <div
-                  key={i}
-                  className={cn(
-                    'whitespace-pre-wrap font-mono',
-                    line.kind === 'added' && 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-                    line.kind === 'removed' && 'bg-destructive/10 text-destructive',
-                    line.kind === 'context' && 'text-muted-foreground',
-                  )}
-                >
-                  {line.kind === 'added' ? '+' : line.kind === 'removed' ? '-' : ' '}
-                  {line.text}
-                </div>
-              ))}
-            </pre>
-          )}
-        </div>
+            {rawDiff === null ? (
+              <p className="text-sm text-muted-foreground">Pick two different versions.</p>
+            ) : !hasChanges(rawDiff) ? (
+              <p className="text-sm text-muted-foreground">These versions are identical.</p>
+            ) : (
+              <pre className="max-h-96 overflow-auto rounded-md border bg-muted/30 p-2 text-xs">
+                {(diff ?? []).map((line, i) => (
+                  <div
+                    key={i}
+                    className={cn(
+                      'whitespace-pre-wrap font-mono',
+                      line.kind === 'added' && 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+                      line.kind === 'removed' && 'bg-destructive/10 text-destructive',
+                      line.kind === 'context' && 'text-muted-foreground',
+                      line.kind === 'separator' && 'text-muted-foreground/70',
+                    )}
+                  >
+                    {line.kind === 'added' ? '+' : line.kind === 'removed' ? '-' : ' '}
+                    {line.text}
+                  </div>
+                ))}
+              </pre>
+            )}
+          </CollapsibleContent>
+        </Collapsible>
       ) : null}
     </div>
   )

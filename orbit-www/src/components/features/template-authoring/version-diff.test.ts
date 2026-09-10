@@ -1,9 +1,78 @@
 import { describe, expect, it } from 'vitest'
-import { diffLines, diffDefinitions, type DiffLine } from './version-diff'
+import { diffLines, diffDefinitions, foldUnchanged, type DiffLine } from './version-diff'
 
 function kinds(lines: DiffLine[]): string {
   return lines.map((l) => l.kind[0]).join('')
 }
+
+function context(text: string): DiffLine {
+  return { kind: 'context', text, left: 1, right: 1 }
+}
+function added(text: string): DiffLine {
+  return { kind: 'added', text, left: null, right: 1 }
+}
+function removed(text: string): DiffLine {
+  return { kind: 'removed', text, left: 1, right: null }
+}
+
+describe('foldUnchanged', () => {
+  it('leaves a short diff untouched (nothing to fold)', () => {
+    const lines = [context('a'), added('b'), context('c')]
+    expect(foldUnchanged(lines)).toEqual(lines)
+  })
+
+  it('folds a long unchanged run in the middle, keeping context lines around each change', () => {
+    const lines: DiffLine[] = [
+      added('start'),
+      ...Array.from({ length: 20 }, (_, i) => context(`u${i}`)),
+      removed('end'),
+    ]
+    const folded = foldUnchanged(lines, 3)
+    // 1 added + 3 leading context + separator + 3 trailing context + 1 removed
+    expect(folded).toHaveLength(1 + 3 + 1 + 3 + 1)
+    expect(folded[0]).toEqual(added('start'))
+    expect(folded.slice(1, 4)).toEqual([context('u0'), context('u1'), context('u2')])
+    const sep = folded[4]
+    expect(sep.kind).toBe('separator')
+    expect(sep.text).toMatch(/14 unchanged lines/)
+    expect(folded.slice(5, 8)).toEqual([context('u17'), context('u18'), context('u19')])
+    expect(folded[8]).toEqual(removed('end'))
+  })
+
+  it('does not fold a run shorter than or equal to 2*context (nothing worth collapsing)', () => {
+    const lines: DiffLine[] = [
+      added('start'),
+      ...Array.from({ length: 6 }, (_, i) => context(`u${i}`)),
+      removed('end'),
+    ]
+    const folded = foldUnchanged(lines, 3)
+    expect(folded).toEqual(lines)
+  })
+
+  it('folds unchanged lines at the very start and end of the diff', () => {
+    const lines: DiffLine[] = [
+      ...Array.from({ length: 10 }, (_, i) => context(`u${i}`)),
+      added('mid'),
+      ...Array.from({ length: 10 }, (_, i) => context(`v${i}`)),
+    ]
+    const folded = foldUnchanged(lines, 3)
+    expect(folded[0].kind).toBe('separator')
+    expect(folded[0].text).toMatch(/7 unchanged lines/)
+    expect(folded.slice(1, 4)).toEqual([context('u7'), context('u8'), context('u9')])
+    expect(folded[4]).toEqual(added('mid'))
+    expect(folded.slice(5, 8)).toEqual([context('v0'), context('v1'), context('v2')])
+    expect(folded[8].kind).toBe('separator')
+    expect(folded[8].text).toMatch(/7 unchanged lines/)
+  })
+
+  it('handles an all-context diff by folding the whole thing to one separator', () => {
+    const lines = Array.from({ length: 10 }, (_, i) => context(`u${i}`))
+    const folded = foldUnchanged(lines, 3)
+    expect(folded).toHaveLength(1)
+    expect(folded[0].kind).toBe('separator')
+    expect(folded[0].text).toMatch(/10 unchanged lines/)
+  })
+})
 
 describe('diffLines', () => {
   it('reports every line as context when both sides are identical', () => {

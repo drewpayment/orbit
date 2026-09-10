@@ -382,55 +382,59 @@ export function TemplateEditorShell({
               </TabsContent>
             </Tabs>
 
-            <div className="grid gap-4 lg:grid-cols-2">
-              <Card>
-                <CardContent className="pt-6">
-                  <ValidationPanel
-                    definition={definition}
-                    validate={validate}
-                    onJumpTo={onJumpTo}
-                    runToken={validateToken}
-                    showTrigger={false}
-                  />
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <DryRunPanel
-                    versionId={versionId}
-                    pages={definition.spec.parameters}
-                    fixtures={fixtures}
-                    dirty={dirty}
-                    values={dryRunValues}
-                    onValuesChange={setDryRunValues}
-                    startDryRun={actions.startDryRun}
-                    getRun={actions.getRun}
-                    recordSuccessfulDryRun={actions.recordSuccessfulDryRun}
-                    onGateSatisfied={() => {
-                      setGateDryRun(true)
-                      router.refresh()
-                    }}
-                  />
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <FixturesPanel
-                    definitionId={definitionId}
-                    fixtures={fixtures}
-                    currentValues={dryRunValues}
-                    onApply={setDryRunValues}
-                    saveFixture={actions.saveFixture}
-                    deleteFixture={actions.deleteFixture}
-                    onChanged={() => router.refresh()}
-                  />
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <VersionsPanel versions={versions} />
-                </CardContent>
-              </Card>
+            <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+              <div className="space-y-4">
+                <Card>
+                  <CardContent className="pt-6">
+                    <ValidationPanel
+                      definition={definition}
+                      validate={validate}
+                      onJumpTo={onJumpTo}
+                      runToken={validateToken}
+                      showTrigger={false}
+                    />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <FixturesPanel
+                      definitionId={definitionId}
+                      fixtures={fixtures}
+                      currentValues={dryRunValues}
+                      onApply={setDryRunValues}
+                      saveFixture={actions.saveFixture}
+                      deleteFixture={actions.deleteFixture}
+                      onChanged={() => router.refresh()}
+                    />
+                  </CardContent>
+                </Card>
+              </div>
+              <div className="space-y-4">
+                <Card>
+                  <CardContent className="pt-6">
+                    <DryRunPanel
+                      versionId={versionId}
+                      pages={definition.spec.parameters}
+                      fixtures={fixtures}
+                      dirty={dirty}
+                      values={dryRunValues}
+                      onValuesChange={setDryRunValues}
+                      startDryRun={actions.startDryRun}
+                      getRun={actions.getRun}
+                      recordSuccessfulDryRun={actions.recordSuccessfulDryRun}
+                      onGateSatisfied={() => {
+                        setGateDryRun(true)
+                        router.refresh()
+                      }}
+                    />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <VersionsPanel versions={versions} />
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           </div>
 

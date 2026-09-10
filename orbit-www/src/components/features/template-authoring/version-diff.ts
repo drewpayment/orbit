@@ -13,15 +13,15 @@
  */
 import YAML from 'yaml'
 
-export type DiffLineKind = 'context' | 'added' | 'removed'
+export type DiffLineKind = 'context' | 'added' | 'removed' | 'separator'
 
 export interface DiffLine {
   kind: DiffLineKind
-  /** The line's text (identical on both sides for `context`). */
+  /** The line's text (identical on both sides for `context`; a summary for `separator`). */
   text: string
-  /** 1-based line number on the left/old side, or null when the line is an addition. */
+  /** 1-based line number on the left/old side, or null when the line is an addition or separator. */
   left: number | null
-  /** 1-based line number on the right/new side, or null when the line is a removal. */
+  /** 1-based line number on the right/new side, or null when the line is a removal or separator. */
   right: number | null
 }
 
@@ -107,4 +107,44 @@ export function diffDefinitions(left: unknown, right: unknown): DiffLine[] {
 /** Whether a diff contains any non-context line. */
 export function hasChanges(lines: DiffLine[]): boolean {
   return lines.some((l) => l.kind !== 'context')
+}
+
+/**
+ * Collapse runs of unchanged (`context`) lines longer than `2 * context`,
+ * keeping `context` lines of surrounding text around each change and
+ * replacing the rest with a single `separator` line summarizing how many
+ * lines were dropped. A run of `context * 2` or fewer lines is left alone —
+ * there's nothing worth collapsing once you account for both edges.
+ */
+export function foldUnchanged(lines: DiffLine[], context = 3): DiffLine[] {
+  const out: DiffLine[] = []
+  let i = 0
+  while (i < lines.length) {
+    if (lines[i].kind !== 'context') {
+      out.push(lines[i])
+      i++
+      continue
+    }
+    // Find the extent of this run of context lines.
+    let j = i
+    while (j < lines.length && lines[j].kind === 'context') j++
+    const runLength = j - i
+    const keepLeading = i === 0 ? 0 : context
+    const keepTrailing = j === lines.length ? 0 : context
+    if (runLength <= keepLeading + keepTrailing) {
+      out.push(...lines.slice(i, j))
+    } else {
+      out.push(...lines.slice(i, i + keepLeading))
+      const folded = runLength - keepLeading - keepTrailing
+      out.push({
+        kind: 'separator',
+        text: `… ${folded} unchanged line${folded === 1 ? '' : 's'}`,
+        left: null,
+        right: null,
+      })
+      out.push(...lines.slice(j - keepTrailing, j))
+    }
+    i = j
+  }
+  return out
 }
