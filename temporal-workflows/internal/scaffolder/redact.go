@@ -57,8 +57,13 @@ var (
 	// pemTruncatedPattern catches a key body whose END line was cut off — a
 	// log line clipped at a length limit, say. It is applied only after the
 	// complete-block rule, so a well-formed key never reaches it.
+	//
+	// The body must be newline-delimited base64 runs, not "anything after the
+	// header": a diagnostic like "-----BEGIN RSA PRIVATE KEY----- is malformed
+	// at line 3" has no key material in it, and swallowing the reason would
+	// leave the reader with nothing.
 	pemTruncatedPattern = regexp.MustCompile(
-		`-----BEGIN[A-Z ]*PRIVATE KEY-----[\sA-Za-z0-9+/=]*`)
+		`-----BEGIN[A-Z ]*PRIVATE KEY-----(?:[\r\n]+[A-Za-z0-9+/=]{16,})+`)
 
 	// urlUserinfoPattern matches the password half of scheme://user:pass@host.
 	// Group 1 keeps everything up to and including the ":", group 2 is the
@@ -111,6 +116,28 @@ var (
 	hexOnlyPattern = regexp.MustCompile(`^[0-9a-fA-F]+$`)
 )
 
+// minCredentialValueLen is the shortest value worth treating as a credential.
+//
+// Requiring a digit is not enough on its own: `authorization: 401 from
+// upstream` and `access_token: 0 remaining` put a number right after a
+// credential-ish name, and redacting an HTTP status code costs the reader the
+// one fact that explains the error. Nothing anyone would call a credential is
+// under eight characters.
+const minCredentialValueLen = 8
+
+// replaceAssignmentValue redacts the value group of an assignment match,
+// leaving the field name and any auth scheme in place, and skipping values too
+// short to be a credential.
+func replaceAssignmentValue(re *regexp.Regexp, s string) string {
+	return re.ReplaceAllStringFunc(s, func(match string) string {
+		groups := re.FindStringSubmatch(match)
+		if len(groups) < 3 || len(groups[2]) < minCredentialValueLen {
+			return match
+		}
+		return groups[1] + RedactedPlaceholder
+	})
+}
+
 // RedactText scrubs credential-shaped substrings from free text.
 //
 // Only the value is replaced, so the reader still sees which field leaked and
@@ -125,8 +152,8 @@ func RedactText(s string) string {
 	out := pemPrivateKeyPattern.ReplaceAllString(s, RedactedPlaceholder)
 	out = pemTruncatedPattern.ReplaceAllString(out, RedactedPlaceholder)
 	out = urlUserinfoPattern.ReplaceAllString(out, "${1}"+RedactedPlaceholder+"@")
-	out = secretSuffixAssignmentPattern.ReplaceAllString(out, "${1}"+RedactedPlaceholder)
-	out = secretAssignmentPattern.ReplaceAllString(out, "${1}"+RedactedPlaceholder)
+	out = replaceAssignmentValue(secretSuffixAssignmentPattern, out)
+	out = replaceAssignmentValue(secretAssignmentPattern, out)
 	return secretTokenPattern.ReplaceAllStringFunc(out, func(match string) string {
 		// A pure-hex run of this length is a digest or a commit id, not a
 		// credential. Redacting it would destroy the most useful part of a

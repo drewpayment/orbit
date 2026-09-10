@@ -15,23 +15,23 @@ import (
 	"github.com/drewpayment/orbit/temporal-workflows/internal/scaffolder"
 )
 
-// Terminal run statuses. These are the strings the `action-runs` collection
-// stores and the repository service's parseWorkflowStatus maps onto the
-// WorkflowStatus enum.
+// Run statuses, re-exported from the engine package so this file reads
+// naturally. scaffolder owns them because the dispatch activities are checked
+// against the same list, and they cannot import this package.
 const (
-	ScaffolderStatusSucceeded = "succeeded"
-	ScaffolderStatusFailed    = "failed"
-	ScaffolderStatusCancelled = "cancelled"
-	ScaffolderStatusRunning   = "running"
+	ScaffolderStatusSucceeded = scaffolder.RunStatusSucceeded
+	ScaffolderStatusFailed    = scaffolder.RunStatusFailed
+	ScaffolderStatusCancelled = scaffolder.RunStatusCancelled
+	ScaffolderStatusRunning   = scaffolder.RunStatusRunning
 )
 
 // Per-step progress statuses.
 const (
-	stepStatusPending   = "pending"
-	stepStatusRunning   = "running"
-	stepStatusSucceeded = "succeeded"
-	stepStatusFailed    = "failed"
-	stepStatusSkipped   = "skipped"
+	stepStatusPending   = scaffolder.StepStatusPending
+	stepStatusRunning   = scaffolder.StepStatusRunning
+	stepStatusSucceeded = scaffolder.StepStatusSucceeded
+	stepStatusFailed    = scaffolder.StepStatusFailed
+	stepStatusSkipped   = scaffolder.StepStatusSkipped
 )
 
 // ScaffolderProgressQuery is the query name GetRunProgress uses.
