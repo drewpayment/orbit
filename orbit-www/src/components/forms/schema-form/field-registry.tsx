@@ -30,9 +30,19 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { X } from 'lucide-react'
 import type { JsonSchema, UiFieldSchema } from './types'
 
-/** Props every registered field component receives from `SchemaForm`. */
+/**
+ * Props every registered field component receives from `SchemaForm`.
+ *
+ * `id` is optional here because `SchemaForm` renders leaf fields inside a
+ * `<FormControl>` (a Radix Slot), which injects its own useId()-scoped `id`
+ * (plus `aria-describedby`/`aria-invalid`) directly onto this element at
+ * render time — the field component never sets its own `id` prop. It's still
+ * typed as an incoming prop (not just implicit) so field components can
+ * apply it to the DOM node they render, and so a caller invoking a field
+ * component directly (e.g. in a test) can still pass one explicitly.
+ */
 export interface FieldComponentProps {
-  id: string
+  id?: string
   schema: JsonSchema
   uiSchema?: UiFieldSchema
   value: unknown
@@ -107,10 +117,14 @@ export function BooleanSwitchField({ id, value, onChange, disabled }: FieldCompo
 
 export function SelectField({ id, schema, value, onChange, disabled, uiSchema }: FieldComponentProps) {
   const options = schema.enum ?? []
+  // shadcn's <Select> always emits a string via onValueChange — coerce back
+  // to the declared type for a number/integer enum so the emitted value
+  // matches what the zod schema (and the caller) expect.
+  const isNumeric = schema.type === 'number' || schema.type === 'integer'
   return (
     <Select
       value={value === undefined || value === null ? '' : String(value)}
-      onValueChange={onChange}
+      onValueChange={(v) => onChange(isNumeric ? Number(v) : v)}
       disabled={disabled}
     >
       <SelectTrigger id={id}>
@@ -214,7 +228,9 @@ function isArrayOfString(schema: JsonSchema): boolean {
 }
 
 function typeDefault(schema: JsonSchema): FieldComponent {
-  if (schema.type === 'string' && schema.enum && schema.enum.length > 0) return SelectField
+  // A non-empty enum on ANY type (string, number, integer) renders as a
+  // Select — not just string enums.
+  if (schema.enum && schema.enum.length > 0) return SelectField
   if (schema.type === 'string') return StringInputField
   if (schema.type === 'number' || schema.type === 'integer') return NumberInputField
   if (schema.type === 'boolean') return BooleanSwitchField

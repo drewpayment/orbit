@@ -4,15 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
-	"strings"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/drewpayment/orbit/temporal-workflows/internal/services"
+	"github.com/drewpayment/orbit/temporal-workflows/internal/templating"
 )
 
 // TemplateInstantiationInput contains all parameters needed for template instantiation
@@ -45,6 +45,54 @@ type ApplyTemplateVariablesActivityInput struct {
 	Variables map[string]string
 }
 
+// ApplyTemplateVariablesResult reports files that could not be rendered as a
+// template (content or name). Such files are left byte-for-byte unmodified;
+// this is not a fatal condition for the activity as a whole.
+type ApplyTemplateVariablesResult struct {
+	SkippedFiles []string
+}
+
+// templateManifest is the subset of orbit-template.yaml/.yml this activity
+// reads. Parsed best-effort: a missing or malformed manifest simply yields
+// an empty rawFiles list rather than failing the activity.
+type templateManifest struct {
+	RawFiles []string `yaml:"rawFiles"`
+}
+
+// LoadRawFilePatterns best-effort reads orbit-template.yaml (or .yml) from
+// workDir's root and returns its rawFiles glob patterns. Any error (missing
+// file, malformed YAML) yields an empty, non-fatal result. Exported so the
+// fs:render scaffolder action reads the manifest the same way the v1
+// ApplyTemplateVariables activity does.
+func LoadRawFilePatterns(workDir string, logger *slog.Logger) []string {
+	for _, name := range []string{"orbit-template.yaml", "orbit-template.yml"} {
+		data, err := os.ReadFile(filepath.Join(workDir, name))
+		if err != nil {
+			continue
+		}
+		var manifest templateManifest
+		if err := yaml.Unmarshal(data, &manifest); err != nil {
+			logger.Warn("Failed to parse template manifest for rawFiles, ignoring", "file", name, "error", err)
+			return nil
+		}
+		return manifest.RawFiles
+	}
+	return nil
+}
+
+// matchesRawFilePattern reports whether relPath matches any of the given
+// filepath.Match glob patterns. Patterns are single-segment (no `**`); a
+// pattern like "charts/*.yaml" matches "charts/values.yaml" but not
+// "charts/nested/values.yaml" — filepath.Match's documented limitation.
+func matchesRawFilePattern(relPath string, patterns []string) bool {
+	for _, pattern := range patterns {
+		if ok, err := filepath.Match(pattern, relPath); err == nil && ok {
+			return true
+		}
+	}
+	return false
+}
+
 // PushToNewRepoActivityInput contains parameters for pushing to new repository
 type PushToNewRepoActivityInput struct {
 	WorkDir        string
@@ -66,6 +114,14 @@ type TokenService interface {
 	GetInstallationToken(ctx context.Context, installationID string) (string, error)
 }
 
+// PayloadTemplateClient defines the interface for finalizing a template
+// instantiation against orbit-www's internal API. Satisfied by
+// services.PayloadTemplateClient; an interface here so tests can supply a
+// mock (mirrors the PatternInstance activities' client-interface pattern).
+type PayloadTemplateClient interface {
+	FinalizeInstantiation(ctx context.Context, templateID string, in services.FinalizeInstantiationInput) (*services.FinalizeInstantiationResult, error)
+}
+
 // GitHubTemplateClient defines the interface for GitHub template operations
 type GitHubTemplateClient interface {
 	// CreateRepoFromTemplate creates a new repository from a GitHub template
@@ -77,20 +133,22 @@ type GitHubTemplateClient interface {
 
 // TemplateActivities holds the dependencies for template instantiation activities
 type TemplateActivities struct {
-	tokenService TokenService
-	workDir      string
-	logger       *slog.Logger
+	tokenService  TokenService
+	payloadClient PayloadTemplateClient
+	workDir       string
+	logger        *slog.Logger
 }
 
 // NewTemplateActivities creates a new instance of TemplateActivities
-func NewTemplateActivities(tokenService TokenService, workDir string, logger *slog.Logger) *TemplateActivities {
+func NewTemplateActivities(tokenService TokenService, payloadClient PayloadTemplateClient, workDir string, logger *slog.Logger) *TemplateActivities {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &TemplateActivities{
-		tokenService: tokenService,
-		workDir:      workDir,
-		logger:       logger,
+		tokenService:  tokenService,
+		payloadClient: payloadClient,
+		workDir:       workDir,
+		logger:        logger,
 	}
 }
 
@@ -212,27 +270,19 @@ func (a *TemplateActivities) CloneTemplateRepo(ctx context.Context, input Templa
 		return "", fmt.Errorf("failed to create work directory: %w", err)
 	}
 
-	// Build clone URL with authentication if we have an installation ID
-	cloneURL := input.SourceRepoURL
+	// Fetch a token if we have an installation ID.
+	token := ""
 	if input.InstallationID != "" {
-		token, err := a.tokenService.GetInstallationToken(ctx, input.InstallationID)
+		t, err := a.tokenService.GetInstallationToken(ctx, input.InstallationID)
 		if err != nil {
 			a.logger.Warn("Failed to get token for clone, attempting unauthenticated", "error", err)
 		} else {
-			// Insert token into URL for authenticated clone
-			cloneURL = strings.Replace(cloneURL, "https://", fmt.Sprintf("https://x-access-token:%s@", token), 1)
+			token = t
 		}
 	}
 
-	// Clone the repository
-	cmd := exec.CommandContext(ctx, "git", "clone", cloneURL, workDir)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		// Clean up on failure
-		_ = os.RemoveAll(workDir)
-		// Sanitize output to remove any tokens
-		sanitizedOutput := sanitizeGitOutput(string(output))
-		return "", fmt.Errorf("failed to clone repository: %w (output: %s)", err, sanitizedOutput)
+	if err := CloneGitRepo(ctx, workDir, input.SourceRepoURL, "", token); err != nil {
+		return "", fmt.Errorf("failed to clone repository: %w", err)
 	}
 
 	// Remove .git directory to start fresh
@@ -247,113 +297,57 @@ func (a *TemplateActivities) CloneTemplateRepo(ctx context.Context, input Templa
 	return workDir, nil
 }
 
-// ApplyTemplateVariables substitutes {{variable}} patterns in all text files
-func (a *TemplateActivities) ApplyTemplateVariables(ctx context.Context, input ApplyTemplateVariablesActivityInput) error {
+// ApplyTemplateVariables substitutes template variables into file contents
+// and file/directory names throughout the work directory, using the
+// templating engine (real Go text/template + curated FuncMap). Files
+// matching a rawFiles glob pattern from orbit-template.yaml are skipped
+// entirely (content and name). A file that fails to parse/execute as a
+// template is left unmodified and reported in the result's SkippedFiles;
+// this is not a fatal condition for the activity.
+func (a *TemplateActivities) ApplyTemplateVariables(ctx context.Context, input ApplyTemplateVariablesActivityInput) (*ApplyTemplateVariablesResult, error) {
 	a.logger.Info("Applying template variables", "workDir", input.WorkDir, "variableCount", len(input.Variables))
 
+	result := &ApplyTemplateVariablesResult{}
+
+	// No variables means no bare tokens can match and no dot-context is
+	// meaningful; skip entirely rather than attempting to parse arbitrary
+	// Go-template syntax in files that were never meant to be rendered.
 	if len(input.Variables) == 0 {
 		a.logger.Info("No variables to apply, skipping")
-		return nil
+		return result, nil
 	}
 
-	// Walk through all files in the work directory
-	err := filepath.WalkDir(input.WorkDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
+	rawPatterns := LoadRawFilePatterns(input.WorkDir, a.logger)
 
-		// Skip directories
-		if d.IsDir() {
-			return nil
-		}
-
-		// Read file content
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("failed to read file %s: %w", path, err)
-		}
-
-		// Skip binary files (heuristic: if file contains null bytes in first 512 bytes)
-		sampleSize := 512
-		if len(content) < sampleSize {
-			sampleSize = len(content)
-		}
-		if strings.Contains(string(content[:sampleSize]), "\x00") {
-			a.logger.Debug("Skipping binary file", "path", path)
-			return nil
-		}
-
-		// Apply variable substitutions
-		contentStr := string(content)
-		modified := false
-		for key, value := range input.Variables {
-			placeholder := fmt.Sprintf("{{%s}}", key)
-			if strings.Contains(contentStr, placeholder) {
-				contentStr = strings.ReplaceAll(contentStr, placeholder, value)
-				modified = true
-			}
-		}
-
-		// Write back if modified
-		if modified {
-			if err := os.WriteFile(path, []byte(contentStr), d.Type().Perm()); err != nil {
-				return fmt.Errorf("failed to write file %s: %w", path, err)
-			}
-			a.logger.Debug("Applied variables to file", "path", path)
-		}
-
-		return nil
-	})
-
+	renderResult, err := templating.RenderDir(input.WorkDir, input.Variables, rawPatterns, a.logger)
 	if err != nil {
-		return fmt.Errorf("failed to apply template variables: %w", err)
+		return nil, err
 	}
+	result.SkippedFiles = renderResult.SkippedFiles
 
-	a.logger.Info("Template variables applied successfully")
-	return nil
+	a.logger.Info("Template variables applied", "skippedFiles", len(result.SkippedFiles))
+	return result, nil
 }
 
 // PushToNewRepo initializes git, adds all files, commits, and pushes to the new repository
 func (a *TemplateActivities) PushToNewRepo(ctx context.Context, input PushToNewRepoActivityInput) error {
 	a.logger.Info("Pushing to new repository", "workDir", input.WorkDir, "repoURL", input.RepoURL)
 
-	// Initialize git repository
-	if err := a.runGitCommand(ctx, input.WorkDir, "init"); err != nil {
-		return fmt.Errorf("failed to initialize git: %w", err)
-	}
-
-	// Configure git
-	_ = a.runGitCommand(ctx, input.WorkDir, "config", "user.name", "Orbit IDP")
-	_ = a.runGitCommand(ctx, input.WorkDir, "config", "user.email", "bot@orbit.dev")
-
-	// Add all files
-	if err := a.runGitCommand(ctx, input.WorkDir, "add", "."); err != nil {
-		return fmt.Errorf("failed to add files: %w", err)
-	}
-
-	// Commit
-	if err := a.runGitCommand(ctx, input.WorkDir, "commit", "-m", "Initial commit from template"); err != nil {
-		return fmt.Errorf("failed to commit: %w", err)
-	}
-
-	// Build remote URL with authentication if we have installation ID
-	remoteURL := input.RepoURL
+	token := ""
 	if input.InstallationID != "" {
-		token, err := a.tokenService.GetInstallationToken(ctx, input.InstallationID)
+		t, err := a.tokenService.GetInstallationToken(ctx, input.InstallationID)
 		if err != nil {
 			return fmt.Errorf("failed to get GitHub token for push: %w", err)
 		}
-		remoteURL = strings.Replace(remoteURL, "https://", fmt.Sprintf("https://x-access-token:%s@", token), 1)
+		token = t
 	}
 
-	// Add remote
-	if err := a.runGitCommand(ctx, input.WorkDir, "remote", "add", "origin", remoteURL); err != nil {
-		// Remote might already exist, try setting URL instead
-		_ = a.runGitCommand(ctx, input.WorkDir, "remote", "set-url", "origin", remoteURL)
-	}
-
-	// Push to main branch
-	if err := a.runGitCommand(ctx, input.WorkDir, "push", "-u", "origin", "main"); err != nil {
+	if err := PushRepo(ctx, PushRepoInput{
+		WorkDir: input.WorkDir,
+		RepoURL: input.RepoURL,
+		Branch:  "main",
+		Token:   token,
+	}); err != nil {
 		return fmt.Errorf("failed to push: %w", err)
 	}
 
@@ -373,7 +367,9 @@ func (a *TemplateActivities) CleanupWorkDir(ctx context.Context, workDir string)
 	return nil
 }
 
-// FinalizeInstantiation records template usage and sends notifications
+// FinalizeInstantiation records template usage (usageCount) and creates the
+// resulting catalog entity via orbit-www's internal API. Notification
+// sending is out of scope for Phase 0.
 func (a *TemplateActivities) FinalizeInstantiation(ctx context.Context, input FinalizeInstantiationActivityInput) error {
 	a.logger.Info("Finalizing template instantiation",
 		"templateID", input.TemplateID,
@@ -382,22 +378,18 @@ func (a *TemplateActivities) FinalizeInstantiation(ctx context.Context, input Fi
 		"repoName", input.RepoName,
 		"userID", input.UserID)
 
-	// TODO: Record usage in database
-	// TODO: Send notification to user
-	// TODO: Update template usage statistics
-
-	// For now, just log
-	a.logger.Info("Template instantiation finalized (placeholder implementation)")
-	return nil
-}
-
-// runGitCommand is a helper to run git commands in a specific directory
-func (a *TemplateActivities) runGitCommand(ctx context.Context, dir string, args ...string) error {
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = dir
-	output, err := cmd.CombinedOutput()
+	result, err := a.payloadClient.FinalizeInstantiation(ctx, input.TemplateID, services.FinalizeInstantiationInput{
+		WorkspaceID: input.WorkspaceID,
+		RepoURL:     input.RepoURL,
+		RepoName:    input.RepoName,
+		UserID:      input.UserID,
+	})
 	if err != nil {
-		return fmt.Errorf("git %v failed: %w (output: %s)", args, err, sanitizeGitOutput(string(output)))
+		return fmt.Errorf("failed to finalize instantiation: %w", err)
 	}
+
+	a.logger.Info("Template instantiation finalized",
+		"catalogEntityID", result.CatalogEntityID,
+		"usageCount", result.UsageCount)
 	return nil
 }

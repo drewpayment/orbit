@@ -144,6 +144,46 @@ function validateValueAgainstSchema(
  *  4. Every non-expression (literal) `input` field validates against that
  *     action's InputSchema via ajv.
  */
+/** Engine-side cap on a single step's timeout (validate.go `MaxStepTimeout`). */
+export const MAX_STEP_TIMEOUT_MS = 2 * 60 * 60 * 1000
+
+const GO_DURATION_UNIT_MS: Record<string, number> = {
+  ns: 1e-6,
+  us: 1e-3,
+  µs: 1e-3,
+  μs: 1e-3,
+  ms: 1,
+  s: 1000,
+  m: 60_000,
+  h: 3_600_000,
+}
+
+/**
+ * Parse a Go `time.ParseDuration` string ("30s", "1h30m", "1.5h", "-5m",
+ * "0") into milliseconds. Returns null when Go would reject it, including a
+ * bare number with no unit — Go's most common authoring mistake.
+ */
+export function parseGoDurationMs(raw: string): number | null {
+  let s = raw.trim()
+  if (s === '') return null
+  let sign = 1
+  if (s.startsWith('-') || s.startsWith('+')) {
+    if (s.startsWith('-')) sign = -1
+    s = s.slice(1)
+  }
+  if (s === '0') return 0
+  const re = /(\d+(?:\.\d*)?|\.\d+)(ns|us|µs|μs|ms|s|m|h)/gy
+  let total = 0
+  let consumed = 0
+  let m: RegExpExecArray | null
+  while ((m = re.exec(s)) !== null) {
+    total += Number(m[1]) * GO_DURATION_UNIT_MS[m[2]]
+    consumed = re.lastIndex
+  }
+  if (consumed !== s.length || consumed === 0) return null
+  return sign * total
+}
+
 export function validateDefinition(
   def: TemplateDefinition,
   registry: ActionDescriptor[],
@@ -151,6 +191,14 @@ export function validateDefinition(
   const errors: ValidationError[] = []
   const registryById = new Map(registry.map((a) => [a.id, a]))
   const ajv = new Ajv({ allErrors: true, strict: false })
+
+  // Check 0: at least one step. The Go engine refuses to plan or execute a
+  // stepless definition ("a template must declare at least one step"), so
+  // surface it here instead of letting "Validation passed" precede a failed
+  // dry run.
+  if (def.spec.steps.length === 0) {
+    errors.push({ path: 'spec.steps', message: 'A template must declare at least one step' })
+  }
 
   // Check 1: unique step ids.
   const seenIds = new Set<string>()
@@ -224,6 +272,23 @@ export function validateDefinition(
 
   def.spec.steps.forEach((step, i) => {
     const stepPath = `spec.steps[${i}]`
+
+    // Check 5: `timeout` is a positive Go duration no longer than the
+    // engine's MaxStepTimeout (2h). Mirrors validate.go so the author sees
+    // this before a dry run instead of as an engine rejection.
+    if (step.timeout !== undefined && step.timeout !== '') {
+      const ms = parseGoDurationMs(step.timeout)
+      if (ms === null) {
+        errors.push({
+          path: `${stepPath}.timeout`,
+          message: 'Timeout must be a Go duration such as "30s", "5m" or "1h30m"',
+        })
+      } else if (ms <= 0) {
+        errors.push({ path: `${stepPath}.timeout`, message: 'Timeout must be positive' })
+      } else if (ms > MAX_STEP_TIMEOUT_MS) {
+        errors.push({ path: `${stepPath}.timeout`, message: 'Timeout must not exceed 2h' })
+      }
+    }
 
     // Check 3: action exists.
     const descriptor = registryById.get(step.action)

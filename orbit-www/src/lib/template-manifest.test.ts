@@ -103,27 +103,58 @@ variables:
       expect(manifest?.variables?.[4].type).toBe('multiselect')
     })
 
-    it('should parse hooks', () => {
-      const withHooks = `
+    it('should parse rawFiles', () => {
+      const withRawFiles = `
 apiVersion: orbit/v1
 kind: Template
 metadata:
-  name: With Hooks
+  name: With Raw Files
   language: typescript
   categories:
     - cli-tool
-hooks:
-  postGeneration:
-    - command: npm install
-      description: Install dependencies
-    - command: npm run setup
-      workingDir: scripts
+rawFiles:
+  - charts/*.yaml
+  - "*.lock"
 `
-      const { manifest, errors } = parseManifest(withHooks)
+      const { manifest, errors } = parseManifest(withRawFiles)
       expect(errors).toHaveLength(0)
-      expect(manifest?.hooks?.postGeneration).toHaveLength(2)
-      expect(manifest?.hooks?.postGeneration?.[0].command).toBe('npm install')
-      expect(manifest?.hooks?.postGeneration?.[1].workingDir).toBe('scripts')
+      expect(manifest?.rawFiles).toEqual(['charts/*.yaml', '*.lock'])
+    })
+  })
+
+  describe('rawFiles validation', () => {
+    it('should return error for non-array rawFiles', () => {
+      const invalidRawFiles = `
+apiVersion: orbit/v1
+kind: Template
+metadata:
+  name: Test
+  language: go
+  categories:
+    - api-service
+rawFiles: not-an-array
+`
+      const { manifest, errors } = parseManifest(invalidRawFiles)
+      expect(manifest).toBeNull()
+      expect(errors.some(e => e.path === 'rawFiles' && e.message === 'rawFiles must be an array of glob strings')).toBe(true)
+    })
+
+    it('should return error for rawFiles array with non-string items', () => {
+      const invalidRawFiles = `
+apiVersion: orbit/v1
+kind: Template
+metadata:
+  name: Test
+  language: go
+  categories:
+    - api-service
+rawFiles:
+  - charts/*.yaml
+  - 42
+`
+      const { manifest, errors } = parseManifest(invalidRawFiles)
+      expect(manifest).toBeNull()
+      expect(errors.some(e => e.path === 'rawFiles' && e.message === 'rawFiles must be an array of glob strings')).toBe(true)
     })
   })
 

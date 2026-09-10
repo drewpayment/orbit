@@ -61,6 +61,21 @@ describe('jsonSchemaToZod', () => {
       expect(schema.safeParse(10).success).toBe(true)
       expect(schema.safeParse(7).success).toBe(false)
     })
+
+    it('enforces a numeric enum', () => {
+      const schema = jsonSchemaToZod({ type: 'number', enum: [1, 2, 3] })
+      expect(schema.safeParse(2).success).toBe(true)
+      expect(schema.safeParse(4).success).toBe(false)
+    })
+
+    it('enforces an integer enum', () => {
+      const schema = jsonSchemaToZod({ type: 'integer', enum: [1, 2, 3] })
+      expect(schema.safeParse(2).success).toBe(true)
+      // Not in the enum, even though it would otherwise be a valid integer.
+      expect(schema.safeParse(4).success).toBe(false)
+      // Not an integer at all.
+      expect(schema.safeParse(2.5).success).toBe(false)
+    })
   })
 
   describe('boolean', () => {

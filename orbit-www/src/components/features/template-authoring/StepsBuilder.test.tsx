@@ -193,7 +193,7 @@ describe('StepsBuilder (typed inputs and step ids)', () => {
     render(<StepsBuilder definition={def} dispatch={dispatch} registry={[...registry, httpLike]} />)
     fireEvent.click(screen.getByRole('button', { name: /expand step/i }))
     fireEvent.click(screen.getByRole('button', { name: /configure inputs/i }))
-    fireEvent.change(document.getElementById('timeoutSeconds') as HTMLInputElement, { target: { value: '10' } })
+    fireEvent.change(screen.getByLabelText('Timeout seconds'), { target: { value: '10' } })
     expect(dispatch).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'UPDATE_STEP',
@@ -209,7 +209,7 @@ describe('StepsBuilder (typed inputs and step ids)', () => {
     render(<StepsBuilder definition={def} dispatch={dispatch} registry={[...registry, httpLike]} />)
     fireEvent.click(screen.getByRole('button', { name: /expand step/i }))
     fireEvent.click(screen.getByRole('button', { name: /configure inputs/i }))
-    fireEvent.change(document.getElementById('timeoutSeconds') as HTMLInputElement, {
+    fireEvent.change(screen.getByLabelText('Timeout seconds'), {
       target: { value: '${{ parameters.t }}' },
     })
     expect(dispatch).toHaveBeenCalledWith(

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "github:repo:create-from-template input",
+  "type": "object",
+  "properties": {
+    "sourceOwner": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Owner of the GitHub template repository."
+    },
+    "sourceRepo": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Name of the GitHub template repository."
+    },
+    "targetOrg": {
+      "type": "string",
+      "minLength": 1,
+      "description": "GitHub org or user that will own the new repository."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9_.-]+$",
+      "description": "Name for the new repository."
+    },
+    "description": {
+      "type": "string",
+      "description": "Repository description."
+    },
+    "private": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether the new repository is private."
+    },
+    "installationId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "GitHub App installation id used to obtain a token for this call, and to clone the result."
+    }
+  },
+  "required": ["sourceOwner", "sourceRepo", "targetOrg", "name", "installationId"],
+  "additionalProperties": false
+}
