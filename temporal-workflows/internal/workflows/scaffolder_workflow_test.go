@@ -30,12 +30,17 @@ type scaffolderStubs struct {
 	opened        []activities.ScaffolderOpenApprovalInput
 	resolved      []activities.ScaffolderResolveApprovalInput
 
+	agentRunsCreated []activities.ScaffolderCreateAgentRunInput
+	versionsResolved []activities.ScaffolderResolveTemplateVersionInput
+
 	// configurable behaviour
-	validationErrors []string
-	executeFn        func(in activities.ScaffolderStepInput) (*activities.ScaffolderStepResult, error)
-	planFn           func(in activities.ScaffolderStepInput) (*activities.ScaffolderPlanResult, error)
-	progressErr      error
-	openApprovalFn   func(in activities.ScaffolderOpenApprovalInput) (*activities.ScaffolderOpenApprovalResult, error)
+	validationErrors     []string
+	executeFn            func(in activities.ScaffolderStepInput) (*activities.ScaffolderStepResult, error)
+	planFn               func(in activities.ScaffolderStepInput) (*activities.ScaffolderPlanResult, error)
+	progressErr          error
+	openApprovalFn       func(in activities.ScaffolderOpenApprovalInput) (*activities.ScaffolderOpenApprovalResult, error)
+	createAgentRunFn     func(in activities.ScaffolderCreateAgentRunInput) (*activities.ScaffolderCreateAgentRunResult, error)
+	resolveTemplateVerFn func(in activities.ScaffolderResolveTemplateVersionInput) (*activities.ScaffolderResolveTemplateVersionResult, error)
 }
 
 type ScaffolderWorkflowTestSuite struct {
@@ -125,6 +130,35 @@ func (s *ScaffolderWorkflowTestSuite) SetupTest() {
 			return nil
 		},
 		activity.RegisterOptions{Name: activities.ActivityScaffolderResolveApproval},
+	)
+
+	s.env.RegisterActivityWithOptions(
+		func(_ context.Context, in activities.ScaffolderCreateAgentRunInput) (*activities.ScaffolderCreateAgentRunResult, error) {
+			stubs.agentRunsCreated = append(stubs.agentRunsCreated, in)
+			if stubs.createAgentRunFn != nil {
+				return stubs.createAgentRunFn(in)
+			}
+			return &activities.ScaffolderCreateAgentRunResult{
+				AgentRunID:    "agent-run-" + in.WorkflowID,
+				LLMProviderID: "llm-default",
+			}, nil
+		},
+		activity.RegisterOptions{Name: activities.ActivityScaffolderCreateAgentRun},
+	)
+
+	s.env.RegisterActivityWithOptions(
+		func(_ context.Context, in activities.ScaffolderResolveTemplateVersionInput) (*activities.ScaffolderResolveTemplateVersionResult, error) {
+			stubs.versionsResolved = append(stubs.versionsResolved, in)
+			if stubs.resolveTemplateVerFn != nil {
+				return stubs.resolveTemplateVerFn(in)
+			}
+			return &activities.ScaffolderResolveTemplateVersionResult{
+				DefinitionVersionID: "ver-" + in.TemplateDefinitionID,
+				DefinitionID:        in.TemplateDefinitionID,
+				Definition:          nestedSingleStepDefinition(),
+			}, nil
+		},
+		activity.RegisterOptions{Name: activities.ActivityScaffolderResolveTemplateVersion},
 	)
 }
 

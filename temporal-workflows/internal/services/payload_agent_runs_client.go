@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -11,6 +12,16 @@ import (
 	"net/url"
 	"time"
 )
+
+// ErrNoDefaultLLMProvider is returned by Create when the route could not
+// resolve a single LLM provider for the target workspace, so an `agent:run`
+// template step cannot start the infra agent (Phase 4 Task D). Two distinct
+// server-side conditions map to it: no provider configured at all
+// (NO_LLM_PROVIDER), or more than one with none marked `isDefault`
+// (AMBIGUOUS_LLM_PROVIDER) — Create wraps the server's actual message so
+// callers see which one occurred, not a generic "no provider" that would be
+// misleading for the ambiguous case.
+var ErrNoDefaultLLMProvider = errors.New("could not resolve an LLM provider for this workspace")
 
 // PayloadAgentRunsClient PATCHes the orbit-www AgentRuns row for a workflow
 // id. Used by the workflow's UpdateAgentRun activity to keep the audit
@@ -93,4 +104,74 @@ func (c *PayloadAgentRunsClient) Patch(ctx context.Context, workflowID string, i
 		return fmt.Errorf("agent-runs patch: HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
 	return nil
+}
+
+// CreateAgentRunInput is the body of POST /api/internal/agent-runs.
+type CreateAgentRunInput struct {
+	WorkspaceID   string `json:"workspaceId"`
+	UserID        string `json:"userId,omitempty"`
+	WorkflowID    string `json:"workflowId"`
+	Title         string `json:"title,omitempty"`
+	InitialPrompt string `json:"initialPrompt"`
+}
+
+// CreateAgentRunResult is the response of POST /api/internal/agent-runs.
+type CreateAgentRunResult struct {
+	AgentRunID    string `json:"agentRunId"`
+	LLMProviderID string `json:"llmProviderId"`
+}
+
+// Create inserts the AgentRuns row for an `agent:run` template step's child
+// InfrastructureAgentWorkflow (Phase 4 Task D). Unlike the normal chat UI
+// flow, which starts the agent workflow via the AgentService gRPC unary and
+// then writes the row from orbit-www itself, ScaffolderWorkflow starts the
+// child workflow directly — so it needs a headless way to both create the
+// row and resolve which LLM provider to use, since a template step supplies
+// neither. Idempotent on workflowId (unique-indexed on the collection): a
+// retried activity attempt returns the existing row rather than erroring on
+// a duplicate key.
+func (c *PayloadAgentRunsClient) Create(ctx context.Context, in CreateAgentRunInput) (CreateAgentRunResult, error) {
+	if c.baseURL == "" {
+		return CreateAgentRunResult{}, fmt.Errorf("agent-runs client: base URL not configured")
+	}
+	if in.WorkspaceID == "" || in.WorkflowID == "" || in.InitialPrompt == "" {
+		return CreateAgentRunResult{}, errors.New("agent-runs client: workspaceId, workflowId, initialPrompt required")
+	}
+	body, err := json.Marshal(in)
+	if err != nil {
+		return CreateAgentRunResult{}, err
+	}
+	u := fmt.Sprintf("%s/api/internal/agent-runs", c.baseURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(body))
+	if err != nil {
+		return CreateAgentRunResult{}, err
+	}
+	req.Header.Set("X-API-Key", c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return CreateAgentRunResult{}, err
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if resp.StatusCode == http.StatusUnprocessableEntity {
+		var errBody struct {
+			Error string `json:"error"`
+			Code  string `json:"code"`
+		}
+		_ = json.Unmarshal(respBody, &errBody)
+		msg := errBody.Error
+		if msg == "" {
+			msg = string(respBody)
+		}
+		return CreateAgentRunResult{}, fmt.Errorf("%s: %w", msg, ErrNoDefaultLLMProvider)
+	}
+	if resp.StatusCode/100 != 2 {
+		return CreateAgentRunResult{}, fmt.Errorf("agent-runs create: HTTP %d: %s", resp.StatusCode, string(respBody))
+	}
+	var out CreateAgentRunResult
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		return CreateAgentRunResult{}, err
+	}
+	return out, nil
 }

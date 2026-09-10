@@ -93,6 +93,13 @@ type ScaffolderWorkflowInput struct {
 	UserEmail     string `json:"userEmail,omitempty"`
 	UserName      string `json:"userName,omitempty"`
 	DryRun        bool   `json:"dryRun"`
+	// TemplateStack is the list of definitionVersionIds already in progress
+	// via `fetch:template` composition, outer-first. Empty for a top-level
+	// run. A nested run's input carries its parent's stack plus the
+	// version id it is about to run, which is how ScaffolderWorkflow
+	// detects a composition cycle (Phase 4 Task D, plan §6) before
+	// starting a child that would recurse forever.
+	TemplateStack []string `json:"templateStack,omitempty"`
 	// Trigger distinguishes what started this run: empty/"manual" for a
 	// person's "Preview"/"Run" click, "scheduled-sweep" for
 	// TemplateDryRunSweepWorkflow's automated re-dry-run (Phase 4 Task G).
@@ -107,6 +114,14 @@ type ScaffolderWorkflowResult struct {
 	Outputs map[string]any             `json:"outputs,omitempty"`
 	Plan    []scaffolder.PlannedChange `json:"plan,omitempty"`
 	Error   string                     `json:"error,omitempty"`
+	// Steps is the run's final per-step progress. It exists so a parent
+	// ScaffolderWorkflow composing this run via `fetch:template` (Phase 4
+	// Task D, plan §6) can flatten these into its own steps[] as
+	// `<outerStepId>.<nestedStepId>` once the nested run completes — see
+	// scaffolder_fetch_template.go. A top-level run's own live progress
+	// comes from the "progress" query and the persisted run record, not
+	// this field.
+	Steps []activities.ScaffolderStepProgress `json:"steps,omitempty"`
 }
 
 // ScaffolderProgress is the "progress" query payload.
@@ -215,14 +230,25 @@ func ScaffolderWorkflow(ctx workflow.Context, input ScaffolderWorkflowInput) (*S
 
 		var cancelled bool
 		var failure string
-		if step.Action == approvalRequestAction {
+		switch step.Action {
+		case approvalRequestAction:
 			// approval:request pauses the WORKFLOW on a human signal, which
 			// requires workflow-context APIs (GetSignalChannel, NewSelector)
 			// a Temporal activity cannot call — so it is intercepted here,
 			// before the generic runStep dispatch path. See
 			// scaffolder_approval.go.
 			cancelled, failure = run.runApprovalStep(ctx, bookkeepingCtx, step)
-		} else {
+		case agentRunAction:
+			// agent:run starts and awaits a child workflow, which requires
+			// ExecuteChildWorkflow — workflow-context-only, like the
+			// approval gate above. See scaffolder_agent_run.go.
+			cancelled, failure = run.runAgentRunStep(ctx, bookkeepingCtx, step)
+		case fetchTemplateAction:
+			// fetch:template recursively runs another ScaffolderWorkflow as
+			// a child. Same workflow-context requirement as agent:run. See
+			// scaffolder_fetch_template.go.
+			cancelled, failure = run.runFetchTemplateStep(ctx, bookkeepingCtx, step)
+		default:
 			cancelled, failure = run.runStep(ctx, stepBaseCtx, step)
 		}
 		switch {
@@ -632,6 +658,7 @@ func (r *scaffolderRun) finish(ctx workflow.Context, actCtx workflow.Context, st
 		Outputs: r.outputs,
 		Plan:    r.plan,
 		Error:   errMsg,
+		Steps:   append([]activities.ScaffolderStepProgress(nil), r.steps...),
 	}, nil
 }
 
@@ -705,6 +732,7 @@ func (r *scaffolderRun) finishCancelled(ctx workflow.Context) (*ScaffolderWorkfl
 		Outputs: r.outputs,
 		Plan:    r.plan,
 		Error:   r.errorMsg,
+		Steps:   append([]activities.ScaffolderStepProgress(nil), r.steps...),
 	}, nil
 }
 

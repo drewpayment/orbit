@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "agent:run output",
+  "type": "object",
+  "properties": {
+    "agentRunId": { "type": "string", "description": "The started Infrastructure Agent run's id." },
+    "status": { "type": "string", "description": "Terminal status of the agent run, e.g. \"completed\"." },
+    "url": { "type": "string", "description": "In-app link to the agent run's chat thread, when the run's workspace slug is known." }
+  },
+  "required": ["agentRunId", "status"],
+  "additionalProperties": false
+}
