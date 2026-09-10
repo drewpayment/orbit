@@ -20,12 +20,6 @@ export interface TemplateVariable {
   }>
 }
 
-export interface TemplateHook {
-  command: string
-  description?: string
-  workingDir?: string
-}
-
 export interface TemplateManifest {
   apiVersion: string
   kind: 'Template'
@@ -39,9 +33,13 @@ export interface TemplateManifest {
     complexity?: 'starter' | 'intermediate' | 'production-ready'
   }
   variables?: TemplateVariable[]
-  hooks?: {
-    postGeneration?: TemplateHook[]
-  }
+  /**
+   * Glob patterns (filepath.Match semantics — single-segment globs, no `**`)
+   * for files that should be copied verbatim, skipping both content and
+   * name templating. See temporal-workflows/internal/templating for the
+   * consumer of this field.
+   */
+  rawFiles?: string[]
 }
 
 export interface ManifestValidationError {
@@ -131,6 +129,13 @@ export function parseManifest(content: string): {
     })
   }
 
+  // Validate rawFiles if present
+  if (doc.rawFiles !== undefined) {
+    if (!Array.isArray(doc.rawFiles) || doc.rawFiles.some((item) => typeof item !== 'string')) {
+      errors.push({ path: 'rawFiles', message: 'rawFiles must be an array of glob strings' })
+    }
+  }
+
   if (errors.length > 0) {
     return { manifest: null, errors }
   }
@@ -149,7 +154,7 @@ export function parseManifest(content: string): {
       complexity: metadata.complexity as 'starter' | 'intermediate' | 'production-ready' | undefined,
     },
     variables: doc.variables as TemplateVariable[] | undefined,
-    hooks: doc.hooks as { postGeneration?: TemplateHook[] } | undefined,
+    rawFiles: doc.rawFiles as string[] | undefined,
   }
 
   return { manifest, errors: [] }
