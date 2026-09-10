@@ -349,10 +349,11 @@ function StepRow({
             <Input
               id={`${step.id}-timeout`}
               value={step.timeout ?? ''}
-              placeholder="5m"
+              placeholder="e.g. 30s, 5m"
               onChange={(e) => patch({ timeout: e.target.value || undefined })}
-              className="w-24"
+              className="w-32"
             />
+            <p className="text-xs text-muted-foreground">Duration with a unit (s, m, h), max 2h. Blank uses the default.</p>
           </div>
           <Button type="button" variant="ghost" size="sm" onClick={() => setExpanded((v) => !v)}>
             {expanded ? 'Hide inputs' : 'Configure inputs'}
