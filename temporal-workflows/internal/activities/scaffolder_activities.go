@@ -32,6 +32,10 @@ const (
 	ActivityScaffolderWriteRunProgress   = "ScaffolderWriteRunProgress"
 	ActivityScaffolderCleanupRun         = "ScaffolderCleanupRun"
 	ActivityScaffolderValidateDefinition = "ScaffolderValidateDefinition"
+	// ActivityScaffolderRecordSweepResult is called from ScaffolderWorkflow's
+	// finish() ONLY for a run with DryRun && Trigger == "scheduled-sweep"
+	// (Phase 4 Task G). See RecordSweepResult.
+	ActivityScaffolderRecordSweepResult = "ScaffolderRecordSweepResult"
 )
 
 // ErrTypeScaffolderInvalid is the temporal.ApplicationError type used for

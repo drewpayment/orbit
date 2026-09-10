@@ -21,11 +21,12 @@ import (
 // scaffolderStubs collects what the stub activities saw, so each test can
 // assert on the dispatch sequence and the progress writebacks.
 type scaffolderStubs struct {
-	executed  []activities.ScaffolderStepInput
-	planned   []activities.ScaffolderStepInput
-	progress  []activities.WriteRunProgressInput
-	cleanups  []activities.CleanupScaffolderRunInput
-	validated []activities.ValidateDefinitionInput
+	executed      []activities.ScaffolderStepInput
+	planned       []activities.ScaffolderStepInput
+	progress      []activities.WriteRunProgressInput
+	cleanups      []activities.CleanupScaffolderRunInput
+	validated     []activities.ValidateDefinitionInput
+	sweepRecorded []activities.RecordSweepResultInput
 
 	// configurable behaviour
 	validationErrors []string
@@ -94,6 +95,14 @@ func (s *ScaffolderWorkflowTestSuite) SetupTest() {
 			return nil
 		},
 		activity.RegisterOptions{Name: activities.ActivityScaffolderCleanupRun},
+	)
+
+	s.env.RegisterActivityWithOptions(
+		func(_ context.Context, in activities.RecordSweepResultInput) error {
+			stubs.sweepRecorded = append(stubs.sweepRecorded, in)
+			return nil
+		},
+		activity.RegisterOptions{Name: activities.ActivityScaffolderRecordSweepResult},
 	)
 }
 
@@ -473,6 +482,85 @@ func (s *ScaffolderWorkflowTestSuite) TestDryRunPreviewFailureFailsTheRun() {
 
 	s.Equal(ScaffolderStatusFailed, res.Status)
 	s.Contains(res.Error, "storage offline")
+}
+
+// --- scheduled-sweep drift recording (Phase 4 Task G) -----------------------
+
+func (s *ScaffolderWorkflowTestSuite) TestSweepDryRunRecordsResultOnSuccess() {
+	in := baseInput(twoStepDefinition())
+	in.DefinitionID = "def-1"
+	in.DryRun = true
+	in.Trigger = "scheduled-sweep"
+	in.Definition.Spec.Steps[1].Input = json.RawMessage(`{"message":"static"}`)
+	in.Definition.Spec.Output = nil
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusSucceeded, res.Status)
+	s.Require().Len(s.stubs.sweepRecorded, 1)
+	s.Equal("def-1", s.stubs.sweepRecorded[0].DefinitionID)
+	s.False(s.stubs.sweepRecorded[0].Failed)
+	s.NotEmpty(s.stubs.sweepRecorded[0].PlanHash, "a non-empty plan must hash to a non-empty value")
+}
+
+func (s *ScaffolderWorkflowTestSuite) TestSweepDryRunRecordsResultOnFailure() {
+	in := baseInput(twoStepDefinition())
+	in.DefinitionID = "def-1"
+	in.DryRun = true
+	in.Trigger = "scheduled-sweep"
+	in.Definition.Spec.Output = nil
+
+	s.stubs.planFn = func(activities.ScaffolderStepInput) (*activities.ScaffolderPlanResult, error) {
+		return nil, temporal.NewNonRetryableApplicationError(
+			"dry-run preview unavailable: storage offline", activities.ErrTypeScaffolderInvalid, nil)
+	}
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusFailed, res.Status)
+	s.Require().Len(s.stubs.sweepRecorded, 1)
+	s.True(s.stubs.sweepRecorded[0].Failed)
+}
+
+func (s *ScaffolderWorkflowTestSuite) TestSweepHashIsStableAcrossPlanOrdering() {
+	changes := []scaffolder.PlannedChange{
+		{Kind: "repo", Name: "b", Description: "second"},
+		{Kind: "repo", Name: "a", Description: "first"},
+	}
+	reordered := []scaffolder.PlannedChange{changes[1], changes[0]}
+	s.Equal(computePlanHash(changes), computePlanHash(reordered),
+		"drift detection must not fire on plan-entry reordering alone")
+}
+
+func (s *ScaffolderWorkflowTestSuite) TestSweepHashChangesWithPlanContent() {
+	a := []scaffolder.PlannedChange{{Kind: "repo", Name: "a", Description: "first"}}
+	b := []scaffolder.PlannedChange{{Kind: "repo", Name: "a", Description: "changed"}}
+	s.NotEqual(computePlanHash(a), computePlanHash(b))
+}
+
+func (s *ScaffolderWorkflowTestSuite) TestManualPreviewDryRunNeverRecordsSweepResult() {
+	in := baseInput(twoStepDefinition())
+	in.DefinitionID = "def-1"
+	in.DryRun = true
+	in.Trigger = "" // a human "Preview" click never sets Trigger
+	in.Definition.Spec.Output = nil
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	s.Equal(ScaffolderStatusSucceeded, s.result().Status)
+	s.Empty(s.stubs.sweepRecorded, "a manual preview must never touch lastDryRunStatus/lastDryRunPlanHash")
+}
+
+func (s *ScaffolderWorkflowTestSuite) TestLiveSweepTriggeredRunNeverRecordsSweepResult() {
+	in := baseInput(twoStepDefinition())
+	in.DefinitionID = "def-1"
+	in.DryRun = false // a REAL run, not a dry run
+	in.Trigger = "scheduled-sweep"
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	s.Equal(ScaffolderStatusSucceeded, s.result().Status)
+	s.Empty(s.stubs.sweepRecorded, "only a DRY run from the sweep records drift status")
 }
 
 // --- cancellation -----------------------------------------------------------

@@ -42,6 +42,23 @@ function statusVariant(status: TemplateListItem['status']) {
   return 'secondary' as const
 }
 
+/**
+ * The scheduled re-dry-run sweep's drift badge (Phase 4 Task G). `unknown`
+ * (no sweep has run yet, or this is a draft/deprecated definition the sweep
+ * never covers) renders nothing — an empty state should not compete
+ * visually with a real finding.
+ */
+function dryRunStatusBadge(status: TemplateListItem['lastDryRunStatus']) {
+  if (status === 'unknown') return null
+  const variant = status === 'ok' ? ('outline' as const) : ('destructive' as const)
+  const label = status === 'ok' ? 'Sweep: OK' : status === 'drifted' ? 'Sweep: Drifted' : 'Sweep: Failed'
+  return (
+    <Badge variant={variant} className="shrink-0">
+      {label}
+    </Badge>
+  )
+}
+
 function EmptyState({ icon: Icon, title, body }: { icon: typeof FileText; title: string; body: string }) {
   return (
     <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-center">
@@ -58,9 +75,12 @@ function TemplateCard({ item, href, cta }: { item: TemplateListItem; href: strin
       <CardHeader className="flex-1">
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="text-base">{item.title || item.name}</CardTitle>
-          <Badge variant={statusVariant(item.status)} className="shrink-0 capitalize">
-            {item.status}
-          </Badge>
+          <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+            <Badge variant={statusVariant(item.status)} className="shrink-0 capitalize">
+              {item.status}
+            </Badge>
+            {dryRunStatusBadge(item.lastDryRunStatus)}
+          </div>
         </div>
         <CardDescription className="line-clamp-2">
           {item.description || 'No description.'}

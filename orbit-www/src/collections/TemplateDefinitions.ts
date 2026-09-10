@@ -233,6 +233,30 @@ export const TemplateDefinitions: CollectionConfig = {
       admin: { readOnly: true },
     },
     {
+      name: 'lastDryRunStatus',
+      type: 'select',
+      defaultValue: 'unknown',
+      admin: {
+        readOnly: true,
+        description:
+          'Drift status from the last scheduled re-dry-run sweep (P4.G). Never set by a manual "Preview" dry run.',
+      },
+      options: [
+        { label: 'Unknown', value: 'unknown' },
+        { label: 'OK', value: 'ok' },
+        { label: 'Drifted', value: 'drifted' },
+        { label: 'Failed', value: 'failed' },
+      ],
+    },
+    {
+      name: 'lastDryRunPlanHash',
+      type: 'text',
+      admin: {
+        readOnly: true,
+        description: 'Content hash of the last scheduled sweep dry run plan, used to detect drift.',
+      },
+    },
+    {
       name: 'createdBy',
       type: 'relationship',
       relationTo: 'users',

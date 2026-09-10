@@ -463,6 +463,26 @@ func main() {
 	log.Printf("Scaffolder engine registered with %d actions (dry-run preview storage: %t)",
 		len(scaffolderRegistry.Names()), scaffolderStorage != nil)
 
+	// Phase 4 Task G: scheduled re-dry-run sweep for published templates.
+	// A dedicated Payload client (v2 template-definitions routes, distinct
+	// from PayloadTemplateClient's legacy v1 `templates` finalize route) and
+	// a thin dispatcher wrapping the same worker Temporal client `c` used
+	// for worker.New above — the sweep starts a SEPARATE ScaffolderWorkflow
+	// execution per fixture, not a child workflow of itself.
+	templateSweepActivities := activities.NewTemplateDryRunSweepActivities(
+		services.NewPayloadTemplateSweepClient(orbitAPIURL, orbitInternalAPIKey, logger),
+		services.NewTemporalScaffolderDispatcher(c),
+		logger,
+	)
+	w.RegisterWorkflow(workflows.TemplateDryRunSweepWorkflow)
+	w.RegisterActivityWithOptions(templateSweepActivities.ListPublishedTemplatesWithFixtures,
+		activity.RegisterOptions{Name: activities.ActivityListPublishedTemplatesWithFixtures})
+	w.RegisterActivityWithOptions(templateSweepActivities.TriggerTemplateDryRun,
+		activity.RegisterOptions{Name: activities.ActivityTriggerTemplateDryRun})
+	w.RegisterActivityWithOptions(templateSweepActivities.RecordSweepResult,
+		activity.RegisterOptions{Name: activities.ActivityScaffolderRecordSweepResult})
+	log.Println("Template dry-run sweep workflow + activities registered")
+
 	// Register decommissioning/cleanup workflows
 	w.RegisterWorkflow(workflows.ApplicationDecommissioningWorkflow)
 	w.RegisterWorkflow(workflows.ApplicationCleanupWorkflow)
@@ -665,6 +685,12 @@ func main() {
 	// installations created before this system existed.
 	ensureGitHubReconcileSchedule(context.Background(), c)
 
+	// Phase 4 Task G: the scheduled re-dry-run sweep's own Temporal Schedule.
+	// Cron comes from TEMPLATE_DRY_RUN_SWEEP_CRON so a dev machine does not
+	// run it by default (lead decision, phase plan §13.2); an empty value
+	// disables it entirely rather than defaulting to some built-in cron.
+	ensureTemplateDryRunSweepSchedule(context.Background(), c, os.Getenv("TEMPLATE_DRY_RUN_SWEEP_CRON"))
+
 	log.Println("Starting Temporal worker...")
 	log.Printf("Temporal address: %s", temporalAddress)
 	log.Printf("Temporal namespace: %s", temporalNamespace)
@@ -710,4 +736,42 @@ func ensureGitHubReconcileSchedule(ctx context.Context, c client.Client) {
 		return
 	}
 	log.Printf("Created GitHub reconcile schedule: %s (every 10m)", scheduleID)
+}
+
+// ensureTemplateDryRunSweepSchedule idempotently creates the Temporal
+// Schedule driving TemplateDryRunSweepWorkflow (Phase 4 Task G). Safe to
+// call on every startup: an existing schedule is left in place. An empty
+// cron DISABLES the schedule — nothing is created and nothing is removed if
+// one already exists (turning it off after having turned it on is a manual
+// `temporal schedule delete`, not something a missing env var should do
+// silently on the next restart).
+func ensureTemplateDryRunSweepSchedule(ctx context.Context, c client.Client, cron string) {
+	const scheduleID = "template-dry-run-sweep"
+
+	if cron == "" {
+		log.Println("TEMPLATE_DRY_RUN_SWEEP_CRON is unset; scheduled re-dry-run sweep is disabled")
+		return
+	}
+
+	_, err := c.ScheduleClient().Create(ctx, client.ScheduleOptions{
+		ID: scheduleID,
+		Spec: client.ScheduleSpec{
+			CronExpressions: []string{cron},
+		},
+		Action: &client.ScheduleWorkflowAction{
+			ID:        "template-dry-run-sweep-wf",
+			Workflow:  "TemplateDryRunSweepWorkflow",
+			TaskQueue: "orbit-workflows",
+		},
+	})
+	if err != nil {
+		var alreadyExists *serviceerror.AlreadyExists
+		if errors.As(err, &alreadyExists) {
+			log.Printf("Template dry-run sweep schedule already exists: %s", scheduleID)
+			return
+		}
+		log.Printf("Warning: failed to create template dry-run sweep schedule: %v", err)
+		return
+	}
+	log.Printf("Created template dry-run sweep schedule: %s (cron: %q)", scheduleID, cron)
 }
