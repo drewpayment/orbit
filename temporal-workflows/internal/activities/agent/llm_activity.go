@@ -51,10 +51,10 @@ type LLMNextStepInput struct {
 	WorkspaceID string
 	ProviderID  string
 
-	System    string
-	Messages  []providers.Message
-	Tools     []providers.ToolSchema
-	MaxTokens int
+	System      string
+	Messages    []providers.Message
+	Tools       []providers.ToolSchema
+	MaxTokens   int
 	Temperature float64
 }
 

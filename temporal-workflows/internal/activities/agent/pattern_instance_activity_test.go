@@ -11,15 +11,15 @@ import (
 type fakePatternInstanceClient struct {
 	getPatternByIDFn func(id string) (services.PatternFull, error)
 
-	created       services.PatternInstanceCreateInput
-	createID      string
-	createErr     error
-	createCalls   int
+	created     services.PatternInstanceCreateInput
+	createID    string
+	createErr   error
+	createCalls int
 
-	updated       services.PatternInstanceStatusInput
-	updateID      string
-	updateErr     error
-	updateCalls   int
+	updated     services.PatternInstanceStatusInput
+	updateID    string
+	updateErr   error
+	updateCalls int
 }
 
 func (f *fakePatternInstanceClient) GetPatternByID(_ context.Context, id string) (services.PatternFull, error) {

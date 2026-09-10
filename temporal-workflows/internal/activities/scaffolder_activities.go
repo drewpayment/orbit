@@ -27,10 +27,11 @@ import (
 // deliberately prefixed: the generic method names would collide with other
 // activity structs in the same worker.
 const (
-	ActivityScaffolderExecuteStep      = "ScaffolderExecuteStep"
-	ActivityScaffolderPlanStep         = "ScaffolderPlanStep"
-	ActivityScaffolderWriteRunProgress = "ScaffolderWriteRunProgress"
-	ActivityScaffolderCleanupRun       = "ScaffolderCleanupRun"
+	ActivityScaffolderExecuteStep        = "ScaffolderExecuteStep"
+	ActivityScaffolderPlanStep           = "ScaffolderPlanStep"
+	ActivityScaffolderWriteRunProgress   = "ScaffolderWriteRunProgress"
+	ActivityScaffolderCleanupRun         = "ScaffolderCleanupRun"
+	ActivityScaffolderValidateDefinition = "ScaffolderValidateDefinition"
 )
 
 // ErrTypeScaffolderInvalid is the temporal.ApplicationError type used for
@@ -131,6 +132,17 @@ type WriteRunProgressInput struct {
 	AppendLogs []ScaffolderLogEntry       `json:"appendLogs,omitempty"`
 }
 
+// ValidateDefinitionInput carries the v2 document to statically validate.
+type ValidateDefinitionInput struct {
+	Definition scaffolder.Definition `json:"definition"`
+}
+
+// ValidateDefinitionResult is the validator's findings, already formatted and
+// sorted. An empty Errors slice means the definition is executable.
+type ValidateDefinitionResult struct {
+	Errors []string `json:"errors"`
+}
+
 // CleanupScaffolderRunInput identifies the run whose work dir to remove.
 type CleanupScaffolderRunInput struct {
 	RunID string `json:"runId"`
@@ -154,9 +166,6 @@ func NewScaffolderActivities(registry *scaffolder.Registry, runs ActionRunStatus
 	if logger == nil {
 		logger = slog.Default()
 	}
-	// A nil interface value held in a typed nil pointer would pass a plain
-	// `!= nil` check, so normalise the two dependencies callers most often
-	// wire conditionally.
 	return &ScaffolderActivities{
 		registry: registry,
 		runs:     runs,
@@ -312,6 +321,28 @@ func (a *ScaffolderActivities) CleanupRun(_ context.Context, in CleanupScaffolde
 	}
 	a.logger.Debug("scaffolder run work dir removed", slog.String("runId", in.RunID), slog.String("workDir", dir))
 	return nil
+}
+
+// ValidateDefinition statically validates a definition against the live action
+// registry.
+//
+// This runs in an activity rather than in workflow code on purpose: JSON Schema
+// compilation and schema-error flattening walk Go maps, whose iteration order
+// is randomised, so the set and order of findings is not replay-stable. Running
+// it here records one settled answer in workflow history.
+//
+// Findings are returned in the result, not as an error: an invalid definition
+// is a user error that must fail the run immediately, never retry.
+func (a *ScaffolderActivities) ValidateDefinition(_ context.Context, in ValidateDefinitionInput) (*ValidateDefinitionResult, error) {
+	def := in.Definition
+	findings := scaffolder.Validate(&def, scaffolder.DescriptorCatalog(a.registry.Descriptors()))
+
+	out := make([]string, 0, len(findings))
+	for _, f := range findings {
+		out = append(out, f.Error())
+	}
+	sort.Strings(out)
+	return &ValidateDefinitionResult{Errors: out}, nil
 }
 
 // --- internals --------------------------------------------------------------

@@ -477,3 +477,47 @@ func assertNonRetryable(t *testing.T, err error) {
 	require.True(t, errors.As(err, &appErr), "expected a temporal.ApplicationError, got %T: %v", err, err)
 	assert.True(t, appErr.NonRetryable(), "expected a non-retryable error, got %v", err)
 }
+
+// --- ValidateDefinition -----------------------------------------------------
+
+func TestScaffolderActivities_ValidateDefinition(t *testing.T) {
+	def := func(stepAction string) scaffolder.Definition {
+		return scaffolder.Definition{
+			APIVersion: scaffolder.APIVersionV2,
+			Kind:       scaffolder.KindTemplate,
+			Metadata:   scaffolder.Metadata{Name: "svc", Title: "Service", Owner: "platform"},
+			Spec: scaffolder.Spec{
+				Steps: []scaffolder.Step{{ID: "s1", Name: "One", Action: stepAction, Input: json.RawMessage(`{}`)}},
+			},
+		}
+	}
+
+	t.Run("reports no findings for a valid definition", func(t *testing.T) {
+		a := newTestScaffolderActivities(t, nil, nil, &fakeAction{name: "test:ok"})
+		res, err := a.ValidateDefinition(context.Background(), ValidateDefinitionInput{Definition: def("test:ok")})
+		require.NoError(t, err)
+		assert.Empty(t, res.Errors)
+	})
+
+	t.Run("reports an unknown action as a finding, not an error", func(t *testing.T) {
+		a := newTestScaffolderActivities(t, nil, nil, &fakeAction{name: "test:ok"})
+		res, err := a.ValidateDefinition(context.Background(), ValidateDefinitionInput{Definition: def("nope:missing")})
+		require.NoError(t, err, "an invalid definition is a finding, never an activity failure")
+		require.NotEmpty(t, res.Errors)
+		assert.Contains(t, strings.Join(res.Errors, "\n"), "nope:missing")
+	})
+
+	t.Run("returns findings in a stable order", func(t *testing.T) {
+		a := newTestScaffolderActivities(t, nil, nil)
+		bad := def("nope:one")
+		bad.Spec.Steps = append(bad.Spec.Steps, scaffolder.Step{ID: "s2", Name: "Two", Action: "nope:two", Input: json.RawMessage(`{}`)})
+
+		first, err := a.ValidateDefinition(context.Background(), ValidateDefinitionInput{Definition: bad})
+		require.NoError(t, err)
+		for i := 0; i < 5; i++ {
+			again, err := a.ValidateDefinition(context.Background(), ValidateDefinitionInput{Definition: bad})
+			require.NoError(t, err)
+			assert.Equal(t, first.Errors, again.Errors, "findings must be replay-stable")
+		}
+	})
+}

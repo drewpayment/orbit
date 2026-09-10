@@ -343,8 +343,8 @@ func TestTopicSyncActivities_UpdateTopicConfig(t *testing.T) {
 			VirtualClusterID: "vc-123",
 			VirtualName:      "events",
 			Config: map[string]string{
-				"retention.ms":    "604800000",
-				"cleanup.policy":  "compact",
+				"retention.ms":   "604800000",
+				"cleanup.policy": "compact",
 			},
 			UpdatedByCredentialID: "cred-789",
 		})
@@ -376,7 +376,7 @@ func TestTopicSyncActivities_UpdateTopicConfig(t *testing.T) {
 		err := activities.UpdateTopicConfig(context.Background(), UpdateTopicConfigInput{
 			VirtualClusterID: "vc-123",
 			VirtualName:      "nonexistent",
-			Config:          map[string]string{},
+			Config:           map[string]string{},
 		})
 
 		assert.NoError(t, err)
@@ -407,7 +407,7 @@ func TestTopicSyncActivities_UpdateTopicConfig(t *testing.T) {
 		err := activities.UpdateTopicConfig(context.Background(), UpdateTopicConfigInput{
 			VirtualClusterID: "vc-123",
 			VirtualName:      "events",
-			Config:          map[string]string{"key": "value"},
+			Config:           map[string]string{"key": "value"},
 		})
 
 		require.NoError(t, err)
@@ -456,7 +456,7 @@ func TestTopicSyncActivities_UpdateTopicConfig(t *testing.T) {
 		err := activities.UpdateTopicConfig(context.Background(), UpdateTopicConfigInput{
 			VirtualClusterID: "vc-123",
 			VirtualName:      "events",
-			Config:          map[string]string{"key": "value"},
+			Config:           map[string]string{"key": "value"},
 		})
 
 		assert.Error(t, err)

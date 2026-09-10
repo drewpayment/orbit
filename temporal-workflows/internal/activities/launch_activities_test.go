@@ -24,9 +24,9 @@ type mockPayloadLaunchClient struct {
 	getCredentialsCalledWith struct {
 		cloudAccountID string
 	}
-	updateStatusErr     error
-	storeOutputsErr     error
-	getCredentialsErr   error
+	updateStatusErr      error
+	storeOutputsErr      error
+	getCredentialsErr    error
 	getCredentialsResult map[string]interface{}
 }
 

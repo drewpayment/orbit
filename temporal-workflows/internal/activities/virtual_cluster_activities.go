@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/drewpayment/orbit/temporal-workflows/internal/clients"
 	gatewayv1 "github.com/drewpayment/orbit/proto/gen/go/idp/gateway/v1"
+	"github.com/drewpayment/orbit/temporal-workflows/internal/clients"
 )
 
 // GetEnvironmentMappingInput is the input for getting environment mapping

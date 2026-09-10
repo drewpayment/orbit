@@ -120,10 +120,10 @@ func (a *GitActivities) CloneTemplateActivity(ctx context.Context, input CloneTe
 func (a *GitActivities) getTemplateURL(templateName string) string {
 	// In production, this would query a database or config service
 	templates := map[string]string{
-		"microservice": "https://github.com/your-org/template-microservice.git",
-		"library":      "https://github.com/your-org/template-library.git",
-		"frontend":     "https://github.com/your-org/template-frontend.git",
-		"mobile":       "https://github.com/your-org/template-mobile.git",
+		"microservice":  "https://github.com/your-org/template-microservice.git",
+		"library":       "https://github.com/your-org/template-library.git",
+		"frontend":      "https://github.com/your-org/template-frontend.git",
+		"mobile":        "https://github.com/your-org/template-mobile.git",
 		"documentation": "https://github.com/your-org/template-docs.git",
 	}
 	return templates[templateName]

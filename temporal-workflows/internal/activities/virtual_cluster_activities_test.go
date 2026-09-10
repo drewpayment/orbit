@@ -9,8 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/drewpayment/orbit/temporal-workflows/internal/clients"
 	gatewayv1 "github.com/drewpayment/orbit/proto/gen/go/idp/gateway/v1"
+	"github.com/drewpayment/orbit/temporal-workflows/internal/clients"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"

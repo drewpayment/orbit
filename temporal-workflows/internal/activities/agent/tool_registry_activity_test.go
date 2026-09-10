@@ -9,14 +9,14 @@ import (
 )
 
 type fakeToolsClient struct {
-	listed     []services.AgentToolDoc
-	listErr    error
-	registered services.RegisterPendingInput
-	registerID    string
-	registerErr   error
-	resolved      bool
-	resolveErr    error
-	resolvedEdits *services.AgentToolEdits
+	listed              []services.AgentToolDoc
+	listErr             error
+	registered          services.RegisterPendingInput
+	registerID          string
+	registerErr         error
+	resolved            bool
+	resolveErr          error
+	resolvedEdits       *services.AgentToolEdits
 	resolvedWorkspaceID string
 }
 

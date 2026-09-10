@@ -87,14 +87,14 @@ type ResolvePatternInput struct {
 	// Empty values mean "leave the agent's proposal unchanged for this
 	// field." The downstream route writes a reviewer_edited
 	// PatternVersions row only when at least one field actually changed.
-	Edited              bool
-	EditedName          string
-	EditedDisplayName   string
-	EditedDescription   string
-	EditedCategory      string
-	EditedTemplateKind  string
-	EditedTemplateJSON  string
-	EditedSchemaJSON    string
+	Edited             bool
+	EditedName         string
+	EditedDisplayName  string
+	EditedDescription  string
+	EditedCategory     string
+	EditedTemplateKind string
+	EditedTemplateJSON string
+	EditedSchemaJSON   string
 }
 
 // ResolvePatternResult mirrors services.ResolvePatternResult so the

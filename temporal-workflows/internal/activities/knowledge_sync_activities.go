@@ -36,10 +36,10 @@ type KnowledgePage struct {
 
 // TransformedPage represents a page transformed for a specific external system
 type TransformedPage struct {
-	ID      string
-	Title   string
-	Content string
-	Format  string
+	ID       string
+	Title    string
+	Content  string
+	Format   string
 	Metadata map[string]interface{}
 }
 
@@ -86,24 +86,24 @@ func (a *KnowledgeSyncActivities) FetchKnowledgePagesActivity(ctx context.Contex
 	// Return mock pages
 	pages := []KnowledgePage{
 		{
-			ID:      "page-1",
-			Title:   "Getting Started",
-			Content: "# Getting Started\n\nWelcome to our documentation!",
-			SpaceID: input.SpaceID,
+			ID:        "page-1",
+			Title:     "Getting Started",
+			Content:   "# Getting Started\n\nWelcome to our documentation!",
+			SpaceID:   input.SpaceID,
 			CreatedAt: time.Now().Add(-24 * time.Hour),
 			UpdatedAt: time.Now(),
-			AuthorID: "user-1",
-			Tags:     []string{"documentation", "getting-started"},
+			AuthorID:  "user-1",
+			Tags:      []string{"documentation", "getting-started"},
 		},
 		{
-			ID:      "page-2",
-			Title:   "API Reference",
-			Content: "# API Reference\n\n## Authentication\n\nUse API keys for authentication.",
-			SpaceID: input.SpaceID,
+			ID:        "page-2",
+			Title:     "API Reference",
+			Content:   "# API Reference\n\n## Authentication\n\nUse API keys for authentication.",
+			SpaceID:   input.SpaceID,
 			CreatedAt: time.Now().Add(-12 * time.Hour),
 			UpdatedAt: time.Now(),
-			AuthorID: "user-2",
-			Tags:     []string{"api", "reference"},
+			AuthorID:  "user-2",
+			Tags:      []string{"api", "reference"},
 		},
 	}
 

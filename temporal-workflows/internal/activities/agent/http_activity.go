@@ -16,7 +16,7 @@ import (
 // HTTPRequestInput is the http_request tool input.
 type HTTPRequestInput struct {
 	WorkflowID string
-	Method     string            // GET / POST / PUT / DELETE / PATCH
+	Method     string // GET / POST / PUT / DELETE / PATCH
 	URL        string
 	Headers    map[string]string
 	Body       string
