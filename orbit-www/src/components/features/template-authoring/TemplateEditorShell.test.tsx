@@ -23,7 +23,7 @@ const definition: TemplateDefinition = {
 
 function makeActions(overrides: Partial<TemplateEditorActions> = {}): TemplateEditorActions {
   return {
-    saveTemplateDefinitionDraft: vi.fn().mockResolvedValue({ versionId: 'v2' }),
+    saveTemplateDefinitionDraft: vi.fn().mockResolvedValue({ versionId: 'v2', versionNumber: 2 }),
     validateTemplateDefinition: vi.fn().mockResolvedValue({ ok: true, errors: [] }),
     markVersionValidated: vi.fn().mockResolvedValue({ ok: true, errors: [] }),
     startDryRun: vi.fn().mockResolvedValue({ runId: 'run-1' }),
@@ -162,6 +162,129 @@ describe('TemplateEditorShell', () => {
     setup()
     await userEvent.type(screen.getByLabelText('Title'), '!')
     expect(screen.getByText(/executes the last saved version/i)).toBeInTheDocument()
+  })
+
+  it('keeps Publish disabled and labeled plainly for a published template with no newer version', () => {
+    setup({
+      status: 'published',
+      currentVersionValidated: true,
+      currentVersionHasDryRun: true,
+      versions: [
+        {
+          id: 'v1',
+          versionNumber: 1,
+          changeNote: null,
+          validatedAt: '2026-09-09T00:00:00.000Z',
+          dryRunRunId: 'run-1',
+          createdAt: '2026-09-09T00:00:00.000Z',
+          isCurrent: true,
+          definitionJson: definition,
+        },
+      ],
+    })
+    const publish = screen.getByRole('button', { name: /^publish$/i })
+    expect(publish).toBeDisabled()
+  })
+
+  it('enables "Publish vN" for a published template once a newer version has passed the gate', () => {
+    setup({
+      status: 'published',
+      currentVersionId: 'v2',
+      currentVersionValidated: true,
+      currentVersionHasDryRun: true,
+      versions: [
+        {
+          id: 'v1',
+          versionNumber: 1,
+          changeNote: null,
+          validatedAt: '2026-09-09T00:00:00.000Z',
+          dryRunRunId: 'run-1',
+          createdAt: '2026-09-09T00:00:00.000Z',
+          isCurrent: true,
+          definitionJson: definition,
+        },
+        {
+          id: 'v2',
+          versionNumber: 2,
+          changeNote: 'Fix the bug',
+          validatedAt: '2026-09-10T00:00:00.000Z',
+          dryRunRunId: 'run-2',
+          createdAt: '2026-09-10T00:00:00.000Z',
+          isCurrent: false,
+          definitionJson: definition,
+        },
+      ],
+    })
+    const publish = screen.getByRole('button', { name: /publish v2/i })
+    expect(publish).toBeEnabled()
+  })
+
+  it('publishes the newer saved version, not the stale currentVersion', async () => {
+    const actions = makeActions()
+    setup({
+      actions,
+      status: 'published',
+      currentVersionId: 'v2',
+      currentVersionValidated: true,
+      currentVersionHasDryRun: true,
+      versions: [
+        {
+          id: 'v1',
+          versionNumber: 1,
+          changeNote: null,
+          validatedAt: '2026-09-09T00:00:00.000Z',
+          dryRunRunId: 'run-1',
+          createdAt: '2026-09-09T00:00:00.000Z',
+          isCurrent: true,
+          definitionJson: definition,
+        },
+        {
+          id: 'v2',
+          versionNumber: 2,
+          changeNote: 'Fix the bug',
+          validatedAt: '2026-09-10T00:00:00.000Z',
+          dryRunRunId: 'run-2',
+          createdAt: '2026-09-10T00:00:00.000Z',
+          isCurrent: false,
+          definitionJson: definition,
+        },
+      ],
+    })
+    await userEvent.click(screen.getByRole('button', { name: /publish v2/i }))
+    await waitFor(() => expect(actions.publishTemplateDefinition).toHaveBeenCalledWith('def-1', 'v2'))
+  })
+
+  it('re-activates a deprecated template with a newer version via "Publish vN"', () => {
+    setup({
+      status: 'deprecated',
+      currentVersionId: 'v2',
+      currentVersionValidated: true,
+      currentVersionHasDryRun: true,
+      versions: [
+        {
+          id: 'v1',
+          versionNumber: 1,
+          changeNote: null,
+          validatedAt: '2026-09-09T00:00:00.000Z',
+          dryRunRunId: 'run-1',
+          createdAt: '2026-09-09T00:00:00.000Z',
+          isCurrent: true,
+          definitionJson: definition,
+        },
+        {
+          id: 'v2',
+          versionNumber: 2,
+          changeNote: 'Fix the bug',
+          validatedAt: '2026-09-10T00:00:00.000Z',
+          dryRunRunId: 'run-2',
+          createdAt: '2026-09-10T00:00:00.000Z',
+          isCurrent: false,
+          definitionJson: definition,
+        },
+      ],
+    })
+    const publish = screen.getByRole('button', { name: /publish v2/i })
+    expect(publish).toBeEnabled()
   })
 
   it('lists version history with its publish-gate badges', () => {

@@ -267,7 +267,7 @@ export async function saveTemplateDefinitionDraft(
   id: string,
   definitionJson: unknown,
   changeNote?: string,
-): Promise<{ versionId: string }> {
+): Promise<{ versionId: string; versionNumber: number }> {
   const payload = await getPayload({ config })
   const uid = await requireUserId()
   const isAdmin = await currentUserIsPlatformAdmin()
@@ -291,7 +291,7 @@ export async function saveTemplateDefinitionDraft(
   })
 
   revalidatePath(`/self-service/templates/${id}/edit`)
-  return { versionId: version.id }
+  return { versionId: version.id, versionNumber: version.versionNumber }
 }
 
 // ---------------------------------------------------------------------------
@@ -938,14 +938,46 @@ export async function deleteFixture(templateDefinitionId: string, fixtureId: str
 // ---------------------------------------------------------------------------
 
 /**
- * Publishes a definition's current draft version. Gated by
- * {@link canPublishTemplateDefinition} — owner/admin for `visibility:
- * workspace`, platform admin additionally required for `shared`/`public`
- * (design §3.7). The actual publish-gate business rules (validatedAt +
- * succeeded-dry-run-of-this-version) are enforced by
- * `lib/scaffolder/versions.ts`'s `publishVersion`, which this delegates to.
+ * Finds the definition's newest version by `versionNumber` — used as
+ * `publishTemplateDefinition`'s default target so publishing always reaches
+ * for the latest saved snapshot rather than whatever `currentVersion`
+ * already points at (which, once published, only `publishVersion` itself
+ * moves).
  */
-export async function publishTemplateDefinition(id: string): Promise<{ id: string }> {
+async function latestVersionId(payload: PayloadClient, definitionId: string): Promise<string | null> {
+  const result = await payload.find({
+    collection: 'template-definition-versions',
+    where: { definition: { equals: definitionId } },
+    sort: '-versionNumber',
+    limit: 1,
+    depth: 0,
+    overrideAccess: true,
+  })
+  return result.docs[0]?.id ?? null
+}
+
+/**
+ * Publishes a specific version of a definition — promoting it to
+ * `currentVersion` and `status: 'published'` — defaulting to the
+ * definition's LATEST saved version (by `versionNumber`) when `versionId`
+ * is omitted. This is what lets a newer draft version be published after
+ * the definition already has an older `published` `currentVersion`: the
+ * bug this fixes always re-published whatever `currentVersion` already was,
+ * so a template could never move past its first published version.
+ *
+ * Gated by {@link canPublishTemplateDefinition} — owner/admin for
+ * `visibility: workspace`, platform admin additionally required for
+ * `shared`/`public` (design §3.7). The actual publish-gate business rules
+ * (validatedAt + succeeded-dry-run-of-THIS-version) are enforced by
+ * `lib/scaffolder/versions.ts`'s `publishVersion`, which this delegates to
+ * — including for a `deprecated` definition, where a successful publish
+ * re-activates it to `published` (publishVersion sets `status: 'published'`
+ * unconditionally on success).
+ */
+export async function publishTemplateDefinition(
+  id: string,
+  versionId?: string,
+): Promise<{ id: string }> {
   const payload = await getPayload({ config })
   const uid = await requireUserId()
   const isAdmin = await currentUserIsPlatformAdmin()
@@ -956,12 +988,17 @@ export async function publishTemplateDefinition(id: string): Promise<{ id: strin
     throw new Error('You do not have permission to publish this template.')
   }
 
-  const versionId = relId(definition.currentVersion)
-  if (!versionId) throw new Error('This template has no draft version to publish.')
+  const targetVersionId = versionId ?? (await latestVersionId(payload, id))
+  if (!targetVersionId) throw new Error('This template has no draft version to publish.')
+
+  const currentVersionId = relId(definition.currentVersion)
+  if (definition.status === 'published' && targetVersionId === currentVersionId) {
+    throw new Error('This version is already published.')
+  }
 
   await publishVersion(payload, {
     definitionId: id,
-    versionId,
+    versionId: targetVersionId,
     actor: { userId: uid, isPlatformAdmin: isAdmin },
   })
 
