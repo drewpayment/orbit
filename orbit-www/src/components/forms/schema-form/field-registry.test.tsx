@@ -25,6 +25,16 @@ describe('field registry resolution precedence', () => {
     expect(registry.resolve({ type: 'string', enum: ['a', 'b'] })).toBe(SelectField)
   })
 
+  it('resolves number+enum → SelectField (any type with a non-empty enum uses Select)', () => {
+    const registry = createFieldRegistry()
+    expect(registry.resolve({ type: 'number', enum: [1, 2, 3] })).toBe(SelectField)
+  })
+
+  it('resolves integer+enum → SelectField', () => {
+    const registry = createFieldRegistry()
+    expect(registry.resolve({ type: 'integer', enum: [1, 2, 3] })).toBe(SelectField)
+  })
+
   it('resolves number/integer → NumberInputField', () => {
     const registry = createFieldRegistry()
     expect(registry.resolve({ type: 'number' })).toBe(NumberInputField)
