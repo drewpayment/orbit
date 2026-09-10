@@ -96,6 +96,10 @@ export const RUN_STATUS_PRESENTATION: Record<RunStatus, StatusPresentation> = {
     label: 'Failed',
     className: 'border-red-500/25 bg-red-500/15 text-red-600 dark:text-red-400',
   },
+  cancelled: {
+    label: 'Cancelled',
+    className: 'border-border bg-muted text-muted-foreground',
+  },
 }
 
 export function runStatusPresentation(status: string): StatusPresentation {
