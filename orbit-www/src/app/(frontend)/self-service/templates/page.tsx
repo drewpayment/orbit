@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, FileText, Loader2, Play, Plus, ShieldAlert } from 'lucide-react'
+import { ArrowLeft, FileStack, FileText, Loader2, Play, Plus, ShieldAlert } from 'lucide-react'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -158,12 +158,20 @@ function TabLink({ href, active, children }: { href: string; active: boolean; ch
 function NewTemplateButton({ canAuthor }: { canAuthor: boolean }) {
   if (!canAuthor) return null
   return (
-    <Button asChild size="sm">
-      <Link href="/self-service/templates/new">
-        <Plus className="h-4 w-4" />
-        New template
-      </Link>
-    </Button>
+    <div className="flex items-center gap-2">
+      <Button asChild size="sm" variant="outline">
+        <Link href="/self-service/templates/skeletons">
+          <FileStack className="h-4 w-4" />
+          Skeletons
+        </Link>
+      </Button>
+      <Button asChild size="sm">
+        <Link href="/self-service/templates/new">
+          <Plus className="h-4 w-4" />
+          New template
+        </Link>
+      </Button>
+    </div>
   )
 }
 
