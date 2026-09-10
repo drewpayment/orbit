@@ -32,6 +32,10 @@ service TemplateService {
   // List the action registry descriptors known to the worker (for definition
   // validation and Phase 2 authoring UI autocomplete)
   rpc ListActions(ListActionsRequest) returns (ListActionsResponse);
+
+  // Resolve an `approval:request` step's human-in-the-loop gate on a running
+  // scaffolder workflow (Phase 4 Task C)
+  rpc ResolveScaffolderApproval(ResolveScaffolderApprovalRequest) returns (ResolveScaffolderApprovalResponse);
 }
 
 message StartInstantiationRequest {
@@ -150,6 +154,18 @@ message ListActionsRequest {}
 
 message ListActionsResponse {
   repeated ActionDescriptor actions = 1;
+}
+
+message ResolveScaffolderApprovalRequest {
+  string workflow_id = 1;
+  string approval_id = 2;   // matches the step's generated approval id, disambiguates multiple approval:request steps
+  bool approved = 3;
+  string approver_id = 4;
+  string comment = 5;
+}
+
+message ResolveScaffolderApprovalResponse {
+  bool success = 1;
 }
 
 message ActionDescriptor {

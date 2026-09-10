@@ -978,7 +978,7 @@ export interface ActionRun {
     | {
         id: string;
         name?: string | null;
-        status: 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped';
+        status: 'pending' | 'running' | 'awaiting-approval' | 'succeeded' | 'failed' | 'skipped';
         startedAt?: string | null;
         finishedAt?: string | null;
         logTail?: string | null;

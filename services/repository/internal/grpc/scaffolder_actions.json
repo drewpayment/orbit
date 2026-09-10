@@ -281,6 +281,63 @@
     "supportsPlan": true
   },
   {
+    "name": "approval:request",
+    "family": "approval",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "approval:request input",
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Shown to approvers explaining what they are approving."
+        },
+        "approvers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Free-text list of approver emails or team ids. Not RBAC-validated at definition-author time — the run-page check enforces who may actually resolve the gate."
+        },
+        "timeoutHours": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 24,
+          "description": "How long to wait for a decision before the step fails as timed out."
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "approval:request output",
+      "type": "object",
+      "properties": {
+        "approved": {
+          "type": "boolean",
+          "description": "Whether the gate was approved."
+        },
+        "approverId": {
+          "type": "string",
+          "description": "Who resolved the gate."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Optional note left by the approver."
+        }
+      },
+      "required": [
+        "approved"
+      ],
+      "additionalProperties": false
+    },
+    "supportsPlan": true
+  },
+  {
     "name": "catalog:entity:register",
     "family": "catalog",
     "inputSchema": {

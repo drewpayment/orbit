@@ -10,28 +10,33 @@ package scaffolder
 // `action-runs.steps[].status` in orbit-www, or a writeback is rejected.
 // scaffolder_status_contract_test.go pins that.
 const (
-	RunStatusRunning   = "running"
-	RunStatusSucceeded = "succeeded"
-	RunStatusFailed    = "failed"
-	RunStatusCancelled = "cancelled"
+	RunStatusRunning          = "running"
+	RunStatusSucceeded        = "succeeded"
+	RunStatusFailed           = "failed"
+	RunStatusCancelled        = "cancelled"
+	RunStatusAwaitingApproval = "awaiting-approval"
 )
 
 const (
-	StepStatusPending   = "pending"
-	StepStatusRunning   = "running"
-	StepStatusSucceeded = "succeeded"
-	StepStatusFailed    = "failed"
-	StepStatusSkipped   = "skipped"
+	StepStatusPending          = "pending"
+	StepStatusRunning          = "running"
+	StepStatusSucceeded        = "succeeded"
+	StepStatusFailed           = "failed"
+	StepStatusSkipped          = "skipped"
+	StepStatusAwaitingApproval = "awaiting-approval"
 )
 
 // RunStatusesWritten is every run status ScaffolderWorkflow writes back. It is
 // deliberately not "every status the collection allows": the workflow never
-// writes `pending` or `awaiting-approval`, which orbit-www owns.
+// writes `pending`, which orbit-www owns. `awaiting-approval` IS written, by
+// an `approval:request` step parking the run on a human signal (Phase 4
+// Task C).
 var RunStatusesWritten = []string{
 	RunStatusRunning,
 	RunStatusSucceeded,
 	RunStatusFailed,
 	RunStatusCancelled,
+	RunStatusAwaitingApproval,
 }
 
 // StepStatusesWritten is every per-step status ScaffolderWorkflow writes back.
@@ -41,4 +46,5 @@ var StepStatusesWritten = []string{
 	StepStatusSucceeded,
 	StepStatusFailed,
 	StepStatusSkipped,
+	StepStatusAwaitingApproval,
 }

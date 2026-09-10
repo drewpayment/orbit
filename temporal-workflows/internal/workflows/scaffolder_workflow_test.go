@@ -26,12 +26,15 @@ type scaffolderStubs struct {
 	progress  []activities.WriteRunProgressInput
 	cleanups  []activities.CleanupScaffolderRunInput
 	validated []activities.ValidateDefinitionInput
+	opened    []activities.ScaffolderOpenApprovalInput
+	resolved  []activities.ScaffolderResolveApprovalInput
 
 	// configurable behaviour
 	validationErrors []string
 	executeFn        func(in activities.ScaffolderStepInput) (*activities.ScaffolderStepResult, error)
 	planFn           func(in activities.ScaffolderStepInput) (*activities.ScaffolderPlanResult, error)
 	progressErr      error
+	openApprovalFn   func(in activities.ScaffolderOpenApprovalInput) (*activities.ScaffolderOpenApprovalResult, error)
 }
 
 type ScaffolderWorkflowTestSuite struct {
@@ -94,6 +97,25 @@ func (s *ScaffolderWorkflowTestSuite) SetupTest() {
 			return nil
 		},
 		activity.RegisterOptions{Name: activities.ActivityScaffolderCleanupRun},
+	)
+
+	s.env.RegisterActivityWithOptions(
+		func(_ context.Context, in activities.ScaffolderOpenApprovalInput) (*activities.ScaffolderOpenApprovalResult, error) {
+			stubs.opened = append(stubs.opened, in)
+			if stubs.openApprovalFn != nil {
+				return stubs.openApprovalFn(in)
+			}
+			return &activities.ScaffolderOpenApprovalResult{ID: "approval-row-" + in.ApprovalID}, nil
+		},
+		activity.RegisterOptions{Name: activities.ActivityScaffolderOpenApproval},
+	)
+
+	s.env.RegisterActivityWithOptions(
+		func(_ context.Context, in activities.ScaffolderResolveApprovalInput) error {
+			stubs.resolved = append(stubs.resolved, in)
+			return nil
+		},
+		activity.RegisterOptions{Name: activities.ActivityScaffolderResolveApproval},
 	)
 }
 

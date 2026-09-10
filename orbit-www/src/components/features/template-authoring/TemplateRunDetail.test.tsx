@@ -10,6 +10,9 @@ vi.mock('@/app/(frontend)/self-service/actions', () => ({
   approveRun: vi.fn(),
   rejectRun: vi.fn(),
 }))
+vi.mock('@/app/(frontend)/self-service/templates/run-actions', () => ({
+  resolveScaffolderApproval: vi.fn(),
+}))
 
 afterEach(() => {
   cleanup()
@@ -122,5 +125,67 @@ describe('TemplateRunDetail', () => {
     )
     expect(screen.getByRole('button', { name: /approve/i })).toBeDisabled()
     expect(screen.getByRole('button', { name: /reject/i })).toBeDisabled()
+  })
+
+  // --- approval:request mid-run gate (Phase 4 Task C) -----------------------
+
+  function runWithAwaitingStep(): ActionRun {
+    return run({
+      status: 'awaiting-approval',
+      steps: [
+        { id: 'create-repo', name: 'Create repo', status: 'succeeded' },
+        { id: 'gate', name: 'Get sign-off', status: 'awaiting-approval' },
+      ],
+    })
+  }
+
+  it('renders the mid-run ScaffolderApprovalGate (not ApprovalButtons) when a step is awaiting-approval', () => {
+    const getRun = vi.fn().mockResolvedValue(null)
+    render(
+      <TemplateRunDetail
+        initialRun={runWithAwaitingStep()}
+        getRun={getRun}
+        gates={{ gate: { approvalId: 'run-1:gate', message: 'Please review the plan', approvers: [], canApprove: true } }}
+      />,
+    )
+
+    expect(screen.getByText('Please review the plan')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /approve/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /reject/i })).toBeInTheDocument()
+    // The run-level gate is NOT also shown — only one control for this run.
+    expect(screen.getAllByRole('button', { name: /approve/i })).toHaveLength(1)
+  })
+
+  it('shows a read-only badge (no buttons) when the viewer cannot approve the step gate', () => {
+    const getRun = vi.fn().mockResolvedValue(null)
+    render(
+      <TemplateRunDetail
+        initialRun={runWithAwaitingStep()}
+        getRun={getRun}
+        gates={{ gate: { approvalId: 'run-1:gate', message: 'Please review the plan', approvers: [], canApprove: false } }}
+      />,
+    )
+
+    expect(screen.getByText('Please review the plan')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /approve/i })).not.toBeInTheDocument()
+  })
+
+  it('calls resolveScaffolderApproval with the run id, approval id and decision on Approve', async () => {
+    const { resolveScaffolderApproval } = await import('@/app/(frontend)/self-service/templates/run-actions')
+    const getRun = vi.fn().mockResolvedValue(null)
+    const { default: userEvent } = await import('@testing-library/user-event')
+    const user = userEvent.setup()
+
+    render(
+      <TemplateRunDetail
+        initialRun={runWithAwaitingStep()}
+        getRun={getRun}
+        gates={{ gate: { approvalId: 'run-1:gate', message: 'Please review', approvers: [], canApprove: true } }}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /approve/i }))
+
+    expect(resolveScaffolderApproval).toHaveBeenCalledWith('run-1', 'run-1:gate', true, undefined)
   })
 })

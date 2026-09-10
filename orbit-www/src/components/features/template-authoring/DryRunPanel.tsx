@@ -72,6 +72,11 @@ const STEP_VARIANT: Record<StepStatus, 'default' | 'secondary' | 'destructive' |
   succeeded: 'default',
   failed: 'destructive',
   skipped: 'outline',
+  // A dry run never reaches an approval:request step (scaffolder_approval.go
+  // short-circuits it to an "unsupported" plan entry), so this state is
+  // never actually rendered here — included only so the map stays total
+  // against the collection's step-status enum.
+  'awaiting-approval': 'secondary',
 }
 
 export function DryRunPanel({

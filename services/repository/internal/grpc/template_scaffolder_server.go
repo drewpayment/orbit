@@ -353,6 +353,43 @@ func (s *TemplateServer) ListActions(_ context.Context, _ *connect.Request[templ
 	return connect.NewResponse(&templatev1.ListActionsResponse{Actions: actions}), nil
 }
 
+// ResolveScaffolderApproval resolves an `approval:request` step's gate
+// (Phase 4 Task C) by signalling the running workflow.
+//
+// Authorization is deliberately thin here: `authorizeScaffolderRun` proves the
+// caller's verified identity is scoped to the run's own workspace (tenant
+// isolation), exactly like GetRunProgress/CancelRun. It does NOT check
+// whether the caller is a workspace owner/admin or a listed approver — that
+// is the orbit-www server action's job (plan §13 decision 6: "the internal
+// API key alone is never an approver"). This RPC is one layer further in,
+// reached only by orbit-www's own service identity, so it trusts the caller
+// to have already made that decision.
+func (s *TemplateServer) ResolveScaffolderApproval(ctx context.Context, req *connect.Request[templatev1.ResolveScaffolderApprovalRequest]) (*connect.Response[templatev1.ResolveScaffolderApprovalResponse], error) {
+	msg := req.Msg
+	if msg.GetApprovalId() == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("approval_id is required"))
+	}
+
+	scaffolderTemporal, err := s.authorizeScaffolderRun(ctx, msg.GetWorkflowId())
+	if err != nil {
+		return nil, err
+	}
+
+	if err := scaffolderTemporal.SignalScaffolderApproval(ctx, msg.GetWorkflowId(), types.ScaffolderApprovalSignalInput{
+		ApprovalID: msg.GetApprovalId(),
+		Approved:   msg.GetApproved(),
+		ApproverID: msg.GetApproverId(),
+		Comment:    msg.GetComment(),
+	}); err != nil {
+		if errors.Is(err, ErrScaffolderRunNotFound) {
+			return nil, connect.NewError(connect.CodeNotFound, err)
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	return connect.NewResponse(&templatev1.ResolveScaffolderApprovalResponse{Success: true}), nil
+}
+
 // normalizeRunStatus maps the scaffolder's "succeeded" onto the enum's
 // "completed"; every other status already matches parseWorkflowStatus.
 func normalizeRunStatus(status string) string {

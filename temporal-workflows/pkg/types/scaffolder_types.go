@@ -59,6 +59,22 @@ type ScaffolderPlannedChange struct {
 	Description string `json:"description,omitempty"`
 }
 
+// ScaffolderApprovalSignal is the signal name ResolveScaffolderApproval sends
+// to resolve an `approval:request` step's human-in-the-loop gate (Phase 4
+// Task C). Must stay field- and name-compatible with
+// workflows.ScaffolderApprovalSignal / workflows.ScaffolderApprovalSignalInput
+// — Temporal's data converter matches by field name, not by Go type identity.
+const ScaffolderApprovalSignal = "ScaffolderApprovalSignal"
+
+// ScaffolderApprovalSignalInput is the payload ResolveScaffolderApproval
+// sends.
+type ScaffolderApprovalSignalInput struct {
+	ApprovalID string `json:"approvalId"`
+	Approved   bool   `json:"approved"`
+	ApproverID string `json:"approverId"`
+	Comment    string `json:"comment"`
+}
+
 // ScaffolderProgress is the "progress" query payload.
 type ScaffolderProgress struct {
 	Status  string                    `json:"status"` // running|succeeded|failed|cancelled
