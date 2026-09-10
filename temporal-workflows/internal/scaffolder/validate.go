@@ -64,6 +64,7 @@ func Validate(def *Definition, actions ActionCatalog) []ValidationError {
 	errs = append(errs, validateHeader(def)...)
 	params, paramErrs := validateParameters(def.Spec.Parameters)
 	errs = append(errs, paramErrs...)
+	errs = append(errs, validateParameterExpressions(def.Spec.Parameters, params)...)
 
 	if len(def.Spec.Steps) == 0 {
 		errs = append(errs, ValidationError{Path: "spec.steps", Message: "a template must declare at least one step"})
@@ -147,6 +148,38 @@ func validateParameters(pages []ParameterPage) (map[string]bool, []ValidationErr
 		}
 	}
 	return params, errs
+}
+
+// validateParameterExpressions checks `ui:` expressions inside the form schema
+// (e.g. ui:visibleIf, design §3.3). The form is rendered before any step runs,
+// so only parameters and the opaque namespaces are in scope there.
+func validateParameterExpressions(pages []ParameterPage, params map[string]bool) []ValidationError {
+	scope := refScope{
+		params:          params,
+		stepIndex:       map[string]int{},
+		stepActionNames: map[string]string{},
+		actions:         DescriptorCatalog(nil),
+		currentStep:     0,
+	}
+	var errs []ValidationError
+	for i, page := range pages {
+		names := make([]string, 0, len(page.Properties))
+		for n := range page.Properties {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		for _, n := range names {
+			base := fmt.Sprintf("spec.parameters[%d].properties.%s", i, n)
+			var decoded any
+			if err := json.Unmarshal(page.Properties[n], &decoded); err != nil {
+				continue // already reported by validateParameters
+			}
+			for _, leaf := range stringLeaves(decoded, base) {
+				errs = append(errs, scope.checkString(leaf.path, leaf.value)...)
+			}
+		}
+	}
+	return errs
 }
 
 func validateStep(def *Definition, idx int, step Step, params map[string]bool, stepIndex map[string]int, actions ActionCatalog) []ValidationError {

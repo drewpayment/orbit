@@ -16,7 +16,7 @@ type schemaAction struct {
 	out  string
 }
 
-func (s *schemaAction) Name() string                 { return s.name }
+func (s *schemaAction) Name() string                  { return s.name }
 func (s *schemaAction) InputSchema() json.RawMessage  { return json.RawMessage(s.in) }
 func (s *schemaAction) OutputSchema() json.RawMessage { return json.RawMessage(s.out) }
 func (s *schemaAction) Execute(context.Context, ActionRunContext, json.RawMessage) (json.RawMessage, error) {
@@ -30,8 +30,8 @@ func testRegistry() *Registry {
 	return NewRegistry(
 		&schemaAction{
 			name: "github:repo:create",
-			in: `{"type":"object","properties":{"name":{"type":"string"},"private":{"type":"boolean"},"replicas":{"type":"integer"}},"required":["name"],"additionalProperties":false}`,
-			out: `{"type":"object","properties":{"repoUrl":{"type":"string"},"repoName":{"type":"string"},"checkout":{"type":"string"}}}`,
+			in:   `{"type":"object","properties":{"name":{"type":"string"},"private":{"type":"boolean"},"replicas":{"type":"integer"}},"required":["name"],"additionalProperties":false}`,
+			out:  `{"type":"object","properties":{"repoUrl":{"type":"string"},"repoName":{"type":"string"},"checkout":{"type":"string"}}}`,
 		},
 		&schemaAction{
 			name: "debug:log",
@@ -104,9 +104,9 @@ func TestValidateDocumentHeader(t *testing.T) {
 
 func TestValidateStepIdentity(t *testing.T) {
 	tests := []struct {
-		name  string
+		name   string
 		mutate func(*Definition)
-		want  string
+		want   string
 	}{
 		{"duplicate ids", func(d *Definition) { d.Spec.Steps[1].ID = "repo" }, "duplicate step id"},
 		{"empty id", func(d *Definition) { d.Spec.Steps[0].ID = "" }, "step id"},
@@ -139,29 +139,39 @@ func TestValidateExpressionReferences(t *testing.T) {
 		want   string
 	}{
 		{
-			name:   "forward step reference",
-			mutate: func(d *Definition) { d.Spec.Steps[0].Input = json.RawMessage(`{"name":"${{ steps.log.output.message }}"}`) },
-			want:   "later step",
+			name: "forward step reference",
+			mutate: func(d *Definition) {
+				d.Spec.Steps[0].Input = json.RawMessage(`{"name":"${{ steps.log.output.message }}"}`)
+			},
+			want: "later step",
 		},
 		{
-			name:   "self reference",
-			mutate: func(d *Definition) { d.Spec.Steps[0].Input = json.RawMessage(`{"name":"${{ steps.repo.output.repoUrl }}"}`) },
-			want:   "itself",
+			name: "self reference",
+			mutate: func(d *Definition) {
+				d.Spec.Steps[0].Input = json.RawMessage(`{"name":"${{ steps.repo.output.repoUrl }}"}`)
+			},
+			want: "itself",
 		},
 		{
-			name:   "unknown step",
-			mutate: func(d *Definition) { d.Spec.Steps[1].Input = json.RawMessage(`{"message":"${{ steps.ghost.output.x }}"}`) },
-			want:   "unknown step",
+			name: "unknown step",
+			mutate: func(d *Definition) {
+				d.Spec.Steps[1].Input = json.RawMessage(`{"message":"${{ steps.ghost.output.x }}"}`)
+			},
+			want: "unknown step",
 		},
 		{
-			name:   "unknown output key",
-			mutate: func(d *Definition) { d.Spec.Steps[1].Input = json.RawMessage(`{"message":"${{ steps.repo.output.nope }}"}`) },
-			want:   "does not declare output",
+			name: "unknown output key",
+			mutate: func(d *Definition) {
+				d.Spec.Steps[1].Input = json.RawMessage(`{"message":"${{ steps.repo.output.nope }}"}`)
+			},
+			want: "does not declare output",
 		},
 		{
-			name:   "steps ref missing output segment",
-			mutate: func(d *Definition) { d.Spec.Steps[1].Input = json.RawMessage(`{"message":"${{ steps.repo.repoUrl }}"}`) },
-			want:   "output",
+			name: "steps ref missing output segment",
+			mutate: func(d *Definition) {
+				d.Spec.Steps[1].Input = json.RawMessage(`{"message":"${{ steps.repo.repoUrl }}"}`)
+			},
+			want: "output",
 		},
 		{
 			name:   "unknown parameter",
@@ -179,9 +189,11 @@ func TestValidateExpressionReferences(t *testing.T) {
 			want:   "unterminated",
 		},
 		{
-			name:   "unknown filter",
-			mutate: func(d *Definition) { d.Spec.Steps[1].Input = json.RawMessage(`{"message":"${{ parameters.name | rot13 }}"}`) },
-			want:   "unknown filter",
+			name: "unknown filter",
+			mutate: func(d *Definition) {
+				d.Spec.Steps[1].Input = json.RawMessage(`{"message":"${{ parameters.name | rot13 }}"}`)
+			},
+			want: "unknown filter",
 		},
 		{
 			name:   "run namespace beyond id",
@@ -189,9 +201,11 @@ func TestValidateExpressionReferences(t *testing.T) {
 			want:   "run.id",
 		},
 		{
-			name:   "whole step output object is allowed",
-			mutate: func(d *Definition) { d.Spec.Steps[1].Input = json.RawMessage(`{"message":"${{ steps.repo.output | json }}"}`) },
-			want:   "",
+			name: "whole step output object is allowed",
+			mutate: func(d *Definition) {
+				d.Spec.Steps[1].Input = json.RawMessage(`{"message":"${{ steps.repo.output | json }}"}`)
+			},
+			want: "",
 		},
 		{
 			name:   "bad reference in if",
@@ -324,4 +338,20 @@ func TestValidateIsDeterministic(t *testing.T) {
 func TestValidateNilInputs(t *testing.T) {
 	assert.NotEmpty(t, Validate(nil, testRegistry()))
 	assert.NotEmpty(t, Validate(validDefinition(), nil))
+}
+
+func TestValidateParameterUIExpressions(t *testing.T) {
+	def := validDefinition()
+	def.Spec.Parameters[0].Properties["topicName"] = json.RawMessage(`{"type":"string","ui:visibleIf":"${{ parameters.private }}"}`)
+	assert.Empty(t, Validate(def, testRegistry()), messages(Validate(def, testRegistry())))
+
+	def = validDefinition()
+	def.Spec.Parameters[0].Properties["topicName"] = json.RawMessage(`{"type":"string","ui:visibleIf":"${{ parameters.ghost }}"}`)
+	assert.Contains(t, messages(Validate(def, testRegistry())), "no parameter named")
+
+	// The form renders before any step runs, so a step reference is never valid
+	// there — it must not silently resolve to an empty value at run time.
+	def = validDefinition()
+	def.Spec.Parameters[0].Properties["topicName"] = json.RawMessage(`{"type":"string","ui:visibleIf":"${{ steps.repo.output.repoUrl }}"}`)
+	assert.Contains(t, messages(Validate(def, testRegistry())), "unknown step")
 }
