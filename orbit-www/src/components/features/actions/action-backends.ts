@@ -22,6 +22,7 @@ export const ACTION_BACKEND_TYPES = [
   'temporal-launch',
   'kafka-provision',
   'agent',
+  'scaffolder',
 ] as const satisfies readonly BackendType[]
 
 // Compile-time guard: fails if the collection union gains a type not listed above.
@@ -42,6 +43,14 @@ export interface BackendTypeMeta {
    * deferred Go ActionDispatch workflow). The form surfaces a "deferred" note.
    */
   deferred: boolean
+  /**
+   * False when this backend type must never be manually authored through the
+   * Action form — currently only `scaffolder`, whose rows are hidden runner
+   * Actions auto-provisioned by `templates/authoring-actions.ts`'s
+   * `ensureRunnerAction` (phase-1 plan §9.2, BLOCKER 1). Defaults to `true`
+   * when omitted (every other backend type is user-authorable).
+   */
+  authorable?: boolean
 }
 
 export const BACKEND_TYPE_META: Record<BackendType, BackendTypeMeta> = {
@@ -101,11 +110,33 @@ export const BACKEND_TYPE_META: Record<BackendType, BackendTypeMeta> = {
     refPlaceholder: 'provision-namespace',
     deferred: true,
   },
+  scaffolder: {
+    value: 'scaffolder',
+    label: 'Scaffolder (template)',
+    refLabel: 'Template definition id',
+    refHelp:
+      'The template-definitions doc this action runs via the v2 ScaffolderWorkflow. Hidden runner row — never manually authored.',
+    refPlaceholder: '66f0c2a1e4b0c9d1a2b3c4d5',
+    deferred: false,
+    // Auto-provisioned by ensureRunnerAction, not user-authored — excluded
+    // from AUTHORABLE_BACKEND_TYPE_OPTIONS below.
+    authorable: false,
+  },
 }
 
 /** Ordered metadata list for rendering the backend-type <select>. */
 export const BACKEND_TYPE_OPTIONS: BackendTypeMeta[] = ACTION_BACKEND_TYPES.map(
   (t) => BACKEND_TYPE_META[t],
+)
+
+/**
+ * Same list, minus backend types marked `authorable: false` — this is what
+ * the Action authoring form's backend-type picker should render, so a
+ * hidden/system-only backend (currently just `scaffolder`) can never be
+ * manually selected.
+ */
+export const AUTHORABLE_BACKEND_TYPE_OPTIONS: BackendTypeMeta[] = BACKEND_TYPE_OPTIONS.filter(
+  (opt) => opt.authorable !== false,
 )
 
 /** Type guard: is `value` a known backend type? (used server-side before save). */

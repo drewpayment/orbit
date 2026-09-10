@@ -93,6 +93,13 @@ function buildActionData(values: ActionFormValues): {
   if (!isBackendType(values.backend?.type)) {
     throw new Error('Unknown backend type.')
   }
+  // BLOCKER 1: `scaffolder` rows are hidden runner Actions auto-provisioned
+  // by templates/authoring-actions.ts's ensureRunnerAction — never trust the
+  // client's backend-type picker alone (it already hides this option, see
+  // AUTHORABLE_BACKEND_TYPE_OPTIONS) to keep them un-authorable here too.
+  if (values.backend?.type === 'scaffolder') {
+    throw new Error('The scaffolder backend type cannot be manually authored.')
+  }
   if (!APPROVAL_POLICIES.includes(values.approvalPolicy)) {
     throw new Error('Unknown approval policy.')
   }

@@ -1087,7 +1087,8 @@ export interface Action {
       | 'temporal-pattern'
       | 'temporal-launch'
       | 'kafka-provision'
-      | 'agent';
+      | 'agent'
+      | 'scaffolder';
     /**
      * Backend target: builtin handler id, webhook URL, template/pattern/launch id, topic config, or agent prompt ref — interpreted per type.
      */

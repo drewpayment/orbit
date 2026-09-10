@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { Action } from '@/payload-types'
-import { BACKEND_TYPE_OPTIONS, BACKEND_TYPE_META } from './action-backends'
+import { AUTHORABLE_BACKEND_TYPE_OPTIONS, BACKEND_TYPE_META } from './action-backends'
 
 type BackendType = Action['backend']['type']
 
@@ -47,7 +47,7 @@ export function BackendConfigFields({ value, onChange }: BackendConfigFieldsProp
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {BACKEND_TYPE_OPTIONS.map((opt) => (
+            {AUTHORABLE_BACKEND_TYPE_OPTIONS.map((opt) => (
               <SelectItem key={opt.value} value={opt.value}>
                 {opt.label}
               </SelectItem>
