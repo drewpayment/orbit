@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ado:repo:create input",
+  "type": "object",
+  "properties": {
+    "connection": {
+      "type": "string",
+      "minLength": 1,
+      "description": "GitConnections id of the Azure DevOps connection used to authenticate this call."
+    },
+    "project": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Azure DevOps project that will own the new repository."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9_.-]+$",
+      "description": "Repository name."
+    }
+  },
+  "required": ["connection", "project", "name"],
+  "additionalProperties": false
+}

@@ -35,6 +35,20 @@ export interface PickerOption {
   description?: string
 }
 
+/**
+ * OrbitSkeletonPicker's option shape — deliberately NOT `PickerOption`. The
+ * picker needs to render file count/size alongside the name (Phase 3 Task 5
+ * spec), which `PickerOption`'s generic `{id, label, description}` can't
+ * carry without stringly-encoding it into `description`.
+ */
+export interface SkeletonPickerOption {
+  id: string
+  name: string
+  slug: string
+  totalSize: number
+  fileCount: number
+}
+
 function relId(value: unknown): string | null {
   if (!value) return null
   if (typeof value === 'string') return value
@@ -193,4 +207,36 @@ export async function getReposForConnection(
     id: String(e.id),
     label: String(e.name ?? e.slug ?? e.id),
   }))
+}
+
+// ---------------------------------------------------------------------------
+// OrbitSkeletonPicker (Phase 3 Task 5) — lists `template-skeletons` rows for
+// the `fetch:orbit-skeleton` scaffolder action's `skeletonId` input.
+// ---------------------------------------------------------------------------
+
+export async function getSkeletonsForWorkspace(
+  payload: PayloadClient,
+  callerId: string,
+  workspaceId: string,
+): Promise<SkeletonPickerOption[]> {
+  if (!(await isActiveMember(payload, callerId, workspaceId))) return []
+
+  const result = await payload.find({
+    collection: 'template-skeletons',
+    where: { and: [{ workspace: { equals: workspaceId } }] },
+    limit: 500,
+    depth: 0,
+    overrideAccess: true,
+  })
+
+  return result.docs.map((s) => {
+    const files = Array.isArray((s as { files?: unknown }).files) ? (s.files as unknown[]) : []
+    return {
+      id: String(s.id),
+      name: String(s.name ?? s.slug ?? s.id),
+      slug: String(s.slug ?? ''),
+      totalSize: typeof s.totalSize === 'number' ? s.totalSize : 0,
+      fileCount: files.length,
+    }
+  })
 }

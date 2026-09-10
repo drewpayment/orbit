@@ -31,12 +31,14 @@ type fakeADOTokenClient struct {
 	err  error
 
 	gotConnectionID string
+	gotWorkspaceID  string
 	calls           int
 }
 
-func (f *fakeADOTokenClient) GetConnectionToken(_ context.Context, connectionID string) (services.ADOConnectionToken, error) {
+func (f *fakeADOTokenClient) GetConnectionToken(_ context.Context, connectionID, workspaceID string) (services.ADOConnectionToken, error) {
 	f.calls++
 	f.gotConnectionID = connectionID
+	f.gotWorkspaceID = workspaceID
 	return f.resp, f.err
 }
 
