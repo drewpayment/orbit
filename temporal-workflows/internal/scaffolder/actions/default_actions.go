@@ -27,10 +27,12 @@ func DefaultActions(deps Deps) []scaffolder.Action {
 		NewFSRender(),
 		NewFetchGit(deps.TokenService),
 		NewGitPush(deps.TokenService),
-		// approval:request is registered for its schema/descriptor only —
-		// ScaffolderWorkflow intercepts it before generic dispatch. See
-		// ApprovalRequest's doc comment.
+		// approval:request, agent:run and fetch:template are registered for
+		// their schema/descriptor only — ScaffolderWorkflow intercepts all
+		// three before generic dispatch. See each type's doc comment.
 		NewApprovalRequest(),
+		NewAgentRun(),
+		NewFetchTemplate(),
 	}
 
 	if deps.TokenService != nil {
@@ -104,5 +106,7 @@ func DescriptorActions() []scaffolder.Action {
 		NewApiSchemaRegister(nil),
 		NewFetchOrbitSkeleton(nil),
 		NewApprovalRequest(),
+		NewAgentRun(),
+		NewFetchTemplate(),
 	}
 }

@@ -484,6 +484,28 @@ func main() {
 	w.RegisterActivityWithOptions(scaffolderApprovalActivities.ResolveApproval,
 		activity.RegisterOptions{Name: activities.ActivityScaffolderResolveApproval})
 
+	// agent:run's AgentRuns row (Phase 4 Task D) — creates the row and
+	// resolves the workspace's default LLM provider before the workflow
+	// starts InfrastructureAgentWorkflow as a child. See
+	// internal/workflows/scaffolder_agent_run.go.
+	scaffolderAgentRunActivities := activities.NewScaffolderAgentRunActivities(
+		services.NewPayloadAgentRunsClient(orbitAPIURL, orbitInternalAPIKey, logger),
+		logger,
+	)
+	w.RegisterActivityWithOptions(scaffolderAgentRunActivities.CreateAgentRun,
+		activity.RegisterOptions{Name: activities.ActivityScaffolderCreateAgentRun})
+
+	// fetch:template's definition/version resolution (Phase 4 Task D) —
+	// resolves `templateDefinitionId` (+ optional pinned `version`) to the
+	// definition document run as a nested ScaffolderWorkflow. See
+	// internal/workflows/scaffolder_fetch_template.go.
+	scaffolderFetchTemplateActivities := activities.NewScaffolderFetchTemplateActivities(
+		services.NewPayloadTemplateDefinitionsClient(orbitAPIURL, orbitInternalAPIKey, logger),
+		logger,
+	)
+	w.RegisterActivityWithOptions(scaffolderFetchTemplateActivities.ResolveTemplateVersion,
+		activity.RegisterOptions{Name: activities.ActivityScaffolderResolveTemplateVersion})
+
 	// Phase 4 Task G: scheduled re-dry-run sweep for published templates.
 	// A dedicated Payload client (v2 template-definitions routes, distinct
 	// from PayloadTemplateClient's legacy v1 `templates` finalize route) and

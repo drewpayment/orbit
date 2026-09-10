@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "fetch:template output",
+  "type": "object",
+  "description": "Shape depends entirely on the nested template's own `spec.output` block; this action's output is that resolved object verbatim.",
+  "properties": {},
+  "additionalProperties": true
+}
