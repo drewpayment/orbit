@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { ArrowLeft } from 'lucide-react'
-import { getTemplateDefinitionByIdOrSlug } from '../../../run-actions'
+import { getTemplateDefinitionByIdOrSlug, getScaffolderApprovalGates } from '../../../run-actions'
 import { getRun } from '../../../authoring-actions'
 import { getCurrentUser, getPayloadUserFromSession } from '@/lib/auth/session'
 import { isPlatformAdmin } from '@/lib/access/workspace-access'
@@ -78,6 +78,7 @@ export default async function RunDetailPage({ params }: PageProps) {
     approvalPolicy,
     isPlatformAdmin(payloadUser),
   )
+  const gates = await getScaffolderApprovalGates(runId)
 
   return (
     <SidebarProvider>
@@ -96,7 +97,7 @@ export default async function RunDetailPage({ params }: PageProps) {
             <h1 className="text-3xl font-bold">Run detail</h1>
           </div>
 
-          <TemplateRunDetail initialRun={run} getRun={getRun} canApprove={canApprove} />
+          <TemplateRunDetail initialRun={run} getRun={getRun} canApprove={canApprove} gates={gates} />
         </div>
       </SidebarInset>
     </SidebarProvider>

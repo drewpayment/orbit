@@ -54,10 +54,15 @@ class FakePayload {
   collections: Record<string, Doc[]> = {
     workspaces: [],
     'catalog-entities': [],
+    'template-definitions': [],
+    'template-definition-versions': [],
   }
+  /** Every `findByID` call's collection, in order — used to assert lookups were (not) made. */
+  findByIDCalls: string[] = []
   private counter = 1
 
   async findByID({ collection, id }: { collection: string; id: string }) {
+    this.findByIDCalls.push(collection)
     const doc = (this.collections[collection] ?? []).find((d) => d.id === id)
     if (!doc) {
       throw new Error('Not Found')
@@ -271,5 +276,135 @@ describe('POST /api/internal/catalog-entities', () => {
     const secondJson = await second.json()
     expect(firstJson.entityId).not.toBe(secondJson.entityId)
     expect(fp.collections['catalog-entities']).toHaveLength(2)
+  })
+
+  describe('template provenance', () => {
+    function seedTemplateDefinition(fp: FakePayload, overrides: Partial<Doc> = {}) {
+      const doc: Doc = { id: 'tmpl-1', workspace: 'ws-1', status: 'published', ...overrides }
+      fp.collections['template-definitions'].push(doc)
+      return doc
+    }
+
+    function seedTemplateVersion(fp: FakePayload, overrides: Partial<Doc> = {}) {
+      const doc: Doc = { id: 'tmpl-1-v2', definition: 'tmpl-1', ...overrides }
+      fp.collections['template-definition-versions'].push(doc)
+      return doc
+    }
+
+    it('stores sourceTemplateDefinition/sourceTemplateVersion when both belong to the workspace/definition', async () => {
+      const fp = new FakePayload()
+      seedWorkspace(fp)
+      seedTemplateDefinition(fp)
+      seedTemplateVersion(fp)
+      vi.mocked(getPayload).mockResolvedValue(p(fp))
+
+      const res = await POST(
+        req('test-api-key', {
+          ...validBody(),
+          templateDefinitionId: 'tmpl-1',
+          templateVersionId: 'tmpl-1-v2',
+        }),
+      )
+      expect(res.status).toBe(201)
+      const json = await res.json()
+      const entity = fp.collections['catalog-entities'].find((d) => d.id === json.entityId)
+      expect(
+        (entity?.source as { sourceTemplateDefinition?: string }).sourceTemplateDefinition,
+      ).toBe('tmpl-1')
+      expect((entity?.source as { sourceTemplateVersion?: string }).sourceTemplateVersion).toBe(
+        'tmpl-1-v2',
+      )
+    })
+
+    it('returns 422 when templateDefinitionId does not exist', async () => {
+      const fp = new FakePayload()
+      seedWorkspace(fp)
+      vi.mocked(getPayload).mockResolvedValue(p(fp))
+
+      const res = await POST(
+        req('test-api-key', { ...validBody(), templateDefinitionId: 'nope' }),
+      )
+      expect(res.status).toBe(422)
+      expect(fp.collections['catalog-entities']).toHaveLength(0)
+    })
+
+    it('returns 422 when templateDefinitionId belongs to a different workspace', async () => {
+      const fp = new FakePayload()
+      seedWorkspace(fp)
+      seedTemplateDefinition(fp, { workspace: 'ws-2' })
+      vi.mocked(getPayload).mockResolvedValue(p(fp))
+
+      const res = await POST(
+        req('test-api-key', { ...validBody(), templateDefinitionId: 'tmpl-1' }),
+      )
+      expect(res.status).toBe(422)
+      expect(fp.collections['catalog-entities']).toHaveLength(0)
+    })
+
+    it('returns 422 when templateVersionId does not exist', async () => {
+      const fp = new FakePayload()
+      seedWorkspace(fp)
+      seedTemplateDefinition(fp)
+      vi.mocked(getPayload).mockResolvedValue(p(fp))
+
+      const res = await POST(
+        req('test-api-key', {
+          ...validBody(),
+          templateDefinitionId: 'tmpl-1',
+          templateVersionId: 'nope',
+        }),
+      )
+      expect(res.status).toBe(422)
+      expect(fp.collections['catalog-entities']).toHaveLength(0)
+    })
+
+    it('returns 422 when templateVersionId does not belong to templateDefinitionId', async () => {
+      const fp = new FakePayload()
+      seedWorkspace(fp)
+      seedTemplateDefinition(fp)
+      seedTemplateDefinition(fp, { id: 'tmpl-2' })
+      seedTemplateVersion(fp, { definition: 'tmpl-2' })
+      vi.mocked(getPayload).mockResolvedValue(p(fp))
+
+      const res = await POST(
+        req('test-api-key', {
+          ...validBody(),
+          templateDefinitionId: 'tmpl-1',
+          templateVersionId: 'tmpl-1-v2',
+        }),
+      )
+      expect(res.status).toBe(422)
+      expect(fp.collections['catalog-entities']).toHaveLength(0)
+    })
+
+    it('returns 400 when templateVersionId is given without templateDefinitionId', async () => {
+      const fp = new FakePayload()
+      seedWorkspace(fp)
+      vi.mocked(getPayload).mockResolvedValue(p(fp))
+
+      const res = await POST(
+        req('test-api-key', { ...validBody(), templateVersionId: 'tmpl-1-v2' }),
+      )
+      expect(res.status).toBe(400)
+    })
+
+    it('omits sourceTemplateDefinition/sourceTemplateVersion and skips both lookups when the ids are not provided', async () => {
+      const fp = new FakePayload()
+      seedWorkspace(fp)
+      vi.mocked(getPayload).mockResolvedValue(p(fp))
+
+      const res = await POST(req('test-api-key', validBody()))
+      expect(res.status).toBe(201)
+      const json = await res.json()
+      const entity = fp.collections['catalog-entities'].find((d) => d.id === json.entityId)
+      expect(
+        (entity?.source as { sourceTemplateDefinition?: string }).sourceTemplateDefinition,
+      ).toBeUndefined()
+      expect(
+        (entity?.source as { sourceTemplateVersion?: string }).sourceTemplateVersion,
+      ).toBeUndefined()
+      expect(fp.findByIDCalls).not.toContain('template-definitions')
+      expect(fp.findByIDCalls).not.toContain('template-definition-versions')
+    })
   })
 })

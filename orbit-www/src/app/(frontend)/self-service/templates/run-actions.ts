@@ -22,8 +22,13 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { getCurrentUser, getPayloadUserFromSession } from '@/lib/auth/session'
 import { isPlatformAdmin } from '@/lib/access/workspace-access'
-import { canManageTemplateDefinitions, canRunTemplateDefinition } from '@/lib/templates/authz'
-import type { TemplateDefinition as TemplateDefinitionDoc } from '@/payload-types'
+import {
+  canManageTemplateDefinitions,
+  canRunTemplateDefinition,
+  canApproveScaffolderStep,
+} from '@/lib/templates/authz'
+import { resolveScaffolderApproval as resolveScaffolderApprovalRPC } from '@/lib/clients/template-client'
+import type { TemplateDefinition as TemplateDefinitionDoc, ActionRun } from '@/payload-types'
 
 function relId(value: unknown): string | null {
   if (!value) return null
@@ -96,3 +101,151 @@ export async function getTemplateDefinitionByIdOrSlug(
 
 /** Back-compat alias — kept for any caller still importing the pre-rename name. Prefer {@link getTemplateDefinitionByIdOrSlug}. */
 export const getTemplateDefinitionBySlug = getTemplateDefinitionByIdOrSlug
+
+// ---------------------------------------------------------------------------
+// resolveScaffolderApproval — approve/reject an approval:request step
+// (Phase 4 Task C)
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolves an `approval:request` step's mid-run gate on a running scaffolder
+ * workflow.
+ *
+ * Authorization (plan §13 decision 6): the caller must be a workspace
+ * owner/admin OR listed in the step's `approvers` — checked here, BEFORE the
+ * RPC is called. The RPC's own tenant-isolation check
+ * (`authorizeScaffolderRun`) is a second, independent layer, not a
+ * substitute: the internal API key that reaches the repository service is
+ * never itself an approver.
+ *
+ * The `approvers` list lives on the `pending-approvals` row the workflow
+ * opened (`payload.approvers`), not on `action-runs` — that row is also
+ * what proves `approvalId` actually belongs to this run, so a caller cannot
+ * resolve an unrelated workflow's gate by guessing an id.
+ */
+export async function resolveScaffolderApproval(
+  runId: string,
+  approvalId: string,
+  approved: boolean,
+  comment?: string,
+): Promise<{ runId: string }> {
+  const payload = await getPayload({ config })
+  const user = await getCurrentUser()
+  const uid = user?.id
+  if (!uid) throw new Error('Not authenticated')
+  const isAdmin = await currentUserIsPlatformAdmin()
+
+  let run: ActionRun
+  try {
+    run = await payload.findByID({ collection: 'action-runs', id: runId, depth: 0, overrideAccess: true })
+  } catch {
+    throw new Error('Run not found')
+  }
+  const workspaceId = relId(run.workspace)
+  if (!workspaceId) throw new Error('Run not found')
+  if (!run.workflowId) throw new Error('This run has not been dispatched yet.')
+
+  const gates = await payload.find({
+    collection: 'pending-approvals',
+    where: {
+      and: [{ workflowId: { equals: run.workflowId } }, { approvalId: { equals: approvalId } }],
+    },
+    limit: 1,
+    depth: 0,
+    overrideAccess: true,
+  })
+  const gate = gates.docs[0]
+  if (!gate) throw new Error('Approval gate not found')
+
+  const gatePayload =
+    gate.payload && typeof gate.payload === 'object' && !Array.isArray(gate.payload)
+      ? (gate.payload as { approvers?: unknown })
+      : {}
+  const approvers = Array.isArray(gatePayload.approvers)
+    ? gatePayload.approvers.filter((a): a is string => typeof a === 'string')
+    : []
+
+  const canApprove = await canApproveScaffolderStep(payload, uid, user?.email, workspaceId, approvers, isAdmin)
+  if (!canApprove) {
+    throw new Error('You do not have permission to resolve this approval gate.')
+  }
+
+  await resolveScaffolderApprovalRPC({
+    workflowId: run.workflowId,
+    approvalId,
+    approved,
+    approverId: uid,
+    comment,
+  })
+
+  return { runId }
+}
+
+/** One `approval:request` step's gate info, for the run-detail page's UI. */
+export interface ScaffolderApprovalGateInfo {
+  approvalId: string
+  message: string
+  approvers: string[]
+  /** Server-computed `canApproveScaffolderStep` result for the current viewer. */
+  canApprove: boolean
+}
+
+/**
+ * Loads every OPEN `approval:request` gate for a run, keyed by step id, for
+ * {@link TemplateRunDetail} to render. Returns `{}` on any authorization or
+ * lookup failure rather than throwing — a run-detail page that cannot
+ * resolve gate info should still render the rest of the run (read-only), not
+ * 500.
+ */
+export async function getScaffolderApprovalGates(
+  runId: string,
+): Promise<Record<string, ScaffolderApprovalGateInfo>> {
+  const payload = await getPayload({ config })
+  const user = await getCurrentUser()
+  const uid = user?.id
+  if (!uid) return {}
+  const isAdmin = await currentUserIsPlatformAdmin()
+
+  let run: ActionRun
+  try {
+    run = await payload.findByID({ collection: 'action-runs', id: runId, depth: 0, overrideAccess: true })
+  } catch {
+    return {}
+  }
+  const workspaceId = relId(run.workspace)
+  if (!workspaceId || !run.workflowId) return {}
+  if (!(await canRunTemplateDefinition(payload, uid, workspaceId, isAdmin))) return {}
+
+  const gates = await payload.find({
+    collection: 'pending-approvals',
+    where: {
+      and: [{ workflowId: { equals: run.workflowId } }, { status: { equals: 'pending' } }],
+    },
+    limit: 50,
+    depth: 0,
+    overrideAccess: true,
+  })
+
+  const out: Record<string, ScaffolderApprovalGateInfo> = {}
+  for (const gate of gates.docs) {
+    const gatePayload =
+      gate.payload && typeof gate.payload === 'object' && !Array.isArray(gate.payload)
+        ? (gate.payload as { message?: unknown; approvers?: unknown; stepId?: unknown })
+        : {}
+    const stepId = typeof gatePayload.stepId === 'string' ? gatePayload.stepId : null
+    if (!stepId) continue
+
+    const approvers = Array.isArray(gatePayload.approvers)
+      ? gatePayload.approvers.filter((a): a is string => typeof a === 'string')
+      : []
+    const canApprove = await canApproveScaffolderStep(payload, uid, user?.email, workspaceId, approvers, isAdmin)
+
+    out[stepId] = {
+      approvalId: gate.approvalId,
+      message: typeof gatePayload.message === 'string' ? gatePayload.message : gate.title,
+      approvers,
+      canApprove,
+    }
+  }
+  return out
+}

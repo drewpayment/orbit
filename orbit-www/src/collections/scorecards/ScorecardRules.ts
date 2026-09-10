@@ -5,7 +5,7 @@ import { validateRuleRelationships } from './invariants'
 /**
  * ScorecardRules — individual checks belonging to a scorecard (IDP refocus P2).
  *
- * Four rule `type`s, each driven by a JSON `expression` (kept as JSON so rules
+ * Five rule `type`s, each driven by a JSON `expression` (kept as JSON so rules
  * are data, not code — Port's model). The evaluator (lib/scorecards/evaluate)
  * interprets `expression` per type:
  *   - field-presence: { path: string, op: 'exists' | 'not-empty' }
@@ -27,6 +27,15 @@ import { validateRuleRelationships } from './invariants'
  *                       score recomputation), then entity-score rules in the
  *                       same pass, so cross-scorecard chains converge on the
  *                       next evaluation run.
+ *   - golden-path-provenance: {} — no expression payload beyond the rule
+ *                       existing. Passes iff the entity's
+ *                       `source.sourceTemplateDefinition` equals its kind's
+ *                       `entity-types.goldenPath.templateDefinition` AND that
+ *                       template-definitions row's `status` is "published"
+ *                       (Template Authoring Phase 4, Task E). Fails, never
+ *                       silently passes, when the kind has no golden path
+ *                       configured or the entity has no recorded source
+ *                       template.
  *
  * `level` names the ladder rung (matches a Scorecards.levels[].name) this rule
  * contributes to. `workspace` is denormalised from the parent scorecard for
@@ -84,6 +93,7 @@ export const ScorecardRules: CollectionConfig = {
         { label: 'Relation check', value: 'relation-check' },
         { label: 'Threshold', value: 'threshold' },
         { label: 'Entity score', value: 'entity-score' },
+        { label: 'Golden path provenance', value: 'golden-path-provenance' },
       ],
     },
     {

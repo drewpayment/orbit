@@ -43,6 +43,11 @@ func (m *MockScaffolderTemporalClient) QueryScaffolderProgress(ctx context.Conte
 	return args.Get(0).(*types.ScaffolderProgress), args.Error(1)
 }
 
+func (m *MockScaffolderTemporalClient) SignalScaffolderApproval(ctx context.Context, workflowID string, in types.ScaffolderApprovalSignalInput) error {
+	args := m.Called(ctx, workflowID, in)
+	return args.Error(0)
+}
+
 type MockActionRunClient struct {
 	mock.Mock
 }
@@ -404,6 +409,84 @@ func TestCancelRun_PropagatesFailure(t *testing.T) {
 	_, err := server.CancelRun(authCtx(), connect.NewRequest(&templatev1.CancelRunRequest{WorkflowId: "scaffolder-run-1"}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeInternal, connectCode(t, err))
+}
+
+// --- ResolveScaffolderApproval -----------------------------------------------
+
+func TestResolveScaffolderApproval_Success(t *testing.T) {
+	temporalMock := new(MockScaffolderTemporalClient)
+	temporalMock.On("ScaffolderRunWorkspace", mock.Anything, "scaffolder-run-1").Return("ws-1", nil)
+	temporalMock.On("SignalScaffolderApproval", mock.Anything, "scaffolder-run-1", types.ScaffolderApprovalSignalInput{
+		ApprovalID: "scaffolder-run-1:gate",
+		Approved:   true,
+		ApproverID: "user-1",
+		Comment:    "looks good",
+	}).Return(nil)
+
+	server := NewTemplateServer(temporalMock, nil)
+	resp, err := server.ResolveScaffolderApproval(authCtx(), connect.NewRequest(&templatev1.ResolveScaffolderApprovalRequest{
+		WorkflowId: "scaffolder-run-1",
+		ApprovalId: "scaffolder-run-1:gate",
+		Approved:   true,
+		ApproverId: "user-1",
+		Comment:    "looks good",
+	}))
+
+	require.NoError(t, err)
+	assert.True(t, resp.Msg.Success)
+	temporalMock.AssertExpectations(t)
+}
+
+func TestResolveScaffolderApproval_RequiresApprovalID(t *testing.T) {
+	server := NewTemplateServer(new(MockScaffolderTemporalClient), nil)
+	_, err := server.ResolveScaffolderApproval(authCtx(), connect.NewRequest(&templatev1.ResolveScaffolderApprovalRequest{
+		WorkflowId: "scaffolder-run-1",
+	}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeInvalidArgument, connectCode(t, err))
+}
+
+func TestResolveScaffolderApproval_RequiresWorkflowID(t *testing.T) {
+	server := NewTemplateServer(new(MockScaffolderTemporalClient), nil)
+	_, err := server.ResolveScaffolderApproval(authCtx(), connect.NewRequest(&templatev1.ResolveScaffolderApprovalRequest{
+		ApprovalId: "scaffolder-run-1:gate",
+	}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeInvalidArgument, connectCode(t, err))
+}
+
+// A workflow id in another workspace's run is rejected before the signal is
+// ever sent — tenant isolation, the same guarantee GetRunProgress/CancelRun
+// already give (authorizeScaffolderRun).
+func TestResolveScaffolderApproval_ScopedToCallerWorkspace(t *testing.T) {
+	temporalMock := new(MockScaffolderTemporalClient)
+	temporalMock.On("ScaffolderRunWorkspace", mock.Anything, "scaffolder-run-1").Return("ws-other", nil)
+
+	server := NewTemplateServer(temporalMock, nil)
+	_, err := server.ResolveScaffolderApproval(authCtx(), connect.NewRequest(&templatev1.ResolveScaffolderApprovalRequest{
+		WorkflowId: "scaffolder-run-1",
+		ApprovalId: "scaffolder-run-1:gate",
+		Approved:   true,
+	}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodePermissionDenied, connectCode(t, err))
+	temporalMock.AssertNotCalled(t, "SignalScaffolderApproval", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestResolveScaffolderApproval_PropagatesNotFound(t *testing.T) {
+	temporalMock := new(MockScaffolderTemporalClient)
+	temporalMock.On("ScaffolderRunWorkspace", mock.Anything, "scaffolder-run-1").Return("ws-1", nil)
+	temporalMock.On("SignalScaffolderApproval", mock.Anything, "scaffolder-run-1", mock.Anything).
+		Return(ErrScaffolderRunNotFound)
+
+	server := NewTemplateServer(temporalMock, nil)
+	_, err := server.ResolveScaffolderApproval(authCtx(), connect.NewRequest(&templatev1.ResolveScaffolderApprovalRequest{
+		WorkflowId: "scaffolder-run-1",
+		ApprovalId: "scaffolder-run-1:gate",
+		Approved:   false,
+	}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeNotFound, connectCode(t, err))
 }
 
 // --- ListActions ------------------------------------------------------------

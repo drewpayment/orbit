@@ -29,19 +29,21 @@ const scaffolderSweepTrigger = "scheduled-sweep"
 // naturally. scaffolder owns them because the dispatch activities are checked
 // against the same list, and they cannot import this package.
 const (
-	ScaffolderStatusSucceeded = scaffolder.RunStatusSucceeded
-	ScaffolderStatusFailed    = scaffolder.RunStatusFailed
-	ScaffolderStatusCancelled = scaffolder.RunStatusCancelled
-	ScaffolderStatusRunning   = scaffolder.RunStatusRunning
+	ScaffolderStatusSucceeded        = scaffolder.RunStatusSucceeded
+	ScaffolderStatusFailed           = scaffolder.RunStatusFailed
+	ScaffolderStatusCancelled        = scaffolder.RunStatusCancelled
+	ScaffolderStatusRunning          = scaffolder.RunStatusRunning
+	ScaffolderStatusAwaitingApproval = scaffolder.RunStatusAwaitingApproval
 )
 
 // Per-step progress statuses.
 const (
-	stepStatusPending   = scaffolder.StepStatusPending
-	stepStatusRunning   = scaffolder.StepStatusRunning
-	stepStatusSucceeded = scaffolder.StepStatusSucceeded
-	stepStatusFailed    = scaffolder.StepStatusFailed
-	stepStatusSkipped   = scaffolder.StepStatusSkipped
+	stepStatusPending          = scaffolder.StepStatusPending
+	stepStatusRunning          = scaffolder.StepStatusRunning
+	stepStatusSucceeded        = scaffolder.StepStatusSucceeded
+	stepStatusFailed           = scaffolder.StepStatusFailed
+	stepStatusSkipped          = scaffolder.StepStatusSkipped
+	stepStatusAwaitingApproval = scaffolder.StepStatusAwaitingApproval
 )
 
 // ScaffolderProgressQuery is the query name GetRunProgress uses.
@@ -211,7 +213,18 @@ func ScaffolderWorkflow(ctx workflow.Context, input ScaffolderWorkflowInput) (*S
 	for i := range input.Definition.Spec.Steps {
 		step := input.Definition.Spec.Steps[i]
 
-		cancelled, failure := run.runStep(ctx, stepBaseCtx, step)
+		var cancelled bool
+		var failure string
+		if step.Action == approvalRequestAction {
+			// approval:request pauses the WORKFLOW on a human signal, which
+			// requires workflow-context APIs (GetSignalChannel, NewSelector)
+			// a Temporal activity cannot call — so it is intercepted here,
+			// before the generic runStep dispatch path. See
+			// scaffolder_approval.go.
+			cancelled, failure = run.runApprovalStep(ctx, bookkeepingCtx, step)
+		} else {
+			cancelled, failure = run.runStep(ctx, stepBaseCtx, step)
+		}
 		switch {
 		case cancelled:
 			return run.finishCancelled(ctx)

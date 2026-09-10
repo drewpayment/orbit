@@ -12,6 +12,10 @@ import "github.com/drewpayment/orbit/temporal-workflows/internal/scaffolder"
 //     the two github:repo:* actions are omitted without a TokenService since
 //     they always require GitHub auth.
 //   - catalog:entity:register needs deps.CatalogClient; omitted without one.
+//   - ado:repo:create, ado:pr:open, ado:pipeline:create need
+//     deps.ADOConnectionClient; omitted without one.
+//   - kafka:topic:provision needs both deps.KafkaTopicClient and
+//     deps.KafkaProvisioner; omitted unless both are set.
 //   - api:schema:register needs deps.ApiSchemaClient; omitted without one.
 //   - fetch:orbit-skeleton needs deps.SkeletonClient; omitted without one.
 //
@@ -23,6 +27,10 @@ func DefaultActions(deps Deps) []scaffolder.Action {
 		NewFSRender(),
 		NewFetchGit(deps.TokenService),
 		NewGitPush(deps.TokenService),
+		// approval:request is registered for its schema/descriptor only —
+		// ScaffolderWorkflow intercepts it before generic dispatch. See
+		// ApprovalRequest's doc comment.
+		NewApprovalRequest(),
 	}
 
 	if deps.TokenService != nil {
@@ -38,6 +46,22 @@ func DefaultActions(deps Deps) []scaffolder.Action {
 
 	if deps.CatalogClient != nil {
 		out = append(out, NewCatalogEntityRegister(deps.CatalogClient))
+	}
+
+	if deps.ADOConnectionClient != nil {
+		adoFactory := deps.ADOClient
+		if adoFactory == nil {
+			adoFactory = defaultADOClientFactory()
+		}
+		out = append(out,
+			NewADORepoCreate(deps.ADOConnectionClient, adoFactory),
+			NewADOPROpen(deps.ADOConnectionClient, adoFactory),
+			NewADOPipelineCreate(deps.ADOConnectionClient, adoFactory),
+		)
+	}
+
+	if deps.KafkaTopicClient != nil && deps.KafkaProvisioner != nil {
+		out = append(out, NewKafkaTopicProvision(deps.KafkaTopicClient, deps.KafkaProvisioner))
 	}
 
 	if deps.ApiSchemaClient != nil {
@@ -73,7 +97,12 @@ func DescriptorActions() []scaffolder.Action {
 		NewGitHubRepoCreate(nil, nil),
 		NewGitHubRepoCreateFromTemplate(nil, nil),
 		NewCatalogEntityRegister(nil),
+		NewADORepoCreate(nil, nil),
+		NewADOPROpen(nil, nil),
+		NewADOPipelineCreate(nil, nil),
+		NewKafkaTopicProvision(nil, nil),
 		NewApiSchemaRegister(nil),
 		NewFetchOrbitSkeleton(nil),
+		NewApprovalRequest(),
 	}
 }

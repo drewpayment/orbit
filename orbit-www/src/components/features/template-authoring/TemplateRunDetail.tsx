@@ -18,23 +18,36 @@ import { RunLogs } from '@/components/features/actions/RunLogs'
 import { ApprovalButtons } from '@/components/features/actions/ApprovalButtons'
 import { RunStatusBadge } from '@/components/features/actions/RunStatusBadge'
 import { stepStatusPresentation } from '@/components/features/actions/action-ui'
+import { ScaffolderApprovalGate } from './ScaffolderApprovalGate'
 import { useRunPolling } from './use-run-polling'
 import type { ActionRun } from '@/payload-types'
+import type { ScaffolderApprovalGateInfo } from '@/app/(frontend)/self-service/templates/run-actions'
 
 export interface TemplateRunDetailProps {
   initialRun: ActionRun
   getRun: (id: string) => Promise<ActionRun | null>
   /**
-   * Whether the current viewer may act on the `awaiting-approval` gate —
-   * a server-side `canApproveActionRun` check (workspace owner/admin, per
-   * the run's approval policy), computed by the page and threaded through
-   * here rather than re-derived client-side. Defaults to `true` (matching
-   * `ApprovalButtons`' own default) so existing callers that don't pass it
-   * are unaffected; `ApprovalButtons` still enforces the real gate
-   * server-side regardless of this prop (defense in depth, not the
-   * authority).
+   * Whether the current viewer may act on the run-level (pre-dispatch)
+   * `awaiting-approval` gate — a server-side `canApproveActionRun` check
+   * (workspace owner/admin, per the run's approval policy), computed by the
+   * page and threaded through here rather than re-derived client-side.
+   * Defaults to `true` (matching `ApprovalButtons`' own default) so existing
+   * callers that don't pass it are unaffected; `ApprovalButtons` still
+   * enforces the real gate server-side regardless of this prop (defense in
+   * depth, not the authority).
+   *
+   * Distinct from an `approval:request` STEP's mid-run gate (Phase 4 Task
+   * C), which is a separate mechanism keyed by {@link gates} — see the
+   * component body for how the two are told apart.
    */
   canApprove?: boolean
+  /**
+   * `approval:request` step gates, keyed by step id — server-computed
+   * (`getScaffolderApprovalGates`) since the message/approvers live on the
+   * `pending-approvals` row, not on `action-runs.steps[]`. Missing/empty
+   * when the run has no open mid-run gate, or on any lookup failure.
+   */
+  gates?: Record<string, ScaffolderApprovalGateInfo>
 }
 
 interface OutputLinkLike {
@@ -60,12 +73,21 @@ function asOutputLinks(outputs: unknown): OutputLinkLike[] {
   return links.filter((l): l is OutputLinkLike => !!l && typeof l === 'object')
 }
 
-export function TemplateRunDetail({ initialRun, getRun, canApprove = true }: TemplateRunDetailProps) {
+export function TemplateRunDetail({ initialRun, getRun, canApprove = true, gates = {} }: TemplateRunDetailProps) {
   const { run: polledRun } = useRunPolling(initialRun.id, getRun)
   const run = polledRun ?? initialRun
 
   const steps = Array.isArray(run.steps) ? run.steps : []
   const outputLinks = asOutputLinks(run.outputs)
+
+  // A step at `awaiting-approval` means an `approval:request` step parked
+  // the WHOLE run in that same status (Phase 4 Task C reuses the existing
+  // enum value) — that is a different gate from the pre-dispatch
+  // `approvalPolicy` one `ApprovalButtons` resolves, so it takes priority:
+  // showing both for the same `run.status === 'awaiting-approval'` would be
+  // confusing and `approveRun`/`rejectRun` would reject a run that was never
+  // actually sitting at the pre-dispatch gate.
+  const awaitingSteps = steps.filter((s) => s.status === 'awaiting-approval')
 
   return (
     <div className="space-y-6">
@@ -73,8 +95,23 @@ export function TemplateRunDetail({ initialRun, getRun, canApprove = true }: Tem
         <div className="flex items-center gap-2">
           <RunStatusBadge status={run.status} />
         </div>
-        {run.status === 'awaiting-approval' && <ApprovalButtons runId={run.id} canApprove={canApprove} />}
+        {run.status === 'awaiting-approval' && awaitingSteps.length === 0 && (
+          <ApprovalButtons runId={run.id} canApprove={canApprove} />
+        )}
       </div>
+
+      {awaitingSteps.map((step) => {
+        const gate = step.id ? gates[step.id] : undefined
+        return (
+          <ScaffolderApprovalGate
+            key={step.id ?? step.name ?? 'gate'}
+            runId={run.id}
+            approvalId={gate?.approvalId ?? `${run.id}:${step.id ?? ''}`}
+            message={gate?.message ?? step.name ?? 'A step in this run requires approval.'}
+            canApprove={gate?.canApprove ?? false}
+          />
+        )
+      })}
 
       {run.error && (
         <Card className="border-red-500/30">

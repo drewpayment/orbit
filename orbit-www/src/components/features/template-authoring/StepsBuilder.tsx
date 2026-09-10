@@ -14,14 +14,24 @@
 
 import * as React from 'react'
 import type { TemplateDefinition, Step } from '@/lib/scaffolder/schema'
-import type { ActionDescriptor } from '@/lib/scaffolder/validate'
+import { isExpressionOnly, type ActionDescriptor } from '@/lib/scaffolder/validate'
 import type { BuilderAction } from './builder-state'
 import { getExpressionCandidates, type ExpressionCandidate } from './expression-autocomplete'
-import { findStepReferences, generateStepId, groupRegistryByFamily, type StepReference } from './step-builder-logic'
+import {
+  defaultStepInput,
+  findStepReferences,
+  generateStepId,
+  groupRegistryByFamily,
+  type StepReference,
+} from './step-builder-logic'
 import { stepInputSchemaToSchemaFormPage } from './schema-ui-split'
 import { ExpressionInput } from './ExpressionInput'
 import { SchemaForm } from '@/components/forms/schema-form/SchemaForm'
-import { createFieldRegistry, type FieldComponent, type FieldRegistry } from '@/components/forms/schema-form/field-registry'
+import {
+  defaultFieldRegistry,
+  type FieldComponent,
+  type FieldRegistry,
+} from '@/components/forms/schema-form/field-registry'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -37,6 +47,16 @@ export interface StepsBuilderProps {
   definition: TemplateDefinition
   dispatch: React.Dispatch<BuilderAction>
   registry: ActionDescriptor[]
+  /**
+   * The template definition's own workspace — threaded into every step
+   * input's `ui:options.workspaceId` (via `stepInputSchemaToSchemaFormPage`)
+   * so an Orbit picker (`OrbitSkeletonPicker`, etc.) configured on a step
+   * input can actually scope its lookup. Optional only so existing callers
+   * that don't yet have a workspace id handy (e.g. a bare unit test) don't
+   * break — a step's pickers simply render empty without it, same as before
+   * this was wired up.
+   */
+  workspaceId?: string
 }
 
 /**
@@ -78,8 +98,29 @@ export function coerceStepInput(input: Step['input'], inputSchema: unknown): Ste
   return changed ? next : input
 }
 
+/**
+ * Wraps the shared `defaultFieldRegistry` (NOT an isolated
+ * `createFieldRegistry()` instance — regression, see StepsBuilder.test.tsx
+ * "resolves a step input's ui:field to its registered picker component"):
+ * an isolated registry only ever has the built-in widgets seeded into it, so
+ * any `ui:field` naming an Orbit picker (`OrbitTeamPicker`,
+ * `OrbitSkeletonPicker`, …) registered on the app-wide `defaultFieldRegistry`
+ * silently fell through to the plain-text-input type default. A step's
+ * `inputSchema` field only gets the expression-input treatment UNCONDITIONALLY
+ * when it has NO `ui:field`/`ui:widget` and no enum (a plain scalar) —
+ * anything with an explicit `ui:*` directive defers to the shared registry,
+ * same as every other `SchemaForm` consumer in the app. BUT a field with a
+ * `ui:field` (e.g. `OrbitSkeletonPicker`) can still legitimately hold a
+ * `${{ }}` expression value (`skeletonId: "${{ steps.x.output.id }}"`) — a
+ * picker component can't represent an arbitrary expression, so that value
+ * would otherwise render as an unselected Select with the expression
+ * silently hidden. `resolve()` only sees the schema/uiSchema, not the
+ * current value, so the picker-or-expression choice is made at RENDER time
+ * by wrapping the resolved component (regression, see StepsBuilder.test.tsx
+ * "an expression-valued step input renders the expression input even when
+ * ui:field names a picker").
+ */
 function buildExpressionAwareRegistry(candidates: ExpressionCandidate[]): FieldRegistry {
-  const base = createFieldRegistry()
   const ExpressionField: FieldComponent = ({ id, value, onChange, disabled, schema, ...rest }) => (
     <ExpressionInput
       id={id}
@@ -91,17 +132,21 @@ function buildExpressionAwareRegistry(candidates: ExpressionCandidate[]): FieldR
     />
   )
   return {
-    register: (name, component) => base.register(name, component),
+    register: (name, component) => defaultFieldRegistry.register(name, component),
     resolve(schema, uiSchema) {
       const isPlainScalar = !uiSchema?.['ui:field'] && !uiSchema?.['ui:widget'] && !schema.enum
       const isExpressionType = schema.type === 'string' || schema.type === 'number' || schema.type === 'integer'
       if (isPlainScalar && isExpressionType) return ExpressionField
-      return base.resolve(schema, uiSchema)
+      const Resolved = defaultFieldRegistry.resolve(schema, uiSchema)
+      if (!isExpressionType) return Resolved
+      const ExpressionAwareResolved: FieldComponent = (props) =>
+        isExpressionOnly(props.value) ? <ExpressionField {...props} /> : <Resolved {...props} />
+      return ExpressionAwareResolved
     },
   }
 }
 
-export function StepsBuilder({ definition, dispatch, registry }: StepsBuilderProps) {
+export function StepsBuilder({ definition, dispatch, registry, workspaceId }: StepsBuilderProps) {
   const steps = definition.spec.steps
   const registryById = React.useMemo(() => new Map(registry.map((d) => [d.id, d])), [registry])
   // Tracks the id of the step just created via "Add step" so its body opens
@@ -113,7 +158,12 @@ export function StepsBuilder({ definition, dispatch, registry }: StepsBuilderPro
       steps.map((s) => s.id),
       descriptor.id,
     )
-    const step: Step = { id, name: descriptor.name, action: descriptor.id, input: {} }
+    const step: Step = {
+      id,
+      name: descriptor.name,
+      action: descriptor.id,
+      input: defaultStepInput(descriptor.id),
+    }
     dispatch({ type: 'ADD_STEP', step })
     setJustAddedId(id)
   }
@@ -132,6 +182,7 @@ export function StepsBuilder({ definition, dispatch, registry }: StepsBuilderPro
           siblingIds={steps.filter((s) => s.id !== step.id).map((s) => s.id)}
           defaultOpen={step.id === justAddedId}
           dispatch={dispatch}
+          workspaceId={workspaceId}
         />
       ))}
       <RegistryPicker registry={registry} onSelect={addStep} />
@@ -195,6 +246,7 @@ function StepRow({
   siblingIds,
   defaultOpen,
   dispatch,
+  workspaceId,
 }: {
   step: Step
   index: number
@@ -204,6 +256,7 @@ function StepRow({
   dependents: StepReference[]
   /** Ids of the other steps (excludes this one), for inline collision checks. */
   siblingIds: string[]
+  workspaceId?: string
   /** Opens the step's body by default — true only for a step just added via "Add step". */
   defaultOpen?: boolean
   dispatch: React.Dispatch<BuilderAction>
@@ -213,8 +266,9 @@ function StepRow({
   const [confirmingRemoval, setConfirmingRemoval] = React.useState(false)
   const fieldRegistry = React.useMemo(() => buildExpressionAwareRegistry(candidates), [candidates])
   const inputPage = React.useMemo(
-    () => (descriptor ? stepInputSchemaToSchemaFormPage('Inputs', descriptor.inputSchema) : undefined),
-    [descriptor],
+    () =>
+      descriptor ? stepInputSchemaToSchemaFormPage('Inputs', descriptor.inputSchema, workspaceId) : undefined,
+    [descriptor, workspaceId],
   )
 
   // Local draft for the id, mirroring ParametersBuilder's Name field: an

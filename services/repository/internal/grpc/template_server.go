@@ -33,6 +33,10 @@ type ScaffolderTemporalClient interface {
 	// workflow id, so this is the only way to scope them to a tenant.
 	// It returns ErrScaffolderRunNotFound for an unknown or expired run.
 	ScaffolderRunWorkspace(ctx context.Context, workflowID string) (string, error)
+	// SignalScaffolderApproval resolves an `approval:request` step's gate
+	// (Phase 4 Task C) by sending types.ScaffolderApprovalSignalInput to the
+	// named workflow.
+	SignalScaffolderApproval(ctx context.Context, workflowID string, in types.ScaffolderApprovalSignalInput) error
 }
 
 // ErrScaffolderRunNotFound is returned when a workflow id does not resolve, so

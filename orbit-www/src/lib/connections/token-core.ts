@@ -102,11 +102,29 @@ export function clearEntraTokenCache(): void {
 
 const DEFAULT_BASE_URL = 'https://dev.azure.com'
 
+/**
+ * Normalizes a Payload relationship field's value into a list of doc id
+ * strings. At `depth: 0` a `hasMany` relationship comes back as an array of
+ * raw ids, but this tolerates populated `{ id }` objects too so the check
+ * below works regardless of the query depth used to fetch the connection.
+ */
+function relationshipIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.map((v) => {
+    if (typeof v === 'string' || typeof v === 'number') return String(v)
+    if (v && typeof v === 'object' && 'id' in (v as Record<string, unknown>)) {
+      return String((v as Record<string, unknown>).id)
+    }
+    return String(v)
+  })
+}
+
 export async function resolveConnectionToken(
   payload: Payload,
   connectionId: string,
   decryptFn: (s: string) => string = defaultDecrypt,
   mintFn: EntraTokenMinter = mintEntraToken,
+  workspaceId?: string,
 ): Promise<ConnectionTokenLookup> {
   let doc: Record<string, unknown> | null
   try {
@@ -122,6 +140,24 @@ export async function resolveConnectionToken(
 
   if (!doc) {
     return { ok: false, status: 404, code: 'NOT_FOUND', error: 'Connection not found' }
+  }
+
+  // Workspace scoping (fail closed): when a caller passes workspaceId, the
+  // connection must explicitly authorize that workspace — either a
+  // singular `workspace` ownership field (not present on GitConnections
+  // today, checked defensively in case one is added later) or membership in
+  // `allowedWorkspaces`. A connection with no workspace authorization
+  // recorded does NOT match any workspaceId. 404 (not 403) so this never
+  // discloses that the connection id exists to a caller outside its
+  // authorized workspace(s) — this is the same shape as "connection not
+  // found" from the caller's point of view.
+  if (workspaceId) {
+    const ownerWorkspace = typeof doc.workspace === 'string' ? doc.workspace : undefined
+    const allowed = relationshipIds(doc.allowedWorkspaces)
+    const authorized = ownerWorkspace === workspaceId || allowed.includes(workspaceId)
+    if (!authorized) {
+      return { ok: false, status: 404, code: 'NOT_FOUND', error: 'Connection not found' }
+    }
   }
 
   const credentials = (doc.credentials ?? {}) as Record<string, unknown>

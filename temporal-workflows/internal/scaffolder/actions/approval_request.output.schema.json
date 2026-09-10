@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "approval:request output",
+  "type": "object",
+  "properties": {
+    "approved": { "type": "boolean", "description": "Whether the gate was approved." },
+    "approverId": { "type": "string", "description": "Who resolved the gate." },
+    "comment": { "type": "string", "description": "Optional note left by the approver." }
+  },
+  "required": ["approved"],
+  "additionalProperties": false
+}

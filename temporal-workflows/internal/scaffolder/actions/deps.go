@@ -3,6 +3,7 @@ package actions
 import (
 	"context"
 
+	"github.com/drewpayment/orbit/temporal-workflows/internal/activities"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/services"
 )
 
@@ -35,6 +36,45 @@ type CatalogEntityClient interface {
 	RegisterEntity(ctx context.Context, in services.CatalogEntityRegisterInput) (*services.CatalogEntityRegisterResult, error)
 }
 
+// ADOConnectionClient resolves a GitConnections (Azure DevOps) id to its
+// decrypted connection detail — organization, base URL, auth mode, and
+// PAT/bearer token. Mirrors TokenService's role for GitHub. Satisfied by
+// *services.PayloadADOConnectionClient.
+type ADOConnectionClient interface {
+	GetConnectionToken(ctx context.Context, connectionID, workspaceID string) (services.ADOConnectionToken, error)
+}
+
+// ADORepoClient is the subset of services.ADOWriteClient the ado:* actions
+// need. An interface here (rather than depending on the concrete client)
+// lets tests supply a fake instead of doing real HTTP.
+type ADORepoClient interface {
+	CreateRepository(ctx context.Context, org, project, name string) (*services.ADORepoResult, error)
+	CreatePullRequest(ctx context.Context, org, project, repoID, sourceBranch, targetBranch, title, description string) (*services.ADOPullRequestResult, error)
+	CreatePipeline(ctx context.Context, org, project, name, repoID, yamlPath string) (*services.ADOPipelineResult, error)
+}
+
+// ADOClientFactory builds an ADORepoClient authenticated against a resolved
+// connection's base URL and Authorization header. Production wiring points
+// this at services.NewADOWriteClient; tests point it at a fake.
+type ADOClientFactory func(baseURL, authHeader string) ADORepoClient
+
+// KafkaTopicClient creates (idempotently, on (workspace, virtualCluster,
+// name)) the kafka-topics Payload row a provisioned topic is tracked
+// against, for kafka:topic:provision. Satisfied by
+// *services.PayloadKafkaTopicClient.
+type KafkaTopicClient interface {
+	CreateTopic(ctx context.Context, in services.KafkaTopicCreateInput) (services.KafkaTopicDoc, error)
+}
+
+// KafkaProvisioner is the subset of activities.KafkaActivitiesImpl that
+// kafka:topic:provision calls as a plain Go method call — never as a nested
+// Temporal activity dispatch, since activities cannot schedule further
+// activities. Satisfied by *activities.KafkaActivitiesImpl.
+type KafkaProvisioner interface {
+	ProvisionTopic(ctx context.Context, input activities.KafkaTopicProvisionInput) (*activities.KafkaTopicProvisionOutput, error)
+	UpdateTopicStatus(ctx context.Context, input activities.KafkaUpdateTopicStatusInput) error
+}
+
 // ApiSchemaClient registers an API schema against orbit-www's internal API
 // on behalf of the api:schema:register action. Satisfied by
 // *services.PayloadApiSchemaClient.
@@ -61,6 +101,21 @@ type Deps struct {
 	// CatalogClient registers entities for catalog:entity:register. That
 	// action is omitted from DefaultActions when this is nil.
 	CatalogClient CatalogEntityClient
+	// ADOConnectionClient resolves a git-connections id to Azure DevOps
+	// org/PAT detail. Required by ado:repo:create, ado:pr:open, and
+	// ado:pipeline:create; those actions are omitted from DefaultActions
+	// when this is nil.
+	ADOConnectionClient ADOConnectionClient
+	// ADOClient builds the ADO REST client used by ado:*. Defaults to
+	// wrapping services.NewADOWriteClient when left nil.
+	ADOClient ADOClientFactory
+	// KafkaTopicClient creates the governed kafka-topics row for
+	// kafka:topic:provision. That action is omitted from DefaultActions
+	// unless both this and KafkaProvisioner are set.
+	KafkaTopicClient KafkaTopicClient
+	// KafkaProvisioner provisions the physical topic for
+	// kafka:topic:provision. Required alongside KafkaTopicClient.
+	KafkaProvisioner KafkaProvisioner
 	// ApiSchemaClient registers API schemas for api:schema:register. That
 	// action is omitted from DefaultActions when this is nil.
 	ApiSchemaClient ApiSchemaClient

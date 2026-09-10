@@ -430,10 +430,13 @@ func main() {
 	}
 
 	scaffolderRegistry := scaffolder.NewRegistry(actions.DefaultActions(actions.Deps{
-		TokenService:    tokenService,
-		CatalogClient:   services.NewPayloadCatalogEntityClient(orbitAPIURL, orbitInternalAPIKey, logger),
-		ApiSchemaClient: services.NewPayloadApiSchemaClient(orbitAPIURL, orbitInternalAPIKey, logger),
-		SkeletonClient:  services.NewPayloadSkeletonClient(orbitAPIURL, orbitInternalAPIKey, logger),
+		TokenService:        tokenService,
+		CatalogClient:       services.NewPayloadCatalogEntityClient(orbitAPIURL, orbitInternalAPIKey, logger),
+		ADOConnectionClient: services.NewPayloadADOConnectionClient(orbitAPIURL, orbitInternalAPIKey, logger),
+		KafkaTopicClient:    services.NewPayloadKafkaTopicClient(orbitAPIURL, orbitInternalAPIKey, logger),
+		KafkaProvisioner:    kafkaActivities,
+		ApiSchemaClient:     services.NewPayloadApiSchemaClient(orbitAPIURL, orbitInternalAPIKey, logger),
+		SkeletonClient:      services.NewPayloadSkeletonClient(orbitAPIURL, orbitInternalAPIKey, logger),
 	})...)
 	if err := scaffolderRegistry.ValidateSchemas(); err != nil {
 		// A broken action schema is a platform bug: fail at startup rather
@@ -462,6 +465,19 @@ func main() {
 		activity.RegisterOptions{Name: activities.ActivityScaffolderValidateDefinition})
 	log.Printf("Scaffolder engine registered with %d actions (dry-run preview storage: %t)",
 		len(scaffolderRegistry.Names()), scaffolderStorage != nil)
+
+	// approval:request's pending-approvals row (Phase 4 Task C) — a separate
+	// PayloadPendingApprovalsClient instance from the agent's own (below),
+	// since this one is constructed here to keep the scaffolder block
+	// self-contained; both talk to the same `pending-approvals` collection.
+	scaffolderApprovalActivities := activities.NewScaffolderApprovalActivities(
+		services.NewPayloadPendingApprovalsClient(orbitAPIURL, orbitInternalAPIKey, logger),
+		logger,
+	)
+	w.RegisterActivityWithOptions(scaffolderApprovalActivities.OpenApproval,
+		activity.RegisterOptions{Name: activities.ActivityScaffolderOpenApproval})
+	w.RegisterActivityWithOptions(scaffolderApprovalActivities.ResolveApproval,
+		activity.RegisterOptions{Name: activities.ActivityScaffolderResolveApproval})
 
 	// Phase 4 Task G: scheduled re-dry-run sweep for published templates.
 	// A dedicated Payload client (v2 template-definitions routes, distinct

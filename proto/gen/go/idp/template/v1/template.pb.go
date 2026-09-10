@@ -1125,6 +1125,126 @@ func (x *ListActionsResponse) GetActions() []*ActionDescriptor {
 	return nil
 }
 
+type ResolveScaffolderApprovalRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	WorkflowId    string                 `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	ApprovalId    string                 `protobuf:"bytes,2,opt,name=approval_id,json=approvalId,proto3" json:"approval_id,omitempty"` // matches the step's generated approval id, disambiguates multiple approval:request steps
+	Approved      bool                   `protobuf:"varint,3,opt,name=approved,proto3" json:"approved,omitempty"`
+	ApproverId    string                 `protobuf:"bytes,4,opt,name=approver_id,json=approverId,proto3" json:"approver_id,omitempty"`
+	Comment       string                 `protobuf:"bytes,5,opt,name=comment,proto3" json:"comment,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolveScaffolderApprovalRequest) Reset() {
+	*x = ResolveScaffolderApprovalRequest{}
+	mi := &file_idp_template_v1_template_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveScaffolderApprovalRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveScaffolderApprovalRequest) ProtoMessage() {}
+
+func (x *ResolveScaffolderApprovalRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_template_v1_template_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveScaffolderApprovalRequest.ProtoReflect.Descriptor instead.
+func (*ResolveScaffolderApprovalRequest) Descriptor() ([]byte, []int) {
+	return file_idp_template_v1_template_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ResolveScaffolderApprovalRequest) GetWorkflowId() string {
+	if x != nil {
+		return x.WorkflowId
+	}
+	return ""
+}
+
+func (x *ResolveScaffolderApprovalRequest) GetApprovalId() string {
+	if x != nil {
+		return x.ApprovalId
+	}
+	return ""
+}
+
+func (x *ResolveScaffolderApprovalRequest) GetApproved() bool {
+	if x != nil {
+		return x.Approved
+	}
+	return false
+}
+
+func (x *ResolveScaffolderApprovalRequest) GetApproverId() string {
+	if x != nil {
+		return x.ApproverId
+	}
+	return ""
+}
+
+func (x *ResolveScaffolderApprovalRequest) GetComment() string {
+	if x != nil {
+		return x.Comment
+	}
+	return ""
+}
+
+type ResolveScaffolderApprovalResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolveScaffolderApprovalResponse) Reset() {
+	*x = ResolveScaffolderApprovalResponse{}
+	mi := &file_idp_template_v1_template_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveScaffolderApprovalResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveScaffolderApprovalResponse) ProtoMessage() {}
+
+func (x *ResolveScaffolderApprovalResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_idp_template_v1_template_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveScaffolderApprovalResponse.ProtoReflect.Descriptor instead.
+func (*ResolveScaffolderApprovalResponse) Descriptor() ([]byte, []int) {
+	return file_idp_template_v1_template_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ResolveScaffolderApprovalResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
 type ActionDescriptor struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Name             string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`                                                   // e.g. "github:repo:create"
@@ -1138,7 +1258,7 @@ type ActionDescriptor struct {
 
 func (x *ActionDescriptor) Reset() {
 	*x = ActionDescriptor{}
-	mi := &file_idp_template_v1_template_proto_msgTypes[18]
+	mi := &file_idp_template_v1_template_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1150,7 +1270,7 @@ func (x *ActionDescriptor) String() string {
 func (*ActionDescriptor) ProtoMessage() {}
 
 func (x *ActionDescriptor) ProtoReflect() protoreflect.Message {
-	mi := &file_idp_template_v1_template_proto_msgTypes[18]
+	mi := &file_idp_template_v1_template_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1163,7 +1283,7 @@ func (x *ActionDescriptor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActionDescriptor.ProtoReflect.Descriptor instead.
 func (*ActionDescriptor) Descriptor() ([]byte, []int) {
-	return file_idp_template_v1_template_proto_rawDescGZIP(), []int{18}
+	return file_idp_template_v1_template_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ActionDescriptor) GetName() string {
@@ -1290,7 +1410,18 @@ const file_idp_template_v1_template_proto_rawDesc = "" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\"\x14\n" +
 	"\x12ListActionsRequest\"R\n" +
 	"\x13ListActionsResponse\x12;\n" +
-	"\aactions\x18\x01 \x03(\v2!.idp.template.v1.ActionDescriptorR\aactions\"\xbd\x01\n" +
+	"\aactions\x18\x01 \x03(\v2!.idp.template.v1.ActionDescriptorR\aactions\"\xbb\x01\n" +
+	" ResolveScaffolderApprovalRequest\x12\x1f\n" +
+	"\vworkflow_id\x18\x01 \x01(\tR\n" +
+	"workflowId\x12\x1f\n" +
+	"\vapproval_id\x18\x02 \x01(\tR\n" +
+	"approvalId\x12\x1a\n" +
+	"\bapproved\x18\x03 \x01(\bR\bapproved\x12\x1f\n" +
+	"\vapprover_id\x18\x04 \x01(\tR\n" +
+	"approverId\x12\x18\n" +
+	"\acomment\x18\x05 \x01(\tR\acomment\"=\n" +
+	"!ResolveScaffolderApprovalResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"\xbd\x01\n" +
 	"\x10ActionDescriptor\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06family\x18\x02 \x01(\tR\x06family\x12*\n" +
@@ -1303,7 +1434,7 @@ const file_idp_template_v1_template_proto_rawDesc = "" +
 	"\x17WORKFLOW_STATUS_RUNNING\x10\x02\x12\x1d\n" +
 	"\x19WORKFLOW_STATUS_COMPLETED\x10\x03\x12\x1a\n" +
 	"\x16WORKFLOW_STATUS_FAILED\x10\x04\x12\x1d\n" +
-	"\x19WORKFLOW_STATUS_CANCELLED\x10\x052\xab\x06\n" +
+	"\x19WORKFLOW_STATUS_CANCELLED\x10\x052\xb0\a\n" +
 	"\x0fTemplateService\x12m\n" +
 	"\x12StartInstantiation\x12*.idp.template.v1.StartInstantiationRequest\x1a+.idp.template.v1.StartInstantiationResponse\x12e\n" +
 	"\x18GetInstantiationProgress\x12#.idp.template.v1.GetProgressRequest\x1a$.idp.template.v1.GetProgressResponse\x12V\n" +
@@ -1312,7 +1443,8 @@ const file_idp_template_v1_template_proto_rawDesc = "" +
 	"\x12StartScaffolderRun\x12*.idp.template.v1.StartScaffolderRunRequest\x1a+.idp.template.v1.StartScaffolderRunResponse\x12a\n" +
 	"\x0eGetRunProgress\x12&.idp.template.v1.GetRunProgressRequest\x1a'.idp.template.v1.GetRunProgressResponse\x12R\n" +
 	"\tCancelRun\x12!.idp.template.v1.CancelRunRequest\x1a\".idp.template.v1.CancelRunResponse\x12X\n" +
-	"\vListActions\x12#.idp.template.v1.ListActionsRequest\x1a$.idp.template.v1.ListActionsResponseBFZDgithub.com/drewpayment/orbit/proto/gen/go/idp/template/v1;templatev1b\x06proto3"
+	"\vListActions\x12#.idp.template.v1.ListActionsRequest\x1a$.idp.template.v1.ListActionsResponse\x12\x82\x01\n" +
+	"\x19ResolveScaffolderApproval\x121.idp.template.v1.ResolveScaffolderApprovalRequest\x1a2.idp.template.v1.ResolveScaffolderApprovalResponseBFZDgithub.com/drewpayment/orbit/proto/gen/go/idp/template/v1;templatev1b\x06proto3"
 
 var (
 	file_idp_template_v1_template_proto_rawDescOnce sync.Once
@@ -1327,40 +1459,42 @@ func file_idp_template_v1_template_proto_rawDescGZIP() []byte {
 }
 
 var file_idp_template_v1_template_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_idp_template_v1_template_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_idp_template_v1_template_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_idp_template_v1_template_proto_goTypes = []any{
-	(WorkflowStatus)(0),                // 0: idp.template.v1.WorkflowStatus
-	(*StartInstantiationRequest)(nil),  // 1: idp.template.v1.StartInstantiationRequest
-	(*StartInstantiationResponse)(nil), // 2: idp.template.v1.StartInstantiationResponse
-	(*GetProgressRequest)(nil),         // 3: idp.template.v1.GetProgressRequest
-	(*GetProgressResponse)(nil),        // 4: idp.template.v1.GetProgressResponse
-	(*CancelRequest)(nil),              // 5: idp.template.v1.CancelRequest
-	(*CancelResponse)(nil),             // 6: idp.template.v1.CancelResponse
-	(*ListAvailableOrgsRequest)(nil),   // 7: idp.template.v1.ListAvailableOrgsRequest
-	(*GitHubOrg)(nil),                  // 8: idp.template.v1.GitHubOrg
-	(*ListAvailableOrgsResponse)(nil),  // 9: idp.template.v1.ListAvailableOrgsResponse
-	(*StartScaffolderRunRequest)(nil),  // 10: idp.template.v1.StartScaffolderRunRequest
-	(*StartScaffolderRunResponse)(nil), // 11: idp.template.v1.StartScaffolderRunResponse
-	(*GetRunProgressRequest)(nil),      // 12: idp.template.v1.GetRunProgressRequest
-	(*GetRunProgressResponse)(nil),     // 13: idp.template.v1.GetRunProgressResponse
-	(*StepProgress)(nil),               // 14: idp.template.v1.StepProgress
-	(*CancelRunRequest)(nil),           // 15: idp.template.v1.CancelRunRequest
-	(*CancelRunResponse)(nil),          // 16: idp.template.v1.CancelRunResponse
-	(*ListActionsRequest)(nil),         // 17: idp.template.v1.ListActionsRequest
-	(*ListActionsResponse)(nil),        // 18: idp.template.v1.ListActionsResponse
-	(*ActionDescriptor)(nil),           // 19: idp.template.v1.ActionDescriptor
-	nil,                                // 20: idp.template.v1.StartInstantiationRequest.VariablesEntry
-	(*structpb.Struct)(nil),            // 21: google.protobuf.Struct
+	(WorkflowStatus)(0),                       // 0: idp.template.v1.WorkflowStatus
+	(*StartInstantiationRequest)(nil),         // 1: idp.template.v1.StartInstantiationRequest
+	(*StartInstantiationResponse)(nil),        // 2: idp.template.v1.StartInstantiationResponse
+	(*GetProgressRequest)(nil),                // 3: idp.template.v1.GetProgressRequest
+	(*GetProgressResponse)(nil),               // 4: idp.template.v1.GetProgressResponse
+	(*CancelRequest)(nil),                     // 5: idp.template.v1.CancelRequest
+	(*CancelResponse)(nil),                    // 6: idp.template.v1.CancelResponse
+	(*ListAvailableOrgsRequest)(nil),          // 7: idp.template.v1.ListAvailableOrgsRequest
+	(*GitHubOrg)(nil),                         // 8: idp.template.v1.GitHubOrg
+	(*ListAvailableOrgsResponse)(nil),         // 9: idp.template.v1.ListAvailableOrgsResponse
+	(*StartScaffolderRunRequest)(nil),         // 10: idp.template.v1.StartScaffolderRunRequest
+	(*StartScaffolderRunResponse)(nil),        // 11: idp.template.v1.StartScaffolderRunResponse
+	(*GetRunProgressRequest)(nil),             // 12: idp.template.v1.GetRunProgressRequest
+	(*GetRunProgressResponse)(nil),            // 13: idp.template.v1.GetRunProgressResponse
+	(*StepProgress)(nil),                      // 14: idp.template.v1.StepProgress
+	(*CancelRunRequest)(nil),                  // 15: idp.template.v1.CancelRunRequest
+	(*CancelRunResponse)(nil),                 // 16: idp.template.v1.CancelRunResponse
+	(*ListActionsRequest)(nil),                // 17: idp.template.v1.ListActionsRequest
+	(*ListActionsResponse)(nil),               // 18: idp.template.v1.ListActionsResponse
+	(*ResolveScaffolderApprovalRequest)(nil),  // 19: idp.template.v1.ResolveScaffolderApprovalRequest
+	(*ResolveScaffolderApprovalResponse)(nil), // 20: idp.template.v1.ResolveScaffolderApprovalResponse
+	(*ActionDescriptor)(nil),                  // 21: idp.template.v1.ActionDescriptor
+	nil,                                       // 22: idp.template.v1.StartInstantiationRequest.VariablesEntry
+	(*structpb.Struct)(nil),                   // 23: google.protobuf.Struct
 }
 var file_idp_template_v1_template_proto_depIdxs = []int32{
-	20, // 0: idp.template.v1.StartInstantiationRequest.variables:type_name -> idp.template.v1.StartInstantiationRequest.VariablesEntry
+	22, // 0: idp.template.v1.StartInstantiationRequest.variables:type_name -> idp.template.v1.StartInstantiationRequest.VariablesEntry
 	0,  // 1: idp.template.v1.GetProgressResponse.status:type_name -> idp.template.v1.WorkflowStatus
 	8,  // 2: idp.template.v1.ListAvailableOrgsResponse.orgs:type_name -> idp.template.v1.GitHubOrg
-	21, // 3: idp.template.v1.StartScaffolderRunRequest.parameters:type_name -> google.protobuf.Struct
+	23, // 3: idp.template.v1.StartScaffolderRunRequest.parameters:type_name -> google.protobuf.Struct
 	0,  // 4: idp.template.v1.GetRunProgressResponse.status:type_name -> idp.template.v1.WorkflowStatus
 	14, // 5: idp.template.v1.GetRunProgressResponse.steps:type_name -> idp.template.v1.StepProgress
-	21, // 6: idp.template.v1.GetRunProgressResponse.outputs:type_name -> google.protobuf.Struct
-	19, // 7: idp.template.v1.ListActionsResponse.actions:type_name -> idp.template.v1.ActionDescriptor
+	23, // 6: idp.template.v1.GetRunProgressResponse.outputs:type_name -> google.protobuf.Struct
+	21, // 7: idp.template.v1.ListActionsResponse.actions:type_name -> idp.template.v1.ActionDescriptor
 	1,  // 8: idp.template.v1.TemplateService.StartInstantiation:input_type -> idp.template.v1.StartInstantiationRequest
 	3,  // 9: idp.template.v1.TemplateService.GetInstantiationProgress:input_type -> idp.template.v1.GetProgressRequest
 	5,  // 10: idp.template.v1.TemplateService.CancelInstantiation:input_type -> idp.template.v1.CancelRequest
@@ -1369,16 +1503,18 @@ var file_idp_template_v1_template_proto_depIdxs = []int32{
 	12, // 13: idp.template.v1.TemplateService.GetRunProgress:input_type -> idp.template.v1.GetRunProgressRequest
 	15, // 14: idp.template.v1.TemplateService.CancelRun:input_type -> idp.template.v1.CancelRunRequest
 	17, // 15: idp.template.v1.TemplateService.ListActions:input_type -> idp.template.v1.ListActionsRequest
-	2,  // 16: idp.template.v1.TemplateService.StartInstantiation:output_type -> idp.template.v1.StartInstantiationResponse
-	4,  // 17: idp.template.v1.TemplateService.GetInstantiationProgress:output_type -> idp.template.v1.GetProgressResponse
-	6,  // 18: idp.template.v1.TemplateService.CancelInstantiation:output_type -> idp.template.v1.CancelResponse
-	9,  // 19: idp.template.v1.TemplateService.ListAvailableOrgs:output_type -> idp.template.v1.ListAvailableOrgsResponse
-	11, // 20: idp.template.v1.TemplateService.StartScaffolderRun:output_type -> idp.template.v1.StartScaffolderRunResponse
-	13, // 21: idp.template.v1.TemplateService.GetRunProgress:output_type -> idp.template.v1.GetRunProgressResponse
-	16, // 22: idp.template.v1.TemplateService.CancelRun:output_type -> idp.template.v1.CancelRunResponse
-	18, // 23: idp.template.v1.TemplateService.ListActions:output_type -> idp.template.v1.ListActionsResponse
-	16, // [16:24] is the sub-list for method output_type
-	8,  // [8:16] is the sub-list for method input_type
+	19, // 16: idp.template.v1.TemplateService.ResolveScaffolderApproval:input_type -> idp.template.v1.ResolveScaffolderApprovalRequest
+	2,  // 17: idp.template.v1.TemplateService.StartInstantiation:output_type -> idp.template.v1.StartInstantiationResponse
+	4,  // 18: idp.template.v1.TemplateService.GetInstantiationProgress:output_type -> idp.template.v1.GetProgressResponse
+	6,  // 19: idp.template.v1.TemplateService.CancelInstantiation:output_type -> idp.template.v1.CancelResponse
+	9,  // 20: idp.template.v1.TemplateService.ListAvailableOrgs:output_type -> idp.template.v1.ListAvailableOrgsResponse
+	11, // 21: idp.template.v1.TemplateService.StartScaffolderRun:output_type -> idp.template.v1.StartScaffolderRunResponse
+	13, // 22: idp.template.v1.TemplateService.GetRunProgress:output_type -> idp.template.v1.GetRunProgressResponse
+	16, // 23: idp.template.v1.TemplateService.CancelRun:output_type -> idp.template.v1.CancelRunResponse
+	18, // 24: idp.template.v1.TemplateService.ListActions:output_type -> idp.template.v1.ListActionsResponse
+	20, // 25: idp.template.v1.TemplateService.ResolveScaffolderApproval:output_type -> idp.template.v1.ResolveScaffolderApprovalResponse
+	17, // [17:26] is the sub-list for method output_type
+	8,  // [8:17] is the sub-list for method input_type
 	8,  // [8:8] is the sub-list for extension type_name
 	8,  // [8:8] is the sub-list for extension extendee
 	0,  // [0:8] is the sub-list for field type_name
@@ -1395,7 +1531,7 @@ func file_idp_template_v1_template_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_idp_template_v1_template_proto_rawDesc), len(file_idp_template_v1_template_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   20,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

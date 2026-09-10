@@ -292,6 +292,7 @@ export function registerField(name: string, component: FieldComponent): void {
 // ---------------------------------------------------------------------------
 import { OrbitEntityPicker } from './fields/OrbitEntityPicker'
 import { OrbitRepoPicker } from './fields/OrbitRepoPicker'
+import { OrbitSkeletonPicker } from './fields/OrbitSkeletonPicker'
 import { OrbitTeamPicker } from './fields/OrbitTeamPicker'
 import { OrbitWorkspacePicker } from './fields/OrbitWorkspacePicker'
 
@@ -299,3 +300,4 @@ defaultFieldRegistry.register('OrbitTeamPicker', OrbitTeamPicker)
 defaultFieldRegistry.register('OrbitWorkspacePicker', OrbitWorkspacePicker)
 defaultFieldRegistry.register('OrbitEntityPicker', OrbitEntityPicker)
 defaultFieldRegistry.register('OrbitRepoPicker', OrbitRepoPicker)
+defaultFieldRegistry.register('OrbitSkeletonPicker', OrbitSkeletonPicker)
