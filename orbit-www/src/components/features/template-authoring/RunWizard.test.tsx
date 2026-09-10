@@ -46,7 +46,7 @@ describe('RunWizard', () => {
         getRun={vi.fn()}
       />,
     )
-    expect(screen.getByRole('textbox')).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Name/i)).toBeInTheDocument()
   })
 
   it('advances to the review step on form submit and calls planRun', async () => {
@@ -64,7 +64,7 @@ describe('RunWizard', () => {
       />,
     )
 
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'my-svc' } })
+    fireEvent.change(screen.getByLabelText(/^Name/i), { target: { value: 'my-svc' } })
     fireEvent.click(screen.getByRole('button', { name: /review/i }))
 
     await waitFor(() => expect(planRun).toHaveBeenCalledWith({ templateVersionId: 'ver-1', parameters: { name: 'my-svc' } }))
@@ -86,7 +86,7 @@ describe('RunWizard', () => {
       />,
     )
 
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'my-svc' } })
+    fireEvent.change(screen.getByLabelText(/^Name/i), { target: { value: 'my-svc' } })
     fireEvent.click(screen.getByRole('button', { name: /review/i }))
 
     await waitFor(() => expect(screen.getByText(/preview unavailable/i)).toBeInTheDocument())
@@ -129,11 +129,11 @@ describe('RunWizard', () => {
         getRun={vi.fn().mockResolvedValue(baseRun())}
       />,
     )
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'my-svc' } })
+    fireEvent.change(screen.getByLabelText(/^Name/i), { target: { value: 'my-svc' } })
     fireEvent.click(screen.getByRole('button', { name: /review/i }))
     await waitFor(() => screen.getByRole('button', { name: /back/i }))
     fireEvent.click(screen.getByRole('button', { name: /back/i }))
-    expect(screen.getByRole('textbox')).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Name/i)).toBeInTheDocument()
   })
 
   it('surfaces a startRun error via a visible message rather than navigating', async () => {
@@ -149,7 +149,7 @@ describe('RunWizard', () => {
         getRun={vi.fn().mockResolvedValue(baseRun())}
       />,
     )
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'my-svc' } })
+    fireEvent.change(screen.getByLabelText(/^Name/i), { target: { value: 'my-svc' } })
     fireEvent.click(screen.getByRole('button', { name: /review/i }))
     await waitFor(() => screen.getByRole('button', { name: /^submit$/i }))
     fireEvent.click(screen.getByRole('button', { name: /^submit$/i }))
@@ -170,7 +170,7 @@ describe('RunWizard', () => {
         getRun={vi.fn().mockResolvedValue(baseRun())}
       />,
     )
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'my-svc' } })
+    fireEvent.change(screen.getByLabelText(/^Name/i), { target: { value: 'my-svc' } })
     fireEvent.click(screen.getByRole('button', { name: /review/i }))
     await waitFor(() => screen.getByRole('button', { name: /^submit$/i }))
     fireEvent.click(screen.getByRole('button', { name: /^submit$/i }))
@@ -190,7 +190,7 @@ describe('RunWizard', () => {
         getRun={vi.fn()}
       />,
     )
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'my-svc' } })
+    fireEvent.change(screen.getByLabelText(/^Name/i), { target: { value: 'my-svc' } })
     fireEvent.click(screen.getByRole('button', { name: /review/i }))
     await waitFor(() => expect(screen.getByText(/Invalid parameters: unexpected additional property/i)).toBeInTheDocument())
   })
