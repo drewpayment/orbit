@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "github:repo:create output",
+  "type": "object",
+  "properties": {
+    "repoUrl": {
+      "type": "string",
+      "description": "HTML URL of the created repository."
+    },
+    "repoName": {
+      "type": "string",
+      "description": "Name of the created repository."
+    }
+  },
+  "required": ["repoUrl", "repoName"],
+  "additionalProperties": false
+}

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "debug:log output",
+  "type": "object",
+  "properties": {
+    "message": { "type": "string", "description": "The message that was logged." },
+    "level": { "type": "string", "description": "The level it was logged at." }
+  },
+  "required": ["message", "level"],
+  "additionalProperties": false
+}

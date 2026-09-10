@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "fs:render output",
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "The rendered directory (same as the input `path`)."
+    },
+    "skippedFiles": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Absolute paths of files left unmodified because they could not be rendered as a template."
+    }
+  },
+  "required": ["path", "skippedFiles"],
+  "additionalProperties": false
+}

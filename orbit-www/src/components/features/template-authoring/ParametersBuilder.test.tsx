@@ -19,6 +19,11 @@ function page(overrides?: Partial<ParameterPage>): ParameterPage {
   }
 }
 
+/** Expands every currently-collapsed field row so its full editor is queryable. */
+function expandAllFields() {
+  for (const btn of screen.queryAllByRole('button', { name: /expand field/i })) fireEvent.click(btn)
+}
+
 describe('ParametersBuilder', () => {
   it('dispatches ADD_PARAMETER_PAGE when "Add page" is clicked', () => {
     const dispatch = vi.fn()
@@ -70,6 +75,7 @@ describe('ParametersBuilder', () => {
   it('dispatches UPDATE_FIELD with a renameTo when a field name changes', () => {
     const dispatch = vi.fn()
     render(<ParametersBuilder pages={[page()]} dispatch={dispatch} />)
+    expandAllFields()
     const nameInputs = screen.getAllByLabelText('Name')
     fireEvent.change(nameInputs[0], { target: { value: 'renamed' } })
     expect(dispatch).toHaveBeenCalledWith(
@@ -86,6 +92,7 @@ describe('ParametersBuilder', () => {
   it('does not dispatch and shows an inline error when renaming a field to an existing sibling name', () => {
     const dispatch = vi.fn()
     render(<ParametersBuilder pages={[page()]} dispatch={dispatch} />)
+    expandAllFields()
     const nameInputs = screen.getAllByLabelText('Name') as HTMLInputElement[]
     // "name" -> "owner" collides with the sibling field already named "owner".
     fireEvent.change(nameInputs[0], { target: { value: 'owner' } })
@@ -99,6 +106,7 @@ describe('ParametersBuilder', () => {
   it('clears the collision error once the name no longer collides', () => {
     const dispatch = vi.fn()
     render(<ParametersBuilder pages={[page()]} dispatch={dispatch} />)
+    expandAllFields()
     const nameInputs = screen.getAllByLabelText('Name') as HTMLInputElement[]
     fireEvent.change(nameInputs[0], { target: { value: 'owner' } })
     expect(screen.getByRole('alert')).toBeInTheDocument()
@@ -113,6 +121,7 @@ describe('ParametersBuilder', () => {
   it('allows retyping a field name back to its own current value without an error', () => {
     const dispatch = vi.fn()
     render(<ParametersBuilder pages={[page()]} dispatch={dispatch} />)
+    expandAllFields()
     const nameInputs = screen.getAllByLabelText('Name') as HTMLInputElement[]
     // Detour through a different value first (typing "name" -> "name" as a no-op
     // change event isn't observable — jsdom's controlled-input value tracker
@@ -123,5 +132,114 @@ describe('ParametersBuilder', () => {
     expect(dispatch).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'UPDATE_FIELD', name: 'name', renameTo: 'name' }),
     )
+  })
+})
+
+// --- Live-reducer harness: the mock-dispatch tests above never re-render the
+// rows, which is exactly how the focus-loss and "my keystroke vanished" bugs
+// slipped through. These drive the real reducer.
+import * as React from 'react'
+import { createInitialBuilderState, templateBuilderReducer } from './builder-state'
+
+function LiveBuilder({ pages }: { pages: ParameterPage[] }) {
+  const [state, dispatch] = React.useReducer(
+    templateBuilderReducer,
+    createInitialBuilderState({ ...EMPTY_DEF, spec: { ...EMPTY_DEF.spec, parameters: pages } }),
+  )
+  return <ParametersBuilder pages={state.spec.parameters} dispatch={dispatch} />
+}
+import { EMPTY_TEMPLATE_DEFINITION as EMPTY_DEF } from './builder-state'
+
+describe('ParametersBuilder (live reducer)', () => {
+  it('keeps focus in the Name input while renaming a field', () => {
+    render(<LiveBuilder pages={[page()]} />)
+    expandAllFields()
+    const input = screen.getAllByLabelText('Name')[0] as HTMLInputElement
+    input.focus()
+    fireEvent.change(input, { target: { value: 'nam' } })
+    fireEvent.change(screen.getAllByLabelText('Name')[0], { target: { value: 'name2' } })
+    const after = screen.getAllByLabelText('Name')[0] as HTMLInputElement
+    expect(after.value).toBe('name2')
+    expect(document.activeElement).toBe(after)
+  })
+
+  it('preserves a trailing space typed into the Label input', () => {
+    render(<LiveBuilder pages={[page()]} />)
+    expandAllFields()
+    const label = screen.getAllByLabelText('Label')[0] as HTMLInputElement
+    fireEvent.change(label, { target: { value: 'Service ' } })
+    expect((screen.getAllByLabelText('Label')[0] as HTMLInputElement).value).toBe('Service ')
+  })
+
+  it('preserves a trailing comma and spacing typed into the Enum options input', () => {
+    render(<LiveBuilder pages={[page()]} />)
+    expandAllFields()
+    const enumInput = screen.getAllByLabelText(/Enum options/)[0] as HTMLInputElement
+    fireEvent.change(enumInput, { target: { value: 'a,' } })
+    expect((screen.getAllByLabelText(/Enum options/)[0] as HTMLInputElement).value).toBe('a,')
+    fireEvent.change(screen.getAllByLabelText(/Enum options/)[0], { target: { value: 'a, b' } })
+    expect((screen.getAllByLabelText(/Enum options/)[0] as HTMLInputElement).value).toBe('a, b')
+  })
+
+  it('shows "Default widget" when no ui:field is set and never persists the sentinel', () => {
+    render(<LiveBuilder pages={[page()]} />)
+    expandAllFields()
+    expect(screen.getAllByText('Default widget').length).toBeGreaterThan(0)
+  })
+})
+
+describe('ParametersBuilder (collapsible field rows)', () => {
+  it('starts every row collapsed, hiding the full editor', () => {
+    render(<ParametersBuilder pages={[page()]} dispatch={vi.fn()} />)
+    expect(screen.queryByLabelText('Name')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Label')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /expand field/i })).toHaveLength(2)
+  })
+
+  it('shows the field name, type badge, label, and required marker in the collapsed header', () => {
+    render(
+      <ParametersBuilder
+        pages={[page({ properties: { name: { type: 'string', title: 'Full name' } }, required: ['name'] })]}
+        dispatch={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('name')).toBeInTheDocument()
+    expect(screen.getByText('Text')).toBeInTheDocument()
+    expect(screen.getByText('Full name')).toBeInTheDocument()
+    expect(screen.getByText('Required')).toBeInTheDocument()
+  })
+
+  it('expands and collapses a row via the chevron toggle', () => {
+    render(<ParametersBuilder pages={[page()]} dispatch={vi.fn()} />)
+    const [first] = screen.getAllByRole('button', { name: /expand field/i })
+    fireEvent.click(first)
+    expect(screen.getAllByLabelText('Name')).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: /collapse field/i })).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: /collapse field/i }))
+    expect(screen.queryByLabelText('Name')).not.toBeInTheDocument()
+  })
+
+  it('opens a newly appended row expanded, while existing rows stay collapsed', () => {
+    // Drives the real reducer: a mocked dispatch never grows `properties`, so
+    // the "just appended" row never actually mounts.
+    render(<LiveBuilder pages={[page()]} />)
+    fireEvent.click(screen.getByRole('button', { name: /append field/i }))
+
+    // The two original fields stay collapsed; the appended field opens expanded.
+    expect(screen.getAllByRole('button', { name: /expand field/i })).toHaveLength(2)
+    expect(screen.getAllByRole('button', { name: /collapse field/i })).toHaveLength(1)
+    expect(screen.getAllByLabelText('Name')).toHaveLength(1)
+  })
+
+  it('"Expand all" opens every row and "Collapse all" closes every row', () => {
+    render(<ParametersBuilder pages={[page()]} dispatch={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /expand all/i }))
+    expect(screen.getAllByLabelText('Name')).toHaveLength(2)
+    expect(screen.queryByRole('button', { name: /expand field/i })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /collapse all/i }))
+    expect(screen.queryByLabelText('Name')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /expand field/i })).toHaveLength(2)
   })
 })
