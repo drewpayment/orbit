@@ -28,9 +28,12 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { Trash2, ChevronUp, ChevronDown, Plus } from 'lucide-react'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { cn } from '@/lib/utils'
+import { Trash2, ChevronUp, ChevronDown, ChevronRight, Plus } from 'lucide-react'
 
 export interface ParametersBuilderProps {
   pages: ParameterPage[]
@@ -88,6 +91,27 @@ function ParameterPageEditor({
   const rows = pageRows(page)
   const error = validateParameterFieldRows(rows)
 
+  // Name of the field just added via "Append field" — its row opens expanded
+  // (every other row starts collapsed). `ADD_FIELD` always appends to the end
+  // of `page.properties`, so the new field is always the last row.
+  const [justAppendedName, setJustAppendedName] = React.useState<string | null>(null)
+  // Bumped to force every row to remount with a fresh `defaultOpen`, driving
+  // "Expand all" / "Collapse all".
+  const [expandAllKey, setExpandAllKey] = React.useState(0)
+  const [expandAllOpen, setExpandAllOpen] = React.useState(false)
+
+  function appendField() {
+    const name = nextFieldName(page)
+    dispatch({ type: 'ADD_FIELD', pageIndex, name, property: { type: 'string' } })
+    setJustAppendedName(name)
+  }
+
+  function setAllRows(open: boolean) {
+    setExpandAllOpen(open)
+    setExpandAllKey((k) => k + 1)
+    setJustAppendedName(null)
+  }
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center gap-2">
@@ -99,6 +123,14 @@ function ParameterPageEditor({
           }
           className="max-w-xs font-medium"
         />
+        <div className="flex gap-2">
+          <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={() => setAllRows(true)}>
+            Expand all
+          </Button>
+          <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={() => setAllRows(false)}>
+            Collapse all
+          </Button>
+        </div>
         <div className="ml-auto flex gap-1">
           <Button
             type="button"
@@ -138,29 +170,21 @@ function ParameterPageEditor({
             // `pageRows`, and keying by `row.name` remounted the row on every
             // rename keystroke (dropping focus from the Name input). Each
             // row's local drafts resync from props when its row changes.
-            key={rowIndex}
+            // `expandAllKey` is appended so "Expand all"/"Collapse all" force
+            // a remount (and thus a fresh `defaultOpen`) without disturbing
+            // the position-based identity the rest of the key relies on.
+            key={`${rowIndex}-${expandAllKey}`}
             row={row}
             rowIndex={rowIndex}
             rowCount={rows.length}
             pageIndex={pageIndex}
             siblingNames={rows.filter((r) => r.name !== row.name).map((r) => r.name)}
+            defaultOpen={row.name === justAppendedName || expandAllOpen}
             dispatch={dispatch}
           />
         ))}
         {error && <p className="text-sm text-destructive">{error}</p>}
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={() =>
-            dispatch({
-              type: 'ADD_FIELD',
-              pageIndex,
-              name: nextFieldName(page),
-              property: { type: 'string' },
-            })
-          }
-        >
+        <Button type="button" variant="secondary" size="sm" onClick={appendField}>
           <Plus className="mr-1 h-4 w-4" /> Append field
         </Button>
       </CardContent>
@@ -200,6 +224,7 @@ function FieldRowEditor({
   rowCount,
   pageIndex,
   siblingNames,
+  defaultOpen,
   dispatch,
 }: {
   row: ParameterFieldRow
@@ -208,6 +233,8 @@ function FieldRowEditor({
   pageIndex: number
   /** Other fields' current names on this page (excludes this row itself). */
   siblingNames: string[]
+  /** Opens the row by default — true for a row just appended, or "Expand all". */
+  defaultOpen?: boolean
   dispatch: React.Dispatch<BuilderAction>
 }) {
   // The Name field needs its own local draft: `UPDATE_FIELD` is a true no-op
@@ -222,6 +249,14 @@ function FieldRowEditor({
     setNameDraft(row.name)
     setNameError(null)
   }, [row.name])
+
+  const [open, setOpen] = React.useState(defaultOpen ?? false)
+  // A row with an inline name error must stay visible regardless of its
+  // collapsed/expanded state — force it open (without fighting a manual
+  // collapse once the error clears).
+  React.useEffect(() => {
+    if (nameError) setOpen(true)
+  }, [nameError])
 
   function commit(patch: Partial<ParameterFieldRow>) {
     const next = { ...row, ...patch }
@@ -257,183 +292,205 @@ function FieldRowEditor({
   const uid = React.useId()
   const fid = (suffix: string) => `${uid}-${suffix}`
 
+  const typeLabel = PARAMETER_FIELD_TYPE_OPTIONS.find((opt) => opt.value === row.type)?.label ?? row.type
+
   return (
-    <div className="grid grid-cols-1 gap-2 rounded-md border p-3 sm:grid-cols-2">
-      <div>
-        <Label htmlFor={fid('name')}>Name</Label>
-        <Input
-          id={fid('name')}
-          value={nameDraft}
-          onChange={(e) => handleNameChange(e.target.value)}
-          aria-invalid={!!nameError}
-        />
-        {nameError && (
-          <p role="alert" className="text-sm text-destructive">
-            {nameError}
-          </p>
-        )}
+    <Collapsible open={open} onOpenChange={setOpen} className="rounded-md border">
+      <div className="flex flex-wrap items-center gap-2 p-3">
+        <span className="truncate font-mono text-sm">{nameDraft || row.name}</span>
+        <Badge variant="secondary" className="font-normal">
+          {typeLabel}
+        </Badge>
+        {row.label && <span className="truncate text-sm text-muted-foreground">{row.label}</span>}
+        {row.required && <span className="text-xs font-medium text-muted-foreground">Required</span>}
+        <div className="ml-auto flex items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Move field up"
+            disabled={rowIndex === 0}
+            onClick={() => dispatch({ type: 'REORDER_FIELD', pageIndex, index: rowIndex, delta: -1 })}
+          >
+            <ChevronUp className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Move field down"
+            disabled={rowIndex === rowCount - 1}
+            onClick={() => dispatch({ type: 'REORDER_FIELD', pageIndex, index: rowIndex, delta: 1 })}
+          >
+            <ChevronDown className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Remove field"
+            onClick={() => dispatch({ type: 'REMOVE_FIELD', pageIndex, name: row.name })}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+          <CollapsibleTrigger asChild>
+            <Button type="button" variant="ghost" size="icon" aria-label={open ? 'Collapse field' : 'Expand field'}>
+              <ChevronRight className={cn('h-4 w-4 transition-transform', open && 'rotate-90')} />
+            </Button>
+          </CollapsibleTrigger>
+        </div>
       </div>
-      <div>
-        <Label htmlFor={fid('type')}>Type</Label>
-        <Select value={row.type} onValueChange={(v) => commit({ type: v as ParameterFieldRow['type'] })}>
-          <SelectTrigger id={fid('type')}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PARAMETER_FIELD_TYPE_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div>
-        <Label htmlFor={fid('label')}>Label</Label>
-        <Input
-          id={fid('label')}
-          value={labelDraft}
-          onChange={(e) => {
-            setLabelDraft(e.target.value)
-            commit({ label: e.target.value })
-          }}
-        />
-      </div>
-      <div>
-        <Label htmlFor={fid('default')}>Default</Label>
-        <Input
-          id={fid('default')}
-          value={defaultDraft}
-          onChange={(e) => {
-            setDefaultDraft(e.target.value)
-            commit({ defaultValue: e.target.value })
-          }}
-        />
-      </div>
-      <div className="sm:col-span-2">
-        <Label htmlFor={fid('help')}>Help text</Label>
-        <Textarea
-          id={fid('help')}
-          value={helpDraft}
-          onChange={(e) => {
-            setHelpDraft(e.target.value)
-            commit({ help: e.target.value })
-          }}
-        />
-      </div>
-      {row.type === 'string' && (
-        <>
+      <CollapsibleContent>
+        <div className="grid grid-cols-1 gap-2 border-t p-3 sm:grid-cols-2">
           <div>
-            <Label htmlFor={fid('pattern')}>Pattern</Label>
+            <Label htmlFor={fid('name')}>Name</Label>
             <Input
-              id={fid('pattern')}
-              value={patternDraft}
+              id={fid('name')}
+              value={nameDraft}
+              onChange={(e) => handleNameChange(e.target.value)}
+              aria-invalid={!!nameError}
+            />
+            {nameError && (
+              <p role="alert" className="text-sm text-destructive">
+                {nameError}
+              </p>
+            )}
+          </div>
+          <div>
+            <Label htmlFor={fid('type')}>Type</Label>
+            <Select value={row.type} onValueChange={(v) => commit({ type: v as ParameterFieldRow['type'] })}>
+              <SelectTrigger id={fid('type')}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PARAMETER_FIELD_TYPE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor={fid('label')}>Label</Label>
+            <Input
+              id={fid('label')}
+              value={labelDraft}
               onChange={(e) => {
-                setPatternDraft(e.target.value)
-                commit({ pattern: e.target.value })
+                setLabelDraft(e.target.value)
+                commit({ label: e.target.value })
               }}
             />
           </div>
           <div>
-            <Label htmlFor={fid('enum')}>Enum options (comma-separated)</Label>
+            <Label htmlFor={fid('default')}>Default</Label>
             <Input
-              id={fid('enum')}
-              value={enumDraft}
-              placeholder="dev, staging, prod"
+              id={fid('default')}
+              value={defaultDraft}
               onChange={(e) => {
-                setEnumDraft(e.target.value)
-                commit({ enumOptions: e.target.value })
+                setDefaultDraft(e.target.value)
+                commit({ defaultValue: e.target.value })
               }}
             />
           </div>
-        </>
-      )}
-      {(row.type === 'number' || row.type === 'integer') && (
-        <>
+          <div className="sm:col-span-2">
+            <Label htmlFor={fid('help')}>Help text</Label>
+            <Textarea
+              id={fid('help')}
+              value={helpDraft}
+              onChange={(e) => {
+                setHelpDraft(e.target.value)
+                commit({ help: e.target.value })
+              }}
+            />
+          </div>
+          {row.type === 'string' && (
+            <>
+              <div>
+                <Label htmlFor={fid('pattern')}>Pattern</Label>
+                <Input
+                  id={fid('pattern')}
+                  value={patternDraft}
+                  onChange={(e) => {
+                    setPatternDraft(e.target.value)
+                    commit({ pattern: e.target.value })
+                  }}
+                />
+              </div>
+              <div>
+                <Label htmlFor={fid('enum')}>Enum options (comma-separated)</Label>
+                <Input
+                  id={fid('enum')}
+                  value={enumDraft}
+                  placeholder="dev, staging, prod"
+                  onChange={(e) => {
+                    setEnumDraft(e.target.value)
+                    commit({ enumOptions: e.target.value })
+                  }}
+                />
+              </div>
+            </>
+          )}
+          {(row.type === 'number' || row.type === 'integer') && (
+            <>
+              <div>
+                <Label htmlFor={fid('min')}>Minimum</Label>
+                <Input id={fid('min')} value={row.minimum} onChange={(e) => commit({ minimum: e.target.value })} />
+              </div>
+              <div>
+                <Label htmlFor={fid('max')}>Maximum</Label>
+                <Input id={fid('max')} value={row.maximum} onChange={(e) => commit({ maximum: e.target.value })} />
+              </div>
+            </>
+          )}
           <div>
-            <Label htmlFor={fid('min')}>Minimum</Label>
-            <Input id={fid('min')} value={row.minimum} onChange={(e) => commit({ minimum: e.target.value })} />
+            <Label htmlFor={fid('visibleIf')}>Show only when (optional)</Label>
+            <Input
+              id={fid('visibleIf')}
+              value={visibleIfDraft}
+              placeholder={'${{ parameters.deployTarget == "kubernetes" }}'}
+              onChange={(e) => {
+                setVisibleIfDraft(e.target.value)
+                commit({ visibleIf: e.target.value })
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              Hide this field until another parameter has a value. Supports{' '}
+              <code>{'${{ parameters.x }}'}</code> (truthy), <code>{'${{ !parameters.x }}'}</code>, and{' '}
+              <code>{'${{ parameters.x == "value" }}'}</code>. Leave blank to always show.
+            </p>
           </div>
           <div>
-            <Label htmlFor={fid('max')}>Maximum</Label>
-            <Input id={fid('max')} value={row.maximum} onChange={(e) => commit({ maximum: e.target.value })} />
+            <Label htmlFor={fid('uiField')}>Field widget</Label>
+            <Select
+              value={row.uiField || UI_FIELD_DEFAULT_SENTINEL}
+              onValueChange={(v) => commit({ uiField: v === UI_FIELD_DEFAULT_SENTINEL ? '' : v })}
+            >
+              <SelectTrigger id={fid('uiField')}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {UI_FIELD_OPTIONS.map((opt) => (
+                  <SelectItem
+                    key={opt.value || UI_FIELD_DEFAULT_SENTINEL}
+                    value={opt.value || UI_FIELD_DEFAULT_SENTINEL}
+                  >
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        </>
-      )}
-      <div>
-        <Label htmlFor={fid('visibleIf')}>Show only when (optional)</Label>
-        <Input
-          id={fid('visibleIf')}
-          value={visibleIfDraft}
-          placeholder={'${{ parameters.deployTarget == "kubernetes" }}'}
-          onChange={(e) => {
-            setVisibleIfDraft(e.target.value)
-            commit({ visibleIf: e.target.value })
-          }}
-        />
-        <p className="text-xs text-muted-foreground">
-          Hide this field until another parameter has a value. Supports{' '}
-          <code>{'${{ parameters.x }}'}</code> (truthy), <code>{'${{ !parameters.x }}'}</code>, and{' '}
-          <code>{'${{ parameters.x == "value" }}'}</code>. Leave blank to always show.
-        </p>
-      </div>
-      <div>
-        <Label htmlFor={fid('uiField')}>Field widget</Label>
-        <Select
-          value={row.uiField || UI_FIELD_DEFAULT_SENTINEL}
-          onValueChange={(v) => commit({ uiField: v === UI_FIELD_DEFAULT_SENTINEL ? '' : v })}
-        >
-          <SelectTrigger id={fid('uiField')}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {UI_FIELD_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value || UI_FIELD_DEFAULT_SENTINEL} value={opt.value || UI_FIELD_DEFAULT_SENTINEL}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="flex items-center gap-2">
-        <Checkbox
-          id={fid('required')}
-          checked={row.required}
-          onCheckedChange={(checked) => commit({ required: checked === true })}
-        />
-        <Label htmlFor={fid('required')}>Required</Label>
-      </div>
-      <div className="flex items-center justify-end gap-1 sm:col-span-2">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label="Move field up"
-          disabled={rowIndex === 0}
-          onClick={() => dispatch({ type: 'REORDER_FIELD', pageIndex, index: rowIndex, delta: -1 })}
-        >
-          <ChevronUp className="h-4 w-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label="Move field down"
-          disabled={rowIndex === rowCount - 1}
-          onClick={() => dispatch({ type: 'REORDER_FIELD', pageIndex, index: rowIndex, delta: 1 })}
-        >
-          <ChevronDown className="h-4 w-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label="Remove field"
-          onClick={() => dispatch({ type: 'REMOVE_FIELD', pageIndex, name: row.name })}
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
-      </div>
-    </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id={fid('required')}
+              checked={row.required}
+              onCheckedChange={(checked) => commit({ required: checked === true })}
+            />
+            <Label htmlFor={fid('required')}>Required</Label>
+          </div>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }

@@ -27,8 +27,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
+import { cn } from '@/lib/utils'
 import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react'
 
 export interface StepsBuilderProps {
@@ -102,6 +104,9 @@ function buildExpressionAwareRegistry(candidates: ExpressionCandidate[]): FieldR
 export function StepsBuilder({ definition, dispatch, registry }: StepsBuilderProps) {
   const steps = definition.spec.steps
   const registryById = React.useMemo(() => new Map(registry.map((d) => [d.id, d])), [registry])
+  // Tracks the id of the step just created via "Add step" so its body opens
+  // expanded (every other step starts collapsed).
+  const [justAddedId, setJustAddedId] = React.useState<string | null>(null)
 
   function addStep(descriptor: ActionDescriptor) {
     const id = generateStepId(
@@ -110,6 +115,7 @@ export function StepsBuilder({ definition, dispatch, registry }: StepsBuilderPro
     )
     const step: Step = { id, name: descriptor.name, action: descriptor.id, input: {} }
     dispatch({ type: 'ADD_STEP', step })
+    setJustAddedId(id)
   }
 
   return (
@@ -124,6 +130,7 @@ export function StepsBuilder({ definition, dispatch, registry }: StepsBuilderPro
           candidates={getExpressionCandidates(definition, index, registry)}
           dependents={findStepReferences(definition, step.id)}
           siblingIds={steps.filter((s) => s.id !== step.id).map((s) => s.id)}
+          defaultOpen={step.id === justAddedId}
           dispatch={dispatch}
         />
       ))}
@@ -186,6 +193,7 @@ function StepRow({
   candidates,
   dependents,
   siblingIds,
+  defaultOpen,
   dispatch,
 }: {
   step: Step
@@ -196,8 +204,11 @@ function StepRow({
   dependents: StepReference[]
   /** Ids of the other steps (excludes this one), for inline collision checks. */
   siblingIds: string[]
+  /** Opens the step's body by default — true only for a step just added via "Add step". */
+  defaultOpen?: boolean
   dispatch: React.Dispatch<BuilderAction>
 }) {
+  const [bodyOpen, setBodyOpen] = React.useState(defaultOpen ?? false)
   const [expanded, setExpanded] = React.useState(false)
   const [confirmingRemoval, setConfirmingRemoval] = React.useState(false)
   const fieldRegistry = React.useMemo(() => buildExpressionAwareRegistry(candidates), [candidates])
@@ -306,6 +317,15 @@ function StepRow({
           <Button type="button" variant="ghost" size="icon" aria-label="Remove step" onClick={handleRemoveClick}>
             <Trash2 className="h-4 w-4" />
           </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label={bodyOpen ? 'Collapse step' : 'Expand step'}
+            onClick={() => setBodyOpen((v) => !v)}
+          >
+            <ChevronDown className={cn('h-4 w-4 transition-transform', bodyOpen && 'rotate-180')} />
+          </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -325,59 +345,65 @@ function StepRow({
             </div>
           </div>
         )}
-        <div>
-          <Label htmlFor={`${step.id}-if`}>Run if (optional expression)</Label>
-          <ExpressionInput
-            id={`${step.id}-if`}
-            value={step.if ?? ''}
-            onChange={(v) => patch({ if: v || undefined })}
-            candidates={candidates}
-            placeholder={'${{ parameters.needsTopic }}'}
-          />
-        </div>
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id={`${step.id}-continueOnError`}
-              checked={step.continueOnError === true}
-              onCheckedChange={(checked) => patch({ continueOnError: checked === true || undefined })}
-            />
-            <Label htmlFor={`${step.id}-continueOnError`}>Continue on error</Label>
-          </div>
-          <div>
-            <Label htmlFor={`${step.id}-timeout`}>Timeout</Label>
-            <Input
-              id={`${step.id}-timeout`}
-              value={step.timeout ?? ''}
-              placeholder="e.g. 30s, 5m"
-              onChange={(e) => patch({ timeout: e.target.value || undefined })}
-              className="w-32"
-            />
-            <p className="text-xs text-muted-foreground">Duration with a unit (s, m, h), max 2h. Blank uses the default.</p>
-          </div>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setExpanded((v) => !v)}>
-            {expanded ? 'Hide inputs' : 'Configure inputs'}
-          </Button>
-        </div>
-        {expanded && inputPage && (
-          <div className="rounded-md border p-3">
-            <SchemaForm
-              pages={[inputPage]}
-              values={step.input}
-              onChange={(values) => patch({ input: values })}
-              fieldRegistry={fieldRegistry}
-              hideSubmit
-              mode="single"
-              as="div"
-            />
-          </div>
-        )}
-        {expanded && !inputPage && (
-          <p className="text-sm text-muted-foreground">
-            This action isn&apos;t in the registry — its inputs can&apos;t be edited visually. Use the YAML
-            view.
-          </p>
-        )}
+        <Collapsible open={bodyOpen} onOpenChange={setBodyOpen}>
+          <CollapsibleContent className="space-y-3">
+            <div>
+              <Label htmlFor={`${step.id}-if`}>Run if (optional expression)</Label>
+              <ExpressionInput
+                id={`${step.id}-if`}
+                value={step.if ?? ''}
+                onChange={(v) => patch({ if: v || undefined })}
+                candidates={candidates}
+                placeholder={'${{ parameters.needsTopic }}'}
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id={`${step.id}-continueOnError`}
+                  checked={step.continueOnError === true}
+                  onCheckedChange={(checked) => patch({ continueOnError: checked === true || undefined })}
+                />
+                <Label htmlFor={`${step.id}-continueOnError`}>Continue on error</Label>
+              </div>
+              <div>
+                <Label htmlFor={`${step.id}-timeout`}>Timeout</Label>
+                <Input
+                  id={`${step.id}-timeout`}
+                  value={step.timeout ?? ''}
+                  placeholder="e.g. 30s, 5m"
+                  onChange={(e) => patch({ timeout: e.target.value || undefined })}
+                  className="w-32"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Duration with a unit (s, m, h), max 2h. Blank uses the default.
+                </p>
+              </div>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setExpanded((v) => !v)}>
+                {expanded ? 'Hide inputs' : 'Configure inputs'}
+              </Button>
+            </div>
+            {expanded && inputPage && (
+              <div className="rounded-md border p-3">
+                <SchemaForm
+                  pages={[inputPage]}
+                  values={step.input}
+                  onChange={(values) => patch({ input: values })}
+                  fieldRegistry={fieldRegistry}
+                  hideSubmit
+                  mode="single"
+                  as="div"
+                />
+              </div>
+            )}
+            {expanded && !inputPage && (
+              <p className="text-sm text-muted-foreground">
+                This action isn&apos;t in the registry — its inputs can&apos;t be edited visually. Use the YAML
+                view.
+              </p>
+            )}
+          </CollapsibleContent>
+        </Collapsible>
       </CardContent>
     </Card>
   )
