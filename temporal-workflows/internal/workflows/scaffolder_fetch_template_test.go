@@ -280,3 +280,77 @@ func (s *ScaffolderWorkflowTestSuite) TestFetchTemplateStep_NestedCancellationOn
 
 	s.Equal(ScaffolderStatusCancelled, res.Status)
 }
+
+// --- step.If (mirrors approval:request's own if-handling fix) --------------
+
+func (s *ScaffolderWorkflowTestSuite) TestFetchTemplateStep_IfFalseSkipsWithoutResolvingOrComposing() {
+	def := fetchTemplateOneStepDefinition()
+	def.Spec.Steps[0].If = "${{ parameters.wantCompose }}"
+	in := baseInput(def)
+	in.Parameters["wantCompose"] = false
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusSucceeded, res.Status)
+	s.Empty(s.stubs.versionsResolved, "a skipped step must never resolve a template version or compose")
+
+	composeStep, ok := stepByID(s.lastProgress().Steps, "compose")
+	s.Require().True(ok)
+	s.Equal(stepStatusSkipped, composeStep.Status)
+}
+
+func (s *ScaffolderWorkflowTestSuite) TestFetchTemplateStep_IfTrueComposes() {
+	def := fetchTemplateOneStepDefinition()
+	def.Spec.Steps[0].If = "${{ parameters.wantCompose }}"
+	in := baseInput(def)
+	in.Parameters["wantCompose"] = true
+	s.stubs.resolveTemplateVerFn = func(req activities.ScaffolderResolveTemplateVersionInput) (*activities.ScaffolderResolveTemplateVersionResult, error) {
+		return &activities.ScaffolderResolveTemplateVersionResult{
+			DefinitionVersionID: "ver-nested",
+			DefinitionID:        req.TemplateDefinitionID,
+			Definition:          nestedSingleStepDefinition(),
+		}, nil
+	}
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusSucceeded, res.Status)
+	s.Require().Len(s.stubs.versionsResolved, 1, "a true condition must still compose the nested template")
+}
+
+func (s *ScaffolderWorkflowTestSuite) TestFetchTemplateStep_MalformedIfFailsTheRun() {
+	def := fetchTemplateOneStepDefinition()
+	def.Spec.Steps[0].If = "${{ bogus.unknownNamespace }}"
+	in := baseInput(def)
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusFailed, res.Status)
+	s.Empty(s.stubs.versionsResolved, "the run must fail before ever resolving a template version")
+}
+
+func (s *ScaffolderWorkflowTestSuite) TestFetchTemplateStep_DryRunIfFalseRecordsSkippedNotUnsupported() {
+	def := fetchTemplateOneStepDefinition()
+	def.Spec.Steps[0].If = "${{ parameters.wantCompose }}"
+	in := baseInput(def)
+	in.DryRun = true
+	in.Parameters["wantCompose"] = false
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusSucceeded, res.Status)
+	s.Empty(s.stubs.versionsResolved)
+
+	var composeEntry *scaffolder.PlannedChange
+	for i := range res.Plan {
+		if res.Plan[i].Name == "compose" {
+			composeEntry = &res.Plan[i]
+		}
+	}
+	s.Require().NotNil(composeEntry)
+	s.Equal("skipped", composeEntry.Kind, "a skipped-by-condition step is a distinct plan entry from an unplannable one")
+}

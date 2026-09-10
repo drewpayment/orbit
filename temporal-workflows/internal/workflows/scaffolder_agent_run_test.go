@@ -209,3 +209,73 @@ func (s *ScaffolderWorkflowTestSuite) TestAgentRunStep_DryRunNeverStartsAChild()
 	s.Require().NotNil(unsupported)
 	s.Equal("unsupported", unsupported.Kind)
 }
+
+// --- step.If (mirrors approval:request's own if-handling fix) --------------
+
+func (s *ScaffolderWorkflowTestSuite) TestAgentRunStep_IfFalseSkipsWithoutStartingAChild() {
+	def := agentRunDefinition()
+	def.Spec.Steps[1].If = "${{ parameters.wantAgent }}"
+	in := baseInput(def)
+	in.Parameters["wantAgent"] = false
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusSucceeded, res.Status)
+	s.Empty(s.stubs.agentRunsCreated, "a skipped step must never create the AgentRuns row or start the child")
+
+	agentStep, ok := stepByID(s.lastProgress().Steps, "agent")
+	s.Require().True(ok)
+	s.Equal(stepStatusSkipped, agentStep.Status)
+}
+
+func (s *ScaffolderWorkflowTestSuite) TestAgentRunStep_IfTrueStartsTheChild() {
+	def := agentRunDefinition()
+	def.Spec.Steps[1].If = "${{ parameters.wantAgent }}"
+	in := baseInput(def)
+	in.Parameters["wantAgent"] = true
+
+	s.env.OnWorkflow(InfrastructureAgentWorkflow, mock.Anything, mock.Anything).Return(
+		func(workflow.Context, InfrastructureAgentInput) error { return nil })
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusSucceeded, res.Status)
+	s.Require().Len(s.stubs.agentRunsCreated, 1, "a true condition must still start the child")
+}
+
+func (s *ScaffolderWorkflowTestSuite) TestAgentRunStep_MalformedIfFailsTheRun() {
+	def := agentRunDefinition()
+	def.Spec.Steps[1].If = "${{ bogus.unknownNamespace }}"
+	in := baseInput(def)
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusFailed, res.Status)
+	s.Empty(s.stubs.agentRunsCreated, "the run must fail before ever starting the child")
+}
+
+func (s *ScaffolderWorkflowTestSuite) TestAgentRunStep_DryRunIfFalseRecordsSkippedNotUnsupported() {
+	def := agentRunDefinition()
+	def.Spec.Steps[1].If = "${{ parameters.wantAgent }}"
+	in := baseInput(def)
+	in.DryRun = true
+	in.Parameters["wantAgent"] = false
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusSucceeded, res.Status)
+	s.Empty(s.stubs.agentRunsCreated)
+
+	var agentEntry *scaffolder.PlannedChange
+	for i := range res.Plan {
+		if res.Plan[i].Name == "agent" {
+			agentEntry = &res.Plan[i]
+		}
+	}
+	s.Require().NotNil(agentEntry)
+	s.Equal("skipped", agentEntry.Kind, "a skipped-by-condition step is a distinct plan entry from an unplannable one")
+}

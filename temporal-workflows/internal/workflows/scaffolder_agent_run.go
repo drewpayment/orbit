@@ -88,6 +88,48 @@ func (r *scaffolderRun) runAgentRunStep(ctx workflow.Context, bookkeepingCtx wor
 		return false, fmt.Sprintf("step %q: no progress slot", step.ID)
 	}
 
+	// step.If is evaluated identically to the generic runStep path (and to
+	// approval:request's own fix, see runApprovalStep): agent:run is not
+	// exempt from conditional skipping just because it is special-cased. A
+	// malformed condition is handled the same way too: dry-run-skippable (an
+	// unresolved step reference) records the step as unplannable and moves
+	// on, anything else fails the run.
+	if step.If != "" {
+		want, err := scaffolder.EvalBool(r.exprCtx, step.If)
+		if err != nil {
+			skippable, realErr := r.dryRunSkippable(err, func(c scaffolder.Ctx) error {
+				if _, e := scaffolder.EvalBool(c, step.If); e != nil {
+					return e
+				}
+				_, e := scaffolder.ResolveJSON(c, step.Input)
+				return e
+			})
+			if skippable {
+				r.markUnplannable(ctx, idx, step, err)
+				return false, ""
+			}
+			r.failStep(idx, realErr.Error())
+			return false, fmt.Sprintf("step %q: %v", step.ID, realErr)
+		}
+		if !want {
+			r.steps[idx].Status = stepStatusSkipped
+			r.steps[idx].FinishedAt = workflowNow(ctx)
+			r.logger.Info("Scaffolder agent:run step skipped", "stepId", step.ID, "if", step.If)
+			r.appendLog(ctx, "info", fmt.Sprintf("step %s (%s) skipped: condition is false", step.ID, step.Action))
+			if r.input.DryRun {
+				// Recorded, so a reader can see the plan accounts for every
+				// step — matches the generic runStep path's dry-run "skipped"
+				// entry exactly.
+				r.plan = append(r.plan, scaffolder.PlannedChange{
+					Kind:        "skipped",
+					Name:        step.ID,
+					Description: fmt.Sprintf("%s will not run: its condition is false", step.Action),
+				})
+			}
+			return false, ""
+		}
+	}
+
 	if r.input.DryRun {
 		r.planAgentRunStep(ctx, idx, step)
 		return false, ""
