@@ -230,8 +230,13 @@ func validateStep(def *Definition, idx int, step Step, params map[string]bool, s
 		currentID:       step.ID,
 	}
 
-	if cond := NormalizeCondition(step.If); cond != "" {
-		errs = append(errs, scope.checkString(base+".if", cond)...)
+	if strings.TrimSpace(step.If) != "" {
+		ref, err := SingleExpression(step.If)
+		if err != nil {
+			errs = append(errs, ValidationError{Path: base + ".if", Message: err.Error()})
+		} else if e, bad := scope.checkRef(base+".if", ref); bad {
+			errs = append(errs, e)
+		}
 	}
 
 	decoded, decodeErr := decodeInput(step.Input)
@@ -319,9 +324,28 @@ func (s refScope) checkString(path, value string) []ValidationError {
 	return errs
 }
 
+// checkFilterOrder rejects a default() that is not the first filter. A missing
+// path resolves to nil and every other filter errors on nil, so a later
+// default never gets the chance to mask it. Putting default first loses
+// nothing: it replaces the empty string too.
+func checkFilterOrder(path string, ref Reference) (ValidationError, bool) {
+	for i, f := range ref.Filters {
+		if f.Name == filterDefault && i > 0 {
+			return ValidationError{
+				Path:    path,
+				Message: fmt.Sprintf("default(...) must be the first filter in %q; a later default cannot mask a missing path", ref.Raw),
+			}, true
+		}
+	}
+	return ValidationError{}, false
+}
+
 func (s refScope) checkRef(path string, ref Reference) (ValidationError, bool) {
 	fail := func(format string, args ...any) (ValidationError, bool) {
 		return ValidationError{Path: path, Message: fmt.Sprintf(format, args...)}, true
+	}
+	if e, bad := checkFilterOrder(path, ref); bad {
+		return e, true
 	}
 	p := ref.Path
 	switch p[0] {
@@ -484,7 +508,7 @@ func validateLiteralInput(path string, decoded any, desc ActionDescriptor) []Val
 		return []ValidationError{{Path: path, Message: fmt.Sprintf("action %q has an unparsable input schema: %v", desc.Name, err)}}
 	}
 
-	var stripped [][]string
+	var stripped [][]pathSeg
 	instance, _ := stripExpressions(decoded, nil, &stripped)
 	relaxSchema(schema, stripped)
 
@@ -512,14 +536,35 @@ func validateLiteralInput(path string, decoded any, desc ActionDescriptor) []Val
 	return nil
 }
 
+// pathSeg is one step of a path into a decoded input value: either an object
+// key or an array index.
+type pathSeg struct {
+	key   string
+	index int
+	isIdx bool
+}
+
+func keySeg(k string) pathSeg { return pathSeg{key: k} }
+func idxSeg(i int) pathSeg    { return pathSeg{index: i, isIdx: true} }
+
+func childPath(path []pathSeg, seg pathSeg) []pathSeg {
+	out := make([]pathSeg, len(path), len(path)+1)
+	copy(out, path)
+	return append(out, seg)
+}
+
 // stripExpressions returns a copy of v with every expression-bearing leaf
-// replaced by null, recording the replaced paths. An array containing an
-// expression is replaced whole: a hole in an array cannot be represented.
+// replaced by null, recording the replaced paths.
 //
-// The key is kept rather than deleted so `additionalProperties: false` still
-// catches an input property the action does not declare, even when its value is
-// an expression.
-func stripExpressions(v any, path []string, stripped *[][]string) (any, bool) {
+// Containers are rebuilt rather than passed through, in objects and arrays
+// alike: an expression nested inside an object inside an array has to reach the
+// schema as null, not as the literal `${{ ... }}` string it is written as.
+// Only a leaf that is itself an expression collapses to null.
+//
+// Object keys are kept rather than deleted so `additionalProperties: false`
+// still catches an input property the action does not declare, even when its
+// value is an expression.
+func stripExpressions(v any, path []pathSeg, stripped *[][]pathSeg) (any, bool) {
 	switch t := v.(type) {
 	case string:
 		if HasExpression(t) {
@@ -534,47 +579,46 @@ func stripExpressions(v any, path []string, stripped *[][]string) (any, bool) {
 		sort.Strings(keys)
 		out := make(map[string]any, len(t))
 		for _, k := range keys {
-			childPath := append(append([]string{}, path...), k)
-			child, hasExpr := stripExpressions(t[k], childPath, stripped)
+			cp := childPath(path, keySeg(k))
+			child, hasExpr := stripExpressions(t[k], cp, stripped)
 			if hasExpr {
-				*stripped = append(*stripped, childPath)
+				*stripped = append(*stripped, cp)
 			}
 			out[k] = child
 		}
 		return out, false
 	case []any:
-		for _, item := range t {
-			if _, hasExpr := stripExpressions(item, path, stripped); hasExpr {
-				return nil, true
+		out := make([]any, len(t))
+		for i, item := range t {
+			cp := childPath(path, idxSeg(i))
+			child, hasExpr := stripExpressions(item, cp, stripped)
+			if hasExpr {
+				*stripped = append(*stripped, cp)
 			}
+			out[i] = child
 		}
-		return t, false
+		return out, false
 	default:
 		return v, false
 	}
 }
 
-// relaxSchema loosens the subschema of every expression-valued property to
+// relaxSchema loosens the subschema of every expression-valued location to
 // `true`, so the null placeholder left by stripExpressions type-checks while
 // `required` and `additionalProperties` keep their bite.
 //
-// It walks `properties` to reach the declaring node, then relaxes that property
-// inside the node's combinator branches too. A property reachable only through
-// `$ref` or `patternProperties` is left alone; the worst case there is a
-// spurious finding on an exotic schema, and every action schema in this repo is
-// a flat object.
-func relaxSchema(schema map[string]any, stripped [][]string) {
+// It walks `properties` and `items` to reach the declaring node, then relaxes
+// that location inside the node's combinator branches too. A location reachable
+// only through `$ref` or `patternProperties` is left alone; the worst case
+// there is a spurious finding on an exotic schema, and every action schema in
+// this repo is a flat object.
+func relaxSchema(schema map[string]any, stripped [][]pathSeg) {
 	for _, p := range stripped {
 		node := schema
 		ok := true
 		for _, seg := range p[:len(p)-1] {
-			props, isMap := node["properties"].(map[string]any)
-			if !isMap {
-				ok = false
-				break
-			}
-			child, isMap := props[seg].(map[string]any)
-			if !isMap {
+			child, found := schemaChild(node, seg)
+			if !found {
 				ok = false
 				break
 			}
@@ -583,8 +627,74 @@ func relaxSchema(schema map[string]any, stripped [][]string) {
 		if !ok {
 			continue
 		}
-		relaxProperty(node, p[len(p)-1])
+		last := p[len(p)-1]
+		if last.isIdx {
+			relaxItems(node, last.index)
+		} else {
+			relaxProperty(node, last.key)
+		}
 	}
+}
+
+// schemaChild descends one path segment into a schema node.
+func schemaChild(node map[string]any, seg pathSeg) (map[string]any, bool) {
+	if seg.isIdx {
+		return schemaChildAtIndex(node, seg.index)
+	}
+	props, ok := node["properties"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	child, ok := props[seg.key].(map[string]any)
+	return child, ok
+}
+
+// schemaChildAtIndex returns the schema node governing one array element,
+// splitting a shared `items` schema into a per-element `prefixItems` entry
+// first so relaxing that element leaves its siblings fully checked.
+func schemaChildAtIndex(node map[string]any, index int) (map[string]any, bool) {
+	if arr, ok := node["items"].([]any); ok { // pre-2020 tuple form
+		if index < len(arr) {
+			if m, ok := arr[index].(map[string]any); ok {
+				return m, true
+			}
+		}
+		return nil, false
+	}
+	items, ok := node["items"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	prefix := splitItems(node, items, index)
+	m, ok := prefix[index].(map[string]any)
+	return m, ok
+}
+
+// splitItems materialises `prefixItems` entries up to index, each an
+// independent copy of the shared `items` schema, and returns the slice.
+//
+// Draft 2020-12 applies `prefixItems` positionally and `items` to the rest, so
+// this is exact for the action schemas in this repo. A schema that pins an
+// older draft would ignore `prefixItems`; none does.
+func splitItems(node map[string]any, items map[string]any, index int) []any {
+	prefix, _ := node["prefixItems"].([]any)
+	for len(prefix) <= index {
+		prefix = append(prefix, deepCopyJSON(items))
+	}
+	node["prefixItems"] = prefix
+	return prefix
+}
+
+func deepCopyJSON(v map[string]any) map[string]any {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return map[string]any{}
+	}
+	var out map[string]any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return map[string]any{}
+	}
+	return out
 }
 
 // relaxProperty sets a declared property's subschema to `true` in node and in
@@ -596,6 +706,24 @@ func relaxProperty(node map[string]any, name string) {
 			props[name] = true
 		}
 	}
+	forEachBranch(node, func(sub map[string]any) { relaxProperty(sub, name) })
+}
+
+// relaxItems relaxes one array element, leaving every other element checked.
+func relaxItems(node map[string]any, index int) {
+	switch items := node["items"].(type) {
+	case map[string]any:
+		prefix := splitItems(node, items, index)
+		prefix[index] = true
+	case []any:
+		if index < len(items) {
+			items[index] = true
+		}
+	}
+	forEachBranch(node, func(sub map[string]any) { relaxItems(sub, index) })
+}
+
+func forEachBranch(node map[string]any, fn func(map[string]any)) {
 	for _, key := range []string{"allOf", "anyOf", "oneOf"} {
 		branches, ok := node[key].([]any)
 		if !ok {
@@ -603,13 +731,13 @@ func relaxProperty(node map[string]any, name string) {
 		}
 		for _, b := range branches {
 			if sub, ok := b.(map[string]any); ok {
-				relaxProperty(sub, name)
+				fn(sub)
 			}
 		}
 	}
 	for _, key := range []string{"if", "then", "else", "not"} {
 		if sub, ok := node[key].(map[string]any); ok {
-			relaxProperty(sub, name)
+			fn(sub)
 		}
 	}
 }

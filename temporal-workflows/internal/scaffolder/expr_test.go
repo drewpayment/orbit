@@ -21,6 +21,7 @@ func testCtx() Ctx {
 			"nilValue":   nil,
 		},
 		Steps: map[string]StepOutput{
+			"my-step": {Output: map[string]any{"value": "dashed"}},
 			"repo": {Output: map[string]any{
 				"repoUrl":  "https://github.com/acme/my-service",
 				"repoName": "my-service",
@@ -46,6 +47,7 @@ func TestResolveString(t *testing.T) {
 		{name: "parameters", in: "${{ parameters.name }}", want: "my service"},
 		{name: "parameters nested", in: "${{ parameters.nested.deep }}", want: "value"},
 		{name: "steps output", in: "${{ steps.repo.output.repoUrl }}", want: "https://github.com/acme/my-service"},
+		{name: "dashed step id", in: "${{ steps.my-step.output.value }}", want: "dashed"},
 		{name: "user", in: "${{ user.email }}", want: "dev@example.com"},
 		{name: "workspace", in: "${{ workspace.slug }}", want: "acme"},
 		{name: "template", in: "${{ template.id }}", want: "t1"},
@@ -97,6 +99,8 @@ func TestResolveString(t *testing.T) {
 		{name: "steps without output segment", in: "${{ steps.repo.repoUrl }}", wantErr: "output"},
 		{name: "unknown namespace", in: "${{ secrets.token }}", wantErr: "unknown namespace"},
 		{name: "unknown filter", in: "${{ parameters.name | rot13 }}", wantErr: "unknown filter"},
+		{name: "default with empty parens", in: "${{ parameters.name | default() }}", wantErr: "argument"},
+		{name: "filter with blank argument", in: "${{ parameters.name | default(  ) }}", wantErr: "argument"},
 		{name: "unterminated expression", in: "${{ parameters.name", wantErr: "unterminated"},
 		{name: "empty expression", in: "${{ }}", wantErr: "empty expression"},
 		{name: "traverse into scalar", in: "${{ parameters.name.oops }}", wantErr: "parameters.name.oops"},
@@ -300,4 +304,23 @@ func TestResolveJSONRoundTripsNonFiniteDefaults(t *testing.T) {
 	out, err := ResolveJSON(testCtx(), json.RawMessage(`{"a":"${{ parameters.absent | default(NaN) }}"}`))
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"a":"NaN"}`, string(out))
+}
+
+func TestSingleExpression(t *testing.T) {
+	ref, err := SingleExpression("${{ parameters.name }}")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"parameters", "name"}, ref.Path)
+
+	ref, err = SingleExpression("parameters.name")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"parameters", "name"}, ref.Path)
+
+	_, err = SingleExpression("  ")
+	assert.ErrorContains(t, err, "empty")
+
+	_, err = SingleExpression("${{ parameters.name }} and more")
+	assert.ErrorContains(t, err, "single expression")
+
+	_, err = SingleExpression("${{ parameters.name")
+	assert.ErrorContains(t, err, "unterminated")
 }
