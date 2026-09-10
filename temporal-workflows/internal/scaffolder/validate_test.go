@@ -43,6 +43,15 @@ func testRegistry() *Registry {
 			in:   `{"type":"object","properties":{"cfg":{"type":"object","properties":{"a":{"type":"string"},"b":{"type":"string"}},"required":["a","b"]}},"required":["cfg"]}`,
 			out:  `{"type":"object","properties":{"ok":{"type":"boolean"}}}`,
 		},
+		&schemaAction{
+			// Mirrors fs:render's input schema: `values` validates its
+			// entries via a schema-valued `additionalProperties` rather than
+			// a declared `properties` map, since its keys are template
+			// authors' own variable names.
+			name: "fs:render",
+			in:   `{"type":"object","properties":{"path":{"type":"string","minLength":1},"values":{"type":"object","additionalProperties":{"type":"string"}}},"required":["path","values"],"additionalProperties":false}`,
+			out:  `{"type":"object","properties":{"path":{"type":"string"}}}`,
+		},
 	)
 }
 
@@ -294,6 +303,32 @@ func TestValidateNestedExpressionRelaxesNestedRequired(t *testing.T) {
 	assert.Empty(t, errs, messages(errs))
 
 	def.Spec.Steps[0].Input = json.RawMessage(`{"cfg":{"a":"${{ parameters.name }}","b":42}}`)
+	assert.NotEmpty(t, Validate(def, testRegistry()))
+}
+
+// TestValidateNestedExpressionUnderAdditionalProperties reproduces a live
+// dry-run bug: an expression nested inside an object whose schema validates
+// entries via a schema-valued `additionalProperties` (fs:render's `values`,
+// e.g. `values.serviceName`) was never relaxed, because relaxSchema/
+// relaxProperty only knew how to reach a key declared under `properties`. The
+// stripped-to-null leaf was then checked against `additionalProperties`'s
+// `{"type":"string"}` and failed as "expected string, but got null", even
+// though the identical expression at a top-level field (declared under
+// `properties`) resolved and validated fine.
+func TestValidateNestedExpressionUnderAdditionalProperties(t *testing.T) {
+	def := validDefinition()
+	def.Spec.Output = nil
+	def.Spec.Steps = []Step{{
+		ID: "render", Name: "render", Action: "fs:render",
+		Input: json.RawMessage(`{"path":"repo","values":{"serviceName":"${{ parameters.name }}"}}`),
+	}}
+	errs := Validate(def, testRegistry())
+	assert.Empty(t, errs, messages(errs))
+
+	// A literal sibling in the same map must still be type-checked: relaxing
+	// the whole `additionalProperties` schema for one expression key must not
+	// silently accept a genuinely wrong-typed literal on another key.
+	def.Spec.Steps[0].Input = json.RawMessage(`{"path":"lit","values":{"serviceName":"${{ parameters.name }}","other":42}}`)
 	assert.NotEmpty(t, Validate(def, testRegistry()))
 }
 

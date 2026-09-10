@@ -55,6 +55,21 @@ var ErrApiSchemasAPINotImplemented = errors.New("orbit-www has no POST /api/inte
 // transient failure (5xx, network error) that IS worth retrying.
 var ErrApiSchemasBadRequest = errors.New("orbit-www rejected the api-schemas request")
 
+// ErrApiSchemaAlreadyExists is returned when the route responds 409 because
+// an api-schemas row with the same slug or name already exists in the
+// workspace, registered by a DIFFERENT run (source.sourceId is the Temporal
+// run id, so a same-run retry never hits this — see the route's cross-run
+// duplicate check). This is a definition problem, not a transient one:
+// callers should not retry and should surface it as a non-retryable input
+// error rather than silently reusing or duplicating the existing schema.
+var ErrApiSchemaAlreadyExists = errors.New("api schema already exists in this workspace")
+
+type apiSchemaConflictResponse struct {
+	Error string `json:"error"`
+	Code  string `json:"code"`
+	Slug  string `json:"slug"`
+}
+
 // PayloadApiSchemaClient calls orbit-www's internal API to register an API
 // schema produced by a scaffolder run (the api:schema:register action).
 //
@@ -64,8 +79,14 @@ var ErrApiSchemasBadRequest = errors.New("orbit-www rejected the api-schemas req
 //	Header: X-API-Key: <ORBIT_INTERNAL_API_KEY>
 //	Body:   ApiSchemaRegisterInput (JSON)
 //	201:    ApiSchemaRegisterResult (JSON)
+//	200:    same run retried the identical (workspace, source, name) — returns
+//	        the existing row instead of duplicating it
 //	404:    route not implemented — surfaced as ErrApiSchemasAPINotImplemented
-//	4xx:    (other than 404) request rejected as sent — surfaced as
+//	409:    a different run already registered the same slug/name in this
+//	        workspace — surfaced as ErrApiSchemaAlreadyExists;
+//	        api:schema:register wraps this as scaffolder.ErrInvalidInput so
+//	        the step fails loudly instead of duplicating
+//	4xx:    (other than 404/409) request rejected as sent — surfaced as
 //	        ErrApiSchemasBadRequest; api:schema:register wraps this as
 //	        scaffolder.ErrInvalidInput so Temporal does not retry it
 //
@@ -132,6 +153,14 @@ func (c *PayloadApiSchemaClient) RegisterSchema(ctx context.Context, in ApiSchem
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, ErrApiSchemasAPINotImplemented
+	}
+	if resp.StatusCode == http.StatusConflict {
+		var parsed apiSchemaConflictResponse
+		slug := in.Name
+		if err := json.Unmarshal(respBody, &parsed); err == nil && parsed.Slug != "" {
+			slug = parsed.Slug
+		}
+		return nil, fmt.Errorf("register api schema: API schema %q already exists in this workspace: %w", slug, ErrApiSchemaAlreadyExists)
 	}
 	if resp.StatusCode/100 == 4 {
 		return nil, fmt.Errorf("register api schema: HTTP %d: %s: %w", resp.StatusCode, string(respBody), ErrApiSchemasBadRequest)
