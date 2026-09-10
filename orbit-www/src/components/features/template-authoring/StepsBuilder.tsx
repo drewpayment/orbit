@@ -29,8 +29,10 @@ import { ExpressionInput } from './ExpressionInput'
 import { SchemaForm } from '@/components/forms/schema-form/SchemaForm'
 import {
   defaultFieldRegistry,
+  isKeyValueObjectSchema,
   type FieldComponent,
   type FieldRegistry,
+  type KeyValueObjectFieldProps,
 } from '@/components/forms/schema-form/field-registry'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -131,12 +133,36 @@ function buildExpressionAwareRegistry(candidates: ExpressionCandidate[]): FieldR
       aria-invalid={rest['aria-invalid']}
     />
   )
+  // Defined ONCE per `buildExpressionAwareRegistry` call (stable across
+  // renders, since it's memoized by `candidates` at the call site in
+  // `StepsBuilder`) rather than freshly inside `resolve()` on every call —
+  // `resolve()` runs on every `SchemaForm` render, and a `FieldComponent`
+  // that's a new function identity each time makes React treat it as a
+  // different component type and remount the field on every keystroke.
+  // Most fields tolerate that (they're purely prop-driven), but
+  // `KeyValueObjectField` keeps uncommitted key-rename drafts in local
+  // state — a remount-per-keystroke silently reverted every rename before
+  // it could be typed. See StepsBuilder.test.tsx "adding a row and typing
+  // an expression value dispatches the updated map".
+  const KeyValueObjectWithExpressions: FieldComponent = (props) => {
+    const Resolved = defaultFieldRegistry.resolve(props.schema, props.uiSchema) as unknown as React.ComponentType<
+      KeyValueObjectFieldProps
+    >
+    return <Resolved {...props} valueField={ExpressionField} />
+  }
   return {
     register: (name, component) => defaultFieldRegistry.register(name, component),
     resolve(schema, uiSchema) {
       const isPlainScalar = !uiSchema?.['ui:field'] && !uiSchema?.['ui:widget'] && !schema.enum
       const isExpressionType = schema.type === 'string' || schema.type === 'number' || schema.type === 'integer'
       if (isPlainScalar && isExpressionType) return ExpressionField
+      // A free-form `{ key: value }` object input (e.g. `fs:render`'s
+      // `values`) resolves to `KeyValueObjectField` — thread ExpressionField
+      // through as its row value editor so a row's value can hold a
+      // `${{ }}` expression via the same insert-expression control other
+      // step inputs get, instead of a bare text input with no such
+      // affordance.
+      if (isKeyValueObjectSchema(schema)) return KeyValueObjectWithExpressions
       const Resolved = defaultFieldRegistry.resolve(schema, uiSchema)
       if (!isExpressionType) return Resolved
       const ExpressionAwareResolved: FieldComponent = (props) =>

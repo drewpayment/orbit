@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, fireEvent } from '@testing-library/react'
+import { cleanup, render, screen, fireEvent, within } from '@testing-library/react'
 import { StepsBuilder } from './StepsBuilder'
 import type { TemplateDefinition } from '@/lib/scaffolder/schema'
 import type { ActionDescriptor } from '@/lib/scaffolder/validate'
@@ -269,6 +269,72 @@ describe('StepsBuilder (typed inputs and step ids)', () => {
     fireEvent.change(idInput, { target: { value: 'Bad Id' } })
     expect(dispatch).not.toHaveBeenCalled()
     expect(screen.getAllByRole('alert').length).toBeGreaterThan(0)
+  })
+})
+
+describe('StepsBuilder (object-typed step inputs)', () => {
+  const fsRenderLike = descriptor({
+    id: 'fs:render:values',
+    family: 'render',
+    name: 'Render with values',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string' },
+        values: {
+          type: 'object',
+          additionalProperties: { type: 'string' },
+          description: 'Template variables available as {{.KEY}}.',
+        },
+      },
+      required: ['path', 'values'],
+    },
+  })
+
+  it('shows a key/value editor for an object-typed input with existing entries', () => {
+    const dispatch = vi.fn()
+    const def = definition([
+      {
+        id: 's1',
+        name: 'S',
+        action: 'fs:render:values',
+        input: { path: 'x', values: { greeting: 'hi' } },
+      },
+    ])
+    render(<StepsBuilder definition={def} dispatch={dispatch} registry={[...registry, fsRenderLike]} />)
+    fireEvent.click(screen.getByRole('button', { name: /expand step/i }))
+    fireEvent.click(screen.getByRole('button', { name: /configure inputs/i }))
+    expect(screen.getByDisplayValue('greeting')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('hi')).toBeInTheDocument()
+  })
+
+  it('adding a row and typing an expression value dispatches the updated map', () => {
+    const dispatch = vi.fn()
+    const def = definition([
+      { id: 's1', name: 'S', action: 'fs:render:values', input: { path: 'x', values: {} } },
+    ])
+    render(<StepsBuilder definition={def} dispatch={dispatch} registry={[...registry, fsRenderLike]} />)
+    fireEvent.click(screen.getByRole('button', { name: /expand step/i }))
+    fireEvent.click(screen.getByRole('button', { name: /configure inputs/i }))
+    fireEvent.click(screen.getByRole('button', { name: /add entry/i }))
+    const keyInput = screen.getByLabelText('Key')
+    fireEvent.change(keyInput, { target: { value: 'foo' } })
+    // The row's value editor is the shared expression-capable control (same
+    // "Insert expression" control used by other step inputs), not a bare
+    // text input with no expression affordance.
+    const row = keyInput.closest('div')!.parentElement!
+    expect(within(row).getByRole('button', { name: /insert expression/i })).toBeInTheDocument()
+    const valueInput = within(row).getAllByRole('textbox')[1]
+    fireEvent.change(valueInput, { target: { value: '${{ parameters.serviceName }}' } })
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'UPDATE_STEP',
+        id: 's1',
+        patch: {
+          input: expect.objectContaining({ values: { foo: '${{ parameters.serviceName }}' } }),
+        },
+      }),
+    )
   })
 })
 

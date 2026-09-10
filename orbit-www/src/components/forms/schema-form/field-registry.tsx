@@ -6,9 +6,11 @@
  * throwing when a name is unregistered — an unrecognized `ui:field`/`ui:widget`
  * degrades gracefully to the type default instead of breaking the form.
  *
- * `object` schemas are NOT resolved here — `SchemaForm` recurses into a
- * nested `SchemaForm` instance for object fields, so the registry only needs
- * to cover leaf field types.
+ * An `object` schema with explicit `properties` is NOT resolved here —
+ * `SchemaForm` recurses into a nested `SchemaForm` instance for those. An
+ * `object` schema with no fixed `properties` (a free-form `{ key: value }`
+ * map — see {@link isKeyValueObjectSchema}) IS resolved here, to
+ * `KeyValueObjectField`, since it has no nested field set to recurse into.
  */
 'use client'
 
@@ -27,7 +29,7 @@ import {
 } from '@/components/ui/select'
 import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { X } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import type { JsonSchema, UiFieldSchema } from './types'
 
 /**
@@ -219,6 +221,197 @@ export function TagInputField({ id, schema, value, onChange, disabled }: FieldCo
   )
 }
 
+function isScalarSchema(schema: JsonSchema | undefined): boolean {
+  return (
+    !!schema &&
+    (schema.type === 'string' ||
+      schema.type === 'number' ||
+      schema.type === 'integer' ||
+      schema.type === 'boolean')
+  )
+}
+
+/**
+ * True for a free-form `{ key: value }` map: `type: object`, no explicit
+ * `properties`, and an `additionalProperties` that is either absent (bare
+ * `{ type: 'object' }` — JSON Schema's default is "any additional keys of
+ * any type"), `true`, or a scalar leaf schema (string/number/integer/
+ * boolean). `additionalProperties: false` is excluded — that schema
+ * declares no keys are allowed at all, so there is nothing to author.
+ *
+ * An object WITH `properties` is out of scope here — `SchemaForm` already
+ * handles that shape by recursing into a nested `SchemaForm` instance.
+ */
+export function isKeyValueObjectSchema(schema: JsonSchema): boolean {
+  if (schema.type !== 'object') return false
+  const hasProperties = !!schema.properties && Object.keys(schema.properties).length > 0
+  if (hasProperties) return false
+  const additionalProperties = schema.additionalProperties
+  if (additionalProperties === undefined || additionalProperties === true) return true
+  if (typeof additionalProperties === 'object') return isScalarSchema(additionalProperties)
+  return false
+}
+
+function isScalarValue(value: unknown): boolean {
+  return value === null || value === undefined || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+}
+
+function defaultScalarValueField(schema: JsonSchema): FieldComponent {
+  if (schema.type === 'number' || schema.type === 'integer') return NumberInputField
+  if (schema.type === 'boolean') return BooleanSwitchField
+  return StringInputField
+}
+
+export interface KeyValueObjectFieldProps extends FieldComponentProps {
+  /**
+   * Row value editor override — passed by callers (e.g. `StepsBuilder`'s
+   * expression-aware registry) that want each row's value to accept a
+   * `${{ }}` expression via the same `ExpressionInput` control used for
+   * other step inputs. Receives the `additionalProperties` leaf schema (not
+   * the outer object schema) as its `schema` prop. Defaults to a plain
+   * scalar input matching that leaf schema's type.
+   */
+  valueField?: FieldComponent
+}
+
+/**
+ * Editor for a free-form `{ key: value }` object — see
+ * {@link isKeyValueObjectSchema} for the schema shapes it applies to (e.g.
+ * `fs:render`'s `values` input). Rows of key + value with add/remove
+ * controls; keys are validated non-empty and unique inline (mirroring the
+ * step-id collision pattern in `StepsBuilder`) rather than blocking typing —
+ * an invalid/duplicate key is shown with an inline error and simply isn't
+ * emitted until fixed, so a transient bad state along the way never
+ * clobbers the last-known-good value. A row whose existing value isn't a
+ * JSON scalar (e.g. legacy or `additionalProperties: true` data) renders
+ * read-only as JSON rather than crashing on an unsupported editor.
+ */
+export function KeyValueObjectField({ id, schema, value, onChange, disabled, valueField }: KeyValueObjectFieldProps) {
+  const obj = value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+  // `obj` is a fresh object/literal reference every render (derived from
+  // `value`, not memoized itself) — depending on `value` alone, not `obj`,
+  // is intentional so this doesn't recompute on every render regardless of
+  // whether the underlying value actually changed.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const entries = React.useMemo(() => Object.entries(obj), [value])
+  const additionalProperties = schema.additionalProperties
+  const apSchema: JsonSchema = typeof additionalProperties === 'object' ? additionalProperties : { type: 'string' }
+  const ValueField = valueField ?? defaultScalarValueField(apSchema)
+
+  // Local key drafts so an in-progress rename (which may transiently be
+  // empty or collide with a sibling key) is visible without being emitted —
+  // reset whenever the committed value changes underneath us.
+  const [keyDrafts, setKeyDrafts] = React.useState<string[]>(() => entries.map(([k]) => k))
+  React.useEffect(() => {
+    setKeyDrafts(entries.map(([k]) => k))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value])
+
+  function emit(nextEntries: Array<[string, unknown]>) {
+    const next: Record<string, unknown> = {}
+    for (const [k, v] of nextEntries) {
+      if (k === '') continue
+      next[k] = v
+    }
+    onChange(next)
+  }
+
+  function updateKeyAt(index: number, newKey: string) {
+    const drafts = [...keyDrafts]
+    drafts[index] = newKey
+    setKeyDrafts(drafts)
+    const others = drafts.filter((_, i) => i !== index)
+    if (newKey !== '' && !others.includes(newKey)) {
+      emit(entries.map(([k, v], i) => [i === index ? newKey : k, v]))
+    }
+  }
+
+  function updateValueAt(index: number, newValue: unknown) {
+    emit(entries.map(([k, v], i) => [k, i === index ? newValue : v]))
+  }
+
+  function removeAt(index: number) {
+    const nextEntries = entries.filter((_, i) => i !== index)
+    setKeyDrafts(nextEntries.map(([k]) => k))
+    emit(nextEntries)
+  }
+
+  function addRow() {
+    const existing = new Set(entries.map(([k]) => k))
+    let candidate = 'key'
+    let n = 1
+    while (existing.has(candidate)) candidate = `key${n++}`
+    emit([...entries, [candidate, apSchema.type === 'boolean' ? false : '']])
+  }
+
+  const keyCounts = keyDrafts.reduce<Record<string, number>>((acc, k) => {
+    if (k !== '') acc[k] = (acc[k] ?? 0) + 1
+    return acc
+  }, {})
+
+  return (
+    <div id={id} className="space-y-2">
+      {entries.length === 0 && <p className="text-sm text-muted-foreground">No entries.</p>}
+      {entries.map(([, rowValue], index) => {
+        const key = keyDrafts[index] ?? ''
+        const duplicate = key !== '' && (keyCounts[key] ?? 0) > 1
+        const empty = key === ''
+        const scalar = isScalarValue(rowValue)
+        return (
+          <div key={index} className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Input
+                aria-label="Key"
+                value={key}
+                placeholder="key"
+                disabled={disabled}
+                onChange={(e) => updateKeyAt(index, e.target.value)}
+                className="max-w-[10rem] font-mono text-xs"
+                aria-invalid={duplicate || empty}
+              />
+              <div className="flex-1">
+                {scalar ? (
+                  <ValueField
+                    schema={apSchema}
+                    value={rowValue}
+                    onChange={(v) => updateValueAt(index, v)}
+                    disabled={disabled}
+                  />
+                ) : (
+                  <Input readOnly disabled value={JSON.stringify(rowValue)} className="font-mono text-xs" />
+                )}
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Remove entry"
+                disabled={disabled}
+                onClick={() => removeAt(index)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            {duplicate && (
+              <p role="alert" className="text-xs text-destructive">
+                Duplicate key &quot;{key}&quot;.
+              </p>
+            )}
+            {empty && (
+              <p role="alert" className="text-xs text-destructive">
+                Key cannot be empty.
+              </p>
+            )}
+          </div>
+        )
+      })}
+      <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={addRow}>
+        <Plus className="mr-1 h-3.5 w-3.5" /> Add entry
+      </Button>
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Registry
 // ---------------------------------------------------------------------------
@@ -235,6 +428,7 @@ function typeDefault(schema: JsonSchema): FieldComponent {
   if (schema.type === 'number' || schema.type === 'integer') return NumberInputField
   if (schema.type === 'boolean') return BooleanSwitchField
   if (isArrayOfString(schema)) return TagInputField
+  if (isKeyValueObjectSchema(schema)) return KeyValueObjectField
   return StringInputField
 }
 
