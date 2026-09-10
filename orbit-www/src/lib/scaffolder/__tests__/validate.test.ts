@@ -67,6 +67,33 @@ function def(overrides: Partial<TemplateDefinition['spec']>): TemplateDefinition
 }
 
 describe('validateDefinition', () => {
+  it('rejects a step timeout that is not a positive Go duration of at most 2h (mirrors the Go engine)', () => {
+    const step = { id: 'a', name: 'A', action: 'debug:log', input: { message: 'x' } }
+    for (const [timeout, expectedMessage] of [
+      ['1', 'Timeout must be a Go duration such as "30s", "5m" or "1h30m"'],
+      ['abc', 'Timeout must be a Go duration such as "30s", "5m" or "1h30m"'],
+      ['0s', 'Timeout must be positive'],
+      ['3h', 'Timeout must not exceed 2h'],
+    ] as const) {
+      const result = validateDefinition(def({ steps: [{ ...step, timeout }] }), registry)
+      expect(result.ok, timeout).toBe(false)
+      expect(result.errors, timeout).toContainEqual({ path: 'spec.steps[0].timeout', message: expectedMessage })
+    }
+    for (const timeout of ['30s', '5m', '1h30m', '1.5h', '2h', '500ms']) {
+      const result = validateDefinition(def({ steps: [{ ...step, timeout }] }), registry)
+      expect(result.errors.filter((e) => e.path.endsWith('.timeout')), timeout).toEqual([])
+    }
+  })
+
+  it('rejects a definition with no steps (mirrors the Go engine)', () => {
+    const result = validateDefinition(def({ steps: [] }), registry)
+    expect(result.ok).toBe(false)
+    expect(result.errors).toContainEqual({
+      path: 'spec.steps',
+      message: 'A template must declare at least one step',
+    })
+  })
+
   it('passes a well-formed definition referencing parameters, earlier steps, and well-known namespaces', () => {
     const d = def({
       steps: [
