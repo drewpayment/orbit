@@ -19,6 +19,7 @@ import { TemplateDefinitionSchema, type TemplateDefinition as DefinitionJson } f
 import { validateDefinition, type ActionDescriptor, type ValidationResult } from '@/lib/scaffolder/validate'
 import { listActions as listActionsRpc } from '@/lib/clients/template-client'
 import { executeRun } from '@/lib/actions/run'
+import { evaluateVisibleIf } from '@/lib/scaffolder/visible-if'
 import type {
   TemplateDefinition as TemplateDefinitionDoc,
   TemplateDefinitionVersion,
@@ -519,6 +520,15 @@ async function loadVersionAndDefinition(
  * field-prefixed message on the FIRST validation failure — startDryRun/
  * startRun call this before persisting anything, so a malformed submission
  * never becomes an action-run row.
+ *
+ * Follow-up from re-review: a property whose `ui:visibleIf` evaluates
+ * `false` against the SUBMITTED `parameters` is dropped from the merged
+ * `required` list before validating — PR #103's SchemaForm unregisters a
+ * hidden field from client-side submission entirely, so the server-side
+ * "required" check must not reject its absence, or every conditional field
+ * becomes impossible to submit. Uses `lib/scaffolder/visible-if.ts`
+ * (evaluator kept behaviourally aligned with the schema-form one — see that
+ * module's docblock).
  */
 function validateRunParameters(version: TemplateDefinitionVersion, parameters: Record<string, unknown>): void {
   const definitionJson = version.definitionJson as { spec?: { parameters?: unknown[] } } | null
@@ -534,10 +544,17 @@ function validateRunParameters(version: TemplateDefinitionVersion, parameters: R
     if (Array.isArray(p.required)) required.push(...p.required)
   }
 
+  const visibleRequired = required.filter((key) => {
+    const prop = properties[key] as Record<string, unknown> | undefined
+    const visibleIf = prop?.['ui:visibleIf']
+    if (typeof visibleIf !== 'string') return true // no condition — always required as declared
+    return evaluateVisibleIf(visibleIf, parameters)
+  })
+
   const schema = {
     type: 'object',
     properties,
-    required,
+    required: visibleRequired,
     additionalProperties: false,
   }
 
