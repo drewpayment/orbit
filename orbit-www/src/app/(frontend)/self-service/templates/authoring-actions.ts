@@ -17,6 +17,7 @@ import {
 import { createDraftVersion, publishVersion, deprecateDefinition } from '@/lib/scaffolder/versions'
 import { TemplateDefinitionSchema, type TemplateDefinition as DefinitionJson } from '@/lib/scaffolder/schema'
 import { validateDefinition, type ActionDescriptor, type ValidationResult } from '@/lib/scaffolder/validate'
+import { RegistryUnavailableError } from '@/lib/scaffolder/registry-errors'
 import { listActions as listActionsRpc } from '@/lib/clients/template-client'
 import { executeRun } from '@/lib/actions/run'
 import type {
@@ -327,16 +328,6 @@ export async function validateTemplateDefinition(definitionJson: unknown): Promi
     throw err
   }
   return validateDefinition(parsed.data, registry)
-}
-
-/** Thrown by {@link listActionRegistry} when the Go worker's ListActions RPC fails — distinguishes "registry down" from a genuine validation failure. */
-export class RegistryUnavailableError extends Error {
-  constructor(cause: unknown) {
-    super(
-      `The action registry is temporarily unavailable (${cause instanceof Error ? cause.message : String(cause)}). Try validating again shortly.`,
-    )
-    this.name = 'RegistryUnavailableError'
-  }
 }
 
 let registryCache: { at: number; entries: ActionDescriptor[] } | null = null
