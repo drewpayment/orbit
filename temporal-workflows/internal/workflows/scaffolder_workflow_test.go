@@ -111,6 +111,16 @@ func twoStepDefinition() scaffolder.Definition {
 			Name: "svc", Title: "Service", Owner: "platform", TargetKind: "service",
 		},
 		Spec: scaffolder.Spec{
+			// A real parameter page, so the fixture passes the actual
+			// validator: `${{ parameters.name }}` below must be declared or
+			// Validate reports an undeclared-parameter finding, and any test
+			// asserting on findings would be measuring the fixture instead of
+			// the thing under test.
+			Parameters: []scaffolder.ParameterPage{{
+				Title:      "Service",
+				Required:   []string{"name"},
+				Properties: map[string]json.RawMessage{"name": json.RawMessage(`{"type":"string"}`)},
+			}},
 			Steps: []scaffolder.Step{
 				{ID: "create", Name: "Create repo", Action: "github:repo:create", Input: json.RawMessage(`{"name":"${{ parameters.name }}"}`)},
 				{ID: "log", Name: "Log it", Action: "debug:log", Input: json.RawMessage(`{"message":"made ${{ steps.create.output.repoUrl }}"}`)},
@@ -119,6 +129,23 @@ func twoStepDefinition() scaffolder.Definition {
 				Text:  "created ${{ steps.create.output.repoUrl }}",
 				Links: []scaffolder.OutputLink{{Title: "Repo", URL: "${{ steps.create.output.repoUrl }}"}},
 			},
+		},
+	}
+}
+
+// testActionCatalog describes the actions the fixture uses, matching the real
+// registry's shape closely enough for validation.
+func testActionCatalog() scaffolder.DescriptorCatalog {
+	return scaffolder.DescriptorCatalog{
+		{
+			Name:         "github:repo:create",
+			InputSchema:  json.RawMessage(`{"type":"object"}`),
+			OutputSchema: json.RawMessage(`{"type":"object","properties":{"repoUrl":{"type":"string"},"ok":{"type":"boolean"}}}`),
+		},
+		{
+			Name:         "debug:log",
+			InputSchema:  json.RawMessage(`{"type":"object"}`),
+			OutputSchema: json.RawMessage(`{"type":"object"}`),
 		},
 	}
 }
@@ -847,18 +874,18 @@ func TestScaffolderValidate_RejectsBadStepTimeouts(t *testing.T) {
 			// up mid-run, after the earlier steps had real side effects.
 			def.Spec.Steps[1].Timeout = tt.timeout
 
-			findings := scaffolder.Validate(&def, scaffolder.DescriptorCatalog{
-				{Name: "github:repo:create", InputSchema: json.RawMessage(`{"type":"object"}`), OutputSchema: json.RawMessage(`{"type":"object","properties":{"repoUrl":{"type":"string"}}}`)},
-				{Name: "debug:log", InputSchema: json.RawMessage(`{"type":"object"}`), OutputSchema: json.RawMessage(`{"type":"object"}`)},
-			})
+			findings := scaffolder.Validate(&def, testActionCatalog())
 
 			var msgs []string
 			for _, f := range findings {
 				msgs = append(msgs, f.Error())
 			}
-			joined := strings.Join(msgs, "\n")
-			require.Contains(t, joined, tt.want)
-			require.Contains(t, joined, "spec.steps[1].timeout")
+			// Exactly one finding: the fixture is otherwise valid, so a
+			// second finding would mean this test is measuring the fixture
+			// rather than the timeout rule.
+			require.Len(t, findings, 1, "unexpected findings: %s", strings.Join(msgs, "; "))
+			require.Contains(t, msgs[0], tt.want)
+			require.Contains(t, msgs[0], "spec.steps[1].timeout")
 		})
 	}
 }
@@ -935,22 +962,39 @@ func (s *ScaffolderWorkflowTestSuite) TestSeededUserAndWorkspaceContextResolve()
 	s.Equal("Acme Inc", got["wsName"])
 }
 
-// A field the run record could not supply resolves to an empty string rather
-// than failing the run. Failing mid-flight over a missing display name would
-// be worse than rendering nothing, and the value is never used for auth.
-func (s *ScaffolderWorkflowTestSuite) TestUnpopulatedUserContextResolvesEmpty() {
+// A field the run record could not supply is absent from the namespace, so a
+// template reading it fails loudly. Seeding "" instead would render an empty
+// owner or contact address into a real repository, which nobody notices until
+// it matters. Authors who want it optional use `| default(...)`.
+func (s *ScaffolderWorkflowTestSuite) TestUnpopulatedUserContextFailsLoudly() {
 	def := twoStepDefinition()
 	def.Spec.Steps = def.Spec.Steps[:1]
-	def.Spec.Steps[0].Input = json.RawMessage(`{"email":"x${{ user.email }}y"}`)
+	def.Spec.Steps[0].Input = json.RawMessage(`{"email":"${{ user.email }}"}`)
 	def.Spec.Output = nil
 
 	// An automation-triggered run has no user, so the dispatcher passes none.
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, baseInput(def))
+	res := s.result()
+
+	s.Equal(ScaffolderStatusFailed, res.Status)
+	s.Contains(res.Error, "unresolved expression path")
+	s.Contains(res.Error, "user.email")
+	s.Empty(s.stubs.executed)
+}
+
+// ...and an author can opt into tolerating it.
+func (s *ScaffolderWorkflowTestSuite) TestUnpopulatedUserContextIsDefaultable() {
+	def := twoStepDefinition()
+	def.Spec.Steps = def.Spec.Steps[:1]
+	def.Spec.Steps[0].Input = json.RawMessage(`{"email":"${{ user.email | default(\"none\") }}"}`)
+	def.Spec.Output = nil
+
 	s.env.ExecuteWorkflow(ScaffolderWorkflow, baseInput(def))
 	s.Equal(ScaffolderStatusSucceeded, s.result().Status)
 
 	var got map[string]any
 	s.Require().NoError(json.Unmarshal(s.stubs.executed[0].Input, &got))
-	s.Equal("xy", got["email"])
+	s.Equal("none", got["email"])
 }
 
 // A dry-run plan must account for every step, so a reader can never mistake a
@@ -1097,4 +1141,18 @@ func (s *ScaffolderWorkflowTestSuite) TestDryRunRedactsActionProvidedPlanEntries
 	s.NotContains(res.Plan[0].Name, "ghp_abcdefghij0123456789")
 	s.Contains(res.Plan[0].Name, "github.com/acme/svc.git")
 	s.NotContains(res.Plan[0].Description, "hunter2hunter2")
+}
+
+// The shared fixture must itself be valid against the real validator. Without
+// this, a fixture defect would show up as spurious findings in every test that
+// asserts on validation, and be mistaken for the behaviour under test.
+func TestTwoStepDefinitionFixtureIsValid(t *testing.T) {
+	def := twoStepDefinition()
+	findings := scaffolder.Validate(&def, testActionCatalog())
+
+	var msgs []string
+	for _, f := range findings {
+		msgs = append(msgs, f.Error())
+	}
+	require.Empty(t, findings, "fixture is not valid: %s", strings.Join(msgs, "; "))
 }

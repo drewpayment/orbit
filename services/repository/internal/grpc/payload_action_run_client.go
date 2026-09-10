@@ -52,6 +52,25 @@ type ActionRunClientInterface interface {
 // handler can answer NotFound rather than Internal.
 var ErrActionRunNotFound = errors.New("action run not found")
 
+// ErrIdentityRouteUnavailable is returned when a 404 came from the framework
+// rather than from the route — i.e. the route is not deployed. It maps to
+// FailedPrecondition, because the fix is deploying orbit-www, not retrying.
+var ErrIdentityRouteUnavailable = errors.New(
+	"action-runs identity route unavailable — is orbit-www up to date?")
+
+// isJSONErrorBody reports whether a 404 body is this API's own
+// {"error": "..."} shape. Next.js answers an unrouted path with HTML, so the
+// body is what separates "no such record" from "no such route".
+func isJSONErrorBody(body []byte) bool {
+	var probe struct {
+		Error *string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &probe); err != nil {
+		return false
+	}
+	return probe.Error != nil
+}
+
 // PayloadActionRunClient reads action runs from orbit-www's internal API.
 //
 // Contract: GET {baseURL}/api/internal/action-runs/{id} with an X-API-Key
@@ -118,6 +137,13 @@ func (c *PayloadActionRunClient) GetActionRun(ctx context.Context, runID string)
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 
 	if resp.StatusCode == http.StatusNotFound {
+		// A 404 from the route means "no such run". A 404 because the route
+		// itself does not exist (orbit-www predates it) is a deployment
+		// problem, and reporting it as "run not found" would send whoever
+		// debugs it looking for a missing record instead of a missing route.
+		if !isJSONErrorBody(body) {
+			return nil, ErrIdentityRouteUnavailable
+		}
 		return nil, ErrActionRunNotFound
 	}
 	if resp.StatusCode/100 != 2 {

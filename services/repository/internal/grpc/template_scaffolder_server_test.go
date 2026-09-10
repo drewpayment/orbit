@@ -771,3 +771,35 @@ func TestStartScaffolderRun_AcceptsARunWithNoTriggeringUser(t *testing.T) {
 	assert.Empty(t, got.UserEmail)
 	assert.Empty(t, got.UserName)
 }
+
+// An undeployed identity route must surface as FailedPrecondition, not as a
+// missing run: the fix is deploying orbit-www, not retrying or hunting records.
+func TestStartScaffolderRun_AbsentIdentityRouteIsFailedPrecondition(t *testing.T) {
+	t.Run("action-runs route missing", func(t *testing.T) {
+		runMock := new(MockActionRunClient)
+		runMock.On("GetActionRun", mock.Anything, testRunID).Return(nil, ErrIdentityRouteUnavailable)
+		defMock := new(MockDefinitionClient)
+
+		server := NewTemplateServer(new(MockScaffolderTemporalClient), nil,
+			WithTemplateDefinitionClient(defMock), WithActionRunClient(runMock))
+		_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(validScaffolderRequest()))
+
+		require.Error(t, err)
+		assert.Equal(t, connect.CodeFailedPrecondition, connectCode(t, err))
+		assert.Contains(t, err.Error(), "orbit-www up to date")
+	})
+
+	t.Run("definition-versions route missing", func(t *testing.T) {
+		runMock := new(MockActionRunClient)
+		runMock.On("GetActionRun", mock.Anything, testRunID).Return(testRun(), nil)
+		defMock := new(MockDefinitionClient)
+		defMock.On("GetDefinitionVersion", mock.Anything, "ver-1").Return(nil, ErrIdentityRouteUnavailable)
+
+		server := NewTemplateServer(new(MockScaffolderTemporalClient), nil,
+			WithTemplateDefinitionClient(defMock), WithActionRunClient(runMock))
+		_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(validScaffolderRequest()))
+
+		require.Error(t, err)
+		assert.Equal(t, connect.CodeFailedPrecondition, connectCode(t, err))
+	})
+}

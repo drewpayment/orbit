@@ -42,7 +42,12 @@ func TestPayloadTemplateDefinitionClient_GetDefinitionVersion(t *testing.T) {
 		{
 			name:      "maps 404 to ErrTemplateDefinitionVersionNotFound",
 			versionID: "missing",
-			handler:   func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) },
+			// The route's own 404 carries its {"error": …} body; a bodyless
+			// 404 means the route is absent (see the absent-route test).
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte(`{"error":"template definition version not found"}`))
+			},
 			wantErrIs: ErrTemplateDefinitionVersionNotFound,
 		},
 		{
@@ -115,4 +120,20 @@ func TestPayloadTemplateDefinitionClient_RejectsAnEmptyID(t *testing.T) {
 	_, err := client.GetDefinitionVersion(context.Background(), "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "id required")
+}
+
+func TestPayloadTemplateDefinitionClient_DistinguishesAnAbsentRoute(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("<!DOCTYPE html><html><body>404</body></html>"))
+	}))
+	defer srv.Close()
+
+	client := NewPayloadTemplateDefinitionClient(srv.URL, "k")
+	_, err := client.GetDefinitionVersion(context.Background(), "ver-1")
+	require.True(t, errors.Is(err, ErrIdentityRouteUnavailable), "got %v", err)
+	require.False(t, errors.Is(err, ErrTemplateDefinitionVersionNotFound))
 }

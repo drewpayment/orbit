@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 	"sync"
@@ -129,8 +130,11 @@ func (s *TemplateServer) StartScaffolderRun(ctx context.Context, req *connect.Re
 	// caller cannot learn whether a version id exists.
 	run, err := s.actionRunClient.GetActionRun(ctx, msg.GetRunId())
 	if err != nil {
-		if errors.Is(err, ErrActionRunNotFound) {
+		switch {
+		case errors.Is(err, ErrActionRunNotFound):
 			return nil, connect.NewError(connect.CodeNotFound, err)
+		case errors.Is(err, ErrIdentityRouteUnavailable):
+			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -140,8 +144,11 @@ func (s *TemplateServer) StartScaffolderRun(ctx context.Context, req *connect.Re
 
 	version, err := s.definitionClient.GetDefinitionVersion(ctx, msg.GetDefinitionVersionId())
 	if err != nil {
-		if errors.Is(err, ErrTemplateDefinitionVersionNotFound) {
+		switch {
+		case errors.Is(err, ErrTemplateDefinitionVersionNotFound):
 			return nil, connect.NewError(connect.CodeNotFound, err)
+		case errors.Is(err, ErrIdentityRouteUnavailable):
+			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -175,6 +182,13 @@ func (s *TemplateServer) StartScaffolderRun(ctx context.Context, req *connect.Re
 	}
 	if run.TriggeredBy != nil {
 		// Prefer the record over the request: orbit-www set this server-side.
+		// A disagreement is not fatal (the record still wins, so nothing
+		// unsafe follows) but it means the caller is confused about whose run
+		// this is, which is worth seeing in the logs.
+		if requested := msg.GetUserId(); requested != "" && requested != run.TriggeredBy.ID {
+			log.Printf("StartScaffolderRun: run %s was triggered by %s but the request said %s; using the run record",
+				run.ID, run.TriggeredBy.ID, requested)
+		}
 		input.UserID = run.TriggeredBy.ID
 		input.UserEmail = run.TriggeredBy.Email
 		input.UserName = run.TriggeredBy.Name

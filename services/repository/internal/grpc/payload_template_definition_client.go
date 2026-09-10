@@ -125,6 +125,11 @@ func (c *PayloadTemplateDefinitionClient) GetDefinitionVersion(ctx context.Conte
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 
 	if resp.StatusCode == http.StatusNotFound {
+		// Same distinction as the action-runs client: a framework 404 means
+		// the route is not deployed, not that the version is missing.
+		if !isJSONErrorBody(body) {
+			return nil, ErrIdentityRouteUnavailable
+		}
 		return nil, ErrTemplateDefinitionVersionNotFound
 	}
 	if resp.StatusCode/100 != 2 {

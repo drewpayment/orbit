@@ -253,19 +253,15 @@ func newScaffolderRun(input ScaffolderWorkflowInput, logger log.Logger) *scaffol
 			Steps:      map[string]scaffolder.StepOutput{},
 			// The keys the engine's validator advertises for these
 			// namespaces, seeded from the run record via the dispatcher.
-			// A field the record could not supply is seeded as an empty
-			// string rather than omitted, so a template referencing it
-			// renders empty instead of failing a whole run mid-flight.
-			User: map[string]any{
-				"id":    input.UserID,
-				"email": input.UserEmail,
-				"name":  input.UserName,
-			},
-			Workspace: map[string]any{
-				"id":   input.WorkspaceID,
-				"slug": input.WorkspaceSlug,
-				"name": input.WorkspaceName,
-			},
+			//
+			// A field the record could not supply is OMITTED, not seeded as an
+			// empty string. A template that reads it then fails with an
+			// unresolved-path error instead of silently rendering nothing into
+			// a real repository — an empty owner or contact address is the
+			// kind of defect nobody notices until it matters. Authors who want
+			// it optional write `${{ user.email | default("") }}`.
+			User:      optionalKeys("id", input.UserID, "email", input.UserEmail, "name", input.UserName),
+			Workspace: optionalKeys("id", input.WorkspaceID, "slug", input.WorkspaceSlug, "name", input.WorkspaceName),
 			Template: map[string]any{
 				"id":          input.DefinitionID,
 				"name":        input.Definition.Metadata.Name,
@@ -694,6 +690,20 @@ func isTerminalScaffolderStatus(status string) bool {
 	default:
 		return false
 	}
+}
+
+// optionalKeys builds a namespace map from key/value pairs, dropping any pair
+// whose value is empty. Dropping rather than seeding "" is what makes an
+// unpopulated field fail loudly when a template reads it.
+func optionalKeys(pairs ...string) map[string]any {
+	out := make(map[string]any, len(pairs)/2)
+	for i := 0; i+1 < len(pairs); i += 2 {
+		if pairs[i+1] == "" {
+			continue
+		}
+		out[pairs[i]] = pairs[i+1]
+	}
+	return out
 }
 
 // workflowNow formats the deterministic workflow clock. Never time.Now().

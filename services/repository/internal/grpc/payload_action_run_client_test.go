@@ -89,9 +89,14 @@ func TestPayloadActionRunClient_GetActionRun(t *testing.T) {
 			},
 		},
 		{
-			name:      "maps 404 to ErrActionRunNotFound",
-			runID:     "missing",
-			handler:   func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) },
+			name:  "maps 404 to ErrActionRunNotFound",
+			runID: "missing",
+			// The route's own 404 carries its {"error": …} body; a bodyless
+			// 404 means the route is absent (see the absent-route test).
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte(`{"error":"action run not found"}`))
+			},
 			wantErrIs: ErrActionRunNotFound,
 		},
 		{
@@ -152,4 +157,59 @@ func TestPayloadActionRunClient_RejectsAnEmptyID(t *testing.T) {
 	_, err := client.GetActionRun(context.Background(), "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "id required")
+}
+
+// A 404 from the route means "no such run". A 404 from the framework means the
+// route is not deployed — reporting that as "run not found" sends whoever
+// debugs it hunting for a missing record instead of a missing route.
+func TestPayloadActionRunClient_DistinguishesAnAbsentRoute(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		body        string
+		contentType string
+		wantErrIs   error
+	}{
+		{
+			name:      "the route's own not-found",
+			body:      `{"error":"action run not found"}`,
+			wantErrIs: ErrActionRunNotFound,
+		},
+		{
+			// What Next.js serves for an unrouted path.
+			name:        "an HTML 404 from the framework",
+			body:        "<!DOCTYPE html><html><body>404: This page could not be found.</body></html>",
+			contentType: "text/html",
+			wantErrIs:   ErrIdentityRouteUnavailable,
+		},
+		{
+			name:      "an empty 404 body",
+			body:      "",
+			wantErrIs: ErrIdentityRouteUnavailable,
+		},
+		{
+			name:      "valid JSON with no error key",
+			body:      `{"message":"nope"}`,
+			wantErrIs: ErrIdentityRouteUnavailable,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				if tt.contentType != "" {
+					w.Header().Set("Content-Type", tt.contentType)
+				}
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer srv.Close()
+
+			client := NewPayloadActionRunClient(srv.URL, "k")
+			_, err := client.GetActionRun(context.Background(), "0123456789abcdef01234567")
+			require.True(t, errors.Is(err, tt.wantErrIs), "got %v", err)
+		})
+	}
 }
