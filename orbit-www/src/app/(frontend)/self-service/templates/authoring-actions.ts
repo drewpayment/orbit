@@ -806,9 +806,9 @@ export async function getRun(runId: string): Promise<ActionRun | null> {
   let run: ActionRun
   try {
     // `depth: 1` populates `run.templateVersion` (one level) and `run.action`
-    // — the consumer run-detail page (`[slug]/run/[runId]/page.tsx`) relies
+    // — the consumer run-detail page (`[id]/run/[runId]/page.tsx`) relies
     // on both WITHOUT a second fetch: `run.templateVersion.definition` for
-    // its cross-slug guard, and `run.action.approvalPolicy` for its
+    // its cross-id/slug guard, and `run.action.approvalPolicy` for its
     // `canApprove` computation. Raising or lowering this depth changes what
     // that page can read directly — check it before changing this.
     run = await payload.findByID({ collection: 'action-runs', id: runId, depth: 1, overrideAccess: true })

@@ -61,6 +61,8 @@ function makeFakePayload(
   const payload = { find, findByID } as unknown as Payload
   return {
     payload,
+    find,
+    findByID,
     setMembershipRole: (role: string | null) => {
       membershipRole = role
     },
@@ -104,48 +106,96 @@ describe('templates/run-actions', () => {
     mockPayloadUser = { id: 'payload-user-1', role: 'member' }
   })
 
-  it('returns null for an unknown slug', async () => {
-    const env = makeFakePayload({ 'template-definitions': [PUBLISHED_DEFINITION] })
-    mockPayload = env.payload
-    const { getTemplateDefinitionBySlug } = await import('./run-actions')
+  describe('getTemplateDefinitionByIdOrSlug', () => {
+    it('returns null for an identifier that matches neither an id nor a slug', async () => {
+      const env = makeFakePayload({ 'template-definitions': [PUBLISHED_DEFINITION] })
+      mockPayload = env.payload
+      const { getTemplateDefinitionByIdOrSlug } = await import('./run-actions')
 
-    expect(await getTemplateDefinitionBySlug('does-not-exist')).toBeNull()
+      expect(await getTemplateDefinitionByIdOrSlug('does-not-exist')).toBeNull()
+    })
+
+    it('returns null (404) for a draft identifier when the caller is a plain member', async () => {
+      const env = makeFakePayload({ 'template-definitions': [DRAFT_DEFINITION] })
+      env.setMembershipRole('member')
+      mockPayload = env.payload
+      const { getTemplateDefinitionByIdOrSlug } = await import('./run-actions')
+
+      expect(await getTemplateDefinitionByIdOrSlug('go-service')).toBeNull()
+      expect(await getTemplateDefinitionByIdOrSlug('def-1')).toBeNull()
+    })
+
+    it('returns the row for a published SLUG to a plain member', async () => {
+      const env = makeFakePayload({ 'template-definitions': [PUBLISHED_DEFINITION] })
+      env.setMembershipRole('member')
+      mockPayload = env.payload
+      const { getTemplateDefinitionByIdOrSlug } = await import('./run-actions')
+
+      const result = await getTemplateDefinitionByIdOrSlug('go-service-published')
+      expect(result?.id).toBe('def-2')
+    })
+
+    it('returns the row for a published ID (resolved via findByID, not the slug find) to a plain member', async () => {
+      const env = makeFakePayload({ 'template-definitions': [PUBLISHED_DEFINITION] })
+      env.setMembershipRole('member')
+      mockPayload = env.payload
+      const { getTemplateDefinitionByIdOrSlug } = await import('./run-actions')
+
+      const result = await getTemplateDefinitionByIdOrSlug('def-2')
+      expect(result?.id).toBe('def-2')
+      expect(env.findByID).toHaveBeenCalledWith(
+        expect.objectContaining({ collection: 'template-definitions', id: 'def-2' }),
+      )
+    })
+
+    it('falls back to a slug lookup when the identifier does not match any id', async () => {
+      const env = makeFakePayload({ 'template-definitions': [PUBLISHED_DEFINITION] })
+      env.setMembershipRole('member')
+      mockPayload = env.payload
+      const { getTemplateDefinitionByIdOrSlug } = await import('./run-actions')
+
+      const result = await getTemplateDefinitionByIdOrSlug('go-service-published')
+      expect(result?.id).toBe('def-2')
+      // findByID was tried first (and threw, per the fake's not-found behavior) before falling back.
+      expect(env.findByID).toHaveBeenCalled()
+      expect(env.find).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { slug: { equals: 'go-service-published' } } }),
+      )
+    })
+
+    it('returns null for a published identifier when the caller has no workspace membership', async () => {
+      const env = makeFakePayload({ 'template-definitions': [PUBLISHED_DEFINITION] })
+      env.setMembershipRole(null)
+      mockPayload = env.payload
+      const { getTemplateDefinitionByIdOrSlug } = await import('./run-actions')
+
+      expect(await getTemplateDefinitionByIdOrSlug('go-service-published')).toBeNull()
+      expect(await getTemplateDefinitionByIdOrSlug('def-2')).toBeNull()
+    })
+
+    it('returns a draft identifier (by id or by slug) to a workspace owner', async () => {
+      const env = makeFakePayload({ 'template-definitions': [DRAFT_DEFINITION] })
+      mockPayload = env.payload
+      const { getTemplateDefinitionByIdOrSlug } = await import('./run-actions')
+
+      expect((await getTemplateDefinitionByIdOrSlug('go-service'))?.id).toBe('def-1')
+      expect((await getTemplateDefinitionByIdOrSlug('def-1'))?.id).toBe('def-1')
+    })
   })
 
-  it('returns null (404) for a draft slug when the caller is a plain member', async () => {
-    const env = makeFakePayload({ 'template-definitions': [DRAFT_DEFINITION] })
-    env.setMembershipRole('member')
-    mockPayload = env.payload
-    const { getTemplateDefinitionBySlug } = await import('./run-actions')
+  describe('getTemplateDefinitionBySlug (back-compat alias)', () => {
+    it('is the same function as getTemplateDefinitionByIdOrSlug', async () => {
+      const { getTemplateDefinitionBySlug, getTemplateDefinitionByIdOrSlug } = await import('./run-actions')
+      expect(getTemplateDefinitionBySlug).toBe(getTemplateDefinitionByIdOrSlug)
+    })
 
-    expect(await getTemplateDefinitionBySlug('go-service')).toBeNull()
-  })
+    it('still resolves a slug', async () => {
+      const env = makeFakePayload({ 'template-definitions': [PUBLISHED_DEFINITION] })
+      env.setMembershipRole('member')
+      mockPayload = env.payload
+      const { getTemplateDefinitionBySlug } = await import('./run-actions')
 
-  it('returns the row for a published slug to a plain member', async () => {
-    const env = makeFakePayload({ 'template-definitions': [PUBLISHED_DEFINITION] })
-    env.setMembershipRole('member')
-    mockPayload = env.payload
-    const { getTemplateDefinitionBySlug } = await import('./run-actions')
-
-    const result = await getTemplateDefinitionBySlug('go-service-published')
-    expect(result?.id).toBe('def-2')
-  })
-
-  it('returns null for a published slug when the caller has no workspace membership', async () => {
-    const env = makeFakePayload({ 'template-definitions': [PUBLISHED_DEFINITION] })
-    env.setMembershipRole(null)
-    mockPayload = env.payload
-    const { getTemplateDefinitionBySlug } = await import('./run-actions')
-
-    expect(await getTemplateDefinitionBySlug('go-service-published')).toBeNull()
-  })
-
-  it('returns a draft slug to a workspace owner', async () => {
-    const env = makeFakePayload({ 'template-definitions': [DRAFT_DEFINITION] })
-    mockPayload = env.payload
-    const { getTemplateDefinitionBySlug } = await import('./run-actions')
-
-    const result = await getTemplateDefinitionBySlug('go-service')
-    expect(result?.id).toBe('def-1')
+      expect((await getTemplateDefinitionBySlug('go-service-published'))?.id).toBe('def-2')
+    })
   })
 })

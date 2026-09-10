@@ -6,7 +6,7 @@ import { ArrowLeft } from 'lucide-react'
 import { getCurrentUser, getPayloadUserFromSession } from '@/lib/auth/session'
 import { isPlatformAdmin } from '@/lib/access/workspace-access'
 import { canRunTemplateDefinition } from '@/lib/templates/authz'
-import { getTemplateDefinitionBySlug } from '../../run-actions'
+import { getTemplateDefinitionByIdOrSlug } from '../../run-actions'
 import { planRun, startRun } from '../../authoring-actions'
 import { getRun } from '../../authoring-actions'
 import { TemplateDefinitionSchema } from '@/lib/scaffolder/schema'
@@ -18,23 +18,28 @@ import { RunWizard } from '@/components/features/template-authoring/RunWizard'
 import type { TemplateDefinitionVersion } from '@/payload-types'
 
 interface PageProps {
-  params: Promise<{ slug: string }>
+  // Named `id` (not `slug`) to match `/self-service/templates/[id]/edit`
+  // (the authoring-shell route) — Next.js requires one consistent dynamic
+  // segment name per path across all routes sharing that path. The value
+  // can be either a definition's Payload id OR its slug;
+  // `getTemplateDefinitionByIdOrSlug` resolves both.
+  params: Promise<{ id: string }>
 }
 
 /**
  * Consumer run wizard entry point (Phase 2 plan Task 16). Resolves the
- * PUBLISHED template by slug, re-checks `canRunTemplateDefinition`
- * explicitly (defense in depth — `getTemplateDefinitionBySlug` already
+ * PUBLISHED template by id or slug, re-checks `canRunTemplateDefinition`
+ * explicitly (defense in depth — `getTemplateDefinitionByIdOrSlug` already
  * gates this, but a route whose entire purpose is "run this template"
  * checks the run permission directly rather than solely trusting a shared
  * loader's internal gate), and 404s on any denial or non-published status
  * rather than redirecting (never leaks whether an unpublished/nonexistent
- * slug exists).
+ * id/slug exists).
  */
 export default async function RunTemplatePage({ params }: PageProps) {
-  const { slug } = await params
+  const { id } = await params
 
-  const definition = await getTemplateDefinitionBySlug(slug)
+  const definition = await getTemplateDefinitionByIdOrSlug(id)
   if (!definition || definition.status !== 'published') notFound()
 
   const payload = await getPayload({ config })
@@ -85,7 +90,7 @@ export default async function RunTemplatePage({ params }: PageProps) {
           </div>
 
           <RunWizard
-            slug={slug}
+            templateId={id}
             templateVersionId={version.id}
             pages={pages}
             planRun={planRun}

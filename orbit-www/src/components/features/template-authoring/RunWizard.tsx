@@ -42,8 +42,14 @@ export interface RunWizardStartResult {
 }
 
 export interface RunWizardProps {
-  /** The template's slug — used to build the redirect to the run detail route. */
-  slug: string
+  /**
+   * The identifier the caller navigated with (a definition's Payload id OR
+   * its slug — the route param is named `id` to match
+   * `/self-service/templates/[id]/edit`, but accepts either) — used
+   * as-is to build the redirect to the run detail route, so the URL stays
+   * consistent with however the user arrived here.
+   */
+  templateId: string
   templateVersionId: string
   pages: SchemaFormPage[]
   planRun: (input: RunWizardPlanInput) => Promise<{ runId: string }>
@@ -67,7 +73,7 @@ function asPlannedChanges(plan: unknown): PlannedChangeLike[] | null {
   )
 }
 
-export function RunWizard({ slug, templateVersionId, pages, planRun, startRun, getRun }: RunWizardProps) {
+export function RunWizard({ templateId, templateVersionId, pages, planRun, startRun, getRun }: RunWizardProps) {
   const router = useRouter()
   const [phase, setPhase] = React.useState<Phase>(pages.length === 0 ? 'review' : 'form')
   const [parameters, setParameters] = React.useState<Record<string, unknown>>({})
@@ -114,7 +120,7 @@ export function RunWizard({ slug, templateVersionId, pages, planRun, startRun, g
     setSubmitError(null)
     try {
       const { runId } = await startRun({ templateVersionId, parameters })
-      router.push(`/self-service/templates/${slug}/run/${runId}`)
+      router.push(`/self-service/templates/${templateId}/run/${runId}`)
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Failed to start the run.')
       setSubmitting(false)
