@@ -45,6 +45,18 @@ const (
 	// TemplateServiceListAvailableOrgsProcedure is the fully-qualified name of the TemplateService's
 	// ListAvailableOrgs RPC.
 	TemplateServiceListAvailableOrgsProcedure = "/idp.template.v1.TemplateService/ListAvailableOrgs"
+	// TemplateServiceStartScaffolderRunProcedure is the fully-qualified name of the TemplateService's
+	// StartScaffolderRun RPC.
+	TemplateServiceStartScaffolderRunProcedure = "/idp.template.v1.TemplateService/StartScaffolderRun"
+	// TemplateServiceGetRunProgressProcedure is the fully-qualified name of the TemplateService's
+	// GetRunProgress RPC.
+	TemplateServiceGetRunProgressProcedure = "/idp.template.v1.TemplateService/GetRunProgress"
+	// TemplateServiceCancelRunProcedure is the fully-qualified name of the TemplateService's CancelRun
+	// RPC.
+	TemplateServiceCancelRunProcedure = "/idp.template.v1.TemplateService/CancelRun"
+	// TemplateServiceListActionsProcedure is the fully-qualified name of the TemplateService's
+	// ListActions RPC.
+	TemplateServiceListActionsProcedure = "/idp.template.v1.TemplateService/ListActions"
 )
 
 // TemplateServiceClient is a client for the idp.template.v1.TemplateService service.
@@ -57,6 +69,15 @@ type TemplateServiceClient interface {
 	CancelInstantiation(context.Context, *connect.Request[v1.CancelRequest]) (*connect.Response[v1.CancelResponse], error)
 	// List available GitHub organizations for a workspace
 	ListAvailableOrgs(context.Context, *connect.Request[v1.ListAvailableOrgsRequest]) (*connect.Response[v1.ListAvailableOrgsResponse], error)
+	// Start a new v2 ScaffolderWorkflow run for a published template definition version
+	StartScaffolderRun(context.Context, *connect.Request[v1.StartScaffolderRunRequest]) (*connect.Response[v1.StartScaffolderRunResponse], error)
+	// Get the current step-by-step progress of a scaffolder run
+	GetRunProgress(context.Context, *connect.Request[v1.GetRunProgressRequest]) (*connect.Response[v1.GetRunProgressResponse], error)
+	// Cancel an in-progress scaffolder run
+	CancelRun(context.Context, *connect.Request[v1.CancelRunRequest]) (*connect.Response[v1.CancelRunResponse], error)
+	// List the action registry descriptors known to the worker (for definition
+	// validation and Phase 2 authoring UI autocomplete)
+	ListActions(context.Context, *connect.Request[v1.ListActionsRequest]) (*connect.Response[v1.ListActionsResponse], error)
 }
 
 // NewTemplateServiceClient constructs a client for the idp.template.v1.TemplateService service. By
@@ -94,6 +115,30 @@ func NewTemplateServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(templateServiceMethods.ByName("ListAvailableOrgs")),
 			connect.WithClientOptions(opts...),
 		),
+		startScaffolderRun: connect.NewClient[v1.StartScaffolderRunRequest, v1.StartScaffolderRunResponse](
+			httpClient,
+			baseURL+TemplateServiceStartScaffolderRunProcedure,
+			connect.WithSchema(templateServiceMethods.ByName("StartScaffolderRun")),
+			connect.WithClientOptions(opts...),
+		),
+		getRunProgress: connect.NewClient[v1.GetRunProgressRequest, v1.GetRunProgressResponse](
+			httpClient,
+			baseURL+TemplateServiceGetRunProgressProcedure,
+			connect.WithSchema(templateServiceMethods.ByName("GetRunProgress")),
+			connect.WithClientOptions(opts...),
+		),
+		cancelRun: connect.NewClient[v1.CancelRunRequest, v1.CancelRunResponse](
+			httpClient,
+			baseURL+TemplateServiceCancelRunProcedure,
+			connect.WithSchema(templateServiceMethods.ByName("CancelRun")),
+			connect.WithClientOptions(opts...),
+		),
+		listActions: connect.NewClient[v1.ListActionsRequest, v1.ListActionsResponse](
+			httpClient,
+			baseURL+TemplateServiceListActionsProcedure,
+			connect.WithSchema(templateServiceMethods.ByName("ListActions")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -103,6 +148,10 @@ type templateServiceClient struct {
 	getInstantiationProgress *connect.Client[v1.GetProgressRequest, v1.GetProgressResponse]
 	cancelInstantiation      *connect.Client[v1.CancelRequest, v1.CancelResponse]
 	listAvailableOrgs        *connect.Client[v1.ListAvailableOrgsRequest, v1.ListAvailableOrgsResponse]
+	startScaffolderRun       *connect.Client[v1.StartScaffolderRunRequest, v1.StartScaffolderRunResponse]
+	getRunProgress           *connect.Client[v1.GetRunProgressRequest, v1.GetRunProgressResponse]
+	cancelRun                *connect.Client[v1.CancelRunRequest, v1.CancelRunResponse]
+	listActions              *connect.Client[v1.ListActionsRequest, v1.ListActionsResponse]
 }
 
 // StartInstantiation calls idp.template.v1.TemplateService.StartInstantiation.
@@ -125,6 +174,26 @@ func (c *templateServiceClient) ListAvailableOrgs(ctx context.Context, req *conn
 	return c.listAvailableOrgs.CallUnary(ctx, req)
 }
 
+// StartScaffolderRun calls idp.template.v1.TemplateService.StartScaffolderRun.
+func (c *templateServiceClient) StartScaffolderRun(ctx context.Context, req *connect.Request[v1.StartScaffolderRunRequest]) (*connect.Response[v1.StartScaffolderRunResponse], error) {
+	return c.startScaffolderRun.CallUnary(ctx, req)
+}
+
+// GetRunProgress calls idp.template.v1.TemplateService.GetRunProgress.
+func (c *templateServiceClient) GetRunProgress(ctx context.Context, req *connect.Request[v1.GetRunProgressRequest]) (*connect.Response[v1.GetRunProgressResponse], error) {
+	return c.getRunProgress.CallUnary(ctx, req)
+}
+
+// CancelRun calls idp.template.v1.TemplateService.CancelRun.
+func (c *templateServiceClient) CancelRun(ctx context.Context, req *connect.Request[v1.CancelRunRequest]) (*connect.Response[v1.CancelRunResponse], error) {
+	return c.cancelRun.CallUnary(ctx, req)
+}
+
+// ListActions calls idp.template.v1.TemplateService.ListActions.
+func (c *templateServiceClient) ListActions(ctx context.Context, req *connect.Request[v1.ListActionsRequest]) (*connect.Response[v1.ListActionsResponse], error) {
+	return c.listActions.CallUnary(ctx, req)
+}
+
 // TemplateServiceHandler is an implementation of the idp.template.v1.TemplateService service.
 type TemplateServiceHandler interface {
 	// Start a new template instantiation workflow
@@ -135,6 +204,15 @@ type TemplateServiceHandler interface {
 	CancelInstantiation(context.Context, *connect.Request[v1.CancelRequest]) (*connect.Response[v1.CancelResponse], error)
 	// List available GitHub organizations for a workspace
 	ListAvailableOrgs(context.Context, *connect.Request[v1.ListAvailableOrgsRequest]) (*connect.Response[v1.ListAvailableOrgsResponse], error)
+	// Start a new v2 ScaffolderWorkflow run for a published template definition version
+	StartScaffolderRun(context.Context, *connect.Request[v1.StartScaffolderRunRequest]) (*connect.Response[v1.StartScaffolderRunResponse], error)
+	// Get the current step-by-step progress of a scaffolder run
+	GetRunProgress(context.Context, *connect.Request[v1.GetRunProgressRequest]) (*connect.Response[v1.GetRunProgressResponse], error)
+	// Cancel an in-progress scaffolder run
+	CancelRun(context.Context, *connect.Request[v1.CancelRunRequest]) (*connect.Response[v1.CancelRunResponse], error)
+	// List the action registry descriptors known to the worker (for definition
+	// validation and Phase 2 authoring UI autocomplete)
+	ListActions(context.Context, *connect.Request[v1.ListActionsRequest]) (*connect.Response[v1.ListActionsResponse], error)
 }
 
 // NewTemplateServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -168,6 +246,30 @@ func NewTemplateServiceHandler(svc TemplateServiceHandler, opts ...connect.Handl
 		connect.WithSchema(templateServiceMethods.ByName("ListAvailableOrgs")),
 		connect.WithHandlerOptions(opts...),
 	)
+	templateServiceStartScaffolderRunHandler := connect.NewUnaryHandler(
+		TemplateServiceStartScaffolderRunProcedure,
+		svc.StartScaffolderRun,
+		connect.WithSchema(templateServiceMethods.ByName("StartScaffolderRun")),
+		connect.WithHandlerOptions(opts...),
+	)
+	templateServiceGetRunProgressHandler := connect.NewUnaryHandler(
+		TemplateServiceGetRunProgressProcedure,
+		svc.GetRunProgress,
+		connect.WithSchema(templateServiceMethods.ByName("GetRunProgress")),
+		connect.WithHandlerOptions(opts...),
+	)
+	templateServiceCancelRunHandler := connect.NewUnaryHandler(
+		TemplateServiceCancelRunProcedure,
+		svc.CancelRun,
+		connect.WithSchema(templateServiceMethods.ByName("CancelRun")),
+		connect.WithHandlerOptions(opts...),
+	)
+	templateServiceListActionsHandler := connect.NewUnaryHandler(
+		TemplateServiceListActionsProcedure,
+		svc.ListActions,
+		connect.WithSchema(templateServiceMethods.ByName("ListActions")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/idp.template.v1.TemplateService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TemplateServiceStartInstantiationProcedure:
@@ -178,6 +280,14 @@ func NewTemplateServiceHandler(svc TemplateServiceHandler, opts ...connect.Handl
 			templateServiceCancelInstantiationHandler.ServeHTTP(w, r)
 		case TemplateServiceListAvailableOrgsProcedure:
 			templateServiceListAvailableOrgsHandler.ServeHTTP(w, r)
+		case TemplateServiceStartScaffolderRunProcedure:
+			templateServiceStartScaffolderRunHandler.ServeHTTP(w, r)
+		case TemplateServiceGetRunProgressProcedure:
+			templateServiceGetRunProgressHandler.ServeHTTP(w, r)
+		case TemplateServiceCancelRunProcedure:
+			templateServiceCancelRunHandler.ServeHTTP(w, r)
+		case TemplateServiceListActionsProcedure:
+			templateServiceListActionsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -201,4 +311,20 @@ func (UnimplementedTemplateServiceHandler) CancelInstantiation(context.Context, 
 
 func (UnimplementedTemplateServiceHandler) ListAvailableOrgs(context.Context, *connect.Request[v1.ListAvailableOrgsRequest]) (*connect.Response[v1.ListAvailableOrgsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.template.v1.TemplateService.ListAvailableOrgs is not implemented"))
+}
+
+func (UnimplementedTemplateServiceHandler) StartScaffolderRun(context.Context, *connect.Request[v1.StartScaffolderRunRequest]) (*connect.Response[v1.StartScaffolderRunResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.template.v1.TemplateService.StartScaffolderRun is not implemented"))
+}
+
+func (UnimplementedTemplateServiceHandler) GetRunProgress(context.Context, *connect.Request[v1.GetRunProgressRequest]) (*connect.Response[v1.GetRunProgressResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.template.v1.TemplateService.GetRunProgress is not implemented"))
+}
+
+func (UnimplementedTemplateServiceHandler) CancelRun(context.Context, *connect.Request[v1.CancelRunRequest]) (*connect.Response[v1.CancelRunResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.template.v1.TemplateService.CancelRun is not implemented"))
+}
+
+func (UnimplementedTemplateServiceHandler) ListActions(context.Context, *connect.Request[v1.ListActionsRequest]) (*connect.Response[v1.ListActionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.template.v1.TemplateService.ListActions is not implemented"))
 }
