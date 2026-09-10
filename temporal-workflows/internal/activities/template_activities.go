@@ -142,6 +142,14 @@ type TokenService interface {
 	GetInstallationToken(ctx context.Context, installationID string) (string, error)
 }
 
+// PayloadTemplateClient defines the interface for finalizing a template
+// instantiation against orbit-www's internal API. Satisfied by
+// services.PayloadTemplateClient; an interface here so tests can supply a
+// mock (mirrors the PatternInstance activities' client-interface pattern).
+type PayloadTemplateClient interface {
+	FinalizeInstantiation(ctx context.Context, templateID string, in services.FinalizeInstantiationInput) (*services.FinalizeInstantiationResult, error)
+}
+
 // GitHubTemplateClient defines the interface for GitHub template operations
 type GitHubTemplateClient interface {
 	// CreateRepoFromTemplate creates a new repository from a GitHub template
@@ -153,20 +161,22 @@ type GitHubTemplateClient interface {
 
 // TemplateActivities holds the dependencies for template instantiation activities
 type TemplateActivities struct {
-	tokenService TokenService
-	workDir      string
-	logger       *slog.Logger
+	tokenService  TokenService
+	payloadClient PayloadTemplateClient
+	workDir       string
+	logger        *slog.Logger
 }
 
 // NewTemplateActivities creates a new instance of TemplateActivities
-func NewTemplateActivities(tokenService TokenService, workDir string, logger *slog.Logger) *TemplateActivities {
+func NewTemplateActivities(tokenService TokenService, payloadClient PayloadTemplateClient, workDir string, logger *slog.Logger) *TemplateActivities {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &TemplateActivities{
-		tokenService: tokenService,
-		workDir:      workDir,
-		logger:       logger,
+		tokenService:  tokenService,
+		payloadClient: payloadClient,
+		workDir:       workDir,
+		logger:        logger,
 	}
 }
 
@@ -524,7 +534,9 @@ func (a *TemplateActivities) CleanupWorkDir(ctx context.Context, workDir string)
 	return nil
 }
 
-// FinalizeInstantiation records template usage and sends notifications
+// FinalizeInstantiation records template usage (usageCount) and creates the
+// resulting catalog entity via orbit-www's internal API. Notification
+// sending is out of scope for Phase 0.
 func (a *TemplateActivities) FinalizeInstantiation(ctx context.Context, input FinalizeInstantiationActivityInput) error {
 	a.logger.Info("Finalizing template instantiation",
 		"templateID", input.TemplateID,
@@ -533,12 +545,19 @@ func (a *TemplateActivities) FinalizeInstantiation(ctx context.Context, input Fi
 		"repoName", input.RepoName,
 		"userID", input.UserID)
 
-	// TODO: Record usage in database
-	// TODO: Send notification to user
-	// TODO: Update template usage statistics
+	result, err := a.payloadClient.FinalizeInstantiation(ctx, input.TemplateID, services.FinalizeInstantiationInput{
+		WorkspaceID: input.WorkspaceID,
+		RepoURL:     input.RepoURL,
+		RepoName:    input.RepoName,
+		UserID:      input.UserID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to finalize instantiation: %w", err)
+	}
 
-	// For now, just log
-	a.logger.Info("Template instantiation finalized (placeholder implementation)")
+	a.logger.Info("Template instantiation finalized",
+		"catalogEntityID", result.CatalogEntityID,
+		"usageCount", result.UsageCount)
 	return nil
 }
 

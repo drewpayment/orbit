@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	"github.com/drewpayment/orbit/temporal-workflows/internal/services"
 )
 
 // MockTokenService for testing
@@ -21,8 +23,22 @@ func (m *MockTokenService) GetInstallationToken(ctx context.Context, installatio
 	return args.String(0), args.Error(1)
 }
 
+// MockPayloadTemplateClient for testing
+type MockPayloadTemplateClient struct {
+	mock.Mock
+}
+
+func (m *MockPayloadTemplateClient) FinalizeInstantiation(ctx context.Context, templateID string, in services.FinalizeInstantiationInput) (*services.FinalizeInstantiationResult, error) {
+	args := m.Called(ctx, templateID, in)
+	var result *services.FinalizeInstantiationResult
+	if v := args.Get(0); v != nil {
+		result = v.(*services.FinalizeInstantiationResult)
+	}
+	return result, args.Error(1)
+}
+
 func TestValidateInstantiationInput_Success(t *testing.T) {
-	activities := NewTemplateActivities(nil, "/tmp/work", nil)
+	activities := NewTemplateActivities(nil, nil, "/tmp/work", nil)
 
 	input := TemplateInstantiationInput{
 		TemplateID:       "template-123",
@@ -39,7 +55,7 @@ func TestValidateInstantiationInput_Success(t *testing.T) {
 }
 
 func TestValidateInstantiationInput_MissingFields(t *testing.T) {
-	activities := NewTemplateActivities(nil, "/tmp/work", nil)
+	activities := NewTemplateActivities(nil, nil, "/tmp/work", nil)
 
 	input := TemplateInstantiationInput{
 		TemplateID: "template-123",
@@ -52,7 +68,7 @@ func TestValidateInstantiationInput_MissingFields(t *testing.T) {
 }
 
 func TestValidateInstantiationInput_InvalidRepoName(t *testing.T) {
-	activities := NewTemplateActivities(nil, "/tmp/work", nil)
+	activities := NewTemplateActivities(nil, nil, "/tmp/work", nil)
 
 	input := TemplateInstantiationInput{
 		TemplateID:     "template-123",
@@ -84,7 +100,7 @@ func TestApplyTemplateVariables_ContentSubstitution(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.go"), []byte("package {{SERVICE_NAME}}\n"), 0644))
 
-	activities := NewTemplateActivities(nil, "/tmp/work", nil)
+	activities := NewTemplateActivities(nil, nil, "/tmp/work", nil)
 	result, err := activities.ApplyTemplateVariables(context.Background(), ApplyTemplateVariablesActivityInput{
 		WorkDir:   dir,
 		Variables: map[string]string{"SERVICE_NAME": "orders"},
@@ -101,7 +117,7 @@ func TestApplyTemplateVariables_FileNameSubstitution(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "{{SERVICE_NAME}}.go"), []byte("package {{SERVICE_NAME}}\n"), 0644))
 
-	activities := NewTemplateActivities(nil, "/tmp/work", nil)
+	activities := NewTemplateActivities(nil, nil, "/tmp/work", nil)
 	result, err := activities.ApplyTemplateVariables(context.Background(), ApplyTemplateVariablesActivityInput{
 		WorkDir:   dir,
 		Variables: map[string]string{"SERVICE_NAME": "orders"},
@@ -124,7 +140,7 @@ func TestApplyTemplateVariables_DirNameSubstitution(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "src", "{{SERVICE_NAME}}"), 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "src", "{{SERVICE_NAME}}", "main.go"), []byte("package main\n"), 0644))
 
-	activities := NewTemplateActivities(nil, "/tmp/work", nil)
+	activities := NewTemplateActivities(nil, nil, "/tmp/work", nil)
 	result, err := activities.ApplyTemplateVariables(context.Background(), ApplyTemplateVariablesActivityInput{
 		WorkDir:   dir,
 		Variables: map[string]string{"SERVICE_NAME": "orders"},
@@ -143,7 +159,7 @@ func TestApplyTemplateVariables_BinaryFileSkipsContentNotName(t *testing.T) {
 	binaryContent := []byte("PNG\x00fake-binary-data")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "{{SERVICE_NAME}}.png"), binaryContent, 0644))
 
-	activities := NewTemplateActivities(nil, "/tmp/work", nil)
+	activities := NewTemplateActivities(nil, nil, "/tmp/work", nil)
 	result, err := activities.ApplyTemplateVariables(context.Background(), ApplyTemplateVariablesActivityInput{
 		WorkDir:   dir,
 		Variables: map[string]string{"SERVICE_NAME": "orders"},
@@ -166,7 +182,7 @@ func TestApplyTemplateVariables_RawFilesOptOut(t *testing.T) {
 	rawContent := "release: {{ .Release.Name }}\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "charts", "values.yaml"), []byte(rawContent), 0644))
 
-	activities := NewTemplateActivities(nil, "/tmp/work", nil)
+	activities := NewTemplateActivities(nil, nil, "/tmp/work", nil)
 	result, err := activities.ApplyTemplateVariables(context.Background(), ApplyTemplateVariablesActivityInput{
 		WorkDir:   dir,
 		Variables: map[string]string{"SERVICE_NAME": "orders"},
@@ -184,7 +200,7 @@ func TestApplyTemplateVariables_ParseFailureIsNonFatal(t *testing.T) {
 	unresolvable := "release: {{ .Values.foo }}\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "chart.yaml"), []byte(unresolvable), 0644))
 
-	activities := NewTemplateActivities(nil, "/tmp/work", nil)
+	activities := NewTemplateActivities(nil, nil, "/tmp/work", nil)
 	result, err := activities.ApplyTemplateVariables(context.Background(), ApplyTemplateVariablesActivityInput{
 		WorkDir:   dir,
 		Variables: map[string]string{"SERVICE_NAME": "orders"},
@@ -203,7 +219,7 @@ func TestApplyTemplateVariables_NoVariables(t *testing.T) {
 	original := "package {{SERVICE_NAME}}\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.go"), []byte(original), 0644))
 
-	activities := NewTemplateActivities(nil, "/tmp/work", nil)
+	activities := NewTemplateActivities(nil, nil, "/tmp/work", nil)
 	result, err := activities.ApplyTemplateVariables(context.Background(), ApplyTemplateVariablesActivityInput{
 		WorkDir:   dir,
 		Variables: map[string]string{},
@@ -214,4 +230,49 @@ func TestApplyTemplateVariables_NoVariables(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(dir, "main.go"))
 	require.NoError(t, err)
 	assert.Equal(t, original, string(content))
+}
+
+func TestFinalizeInstantiation_Success(t *testing.T) {
+	mockClient := new(MockPayloadTemplateClient)
+	input := FinalizeInstantiationActivityInput{
+		TemplateID:  "template-123",
+		WorkspaceID: "workspace-456",
+		RepoURL:     "https://github.com/my-org/new-service",
+		RepoName:    "new-service",
+		UserID:      "user-789",
+	}
+	expectedClientInput := services.FinalizeInstantiationInput{
+		WorkspaceID: input.WorkspaceID,
+		RepoURL:     input.RepoURL,
+		RepoName:    input.RepoName,
+		UserID:      input.UserID,
+	}
+	mockClient.On("FinalizeInstantiation", mock.Anything, input.TemplateID, expectedClientInput).
+		Return(&services.FinalizeInstantiationResult{CatalogEntityID: "entity-1", UsageCount: 4}, nil)
+
+	activities := NewTemplateActivities(nil, mockClient, "/tmp/work", nil)
+	err := activities.FinalizeInstantiation(context.Background(), input)
+
+	require.NoError(t, err)
+	mockClient.AssertExpectations(t)
+}
+
+func TestFinalizeInstantiation_ClientError(t *testing.T) {
+	mockClient := new(MockPayloadTemplateClient)
+	input := FinalizeInstantiationActivityInput{
+		TemplateID:  "template-123",
+		WorkspaceID: "workspace-456",
+		RepoURL:     "https://github.com/my-org/new-service",
+		RepoName:    "new-service",
+	}
+	mockClient.On("FinalizeInstantiation", mock.Anything, input.TemplateID, mock.Anything).
+		Return(nil, services.ErrTemplateNotFound)
+
+	activities := NewTemplateActivities(nil, mockClient, "/tmp/work", nil)
+	err := activities.FinalizeInstantiation(context.Background(), input)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, services.ErrTemplateNotFound)
+	assert.Contains(t, err.Error(), "failed to finalize instantiation")
+	mockClient.AssertExpectations(t)
 }
