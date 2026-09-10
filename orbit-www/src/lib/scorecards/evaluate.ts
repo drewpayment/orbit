@@ -8,7 +8,7 @@ import type {
   ScorecardRuleResult,
 } from '@/payload-types'
 import type { EntityKind } from '@/collections/catalog/constants'
-import { resolveEntityType } from '@/lib/catalog/entity-types'
+import { resolveEntityType, type EntityTypeDefinition } from '@/lib/catalog/entity-types'
 import {
   computeScorecardScore,
   computeOverallScore,
@@ -64,6 +64,22 @@ export type EvalContext = {
    *  `entity-score` rules' weighted-average aggregation over related
    *  entities. Missing entries default to weight 1 (see `evalEntityScore`). */
   weights?: Record<string, number>
+  /** Precomputed golden-path provenance lookup for the entity under
+   *  evaluation. Only `golden-path-provenance` rules consult this;
+   *  absent/undefined is fine for the other rule types. Built async by the
+   *  orchestrator (resolving the entity's kind's `entity-types` row and, when
+   *  set, the entity's `source.sourceTemplateDefinition` status) so this
+   *  function itself stays pure/sync. */
+  goldenPath?: {
+    /** `entity-types[kind].goldenPath.templateDefinition` id, or null when no
+     *  golden path is configured for this kind. */
+    entityTypeTemplateDefinitionId: string | null
+    /** `entity.source.sourceTemplateDefinition` id, or null when unset. */
+    entitySourceTemplateDefinitionId: string | null
+    /** `status` of the template-definitions row at
+     *  `entitySourceTemplateDefinitionId`, or null when unset/not found. */
+    sourceTemplateDefinitionStatus: string | null
+  }
 }
 
 export interface RuleEvalResult {
@@ -98,6 +114,9 @@ type EntityScoreExpr = {
   op: CompareOp
   value: number
 }
+// golden-path-provenance carries no expression payload beyond the rule
+// existing — all of its inputs come from ctx.goldenPath (see EvalContext).
+type GoldenPathProvenanceExpr = Record<string, never>
 
 // --- helpers ----------------------------------------------------------------
 
@@ -179,8 +198,44 @@ export function evaluateRule(rule: ScorecardRule, ctx: EvalContext): RuleEvalRes
       return evalThreshold(expr as unknown as ThresholdExpr, ctx)
     case 'entity-score':
       return evalEntityScore(expr as unknown as EntityScoreExpr, ctx)
+    case 'golden-path-provenance':
+      return evalGoldenPathProvenance(expr as unknown as GoldenPathProvenanceExpr, ctx)
     default:
       return fail(`Unknown rule type "${rule.type}".`)
+  }
+}
+
+/**
+ * Passes iff the entity was built from its kind's approved, currently
+ * published golden-path template: `entity.source.sourceTemplateDefinition`
+ * equals `entity-types[kind].goldenPath.templateDefinition`, and that
+ * template-definitions row's `status` is "published". Fails (never silently
+ * passes) when the kind has no golden path configured, the entity has no
+ * recorded source template, or the ids mismatch — see
+ * `runScorecardEvaluation`'s Phase A loop for how `ctx.goldenPath` is built.
+ */
+function evalGoldenPathProvenance(_expr: GoldenPathProvenanceExpr, ctx: EvalContext): RuleEvalResult {
+  const gp = ctx.goldenPath
+  const kind = ctx.entity.kind
+  if (!gp || !gp.entityTypeTemplateDefinitionId) {
+    return fail(`golden-path-provenance: no golden path template is configured for kind "${kind}".`)
+  }
+  if (!gp.entitySourceTemplateDefinitionId) {
+    return fail('golden-path-provenance: entity has no `source.sourceTemplateDefinition` set.')
+  }
+  if (gp.entitySourceTemplateDefinitionId !== gp.entityTypeTemplateDefinitionId) {
+    return fail(
+      `golden-path-provenance: entity was built from template ${gp.entitySourceTemplateDefinitionId}, not the kind's golden path template ${gp.entityTypeTemplateDefinitionId}.`,
+    )
+  }
+  if (gp.sourceTemplateDefinitionStatus !== 'published') {
+    return fail(
+      `golden-path-provenance: golden path template ${gp.entityTypeTemplateDefinitionId} is not published (status: ${gp.sourceTemplateDefinitionStatus ?? 'unknown'}).`,
+    )
+  }
+  return {
+    passed: true,
+    detail: `Built from the published golden path template ${gp.entityTypeTemplateDefinitionId}.`,
   }
 }
 
@@ -559,6 +614,78 @@ export async function upsertRuleResult(
 
 function relIdOf(v: string | { id: string }): string {
   return typeof v === 'string' ? v : v.id
+}
+
+/** Nullable variant of {@link relIdOf} for optional relationship fields. */
+function relIdOrNull(v: unknown): string | null {
+  if (v == null) return null
+  if (typeof v === 'string') return v
+  if (typeof v === 'object' && 'id' in (v as Record<string, unknown>)) {
+    return String((v as { id: unknown }).id)
+  }
+  return null
+}
+
+/**
+ * Resolve a `template-definitions` row's `status`, or null when unset/not
+ * found. Memoised in `cache` (keyed by template definition id) since several
+ * entities in one evaluation pass commonly share the same golden-path
+ * template.
+ */
+async function resolveTemplateDefinitionStatus(
+  payload: Payload,
+  cache: Map<string, string | null>,
+  templateDefinitionId: string,
+): Promise<string | null> {
+  if (cache.has(templateDefinitionId)) return cache.get(templateDefinitionId) ?? null
+  let status: string | null = null
+  try {
+    const doc = await payload.findByID({
+      collection: 'template-definitions',
+      id: templateDefinitionId,
+      depth: 0,
+      overrideAccess: true,
+    })
+    status = (doc as { status?: string } | null)?.status ?? null
+  } catch {
+    status = null
+  }
+  cache.set(templateDefinitionId, status)
+  return status
+}
+
+/**
+ * Build `EvalContext.goldenPath` for one entity: its kind's configured
+ * golden-path template (via `resolveEntityType`, memoised per kind) and, when
+ * the entity has a `source.sourceTemplateDefinition`, that template's stored
+ * `status`. Used by `golden-path-provenance` rules — see `evalGoldenPathProvenance`.
+ */
+async function buildGoldenPathContext(
+  payload: Payload,
+  workspaceId: string,
+  entity: CatalogEntity,
+  entityTypeCache: Map<string, EntityTypeDefinition>,
+  templateStatusCache: Map<string, string | null>,
+): Promise<NonNullable<EvalContext['goldenPath']>> {
+  const kind = entity.kind as EntityKind
+  let typeDef = entityTypeCache.get(kind)
+  if (!typeDef) {
+    typeDef = await resolveEntityType(payload, workspaceId, kind)
+    entityTypeCache.set(kind, typeDef)
+  }
+
+  const entitySourceTemplateDefinitionId = relIdOrNull(
+    (entity.source as { sourceTemplateDefinition?: unknown } | undefined)?.sourceTemplateDefinition,
+  )
+  const sourceTemplateDefinitionStatus = entitySourceTemplateDefinitionId
+    ? await resolveTemplateDefinitionStatus(payload, templateStatusCache, entitySourceTemplateDefinitionId)
+    : null
+
+  return {
+    entityTypeTemplateDefinitionId: typeDef.goldenPath.templateDefinition,
+    entitySourceTemplateDefinitionId,
+    sourceTemplateDefinitionStatus,
+  }
 }
 
 /**
@@ -1101,6 +1228,10 @@ export async function runScorecardEvaluation(
 
   // --- Phase A: non-score rules ----------------------------------------------
 
+  const needsGoldenPath = otherRules.some((r) => r.type === 'golden-path-provenance')
+  const entityTypeCache = new Map<string, EntityTypeDefinition>()
+  const templateStatusCache = new Map<string, string | null>()
+
   for (let page = 1; ; page++) {
     const entitiesRes = await payload.find({
       collection: 'catalog-entities',
@@ -1127,7 +1258,10 @@ export async function runScorecardEvaluation(
               })
             ).docs as CatalogRelation[])
           : []
-      const ctx: EvalContext = { entity, relations }
+      const goldenPath = needsGoldenPath
+        ? await buildGoldenPathContext(payload, workspaceId, entity, entityTypeCache, templateStatusCache)
+        : undefined
+      const ctx: EvalContext = { entity, relations, goldenPath }
 
       for (const rule of otherRules) {
         const { passed, detail } = evaluateRule(rule, ctx)

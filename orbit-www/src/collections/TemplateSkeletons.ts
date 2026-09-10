@@ -2,6 +2,7 @@
 import type { CollectionConfig } from 'payload'
 import { workspaceScopedRead, memberCreate, docWorkspaceMutate } from '@/lib/access/collection-access'
 import { validateSkeletonBundleHook } from './hooks/validate-skeleton-bundle'
+import { skeletonVersionBumpHook } from './hooks/skeleton-version-bump'
 
 /**
  * TemplateSkeletons — Orbit-hosted "create from scratch without git" file
@@ -41,16 +42,7 @@ export const TemplateSkeletons: CollectionConfig = {
   },
   hooks: {
     beforeValidate: [validateSkeletonBundleHook],
-    beforeChange: [
-      ({ data, operation, req }) => {
-        if (!data) return data
-        return {
-          ...data,
-          version: operation === 'create' ? 1 : (typeof data.version === 'number' ? data.version : 0) + 1,
-          ...(operation === 'create' ? { createdBy: req.user?.id } : {}),
-        }
-      },
-    ],
+    beforeChange: [skeletonVersionBumpHook],
   },
   fields: [
     {

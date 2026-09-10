@@ -46,6 +46,27 @@ export function generateStepId(existingIds: string[], actionId: string): string 
   return `${base}-${n}`
 }
 
+/**
+ * Default `input` for a freshly added step, keyed by action id
+ * (Template Authoring Phase 4, Task E). A `catalog:entity:register` step
+ * gets its template-provenance fields for free — `${{ template.id }}` and
+ * `${{ template.versionId }}` are always resolvable (seeded by
+ * `scaffolder_workflow.go`'s `newScaffolderRun`, no engine change needed) so
+ * an entity a template scaffolds is automatically traceable back to it,
+ * which is what the golden-path-provenance scorecard check reads. Every
+ * other action still gets an empty input, same as before this default was
+ * introduced.
+ */
+export function defaultStepInput(actionId: string): Record<string, unknown> {
+  if (actionId === 'catalog:entity:register') {
+    return {
+      templateDefinitionId: '${{ template.id }}',
+      templateVersionId: '${{ template.versionId }}',
+    }
+  }
+  return {}
+}
+
 /** One place elsewhere in the definition that references a step's id via `${{ steps.<id>... }}`. */
 export interface StepReference {
   /** The referencing step's id, or `'__output__'` for `spec.output`. */

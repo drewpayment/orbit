@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "kafka:topic:provision input",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9_.-]+$",
+      "description": "Topic name."
+    },
+    "virtualClusterId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "kafka-virtual-clusters doc id the topic is provisioned on."
+    },
+    "owner": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Team or user that owns the topic. kafka-topics has no owner field today; stored as a topic tag (owner:<value>)."
+    },
+    "partitions": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 3,
+      "description": "Number of partitions."
+    },
+    "retentionMs": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Retention period in milliseconds."
+    },
+    "description": {
+      "type": "string",
+      "description": "Topic description."
+    },
+    "environment": {
+      "type": "string",
+      "minLength": 1,
+      "default": "dev",
+      "description": "Target environment. kafka-topics.environment is required; defaults to \"dev\" when omitted."
+    }
+  },
+  "required": ["name", "virtualClusterId", "owner"],
+  "additionalProperties": false
+}

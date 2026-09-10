@@ -19,6 +19,11 @@
  *                       entity-scores rows (see
  *                       docs/plans/2026-07-01-entity-scores-and-golden-paths.md).
  *                       NOT interpreted by this module — evaluate.ts owns that.
+ *   - golden-path-provenance: {} — no fields; the rule's existence is the
+ *                       whole check. Passes iff the entity was built from its
+ *                       kind's approved, published golden-path template
+ *                       (Template Authoring Phase 4, Task E). NOT interpreted
+ *                       by this module — evaluate.ts owns that.
  *
  * Deliberately framework-light: no 'use server', no React, no Payload imports —
  * so both the client RuleBuilder and the server authoring actions import these
@@ -33,7 +38,12 @@ import { ENTITY_KINDS, RELATION_TYPES } from '@/collections/catalog/constants'
 
 // --- option vocabularies (drive the builder dropdowns) ----------------------
 
-export type RuleType = 'field-presence' | 'relation-check' | 'threshold' | 'entity-score'
+export type RuleType =
+  | 'field-presence'
+  | 'relation-check'
+  | 'threshold'
+  | 'entity-score'
+  | 'golden-path-provenance'
 export type FieldPresenceOp = 'exists' | 'not-empty'
 export type ThresholdOp = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in'
 export type RelationDirection = 'from' | 'to' | 'either'
@@ -47,6 +57,7 @@ export const RULE_TYPES: { value: RuleType; label: string }[] = [
   { value: 'relation-check', label: 'Relation check' },
   { value: 'threshold', label: 'Threshold' },
   { value: 'entity-score', label: 'Entity score' },
+  { value: 'golden-path-provenance', label: 'Golden path provenance' },
 ]
 
 export const FIELD_PRESENCE_OPS: { value: FieldPresenceOp; label: string }[] = [
@@ -185,6 +196,8 @@ export const RULE_TYPE_HELP: Record<RuleType, string> = {
   threshold: 'Passes when the chosen field compares to the value.',
   'entity-score':
     "Passes when the entity's own (or related entities' compiled) score compares to the value.",
+  'golden-path-provenance':
+    "Passes when the entity was built from its kind's approved, published golden-path template.",
 }
 
 // --- form shapes (the controlled state the builder edits) -------------------
@@ -227,7 +240,16 @@ export interface EntityScoreForm {
   value: string
 }
 
-export type RuleForm = FieldPresenceForm | RelationCheckForm | ThresholdForm | EntityScoreForm
+export interface GoldenPathProvenanceForm {
+  type: 'golden-path-provenance'
+}
+
+export type RuleForm =
+  | FieldPresenceForm
+  | RelationCheckForm
+  | ThresholdForm
+  | EntityScoreForm
+  | GoldenPathProvenanceForm
 
 // --- helpers ----------------------------------------------------------------
 
@@ -301,6 +323,9 @@ export function buildExpression(form: RuleForm): Record<string, unknown> {
       }
       return expr
     }
+
+    case 'golden-path-provenance':
+      return {}
   }
 }
 
@@ -440,6 +465,10 @@ export function validateExpression(type: string, expression: unknown): string | 
       return null
     }
 
+    case 'golden-path-provenance':
+      // No fields to validate — the rule's existence is the whole check.
+      return null
+
     default:
       return `Unknown rule type "${type}".`
   }
@@ -467,6 +496,7 @@ const DEFAULT_FORMS: Record<RuleType, RuleForm> = {
     op: 'gte',
     value: '70',
   },
+  'golden-path-provenance': { type: 'golden-path-provenance' },
 }
 
 /** A blank, valid-by-construction form for a freshly chosen rule type. */
@@ -535,5 +565,7 @@ export function parseExpression(type: RuleType, expression: unknown): RuleForm {
         // types' numeric fallbacks (e.g. relation-check's min: 1) above.
         value: expr.value == null ? '70' : scalarToText(expr.value),
       }
+    case 'golden-path-provenance':
+      return { type }
   }
 }

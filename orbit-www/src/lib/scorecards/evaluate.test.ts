@@ -710,6 +710,94 @@ describe('evaluateRule — entity-score', () => {
   })
 })
 
+describe('evaluateRule — golden-path-provenance', () => {
+  const gpCtx = (
+    e: CatalogEntity,
+    goldenPath: EvalContext['goldenPath'],
+  ): EvalContext => ({ entity: e, relations: [], goldenPath })
+
+  it('passes when the entity source matches the kind golden path template and it is published', () => {
+    const res = evaluateRule(
+      rule('golden-path-provenance', {}),
+      gpCtx(entity({ kind: 'service' }), {
+        entityTypeTemplateDefinitionId: 'tmpl-1',
+        entitySourceTemplateDefinitionId: 'tmpl-1',
+        sourceTemplateDefinitionStatus: 'published',
+      }),
+    )
+    expect(res.passed).toBe(true)
+  })
+
+  it('fails, not silently passes, when the entity has no sourceTemplateDefinition set', () => {
+    const res = evaluateRule(
+      rule('golden-path-provenance', {}),
+      gpCtx(entity({ kind: 'service' }), {
+        entityTypeTemplateDefinitionId: 'tmpl-1',
+        entitySourceTemplateDefinitionId: null,
+        sourceTemplateDefinitionStatus: null,
+      }),
+    )
+    expect(res.passed).toBe(false)
+    expect(res.detail).toContain('sourceTemplateDefinition')
+  })
+
+  it('fails when the entity was built from a different template than the kind golden path', () => {
+    const res = evaluateRule(
+      rule('golden-path-provenance', {}),
+      gpCtx(entity({ kind: 'service' }), {
+        entityTypeTemplateDefinitionId: 'tmpl-1',
+        entitySourceTemplateDefinitionId: 'tmpl-2',
+        sourceTemplateDefinitionStatus: 'published',
+      }),
+    )
+    expect(res.passed).toBe(false)
+    expect(res.detail).toContain('tmpl-2')
+  })
+
+  it('fails when the matching template is deprecated, not published', () => {
+    const res = evaluateRule(
+      rule('golden-path-provenance', {}),
+      gpCtx(entity({ kind: 'service' }), {
+        entityTypeTemplateDefinitionId: 'tmpl-1',
+        entitySourceTemplateDefinitionId: 'tmpl-1',
+        sourceTemplateDefinitionStatus: 'deprecated',
+      }),
+    )
+    expect(res.passed).toBe(false)
+    expect(res.detail).toContain('not published')
+  })
+
+  it('fails when the matching template is still a draft', () => {
+    const res = evaluateRule(
+      rule('golden-path-provenance', {}),
+      gpCtx(entity({ kind: 'service' }), {
+        entityTypeTemplateDefinitionId: 'tmpl-1',
+        entitySourceTemplateDefinitionId: 'tmpl-1',
+        sourceTemplateDefinitionStatus: 'draft',
+      }),
+    )
+    expect(res.passed).toBe(false)
+  })
+
+  it('fails with a clear reason when the kind has no golden path template configured', () => {
+    const res = evaluateRule(
+      rule('golden-path-provenance', {}),
+      gpCtx(entity({ kind: 'kafka-topic' }), {
+        entityTypeTemplateDefinitionId: null,
+        entitySourceTemplateDefinitionId: null,
+        sourceTemplateDefinitionStatus: null,
+      }),
+    )
+    expect(res.passed).toBe(false)
+    expect(res.detail).toContain('kafka-topic')
+  })
+
+  it('fails when ctx.goldenPath was never built (defensive default)', () => {
+    const res = evaluateRule(rule('golden-path-provenance', {}), ctx(entity()))
+    expect(res.passed).toBe(false)
+  })
+})
+
 // --- computeEntityLevel -----------------------------------------------------
 
 describe('computeEntityLevel', () => {
@@ -1329,5 +1417,140 @@ describe('runScorecardEvaluation — entity-score rule integration', () => {
     expect(summary.entitiesEvaluated).toBe(1)
     expect(summary.rulesEvaluated).toBe(1)
     expect(overallRowFor(fp, 'e1')?.score).toBe(100) // one rule, passed
+  })
+})
+
+describe('runScorecardEvaluation — golden-path-provenance rule integration', () => {
+  function setUp(fp: FakePayload) {
+    fp.collections['scorecards'] = [{ id: 'sc1', workspace: 'ws1', levels: [] }]
+    fp.collections['scorecard-rules'] = [
+      { id: 'r1', scorecard: 'sc1', type: 'golden-path-provenance', weight: 1, expression: {} },
+    ]
+    fp.collections['entity-types'] = [
+      {
+        id: 'et1',
+        workspace: 'ws1',
+        kind: 'service',
+        baseValue: 50,
+        scoringWeight: 1,
+        goldenPath: { templateDefinition: 'tmpl-1', requiredRelations: [], requiredMetadata: [] },
+      },
+    ]
+    fp.collections['template-definitions'] = [{ id: 'tmpl-1', status: 'published' }]
+  }
+
+  it('passes an entity built from the matching published golden path template', async () => {
+    const fp = new FakePayload()
+    setUp(fp)
+    fp.collections['catalog-entities'] = [
+      {
+        id: 'e1',
+        kind: 'service',
+        workspace: 'ws1',
+        source: { type: 'scaffolder-run', sourceTemplateDefinition: 'tmpl-1' },
+      },
+    ]
+
+    await runScorecardEvaluation(fp as unknown as Payload, 'sc1', { captureSnapshots: false })
+
+    const result = fp.collections['scorecard-rule-results'].find((r) => r.entity === 'e1')
+    expect(result?.passed).toBe(true)
+  })
+
+  it('fails, never silently passes, when the entity has no sourceTemplateDefinition', async () => {
+    const fp = new FakePayload()
+    setUp(fp)
+    fp.collections['catalog-entities'] = [
+      { id: 'e1', kind: 'service', workspace: 'ws1', source: { type: 'manual' } },
+    ]
+
+    await runScorecardEvaluation(fp as unknown as Payload, 'sc1', { captureSnapshots: false })
+
+    const result = fp.collections['scorecard-rule-results'].find((r) => r.entity === 'e1')
+    expect(result?.passed).toBe(false)
+  })
+
+  it('fails when the entity was built from a different template', async () => {
+    const fp = new FakePayload()
+    setUp(fp)
+    fp.collections['template-definitions'].push({ id: 'tmpl-2', status: 'published' })
+    fp.collections['catalog-entities'] = [
+      {
+        id: 'e1',
+        kind: 'service',
+        workspace: 'ws1',
+        source: { type: 'scaffolder-run', sourceTemplateDefinition: 'tmpl-2' },
+      },
+    ]
+
+    await runScorecardEvaluation(fp as unknown as Payload, 'sc1', { captureSnapshots: false })
+
+    const result = fp.collections['scorecard-rule-results'].find((r) => r.entity === 'e1')
+    expect(result?.passed).toBe(false)
+  })
+
+  it('fails when the matching golden path template has since been deprecated', async () => {
+    const fp = new FakePayload()
+    setUp(fp)
+    fp.collections['template-definitions'] = [{ id: 'tmpl-1', status: 'deprecated' }]
+    fp.collections['catalog-entities'] = [
+      {
+        id: 'e1',
+        kind: 'service',
+        workspace: 'ws1',
+        source: { type: 'scaffolder-run', sourceTemplateDefinition: 'tmpl-1' },
+      },
+    ]
+
+    await runScorecardEvaluation(fp as unknown as Payload, 'sc1', { captureSnapshots: false })
+
+    const result = fp.collections['scorecard-rule-results'].find((r) => r.entity === 'e1')
+    expect(result?.passed).toBe(false)
+  })
+
+  it('fails with a clear reason when the entity kind has no golden path configured', async () => {
+    const fp = new FakePayload()
+    setUp(fp)
+    fp.collections['entity-types'] = [] // no golden path for `kafka-topic`
+    fp.collections['catalog-entities'] = [
+      {
+        id: 'e1',
+        kind: 'kafka-topic',
+        workspace: 'ws1',
+        source: { type: 'scaffolder-run', sourceTemplateDefinition: 'tmpl-1' },
+      },
+    ]
+
+    await runScorecardEvaluation(fp as unknown as Payload, 'sc1', { captureSnapshots: false })
+
+    const result = fp.collections['scorecard-rule-results'].find((r) => r.entity === 'e1')
+    expect(result?.passed).toBe(false)
+    expect(result?.detail).toContain('kafka-topic')
+  })
+
+  it('fails, fail-closed, when the template-definitions lookup throws a non-"not found" error', async () => {
+    const fp = new FakePayload()
+    setUp(fp)
+    fp.collections['catalog-entities'] = [
+      {
+        id: 'e1',
+        kind: 'service',
+        workspace: 'ws1',
+        source: { type: 'scaffolder-run', sourceTemplateDefinition: 'tmpl-1' },
+      },
+    ]
+    const originalFindByID = fp.findByID.bind(fp)
+    fp.findByID = (async (args: { collection: string; id: string }) => {
+      if (args.collection === 'template-definitions') {
+        throw new Error('connection reset')
+      }
+      return originalFindByID(args)
+    }) as typeof fp.findByID
+
+    await runScorecardEvaluation(fp as unknown as Payload, 'sc1', { captureSnapshots: false })
+
+    const result = fp.collections['scorecard-rule-results'].find((r) => r.entity === 'e1')
+    expect(result?.passed).toBe(false)
+    expect(result?.detail).toBeTruthy()
   })
 })

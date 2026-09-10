@@ -1148,6 +1148,14 @@ export interface CatalogEntity {
      * ID of the backing row in the source collection.
      */
     sourceId?: string | null;
+    /**
+     * The template definition this entity was scaffolded from, if any.
+     */
+    sourceTemplateDefinition?: (string | null) | TemplateDefinition;
+    /**
+     * The specific template version this entity was scaffolded from, if any.
+     */
+    sourceTemplateVersion?: (string | null) | TemplateDefinitionVersion;
   };
   /**
    * Freeform, queryable by scorecard rules (P2).
@@ -3866,9 +3874,9 @@ export interface ApiSchema {
    */
   visibility: 'private' | 'workspace' | 'public';
   /**
-   * Schema format (OpenAPI, AsyncAPI, GraphQL supported)
+   * Schema format (OpenAPI, AsyncAPI, GraphQL, Protocol Buffers supported)
    */
-  schemaType: 'openapi' | 'asyncapi' | 'graphql';
+  schemaType: 'openapi' | 'asyncapi' | 'graphql' | 'proto';
   /**
    * Current version string (from OpenAPI info.version)
    */
@@ -3916,6 +3924,16 @@ export interface ApiSchema {
    * Path to OpenAPI spec in repository (e.g., docs/openapi.yaml)
    */
   repositoryPath?: string | null;
+  /**
+   * Where this schema came from — set by /api/internal/api-schemas for a scaffolder-run-registered schema, otherwise "manual".
+   */
+  source?: {
+    type?: ('manual' | 'scaffolder-run') | null;
+    /**
+     * Identifies the specific producer, e.g. the scaffolder run id.
+     */
+    sourceId?: string | null;
+  };
   /**
    * User who created this API schema
    */
@@ -4074,6 +4092,10 @@ export interface EntityType {
      */
     docsUrl?: string | null;
     /**
+     * The approved paved-path template that should produce entities of this kind. Used by the golden-path-provenance scorecard check.
+     */
+    templateDefinition?: (string | null) | TemplateDefinition;
+    /**
      * Structural expectations checked against the entity’s actual relations.
      */
     requiredRelations?:
@@ -4200,7 +4222,7 @@ export interface ScorecardRule {
    * Ladder rung this rule belongs to (matches a scorecard level name).
    */
   level?: string | null;
-  type: 'field-presence' | 'relation-check' | 'threshold' | 'entity-score';
+  type: 'field-presence' | 'relation-check' | 'threshold' | 'entity-score' | 'golden-path-provenance';
   /**
    * Rule definition interpreted by the evaluator per type (see collection doc).
    */
@@ -6209,6 +6231,12 @@ export interface ApiSchemasSelect<T extends boolean = true> {
       };
   repository?: T;
   repositoryPath?: T;
+  source?:
+    | T
+    | {
+        type?: T;
+        sourceId?: T;
+      };
   createdBy?: T;
   lastEditedBy?: T;
   specTitle?: T;
@@ -6260,6 +6288,8 @@ export interface CatalogEntitiesSelect<T extends boolean = true> {
     | {
         type?: T;
         sourceId?: T;
+        sourceTemplateDefinition?: T;
+        sourceTemplateVersion?: T;
       };
   metadata?: T;
   health?: T;
@@ -6301,6 +6331,7 @@ export interface EntityTypesSelect<T extends boolean = true> {
     | {
         summary?: T;
         docsUrl?: T;
+        templateDefinition?: T;
         requiredRelations?:
           | T
           | {

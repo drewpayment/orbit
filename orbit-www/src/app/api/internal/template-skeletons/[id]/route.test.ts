@@ -1,12 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('payload', () => ({ getPayload: vi.fn() }))
+vi.mock('payload', async () => {
+  const actual = await vi.importActual<typeof import('payload')>('payload')
+  return { ...actual, getPayload: vi.fn() }
+})
 vi.mock('@payload-config', () => ({ default: {} }))
 
 process.env.ORBIT_INTERNAL_API_KEY = 'test-internal-key'
 
 import type { BasePayload } from 'payload'
-import { getPayload } from 'payload'
+import { getPayload, NotFound } from 'payload'
 import { GET } from './route'
 
 const skeletonDoc = {
@@ -54,7 +57,7 @@ describe('GET /api/internal/template-skeletons/[id]', () => {
   })
 
   it('404s when the skeleton is not found', async () => {
-    mockPayload.findByID.mockRejectedValueOnce(new Error('not found'))
+    mockPayload.findByID.mockRejectedValueOnce(new NotFound())
     const res = await GET(req('https://x/api/internal/template-skeletons/missing?workspaceId=ws-1'), {
       params: Promise.resolve({ id: 'missing' }),
     })
@@ -79,6 +82,14 @@ describe('GET /api/internal/template-skeletons/[id]', () => {
 
   it('500s on an unrelated error', async () => {
     mockPayload.findByID.mockRejectedValueOnce(new Error('boom'))
+    const res = await GET(req('https://x/api/internal/template-skeletons/sk-1?workspaceId=ws-1'), {
+      params: Promise.resolve({ id: 'sk-1' }),
+    })
+    expect(res.status).toBe(500)
+  })
+
+  it('500s on a plain Error whose message merely mentions "not found" (only a real NotFound instance maps to 404)', async () => {
+    mockPayload.findByID.mockRejectedValueOnce(new Error('not found in some unrelated cache'))
     const res = await GET(req('https://x/api/internal/template-skeletons/sk-1?workspaceId=ws-1'), {
       params: Promise.resolve({ id: 'sk-1' }),
     })

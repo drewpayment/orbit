@@ -12,6 +12,10 @@ import "github.com/drewpayment/orbit/temporal-workflows/internal/scaffolder"
 //     the two github:repo:* actions are omitted without a TokenService since
 //     they always require GitHub auth.
 //   - catalog:entity:register needs deps.CatalogClient; omitted without one.
+//   - kafka:topic:provision needs both deps.KafkaTopicClient and
+//     deps.KafkaProvisioner; omitted unless both are set.
+//   - api:schema:register needs deps.ApiSchemaClient; omitted without one.
+//   - fetch:orbit-skeleton needs deps.SkeletonClient; omitted without one.
 //
 // debug:log and http:request take no dependencies and are always included.
 func DefaultActions(deps Deps) []scaffolder.Action {
@@ -36,6 +40,18 @@ func DefaultActions(deps Deps) []scaffolder.Action {
 
 	if deps.CatalogClient != nil {
 		out = append(out, NewCatalogEntityRegister(deps.CatalogClient))
+	}
+
+	if deps.KafkaTopicClient != nil && deps.KafkaProvisioner != nil {
+		out = append(out, NewKafkaTopicProvision(deps.KafkaTopicClient, deps.KafkaProvisioner))
+	}
+
+	if deps.ApiSchemaClient != nil {
+		out = append(out, NewApiSchemaRegister(deps.ApiSchemaClient))
+	}
+
+	if deps.SkeletonClient != nil {
+		out = append(out, NewFetchOrbitSkeleton(deps.SkeletonClient))
 	}
 
 	return out
@@ -63,5 +79,8 @@ func DescriptorActions() []scaffolder.Action {
 		NewGitHubRepoCreate(nil, nil),
 		NewGitHubRepoCreateFromTemplate(nil, nil),
 		NewCatalogEntityRegister(nil),
+		NewKafkaTopicProvision(nil, nil),
+		NewApiSchemaRegister(nil),
+		NewFetchOrbitSkeleton(nil),
 	}
 }

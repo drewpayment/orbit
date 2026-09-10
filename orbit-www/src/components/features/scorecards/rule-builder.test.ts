@@ -89,7 +89,13 @@ describe('buildExpression → validateExpression round-trip', () => {
   })
 
   it('every defaultForm produces a valid expression', () => {
-    for (const type of ['field-presence', 'relation-check', 'threshold', 'entity-score'] as const) {
+    for (const type of [
+      'field-presence',
+      'relation-check',
+      'threshold',
+      'entity-score',
+      'golden-path-provenance',
+    ] as const) {
       const form = defaultForm(type)
       // field-presence/threshold defaults need a path to be valid; supply one.
       const filled: RuleForm =
@@ -190,6 +196,14 @@ describe('buildExpression → validateExpression round-trip', () => {
     const expr = buildExpression(form)
     expect(expr).toMatchObject({ targetKind: 'service' })
     expect(validateExpression('entity-score', expr)).toBeNull()
+  })
+
+  it('golden-path-provenance builds an empty expression and validates, and parses back to the same form', () => {
+    const form: RuleForm = { type: 'golden-path-provenance' }
+    const expr = buildExpression(form)
+    expect(expr).toEqual({})
+    expect(validateExpression('golden-path-provenance', expr)).toBeNull()
+    expect(parseExpression('golden-path-provenance', expr)).toEqual({ type: 'golden-path-provenance' })
   })
 })
 
