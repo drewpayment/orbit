@@ -43,6 +43,7 @@ function setup(props: Partial<React.ComponentProps<typeof TemplateEditorShell>> 
     <TemplateEditorShell
       definitionId="def-1"
       status="draft"
+      workspaceId="ws-1"
       initialDefinition={definition}
       currentVersionId="v1"
       currentVersionValidated={false}

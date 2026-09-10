@@ -7,8 +7,10 @@ import type { EntityKind } from '@/collections/catalog/constants'
 import {
   getEntitiesForWorkspace,
   getReposForConnection,
+  getSkeletonsForWorkspace,
   getTeamsForWorkspace,
   type PickerOption,
+  type SkeletonPickerOption,
 } from './picker-data'
 
 /**
@@ -45,4 +47,11 @@ export async function listReposForPicker(
   return getReposForConnection(payload, user.id, workspaceId, connectionId)
 }
 
-export type { PickerOption }
+export async function listSkeletonsForPicker(workspaceId: string): Promise<SkeletonPickerOption[]> {
+  const user = await getCurrentUser()
+  if (!user) return []
+  const payload = await getPayload({ config })
+  return getSkeletonsForWorkspace(payload, user.id, workspaceId)
+}
+
+export type { PickerOption, SkeletonPickerOption }

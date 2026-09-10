@@ -15,11 +15,16 @@ import { parameterPageToSchemaFormPage } from './schema-ui-split'
 
 export interface ParametersPreviewProps {
   pages: ParameterPage[]
+  /** The template definition's own workspace — see `parameterPageToSchemaFormPage`'s doc comment. */
+  workspaceId?: string
 }
 
-export function ParametersPreview({ pages }: ParametersPreviewProps) {
+export function ParametersPreview({ pages, workspaceId }: ParametersPreviewProps) {
   const [values, setValues] = React.useState<Record<string, unknown>>({})
-  const schemaFormPages = React.useMemo(() => pages.map(parameterPageToSchemaFormPage), [pages])
+  const schemaFormPages = React.useMemo(
+    () => pages.map((p) => parameterPageToSchemaFormPage(p, workspaceId)),
+    [pages, workspaceId],
+  )
 
   if (schemaFormPages.length === 0) {
     return <p className="text-sm text-muted-foreground">Add a page to see a live preview.</p>
