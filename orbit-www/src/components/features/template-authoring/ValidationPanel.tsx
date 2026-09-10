@@ -37,6 +37,12 @@ export interface ValidationPanelProps {
   runToken?: number
   /** Reports each completed run to the parent. */
   onResult?: (result: ValidationResult) => void
+  /**
+   * Render the panel's own Validate button. The editor shell sets this false
+   * because its bottom bar already owns the trigger (via `runToken`), and two
+   * identically-labelled buttons doing the same thing is worse than one.
+   */
+  showTrigger?: boolean
 }
 
 export function ValidationPanel({
@@ -45,6 +51,7 @@ export function ValidationPanel({
   onJumpTo,
   runToken,
   onResult,
+  showTrigger = true,
 }: ValidationPanelProps) {
   const [result, setResult] = React.useState<ValidationResult | null>(null)
   const [error, setError] = React.useState<string | null>(null)
@@ -99,10 +106,14 @@ export function ValidationPanel({
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">Validation</h3>
-        <Button size="sm" variant="outline" onClick={() => void run()} disabled={pending}>
-          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          Validate
-        </Button>
+        {showTrigger ? (
+          <Button size="sm" variant="outline" onClick={() => void run()} disabled={pending}>
+            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            Validate
+          </Button>
+        ) : pending ? (
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        ) : null}
       </div>
 
       {error ? (
