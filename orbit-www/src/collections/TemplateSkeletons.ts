@@ -95,7 +95,12 @@ export const TemplateSkeletons: CollectionConfig = {
         {
           name: 'content',
           type: 'textarea',
-          required: true,
+          // NOT required: Payload treats an empty string as a missing
+          // value for `required` fields, which broke saving a freshly
+          // added file (empty until the author types into it) and any
+          // legitimately empty file (e.g. `.gitkeep`). `path` stays
+          // required — content is allowed to be empty.
+          defaultValue: '',
         },
         {
           name: 'size',
