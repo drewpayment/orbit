@@ -4,8 +4,11 @@
  * page's schema to zod (`schema-to-zod.ts`), wires `react-hook-form` +
  * shadcn's `form.tsx` wrapper, evaluates `ui:visibleIf` (`visible-if.ts`) to
  * hide/unregister fields, and resolves each leaf field to a component via
- * the field registry (`field-registry.tsx`). `object`-typed properties
- * recurse into a nested `SchemaForm`.
+ * the field registry (`field-registry.tsx`). An `object`-typed property with
+ * explicit `properties` recurses into a nested `SchemaForm`; a free-form
+ * `{ key: value }` map (`isKeyValueObjectSchema` — no fixed `properties`)
+ * instead resolves through the field registry like any other leaf, to
+ * `KeyValueObjectField`.
  *
  * Hidden fields are unregistered from validation (not just visually hidden):
  * the zod schema used for a given submit/validate pass only covers the
@@ -31,7 +34,7 @@ import {
 } from '@/components/ui/form'
 import { jsonSchemaToZod } from './schema-to-zod'
 import { evaluateVisibleIf } from './visible-if'
-import { defaultFieldRegistry, type FieldRegistry } from './field-registry'
+import { defaultFieldRegistry, isKeyValueObjectSchema, type FieldRegistry } from './field-registry'
 import type { JsonSchema, SchemaFormPage, UiFieldSchema, UiSchema } from './types'
 
 export interface SchemaFormProps {
@@ -309,7 +312,7 @@ export function SchemaForm({
                   const label = entry.schema.title ?? entry.name
                   const required = (mergedSchema.required ?? []).includes(entry.name)
 
-                  if (entry.schema.type === 'object') {
+                  if (entry.schema.type === 'object' && !isKeyValueObjectSchema(entry.schema)) {
                     // Not wrapped in <FormField>/<FormItem> (no single RHF
                     // field name applies to a whole group) — use a plain
                     // <Label> rather than <FormLabel>, which requires that
