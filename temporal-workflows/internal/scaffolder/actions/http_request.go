@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -214,7 +215,18 @@ func (a *HTTPRequest) parseInput(raw json.RawMessage) (httpRequestInput, *url.UR
 	}
 	target, err := url.Parse(strings.TrimSpace(in.URL))
 	if err != nil {
+		// url.Error echoes the whole URL, credentials included, and this text
+		// lands in a run log that every workspace member can read.
+		var uerr *url.Error
+		if errors.As(err, &uerr) {
+			err = uerr.Err
+		}
 		return in, nil, fmt.Errorf("http:request: `url` is not parsable: %w", err)
+	}
+	if target.User != nil {
+		// Design §3.4: credentials come from a connection resolved server-side,
+		// never inline in an author-written URL.
+		return in, nil, fmt.Errorf("http:request: `url` must not contain inline credentials; reference a connection instead")
 	}
 	switch target.Scheme {
 	case "http", "https":
@@ -282,25 +294,45 @@ func defaultLookupIP(ctx context.Context, host string) ([]net.IP, error) {
 
 // internalCIDRs are the ranges an Orbit worker must never be talked into
 // reaching on a template author's behalf.
+//
+// The IPv6 entries include every deprecated or special-purpose range that can
+// carry an IPv4 address inside it (IPv4-compatible, IPv4-translated, 6to4,
+// Teredo, local-use NAT64). Those are blocked wholesale rather than unwrapped:
+// none of them is a legitimate target for a template, and "block the range" has
+// no decoding edge cases to get wrong. Only the two embeddings still in real
+// use — ::ffff:a.b.c.d and the well-known NAT64 prefix — are unwrapped and
+// judged on the address they carry.
 var internalCIDRs = func() []*net.IPNet {
 	blocks := []string{
+		// IPv4
 		"0.0.0.0/8",      // "this network"
 		"10.0.0.0/8",     // private
 		"100.64.0.0/10",  // carrier-grade NAT
 		"127.0.0.0/8",    // loopback
-		"169.254.0.0/16", // link-local, includes 169.254.169.254 metadata
+		"169.254.0.0/16", // link-local, includes the 169.254.169.254 metadata address
 		"172.16.0.0/12",  // private
 		"192.0.0.0/24",   // IETF protocol assignments
+		"192.0.2.0/24",   // documentation (TEST-NET-1)
+		"192.88.99.0/24", // 6to4 relay anycast
 		"192.168.0.0/16", // private
 		"198.18.0.0/15",  // benchmarking
 		"224.0.0.0/4",    // multicast
 		"240.0.0.0/4",    // reserved, includes 255.255.255.255
-		"::/128",         // unspecified
-		"::1/128",        // loopback
-		"fc00::/7",       // unique local
-		"fe80::/10",      // link-local
-		"ff00::/8",       // multicast
-		"2001:db8::/32",  // documentation
+		// IPv6
+		"::/128",          // unspecified
+		"::1/128",         // loopback
+		"::/96",           // deprecated IPv4-compatible, e.g. ::127.0.0.1
+		"::ffff:0:0:0/96", // IPv4-translated (RFC 6052)
+		"64:ff9b:1::/48",  // local-use NAT64 (RFC 8215)
+		"100::/64",        // discard-only
+		"2001::/32",       // Teredo
+		"2001:20::/28",    // ORCHIDv2
+		"2001:db8::/32",   // documentation
+		"2002::/16",       // 6to4, e.g. 2002:7f00:1:: is 127.0.0.1
+		"fc00::/7",        // unique local
+		"fe80::/10",       // link-local
+		"fec0::/10",       // deprecated site-local
+		"ff00::/8",        // multicast
 	}
 	out := make([]*net.IPNet, 0, len(blocks))
 	for _, b := range blocks {
@@ -321,13 +353,13 @@ var nat64Prefix = func() *net.IPNet {
 }()
 
 // DenyInternalIP is the default IPGuard: it refuses loopback, private,
-// link-local, CGNAT, multicast and reserved addresses, in both IPv4 and IPv6,
-// including IPv4-mapped and NAT64-embedded forms.
+// link-local, CGNAT, multicast and reserved addresses in both families,
+// including the IPv4-mapped and NAT64-embedded spellings of each.
 func DenyInternalIP(ip net.IP) error {
 	if ip == nil || (len(ip) != net.IPv4len && len(ip) != net.IPv6len) {
 		return fmt.Errorf("address is not a valid IP")
 	}
-	// Unwrap ::ffff:a.b.c.d so a mapped private address is judged as IPv4.
+	// Unwrap ::ffff:a.b.c.d so a mapped internal address is judged as IPv4.
 	if v4 := ip.To4(); v4 != nil {
 		ip = v4
 	} else if nat64Prefix.Contains(ip) {

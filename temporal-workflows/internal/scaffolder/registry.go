@@ -1,10 +1,13 @@
 package scaffolder
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
 // ActionDescriptor is the serialisable view of a registered action. It is
@@ -31,6 +34,9 @@ type Registry struct {
 func NewRegistry(actions ...Action) *Registry {
 	r := &Registry{actions: make(map[string]Action, len(actions))}
 	for _, a := range actions {
+		if a == nil {
+			panic("scaffolder: nil action registered")
+		}
 		name := a.Name()
 		if strings.TrimSpace(name) == "" {
 			panic("scaffolder: action registered with an empty name")
@@ -43,6 +49,33 @@ func NewRegistry(actions ...Action) *Registry {
 	}
 	sort.Strings(r.names)
 	return r
+}
+
+// ValidateSchemas checks that every registered action's schemas are parsable
+// JSON Schema documents. Call it once at worker startup: a broken action schema
+// is a platform bug, and without this it would surface later as a validation
+// finding against whichever template happened to use the action.
+func (r *Registry) ValidateSchemas() error {
+	if r == nil {
+		return nil
+	}
+	for _, n := range r.names {
+		a := r.actions[n]
+		for label, raw := range map[string]json.RawMessage{"input": a.InputSchema(), "output": a.OutputSchema()} {
+			if len(raw) == 0 {
+				return fmt.Errorf("action %q has an empty %s schema", n, label)
+			}
+			compiler := jsonschema.NewCompiler()
+			url := "mem://orbit/scaffolder/" + n + "/" + label + ".json"
+			if err := compiler.AddResource(url, bytes.NewReader(raw)); err != nil {
+				return fmt.Errorf("action %q has an invalid %s schema: %w", n, label, err)
+			}
+			if _, err := compiler.Compile(url); err != nil {
+				return fmt.Errorf("action %q has an invalid %s schema: %w", n, label, err)
+			}
+		}
+	}
+	return nil
 }
 
 // Get returns the action registered under name.

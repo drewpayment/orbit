@@ -56,11 +56,17 @@ func (a *DebugLog) Execute(_ context.Context, rc scaffolder.ActionRunContext, in
 	if err != nil {
 		return nil, err
 	}
-	attrs := []any{slog.String("runId", rc.RunID), slog.String("action", a.Name())}
+	// Author-supplied field names go under a `data` group so a template cannot
+	// forge a top-level runId, level or msg attribute and spoof a run log.
+	data := make([]any, 0, len(in.Data))
 	for _, k := range sortedKeys(in.Data) {
-		attrs = append(attrs, slog.Any(k, in.Data[k]))
+		data = append(data, slog.Any(k, in.Data[k]))
 	}
-	rc.Logger.Log(context.Background(), debugLogLevels[in.Level], in.Message, attrs...)
+	rc.Logger.Log(context.Background(), debugLogLevels[in.Level], in.Message,
+		slog.String("runId", rc.RunID),
+		slog.String("action", a.Name()),
+		slog.Group("data", data...),
+	)
 	return json.Marshal(map[string]string{"message": in.Message, "level": in.Level})
 }
 

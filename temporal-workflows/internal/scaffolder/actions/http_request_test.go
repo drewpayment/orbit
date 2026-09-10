@@ -197,6 +197,7 @@ func TestHTTPRequestInputValidation(t *testing.T) {
 		want  string
 	}{
 		{name: "missing url", input: `{}`, want: "url"},
+		{name: "inline credentials", input: `{"url":"https://user:pw@example.com/x"}`, want: "credentials"},
 		{name: "blank url", input: `{"url":"   "}`, want: "url"},
 		{name: "file scheme", input: `{"url":"file:///etc/passwd"}`, want: "scheme"},
 		{name: "ftp scheme", input: `{"url":"ftp://example.com/x"}`, want: "scheme"},
@@ -234,6 +235,12 @@ func TestDenyInternalIP(t *testing.T) {
 		"fd00::1", "fc00::1", "fe80::1", "ff02::1", "::",
 		"::ffff:127.0.0.1", "::ffff:10.0.0.1", "::ffff:169.254.169.254",
 		"64:ff9b::7f00:1",
+		// alternate spellings that carry an IPv4 address inside an IPv6 one
+		"::7f00:1", "::a00:1", "::ffff:0:7f00:1",
+		"2002:7f00:1::", "2002:a00:1::",
+		"64:ff9b:1::7f00:1",
+		"fec0::1", "192.88.99.1", "2001::1", "100::1",
+		"192.0.2.1", "2001:db8::1",
 	}
 	allowed := []string{
 		"8.8.8.8", "1.1.1.1", "93.184.216.34",
@@ -270,4 +277,11 @@ func TestHTTPRequestIgnoresProxyEnvironment(t *testing.T) {
 	out, err := execHTTP(t, NewHTTPRequest(WithIPGuard(allowAll)), fmt.Sprintf(`{"url":%q}`, srv.URL))
 	require.NoError(t, err)
 	assert.Equal(t, "direct", out.Body)
+}
+
+func TestHTTPRequestParseErrorDoesNotLeakCredentials(t *testing.T) {
+	a := NewHTTPRequest(WithIPGuard(allowAll))
+	_, err := a.Execute(context.Background(), runCtx(), json.RawMessage(`{"url":"http://user:sup3rsecret@exa mple.com/x"}`))
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "sup3rsecret")
 }

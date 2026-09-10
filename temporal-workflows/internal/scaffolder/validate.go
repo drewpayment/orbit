@@ -191,8 +191,15 @@ func validateStep(def *Definition, idx int, step Step, params map[string]bool, s
 	} else if first, ok := stepIndex[step.ID]; ok && first != idx {
 		errs = append(errs, ValidationError{Path: base + ".id", Message: fmt.Sprintf("duplicate step id %q (first declared at step %d)", step.ID, first)})
 	}
+	// step.Name, page titles and metadata text are intentionally literal: nothing
+	// resolves them at run time, so an expression there would be a silent
+	// passthrough. If the workflow ever renders them, add them to the reference
+	// checks below at the same time.
 	if strings.TrimSpace(step.Name) == "" {
 		errs = append(errs, ValidationError{Path: base + ".name", Message: "is required"})
+	}
+	if HasExpression(step.Name) {
+		errs = append(errs, ValidationError{Path: base + ".name", Message: "expressions are not supported in a step name"})
 	}
 	if step.Timeout != "" {
 		if _, err := time.ParseDuration(step.Timeout); err != nil {
@@ -223,8 +230,8 @@ func validateStep(def *Definition, idx int, step Step, params map[string]bool, s
 		currentID:       step.ID,
 	}
 
-	if step.If != "" {
-		errs = append(errs, scope.checkString(base+".if", step.If)...)
+	if cond := NormalizeCondition(step.If); cond != "" {
+		errs = append(errs, scope.checkString(base+".if", cond)...)
 	}
 
 	decoded, decodeErr := decodeInput(step.Input)
@@ -233,6 +240,9 @@ func validateStep(def *Definition, idx int, step Step, params map[string]bool, s
 		return errs
 	}
 
+	for _, k := range expressionKeys(decoded, base+".input") {
+		errs = append(errs, ValidationError{Path: k, Message: "expressions are not supported in object keys"})
+	}
 	for _, leaf := range stringLeaves(decoded, base+".input") {
 		errs = append(errs, scope.checkString(leaf.path, leaf.value)...)
 	}
@@ -260,6 +270,17 @@ func validateOutput(def *Definition, out *Output, params map[string]bool, stepIn
 	var errs []ValidationError
 	for i, l := range out.Links {
 		base := fmt.Sprintf("spec.output.links[%d]", i)
+		if strings.TrimSpace(l.Title) == "" {
+			errs = append(errs, ValidationError{Path: base + ".title", Message: "is required"})
+		}
+		hasURL := strings.TrimSpace(l.URL) != ""
+		hasEntity := strings.TrimSpace(l.Entity) != ""
+		switch {
+		case hasURL && hasEntity:
+			errs = append(errs, ValidationError{Path: base, Message: "set exactly one of `url` or `entity`, not both"})
+		case !hasURL && !hasEntity:
+			errs = append(errs, ValidationError{Path: base, Message: "set exactly one of `url` or `entity`"})
+		}
 		errs = append(errs, scope.checkString(base+".title", l.Title)...)
 		errs = append(errs, scope.checkString(base+".url", l.URL)...)
 		errs = append(errs, scope.checkString(base+".entity", l.Entity)...)
@@ -340,16 +361,15 @@ func (s refScope) checkRef(path string, ref Reference) (ValidationError, bool) {
 		if len(p) == 3 {
 			return ValidationError{}, false // whole output object
 		}
-		return s.checkOutputKey(path, p[1], p[3], idx)
+		return s.checkOutputKey(path, p[1], p[3])
 	default:
 		return fail("unknown namespace %q in expression %q", p[0], ref.Raw)
 	}
 }
 
-func (s refScope) checkOutputKey(path, stepID, key string, idx int) (ValidationError, bool) {
+func (s refScope) checkOutputKey(path, stepID, key string) (ValidationError, bool) {
 	// The referenced step's action must declare the key. A step with an unknown
 	// action already produced its own error; don't pile on.
-	_ = idx
 	desc, ok := s.descriptorForStep(stepID)
 	if !ok {
 		return ValidationError{}, false
@@ -493,8 +513,12 @@ func validateLiteralInput(path string, decoded any, desc ActionDescriptor) []Val
 }
 
 // stripExpressions returns a copy of v with every expression-bearing leaf
-// removed, recording the removed paths. An array containing an expression is
-// removed whole: a hole in an array cannot be represented.
+// replaced by null, recording the replaced paths. An array containing an
+// expression is replaced whole: a hole in an array cannot be represented.
+//
+// The key is kept rather than deleted so `additionalProperties: false` still
+// catches an input property the action does not declare, even when its value is
+// an expression.
 func stripExpressions(v any, path []string, stripped *[][]string) (any, bool) {
 	switch t := v.(type) {
 	case string:
@@ -514,7 +538,6 @@ func stripExpressions(v any, path []string, stripped *[][]string) (any, bool) {
 			child, hasExpr := stripExpressions(t[k], childPath, stripped)
 			if hasExpr {
 				*stripped = append(*stripped, childPath)
-				continue
 			}
 			out[k] = child
 		}
@@ -531,10 +554,15 @@ func stripExpressions(v any, path []string, stripped *[][]string) (any, bool) {
 	}
 }
 
-// relaxSchema removes stripped property names from the `required` list of the
-// schema node that declares them. It walks `properties` only; a stripped value
-// under a combinator (anyOf/oneOf) or an array item is left alone, which can
-// only make validation more permissive, never less correct.
+// relaxSchema loosens the subschema of every expression-valued property to
+// `true`, so the null placeholder left by stripExpressions type-checks while
+// `required` and `additionalProperties` keep their bite.
+//
+// It walks `properties` to reach the declaring node, then relaxes that property
+// inside the node's combinator branches too. A property reachable only through
+// `$ref` or `patternProperties` is left alone; the worst case there is a
+// spurious finding on an exotic schema, and every action schema in this repo is
+// a flat object.
 func relaxSchema(schema map[string]any, stripped [][]string) {
 	for _, p := range stripped {
 		node := schema
@@ -555,23 +583,65 @@ func relaxSchema(schema map[string]any, stripped [][]string) {
 		if !ok {
 			continue
 		}
-		removeRequired(node, p[len(p)-1])
+		relaxProperty(node, p[len(p)-1])
 	}
 }
 
-func removeRequired(node map[string]any, name string) {
-	req, ok := node["required"].([]any)
-	if !ok {
-		return
+// relaxProperty sets a declared property's subschema to `true` in node and in
+// any combinator branch of node that declares it. An undeclared property is
+// deliberately left alone so additionalProperties still rejects it.
+func relaxProperty(node map[string]any, name string) {
+	if props, ok := node["properties"].(map[string]any); ok {
+		if _, declared := props[name]; declared {
+			props[name] = true
+		}
 	}
-	out := make([]any, 0, len(req))
-	for _, r := range req {
-		if s, isStr := r.(string); isStr && s == name {
+	for _, key := range []string{"allOf", "anyOf", "oneOf"} {
+		branches, ok := node[key].([]any)
+		if !ok {
 			continue
 		}
-		out = append(out, r)
+		for _, b := range branches {
+			if sub, ok := b.(map[string]any); ok {
+				relaxProperty(sub, name)
+			}
+		}
 	}
-	node["required"] = out
+	for _, key := range []string{"if", "then", "else", "not"} {
+		if sub, ok := node[key].(map[string]any); ok {
+			relaxProperty(sub, name)
+		}
+	}
+}
+
+// expressionKeys reports the paths of object keys that contain an expression.
+// Resolving keys would let one expression overwrite another's entry on
+// collision, so the engine refuses them and the validator says so up front.
+func expressionKeys(v any, path string) []string {
+	switch t := v.(type) {
+	case map[string]any:
+		keys := make([]string, 0, len(t))
+		for k := range t {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		var out []string
+		for _, k := range keys {
+			if HasExpression(k) {
+				out = append(out, path+"."+k)
+			}
+			out = append(out, expressionKeys(t[k], path+"."+k)...)
+		}
+		return out
+	case []any:
+		var out []string
+		for i, item := range t {
+			out = append(out, expressionKeys(item, fmt.Sprintf("%s[%d]", path, i))...)
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 func asValidationError(err error, target **jsonschema.ValidationError) bool {

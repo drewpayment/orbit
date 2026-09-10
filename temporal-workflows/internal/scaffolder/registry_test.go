@@ -10,11 +10,10 @@ import (
 )
 
 type fakeAction struct {
-	name         string
-	family       string
-	in, out      string
-	noPlan       bool
-	declaresPlan bool
+	name    string
+	family  string
+	in, out string
+	noPlan  bool
 }
 
 func (f *fakeAction) Name() string                  { return f.name }
@@ -121,4 +120,17 @@ func TestFamilyFromName(t *testing.T) {
 	assert.Equal(t, "debug", familyFromName("debug:log"))
 	assert.Equal(t, "plain", familyFromName("plain"))
 	assert.Equal(t, "", familyFromName(""))
+}
+
+func TestNewRegistryPanicsOnNilAction(t *testing.T) {
+	assert.Panics(t, func() { NewRegistry(nil) })
+}
+
+func TestRegistryValidateSchemas(t *testing.T) {
+	ok := NewRegistry(&fakeAction{name: "a:b", in: `{"type":"object"}`, out: `{"type":"object"}`})
+	assert.NoError(t, ok.ValidateSchemas())
+
+	assert.Error(t, NewRegistry(&fakeAction{name: "a:b", in: `{"type":`, out: `{}`}).ValidateSchemas())
+	assert.Error(t, NewRegistry(&fakeAction{name: "a:b", in: ``, out: `{}`}).ValidateSchemas())
+	assert.Error(t, NewRegistry(&fakeAction{name: "a:b", in: `{"type":"object"}`, out: `{"type":5}`}).ValidateSchemas())
 }

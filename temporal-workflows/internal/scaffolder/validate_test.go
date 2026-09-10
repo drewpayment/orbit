@@ -115,6 +115,7 @@ func TestValidateStepIdentity(t *testing.T) {
 		{"unknown action", func(d *Definition) { d.Spec.Steps[0].Action = "nope:missing" }, "unknown action"},
 		{"no steps", func(d *Definition) { d.Spec.Steps = nil }, "at least one step"},
 		{"bad timeout", func(d *Definition) { d.Spec.Steps[0].Timeout = "5 fortnights" }, "timeout"},
+		{"expression in step name", func(d *Definition) { d.Spec.Steps[0].Name = "build ${{ parameters.name }}" }, "step name"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -259,6 +260,8 @@ func TestValidateLiteralInputAgainstSchema(t *testing.T) {
 		{name: "wrong type", input: `{"name":123}`, want: "name"},
 		{name: "missing required literal", input: `{"private":true}`, want: "name"},
 		{name: "additional property", input: `{"name":"svc","bogus":1}`, want: "bogus"},
+		{name: "additional property hidden behind an expression", input: `{"name":"svc","bogus":"${{ parameters.name }}"}`, want: "bogus"},
+		{name: "additional property hidden in an expression array", input: `{"name":"svc","bogus":["${{ parameters.name }}"]}`, want: "bogus"},
 		{name: "required satisfied by expression", input: `{"name":"${{ parameters.name }}"}`},
 		{name: "expression in typed field is skipped", input: `{"name":"svc","private":"${{ parameters.private }}"}`},
 		{name: "expression cannot excuse a sibling", input: `{"name":"${{ parameters.name }}","private":7}`, want: "private"},
@@ -292,6 +295,56 @@ func TestValidateNestedExpressionRelaxesNestedRequired(t *testing.T) {
 
 	def.Spec.Steps[0].Input = json.RawMessage(`{"cfg":{"a":"${{ parameters.name }}","b":42}}`)
 	assert.NotEmpty(t, Validate(def, testRegistry()))
+}
+
+func TestValidateBarePathCondition(t *testing.T) {
+	// EvalBool accepts a bare dotted path, so the validator must check it too;
+	// otherwise the publish gate misses a reference the run will die on.
+	def := validDefinition()
+	def.Spec.Steps[0].If = "steps.log.output.message"
+	assert.Contains(t, messages(Validate(def, testRegistry())), "later step")
+
+	def = validDefinition()
+	def.Spec.Steps[1].If = "secrets.token"
+	assert.Contains(t, messages(Validate(def, testRegistry())), "unknown namespace")
+
+	def = validDefinition()
+	def.Spec.Steps[1].If = "parameters.private"
+	assert.Empty(t, Validate(def, testRegistry()))
+}
+
+func TestValidateRejectsExpressionKeys(t *testing.T) {
+	def := validDefinition()
+	def.Spec.Steps[1].Input = json.RawMessage(`{"message":"hi","${{ parameters.name }}":"x"}`)
+	assert.Contains(t, messages(Validate(def, testRegistry())), "object keys")
+}
+
+func TestValidateCombinatorRequiredWithExpression(t *testing.T) {
+	// A stripped property must not trip a `required` inside a combinator: the
+	// template is valid and has to be publishable.
+	reg := NewRegistry(&schemaAction{
+		name: "combo:thing",
+		in:   `{"type":"object","properties":{"a":{"type":"string"},"b":{"type":"string"}},"anyOf":[{"required":["a"]},{"required":["b"]}]}`,
+		out:  `{"type":"object","properties":{"ok":{"type":"boolean"}}}`,
+	})
+	def := validDefinition()
+	def.Spec.Output = nil
+	def.Spec.Steps = []Step{{ID: "c", Name: "c", Action: "combo:thing", Input: json.RawMessage(`{"a":"${{ parameters.name }}"}`)}}
+	assert.Empty(t, Validate(def, reg), messages(Validate(def, reg)))
+}
+
+func TestValidateOutputLinkShape(t *testing.T) {
+	def := validDefinition()
+	def.Spec.Output.Links[0].Entity = "${{ steps.repo.output.repoName }}"
+	assert.Contains(t, messages(Validate(def, testRegistry())), "not both")
+
+	def = validDefinition()
+	def.Spec.Output.Links[0].URL = ""
+	assert.Contains(t, messages(Validate(def, testRegistry())), "exactly one of")
+
+	def = validDefinition()
+	def.Spec.Output.Links[0].Title = ""
+	assert.Contains(t, messages(Validate(def, testRegistry())), "spec.output.links[0].title")
 }
 
 func TestValidateMalformedInputJSON(t *testing.T) {

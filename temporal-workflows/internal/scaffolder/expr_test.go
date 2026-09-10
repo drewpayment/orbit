@@ -17,6 +17,7 @@ func testCtx() Ctx {
 			"nested":     map[string]any{"deep": "value"},
 			"list":       []any{"a", "b"},
 			"emptyStr":   "",
+			"emptyList":  []any{},
 			"nilValue":   nil,
 		},
 		Steps: map[string]StepOutput{
@@ -102,7 +103,10 @@ func TestResolveString(t *testing.T) {
 		{name: "filter on missing without default", in: "${{ parameters.absent | upper }}", wantErr: "parameters.absent"},
 		{name: "run unknown key", in: "${{ run.nope }}", wantErr: "run.nope"},
 		{name: "partial stringify of null fails loudly", in: "x=${{ parameters.nilValue }}", wantErr: "stringify null"},
-		{name: "filter on explicit null", in: "${{ parameters.nilValue | upper }}", wantErr: "unresolved path"},
+		{name: "filter on explicit null", in: "${{ parameters.nilValue | upper }}", wantErr: "which is null"},
+		{name: "default NaN is not a float", in: "${{ parameters.absent | default(NaN) }}", want: "NaN"},
+		{name: "default Inf is not a float", in: "${{ parameters.absent | default(Inf) }}", want: "Inf"},
+		{name: "escaped quote in default", in: `${{ parameters.absent | default("a\"b") }}`, want: `a"b`},
 	}
 
 	ctx := testCtx()
@@ -213,7 +217,8 @@ func TestEvalBool(t *testing.T) {
 		{name: "zero number is false", in: `${{ parameters.absent | default(0) }}`, want: false},
 		{name: "non-zero number is true", in: "${{ parameters.replicas }}", want: true},
 		{name: "literal false string", in: `${{ parameters.absent | default("false") }}`, want: false},
-		{name: "empty slice is false", in: `${{ parameters.absent | default("") }}`, want: false},
+		{name: "empty string default is false", in: `${{ parameters.absent | default("") }}`, want: false},
+		{name: "empty slice is false", in: "${{ parameters.emptyList }}", want: false},
 		{name: "slice is true", in: "${{ parameters.list }}", want: true},
 		{name: "blank expression errors", in: "   ", wantErr: "empty"},
 		{name: "missing path errors", in: "${{ parameters.absent }}", wantErr: "parameters.absent"},
@@ -270,4 +275,29 @@ func TestCaseFilters(t *testing.T) {
 			assert.Equal(t, tt.snake, snakeCase(tt.in), "snakeCase")
 		})
 	}
+}
+
+func TestResolveRejectsExpressionKeys(t *testing.T) {
+	ctx := testCtx()
+	_, err := Resolve(ctx, map[string]any{"${{ parameters.name }}": "v"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "object keys")
+
+	_, err = Resolve(ctx, map[string]any{"outer": map[string]any{"${{ parameters.name }}": "v"}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "outer")
+}
+
+func TestNormalizeCondition(t *testing.T) {
+	assert.Equal(t, "", NormalizeCondition("   "))
+	assert.Equal(t, "${{ parameters.a }}", NormalizeCondition("parameters.a"))
+	assert.Equal(t, "${{ parameters.a }}", NormalizeCondition("  ${{ parameters.a }}  "))
+}
+
+func TestResolveJSONRoundTripsNonFiniteDefaults(t *testing.T) {
+	// A default() that parsed as NaN would fail at marshal time, far from the
+	// expression that caused it.
+	out, err := ResolveJSON(testCtx(), json.RawMessage(`{"a":"${{ parameters.absent | default(NaN) }}"}`))
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"a":"NaN"}`, string(out))
 }

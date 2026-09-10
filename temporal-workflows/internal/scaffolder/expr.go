@@ -3,6 +3,7 @@ package scaffolder
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -97,12 +98,9 @@ func ResolveJSON(ctx Ctx, raw json.RawMessage) (json.RawMessage, error) {
 // whole-string `${{ }}` expression or a bare dotted path; mixed literal text is
 // rejected because `if` is single-expression truthiness only (plan §13).
 func EvalBool(ctx Ctx, expr string) (bool, error) {
-	trimmed := strings.TrimSpace(expr)
+	trimmed := NormalizeCondition(expr)
 	if trimmed == "" {
 		return false, fmt.Errorf("if: empty expression")
-	}
-	if !HasExpression(trimmed) {
-		trimmed = exprOpen + " " + trimmed + " " + exprClose
 	}
 	spans, err := scanExpressions(trimmed)
 	if err != nil {
@@ -116,6 +114,18 @@ func EvalBool(ctx Ctx, expr string) (bool, error) {
 		return false, fmt.Errorf("if: %w", err)
 	}
 	return truthy(val), nil
+}
+
+// NormalizeCondition puts a step's `if` into its canonical form. A bare dotted
+// path is wrapped in `${{ }}` so it evaluates the same way it reads. Both
+// EvalBool and the static validator go through here, so the two can never
+// disagree about which conditions carry references.
+func NormalizeCondition(expr string) string {
+	trimmed := strings.TrimSpace(expr)
+	if trimmed == "" || HasExpression(trimmed) {
+		return trimmed
+	}
+	return exprOpen + " " + trimmed + " " + exprClose
 }
 
 // ---------------------------------------------------------------------------
@@ -140,6 +150,11 @@ func resolveValue(ctx Ctx, v any, path string) (any, error) {
 		sort.Strings(keys)
 		out := make(map[string]any, len(t))
 		for _, k := range keys {
+			if HasExpression(k) {
+				// Resolving keys would let one expression silently overwrite
+				// another's entry on collision. Refuse instead of guessing.
+				return nil, wrapPath(path, fmt.Errorf("expressions are not supported in object keys: %q", k))
+			}
 			child, err := resolveValue(ctx, t[k], joinPath(path, k))
 			if err != nil {
 				return nil, err
@@ -252,6 +267,10 @@ func findClose(s string, from int) (int, error) {
 	for i := from; i < len(s); i++ {
 		c := s[i]
 		if quote != 0 {
+			if c == '\\' && i+1 < len(s) {
+				i++ // an escaped character never closes the quote
+				continue
+			}
 			if c == quote {
 				quote = 0
 			}
@@ -349,6 +368,10 @@ func splitTopLevel(s string, sep byte) []string {
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		if quote != 0 {
+			if c == '\\' && i+1 < len(s) {
+				i++
+				continue
+			}
 			if c == quote {
 				quote = 0
 			}
@@ -376,7 +399,7 @@ func splitTopLevel(s string, sep byte) []string {
 func parseLiteral(s string) any {
 	if len(s) >= 2 {
 		if (s[0] == '"' && s[len(s)-1] == '"') || (s[0] == '\'' && s[len(s)-1] == '\'') {
-			return s[1 : len(s)-1]
+			return unescapeQuoted(s[1 : len(s)-1])
 		}
 	}
 	switch s {
@@ -387,7 +410,9 @@ func parseLiteral(s string) any {
 	case "null", "nil":
 		return nil
 	}
-	if f, err := strconv.ParseFloat(s, 64); err == nil {
+	// A non-finite float cannot be marshalled back to JSON, so it would fail
+	// deep inside ResolveJSON rather than here. Treat it as a plain string.
+	if f, err := strconv.ParseFloat(s, 64); err == nil && !math.IsNaN(f) && !math.IsInf(f, 0) {
 		return f
 	}
 	return s
@@ -423,17 +448,25 @@ func evalReference(ctx Ctx, ref Reference) (any, error) {
 // namespace, malformed steps reference) is never maskable by default().
 func lookup(ctx Ctx, path []string) (any, bool, error) {
 	joined := strings.Join(path, ".")
+	if len(path) == 0 {
+		return nil, false, fmt.Errorf("empty expression path")
+	}
 	switch path[0] {
 	case "parameters":
-		return descend(ctx.Parameters, path[1:], joined)
+		v, ok := descend(ctx.Parameters, path[1:])
+		return v, ok, nil
 	case "user":
-		return descend(ctx.User, path[1:], joined)
+		v, ok := descend(ctx.User, path[1:])
+		return v, ok, nil
 	case "workspace":
-		return descend(ctx.Workspace, path[1:], joined)
+		v, ok := descend(ctx.Workspace, path[1:])
+		return v, ok, nil
 	case "template":
-		return descend(ctx.Template, path[1:], joined)
+		v, ok := descend(ctx.Template, path[1:])
+		return v, ok, nil
 	case "run":
-		return descend(map[string]any{"id": ctx.RunID}, path[1:], joined)
+		v, ok := descend(map[string]any{"id": ctx.RunID}, path[1:])
+		return v, ok, nil
 	case "steps":
 		if len(path) < 3 {
 			return nil, false, fmt.Errorf("invalid steps reference %q: expected steps.<id>.output.<key>", joined)
@@ -445,29 +478,46 @@ func lookup(ctx Ctx, path []string) (any, bool, error) {
 		if !ok {
 			return nil, false, nil
 		}
-		return descend(step.Output, path[3:], joined)
+		v, found := descend(step.Output, path[3:])
+		return v, found, nil
 	default:
 		return nil, false, fmt.Errorf("unknown namespace %q in expression %q", path[0], joined)
 	}
 }
 
-func descend(root map[string]any, rest []string, joined string) (any, bool, error) {
-	var cur any = root
+// descend walks a dotted path into a namespace map. Traversal into a scalar is
+// reported as missing, so default() can mask it like any other absent path.
+func descend(root map[string]any, rest []string) (any, bool) {
 	if root == nil {
-		return nil, false, nil
+		return nil, false
 	}
+	var cur any = root
 	for _, key := range rest {
 		m, ok := cur.(map[string]any)
 		if !ok {
-			return nil, false, nil // traversal into a scalar: treated as missing
+			return nil, false
 		}
 		cur, ok = m[key]
 		if !ok {
-			return nil, false, nil
+			return nil, false
 		}
 	}
-	_ = joined
-	return cur, true, nil
+	return cur, true
+}
+
+// unescapeQuoted resolves backslash escapes inside a quoted filter argument.
+func unescapeQuoted(s string) string {
+	if !strings.ContainsRune(s, '\\') {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) {
+			i++
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
 }
 
 const filterDefault = "default"
@@ -504,7 +554,7 @@ func applyFilter(f Filter, val any, ref Reference) (any, error) {
 		return val, nil
 	}
 	if val == nil {
-		return nil, fmt.Errorf("cannot apply filter %q to unresolved path %q", f.Name, strings.Join(ref.Path, "."))
+		return nil, fmt.Errorf("cannot apply filter %q to %q, which is null; add default(...) first", f.Name, strings.Join(ref.Path, "."))
 	}
 	if f.Name == "json" {
 		b, err := json.Marshal(val)
