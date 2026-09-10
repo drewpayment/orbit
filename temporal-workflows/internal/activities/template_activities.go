@@ -4,13 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -92,33 +89,6 @@ func matchesRawFilePattern(relPath string, patterns []string) bool {
 		}
 	}
 	return false
-}
-
-// isBinaryContent applies the existing null-byte heuristic to a content
-// sample.
-func isBinaryContent(content []byte) bool {
-	sampleSize := 512
-	if len(content) < sampleSize {
-		sampleSize = len(content)
-	}
-	return strings.Contains(string(content[:sampleSize]), "\x00")
-}
-
-// isSafeRenderedName reports whether a rendered file/dir name is safe to use
-// as a single path segment: non-empty and free of path separators or ".."
-// (guards against a malicious/misconfigured template variable value, e.g.
-// {"SERVICE_NAME": "../../etc"}, escaping the work directory via rename).
-func isSafeRenderedName(name string) bool {
-	if name == "" {
-		return false
-	}
-	if name == "." || name == ".." {
-		return false
-	}
-	if strings.ContainsAny(name, `/\`) {
-		return false
-	}
-	return true
 }
 
 // PushToNewRepoActivityInput contains parameters for pushing to new repository
@@ -298,27 +268,19 @@ func (a *TemplateActivities) CloneTemplateRepo(ctx context.Context, input Templa
 		return "", fmt.Errorf("failed to create work directory: %w", err)
 	}
 
-	// Build clone URL with authentication if we have an installation ID
-	cloneURL := input.SourceRepoURL
+	// Fetch a token if we have an installation ID.
+	token := ""
 	if input.InstallationID != "" {
-		token, err := a.tokenService.GetInstallationToken(ctx, input.InstallationID)
+		t, err := a.tokenService.GetInstallationToken(ctx, input.InstallationID)
 		if err != nil {
 			a.logger.Warn("Failed to get token for clone, attempting unauthenticated", "error", err)
 		} else {
-			// Insert token into URL for authenticated clone
-			cloneURL = strings.Replace(cloneURL, "https://", fmt.Sprintf("https://x-access-token:%s@", token), 1)
+			token = t
 		}
 	}
 
-	// Clone the repository
-	cmd := exec.CommandContext(ctx, "git", "clone", cloneURL, workDir)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		// Clean up on failure
-		_ = os.RemoveAll(workDir)
-		// Sanitize output to remove any tokens
-		sanitizedOutput := sanitizeGitOutput(string(output))
-		return "", fmt.Errorf("failed to clone repository: %w (output: %s)", err, sanitizedOutput)
+	if err := CloneGitRepo(ctx, workDir, input.SourceRepoURL, "", token); err != nil {
+		return "", fmt.Errorf("failed to clone repository: %w", err)
 	}
 
 	// Remove .git directory to start fresh
@@ -355,135 +317,11 @@ func (a *TemplateActivities) ApplyTemplateVariables(ctx context.Context, input A
 
 	rawPatterns := loadRawFilePatterns(input.WorkDir, a.logger)
 
-	var allPaths []string
-
-	// Pass 1: content substitution (top-down walk). Collect every visited
-	// path (files and dirs) along the way for the rename pass below.
-	err := filepath.WalkDir(input.WorkDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if path != input.WorkDir {
-			allPaths = append(allPaths, path)
-		}
-
-		if d.IsDir() {
-			return nil
-		}
-
-		// Symlinks: do not follow, do not attempt to render their target
-		// content (a dangling or absolute-path symlink could point outside
-		// WorkDir); treat like a raw/binary file for content purposes.
-		if d.Type()&fs.ModeSymlink != 0 {
-			a.logger.Debug("Skipping content render for symlink", "path", path)
-			return nil
-		}
-
-		relPath, relErr := filepath.Rel(input.WorkDir, path)
-		if relErr != nil {
-			return fmt.Errorf("failed to compute relative path for %s: %w", path, relErr)
-		}
-
-		if matchesRawFilePattern(relPath, rawPatterns) {
-			a.logger.Debug("Skipping raw-file-matched content", "path", relPath)
-			return nil
-		}
-
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("failed to read file %s: %w", path, err)
-		}
-
-		if isBinaryContent(content) {
-			a.logger.Debug("Skipping binary file content", "path", path)
-			return nil
-		}
-
-		rendered, renderErr := templating.Render(string(content), input.Variables)
-		if renderErr != nil {
-			a.logger.Warn("Failed to render template file, leaving unchanged", "path", path, "error", renderErr)
-			result.SkippedFiles = append(result.SkippedFiles, path)
-			return nil
-		}
-
-		if rendered != string(content) {
-			info, statErr := d.Info()
-			if statErr != nil {
-				return fmt.Errorf("failed to stat file %s: %w", path, statErr)
-			}
-			if err := os.WriteFile(path, []byte(rendered), info.Mode().Perm()); err != nil {
-				return fmt.Errorf("failed to write file %s: %w", path, err)
-			}
-			a.logger.Debug("Applied variables to file", "path", path)
-		}
-
-		return nil
-	})
+	renderResult, err := templating.RenderDir(input.WorkDir, input.Variables, rawPatterns, a.logger)
 	if err != nil {
-		return nil, fmt.Errorf("failed to apply template variables: %w", err)
+		return nil, err
 	}
-
-	// Pass 2: rename file/dir base names, deepest-first. allPaths was
-	// collected in top-down (pre-)order by WalkDir, so iterating it in
-	// reverse visits children before their parents — a valid bottom-up
-	// order without a second directory walk.
-	for i := len(allPaths) - 1; i >= 0; i-- {
-		oldPath := allPaths[i]
-
-		dir := filepath.Dir(oldPath)
-		base := filepath.Base(oldPath)
-
-		relPath, relErr := filepath.Rel(input.WorkDir, oldPath)
-		if relErr != nil {
-			a.logger.Warn("Failed to compute relative path for rename, skipping", "path", oldPath, "error", relErr)
-			result.SkippedFiles = append(result.SkippedFiles, oldPath)
-			continue
-		}
-		if matchesRawFilePattern(relPath, rawPatterns) {
-			continue
-		}
-
-		newBase, renderErr := templating.RenderName(base, input.Variables)
-		if renderErr != nil {
-			a.logger.Warn("Failed to render name, leaving unchanged", "path", oldPath, "error", renderErr)
-			result.SkippedFiles = append(result.SkippedFiles, oldPath)
-			continue
-		}
-
-		if newBase == base {
-			continue
-		}
-
-		if !isSafeRenderedName(newBase) {
-			a.logger.Warn("Rendered name is unsafe (path separator or '..'), leaving unchanged", "path", oldPath, "renderedName", newBase)
-			result.SkippedFiles = append(result.SkippedFiles, oldPath)
-			continue
-		}
-
-		newPath := filepath.Join(dir, newBase)
-
-		// Guard against a silent clobber: if two paths render to the same
-		// new name (e.g. two variable keys sharing a value), os.Rename
-		// would otherwise overwrite whichever collision target already
-		// landed there first. Skip instead of clobbering.
-		if _, statErr := os.Lstat(newPath); statErr == nil {
-			a.logger.Warn("Rename target already exists, leaving source unchanged to avoid clobbering it", "path", oldPath, "newPath", newPath)
-			result.SkippedFiles = append(result.SkippedFiles, oldPath)
-			continue
-		} else if !os.IsNotExist(statErr) {
-			a.logger.Warn("Failed to check rename target, leaving unchanged", "path", oldPath, "newPath", newPath, "error", statErr)
-			result.SkippedFiles = append(result.SkippedFiles, oldPath)
-			continue
-		}
-
-		if err := os.Rename(oldPath, newPath); err != nil {
-			a.logger.Warn("Failed to rename path, leaving unchanged", "path", oldPath, "newPath", newPath, "error", err)
-			result.SkippedFiles = append(result.SkippedFiles, oldPath)
-			continue
-		}
-		a.logger.Debug("Renamed path", "oldPath", oldPath, "newPath", newPath)
-	}
+	result.SkippedFiles = renderResult.SkippedFiles
 
 	a.logger.Info("Template variables applied", "skippedFiles", len(result.SkippedFiles))
 	return result, nil
@@ -493,43 +331,21 @@ func (a *TemplateActivities) ApplyTemplateVariables(ctx context.Context, input A
 func (a *TemplateActivities) PushToNewRepo(ctx context.Context, input PushToNewRepoActivityInput) error {
 	a.logger.Info("Pushing to new repository", "workDir", input.WorkDir, "repoURL", input.RepoURL)
 
-	// Initialize git repository
-	if err := a.runGitCommand(ctx, input.WorkDir, "init"); err != nil {
-		return fmt.Errorf("failed to initialize git: %w", err)
-	}
-
-	// Configure git
-	_ = a.runGitCommand(ctx, input.WorkDir, "config", "user.name", "Orbit IDP")
-	_ = a.runGitCommand(ctx, input.WorkDir, "config", "user.email", "bot@orbit.dev")
-
-	// Add all files
-	if err := a.runGitCommand(ctx, input.WorkDir, "add", "."); err != nil {
-		return fmt.Errorf("failed to add files: %w", err)
-	}
-
-	// Commit
-	if err := a.runGitCommand(ctx, input.WorkDir, "commit", "-m", "Initial commit from template"); err != nil {
-		return fmt.Errorf("failed to commit: %w", err)
-	}
-
-	// Build remote URL with authentication if we have installation ID
-	remoteURL := input.RepoURL
+	token := ""
 	if input.InstallationID != "" {
-		token, err := a.tokenService.GetInstallationToken(ctx, input.InstallationID)
+		t, err := a.tokenService.GetInstallationToken(ctx, input.InstallationID)
 		if err != nil {
 			return fmt.Errorf("failed to get GitHub token for push: %w", err)
 		}
-		remoteURL = strings.Replace(remoteURL, "https://", fmt.Sprintf("https://x-access-token:%s@", token), 1)
+		token = t
 	}
 
-	// Add remote
-	if err := a.runGitCommand(ctx, input.WorkDir, "remote", "add", "origin", remoteURL); err != nil {
-		// Remote might already exist, try setting URL instead
-		_ = a.runGitCommand(ctx, input.WorkDir, "remote", "set-url", "origin", remoteURL)
-	}
-
-	// Push to main branch
-	if err := a.runGitCommand(ctx, input.WorkDir, "push", "-u", "origin", "main"); err != nil {
+	if err := PushRepo(ctx, PushRepoInput{
+		WorkDir: input.WorkDir,
+		RepoURL: input.RepoURL,
+		Branch:  "main",
+		Token:   token,
+	}); err != nil {
 		return fmt.Errorf("failed to push: %w", err)
 	}
 
@@ -573,16 +389,5 @@ func (a *TemplateActivities) FinalizeInstantiation(ctx context.Context, input Fi
 	a.logger.Info("Template instantiation finalized",
 		"catalogEntityID", result.CatalogEntityID,
 		"usageCount", result.UsageCount)
-	return nil
-}
-
-// runGitCommand is a helper to run git commands in a specific directory
-func (a *TemplateActivities) runGitCommand(ctx context.Context, dir string, args ...string) error {
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = dir
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("git %v failed: %w (output: %s)", args, err, sanitizeGitOutput(string(output)))
-	}
 	return nil
 }

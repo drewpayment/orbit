@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/drewpayment/orbit/temporal-workflows/internal/services"
+	"github.com/drewpayment/orbit/temporal-workflows/internal/templating"
 )
 
 // MockTokenService for testing
@@ -331,7 +332,7 @@ func TestIsSafeRenderedName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, isSafeRenderedName(tt.in))
+			assert.Equal(t, tt.want, templating.IsSafeRenderedName(tt.in))
 		})
 	}
 }
