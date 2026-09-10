@@ -74,11 +74,11 @@ func (s *TopicSyncWorkflowTestSuite) TestTopicCreatedSyncWorkflow_Success() {
 // TestTopicCreatedSyncWorkflow_WithConfig tests topic creation with configuration
 func (s *TopicSyncWorkflowTestSuite) TestTopicCreatedSyncWorkflow_WithConfig() {
 	input := TopicCreatedSyncInput{
-		VirtualClusterID:      "vc-123",
-		VirtualName:           "configured-topic",
-		PhysicalName:          "vc123_configured-topic",
-		Partitions:            6,
-		ReplicationFactor:     3,
+		VirtualClusterID:  "vc-123",
+		VirtualName:       "configured-topic",
+		PhysicalName:      "vc123_configured-topic",
+		Partitions:        6,
+		ReplicationFactor: 3,
 		Config: map[string]string{
 			"retention.ms":      "604800000",
 			"cleanup.policy":    "compact",

@@ -142,7 +142,7 @@ func (s *scriptedLLM) Run(_ context.Context, in agentactivity.LLMNextStepInput) 
 	if idx >= len(s.steps) {
 		// Default tail: end with done
 		return agentactivity.LLMNextStepResult{
-			ToolCalls: []providers.ToolCall{{ID: "done-final", Name: ToolDone, Arguments: map[string]any{"summary": "default tail"}}},
+			ToolCalls:  []providers.ToolCall{{ID: "done-final", Name: ToolDone, Arguments: map[string]any{"summary": "default tail"}}},
 			StopReason: "tool_use",
 		}, nil
 	}

@@ -74,12 +74,12 @@ type ExecuteCleanupInput struct {
 
 // ExecuteCleanupResult is the result of executing immediate cleanup
 type ExecuteCleanupResult struct {
-	Success             bool     `json:"success"`
-	DeletedResources    []string `json:"deletedResources"`
-	DeletedTopics       []string `json:"deletedTopics"`
-	DeletedCredentials  []string `json:"deletedCredentials"`
+	Success                bool     `json:"success"`
+	DeletedResources       []string `json:"deletedResources"`
+	DeletedTopics          []string `json:"deletedTopics"`
+	DeletedCredentials     []string `json:"deletedCredentials"`
 	DeletedVirtualClusters []string `json:"deletedVirtualClusters"`
-	Error               string   `json:"error,omitempty"`
+	Error                  string   `json:"error,omitempty"`
 }
 
 // MarkApplicationDeletedInput is the input for marking an application as deleted

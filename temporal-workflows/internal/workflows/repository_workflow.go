@@ -30,13 +30,13 @@ var (
 
 // RepositoryWorkflowInput defines the input parameters for the repository creation workflow
 type RepositoryWorkflowInput struct {
-	WorkspaceID          string            // REQUIRED - for GitHub installation lookup
+	WorkspaceID          string // REQUIRED - for GitHub installation lookup
 	RepositoryID         string
-	GitHubInstallationID string            // OPTIONAL - override default installation
+	GitHubInstallationID string // OPTIONAL - override default installation
 	TemplateName         string
 	Variables            map[string]string
-	GitURL               string            // OPTIONAL - if empty, create repo in GitHub
-	RepositoryName       string            // REQUIRED if creating repo (GitURL empty)
+	GitURL               string // OPTIONAL - if empty, create repo in GitHub
+	RepositoryName       string // REQUIRED if creating repo (GitURL empty)
 }
 
 // RepositoryWorkflowResult defines the output of the repository creation workflow

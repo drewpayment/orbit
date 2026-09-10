@@ -148,6 +148,7 @@ func (s *TemplateServer) StartScaffolderRun(ctx context.Context, req *connect.Re
 	workflowID, err := scaffolderTemporal.StartScaffolderWorkflow(ctx, types.ScaffolderWorkflowInput{
 		RunID:               msg.GetRunId(),
 		DefinitionVersionID: msg.GetDefinitionVersionId(),
+		DefinitionID:        version.DefinitionID,
 		Definition:          version.DefinitionJSON,
 		Parameters:          params,
 		WorkspaceID:         msg.GetWorkspaceId(),

@@ -32,9 +32,9 @@ func TestAbortAtGate_PreemptsBeforeSlowAudit(t *testing.T) {
 	registerSandboxStubs(env)
 
 	var (
-		mu              sync.Mutex
-		abortAuditSeen  bool
-		releaseAudit    = make(chan struct{})
+		mu             sync.Mutex
+		abortAuditSeen bool
+		releaseAudit   = make(chan struct{})
 	)
 	// Override UpdateAgentRun: the terminal "aborted" write blocks until the
 	// test releases it; all other writes pass through instantly.

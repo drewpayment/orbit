@@ -33,6 +33,7 @@ func TestScaffolderWorkflowInput_MatchesSharedType(t *testing.T) {
 	sent := types.ScaffolderWorkflowInput{
 		RunID:               "run-1",
 		DefinitionVersionID: "ver-1",
+		DefinitionID:        "def-1",
 		Definition:          rawDef,
 		Parameters:          map[string]any{"name": "orders", "count": float64(2), "nested": map[string]any{"a": true}},
 		WorkspaceID:         "ws-1",
@@ -48,6 +49,7 @@ func TestScaffolderWorkflowInput_MatchesSharedType(t *testing.T) {
 
 	assert.Equal(t, sent.RunID, got.RunID)
 	assert.Equal(t, sent.DefinitionVersionID, got.DefinitionVersionID)
+	assert.Equal(t, sent.DefinitionID, got.DefinitionID)
 	assert.Equal(t, sent.WorkspaceID, got.WorkspaceID)
 	assert.Equal(t, sent.UserID, got.UserID)
 	assert.Equal(t, sent.DryRun, got.DryRun)

@@ -22,13 +22,16 @@ const ScaffolderProgressQuery = "progress"
 // full v2 document, resolved by the caller before the workflow starts, so
 // workflow code makes no Payload calls and history records exactly what ran.
 type ScaffolderWorkflowInput struct {
-	RunID               string          `json:"runId"`
-	DefinitionVersionID string          `json:"definitionVersionId"`
-	Definition          json.RawMessage `json:"definition"`
-	Parameters          map[string]any  `json:"parameters"`
-	WorkspaceID         string          `json:"workspaceId"`
-	UserID              string          `json:"userId"`
-	DryRun              bool            `json:"dryRun"`
+	RunID               string `json:"runId"`
+	DefinitionVersionID string `json:"definitionVersionId"`
+	// DefinitionID is the template-definitions doc id, exposed to expressions
+	// as `${{ template.id }}`.
+	DefinitionID string          `json:"definitionId"`
+	Definition   json.RawMessage `json:"definition"`
+	Parameters   map[string]any  `json:"parameters"`
+	WorkspaceID  string          `json:"workspaceId"`
+	UserID       string          `json:"userId"`
+	DryRun       bool            `json:"dryRun"`
 }
 
 // ScaffolderStepProgress is one step's state in a run.

@@ -119,6 +119,7 @@ func TestStartScaffolderRun_Success(t *testing.T) {
 
 	assert.Equal(t, testRunID, got.RunID)
 	assert.Equal(t, "ver-1", got.DefinitionVersionID)
+	assert.Equal(t, "def-1", got.DefinitionID, "template.id comes from the version's parent definition")
 	assert.Equal(t, "ws-1", got.WorkspaceID)
 	assert.Equal(t, "user-1", got.UserID)
 	assert.True(t, got.DryRun)

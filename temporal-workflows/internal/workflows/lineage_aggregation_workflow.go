@@ -84,9 +84,9 @@ type LineageAggregationWorkflowInput struct {
 
 // LineageAggregationWorkflowResult is the result of the aggregation workflow
 type LineageAggregationWorkflowResult struct {
-	EdgesReset       int `json:"edgesReset"`
+	EdgesReset          int `json:"edgesReset"`
 	EdgesMarkedInactive int `json:"edgesMarkedInactive"`
-	SnapshotsCreated int `json:"snapshotsCreated"`
+	SnapshotsCreated    int `json:"snapshotsCreated"`
 }
 
 // LineageAggregationWorkflow is a scheduled workflow that performs periodic lineage maintenance:

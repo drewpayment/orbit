@@ -57,7 +57,7 @@ func TestInfrastructureAgentWorkflow_ProposePatternFullRoundTrip(t *testing.T) {
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, in agentactivity.RegisterPendingPatternInput) (agentactivity.RegisterPendingPatternResult, error) {
 			rows = append(rows, entry{
-				ID: fmt.Sprintf("pat-%d", len(rows)),
+				ID:   fmt.Sprintf("pat-%d", len(rows)),
 				Name: in.Name, DisplayName: in.DisplayName, Description: in.Description,
 				Category: in.Category, TemplateKind: in.TemplateKind, TemplateJSON: in.TemplateJSON,
 				InputSchemaJSON: in.InputSchemaJSON,

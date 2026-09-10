@@ -862,3 +862,66 @@ func TestScaffolderValidate_RejectsBadStepTimeouts(t *testing.T) {
 		})
 	}
 }
+
+// The built-in namespaces the engine's validator advertises must actually
+// resolve at run time, or a template passes validation and then fails mid-run.
+// This pins the ones the workflow can seed and documents the two it cannot.
+func (s *ScaffolderWorkflowTestSuite) TestBuiltinNamespacesResolve() {
+	def := twoStepDefinition()
+	def.Spec.Steps = def.Spec.Steps[:1]
+	def.Spec.Steps[0].Input = json.RawMessage(`{
+		"user":        "${{ user.id }}",
+		"workspace":   "${{ workspace.id }}",
+		"run":         "${{ run.id }}",
+		"tmplId":      "${{ template.id }}",
+		"tmplName":    "${{ template.name }}",
+		"tmplTitle":   "${{ template.title }}",
+		"tmplOwner":   "${{ template.owner }}",
+		"tmplKind":    "${{ template.targetKind }}",
+		"tmplVersion": "${{ template.versionId }}"
+	}`)
+	def.Spec.Output = nil
+
+	in := baseInput(def)
+	in.DefinitionID = "def-1"
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	s.Equal(ScaffolderStatusSucceeded, s.result().Status)
+
+	s.Require().Len(s.stubs.executed, 1)
+	var got map[string]any
+	s.Require().NoError(json.Unmarshal(s.stubs.executed[0].Input, &got))
+
+	s.Equal("user-1", got["user"])
+	s.Equal("ws-1", got["workspace"])
+	s.Equal("run-1", got["run"])
+	s.Equal("def-1", got["tmplId"])
+	s.Equal("svc", got["tmplName"])
+	s.Equal("Service", got["tmplTitle"])
+	s.Equal("platform", got["tmplOwner"])
+	s.Equal("service", got["tmplKind"])
+	s.Equal("ver-1", got["tmplVersion"])
+}
+
+// KNOWN MISMATCH, pinned so it is visible rather than folklore: the validator
+// accepts these, but the run input carries no such fields, so they fail at run
+// time. Seeding a placeholder instead would render an empty string into a real
+// repository, which is worse.
+func (s *ScaffolderWorkflowTestSuite) TestUnseededBuiltinNamespaceKeysFailAtRunTime() {
+	for _, expr := range []string{"${{ user.email }}", "${{ workspace.slug }}"} {
+		s.Run(expr, func() {
+			s.SetupTest()
+			def := twoStepDefinition()
+			def.Spec.Steps = def.Spec.Steps[:1]
+			def.Spec.Steps[0].Input = json.RawMessage(`{"name":"` + expr + `"}`)
+			def.Spec.Output = nil
+
+			s.env.ExecuteWorkflow(ScaffolderWorkflow, baseInput(def))
+			res := s.result()
+
+			s.Equal(ScaffolderStatusFailed, res.Status)
+			s.Contains(res.Error, "unresolved expression path")
+			s.Empty(s.stubs.executed)
+		})
+	}
+}

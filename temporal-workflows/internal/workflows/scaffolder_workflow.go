@@ -68,6 +68,7 @@ const maxStepAttempts = 3
 type ScaffolderWorkflowInput struct {
 	RunID               string                `json:"runId"`
 	DefinitionVersionID string                `json:"definitionVersionId"`
+	DefinitionID        string                `json:"definitionId"`
 	Definition          scaffolder.Definition `json:"definition"`
 	Parameters          map[string]any        `json:"parameters"`
 	WorkspaceID         string                `json:"workspaceId"`
@@ -245,7 +246,20 @@ func newScaffolderRun(input ScaffolderWorkflowInput, logger log.Logger) *scaffol
 			Steps:      map[string]scaffolder.StepOutput{},
 			User:       map[string]any{"id": input.UserID},
 			Workspace:  map[string]any{"id": input.WorkspaceID},
+			// The keys the engine's validator advertises for this namespace,
+			// seeded from what the run input carries.
+			//
+			// KNOWN MISMATCH: the validator also accepts `${{ user.email }}`
+			// and `${{ workspace.slug }}` (see validate.go's well-known
+			// namespaces and its test fixture), but StartScaffolderRunRequest
+			// carries only ids, so those resolve to nothing here — a template
+			// using them passes validation and then fails at run time. Closing
+			// it means carrying the fields through the proto and the
+			// dispatcher; tracked as follow-up, not worked around by seeding a
+			// placeholder, which would silently render an empty string into a
+			// real repository.
 			Template: map[string]any{
+				"id":          input.DefinitionID,
 				"name":        input.Definition.Metadata.Name,
 				"title":       input.Definition.Metadata.Title,
 				"owner":       input.Definition.Metadata.Owner,

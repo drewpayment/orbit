@@ -23,9 +23,9 @@ type HealthConfig struct {
 
 // HealthCheckWorkflowInput contains all parameters for the workflow
 type HealthCheckWorkflowInput struct {
-	AppID           string       `json:"appId"`
-	HealthConfig    HealthConfig `json:"healthConfig"`
-	ChecksPerformed int          `json:"checksPerformed"` // Carried across ContinueAsNew
+	AppID           string             `json:"appId"`
+	HealthConfig    HealthConfig       `json:"healthConfig"`
+	ChecksPerformed int                `json:"checksPerformed"` // Carried across ContinueAsNew
 	LastResult      *HealthCheckResult `json:"lastResult"`      // Carried across ContinueAsNew for query continuity
 }
 
@@ -39,7 +39,7 @@ type HealthCheckResult struct {
 
 // HealthStatusQueryResult is returned by the health status query
 type HealthStatusQueryResult struct {
-	Status          string `json:"status"`          // pending, healthy, degraded, down
+	Status          string `json:"status"` // pending, healthy, degraded, down
 	StatusCode      int    `json:"statusCode"`
 	ResponseTime    int64  `json:"responseTime"`
 	Error           string `json:"error"`
