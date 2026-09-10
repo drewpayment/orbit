@@ -155,8 +155,16 @@ const DEFINITION_JSON = {
     parameters: [
       { title: 'Basics', required: ['name'], properties: { name: { type: 'string' } } },
     ],
-    steps: [],
+    // The validator (like the Go engine) requires at least one step.
+    steps: [{ id: 'log', name: 'Log', action: 'debug:log', input: { message: 'hi' } }],
   },
+}
+
+const DEBUG_LOG_RPC_ACTION = {
+  name: 'debug:log',
+  family: 'debug',
+  inputSchemaJson: '{"type":"object","properties":{"message":{"type":"string"}}}',
+  outputSchemaJson: '{}',
 }
 
 describe('templates/authoring-actions', () => {
@@ -331,7 +339,7 @@ describe('templates/authoring-actions', () => {
     })
 
     it('validateTemplateDefinition runs the static validator against a shape-valid definition', async () => {
-      mockListActionsRpc.mockResolvedValue({ actions: [] })
+      mockListActionsRpc.mockResolvedValue({ actions: [DEBUG_LOG_RPC_ACTION] })
       const env = makeFakePayload()
       mockPayload = env.payload
       const { validateTemplateDefinition } = await import('./authoring-actions')
@@ -931,6 +939,50 @@ describe('templates/authoring-actions', () => {
       // run-detail page — must be redacted too, not just inputs/steps/plan.
       const outputs = run!.outputs as { text?: string; links?: { url?: string }[] }
       expect(outputs.text).toBe('••••••••')
+    })
+
+    it('getRun also redacts a secret value if it leaks into outputs (consumer run-detail Task 17 surfaces this)', async () => {
+      const secretDefinitionJson = {
+        ...DEFINITION_JSON,
+        spec: {
+          ...DEFINITION_JSON.spec,
+          parameters: [
+            {
+              title: 'Basics',
+              properties: { token: { type: 'string', 'ui:secret': true } },
+            },
+          ],
+        },
+      }
+      const env = makeFakePayload({
+        'template-definition-versions': [
+          {
+            id: 'ver-5',
+            definition: 'def-5',
+            workspace: WORKSPACE_ID,
+            versionNumber: 1,
+            definitionJson: secretDefinitionJson,
+          },
+        ],
+        'action-runs': [
+          {
+            id: 'run-3',
+            action: 'act-1',
+            workspace: WORKSPACE_ID,
+            templateVersion: 'ver-5',
+            status: 'succeeded',
+            inputs: { token: 'super-secret-value' },
+            outputs: { links: [{ title: 'Token', url: 'super-secret-value' }] },
+          },
+        ],
+      })
+      mockPayload = env.payload
+      const { getRun } = await import('./authoring-actions')
+
+      const run = await getRun('run-3')
+      expect(run).not.toBeNull()
+      const outputs = run!.outputs as { links?: { url?: string }[] }
+      expect(outputs.links?.[0].url).toBe('••••••••')
     })
 
     it('getRun scopes to the caller\'s workspace access', async () => {

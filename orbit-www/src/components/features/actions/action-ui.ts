@@ -114,6 +114,47 @@ export function runStatusPresentation(status: string): StatusPresentation {
   )
 }
 
+/** A `Steps[number].status` value on an `ActionRun` (per-step lifecycle, Phase 2 plan Task 15). */
+export type StepStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped'
+
+/**
+ * Status → badge presentation for one `ActionRun.steps[]` entry. Distinct
+ * from {@link RUN_STATUS_PRESENTATION} (whole-run lifecycle includes
+ * `awaiting-approval`/`cancelled`, which no individual step has; a step adds
+ * `skipped`, which no whole run has).
+ */
+export const STEP_STATUS_PRESENTATION: Record<StepStatus, StatusPresentation> = {
+  pending: {
+    label: 'Pending',
+    className: 'border-border bg-transparent text-muted-foreground',
+  },
+  running: {
+    label: 'Running',
+    className: 'border-blue-500/25 bg-blue-500/15 text-blue-600 dark:text-blue-400 animate-pulse',
+  },
+  succeeded: {
+    label: 'Succeeded',
+    className: 'border-green-500/25 bg-green-500/15 text-green-600 dark:text-green-400',
+  },
+  failed: {
+    label: 'Failed',
+    className: 'border-red-500/25 bg-red-500/15 text-red-600 dark:text-red-400',
+  },
+  skipped: {
+    label: 'Skipped',
+    className: 'border-border bg-muted text-muted-foreground',
+  },
+}
+
+export function stepStatusPresentation(status: string): StatusPresentation {
+  return (
+    STEP_STATUS_PRESENTATION[status as StepStatus] ?? {
+      label: status,
+      className: 'border-border bg-muted text-muted-foreground',
+    }
+  )
+}
+
 /** Human label for a run trigger. */
 export function triggerLabel(trigger: string | null | undefined): string {
   return trigger === 'automation' ? 'Automation' : 'Manual'

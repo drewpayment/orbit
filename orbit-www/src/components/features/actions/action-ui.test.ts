@@ -3,6 +3,7 @@ import {
   approvalPolicyLabel,
   backendTypeLabel,
   runStatusPresentation,
+  stepStatusPresentation,
   triggerLabel,
 } from './action-ui'
 
@@ -41,6 +42,23 @@ describe('runStatusPresentation', () => {
 
   it('degrades gracefully for an unknown status', () => {
     const pres = runStatusPresentation('weird')
+    expect(pres.label).toBe('weird')
+    expect(pres.className).toContain('muted')
+  })
+})
+
+describe('stepStatusPresentation', () => {
+  it('returns a label + class for each step-lifecycle status', () => {
+    expect(stepStatusPresentation('pending').label).toBe('Pending')
+    expect(stepStatusPresentation('running').label).toBe('Running')
+    expect(stepStatusPresentation('running').className).toContain('animate-pulse')
+    expect(stepStatusPresentation('succeeded').className).toContain('green')
+    expect(stepStatusPresentation('failed').className).toContain('red')
+    expect(stepStatusPresentation('skipped').label).toBe('Skipped')
+  })
+
+  it('degrades gracefully for an unknown step status', () => {
+    const pres = stepStatusPresentation('weird')
     expect(pres.label).toBe('weird')
     expect(pres.className).toContain('muted')
   })
