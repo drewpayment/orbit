@@ -387,6 +387,28 @@ describe('recordSuccessfulDryRun', () => {
     expect(fake.update).not.toHaveBeenCalled()
   })
 
+  it('refuses a run belonging to a DIFFERENT workspace than the definition', async () => {
+    // Defence in depth against a confused-deputy stamp: the caller is a
+    // legitimate owner of the definition's workspace, and the run claims the
+    // right templateVersion, but the run row itself lives in another
+    // workspace. Nothing should be stamped from a cross-tenant run.
+    seed({ 'action-runs': [{ ...SUCCEEDED_DRY_RUN, workspace: OTHER_WORKSPACE_ID }] })
+    const { recordSuccessfulDryRun } = await import('./editor-actions')
+    expect(await recordSuccessfulDryRun('ver-1', 'run-1')).toEqual({ recorded: false })
+    expect(fake.col('template-definition-versions').get('ver-1')?.dryRunRunId).toBeNull()
+  })
+
+  it('still stamps when the run carries a populated workspace object', async () => {
+    // `depth` can populate the relationship; the check compares ids, not refs.
+    seed({
+      'action-runs': [
+        { ...SUCCEEDED_DRY_RUN, workspace: { id: WORKSPACE_ID, name: 'Platform' } },
+      ],
+    })
+    const { recordSuccessfulDryRun } = await import('./editor-actions')
+    expect(await recordSuccessfulDryRun('ver-1', 'run-1')).toEqual({ recorded: true })
+  })
+
   it('throws on an unknown run rather than stamping', async () => {
     const { recordSuccessfulDryRun } = await import('./editor-actions')
     await expect(recordSuccessfulDryRun('ver-1', 'nope')).rejects.toThrow(/not found/i)

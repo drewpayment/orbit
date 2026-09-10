@@ -437,6 +437,11 @@ export async function recordSuccessfulDryRun(
   if (run.dryRun !== true) return { recorded: false }
   if (run.status !== 'succeeded') return { recorded: false }
   if (relId(run.templateVersion) !== versionId) return { recorded: false }
+  // Defence in depth against a confused deputy: the caller may legitimately
+  // manage this definition's workspace and the run may claim the right
+  // templateVersion, but the run row must also LIVE in that workspace. A
+  // cross-tenant run can never satisfy another workspace's publish gate.
+  if (relId(run.workspace) !== relId(definition.workspace)) return { recorded: false }
 
   await payload.update({
     collection: 'template-definition-versions',
