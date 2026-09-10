@@ -8,12 +8,38 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"go.temporal.io/sdk/activity"
 
 	"github.com/drewpayment/orbit/temporal-workflows/internal/activities"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/scaffolder"
 )
+
+// nestedApprovalDefinition is a single-step nested definition whose one step
+// is an `approval:request` gate — used to prove a gate opened INSIDE a
+// `fetch:template`-composed child workflow still stamps its
+// pending-approvals row with the outermost run's identity (see
+// TestFetchTemplateStep_NestedApprovalStampsRootIdsAndChildWorkflowID).
+func nestedApprovalDefinition() scaffolder.Definition {
+	return scaffolder.Definition{
+		APIVersion: scaffolder.APIVersionV2,
+		Kind:       scaffolder.KindTemplate,
+		Metadata: scaffolder.Metadata{
+			Name: "nested-approval", Title: "Nested Approval", Owner: "platform", TargetKind: "service",
+		},
+		Spec: scaffolder.Spec{
+			Steps: []scaffolder.Step{
+				{
+					ID:     "gate",
+					Name:   "Get sign-off",
+					Action: approvalRequestAction,
+					Input:  json.RawMessage(`{"message":"please review nested","timeoutHours":1}`),
+				},
+			},
+		},
+	}
+}
 
 // nestedSingleStepDefinition is the default nested definition the shared
 // SetupTest's ScaffolderResolveTemplateVersion stub returns when a test
@@ -353,4 +379,58 @@ func (s *ScaffolderWorkflowTestSuite) TestFetchTemplateStep_DryRunIfFalseRecords
 	}
 	s.Require().NotNil(composeEntry)
 	s.Equal("skipped", composeEntry.Kind, "a skipped-by-condition step is a distinct plan entry from an unplannable one")
+}
+
+// --- nested approval:request (root identity threading) ----------------------
+
+// TestFetchTemplateStep_NestedApprovalStampsRootIdsAndChildWorkflowID proves
+// the fix for the /platform/approvals nested-run 404: an `approval:request`
+// step INSIDE a `fetch:template`-composed child workflow must open its
+// pending-approvals row against the OUTERMOST run's identity (the only run
+// with a Payload action-runs document and a run-detail page), not the
+// nested/synthetic run this particular execution actually carries in its own
+// `input.RunID`/`input.DefinitionID` — while still targeting the CHILD's
+// real Temporal workflow id for the `workflowId` field, since that is the
+// execution actually parked waiting on the approval signal.
+func (s *ScaffolderWorkflowTestSuite) TestFetchTemplateStep_NestedApprovalStampsRootIdsAndChildWorkflowID() {
+	in := baseInput(fetchTemplateOneStepDefinition())
+	in.DefinitionID = "def-outer"
+	s.stubs.resolveTemplateVerFn = func(req activities.ScaffolderResolveTemplateVersionInput) (*activities.ScaffolderResolveTemplateVersionResult, error) {
+		return &activities.ScaffolderResolveTemplateVersionResult{
+			DefinitionVersionID: "ver-nested",
+			DefinitionID:        req.TemplateDefinitionID,
+			Definition:          nestedApprovalDefinition(),
+		}, nil
+	}
+
+	childWorkflowID := fetchTemplateChildWorkflowID(in.RunID, "compose")
+	nestedRunID := fetchTemplateNestedRunID(in.RunID, "compose")
+	approvalID := approvalStepID(nestedRunID, "gate")
+
+	// The signal must reach the CHILD workflow specifically — SignalWorkflow
+	// (used by every non-nested approval test) only ever targets the
+	// workflow under test itself, which here is the OUTER run, not the
+	// child actually waiting on the gate.
+	s.env.RegisterDelayedCallback(func() {
+		err := s.env.SignalWorkflowByID(childWorkflowID, ScaffolderApprovalSignal, ScaffolderApprovalSignalInput{
+			ApprovalID: approvalID,
+			Approved:   true,
+			ApproverID: "approver@example.com",
+		})
+		s.NoError(err, "the signal must reach the nested child workflow by its own id")
+	}, 50*time.Millisecond)
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusSucceeded, res.Status)
+	s.Require().Len(s.stubs.opened, 1)
+	opened := s.stubs.opened[0]
+	s.Equal(in.RunID, opened.RunID,
+		"the row must carry the ROOT run id (the action-runs doc id), not the nested synthetic run id")
+	s.Equal("def-outer", opened.TemplateDefinitionID,
+		"the row must carry the ROOT template definition id, not the nested one being composed")
+	s.Equal(childWorkflowID, opened.WorkflowID,
+		"the row must carry the CHILD's real workflow id — the execution actually parked on the signal")
+	s.NotEqual(in.RunID, opened.WorkflowID, "the outer run's id must never be mistaken for a Temporal workflow id")
 }

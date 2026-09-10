@@ -182,15 +182,28 @@ func (r *scaffolderRun) runApprovalStep(ctx workflow.Context, bookkeepingCtx wor
 	r.writeProgress(bookkeepingCtx, ScaffolderStatusAwaitingApproval, "", nil)
 
 	var openResult activities.ScaffolderOpenApprovalResult
+	// RunID/TemplateDefinitionID are the ROOT run's — the only run with a
+	// Payload action-runs document and a run-detail page — even when this
+	// step is executing inside a `fetch:template`-nested child workflow,
+	// where r.input.RunID/DefinitionID are the nested (synthetic, page-less)
+	// values instead. WorkflowID is deliberately NOT the root's: it is
+	// THIS execution's own real Temporal workflow id (root's or a nested
+	// child's, whichever is actually parked waiting on the signal below),
+	// since that is what ResolveScaffolderApproval must target to reach it.
+	// approvalID itself also stays keyed off r.input.RunID (not the root),
+	// unrelated to either of these: it only has to be unique WITHIN this one
+	// workflow execution's own signal channel, which per-nested-run RunID
+	// already guarantees regardless of how many sibling nested runs share a
+	// step id.
 	openErr := workflow.ExecuteActivity(bookkeepingCtx, activities.ActivityScaffolderOpenApproval, activities.ScaffolderOpenApprovalInput{
 		WorkspaceID:          r.input.WorkspaceID,
 		WorkflowID:           workflow.GetInfo(ctx).WorkflowExecution.ID,
-		RunID:                r.input.RunID,
+		RunID:                r.rootRunID(),
 		ApprovalID:           approvalID,
 		StepID:               step.ID,
 		Message:              in.Message,
 		Approvers:            in.Approvers,
-		TemplateDefinitionID: r.input.DefinitionID,
+		TemplateDefinitionID: r.rootDefinitionID(),
 	}).Get(bookkeepingCtx, &openResult)
 	if openErr != nil {
 		if temporal.IsCanceledError(openErr) {
