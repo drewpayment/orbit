@@ -155,8 +155,16 @@ const DEFINITION_JSON = {
     parameters: [
       { title: 'Basics', required: ['name'], properties: { name: { type: 'string' } } },
     ],
-    steps: [],
+    // The validator (like the Go engine) requires at least one step.
+    steps: [{ id: 'log', name: 'Log', action: 'debug:log', input: { message: 'hi' } }],
   },
+}
+
+const DEBUG_LOG_RPC_ACTION = {
+  name: 'debug:log',
+  family: 'debug',
+  inputSchemaJson: '{"type":"object","properties":{"message":{"type":"string"}}}',
+  outputSchemaJson: '{}',
 }
 
 describe('templates/authoring-actions', () => {
@@ -331,7 +339,7 @@ describe('templates/authoring-actions', () => {
     })
 
     it('validateTemplateDefinition runs the static validator against a shape-valid definition', async () => {
-      mockListActionsRpc.mockResolvedValue({ actions: [] })
+      mockListActionsRpc.mockResolvedValue({ actions: [DEBUG_LOG_RPC_ACTION] })
       const env = makeFakePayload()
       mockPayload = env.payload
       const { validateTemplateDefinition } = await import('./authoring-actions')

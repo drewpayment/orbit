@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "http:request input",
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Absolute http or https URL. Private, loopback, link-local and metadata addresses are refused."
+    },
+    "method": {
+      "type": "string",
+      "enum": ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
+      "default": "GET",
+      "description": "HTTP method. Case-insensitive."
+    },
+    "headers": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Request headers. Never put secrets here; reference a connection instead."
+    },
+    "body": {
+      "type": "string",
+      "description": "Request body, sent as-is."
+    },
+    "timeoutSeconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 120,
+      "default": 30,
+      "description": "Total request timeout."
+    },
+    "maxResponseBytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10485760,
+      "default": 1048576,
+      "description": "Response body cap. A longer body is truncated, not an error."
+    }
+  },
+  "required": ["url"],
+  "additionalProperties": false
+}

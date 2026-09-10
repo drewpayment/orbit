@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "debug:log input",
+  "type": "object",
+  "properties": {
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Text to write to the run log."
+    },
+    "level": {
+      "type": "string",
+      "enum": ["debug", "info", "warn", "error"],
+      "default": "info",
+      "description": "Log level."
+    },
+    "data": {
+      "type": "object",
+      "description": "Structured fields logged alongside the message.",
+      "additionalProperties": true
+    }
+  },
+  "required": ["message"],
+  "additionalProperties": false
+}

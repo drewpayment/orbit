@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "http:request output",
+  "type": "object",
+  "properties": {
+    "status": { "type": "integer", "description": "HTTP status code." },
+    "headers": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Response headers; repeated values are joined with \", \"."
+    },
+    "body": { "type": "string", "description": "Response body, capped at maxResponseBytes." },
+    "truncated": { "type": "boolean", "description": "True when the body hit the cap." }
+  },
+  "required": ["status", "headers", "body", "truncated"],
+  "additionalProperties": false
+}
