@@ -59,10 +59,12 @@ type templateManifest struct {
 	RawFiles []string `yaml:"rawFiles"`
 }
 
-// loadRawFilePatterns best-effort reads orbit-template.yaml (or .yml) from
+// LoadRawFilePatterns best-effort reads orbit-template.yaml (or .yml) from
 // workDir's root and returns its rawFiles glob patterns. Any error (missing
-// file, malformed YAML) yields an empty, non-fatal result.
-func loadRawFilePatterns(workDir string, logger *slog.Logger) []string {
+// file, malformed YAML) yields an empty, non-fatal result. Exported so the
+// fs:render scaffolder action reads the manifest the same way the v1
+// ApplyTemplateVariables activity does.
+func LoadRawFilePatterns(workDir string, logger *slog.Logger) []string {
 	for _, name := range []string{"orbit-template.yaml", "orbit-template.yml"} {
 		data, err := os.ReadFile(filepath.Join(workDir, name))
 		if err != nil {
@@ -315,7 +317,7 @@ func (a *TemplateActivities) ApplyTemplateVariables(ctx context.Context, input A
 		return result, nil
 	}
 
-	rawPatterns := loadRawFilePatterns(input.WorkDir, a.logger)
+	rawPatterns := LoadRawFilePatterns(input.WorkDir, a.logger)
 
 	renderResult, err := templating.RenderDir(input.WorkDir, input.Variables, rawPatterns, a.logger)
 	if err != nil {

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "github:repo:create-from-template output",
+  "type": "object",
+  "properties": {
+    "repoUrl": {
+      "type": "string",
+      "description": "HTML URL of the created repository."
+    },
+    "repoName": {
+      "type": "string",
+      "description": "Name of the created repository."
+    },
+    "checkout": {
+      "type": "string",
+      "description": "Absolute path, under the run's work directory, where the new repository was cloned for later render/push steps."
+    }
+  },
+  "required": ["repoUrl", "repoName", "checkout"],
+  "additionalProperties": false
+}

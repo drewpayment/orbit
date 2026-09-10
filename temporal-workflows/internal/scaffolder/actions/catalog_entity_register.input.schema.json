@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "catalog:entity:register input",
+  "type": "object",
+  "properties": {
+    "workspaceId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Workspace the entity belongs to."
+    },
+    "kind": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Catalog entity kind, e.g. \"app\"."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Entity display name."
+    },
+    "owner": {
+      "type": "string",
+      "description": "Owning team or user."
+    },
+    "links": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "url": { "type": "string" }
+        },
+        "required": ["title", "url"],
+        "additionalProperties": false
+      },
+      "description": "Links shown on the entity's catalog page."
+    },
+    "sourceType": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Producer kind, e.g. \"scaffolder-run\"."
+    },
+    "sourceId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifies the specific producer, e.g. the run id."
+    }
+  },
+  "required": ["workspaceId", "kind", "name", "sourceType", "sourceId"],
+  "additionalProperties": false
+}

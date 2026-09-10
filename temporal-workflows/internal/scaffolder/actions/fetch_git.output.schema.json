@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "fetch:git output",
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Absolute path where the repository was cloned."
+    }
+  },
+  "required": ["path"],
+  "additionalProperties": false
+}

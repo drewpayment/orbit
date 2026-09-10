@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "git:push output",
+  "type": "object",
+  "properties": {
+    "repoUrl": {
+      "type": "string",
+      "description": "The remote that was pushed to."
+    },
+    "branch": {
+      "type": "string",
+      "description": "The branch that was pushed."
+    }
+  },
+  "required": ["repoUrl", "branch"],
+  "additionalProperties": false
+}

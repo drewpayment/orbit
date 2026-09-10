@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "fetch:git input",
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Git remote URL to clone."
+    },
+    "ref": {
+      "type": "string",
+      "description": "Branch, tag or commit to check out. Defaults to the remote's default branch."
+    },
+    "path": {
+      "type": "string",
+      "description": "Subdirectory, relative to the run's work directory, to clone into. Defaults to a name derived from `url`."
+    },
+    "installationId": {
+      "type": "string",
+      "description": "GitHub App installation id used to obtain a token, for a private repository. Omit for a public clone."
+    }
+  },
+  "required": ["url"],
+  "additionalProperties": false
+}

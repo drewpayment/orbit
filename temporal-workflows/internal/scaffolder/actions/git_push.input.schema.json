@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "git:push input",
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Directory to push, inside the run's work directory. Initialized with `git init` if it has no .git directory yet."
+    },
+    "repoUrl": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Remote URL to push to."
+    },
+    "branch": {
+      "type": "string",
+      "default": "main",
+      "description": "Remote branch to push HEAD to."
+    },
+    "commitMessage": {
+      "type": "string",
+      "default": "Initial commit from template",
+      "description": "Commit message for the staged changes."
+    },
+    "installationId": {
+      "type": "string",
+      "description": "GitHub App installation id used to obtain a token. Omit for an unauthenticated push."
+    }
+  },
+  "required": ["path", "repoUrl"],
+  "additionalProperties": false
+}
