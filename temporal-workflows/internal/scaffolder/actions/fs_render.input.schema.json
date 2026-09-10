@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "fs:render input",
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Directory to render in place, inside the run's work directory — file/dir names and content are substituted using `values`. Typically a prior step's `path` or `checkout` output."
+    },
+    "values": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Template variables available as {{.KEY}} (and, for an exact KEY match, bare {{KEY}})."
+    }
+  },
+  "required": ["path", "values"],
+  "additionalProperties": false
+}
