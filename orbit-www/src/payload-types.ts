@@ -279,6 +279,9 @@ export interface User {
    * If checked, user can log in immediately after approval without verifying their email.
    */
   skipEmailVerification?: boolean | null;
+  /**
+   * Set when an admin creates this user via an invite link; distinguishes invited users from self-registered ones.
+   */
   invitedAt?: string | null;
   registrationApprovedAt?: string | null;
   registrationApprovedBy?: (string | null) | User;
@@ -3580,7 +3583,7 @@ export interface CatalogEntity {
    * Provenance back to the backing collection this row projects from.
    */
   source: {
-    type: 'manual' | 'apps' | 'api-schemas' | 'kafka' | 'sync' | 'scan';
+    type: 'manual' | 'apps' | 'api-schemas' | 'kafka' | 'sync' | 'scan' | 'template' | 'scaffolder-run';
     /**
      * ID of the backing row in the source collection.
      */
@@ -4603,6 +4606,7 @@ export interface UsersSelect<T extends boolean = true> {
   role?: T;
   betterAuthId?: T;
   skipEmailVerification?: T;
+  invitedAt?: T;
   registrationApprovedAt?: T;
   registrationApprovedBy?: T;
   updatedAt?: T;
