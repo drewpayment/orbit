@@ -134,9 +134,10 @@ type ScaffolderLogEntry struct {
 
 // WriteRunProgressInput is the activity input for the run-status writeback.
 //
-// HasPlan distinguishes "this dry run produced no changes" (send an empty
-// array) from "this is not a dry-run write" (leave the stored plan alone) —
-// the status route replaces `plan` whenever the key is present.
+// HasPlan and HasOutputs distinguish "this run produced none" (send an empty
+// value, clearing whatever is stored) from "this is not a write of that field"
+// (leave it alone) — the status route replaces a field whenever its key is
+// present.
 type WriteRunProgressInput struct {
 	RunID      string                     `json:"runId"`
 	Status     string                     `json:"status,omitempty"`
@@ -144,9 +145,14 @@ type WriteRunProgressInput struct {
 	Steps      []ScaffolderStepProgress   `json:"steps,omitempty"`
 	HasPlan    bool                       `json:"hasPlan,omitempty"`
 	Plan       []scaffolder.PlannedChange `json:"plan,omitempty"`
-	Outputs    map[string]any             `json:"outputs,omitempty"`
-	Error      string                     `json:"error,omitempty"`
-	AppendLogs []ScaffolderLogEntry       `json:"appendLogs,omitempty"`
+	// HasOutputs distinguishes "this run produced no outputs, clear any
+	// stored ones" from "this is not an outputs write". Outputs alone cannot
+	// carry that: an empty map is dropped by omitempty on the way in, so it
+	// would arrive indistinguishable from unset.
+	HasOutputs bool                 `json:"hasOutputs,omitempty"`
+	Outputs    map[string]any       `json:"outputs,omitempty"`
+	Error      string               `json:"error,omitempty"`
+	AppendLogs []ScaffolderLogEntry `json:"appendLogs,omitempty"`
 }
 
 // ValidateDefinitionInput carries the v2 document to statically validate.
@@ -312,11 +318,15 @@ func (a *ScaffolderActivities) WriteRunProgress(ctx context.Context, in WriteRun
 	if in.Error != "" {
 		body.Error = &in.Error
 	}
-	if in.Outputs != nil {
+	if in.HasOutputs || in.Outputs != nil {
 		// spec.output is author-written and can name a step output that holds
 		// a credential, so the persisted copy goes through the same redaction
 		// as step output.
-		redacted, _ := redactSecrets(in.Outputs).(map[string]any)
+		outputs := in.Outputs
+		if outputs == nil {
+			outputs = map[string]any{}
+		}
+		redacted, _ := redactSecrets(outputs).(map[string]any)
 		body.Outputs = redacted
 	}
 	if in.Steps != nil {
@@ -680,56 +690,78 @@ func planStepError(in ScaffolderStepInput, err error) error {
 
 // Credential shapes recognised in free text.
 //
-// A short, purely alphabetic value is deliberately NOT redacted: it cannot be
-// told apart from an ordinary word, and mangling readable errors to chase it
-// would cost more than it saves. Provider tokens are covered regardless by
-// secretTokenPattern.
+// This is a BACKSTOP for text this code did not compose (an action's error
+// string). The real control is not putting secrets in messages; the run log
+// only ever carries step lifecycle lines, never a resolved input.
 //
-// secretAssignmentPattern matches `<secret-ish name> = <value>` and
-// `<secret-ish name>: <value>`, including a leading auth scheme
-// ("Bearer", "Basic", "token") which must be KEPT — eating the scheme word
-// while publishing the token after it is worse than not redacting at all.
-// The value class excludes "@" so a URL's host survives
-// (https://x-access-token:TOK@github.com/o/r keeps github.com/o/r), and
-// excludes brackets so re-running redaction cannot chew its own
-// "[redacted]" output.
+// It is tuned for precision over recall, because over-redaction actively
+// misleads: "Secret: [redacted] not found" tells an operator less than the
+// unredacted message did. So:
 //
-// secretTokenPattern matches provider tokens that are self-identifying, so
-// they are redacted wherever they appear: GitHub (ghp_/gho_/ghu_/ghs_/ghr_
-// and the newer github_pat_), GitLab (glpat-), and long opaque base64-ish
-// strings that look like an Azure DevOps PAT.
+//   - Only field names that mean "the value IS a credential" are matched.
+//     Deliberately absent: bare `secret`, `token`, `credential`, `auth` and
+//     `private_key`. Those routinely name a resource, not a secret — a
+//     Kubernetes Secret, a git ref (`token: refs/heads/x`), a key file path —
+//     and matching them destroyed the identifying half of real messages.
+//     Values that are genuinely secret under those names are still caught by
+//     secretTokenPattern whenever they have a recognisable shape.
+//   - URL userinfo is handled by its own rule, so a credentialed clone URL
+//     keeps its scheme, username and host and loses only the password.
 var (
-	// vc is the value character class: no whitespace or quoting, no "@" (so a
-	// URL's host survives), no brackets (so re-running cannot chew an earlier
-	// "[redacted]").
-	secretValueChars = `[^\s"'&@,;)\[\]{}]`
+	// secretValueChars: no whitespace or quoting, and no brackets, so
+	// re-running cannot chew an earlier "[redacted]".
+	secretValueChars = `[^\s"'&,;)\[\]{}]`
 
+	// urlUserinfoPattern matches the password half of scheme://user:pass@host.
+	// Group 1 keeps everything up to and including the ":", group 2 is the
+	// password, and the trailing "@host" is left in place by the replacement.
+	urlUserinfoPattern = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.\-]*://[^/\s:@]+:)([^/\s@]+)@`)
+
+	// secretAssignmentPattern matches `<credential name> = <value>` and
+	// `<credential name>: <value>`, including a leading auth scheme
+	// ("Bearer", "Basic", "token") which must be KEPT — eating the scheme
+	// while publishing the token after it is worse than not redacting.
 	secretAssignmentPattern = regexp.MustCompile(
-		`(?i)\b((?:access[_-]?token|refresh[_-]?token|id[_-]?token|token|secret|password|passwd|pwd|api[_-]?key|apikey|credential|private[_-]?key|authorization|auth)` +
+		`(?i)\b((?:access[_-]?token|refresh[_-]?token|id[_-]?token|bearer[_-]?token|api[_-]?key|apikey|api[_-]?secret|client[_-]?secret|password|passwd|pwd|authorization)` +
 			`["']?\s*[=:]\s*["']?(?:(?:bearer|basic|token)\s+)?)` +
-			// The value must look like a credential, not like a word: either
-			// it carries a digit or symbol, or it is long enough that no
-			// ordinary word would reach it. Without this the optional scheme
-			// above can backtrack and redact "Bearer" itself, publishing the
-			// token that follows.
-			`(` + secretValueChars + `{5,}[0-9_\-+/=.]` + secretValueChars + `*` +
+			// The value must look like a credential rather than a word:
+			// either it carries a digit or symbol, or it is long enough that
+			// no ordinary word reaches it. Without this the optional scheme
+			// above can backtrack and be redacted AS the value, publishing
+			// the token that follows it.
+			`(` + secretValueChars + `{5,}[0-9_\-+/=.@]` + secretValueChars + `*` +
 			`|` + secretValueChars + `{12,})`)
 
+	// secretTokenPattern matches tokens that identify themselves, so they are
+	// redacted wherever they appear regardless of any surrounding field name:
+	// GitHub (classic ghp_/gho_/ghu_/ghs_/ghr_ and fine-grained github_pat_),
+	// GitLab (glpat-), Slack (xoxb-/xoxp-/xoxa-/xoxs-), AWS access key ids,
+	// and long opaque alphanumeric strings in the shape of an Azure DevOps PAT.
+	//
+	// The opaque rule starts at 44 characters specifically so a 40-character
+	// git SHA-1 is NOT redacted; a longer single-case hex digest still can be,
+	// which is an accepted cost for catching unprefixed PATs.
 	secretTokenPattern = regexp.MustCompile(
-		`\b(gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9\-_]{16,}|[A-Za-z0-9]{52})\b`)
+		`\b(gh[pousr]_[A-Za-z0-9]{16,}` +
+			`|github_pat_[A-Za-z0-9_]{20,}` +
+			`|glpat-[A-Za-z0-9\-_]{16,}` +
+			`|xox[baps]-[A-Za-z0-9\-]{10,}` +
+			`|AKIA[0-9A-Z]{16}` +
+			`|[A-Za-z0-9]{44,})\b`)
 )
 
-// redactSecretsInText scrubs credential-shaped substrings from a free-text
-// message. It is a backstop for text this code did not compose (an action's
-// error string), not a substitute for keeping secrets out of messages.
+// redactSecretsInText scrubs credential-shaped substrings from free text.
 //
-// It errs toward keeping the message readable: only the value is replaced, so
-// the reader still sees which field leaked and what the surrounding error was.
+// Only the value is replaced, so the reader still sees which field leaked and
+// what the surrounding error said. Running it twice is a no-op.
 func redactSecretsInText(s string) string {
 	if s == "" {
 		return s
 	}
-	out := secretAssignmentPattern.ReplaceAllString(s, "${1}"+redactedPlaceholder)
+	// URL userinfo first: it is the most specific rule, and running it before
+	// the assignment rule means a credentialed URL keeps its host.
+	out := urlUserinfoPattern.ReplaceAllString(s, "${1}"+redactedPlaceholder+"@")
+	out = secretAssignmentPattern.ReplaceAllString(out, "${1}"+redactedPlaceholder)
 	return secretTokenPattern.ReplaceAllString(out, redactedPlaceholder)
 }
 

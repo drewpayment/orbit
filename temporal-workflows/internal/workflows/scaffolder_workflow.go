@@ -50,9 +50,10 @@ const stepHeartbeatTimeout = 2 * time.Minute
 // heartbeat, so they deliberately run without a heartbeat timeout.
 const bookkeepingTimeout = 5 * time.Minute
 
-// maxStepTimeout caps a step's declared `timeout`. Without a ceiling, a
-// definition could pin a worker slot for the workflow's whole run timeout.
-const maxStepTimeout = 2 * time.Hour
+// cancelNoticeTimeout bounds the "cancel requested" writeback. It is one
+// attempt on a short budget: the run is being torn down, and cleanup must not
+// wait on a status write nobody is depending on.
+const cancelNoticeTimeout = 30 * time.Second
 
 // maxStepAttempts bounds retries for a step whose action failed for a reason
 // that might be transient. Definition and expression errors never reach a
@@ -213,6 +214,10 @@ func ScaffolderWorkflow(ctx workflow.Context, input ScaffolderWorkflowInput) (*S
 		})
 		run.appendLog(ctx, "warn", "run output cannot be previewed: it depends on a step's output")
 		run.logger.Info("Scaffolder run output not previewable in a dry run", "reason", err)
+		// Non-nil but empty, so the writeback clears any outputs a previous
+		// run of this record left behind instead of leaving them to look
+		// like this run's result.
+		run.outputs = map[string]any{}
 	case outputErr != nil:
 		return run.finish(ctx, bookkeepingCtx, ScaffolderStatusFailed, "failed to resolve output: "+outputErr.Error())
 	default:
@@ -278,8 +283,15 @@ func (r *scaffolderRun) runStep(ctx workflow.Context, stepBaseCtx workflow.Conte
 	if step.If != "" {
 		want, err := scaffolder.EvalBool(r.exprCtx, step.If)
 		if err != nil {
+			// Recheck the condition AND the input together. Skipping here
+			// returns before the input is ever resolved, so checking only the
+			// condition would let a genuine bad reference in the input reach
+			// a "succeeded" dry run through the `if` door.
 			skippable, realErr := r.dryRunSkippable(err, func(c scaffolder.Ctx) error {
-				_, e := scaffolder.EvalBool(c, step.If)
+				if _, e := scaffolder.EvalBool(c, step.If); e != nil {
+					return e
+				}
+				_, e := scaffolder.ResolveJSON(c, step.Input)
 				return e
 			})
 			if skippable {
@@ -378,18 +390,20 @@ func (r *scaffolderRun) runStep(ctx workflow.Context, stepBaseCtx workflow.Conte
 		// stop. `action-runs.status` has no `cancelling` member, so this is a
 		// log line on the still-running status rather than a new state.
 		waitCtx, cancelWait := workflow.NewDisconnectedContext(ctx)
-		waitBookkeeping := workflow.WithActivityOptions(waitCtx, workflow.ActivityOptions{
-			StartToCloseTimeout: bookkeepingTimeout,
-			RetryPolicy: &temporal.RetryPolicy{
-				MaximumAttempts:        maxStepAttempts,
-				NonRetryableErrorTypes: []string{activities.ErrTypeScaffolderInvalid},
-			},
+		defer cancelWait()
+
+		// This notice is a UI nicety, not a durability requirement, and it
+		// runs BEFORE the wait — so it gets a deliberately tight budget. On
+		// the bookkeeping budget (5m x 3 attempts) an unreachable orbit-www
+		// would postpone the work dir cleanup by a quarter of an hour.
+		notifyCtx := workflow.WithActivityOptions(waitCtx, workflow.ActivityOptions{
+			StartToCloseTimeout: cancelNoticeTimeout,
+			RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 1},
 		})
 		r.appendLog(ctx, "warn", fmt.Sprintf("cancel requested; waiting for step %s (%s) to stop", step.ID, step.Action))
-		r.writeProgress(waitBookkeeping, ScaffolderStatusRunning, "", nil)
+		r.writeProgress(notifyCtx, ScaffolderStatusRunning, "", nil)
 
 		_ = future.Get(waitCtx, nil)
-		cancelWait()
 
 		r.failStep(idx, "cancelled")
 		r.appendLog(ctx, "warn", fmt.Sprintf("step %s (%s) cancelled", step.ID, step.Action))
@@ -588,6 +602,10 @@ func (r *scaffolderRun) writeProgress(ctx workflow.Context, status, workflowID s
 	}
 	if isTerminalScaffolderStatus(status) {
 		in.Error = r.errorMsg
+		// Always claim the outputs on a terminal write, even when there are
+		// none, so a previous run of this record cannot leave values behind
+		// that read as this run's result.
+		in.HasOutputs = true
 		in.Outputs = r.outputs
 		if r.input.DryRun {
 			// Always send the plan on a dry run's terminal write, even when
@@ -642,8 +660,8 @@ func parseStepTimeout(raw string, def time.Duration) (time.Duration, error) {
 	if d <= 0 {
 		return 0, fmt.Errorf("invalid timeout %q: must be positive", raw)
 	}
-	if d > maxStepTimeout {
-		return 0, fmt.Errorf("invalid timeout %q: must not exceed %s", raw, maxStepTimeout)
+	if d > scaffolder.MaxStepTimeout {
+		return 0, fmt.Errorf("invalid timeout %q: must not exceed %s", raw, scaffolder.MaxStepTimeout)
 	}
 	return d, nil
 }

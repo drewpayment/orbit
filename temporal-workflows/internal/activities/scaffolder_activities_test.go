@@ -623,15 +623,29 @@ func TestRedactSecretsInText(t *testing.T) {
 		// mustNotContain is the secret that has to disappear.
 		mustNotContain string
 		// mustContain are fragments that must survive, so a redacted message
-		// is still diagnosable.
+		// stays diagnosable.
 		mustContain []string
-		// unchanged asserts the input is returned verbatim.
+		// unchanged asserts the input is returned verbatim — the assertion
+		// that catches over-redaction.
 		unchanged bool
 	}{
-		{name: "leaves ordinary text alone", in: "clone failed: repository not found", unchanged: true},
-		{name: "leaves an empty string alone", in: "", unchanged: true},
+		// --- must not be touched: these name a resource, not a secret ------
+		{name: "ordinary error", in: "clone failed: repository not found", unchanged: true},
+		{name: "empty string", in: "", unchanged: true},
 		{
-			name:           "keeps the Bearer scheme and redacts only the token",
+			name:      "kubernetes Secret by name",
+			in:        "Secret: orbit-git-credentials not found in namespace orbit",
+			unchanged: true,
+		},
+		{name: "a git ref under the word token", in: "token: refs/heads/feature-branch is protected", unchanged: true},
+		{name: "a key file path", in: "private_key: /etc/orbit/id_ed25519 has bad permissions", unchanged: true},
+		{name: "a credentials file path", in: "credential: /home/runner/.git-credentials is unreadable", unchanged: true},
+		{name: "an auth diagnostic", in: "auth: could-not-reach-provider after 3 attempts", unchanged: true},
+		{name: "a git SHA-1 is not a token", in: "at commit 0123456789abcdef0123456789abcdef01234567", unchanged: true},
+
+		// --- must be redacted ----------------------------------------------
+		{
+			name:           "keeps the Bearer scheme, redacts the token",
 			in:             "Authorization: Bearer " + ghToken + " rejected",
 			mustNotContain: ghToken,
 			mustContain:    []string{"Authorization:", "Bearer", "rejected"},
@@ -643,49 +657,58 @@ func TestRedactSecretsInText(t *testing.T) {
 			mustContain:    []string{"Basic"},
 		},
 		{
-			name:           "keeps the host in a credentialed git URL",
+			name:           "keeps the host in an x-access-token clone URL",
 			in:             "clone https://x-access-token:" + ghToken + "@github.com/acme/svc.git failed",
 			mustNotContain: ghToken,
-			mustContain:    []string{"github.com/acme/svc.git", "failed"},
+			mustContain:    []string{"github.com/acme/svc.git", "x-access-token", "failed"},
 		},
 		{
-			name:           "scrubs a token query parameter but keeps the path",
+			name:           "redacts a plain user:password clone URL",
+			in:             "clone https://svcuser:S3cr3tP4ss@github.com/acme/svc.git failed",
+			mustNotContain: "S3cr3tP4ss",
+			mustContain:    []string{"svcuser", "github.com/acme/svc.git"},
+		},
+		{
+			name:           "redacts userinfo in a remote error",
+			in:             "remote: Invalid username or password for 'https://bob:LongPasswordHere123@git.example.com'",
+			mustNotContain: "LongPasswordHere123",
+			mustContain:    []string{"bob", "git.example.com"},
+		},
+		{
+			name:           "scrubs a token query parameter, keeps the path",
 			in:             "GET https://api.example.com/repos?access_token=" + ghToken + " -> 401",
 			mustNotContain: ghToken,
 			mustContain:    []string{"api.example.com/repos", "401"},
 		},
 		{
+			// The @-in-value case: excluding @ from the value class used to
+			// make this match nothing at all, redacting less than before.
+			name:           "scrubs a password containing an at sign",
+			in:             "password=p@ssw0rd123456 rejected",
+			mustNotContain: "p@ssw0rd123456",
+			mustContain:    []string{"rejected"},
+		},
+		{
+			name:           "scrubs a quoted password",
+			in:             `password: "hunter2hunter2"`,
+			mustNotContain: "hunter2hunter2",
+		},
+		{name: "scrubs an api key", in: "apiKey=sk-live-0123456789", mustNotContain: "sk-live-0123456789"},
+		{name: "scrubs a client secret", in: "client_secret=abc123def456ghi789", mustNotContain: "abc123def456ghi789"},
+		{
 			name:           "scrubs a fine-grained github pat",
 			in:             "auth failed for github_pat_11ABCDEFG0abcdefghijklmnop",
 			mustNotContain: "github_pat_11ABCDEFG0abcdefghijklmnop",
 		},
+		{name: "scrubs a gitlab pat", in: "push rejected: glpat-ABCDEFGHIJ0123456789", mustNotContain: "glpat-ABCDEFGHIJ0123456789"},
+		{name: "scrubs a slack bot token", in: "slack said no to xoxb-123456789012-abcdefghij", mustNotContain: "xoxb-123456789012-abcdefghij"},
+		{name: "scrubs an aws access key id", in: "using AKIAIOSFODNN7EXAMPLE", mustNotContain: "AKIAIOSFODNN7EXAMPLE"},
 		{
-			name:           "scrubs a gitlab pat",
-			in:             "push rejected: glpat-ABCDEFGHIJ0123456789",
-			mustNotContain: "glpat-ABCDEFGHIJ0123456789",
-		},
-		{
-			name:           "scrubs an azure devops style pat",
-			in:             "ado auth failed with abcdefghij0123456789abcdefghij0123456789abcdefghij01",
-			mustNotContain: "abcdefghij0123456789abcdefghij0123456789abcdefghij01",
-		},
-		{
-			name:           "scrubs a quoted password assignment",
-			in:             `password: "hunter2hunter2"`,
-			mustNotContain: "hunter2hunter2",
-		},
-		{
-			name:           "scrubs an api key",
-			in:             "apiKey=sk-live-0123456789",
-			mustNotContain: "sk-live-0123456789",
-		},
-		{
-			// The false positive the reviewer asked about: "Secret" here names
-			// a Kubernetes object, and "not" is not a credential. Redacting it
-			// costs nothing but must not mangle the rest of the message.
-			name:        "keeps a Kubernetes Secret not-found message readable",
-			in:          `Secret: not found in namespace orbit`,
-			mustContain: []string{"Secret:", "namespace orbit"},
+			// A 52-char exact rule missed anything longer; the opaque rule is
+			// now open-ended from 44.
+			name:           "scrubs a long opaque ado pat",
+			in:             "ado auth failed with abcdefghij0123456789abcdefghij0123456789abcdefghij0123456789",
+			mustNotContain: "abcdefghij0123456789abcdefghij0123456789abcdefghij0123456789",
 		},
 	}
 
@@ -694,13 +717,12 @@ func TestRedactSecretsInText(t *testing.T) {
 			got := redactSecretsInText(tt.in)
 
 			if tt.unchanged {
-				assert.Equal(t, tt.in, got)
+				assert.Equal(t, tt.in, got, "over-redaction: a non-secret was scrubbed")
 				return
 			}
-			if tt.mustNotContain != "" {
-				assert.NotContains(t, got, tt.mustNotContain)
-				assert.Contains(t, got, redactedPlaceholder)
-			}
+			require.NotEqual(t, tt.in, got, "nothing was redacted")
+			assert.NotContains(t, got, tt.mustNotContain)
+			assert.Contains(t, got, redactedPlaceholder)
 			for _, frag := range tt.mustContain {
 				assert.Contains(t, got, frag, "redaction destroyed a diagnosable fragment")
 			}
@@ -765,4 +787,31 @@ func TestScaffolderActivities_PlanStep_PreviewLivesUnderTheSweptRoot(t *testing.
 		"previews must sit under the swept root, not the system temp dir")
 	assert.NotContains(t, dest, "scaffolder-run-", "and never inside a run work dir")
 	assert.NoDirExists(t, dest)
+}
+
+func TestScaffolderActivities_WriteRunProgress_ClearsOutputsWhenFlagged(t *testing.T) {
+	writer := &fakeRunWriter{}
+	a := newTestScaffolderActivities(t, nil, writer)
+
+	// No outputs, but the flag set: the route must receive an empty object so
+	// it replaces whatever was stored, rather than leaving a stale value.
+	require.NoError(t, a.WriteRunProgress(context.Background(), WriteRunProgressInput{
+		RunID: "run-1", Status: "succeeded", HasOutputs: true,
+	}))
+
+	require.Len(t, writer.calls, 1)
+	require.NotNil(t, writer.calls[0].in.Outputs)
+	assert.Empty(t, writer.calls[0].in.Outputs)
+}
+
+func TestScaffolderActivities_WriteRunProgress_LeavesOutputsAloneWithoutTheFlag(t *testing.T) {
+	writer := &fakeRunWriter{}
+	a := newTestScaffolderActivities(t, nil, writer)
+
+	require.NoError(t, a.WriteRunProgress(context.Background(), WriteRunProgressInput{
+		RunID: "run-1", Status: "running",
+	}))
+
+	require.Len(t, writer.calls, 1)
+	assert.Nil(t, writer.calls[0].in.Outputs, "a per-step write must not clobber stored outputs")
 }

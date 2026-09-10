@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -54,6 +55,9 @@ func (m *MockDefinitionClient) GetDefinitionVersion(ctx context.Context, version
 	return args.Get(0).(*TemplateDefinitionVersionData), args.Error(1)
 }
 
+// testRunID is a well-formed Payload document id: run_id is validated as one.
+const testRunID = "0123456789abcdef01234567"
+
 const testDefinitionJSON = `{"apiVersion":"orbit/v2","kind":"Template","metadata":{"name":"svc","title":"Service","owner":"platform"},"spec":{"parameters":[],"steps":[]}}`
 
 func testVersion() *TemplateDefinitionVersionData {
@@ -69,7 +73,7 @@ func testVersion() *TemplateDefinitionVersionData {
 func validScaffolderRequest() *templatev1.StartScaffolderRunRequest {
 	params, _ := structpb.NewStruct(map[string]any{"name": "orders", "private": true, "count": float64(2)})
 	return &templatev1.StartScaffolderRunRequest{
-		RunId:               "run-1",
+		RunId:               testRunID,
 		DefinitionVersionId: "ver-1",
 		WorkspaceId:         "ws-1",
 		UserId:              "user-1",
@@ -113,7 +117,7 @@ func TestStartScaffolderRun_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "scaffolder-run-1", resp.Msg.WorkflowId)
 
-	assert.Equal(t, "run-1", got.RunID)
+	assert.Equal(t, testRunID, got.RunID)
 	assert.Equal(t, "ver-1", got.DefinitionVersionID)
 	assert.Equal(t, "ws-1", got.WorkspaceID)
 	assert.Equal(t, "user-1", got.UserID)
@@ -518,4 +522,23 @@ func TestScaffolderRunHandlers_RejectAnUnauthenticatedCaller(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, connect.CodePermissionDenied, connectCode(t, err))
 	m.AssertNotCalled(t, "QueryScaffolderProgress", mock.Anything, mock.Anything)
+}
+
+func TestStartScaffolderRun_RejectsAMalformedRunID(t *testing.T) {
+	for _, id := range []string{"run-1", "../../etc", "0123", strings.Repeat("z", 24)} {
+		t.Run(id, func(t *testing.T) {
+			temporalMock := new(MockScaffolderTemporalClient)
+			defMock := new(MockDefinitionClient)
+			req := validScaffolderRequest()
+			req.RunId = id
+
+			server := NewTemplateServer(temporalMock, nil, WithTemplateDefinitionClient(defMock))
+			_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(req))
+
+			require.Error(t, err)
+			assert.Equal(t, connect.CodeInvalidArgument, connectCode(t, err))
+			defMock.AssertNotCalled(t, "GetDefinitionVersion", mock.Anything, mock.Anything)
+			temporalMock.AssertNotCalled(t, "StartScaffolderWorkflow", mock.Anything, mock.Anything)
+		})
+	}
 }

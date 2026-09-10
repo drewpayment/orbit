@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
@@ -190,11 +191,24 @@ func (tc *TemporalClient) StartScaffolderWorkflow(ctx context.Context, in types.
 		Memo: map[string]interface{}{
 			scaffolderWorkspaceMemoKey: in.WorkspaceID,
 		},
+		// One ActionRun doc is dispatched exactly once, ever. Rejecting a
+		// duplicate makes a re-used run id fail loudly instead of stamping a
+		// second workflow (and a second workspace memo) over the first — a
+		// re-run is a new ActionRun, not a second dispatch of an old one.
+		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 	}, types.ScaffolderWorkflowName, in)
 	if err != nil {
 		return "", fmt.Errorf("failed to start scaffolder workflow: %w", err)
 	}
 	return we.GetID(), nil
+}
+
+// isTemporalNotFound reports whether err means the workflow does not exist (or
+// has aged out of retention), so the handlers can answer NotFound instead of
+// Internal.
+func isTemporalNotFound(err error) bool {
+	var notFound *serviceerror.NotFound
+	return errors.As(err, &notFound)
 }
 
 // scaffolderWorkspaceMemoKey names the memo field carrying a run's workspace.
@@ -206,8 +220,7 @@ const scaffolderWorkspaceMemoKey = "workspaceId"
 func (tc *TemporalClient) ScaffolderRunWorkspace(ctx context.Context, workflowID string) (string, error) {
 	desc, err := tc.client.DescribeWorkflowExecution(ctx, workflowID, "")
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if isTemporalNotFound(err) {
 			return "", grpcserver.ErrScaffolderRunNotFound
 		}
 		return "", fmt.Errorf("failed to describe scaffolder run: %w", err)
@@ -233,6 +246,9 @@ func (tc *TemporalClient) ScaffolderRunWorkspace(ctx context.Context, workflowID
 func (tc *TemporalClient) QueryScaffolderProgress(ctx context.Context, workflowID string) (*types.ScaffolderProgress, error) {
 	resp, err := tc.client.QueryWorkflow(ctx, workflowID, "", types.ScaffolderProgressQuery)
 	if err != nil {
+		if isTemporalNotFound(err) {
+			return nil, grpcserver.ErrScaffolderRunNotFound
+		}
 		return nil, fmt.Errorf("failed to query scaffolder run: %w", err)
 	}
 
@@ -281,9 +297,17 @@ func max(a, b int) int {
 	return b
 }
 
-// CancelWorkflow cancels a running workflow
+// CancelWorkflow cancels a running workflow. An unknown or aged-out workflow
+// id is reported with the NotFound sentinel so the handlers do not report a
+// stale link as an internal failure.
 func (tc *TemporalClient) CancelWorkflow(ctx context.Context, workflowID string) error {
-	return tc.client.CancelWorkflow(ctx, workflowID, "")
+	if err := tc.client.CancelWorkflow(ctx, workflowID, ""); err != nil {
+		if isTemporalNotFound(err) {
+			return grpcserver.ErrScaffolderRunNotFound
+		}
+		return err
+	}
+	return nil
 }
 
 // StartDeploymentWorkflow starts a deployment workflow

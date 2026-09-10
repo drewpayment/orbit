@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -83,6 +84,20 @@ func (s *TemplateServer) StartScaffolderRun(ctx context.Context, req *connect.Re
 	if msg.GetRunId() == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("run_id is required"))
 	}
+	// run_id becomes both the workflow id and the ActionRuns doc the worker
+	// writes progress to, so it must at least be a well-formed doc id.
+	//
+	// KNOWN GAP: this does not prove the run belongs to the caller's
+	// workspace, which needs a read of the ActionRuns doc that this service
+	// has no route for yet. StartScaffolderWorkflow sets
+	// WorkflowIDReusePolicy REJECT_DUPLICATE, so an id that has already been
+	// dispatched cannot be re-targeted; an id that never has still could be.
+	// Close this with an ActionRuns workspace check before the RPC is wired
+	// up in orbit-www.
+	if !payloadDocIDPattern.MatchString(msg.GetRunId()) {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("run_id must be a 24-character hex document id"))
+	}
 	if msg.GetDefinitionVersionId() == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("definition_version_id is required"))
 	}
@@ -145,6 +160,9 @@ func (s *TemplateServer) StartScaffolderRun(ctx context.Context, req *connect.Re
 
 	return connect.NewResponse(&templatev1.StartScaffolderRunResponse{WorkflowId: workflowID}), nil
 }
+
+// payloadDocIDPattern matches a Mongo ObjectId as Payload renders it.
+var payloadDocIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{24}$`)
 
 // ScaffolderRunIDPrefix is the workflow-id prefix StartScaffolderWorkflow
 // assigns. Requiring it stops these handlers being used as a generic

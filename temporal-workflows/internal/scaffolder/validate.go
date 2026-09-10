@@ -40,6 +40,12 @@ func (d DescriptorCatalog) Descriptor(name string) (ActionDescriptor, bool) {
 	return ActionDescriptor{}, false
 }
 
+// MaxStepTimeout caps a step's declared `timeout`. Without a ceiling, a
+// definition could pin a worker slot for the whole of the workflow's run
+// timeout. Both static validation and the workflow's own parse enforce it, so
+// a definition cannot slip past by being validated under an older build.
+const MaxStepTimeout = 2 * time.Hour
+
 var (
 	nameRe   = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 	stepIDRe = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
@@ -202,8 +208,16 @@ func validateStep(def *Definition, idx int, step Step, params map[string]bool, s
 		errs = append(errs, ValidationError{Path: base + ".name", Message: "expressions are not supported in a step name"})
 	}
 	if step.Timeout != "" {
-		if _, err := time.ParseDuration(step.Timeout); err != nil {
+		// Positivity and the ceiling are checked HERE, not only when the step
+		// runs: a bad timeout on step 3 would otherwise fail the run after
+		// steps 1 and 2 had already created a repo and pushed to it.
+		switch d, err := time.ParseDuration(step.Timeout); {
+		case err != nil:
 			errs = append(errs, ValidationError{Path: base + ".timeout", Message: fmt.Sprintf("is not a Go duration: %v", err)})
+		case d <= 0:
+			errs = append(errs, ValidationError{Path: base + ".timeout", Message: "must be positive"})
+		case d > MaxStepTimeout:
+			errs = append(errs, ValidationError{Path: base + ".timeout", Message: fmt.Sprintf("must not exceed %s", MaxStepTimeout)})
 		}
 	}
 

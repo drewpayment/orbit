@@ -769,3 +769,96 @@ func (s *ScaffolderWorkflowTestSuite) TestRunLogEntriesCarryTheWorkflowClock() {
 	}
 	s.Positive(seen)
 }
+
+// A skippable `if` returns before the step's input is ever resolved, so the
+// dry-run recheck has to cover BOTH. Otherwise a genuine bad reference reaches
+// a "succeeded" dry run through the `if` door — the same masking the input
+// path was already fixed for.
+func (s *ScaffolderWorkflowTestSuite) TestDryRunStillFailsOnABadInputBehindASkippableIf() {
+	in := baseInput(twoStepDefinition())
+	in.DryRun = true
+	in.Definition.Spec.Output = nil
+	in.Definition.Spec.Steps[1].If = "${{ steps.create.output.ok }}"
+	in.Definition.Spec.Steps[1].Input = json.RawMessage(`{"message":"${{ user.email }}"}`)
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusFailed, res.Status)
+	s.Contains(res.Error, "user.email")
+}
+
+// The same shape with a sound input is still skipped, not failed.
+func (s *ScaffolderWorkflowTestSuite) TestDryRunSkipsASoundStepBehindASkippableIf() {
+	in := baseInput(twoStepDefinition())
+	in.DryRun = true
+	in.Definition.Spec.Output = nil
+	in.Definition.Spec.Steps[1].If = "${{ steps.create.output.ok }}"
+	in.Definition.Spec.Steps[1].Input = json.RawMessage(`{"message":"${{ parameters.name }}"}`)
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusSucceeded, res.Status)
+	logStep, ok := stepByID(s.lastProgress().Steps, "log")
+	s.Require().True(ok)
+	s.Equal("skipped", logStep.Status)
+}
+
+// A dry run whose output cannot be previewed must CLEAR any outputs left on
+// the run record, not leave a previous run's values looking like this one's.
+func (s *ScaffolderWorkflowTestSuite) TestDryRunClearsOutputsWhenTheyCannotBePreviewed() {
+	in := baseInput(twoStepDefinition())
+	in.DryRun = true
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	s.Equal(ScaffolderStatusSucceeded, s.result().Status)
+
+	last := s.lastProgress()
+	// An empty map cannot survive omitempty on the wire, so the flag is what
+	// tells the activity to send `outputs` and clear the stored value.
+	s.True(last.HasOutputs, "a terminal write must always claim the outputs field")
+	s.Empty(last.Outputs)
+}
+
+// The 2h ceiling is enforced statically as well as at run time, so a bad
+// timeout on a later step cannot fail the run after earlier steps have already
+// created a repo and pushed to it.
+func TestParseStepTimeout_RejectsAnExcessiveTimeout(t *testing.T) {
+	_, err := parseStepTimeout("5h", 10*time.Minute)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "must not exceed")
+}
+
+func TestScaffolderValidate_RejectsBadStepTimeouts(t *testing.T) {
+	tests := []struct {
+		name    string
+		timeout string
+		want    string
+	}{
+		{name: "over the ceiling", timeout: "5h", want: "must not exceed"},
+		{name: "zero", timeout: "0s", want: "must be positive"},
+		{name: "negative", timeout: "-1m", want: "must be positive"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			def := twoStepDefinition()
+			// Deliberately the LAST step: this is the case that used to blow
+			// up mid-run, after the earlier steps had real side effects.
+			def.Spec.Steps[1].Timeout = tt.timeout
+
+			findings := scaffolder.Validate(&def, scaffolder.DescriptorCatalog{
+				{Name: "github:repo:create", InputSchema: json.RawMessage(`{"type":"object"}`), OutputSchema: json.RawMessage(`{"type":"object","properties":{"repoUrl":{"type":"string"}}}`)},
+				{Name: "debug:log", InputSchema: json.RawMessage(`{"type":"object"}`), OutputSchema: json.RawMessage(`{"type":"object"}`)},
+			})
+
+			var msgs []string
+			for _, f := range findings {
+				msgs = append(msgs, f.Error())
+			}
+			joined := strings.Join(msgs, "\n")
+			require.Contains(t, joined, tt.want)
+			require.Contains(t, joined, "spec.steps[1].timeout")
+		})
+	}
+}
