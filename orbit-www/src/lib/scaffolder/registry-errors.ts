@@ -1,14 +1,20 @@
-/**
- * `RegistryUnavailableError` — split out of `authoring-actions.ts` (a
- * `'use server'` file). Next.js only allows async function exports from a
- * `'use server'` module, so a class export there is a build error (SWC:
- * "Only async functions are allowed to be exported in a 'use server'
- * file."). Kept in its own tiny, framework-free module so it can be a
- * normal class export and imported by both the server-action module and
- * any test/UI code that needs to `instanceof`-check it.
- */
+// orbit-www/src/lib/scaffolder/registry-errors.ts
 
-/** Thrown by `listActionRegistry` when the Go worker's ListActions RPC fails — distinguishes "registry down" from a genuine validation failure. */
+/**
+ * Thrown by `listActionRegistry` (`templates/authoring-actions.ts`) when the
+ * Go worker's `ListActions` RPC fails — distinguishes "registry down" from a
+ * genuine validation failure so callers (e.g. `validateTemplateDefinition`)
+ * can report an outage as a typed finding instead of an unhandled
+ * rejection.
+ *
+ * Lives here, NOT in `templates/authoring-actions.ts`, because that file is
+ * a `'use server'` module: Next.js's server-actions transform only allows
+ * top-level exports to be async functions, and a class export there fails
+ * the SWC build for every importer (BUILD BREAK fixed by this move — see
+ * the guard test in `authoring-actions.test.ts`). Exact path/name matches
+ * what the run-wizard branch already uses locally to avoid a merge
+ * conflict.
+ */
 export class RegistryUnavailableError extends Error {
   constructor(cause: unknown) {
     super(

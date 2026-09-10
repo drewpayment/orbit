@@ -635,6 +635,71 @@ describe('templates/authoring-actions', () => {
       })
     })
 
+    describe('planRun authorization (published: any member; draft: manage-gated, same as startDryRun)', () => {
+      it('allows a plain member to plan-run a PUBLISHED definition (side-effect-free consumer Review step)', async () => {
+        const e = makeFakePayload({
+          'template-definitions': [PUBLISHED_DEFINITION],
+          'template-definition-versions': [
+            {
+              id: 'ver-2',
+              definition: 'def-2',
+              workspace: WORKSPACE_ID,
+              versionNumber: 1,
+              definitionJson: DEFINITION_JSON,
+            },
+          ],
+        })
+        e.setMembershipRole('member')
+        mockPayload = e.payload
+        const { planRun } = await import('./authoring-actions')
+
+        const result = await planRun({ templateVersionId: 'ver-2', parameters: { name: 'svc' } })
+        expect(result.runId).toBeTruthy()
+      })
+
+      it('denies a plain member plan-running a DRAFT definition (falls back to manage-gate)', async () => {
+        const e = makeFakePayload({
+          'template-definitions': [{ ...DRAFT_DEFINITION, currentVersion: 'ver-1' }],
+          'template-definition-versions': [
+            {
+              id: 'ver-1',
+              definition: 'def-1',
+              workspace: WORKSPACE_ID,
+              versionNumber: 1,
+              definitionJson: DEFINITION_JSON,
+            },
+          ],
+        })
+        e.setMembershipRole('member')
+        mockPayload = e.payload
+        const { planRun } = await import('./authoring-actions')
+
+        await expect(
+          planRun({ templateVersionId: 'ver-1', parameters: { name: 'svc' } }),
+        ).rejects.toThrow(/permission/i)
+      })
+
+      it('still allows an owner/admin to plan-run their own DRAFT (manage-gate)', async () => {
+        const e = makeFakePayload({
+          'template-definitions': [{ ...DRAFT_DEFINITION, currentVersion: 'ver-1' }],
+          'template-definition-versions': [
+            {
+              id: 'ver-1',
+              definition: 'def-1',
+              workspace: WORKSPACE_ID,
+              versionNumber: 1,
+              definitionJson: DEFINITION_JSON,
+            },
+          ],
+        })
+        mockPayload = e.payload // default membershipRole: 'owner'
+        const { planRun } = await import('./authoring-actions')
+
+        const result = await planRun({ templateVersionId: 'ver-1', parameters: { name: 'svc' } })
+        expect(result.runId).toBeTruthy()
+      })
+    })
+
     it('getRun redacts ui:secret parameter values before returning', async () => {
       const secretDefinitionJson = {
         ...DEFINITION_JSON,
@@ -709,6 +774,7 @@ describe('templates/authoring-actions', () => {
             inputs: { token: 'super-secret-value' },
             steps: [{ id: 's1', status: 'succeeded', output: { echoedToken: 'super-secret-value' } }],
             plan: { changes: [{ description: 'uses super-secret-value verbatim is NOT matched (substring)' }], token: 'super-secret-value' },
+            outputs: { links: [{ title: 'Config', url: 'https://x/super-secret-value' }], text: 'super-secret-value' },
           },
         ],
       })
@@ -721,6 +787,10 @@ describe('templates/authoring-actions', () => {
       expect(steps[0].output?.echoedToken).toBe('••••••••')
       const plan = run!.plan as { token?: string }
       expect(plan.token).toBe('••••••••')
+      // MINOR follow-up: outputs.links/text render straight to the consumer
+      // run-detail page — must be redacted too, not just inputs/steps/plan.
+      const outputs = run!.outputs as { text?: string; links?: { url?: string }[] }
+      expect(outputs.text).toBe('••••••••')
     })
 
     it('getRun also redacts a secret value if it leaks into outputs (consumer run-detail Task 17 surfaces this)', async () => {
@@ -868,5 +938,22 @@ describe('templates/authoring-actions', () => {
       const definition = await env.payload.findByID({ collection: 'template-definitions', id: 'def-2' })
       expect(definition.status).toBe('deprecated')
     })
+  })
+
+  // ---------------------------------------------------------------------------
+  // BUILD BREAK fix: Next.js 'use server' modules may only export async
+  // functions at the top level — a class (or any other non-async-function
+  // runtime export) fails the SWC server-actions transform for every
+  // importer. This guard fails loudly the next time someone exports
+  // something else from this file, instead of only failing at `next build`.
+  // ---------------------------------------------------------------------------
+  it('guard: every runtime export is an async function ("use server" constraint)', async () => {
+    const mod = await import('./authoring-actions')
+    for (const [name, value] of Object.entries(mod)) {
+      if (typeof value !== 'function') continue // type-only exports (interfaces) are erased, not present here
+      expect(value.constructor.name, `export "${name}" must be an async function, not ${value.constructor.name}`).toBe(
+        'AsyncFunction',
+      )
+    }
   })
 })

@@ -21,6 +21,7 @@ import { RegistryUnavailableError } from '@/lib/scaffolder/registry-errors'
 import { listActions as listActionsRpc } from '@/lib/clients/template-client'
 import { executeRun } from '@/lib/actions/run'
 import { evaluateVisibleIf } from '@/lib/scaffolder/visible-if'
+import { RegistryUnavailableError } from '@/lib/scaffolder/registry-errors'
 import type {
   TemplateDefinition as TemplateDefinitionDoc,
   TemplateDefinitionVersion,
@@ -561,21 +562,19 @@ function validateRunParameters(version: TemplateDefinitionVersion, parameters: R
 }
 
 /**
- * Creates a `dryRun: true` action-run for a template version and dispatches
- * it. Manage-gated (dry runs are an authoring/preview tool, not the
- * published-template consumer flow — {@link startRun} is that).
+ * Shared dry-run creation core for {@link startDryRun} and {@link planRun} —
+ * everything AFTER authorization: resolve fixture/parameters, validate,
+ * provision the runner action, create + dispatch the `dryRun: true` run,
+ * and stamp `lastDryRunAt`. Callers must authorize BEFORE calling this.
  */
-export async function startDryRun(input: StartDryRunInput): Promise<{ runId: string }> {
-  const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  const isAdmin = await currentUserIsPlatformAdmin()
-
-  const { version, definition } = await loadVersionAndDefinition(payload, input.templateVersionId)
-  const workspaceId = relId(definition.workspace)
-  if (!(await canManageTemplateDefinitions(payload, uid, workspaceId, isAdmin))) {
-    throw new Error('You do not have permission to dry-run templates in this workspace.')
-  }
-
+async function createAndDispatchDryRun(
+  payload: PayloadClient,
+  uid: string,
+  version: TemplateDefinitionVersion,
+  definition: TemplateDefinitionDoc,
+  workspaceId: string | null,
+  input: StartDryRunInput,
+): Promise<{ runId: string }> {
   let parameters = input.parameters ?? {}
   if (input.fixtureId) {
     const fixture = (definition.fixtures ?? []).find((f) => f.id === input.fixtureId)
@@ -620,14 +619,51 @@ export async function startDryRun(input: StartDryRunInput): Promise<{ runId: str
 }
 
 /**
- * Alias for {@link startDryRun} — the "Review" step of both the authoring
- * dry-run panel and the consumer run wizard plan the same way (a dry run IS
- * the plan). Kept as a separate export because Phase 2's plan names it
- * `planRun` distinctly (design §3.6/§4); if the two diverge later (e.g. a
- * plan-only mode that skips MinIO persistence), split the implementations
- * then.
+ * Creates a `dryRun: true` action-run for a template version and dispatches
+ * it. Manage-gated ALWAYS (dry runs are an authoring/preview tool over any
+ * draft, published, or deprecated version) — {@link planRun} is the
+ * consumer-facing sibling with a looser gate for published definitions.
  */
-export const planRun = startDryRun
+export async function startDryRun(input: StartDryRunInput): Promise<{ runId: string }> {
+  const payload = await getPayload({ config })
+  const uid = await requireUserId()
+  const isAdmin = await currentUserIsPlatformAdmin()
+
+  const { version, definition } = await loadVersionAndDefinition(payload, input.templateVersionId)
+  const workspaceId = relId(definition.workspace)
+  if (!(await canManageTemplateDefinitions(payload, uid, workspaceId, isAdmin))) {
+    throw new Error('You do not have permission to dry-run templates in this workspace.')
+  }
+
+  return createAndDispatchDryRun(payload, uid, version, definition, workspaceId, input)
+}
+
+/**
+ * The consumer run wizard's "Review" step (design §3.6/§4) — a dry run IS
+ * the plan, so this shares {@link startDryRun}'s creation/dispatch core but
+ * with a DIFFERENT, looser authorization: side-effect-free, so any active
+ * member may plan-run a PUBLISHED definition (`canRunTemplateDefinition`),
+ * without needing the manage/owner-admin gate `startDryRun` otherwise
+ * requires. A draft/deprecated definition still falls back to the manage
+ * gate — a consumer has no business previewing an unpublished template.
+ */
+export async function planRun(input: StartDryRunInput): Promise<{ runId: string }> {
+  const payload = await getPayload({ config })
+  const uid = await requireUserId()
+  const isAdmin = await currentUserIsPlatformAdmin()
+
+  const { version, definition } = await loadVersionAndDefinition(payload, input.templateVersionId)
+  const workspaceId = relId(definition.workspace)
+
+  const canPlanAsConsumer =
+    definition.status === 'published' &&
+    (await canRunTemplateDefinition(payload, uid, workspaceId, isAdmin))
+  if (!canPlanAsConsumer && !(await canManageTemplateDefinitions(payload, uid, workspaceId, isAdmin))) {
+    throw new Error('You do not have permission to dry-run templates in this workspace.')
+  }
+
+  return createAndDispatchDryRun(payload, uid, version, definition, workspaceId, input)
+}
 
 export interface StartRunInput {
   templateVersionId: string
@@ -754,10 +790,9 @@ export async function getRun(runId: string): Promise<ActionRun | null> {
           ...(secretValues.size > 0 && run.plan
             ? { plan: redactSecretValuesDeep(run.plan, secretValues) as ActionRun['plan'] }
             : {}),
-          // Consumer run-detail surfaces (Phase 2 Task 17) render
-          // `run.outputs.links[]` directly to the caller — a secret input
-          // echoed into a step's declared output (same class of leak as
-          // steps[]/plan above) must be redacted here too.
+          // MINOR: `outputs` (links/text, design §output) renders straight
+          // to the consumer run-detail page — a secret echoed there must be
+          // redacted exactly like steps[].output/plan.
           ...(secretValues.size > 0 && run.outputs
             ? { outputs: redactSecretValuesDeep(run.outputs, secretValues) as ActionRun['outputs'] }
             : {}),
