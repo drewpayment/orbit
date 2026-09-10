@@ -52,13 +52,37 @@ export function parameterPageToSchemaFormPage(page: ParameterPage): SchemaFormPa
   }
 }
 
-/** Convert a step's registry `inputSchema` (plain JSON Schema, no inline `ui:*`) to a single-page form. */
+/**
+ * Convert a step's registry `inputSchema` to a single-page form.
+ *
+ * A property MAY carry inline `ui:*` keys (design §3.1's wire format — e.g.
+ * `{ type: 'string', 'ui:field': 'OrbitSkeletonPicker' }`) exactly like a
+ * parameter page's properties do; this is how a Go action's InputSchema
+ * requests a picker for one of its inputs (`fetch:orbit-skeleton`'s
+ * `skeletonId`, Phase 3 Task 5). Split each property with {@link
+ * splitProperty}, same as {@link parameterPageToSchemaFormPage}, so
+ * `SchemaForm`'s registry-driven field resolution sees the `ui:field`.
+ */
 export function stepInputSchemaToSchemaFormPage(
   title: string,
   inputSchema: Record<string, unknown>,
 ): SchemaFormPage {
   const schema = inputSchema as JsonSchema
-  return { title, schema: { type: 'object', properties: schema.properties ?? {}, required: schema.required ?? [] } }
+  const rawProperties = (schema.properties ?? {}) as Record<string, ParameterProperty>
+  const properties: Record<string, JsonSchema> = {}
+  const uiSchema: UiSchema = {}
+  for (const [name, property] of Object.entries(rawProperties)) {
+    const { schema: propSchema, ui } = splitProperty(property)
+    properties[name] = propSchema
+    if (Object.keys(ui).length > 0) {
+      ;(uiSchema as Record<string, UiFieldSchema>)[name] = ui
+    }
+  }
+  return {
+    title,
+    schema: { type: 'object', properties, required: schema.required ?? [] },
+    uiSchema: Object.keys(uiSchema).length > 0 ? uiSchema : undefined,
+  }
 }
 
 /** True when a leaf JSON-Schema type may hold a `${{ }}` expression value (design §2.6: string/number fields). */

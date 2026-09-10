@@ -65,6 +65,23 @@ describe('stepInputSchemaToSchemaFormPage', () => {
     expect(page.schema.properties).toEqual({ name: { type: 'string' } })
     expect(page.schema.required).toEqual(['name'])
   })
+
+  it('splits inline ui:* keys on step input properties into a uiSchema, same as parameterPageToSchemaFormPage', () => {
+    // Go actions declare `"ui:field": "OrbitSkeletonPicker"` inline on the
+    // property, same wire format as parameter pages (design §3.1) — a step's
+    // InputSchema is not exempt from carrying ui:* directives.
+    const page = stepInputSchemaToSchemaFormPage('Configure step', {
+      type: 'object',
+      properties: {
+        skeletonId: { type: 'string', 'ui:field': 'OrbitSkeletonPicker' },
+        plain: { type: 'string' },
+      },
+      required: ['skeletonId'],
+    })
+    expect(page.schema.properties?.skeletonId).toEqual({ type: 'string' })
+    expect(page.uiSchema?.skeletonId).toEqual({ 'ui:field': 'OrbitSkeletonPicker' })
+    expect(page.uiSchema && 'plain' in page.uiSchema).toBe(false)
+  })
 })
 
 describe('isExpressionCapable / expressionCapableFieldNames', () => {

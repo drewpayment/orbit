@@ -3,6 +3,8 @@ import { cleanup, render, screen, fireEvent } from '@testing-library/react'
 import { StepsBuilder } from './StepsBuilder'
 import type { TemplateDefinition } from '@/lib/scaffolder/schema'
 import type { ActionDescriptor } from '@/lib/scaffolder/validate'
+import { registerField } from '@/components/forms/schema-form/field-registry'
+import type { FieldComponentProps } from '@/components/forms/schema-form/field-registry'
 
 afterEach(() => {
   cleanup()
@@ -307,6 +309,37 @@ describe('StepsBuilder (collapsible step bodies)', () => {
     expect(screen.getByRole('button', { name: /expand step/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /collapse step/i })).toBeInTheDocument()
     expect(screen.getAllByLabelText(/run if/i)).toHaveLength(1)
+  })
+
+  it('resolves a step input\'s ui:field to its registered picker component (regression: the per-step field registry must not drop pickers registered on the shared registry)', () => {
+    const StubPickerField = ({ id, onChange }: FieldComponentProps) => (
+      <button type="button" id={id} onClick={() => onChange('picked-value')}>
+        stub-picker
+      </button>
+    )
+    registerField('__TestStubPicker', StubPickerField)
+
+    const registryWithPicker: ActionDescriptor[] = [
+      descriptor({
+        id: 'test:stub-picker',
+        family: 'utility',
+        name: 'Stub picker action',
+        inputSchema: {
+          type: 'object',
+          properties: { thing: { type: 'string', 'ui:field': '__TestStubPicker' } },
+        },
+      }),
+    ]
+    const dispatch = vi.fn()
+    const def = definition([{ id: 's1', name: 'Step 1', action: 'test:stub-picker', input: {} }])
+    render(<StepsBuilder definition={def} dispatch={dispatch} registry={registryWithPicker} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /expand step/i }))
+    fireEvent.click(screen.getByRole('button', { name: /configure inputs/i }))
+
+    // Without the fix this renders a plain text <input> (typeDefault
+    // fallback) instead of the registered stub picker button.
+    expect(screen.getByText('stub-picker')).toBeInTheDocument()
   })
 })
 

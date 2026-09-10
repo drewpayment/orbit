@@ -21,7 +21,11 @@ import { findStepReferences, generateStepId, groupRegistryByFamily, type StepRef
 import { stepInputSchemaToSchemaFormPage } from './schema-ui-split'
 import { ExpressionInput } from './ExpressionInput'
 import { SchemaForm } from '@/components/forms/schema-form/SchemaForm'
-import { createFieldRegistry, type FieldComponent, type FieldRegistry } from '@/components/forms/schema-form/field-registry'
+import {
+  defaultFieldRegistry,
+  type FieldComponent,
+  type FieldRegistry,
+} from '@/components/forms/schema-form/field-registry'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -78,8 +82,20 @@ export function coerceStepInput(input: Step['input'], inputSchema: unknown): Ste
   return changed ? next : input
 }
 
+/**
+ * Wraps the shared `defaultFieldRegistry` (NOT an isolated
+ * `createFieldRegistry()` instance — regression, see StepsBuilder.test.tsx
+ * "resolves a step input's ui:field to its registered picker component"):
+ * an isolated registry only ever has the built-in widgets seeded into it, so
+ * any `ui:field` naming an Orbit picker (`OrbitTeamPicker`,
+ * `OrbitSkeletonPicker`, …) registered on the app-wide `defaultFieldRegistry`
+ * silently fell through to the plain-text-input type default. A step's
+ * `inputSchema` field only gets the expression-input treatment when it has
+ * NO `ui:field`/`ui:widget` and no enum — anything with an explicit `ui:*`
+ * directive defers to the shared registry, same as every other `SchemaForm`
+ * consumer in the app.
+ */
 function buildExpressionAwareRegistry(candidates: ExpressionCandidate[]): FieldRegistry {
-  const base = createFieldRegistry()
   const ExpressionField: FieldComponent = ({ id, value, onChange, disabled, schema, ...rest }) => (
     <ExpressionInput
       id={id}
@@ -91,12 +107,12 @@ function buildExpressionAwareRegistry(candidates: ExpressionCandidate[]): FieldR
     />
   )
   return {
-    register: (name, component) => base.register(name, component),
+    register: (name, component) => defaultFieldRegistry.register(name, component),
     resolve(schema, uiSchema) {
       const isPlainScalar = !uiSchema?.['ui:field'] && !uiSchema?.['ui:widget'] && !schema.enum
       const isExpressionType = schema.type === 'string' || schema.type === 'number' || schema.type === 'integer'
       if (isPlainScalar && isExpressionType) return ExpressionField
-      return base.resolve(schema, uiSchema)
+      return defaultFieldRegistry.resolve(schema, uiSchema)
     },
   }
 }
