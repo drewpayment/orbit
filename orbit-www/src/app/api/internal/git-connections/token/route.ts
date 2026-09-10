@@ -15,18 +15,26 @@ import { resolveConnectionToken } from '@/lib/connections/token-core'
  * same guard as the GitHub token route. The decrypted PAT is returned ONLY to
  * the internal Go worker — it never crosses to the browser.
  *
- * Body:     { connectionId }
+ * Body:     { connectionId, workspaceId? }
  * Response: 200 { provider, organization, project, baseUrl, pat }
  *           404 { error, code: 'NOT_FOUND' }
  *           410 { error, code: 'NOT_CONFIGURED' }
  *           500 { error, code }
+ *
+ * workspaceId is optional and additive: when a caller passes it, the
+ * connection must be authorized for that workspace (see
+ * resolveConnectionToken's workspace-scoping check) or the route responds
+ * 404 exactly as it would for an unknown connection id — this is what
+ * stops a scaffolder run in workspace A from resolving workspace B's PAT.
+ * Omitting workspaceId keeps the route's prior, unscoped behavior for
+ * callers that have no workspace context (e.g. a global connection scan).
  */
 export async function POST(request: NextRequest) {
   const authError = validateInternalApiKey(request.headers.get('X-API-Key'))
   if (authError) return authError
 
   try {
-    const { connectionId } = await request.json()
+    const { connectionId, workspaceId } = await request.json()
 
     if (!connectionId || typeof connectionId !== 'string') {
       return NextResponse.json(
@@ -34,9 +42,21 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       )
     }
+    if (workspaceId !== undefined && typeof workspaceId !== 'string') {
+      return NextResponse.json(
+        { error: 'workspaceId must be a string', code: 'BAD_REQUEST' },
+        { status: 400 },
+      )
+    }
 
     const payload = await getPayload({ config: configPromise })
-    const result = await resolveConnectionToken(payload, connectionId)
+    const result = await resolveConnectionToken(
+      payload,
+      connectionId,
+      undefined,
+      undefined,
+      typeof workspaceId === 'string' ? workspaceId : undefined,
+    )
 
     if (!result.ok) {
       return NextResponse.json({ error: result.error, code: result.code }, { status: result.status })

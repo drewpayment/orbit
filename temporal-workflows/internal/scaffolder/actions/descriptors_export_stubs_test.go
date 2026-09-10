@@ -8,9 +8,9 @@ import (
 	"github.com/drewpayment/orbit/temporal-workflows/internal/services"
 )
 
-// stubTokenService, stubCatalogClient, stubKafkaTopicClient,
-// stubKafkaProvisioner, stubApiSchemaClient and stubSkeletonClient exist
-// only so DefaultActions returns its full set in
+// stubTokenService, stubCatalogClient, stubADOConnectionClient,
+// stubKafkaTopicClient, stubKafkaProvisioner, stubApiSchemaClient and
+// stubSkeletonClient exist only so DefaultActions returns its full set in
 // TestDescriptorActions_CoversEveryDefaultAction. None is ever called.
 type stubTokenService struct{}
 
@@ -22,6 +22,12 @@ type stubCatalogClient struct{}
 
 func (stubCatalogClient) RegisterEntity(context.Context, services.CatalogEntityRegisterInput) (*services.CatalogEntityRegisterResult, error) {
 	return nil, errors.New("stub")
+}
+
+type stubADOConnectionClient struct{}
+
+func (stubADOConnectionClient) GetConnectionToken(context.Context, string, string) (services.ADOConnectionToken, error) {
+	return services.ADOConnectionToken{}, errors.New("stub")
 }
 
 type stubKafkaTopicClient struct{}

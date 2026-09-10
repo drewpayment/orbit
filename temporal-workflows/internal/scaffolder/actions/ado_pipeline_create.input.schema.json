@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ado:pipeline:create input",
+  "type": "object",
+  "properties": {
+    "connection": {
+      "type": "string",
+      "minLength": 1,
+      "description": "GitConnections id of the Azure DevOps connection used to authenticate this call."
+    },
+    "project": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Azure DevOps project that will own the new pipeline."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Pipeline (build definition) name."
+    },
+    "repoId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Azure DevOps repository id (or name) the pipeline is defined in."
+    },
+    "yamlPath": {
+      "type": "string",
+      "minLength": 1,
+      "default": "azure-pipelines.yml",
+      "description": "Path (within the repository) to the pipeline YAML file. This action does not generate pipeline YAML content — the file must already exist in the repository (e.g. from an earlier fs:render/git:push step); a missing file surfaces as an Azure DevOps API error."
+    }
+  },
+  "required": ["connection", "project", "name", "repoId"],
+  "additionalProperties": false
+}
