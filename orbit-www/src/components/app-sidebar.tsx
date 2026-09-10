@@ -77,7 +77,13 @@ const navMainData = [
       icon: Sparkles,
       // Highlight on the hub and the folded-in self-service surfaces.
       activeMatch: ["/self-service", "/templates", "/launches", "/agent", "/infra-agent"],
-      items: [],
+      items: [
+        // In-app template authoring + the published-template catalog
+        // (docs/plans/2026-09-09-template-authoring-phase-2-authoring-ui.md).
+        // Visible to everyone; the Drafts tab and "New template" CTA are
+        // RBAC-gated inside the page and its server actions.
+        { title: "Templates", url: "/self-service/templates", icon: LayoutTemplate },
+      ],
     },
     {
       // Automations bridge Scorecards (triggers) and Self-Service (actions).

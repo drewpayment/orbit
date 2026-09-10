@@ -80,6 +80,8 @@ export interface Config {
     roles: Role;
     'user-workspace-roles': UserWorkspaceRole;
     templates: Template;
+    'template-definitions': TemplateDefinition;
+    'template-definition-versions': TemplateDefinitionVersion;
     apps: App;
     deployments: Deployment;
     'deployment-generators': DeploymentGenerator;
@@ -159,6 +161,8 @@ export interface Config {
     roles: RolesSelect<false> | RolesSelect<true>;
     'user-workspace-roles': UserWorkspaceRolesSelect<false> | UserWorkspaceRolesSelect<true>;
     templates: TemplatesSelect<false> | TemplatesSelect<true>;
+    'template-definitions': TemplateDefinitionsSelect<false> | TemplateDefinitionsSelect<true>;
+    'template-definition-versions': TemplateDefinitionVersionsSelect<false> | TemplateDefinitionVersionsSelect<true>;
     apps: AppsSelect<false> | AppsSelect<true>;
     deployments: DeploymentsSelect<false> | DeploymentsSelect<true>;
     'deployment-generators': DeploymentGeneratorsSelect<false> | DeploymentGeneratorsSelect<true>;
@@ -279,6 +283,9 @@ export interface User {
    * If checked, user can log in immediately after approval without verifying their email.
    */
   skipEmailVerification?: boolean | null;
+  /**
+   * Set when an admin creates this user via an invite link; distinguishes invited users from self-registered ones.
+   */
   invitedAt?: string | null;
   registrationApprovedAt?: string | null;
   registrationApprovedBy?: (string | null) | User;
@@ -816,6 +823,403 @@ export interface Template {
   webhookSecret?: string | null;
   usageCount?: number | null;
   createdBy?: (string | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Self-service template definitions (v2 Scaffolder engine).
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "template-definitions".
+ */
+export interface TemplateDefinition {
+  id: string;
+  name: string;
+  slug: string;
+  title?: string | null;
+  description?: string | null;
+  workspace: string | Workspace;
+  /**
+   * Team/owner label for the template (no dedicated teams collection exists yet — free text).
+   */
+  owner?: string | null;
+  /**
+   * Catalog entity kind this template produces, e.g. "service".
+   */
+  targetKind?: string | null;
+  visibility: 'workspace' | 'shared' | 'public';
+  /**
+   * Workspaces that can use this template
+   */
+  sharedWith?: (string | Workspace)[] | null;
+  status: 'draft' | 'published' | 'deprecated';
+  /**
+   * Pointer to the active version row (not an ordinal).
+   */
+  currentVersion?: (string | null) | TemplateDefinitionVersion;
+  sourceMode: 'orbit' | 'git';
+  gitSource?: {
+    repoUrl?: string | null;
+    manifestPath?: string | null;
+    lastSyncedAt?: string | null;
+    syncStatus?: ('synced' | 'error' | 'pending') | null;
+  };
+  /**
+   * Set by the v1→v2 migration reconciler; presence is its idempotency key.
+   */
+  migratedFrom?: (string | null) | Template;
+  /**
+   * Named sample inputs for one-click dry run.
+   */
+  fixtures?:
+    | {
+        name: string;
+        values?:
+          | {
+              [k: string]: unknown;
+            }
+          | unknown[]
+          | string
+          | number
+          | boolean
+          | null;
+        id?: string | null;
+      }[]
+    | null;
+  usageCount?: number | null;
+  lastDryRunAt?: string | null;
+  createdBy?: (string | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Immutable version history for template definitions.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "template-definition-versions".
+ */
+export interface TemplateDefinitionVersion {
+  id: string;
+  definition: string | TemplateDefinition;
+  /**
+   * Denormalized from the parent definition's workspace at write time.
+   */
+  workspace: string | Workspace;
+  /**
+   * Monotonically increasing per-definition.
+   */
+  versionNumber: number;
+  /**
+   * The full v2 document (apiVersion/kind/metadata/spec) — see design §3.1.
+   */
+  definitionJson:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  editedBy?: (string | null) | User;
+  changeNote?: string | null;
+  /**
+   * Set when static validation last passed for this version.
+   */
+  validatedAt?: string | null;
+  /**
+   * The successful dry run that satisfied the publish gate.
+   */
+  dryRunRunId?: (string | null) | ActionRun;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Execution records for self-service actions.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "action-runs".
+ */
+export interface ActionRun {
+  id: string;
+  action: string | Action;
+  workspace: string | Workspace;
+  /**
+   * What this run produced or targeted, if anything.
+   */
+  entity?: (string | null) | CatalogEntity;
+  /**
+   * Validated against the Action inputSchema.
+   */
+  inputs?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  status: 'pending' | 'awaiting-approval' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+  /**
+   * Scaffolder (Phase 1): the definition version this run executed.
+   */
+  templateVersion?: (string | null) | TemplateDefinitionVersion;
+  /**
+   * True for a Preview/plan run — no side effects.
+   */
+  dryRun?: boolean | null;
+  /**
+   * Per-step live status, written by ScaffolderWorkflow progress updates.
+   */
+  steps?:
+    | {
+        id: string;
+        name?: string | null;
+        status: 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped';
+        startedAt?: string | null;
+        finishedAt?: string | null;
+        logTail?: string | null;
+        output?:
+          | {
+              [k: string]: unknown;
+            }
+          | unknown[]
+          | string
+          | number
+          | boolean
+          | null;
+      }[]
+    | null;
+  /**
+   * PlannedChange[] from a dry run, or null.
+   */
+  plan?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * MinIO key prefix, e.g. scaffolder-runs/{runId}/.
+   */
+  artifactsPrefix?: string | null;
+  /**
+   * Temporal dispatch workflow id (Temporal backends).
+   */
+  workflowId?: string | null;
+  /**
+   * Append-only array of { ts, level, message } entries.
+   */
+  logs?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Produced urls/ids/etc.
+   */
+  outputs?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  error?: string | null;
+  triggeredBy?: (string | null) | User;
+  /**
+   * P4 automations create runs with trigger=automation.
+   */
+  trigger?: ('manual' | 'automation') | null;
+  /**
+   * The automation that created this run (P4.1; set when trigger=automation).
+   */
+  sourceAutomation?: (string | null) | Automation;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Self-service actions developers can run (templates, provisioning, agent, …).
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "actions".
+ */
+export interface Action {
+  id: string;
+  name: string;
+  description?: string | null;
+  workspace: string | Workspace;
+  /**
+   * Optional lucide icon name for the catalog card.
+   */
+  icon?: string | null;
+  /**
+   * JSON Schema for the run form (reuses the Patterns inputSchemaJson convention). Drives the inputs collected before a run.
+   */
+  inputSchema?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  approvalPolicy?: ('none' | 'workspace-admin' | 'platform-admin') | null;
+  /**
+   * How this action executes.
+   */
+  backend: {
+    type:
+      | 'builtin'
+      | 'webhook'
+      | 'temporal-template'
+      | 'temporal-pattern'
+      | 'temporal-launch'
+      | 'kafka-provision'
+      | 'agent'
+      | 'scaffolder';
+    /**
+     * Backend target: builtin handler id, webhook URL, template/pattern/launch id, topic config, or agent prompt ref — interpreted per type.
+     */
+    ref?: string | null;
+  };
+  enabled?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Unified catalog graph — projected from apps, APIs, topics and more.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "catalog-entities".
+ */
+export interface CatalogEntity {
+  id: string;
+  name: string;
+  /**
+   * URL-safe identifier, unique within a workspace.
+   */
+  slug?: string | null;
+  description?: string | null;
+  kind: 'service' | 'api' | 'resource' | 'datastore' | 'kafka-topic' | 'domain' | 'system' | 'team' | 'environment';
+  /**
+   * Security enclave the entity belongs to (absent = global).
+   */
+  workspace?: (string | null) | Workspace;
+  /**
+   * Owning team (a catalog-entities row of kind "team").
+   */
+  owner?: (string | null) | CatalogEntity;
+  lifecycle?: ('experimental' | 'production' | 'deprecated') | null;
+  /**
+   * Criticality — drives scorecard expectations in P2.
+   */
+  tier?: ('tier-1' | 'tier-2' | 'tier-3') | null;
+  /**
+   * Docs, dashboards, runbooks.
+   */
+  links?:
+    | {
+        label: string;
+        url: string;
+        type?: ('docs' | 'dashboard' | 'runbook' | 'repository' | 'other') | null;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * Provenance back to the backing collection this row projects from.
+   */
+  source: {
+    type: 'manual' | 'apps' | 'api-schemas' | 'kafka' | 'sync' | 'scan' | 'template' | 'scaffolder-run';
+    /**
+     * ID of the backing row in the source collection.
+     */
+    sourceId?: string | null;
+  };
+  /**
+   * Freeform, queryable by scorecard rules (P2).
+   */
+  metadata?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Folded-in health badge (projected from the source app).
+   */
+  health?: ('healthy' | 'degraded' | 'down' | 'unknown') | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Event-driven rules that run self-service actions when catalog or scorecard state changes.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "automations".
+ */
+export interface Automation {
+  id: string;
+  name: string;
+  description?: string | null;
+  workspace: string | Workspace;
+  /**
+   * What event this automation reacts to.
+   */
+  trigger: {
+    event: 'rule-result-changed' | 'entity-changed' | 'schedule';
+    /**
+     * Optional JSON predicate narrowing the event (e.g. { "transition": "drift" } or { "kind": "service" }). Evaluated in-process; AND of all keys.
+     */
+    filter?:
+      | {
+          [k: string]: unknown;
+        }
+      | unknown[]
+      | string
+      | number
+      | boolean
+      | null;
+    /**
+     * Cron expression — only used when event is "schedule" (swept by the deferred Temporal worker).
+     */
+    schedule?: string | null;
+  };
+  /**
+   * The self-service Action to run when this automation fires.
+   */
+  action: string | Action;
+  /**
+   * Maps event fields → action inputs. Values may be templates referencing the event, e.g. { "service": "{{entity.slug}}", "reason": "Rule {{rule.title}} failing" }.
+   */
+  inputMapping?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  enabled?: boolean | null;
+  /**
+   * When this automation last created a run.
+   */
+  lastTriggeredAt?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -3538,74 +3942,6 @@ export interface ApiSchemaVersion {
   createdAt: string;
 }
 /**
- * Unified catalog graph — projected from apps, APIs, topics and more.
- *
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "catalog-entities".
- */
-export interface CatalogEntity {
-  id: string;
-  name: string;
-  /**
-   * URL-safe identifier, unique within a workspace.
-   */
-  slug?: string | null;
-  description?: string | null;
-  kind: 'service' | 'api' | 'resource' | 'datastore' | 'kafka-topic' | 'domain' | 'system' | 'team' | 'environment';
-  /**
-   * Security enclave the entity belongs to (absent = global).
-   */
-  workspace?: (string | null) | Workspace;
-  /**
-   * Owning team (a catalog-entities row of kind "team").
-   */
-  owner?: (string | null) | CatalogEntity;
-  lifecycle?: ('experimental' | 'production' | 'deprecated') | null;
-  /**
-   * Criticality — drives scorecard expectations in P2.
-   */
-  tier?: ('tier-1' | 'tier-2' | 'tier-3') | null;
-  /**
-   * Docs, dashboards, runbooks.
-   */
-  links?:
-    | {
-        label: string;
-        url: string;
-        type?: ('docs' | 'dashboard' | 'runbook' | 'repository' | 'other') | null;
-        id?: string | null;
-      }[]
-    | null;
-  /**
-   * Provenance back to the backing collection this row projects from.
-   */
-  source: {
-    type: 'manual' | 'apps' | 'api-schemas' | 'kafka' | 'sync' | 'scan';
-    /**
-     * ID of the backing row in the source collection.
-     */
-    sourceId?: string | null;
-  };
-  /**
-   * Freeform, queryable by scorecard rules (P2).
-   */
-  metadata?:
-    | {
-        [k: string]: unknown;
-      }
-    | unknown[]
-    | string
-    | number
-    | boolean
-    | null;
-  /**
-   * Folded-in health badge (projected from the source app).
-   */
-  health?: ('healthy' | 'degraded' | 'down' | 'unknown') | null;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
  * Typed edges between catalog entities (dependencies, ownership, lineage).
  *
  * This interface was referenced by `Config`'s JSON-Schema
@@ -3996,180 +4332,6 @@ export interface InitiativeActionItem {
   createdAt: string;
 }
 /**
- * Self-service actions developers can run (templates, provisioning, agent, …).
- *
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "actions".
- */
-export interface Action {
-  id: string;
-  name: string;
-  description?: string | null;
-  workspace: string | Workspace;
-  /**
-   * Optional lucide icon name for the catalog card.
-   */
-  icon?: string | null;
-  /**
-   * JSON Schema for the run form (reuses the Patterns inputSchemaJson convention). Drives the inputs collected before a run.
-   */
-  inputSchema?:
-    | {
-        [k: string]: unknown;
-      }
-    | unknown[]
-    | string
-    | number
-    | boolean
-    | null;
-  approvalPolicy?: ('none' | 'workspace-admin' | 'platform-admin') | null;
-  /**
-   * How this action executes.
-   */
-  backend: {
-    type:
-      | 'builtin'
-      | 'webhook'
-      | 'temporal-template'
-      | 'temporal-pattern'
-      | 'temporal-launch'
-      | 'kafka-provision'
-      | 'agent';
-    /**
-     * Backend target: builtin handler id, webhook URL, template/pattern/launch id, topic config, or agent prompt ref — interpreted per type.
-     */
-    ref?: string | null;
-  };
-  enabled?: boolean | null;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * Execution records for self-service actions.
- *
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "action-runs".
- */
-export interface ActionRun {
-  id: string;
-  action: string | Action;
-  workspace: string | Workspace;
-  /**
-   * What this run produced or targeted, if anything.
-   */
-  entity?: (string | null) | CatalogEntity;
-  /**
-   * Validated against the Action inputSchema.
-   */
-  inputs?:
-    | {
-        [k: string]: unknown;
-      }
-    | unknown[]
-    | string
-    | number
-    | boolean
-    | null;
-  status: 'pending' | 'awaiting-approval' | 'running' | 'succeeded' | 'failed';
-  /**
-   * Temporal dispatch workflow id (Temporal backends).
-   */
-  workflowId?: string | null;
-  /**
-   * Append-only array of { ts, level, message } entries.
-   */
-  logs?:
-    | {
-        [k: string]: unknown;
-      }
-    | unknown[]
-    | string
-    | number
-    | boolean
-    | null;
-  /**
-   * Produced urls/ids/etc.
-   */
-  outputs?:
-    | {
-        [k: string]: unknown;
-      }
-    | unknown[]
-    | string
-    | number
-    | boolean
-    | null;
-  error?: string | null;
-  triggeredBy?: (string | null) | User;
-  /**
-   * P4 automations create runs with trigger=automation.
-   */
-  trigger?: ('manual' | 'automation') | null;
-  /**
-   * The automation that created this run (P4.1; set when trigger=automation).
-   */
-  sourceAutomation?: (string | null) | Automation;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * Event-driven rules that run self-service actions when catalog or scorecard state changes.
- *
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "automations".
- */
-export interface Automation {
-  id: string;
-  name: string;
-  description?: string | null;
-  workspace: string | Workspace;
-  /**
-   * What event this automation reacts to.
-   */
-  trigger: {
-    event: 'rule-result-changed' | 'entity-changed' | 'schedule';
-    /**
-     * Optional JSON predicate narrowing the event (e.g. { "transition": "drift" } or { "kind": "service" }). Evaluated in-process; AND of all keys.
-     */
-    filter?:
-      | {
-          [k: string]: unknown;
-        }
-      | unknown[]
-      | string
-      | number
-      | boolean
-      | null;
-    /**
-     * Cron expression — only used when event is "schedule" (swept by the deferred Temporal worker).
-     */
-    schedule?: string | null;
-  };
-  /**
-   * The self-service Action to run when this automation fires.
-   */
-  action: string | Action;
-  /**
-   * Maps event fields → action inputs. Values may be templates referencing the event, e.g. { "service": "{{entity.slug}}", "reason": "Rule {{rule.title}} failing" }.
-   */
-  inputMapping?:
-    | {
-        [k: string]: unknown;
-      }
-    | unknown[]
-    | string
-    | number
-    | boolean
-    | null;
-  enabled?: boolean | null;
-  /**
-   * When this automation last created a run.
-   */
-  lastTriggeredAt?: string | null;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
  * Repository-scan proposals awaiting review — projected into the catalog on approval.
  *
  * This interface was referenced by `Config`'s JSON-Schema
@@ -4309,6 +4471,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'templates';
         value: string | Template;
+      } | null)
+    | ({
+        relationTo: 'template-definitions';
+        value: string | TemplateDefinition;
+      } | null)
+    | ({
+        relationTo: 'template-definition-versions';
+        value: string | TemplateDefinitionVersion;
       } | null)
     | ({
         relationTo: 'apps';
@@ -4603,6 +4773,7 @@ export interface UsersSelect<T extends boolean = true> {
   role?: T;
   betterAuthId?: T;
   skipEmailVerification?: T;
+  invitedAt?: T;
   registrationApprovedAt?: T;
   registrationApprovedBy?: T;
   updatedAt?: T;
@@ -4871,6 +5042,61 @@ export interface TemplatesSelect<T extends boolean = true> {
   webhookSecret?: T;
   usageCount?: T;
   createdBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "template-definitions_select".
+ */
+export interface TemplateDefinitionsSelect<T extends boolean = true> {
+  name?: T;
+  slug?: T;
+  title?: T;
+  description?: T;
+  workspace?: T;
+  owner?: T;
+  targetKind?: T;
+  visibility?: T;
+  sharedWith?: T;
+  status?: T;
+  currentVersion?: T;
+  sourceMode?: T;
+  gitSource?:
+    | T
+    | {
+        repoUrl?: T;
+        manifestPath?: T;
+        lastSyncedAt?: T;
+        syncStatus?: T;
+      };
+  migratedFrom?: T;
+  fixtures?:
+    | T
+    | {
+        name?: T;
+        values?: T;
+        id?: T;
+      };
+  usageCount?: T;
+  lastDryRunAt?: T;
+  createdBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "template-definition-versions_select".
+ */
+export interface TemplateDefinitionVersionsSelect<T extends boolean = true> {
+  definition?: T;
+  workspace?: T;
+  versionNumber?: T;
+  definitionJson?: T;
+  editedBy?: T;
+  changeNote?: T;
+  validatedAt?: T;
+  dryRunRunId?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -6183,6 +6409,21 @@ export interface ActionRunsSelect<T extends boolean = true> {
   entity?: T;
   inputs?: T;
   status?: T;
+  templateVersion?: T;
+  dryRun?: T;
+  steps?:
+    | T
+    | {
+        id?: T;
+        name?: T;
+        status?: T;
+        startedAt?: T;
+        finishedAt?: T;
+        logTail?: T;
+        output?: T;
+      };
+  plan?: T;
+  artifactsPrefix?: T;
   workflowId?: T;
   logs?: T;
   outputs?: T;

@@ -2,6 +2,19 @@ import 'server-only'
 import type { Payload } from 'payload'
 import type { Action, ActionRun } from '@/payload-types'
 import { BUILTIN_HANDLERS, type BuiltinHandlerContext } from './builtins'
+import { startScaffolderRun } from '@/lib/clients/template-client'
+import type { JsonObject } from '@bufbuild/protobuf'
+import { ConnectError, Code } from '@connectrpc/connect'
+
+/**
+ * The Go repository service assigns scaffolder workflow ids as
+ * `ScaffolderRunIDPrefix + RunID` (services/repository/cmd/server/main.go,
+ * `StartScaffolderWorkflow` — `feat/scaffolder-workflow`). Duplicated here
+ * ONLY for the AlreadyExists retry path below, where the Go side's error
+ * response carries no workflowId to read back — the id is otherwise fully
+ * deterministic from the run id, so reconstructing it is safe.
+ */
+const SCAFFOLDER_RUN_ID_PREFIX = 'scaffolder-run-'
 
 /**
  * Action execution runner (IDP refocus P3).
@@ -67,7 +80,7 @@ async function writeRun(
   payload: Payload,
   runId: string,
   logs: RunLogEntry[],
-  patch: Partial<Pick<ActionRun, 'status' | 'outputs' | 'error' | 'entity'>>,
+  patch: Partial<Pick<ActionRun, 'status' | 'outputs' | 'error' | 'entity' | 'workflowId'>>,
 ): Promise<void> {
   await payload.update({
     collection: 'action-runs',
@@ -200,6 +213,120 @@ export async function executeRun(payload: Payload, runId: string): Promise<void>
           error: `Webhook returned HTTP ${status}.`,
         })
       }
+      return
+    }
+
+    if (backendType === 'scaffolder') {
+      if (!backendRef) {
+        throw new Error('scaffolder backend requires backend.ref (a template-definitions doc id).')
+      }
+
+      // BLOCKER 1: a scaffolder-backed run must have come through
+      // startDryRun/startRun (self-service/templates/authoring-actions.ts) —
+      // those are the only callers that record `templateVersion` on the run
+      // and enforce the RBAC/publish gates BEFORE creating it. A run that
+      // reached here via the generic Actions catalog (runAction is now
+      // rejected at the source for this backend type, but defend in depth
+      // here too) has no templateVersion — refuse it.
+      const runTemplateVersionId = relId(run.templateVersion)
+      if (!runTemplateVersionId) {
+        throw new Error(
+          'This run has no templateVersion recorded — scaffolder runs must be created via ' +
+            'startDryRun/startRun, not dispatched directly.',
+        )
+      }
+
+      const definition = await payload.findByID({
+        collection: 'template-definitions',
+        id: backendRef,
+        depth: 0,
+        overrideAccess: true,
+      })
+
+      // Defense in depth: the run's recorded templateVersion must actually
+      // belong to the definition the backing Action's backend.ref points
+      // at. Neither the workspace checks below nor the caller's RBAC catch
+      // a version/definition mismatch within the SAME workspace (e.g. a
+      // tampered or mis-assigned templateVersion pointing at a sibling
+      // definition's version) — this is the one place that does.
+      const version = await payload.findByID({
+        collection: 'template-definition-versions',
+        id: runTemplateVersionId,
+        depth: 0,
+        overrideAccess: true,
+      })
+      const versionDefinitionId = relId(version.definition)
+      if (versionDefinitionId !== backendRef) {
+        throw new Error(
+          `Run's templateVersion (${runTemplateVersionId}) belongs to definition ` +
+            `${versionDefinitionId ?? 'unknown'}, not backend.ref's definition ${backendRef} — refusing to dispatch.`,
+        )
+      }
+
+      // BLOCKER 1: a REAL (non-dry) run may only dispatch a published
+      // definition — an unpublished draft has not passed the publish gate
+      // (validated + successful dry run of the reviewed version).
+      if (!run.dryRun && definition.status !== 'published') {
+        throw new Error(
+          `Template definition "${definition.name}" is not published (status: ${definition.status}) — ` +
+            'only dry runs may execute an unpublished draft.',
+        )
+      }
+
+      // BLOCKER 2: tenant isolation. The definition, the run, and the
+      // backing Action must all agree on the workspace — refuse a
+      // cross-tenant dispatch rather than silently running one tenant's
+      // template against another's workspace id.
+      const definitionWorkspaceId = relId(definition.workspace)
+      const actionWorkspaceId = relId(action.workspace)
+      if (definitionWorkspaceId !== workspaceId || definitionWorkspaceId !== actionWorkspaceId) {
+        throw new Error(
+          `Workspace mismatch: run.workspace=${workspaceId}, action.workspace=${actionWorkspaceId}, ` +
+            `template-definitions.workspace=${definitionWorkspaceId} — refusing a cross-tenant dispatch.`,
+        )
+      }
+
+      // MAJOR 4: dispatch the version the run was actually created/reviewed
+      // against, NOT the definition's current version — currentVersion may
+      // have moved on since an approval-gated run was queued.
+      const definitionVersionId = runTemplateVersionId
+      const userId = relId(run.triggeredBy) ?? ''
+      append(
+        'info',
+        `Dispatching ${run.dryRun ? 'dry run' : 'run'} of "${definition.name}" v${definitionVersionId} via ScaffolderWorkflow.`,
+      )
+      let workflowId: string
+      try {
+        const result = await startScaffolderRun({
+          runId,
+          definitionVersionId,
+          workspaceId,
+          userId,
+          // The `inputs` JSON column is already plain JSON-compatible data —
+          // it's a structural JsonObject even though Payload types it loosely.
+          parameters: inputs as unknown as JsonObject,
+          dryRun: run.dryRun ?? false,
+        })
+        workflowId = result.workflowId
+        append('info', `Started ScaffolderWorkflow ${workflowId}.`)
+      } catch (dispatchErr) {
+        // The repository service starts the ScaffolderWorkflow with
+        // WorkflowIDReusePolicy REJECT_DUPLICATE +
+        // WorkflowExecutionErrorWhenAlreadyStarted=true, so a RETRIED
+        // dispatch for a run already started (e.g. this handler re-invoked
+        // after its own write-back was interrupted) comes back as
+        // Code.AlreadyExists, not a real failure — the workflow IS running,
+        // just not under THIS call. Attach to it instead of failing the run.
+        if (ConnectError.from(dispatchErr).code === Code.AlreadyExists) {
+          workflowId = SCAFFOLDER_RUN_ID_PREFIX + runId
+          append('info', 'ScaffolderWorkflow already started; attached to existing run.')
+        } else {
+          throw dispatchErr
+        }
+      }
+      // The Go worker owns terminal status from here (writes back via
+      // /api/internal/action-runs/[id]/status) — leave status "running".
+      await writeRun(payload, runId, logs, { workflowId })
       return
     }
 

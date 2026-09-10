@@ -17,6 +17,7 @@ import {
   Radio,
   Sparkles,
   Play,
+  FileCode,
 } from 'lucide-react'
 import type { Action, ActionRun } from '@/payload-types'
 
@@ -32,6 +33,7 @@ export const BACKEND_TYPE_LABEL: Record<ActionBackendType, string> = {
   'temporal-launch': 'Launch',
   'kafka-provision': 'Kafka topic',
   agent: 'Agent',
+  scaffolder: 'Template (v2)',
 }
 
 export function backendTypeLabel(type: string): string {
@@ -47,6 +49,7 @@ export const BACKEND_TYPE_ICON: Record<ActionBackendType, LucideIcon> = {
   'temporal-launch': Rocket,
   'kafka-provision': Radio,
   agent: Sparkles,
+  scaffolder: FileCode,
 }
 
 export function backendTypeIcon(type: string): LucideIcon {
@@ -96,11 +99,56 @@ export const RUN_STATUS_PRESENTATION: Record<RunStatus, StatusPresentation> = {
     label: 'Failed',
     className: 'border-red-500/25 bg-red-500/15 text-red-600 dark:text-red-400',
   },
+  cancelled: {
+    label: 'Cancelled',
+    className: 'border-border bg-muted text-muted-foreground',
+  },
 }
 
 export function runStatusPresentation(status: string): StatusPresentation {
   return (
     RUN_STATUS_PRESENTATION[status as RunStatus] ?? {
+      label: status,
+      className: 'border-border bg-muted text-muted-foreground',
+    }
+  )
+}
+
+/** A `Steps[number].status` value on an `ActionRun` (per-step lifecycle, Phase 2 plan Task 15). */
+export type StepStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped'
+
+/**
+ * Status → badge presentation for one `ActionRun.steps[]` entry. Distinct
+ * from {@link RUN_STATUS_PRESENTATION} (whole-run lifecycle includes
+ * `awaiting-approval`/`cancelled`, which no individual step has; a step adds
+ * `skipped`, which no whole run has).
+ */
+export const STEP_STATUS_PRESENTATION: Record<StepStatus, StatusPresentation> = {
+  pending: {
+    label: 'Pending',
+    className: 'border-border bg-transparent text-muted-foreground',
+  },
+  running: {
+    label: 'Running',
+    className: 'border-blue-500/25 bg-blue-500/15 text-blue-600 dark:text-blue-400 animate-pulse',
+  },
+  succeeded: {
+    label: 'Succeeded',
+    className: 'border-green-500/25 bg-green-500/15 text-green-600 dark:text-green-400',
+  },
+  failed: {
+    label: 'Failed',
+    className: 'border-red-500/25 bg-red-500/15 text-red-600 dark:text-red-400',
+  },
+  skipped: {
+    label: 'Skipped',
+    className: 'border-border bg-muted text-muted-foreground',
+  },
+}
+
+export function stepStatusPresentation(status: string): StatusPresentation {
+  return (
+    STEP_STATUS_PRESENTATION[status as StepStatus] ?? {
       label: status,
       className: 'border-border bg-muted text-muted-foreground',
     }

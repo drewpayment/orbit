@@ -21,6 +21,8 @@ import { Permissions } from './collections/Permissions'
 import { Roles } from './collections/Roles'
 import { UserWorkspaceRoles } from './collections/UserWorkspaceRoles'
 import { Templates } from './collections/Templates'
+import { TemplateDefinitions } from './collections/TemplateDefinitions'
+import { TemplateDefinitionVersions } from './collections/TemplateDefinitionVersions'
 import { Apps } from './collections/Apps'
 import { Deployments } from './collections/Deployments'
 import { DeploymentGenerators } from './collections/DeploymentGenerators'
@@ -122,6 +124,8 @@ export default buildConfig({
     Roles,
     UserWorkspaceRoles,
     Templates,
+    TemplateDefinitions,
+    TemplateDefinitionVersions,
     Apps,
     Deployments,
     DeploymentGenerators,

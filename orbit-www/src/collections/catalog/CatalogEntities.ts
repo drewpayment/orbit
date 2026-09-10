@@ -214,6 +214,15 @@ export const CatalogEntities: CollectionConfig = {
             // this entity directly (no api-schemas/apps source), sourceId = the
             // discovered-entities dedupeKey. See lib/discovery/import.ts.
             { label: 'Scan', value: 'scan' },
+            // In-app template instantiation (Template Authoring Phase 0):
+            // sourceId = the originating Templates doc id. See
+            // POST /api/internal/templates/[id]/finalize.
+            { label: 'Template', value: 'template' },
+            // Scaffolder action run (Template Authoring Phase 1): the
+            // catalog:entity:register action registered this entity directly
+            // from a scaffolder run, sourceId = the run id. See
+            // POST /api/internal/catalog-entities.
+            { label: 'Scaffolder Run', value: 'scaffolder-run' },
           ],
         },
         {
