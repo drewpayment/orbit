@@ -2,6 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('payload', () => ({ getPayload: vi.fn() }))
 vi.mock('@payload-config', () => ({ default: {} }))
+// This route imports `readLogs` from lib/actions/run, which now reaches the
+// gRPC client -> auth interceptor -> lib/auth.ts, and that constructs a
+// MongoClient at module scope. Under vitest there is no DATABASE_URI, so
+// merely loading the chain throws MongoParseError before any test runs.
+// Stubbing the client cuts the chain; nothing under test here touches gRPC.
+vi.mock('@/lib/clients/template-client', () => ({
+  startScaffolderRun: vi.fn(),
+  listActions: vi.fn(),
+}))
 
 process.env.ORBIT_INTERNAL_API_KEY = 'test-internal-key'
 
