@@ -99,6 +99,8 @@ export interface TemplateListItem {
   targetKind: string | null
   usageCount: number
   lastDryRunAt: string | null
+  /** Drift status from the last scheduled re-dry-run sweep (Phase 4 Task G). */
+  lastDryRunStatus: 'unknown' | 'ok' | 'drifted' | 'failed'
   updatedAt: string
   /** True when the session user created this definition (drives the "mine" filter). */
   mine: boolean
@@ -126,6 +128,7 @@ function toListItem(
     targetKind: definition.targetKind ?? null,
     usageCount: definition.usageCount ?? 0,
     lastDryRunAt: definition.lastDryRunAt ?? null,
+    lastDryRunStatus: definition.lastDryRunStatus ?? 'unknown',
     updatedAt: definition.updatedAt,
     mine: relId(definition.createdBy) === uid,
     currentVersionId: relId(definition.currentVersion),

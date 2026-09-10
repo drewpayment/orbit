@@ -43,6 +43,13 @@ type ScaffolderWorkflowInput struct {
 	// (Phase 4 Task D, `fetch:template` composition). A top-level run never
 	// sets it.
 	TemplateStack []string `json:"templateStack,omitempty"`
+	// Trigger distinguishes what started this run: empty/"manual" for a
+	// person's "Preview"/"Run" click (via StartScaffolderRun's gRPC path),
+	// "scheduled-sweep" for TemplateDryRunSweepWorkflow's automated re-dry-run
+	// (Phase 4 Task G). ScaffolderWorkflow.finish() only records
+	// lastDryRunStatus/lastDryRunPlanHash when DryRun && Trigger ==
+	// "scheduled-sweep" — a manual preview must never touch those fields.
+	Trigger string `json:"trigger,omitempty"`
 }
 
 // ScaffolderStepProgress is one step's state in a run.

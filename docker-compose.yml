@@ -93,6 +93,11 @@ services:
       - GIT_WORK_DIR=/tmp/orbit-repos
       - TEMPLATE_WORK_DIR=/tmp/orbit-templates
       - DEPLOYMENT_WORK_DIR=/tmp/orbit-deployments
+      # Scheduled re-dry-run sweep for published templates (Phase 4 Task G).
+      # A standard cron expression (e.g. "0 6 * * *" for daily at 06:00 UTC).
+      # Empty/unset DISABLES the schedule — dev machines do not run it by
+      # default; set it in your own .env to opt in locally.
+      - TEMPLATE_DRY_RUN_SWEEP_CRON=${TEMPLATE_DRY_RUN_SWEEP_CRON:-}
     volumes:
       - temporal-worker-data:/tmp
     restart: unless-stopped
