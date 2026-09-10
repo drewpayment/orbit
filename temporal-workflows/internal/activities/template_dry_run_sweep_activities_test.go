@@ -44,6 +44,18 @@ func (f *fakeSweepPayloadClient) WriteDryRunSweepResult(_ context.Context, defin
 	return f.writeResult, f.writeErr
 }
 
+type fakeActionRunWriter struct {
+	err       error
+	calls     []services.ActionRunStatusInput
+	gotRunIDs []string
+}
+
+func (f *fakeActionRunWriter) WriteStatus(_ context.Context, runID string, in services.ActionRunStatusInput) error {
+	f.gotRunIDs = append(f.gotRunIDs, runID)
+	f.calls = append(f.calls, in)
+	return f.err
+}
+
 type fakeDispatcher struct {
 	workflowID string
 	err        error
@@ -74,7 +86,7 @@ func TestListPublishedTemplatesWithFixtures_MapsCandidates(t *testing.T) {
 			{DefinitionID: "def-2", Name: "No Fixtures", WorkspaceID: "ws-2", CurrentVersionID: "ver-2"},
 		},
 	}
-	a := NewTemplateDryRunSweepActivities(client, nil, nil)
+	a := NewTemplateDryRunSweepActivities(client, nil, nil, nil)
 
 	res, err := a.ListPublishedTemplatesWithFixtures(context.Background())
 	require.NoError(t, err)
@@ -87,7 +99,7 @@ func TestListPublishedTemplatesWithFixtures_MapsCandidates(t *testing.T) {
 
 func TestListPublishedTemplatesWithFixtures_PropagatesTransientErrors(t *testing.T) {
 	client := &fakeSweepPayloadClient{listErr: errors.New("connection refused")}
-	a := NewTemplateDryRunSweepActivities(client, nil, nil)
+	a := NewTemplateDryRunSweepActivities(client, nil, nil, nil)
 
 	_, err := a.ListPublishedTemplatesWithFixtures(context.Background())
 	require.Error(t, err)
@@ -106,7 +118,8 @@ func TestTriggerTemplateDryRun_CreatesRunAndDispatchesWorkflow(t *testing.T) {
 		},
 	}
 	dispatcher := &fakeDispatcher{workflowID: "scaffolder-run-run-1"}
-	a := NewTemplateDryRunSweepActivities(client, dispatcher, nil)
+	runs := &fakeActionRunWriter{}
+	a := NewTemplateDryRunSweepActivities(client, dispatcher, runs, nil)
 
 	res, err := a.TriggerTemplateDryRun(context.Background(), TriggerTemplateDryRunInput{
 		DefinitionID:     "def-1",
@@ -132,12 +145,38 @@ func TestTriggerTemplateDryRun_CreatesRunAndDispatchesWorkflow(t *testing.T) {
 	assert.Equal(t, "def-1", dispatcher.gotInput.DefinitionID)
 	assert.Equal(t, "ver-1", dispatcher.gotInput.DefinitionVersionID)
 	assert.JSONEq(t, `{"apiVersion":"orbit/v2"}`, string(dispatcher.gotInput.Definition))
+
+	// The started Temporal workflowId must be written back onto the
+	// action-runs row, exactly as lib/actions/run.ts's manual path does —
+	// otherwise the run page has no way to query progress for a
+	// sweep-triggered run.
+	require.Len(t, runs.calls, 1)
+	assert.Equal(t, "run-1", runs.gotRunIDs[0])
+	require.NotNil(t, runs.calls[0].WorkflowID)
+	assert.Equal(t, "scaffolder-run-run-1", *runs.calls[0].WorkflowID)
+}
+
+func TestTriggerTemplateDryRun_WorkflowIDWriteBackFailureDoesNotFailTheTrigger(t *testing.T) {
+	client := &fakeSweepPayloadClient{
+		triggerResult: &services.TriggerDryRunResult{RunID: "run-1", WorkspaceID: "ws-1"},
+	}
+	dispatcher := &fakeDispatcher{workflowID: "scaffolder-run-run-1"}
+	runs := &fakeActionRunWriter{err: errors.New("orbit-www unavailable")}
+	a := NewTemplateDryRunSweepActivities(client, dispatcher, runs, nil)
+
+	res, err := a.TriggerTemplateDryRun(context.Background(), TriggerTemplateDryRunInput{
+		DefinitionID: "def-1", CurrentVersionID: "ver-1",
+	})
+	require.NoError(t, err, "a best-effort write-back failure must not fail the trigger — the dry run already dispatched")
+	assert.Equal(t, "run-1", res.RunID)
+	assert.Equal(t, "scaffolder-run-run-1", res.WorkflowID)
+	require.Len(t, runs.calls, 1, "the write-back must still have been attempted")
 }
 
 func TestTriggerTemplateDryRun_RequiresDefinitionAndVersion(t *testing.T) {
 	client := &fakeSweepPayloadClient{}
 	dispatcher := &fakeDispatcher{}
-	a := NewTemplateDryRunSweepActivities(client, dispatcher, nil)
+	a := NewTemplateDryRunSweepActivities(client, dispatcher, nil, nil)
 
 	_, err := a.TriggerTemplateDryRun(context.Background(), TriggerTemplateDryRunInput{})
 	require.Error(t, err)
@@ -150,7 +189,7 @@ func TestTriggerTemplateDryRun_RequiresDefinitionAndVersion(t *testing.T) {
 func TestTriggerTemplateDryRun_DefinitionNotFoundIsNonRetryable(t *testing.T) {
 	client := &fakeSweepPayloadClient{triggerErr: services.ErrTemplateDefinitionNotFound}
 	dispatcher := &fakeDispatcher{}
-	a := NewTemplateDryRunSweepActivities(client, dispatcher, nil)
+	a := NewTemplateDryRunSweepActivities(client, dispatcher, nil, nil)
 
 	_, err := a.TriggerTemplateDryRun(context.Background(), TriggerTemplateDryRunInput{
 		DefinitionID: "def-1", CurrentVersionID: "ver-1",
@@ -164,7 +203,7 @@ func TestTriggerTemplateDryRun_DefinitionNotFoundIsNonRetryable(t *testing.T) {
 func TestTriggerTemplateDryRun_TransientCreateErrorIsRetryable(t *testing.T) {
 	client := &fakeSweepPayloadClient{triggerErr: errors.New("connection refused")}
 	dispatcher := &fakeDispatcher{}
-	a := NewTemplateDryRunSweepActivities(client, dispatcher, nil)
+	a := NewTemplateDryRunSweepActivities(client, dispatcher, nil, nil)
 
 	_, err := a.TriggerTemplateDryRun(context.Background(), TriggerTemplateDryRunInput{
 		DefinitionID: "def-1", CurrentVersionID: "ver-1",
@@ -179,7 +218,7 @@ func TestTriggerTemplateDryRun_DispatchFailurePropagates(t *testing.T) {
 		triggerResult: &services.TriggerDryRunResult{RunID: "run-1", WorkspaceID: "ws-1"},
 	}
 	dispatcher := &fakeDispatcher{err: errors.New("temporal unavailable")}
-	a := NewTemplateDryRunSweepActivities(client, dispatcher, nil)
+	a := NewTemplateDryRunSweepActivities(client, dispatcher, nil, nil)
 
 	_, err := a.TriggerTemplateDryRun(context.Background(), TriggerTemplateDryRunInput{
 		DefinitionID: "def-1", CurrentVersionID: "ver-1",
@@ -189,7 +228,7 @@ func TestTriggerTemplateDryRun_DispatchFailurePropagates(t *testing.T) {
 
 func TestRecordSweepResult_ForwardsToClient(t *testing.T) {
 	client := &fakeSweepPayloadClient{writeResult: &services.DryRunSweepResultResponse{Status: "drifted"}}
-	a := NewTemplateDryRunSweepActivities(client, nil, nil)
+	a := NewTemplateDryRunSweepActivities(client, nil, nil, nil)
 
 	err := a.RecordSweepResult(context.Background(), RecordSweepResultInput{
 		DefinitionID: "def-1",
@@ -204,7 +243,7 @@ func TestRecordSweepResult_ForwardsToClient(t *testing.T) {
 
 func TestRecordSweepResult_RequiresDefinitionID(t *testing.T) {
 	client := &fakeSweepPayloadClient{}
-	a := NewTemplateDryRunSweepActivities(client, nil, nil)
+	a := NewTemplateDryRunSweepActivities(client, nil, nil, nil)
 
 	err := a.RecordSweepResult(context.Background(), RecordSweepResultInput{})
 	require.Error(t, err)

@@ -92,17 +92,19 @@ type RecordSweepResultInput struct {
 type TemplateDryRunSweepActivities struct {
 	client     SweepPayloadClient
 	dispatcher ScaffolderDispatcher
+	runs       ActionRunStatusWriter
 	logger     *slog.Logger
 }
 
-// NewTemplateDryRunSweepActivities wires the sweep activities. dispatcher may
-// be nil for a caller that only needs ListPublishedTemplatesWithFixtures or
-// RecordSweepResult (neither dispatches a workflow).
-func NewTemplateDryRunSweepActivities(client SweepPayloadClient, dispatcher ScaffolderDispatcher, logger *slog.Logger) *TemplateDryRunSweepActivities {
+// NewTemplateDryRunSweepActivities wires the sweep activities. dispatcher and
+// runs may be nil for a caller that only needs
+// ListPublishedTemplatesWithFixtures or RecordSweepResult (neither dispatches
+// a workflow or writes an action-run's workflowId).
+func NewTemplateDryRunSweepActivities(client SweepPayloadClient, dispatcher ScaffolderDispatcher, runs ActionRunStatusWriter, logger *slog.Logger) *TemplateDryRunSweepActivities {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &TemplateDryRunSweepActivities{client: client, dispatcher: dispatcher, logger: logger}
+	return &TemplateDryRunSweepActivities{client: client, dispatcher: dispatcher, runs: runs, logger: logger}
 }
 
 // ListPublishedTemplatesWithFixtures lists every published
@@ -177,6 +179,22 @@ func (a *TemplateDryRunSweepActivities) TriggerTemplateDryRun(ctx context.Contex
 
 	a.logger.Info("Triggered scheduled-sweep dry run",
 		"definitionId", in.DefinitionID, "fixtureId", in.FixtureID, "runId", triggered.RunID, "workflowId", workflowID)
+
+	// Write the started workflowId back onto the action-run row, exactly as
+	// lib/actions/run.ts's manual dispatch path does — GetRunProgress/Cancel
+	// on the run page both key off this field, so a run whose workflowId is
+	// never recorded looks permanently stuck at "pending" even though it is
+	// actually running. Best-effort: the dry run already dispatched
+	// successfully, so a write-back failure is logged, not fatal to the
+	// trigger (a stuck-looking run row is recoverable; a duplicate dispatch
+	// from retrying this activity is not, since ScaffolderWorkflow's id is
+	// already claimed).
+	if a.runs != nil {
+		if err := a.runs.WriteStatus(ctx, triggered.RunID, services.ActionRunStatusInput{WorkflowID: &workflowID}); err != nil {
+			a.logger.Warn("Failed to write scheduled-sweep dry run's workflowId back to its action-run",
+				"runId", triggered.RunID, "workflowId", workflowID, "error", err)
+		}
+	}
 
 	return &TriggerTemplateDryRunResult{RunID: triggered.RunID, WorkflowID: workflowID}, nil
 }

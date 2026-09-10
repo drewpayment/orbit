@@ -445,9 +445,14 @@ func main() {
 		log.Fatalf("Scaffolder action registry is invalid: %v", err)
 	}
 
+	// Shared with templateSweepActivities below (Phase 4 Task G) so the sweep's
+	// workflowId write-back uses the same client/route as every other run's
+	// status writeback, rather than a second parallel instance.
+	actionRunClient := services.NewPayloadActionRunClient(orbitAPIURL, orbitInternalAPIKey, logger)
+
 	scaffolderActivities := activities.NewScaffolderActivities(
 		scaffolderRegistry,
-		services.NewPayloadActionRunClient(orbitAPIURL, orbitInternalAPIKey, logger),
+		actionRunClient,
 		scaffolderStorage,
 		templateWorkDir,
 		logger,
@@ -488,6 +493,7 @@ func main() {
 	templateSweepActivities := activities.NewTemplateDryRunSweepActivities(
 		services.NewPayloadTemplateSweepClient(orbitAPIURL, orbitInternalAPIKey, logger),
 		services.NewTemporalScaffolderDispatcher(c),
+		actionRunClient,
 		logger,
 	)
 	w.RegisterWorkflow(workflows.TemplateDryRunSweepWorkflow)
