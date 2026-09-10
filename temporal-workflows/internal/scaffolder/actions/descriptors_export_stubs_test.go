@@ -7,9 +7,9 @@ import (
 	"github.com/drewpayment/orbit/temporal-workflows/internal/services"
 )
 
-// stubTokenService and stubCatalogClient exist only so DefaultActions returns
-// its full set in TestDescriptorActions_CoversEveryDefaultAction. Neither is
-// ever called.
+// stubTokenService, stubCatalogClient, stubApiSchemaClient and
+// stubSkeletonClient exist only so DefaultActions returns its full set in
+// TestDescriptorActions_CoversEveryDefaultAction. None is ever called.
 type stubTokenService struct{}
 
 func (stubTokenService) GetInstallationToken(context.Context, string) (string, error) {
@@ -26,4 +26,20 @@ type stubADOConnectionClient struct{}
 
 func (stubADOConnectionClient) GetConnectionToken(context.Context, string, string) (services.ADOConnectionToken, error) {
 	return services.ADOConnectionToken{}, errors.New("stub")
+}
+
+type stubApiSchemaClient struct{}
+
+func (stubApiSchemaClient) RegisterSchema(context.Context, services.ApiSchemaRegisterInput) (*services.ApiSchemaRegisterResult, error) {
+	return nil, errors.New("stub")
+}
+
+type stubSkeletonClient struct{}
+
+func (stubSkeletonClient) GetSkeletonManifest(context.Context, string, string) (*services.SkeletonBundle, error) {
+	return nil, errors.New("stub")
+}
+
+func (stubSkeletonClient) GetSkeletonBundle(context.Context, string, string) (*services.SkeletonBundle, error) {
+	return nil, errors.New("stub")
 }

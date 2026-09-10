@@ -204,6 +204,83 @@
     "supportsPlan": true
   },
   {
+    "name": "api:schema:register",
+    "family": "api",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "api:schema:register input",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Display name for the API schema."
+        },
+        "schemaType": {
+          "type": "string",
+          "enum": [
+            "openapi",
+            "graphql",
+            "proto"
+          ],
+          "description": "Contract style of `content`."
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The starter spec text (OpenAPI 3.1 document, GraphQL SDL, or .proto source).",
+          "ui:widget": "textarea"
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional description shown on the schema's catalog page."
+        },
+        "visibility": {
+          "type": "string",
+          "enum": [
+            "private",
+            "workspace",
+            "public"
+          ],
+          "default": "workspace",
+          "description": "Who can view this API schema in the catalog. Defaults to workspace."
+        }
+      },
+      "required": [
+        "name",
+        "schemaType",
+        "content"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "api:schema:register output",
+      "type": "object",
+      "properties": {
+        "schemaId": {
+          "type": "string",
+          "description": "Id of the registered api-schemas document."
+        },
+        "versionId": {
+          "type": "string",
+          "description": "Id of the created api-schema-versions v1 document."
+        },
+        "slug": {
+          "type": "string",
+          "description": "Slug assigned to the registered API schema."
+        }
+      },
+      "required": [
+        "schemaId",
+        "versionId",
+        "slug"
+      ],
+      "additionalProperties": false
+    },
+    "supportsPlan": true
+  },
+  {
     "name": "catalog:entity:register",
     "family": "catalog",
     "inputSchema": {
@@ -388,6 +465,56 @@
       },
       "required": [
         "path"
+      ],
+      "additionalProperties": false
+    },
+    "supportsPlan": true
+  },
+  {
+    "name": "fetch:orbit-skeleton",
+    "family": "fetch",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "fetch:orbit-skeleton input",
+      "type": "object",
+      "properties": {
+        "skeletonId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Payload id of the template-skeletons document to fetch.",
+          "ui:field": "OrbitSkeletonPicker",
+          "ui:help": "Choose an Orbit-hosted skeleton bundle from this workspace."
+        },
+        "path": {
+          "type": "string",
+          "description": "Subdirectory, relative to the run's work directory, to write the bundle into. Defaults to a name derived from `skeletonId`."
+        }
+      },
+      "required": [
+        "skeletonId"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "fetch:orbit-skeleton output",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Absolute path where the skeleton bundle was written."
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Relative paths of the files written, in bundle order."
+        }
+      },
+      "required": [
+        "path",
+        "files"
       ],
       "additionalProperties": false
     },

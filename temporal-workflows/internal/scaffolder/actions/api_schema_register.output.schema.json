@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "api:schema:register output",
+  "type": "object",
+  "properties": {
+    "schemaId": {
+      "type": "string",
+      "description": "Id of the registered api-schemas document."
+    },
+    "versionId": {
+      "type": "string",
+      "description": "Id of the created api-schema-versions v1 document."
+    },
+    "slug": {
+      "type": "string",
+      "description": "Slug assigned to the registered API schema."
+    }
+  },
+  "required": ["schemaId", "versionId", "slug"],
+  "additionalProperties": false
+}

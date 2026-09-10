@@ -433,6 +433,8 @@ func main() {
 		TokenService:        tokenService,
 		CatalogClient:       services.NewPayloadCatalogEntityClient(orbitAPIURL, orbitInternalAPIKey, logger),
 		ADOConnectionClient: services.NewPayloadADOConnectionClient(orbitAPIURL, orbitInternalAPIKey, logger),
+		ApiSchemaClient:     services.NewPayloadApiSchemaClient(orbitAPIURL, orbitInternalAPIKey, logger),
+		SkeletonClient:      services.NewPayloadSkeletonClient(orbitAPIURL, orbitInternalAPIKey, logger),
 	})...)
 	if err := scaffolderRegistry.ValidateSchemas(); err != nil {
 		// A broken action schema is a platform bug: fail at startup rather

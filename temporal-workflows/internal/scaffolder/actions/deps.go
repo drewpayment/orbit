@@ -57,6 +57,13 @@ type ADORepoClient interface {
 // this at services.NewADOWriteClient; tests point it at a fake.
 type ADOClientFactory func(baseURL, authHeader string) ADORepoClient
 
+// ApiSchemaClient registers an API schema against orbit-www's internal API
+// on behalf of the api:schema:register action. Satisfied by
+// *services.PayloadApiSchemaClient.
+type ApiSchemaClient interface {
+	RegisterSchema(ctx context.Context, in services.ApiSchemaRegisterInput) (*services.ApiSchemaRegisterResult, error)
+}
+
 // Deps are the live collaborators DefaultActions wires into every action
 // that needs one. Constructed once at worker startup and passed by value;
 // fields left zero simply mean the actions that need them are omitted by
@@ -84,4 +91,11 @@ type Deps struct {
 	// ADOClient builds the ADO REST client used by ado:*. Defaults to
 	// wrapping services.NewADOWriteClient when left nil.
 	ADOClient ADOClientFactory
+	// ApiSchemaClient registers API schemas for api:schema:register. That
+	// action is omitted from DefaultActions when this is nil.
+	ApiSchemaClient ApiSchemaClient
+	// SkeletonClient fetches Orbit-hosted template skeleton bundles for
+	// fetch:orbit-skeleton. That action is omitted from DefaultActions when
+	// this is nil.
+	SkeletonClient services.SkeletonClient
 }
