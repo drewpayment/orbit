@@ -54,6 +54,28 @@ export function coerceExpressionInput(raw: string, schemaType: unknown): unknown
 
 const STEP_ID_RE = /^[a-z][a-z0-9-]*$/
 
+/**
+ * Re-type top-level number/integer inputs that an earlier build stored as
+ * strings (e.g. `"10"`). Returns the same reference when nothing changes so
+ * callers can skip a dispatch.
+ */
+export function coerceStepInput(input: Step['input'], inputSchema: unknown): Step['input'] {
+  const props = ((inputSchema as { properties?: Record<string, { type?: unknown }> } | undefined)?.properties ?? {})
+  let changed = false
+  const next: Step['input'] = { ...input }
+  for (const [key, value] of Object.entries(input)) {
+    const type = props[key]?.type
+    if ((type === 'number' || type === 'integer') && typeof value === 'string') {
+      const coerced = coerceExpressionInput(value, type)
+      if (coerced !== value) {
+        next[key] = coerced
+        changed = true
+      }
+    }
+  }
+  return changed ? next : input
+}
+
 function buildExpressionAwareRegistry(candidates: ExpressionCandidate[]): FieldRegistry {
   const base = createFieldRegistry()
   const ExpressionField: FieldComponent = ({ id, value, onChange, disabled, schema, ...rest }) => (
@@ -197,6 +219,14 @@ function StepRow({
   function patch(fields: Partial<Step>) {
     dispatch({ type: 'UPDATE_STEP', id: step.id, patch: fields })
   }
+
+  // Self-heal inputs saved as numeric strings by earlier builds.
+  React.useEffect(() => {
+    if (!descriptor) return
+    const healed = coerceStepInput(step.input, descriptor.inputSchema)
+    if (healed !== step.input) dispatch({ type: 'UPDATE_STEP', id: step.id, patch: { input: healed } })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step.id, descriptor])
 
   function handleIdChange(value: string) {
     setIdDraft(value)

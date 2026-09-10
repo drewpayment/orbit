@@ -235,3 +235,33 @@ describe('StepsBuilder (typed inputs and step ids)', () => {
     expect(screen.getAllByRole('alert').length).toBeGreaterThan(0)
   })
 })
+
+describe('StepsBuilder (self-heals numeric strings saved by older builds)', () => {
+  it('dispatches a coerced input patch on mount when a number field holds a numeric string', () => {
+    const dispatch = vi.fn()
+    const httpLike = descriptor({
+      id: 'http:request',
+      name: 'HTTP request',
+      inputSchema: {
+        type: 'object',
+        properties: { url: { type: 'string' }, timeoutSeconds: { type: 'integer' } },
+      },
+    })
+    const def = definition([
+      { id: 's1', name: 'S', action: 'http:request', input: { url: 'https://x', timeoutSeconds: '10' } },
+    ])
+    render(<StepsBuilder definition={def} dispatch={dispatch} registry={[...registry, httpLike]} />)
+    expect(dispatch).toHaveBeenCalledWith({
+      type: 'UPDATE_STEP',
+      id: 's1',
+      patch: { input: { url: 'https://x', timeoutSeconds: 10 } },
+    })
+  })
+
+  it('does not dispatch on mount when inputs are already well-typed', () => {
+    const dispatch = vi.fn()
+    const def = definition([{ id: 's1', name: 'S', action: 'fs:render', input: { path: 'x' } }])
+    render(<StepsBuilder definition={def} dispatch={dispatch} registry={registry} />)
+    expect(dispatch).not.toHaveBeenCalled()
+  })
+})
