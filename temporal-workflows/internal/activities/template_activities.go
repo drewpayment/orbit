@@ -462,6 +462,21 @@ func (a *TemplateActivities) ApplyTemplateVariables(ctx context.Context, input A
 		}
 
 		newPath := filepath.Join(dir, newBase)
+
+		// Guard against a silent clobber: if two paths render to the same
+		// new name (e.g. two variable keys sharing a value), os.Rename
+		// would otherwise overwrite whichever collision target already
+		// landed there first. Skip instead of clobbering.
+		if _, statErr := os.Lstat(newPath); statErr == nil {
+			a.logger.Warn("Rename target already exists, leaving source unchanged to avoid clobbering it", "path", oldPath, "newPath", newPath)
+			result.SkippedFiles = append(result.SkippedFiles, oldPath)
+			continue
+		} else if !os.IsNotExist(statErr) {
+			a.logger.Warn("Failed to check rename target, leaving unchanged", "path", oldPath, "newPath", newPath, "error", statErr)
+			result.SkippedFiles = append(result.SkippedFiles, oldPath)
+			continue
+		}
+
 		if err := os.Rename(oldPath, newPath); err != nil {
 			a.logger.Warn("Failed to rename path, leaving unchanged", "path", oldPath, "newPath", newPath, "error", err)
 			result.SkippedFiles = append(result.SkippedFiles, oldPath)

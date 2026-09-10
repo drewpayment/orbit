@@ -276,3 +276,112 @@ func TestFinalizeInstantiation_ClientError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to finalize instantiation")
 	mockClient.AssertExpectations(t)
 }
+
+func TestApplyTemplateVariables_RenameCollisionDoesNotClobber(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "{{A}}.go"), []byte("package a\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "{{B}}.go"), []byte("package b\n"), 0644))
+
+	activities := NewTemplateActivities(nil, nil, "/tmp/work", nil)
+	result, err := activities.ApplyTemplateVariables(context.Background(), ApplyTemplateVariablesActivityInput{
+		WorkDir:   dir,
+		Variables: map[string]string{"A": "orders", "B": "orders"},
+	})
+	require.NoError(t, err, "a rename collision must not fail the activity")
+
+	// One of the two renders to "orders.go" first and succeeds; the other
+	// collides with the now-existing "orders.go" and must be left alone
+	// rather than silently overwritten by os.Rename.
+	require.Len(t, result.SkippedFiles, 1, "exactly one of the two colliding renames should be skipped")
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	assert.Len(t, names, 2, "both original files must still exist under some name — no data loss")
+	assert.Contains(t, names, "orders.go", "the winning rename should have happened")
+
+	// The loser must retain its original (unrendered) name, not have been
+	// clobbered or deleted.
+	skippedBase := filepath.Base(result.SkippedFiles[0])
+	assert.Contains(t, []string{"{{A}}.go", "{{B}}.go"}, skippedBase)
+	assert.Contains(t, names, skippedBase)
+
+	// The content of orders.go must be exactly one of the two original
+	// files' content, not a mix — i.e. no partial overwrite occurred.
+	content, err := os.ReadFile(filepath.Join(dir, "orders.go"))
+	require.NoError(t, err)
+	assert.Contains(t, []string{"package a\n", "package b\n"}, string(content))
+}
+
+func TestIsSafeRenderedName(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{name: "path traversal via parent dir", in: "../../etc", want: false},
+		{name: "embedded forward slash", in: "a/b", want: false},
+		{name: "empty string", in: "", want: false},
+		{name: "single dot", in: ".", want: false},
+		{name: "double dot", in: "..", want: false},
+		{name: "ordinary name", in: "orders", want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isSafeRenderedName(tt.in))
+		})
+	}
+}
+
+func TestApplyTemplateVariables_TraversalNameIsSkippedAndContained(t *testing.T) {
+	// The fixture's base name is exactly "{{SERVICE_NAME}}" (no suffix) so
+	// the rendered name is exactly the variable value — this is what lets
+	// the "." / ".." cases below exercise isSafeRenderedName's exact-match
+	// branches rather than being masked by an appended file extension.
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{name: "parent traversal", value: "../../etc"},
+		{name: "embedded slash", value: "a/b"},
+		{name: "single dot", value: "."},
+		{name: "double dot", value: ".."},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workDir := t.TempDir()
+			original := filepath.Join(workDir, "{{SERVICE_NAME}}")
+			require.NoError(t, os.WriteFile(original, []byte("package main\n"), 0644))
+
+			activities := NewTemplateActivities(nil, nil, "/tmp/work", nil)
+			result, err := activities.ApplyTemplateVariables(context.Background(), ApplyTemplateVariablesActivityInput{
+				WorkDir:   workDir,
+				Variables: map[string]string{"SERVICE_NAME": tt.value},
+			})
+			require.NoError(t, err)
+			require.Len(t, result.SkippedFiles, 1)
+			assert.Equal(t, original, result.SkippedFiles[0])
+
+			// The original file must still exist, unrenamed.
+			_, err = os.Stat(original)
+			assert.NoError(t, err, "unsafe rename must be skipped, leaving the original file in place")
+
+			// The work dir must contain nothing outside its own tree — no
+			// path traversal actually occurred on disk.
+			entries, err := os.ReadDir(workDir)
+			require.NoError(t, err)
+			require.Len(t, entries, 1)
+			assert.Equal(t, "{{SERVICE_NAME}}", entries[0].Name())
+
+			parentEntries, err := os.ReadDir(filepath.Dir(workDir))
+			require.NoError(t, err)
+			for _, e := range parentEntries {
+				assert.NotEqual(t, "etc", e.Name(), "traversal must not have created a sibling 'etc' entry")
+			}
+		})
+	}
+}
