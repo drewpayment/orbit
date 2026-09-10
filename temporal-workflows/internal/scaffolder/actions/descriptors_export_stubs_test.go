@@ -21,3 +21,9 @@ type stubCatalogClient struct{}
 func (stubCatalogClient) RegisterEntity(context.Context, services.CatalogEntityRegisterInput) (*services.CatalogEntityRegisterResult, error) {
 	return nil, errors.New("stub")
 }
+
+type stubADOConnectionClient struct{}
+
+func (stubADOConnectionClient) GetConnectionToken(context.Context, string) (services.ADOConnectionToken, error) {
+	return services.ADOConnectionToken{}, errors.New("stub")
+}

@@ -38,6 +38,18 @@ func DefaultActions(deps Deps) []scaffolder.Action {
 		out = append(out, NewCatalogEntityRegister(deps.CatalogClient))
 	}
 
+	if deps.ADOConnectionClient != nil {
+		adoFactory := deps.ADOClient
+		if adoFactory == nil {
+			adoFactory = defaultADOClientFactory()
+		}
+		out = append(out,
+			NewADORepoCreate(deps.ADOConnectionClient, adoFactory),
+			NewADOPROpen(deps.ADOConnectionClient, adoFactory),
+			NewADOPipelineCreate(deps.ADOConnectionClient, adoFactory),
+		)
+	}
+
 	return out
 }
 
@@ -63,5 +75,8 @@ func DescriptorActions() []scaffolder.Action {
 		NewGitHubRepoCreate(nil, nil),
 		NewGitHubRepoCreateFromTemplate(nil, nil),
 		NewCatalogEntityRegister(nil),
+		NewADORepoCreate(nil, nil),
+		NewADOPROpen(nil, nil),
+		NewADOPipelineCreate(nil, nil),
 	}
 }

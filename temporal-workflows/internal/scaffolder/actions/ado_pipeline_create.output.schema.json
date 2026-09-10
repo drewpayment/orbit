@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ado:pipeline:create output",
+  "type": "object",
+  "properties": {
+    "pipelineUrl": {
+      "type": "string",
+      "description": "Web URL of the created pipeline."
+    },
+    "pipelineId": {
+      "type": "string",
+      "description": "Azure DevOps pipeline (build definition) id."
+    }
+  },
+  "required": ["pipelineUrl", "pipelineId"],
+  "additionalProperties": false
+}

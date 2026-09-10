@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ado:repo:create output",
+  "type": "object",
+  "properties": {
+    "repoUrl": {
+      "type": "string",
+      "description": "Web URL of the created repository."
+    },
+    "repoId": {
+      "type": "string",
+      "description": "Azure DevOps repository id (used by ado:pr:open and ado:pipeline:create)."
+    },
+    "cloneUrl": {
+      "type": "string",
+      "description": "Remote (clone) URL of the created repository."
+    },
+    "project": {
+      "type": "string",
+      "description": "Azure DevOps project the repository was created in."
+    }
+  },
+  "required": ["repoUrl", "repoId", "cloneUrl", "project"],
+  "additionalProperties": false
+}

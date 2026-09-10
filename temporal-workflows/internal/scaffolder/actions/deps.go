@@ -35,6 +35,28 @@ type CatalogEntityClient interface {
 	RegisterEntity(ctx context.Context, in services.CatalogEntityRegisterInput) (*services.CatalogEntityRegisterResult, error)
 }
 
+// ADOConnectionClient resolves a GitConnections (Azure DevOps) id to its
+// decrypted connection detail — organization, base URL, auth mode, and
+// PAT/bearer token. Mirrors TokenService's role for GitHub. Satisfied by
+// *services.PayloadADOConnectionClient.
+type ADOConnectionClient interface {
+	GetConnectionToken(ctx context.Context, connectionID string) (services.ADOConnectionToken, error)
+}
+
+// ADORepoClient is the subset of services.ADOWriteClient the ado:* actions
+// need. An interface here (rather than depending on the concrete client)
+// lets tests supply a fake instead of doing real HTTP.
+type ADORepoClient interface {
+	CreateRepository(ctx context.Context, org, project, name string) (*services.ADORepoResult, error)
+	CreatePullRequest(ctx context.Context, org, project, repoID, sourceBranch, targetBranch, title, description string) (*services.ADOPullRequestResult, error)
+	CreatePipeline(ctx context.Context, org, project, name, repoID, yamlPath string) (*services.ADOPipelineResult, error)
+}
+
+// ADOClientFactory builds an ADORepoClient authenticated against a resolved
+// connection's base URL and Authorization header. Production wiring points
+// this at services.NewADOWriteClient; tests point it at a fake.
+type ADOClientFactory func(baseURL, authHeader string) ADORepoClient
+
 // Deps are the live collaborators DefaultActions wires into every action
 // that needs one. Constructed once at worker startup and passed by value;
 // fields left zero simply mean the actions that need them are omitted by
@@ -54,4 +76,12 @@ type Deps struct {
 	// CatalogClient registers entities for catalog:entity:register. That
 	// action is omitted from DefaultActions when this is nil.
 	CatalogClient CatalogEntityClient
+	// ADOConnectionClient resolves a git-connections id to Azure DevOps
+	// org/PAT detail. Required by ado:repo:create, ado:pr:open, and
+	// ado:pipeline:create; those actions are omitted from DefaultActions
+	// when this is nil.
+	ADOConnectionClient ADOConnectionClient
+	// ADOClient builds the ADO REST client used by ado:*. Defaults to
+	// wrapping services.NewADOWriteClient when left nil.
+	ADOClient ADOClientFactory
 }
