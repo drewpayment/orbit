@@ -135,8 +135,12 @@ export const ActionRuns: CollectionConfig = {
       options: [
         { label: 'Manual', value: 'manual' },
         { label: 'Automation', value: 'automation' },
+        { label: 'Scheduled sweep', value: 'scheduled-sweep' },
       ],
-      admin: { description: 'P4 automations create runs with trigger=automation.' },
+      admin: {
+        description:
+          'P4 automations create runs with trigger=automation; the P4.G scheduled re-dry-run sweep uses scheduled-sweep.',
+      },
     },
     {
       name: 'sourceAutomation',

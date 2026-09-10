@@ -231,6 +231,20 @@ describe('listRunnableTemplates', () => {
     expect(await listRunnableTemplates()).toEqual([])
   })
 
+  it('defaults lastDryRunStatus to unknown, and passes through a sweep-recorded value (Phase 4 Task G)', async () => {
+    seed({
+      'template-definitions': [
+        { ...DEFINITION, id: 'pub-1', status: 'published' },
+        { ...DEFINITION, id: 'pub-2', status: 'published', lastDryRunStatus: 'drifted' },
+      ],
+    })
+    const { listRunnableTemplates } = await import('./editor-actions')
+    fake.setRoles(new Map([[WORKSPACE_ID, 'member']]))
+    const items = await listRunnableTemplates()
+    expect(items.find((t) => t.id === 'pub-1')?.lastDryRunStatus).toBe('unknown')
+    expect(items.find((t) => t.id === 'pub-2')?.lastDryRunStatus).toBe('drifted')
+  })
+
   it('never leaks fixture contents to the catalog projection', async () => {
     seed({
       'template-definitions': [
