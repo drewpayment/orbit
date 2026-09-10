@@ -85,15 +85,8 @@ func (s *TemplateServer) StartScaffolderRun(ctx context.Context, req *connect.Re
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("run_id is required"))
 	}
 	// run_id becomes both the workflow id and the ActionRuns doc the worker
-	// writes progress to, so it must at least be a well-formed doc id.
-	//
-	// KNOWN GAP: this does not prove the run belongs to the caller's
-	// workspace, which needs a read of the ActionRuns doc that this service
-	// has no route for yet. StartScaffolderWorkflow sets
-	// WorkflowIDReusePolicy REJECT_DUPLICATE, so an id that has already been
-	// dispatched cannot be re-targeted; an id that never has still could be.
-	// Close this with an ActionRuns workspace check before the RPC is wired
-	// up in orbit-www.
+	// writes progress to, so it must at least be a well-formed doc id. Its
+	// ownership is proven against the run itself further down.
 	if !payloadDocIDPattern.MatchString(msg.GetRunId()) {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("run_id must be a 24-character hex document id"))
@@ -115,6 +108,12 @@ func (s *TemplateServer) StartScaffolderRun(ctx context.Context, req *connect.Re
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			errors.New("template definition client is not configured"))
 	}
+	if s.actionRunClient == nil {
+		// Without the run reader there is no way to prove run_id belongs to
+		// the caller, so refuse rather than dispatch a run we cannot vouch for.
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			errors.New("action run client is not configured"))
+	}
 	if s.temporalClient == nil {
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("temporal is unavailable"))
 	}
@@ -122,6 +121,21 @@ func (s *TemplateServer) StartScaffolderRun(ctx context.Context, req *connect.Re
 	if !ok {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			errors.New("the configured temporal client cannot start scaffolder runs"))
+	}
+
+	// Prove the run before anything else is read: run_id is caller-supplied
+	// and names the record the worker will write progress, outputs and logs
+	// to. This is checked BEFORE the definition version so an unauthorized
+	// caller cannot learn whether a version id exists.
+	run, err := s.actionRunClient.GetActionRun(ctx, msg.GetRunId())
+	if err != nil {
+		if errors.Is(err, ErrActionRunNotFound) {
+			return nil, connect.NewError(connect.CodeNotFound, err)
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if err := checkRunMatchesRequest(run, msg); err != nil {
+		return nil, err
 	}
 
 	version, err := s.definitionClient.GetDefinitionVersion(ctx, msg.GetDefinitionVersionId())
@@ -145,16 +159,28 @@ func (s *TemplateServer) StartScaffolderRun(ctx context.Context, req *connect.Re
 		params = p.AsMap()
 	}
 
-	workflowID, err := scaffolderTemporal.StartScaffolderWorkflow(ctx, types.ScaffolderWorkflowInput{
+	// The run's own workspace and triggering user are the trustworthy source
+	// for expression context: they come from the record, not the request.
+	input := types.ScaffolderWorkflowInput{
 		RunID:               msg.GetRunId(),
 		DefinitionVersionID: msg.GetDefinitionVersionId(),
 		DefinitionID:        version.DefinitionID,
 		Definition:          version.DefinitionJSON,
 		Parameters:          params,
-		WorkspaceID:         msg.GetWorkspaceId(),
+		WorkspaceID:         run.Workspace.ID,
+		WorkspaceSlug:       run.Workspace.Slug,
+		WorkspaceName:       run.Workspace.Name,
 		UserID:              msg.GetUserId(),
 		DryRun:              msg.GetDryRun(),
-	})
+	}
+	if run.TriggeredBy != nil {
+		// Prefer the record over the request: orbit-www set this server-side.
+		input.UserID = run.TriggeredBy.ID
+		input.UserEmail = run.TriggeredBy.Email
+		input.UserName = run.TriggeredBy.Name
+	}
+
+	workflowID, err := scaffolderTemporal.StartScaffolderWorkflow(ctx, input)
 	if err != nil {
 		if errors.Is(err, ErrScaffolderRunAlreadyDispatched) {
 			return nil, connect.NewError(connect.CodeAlreadyExists, err)
@@ -213,6 +239,38 @@ func (s *TemplateServer) authorizeScaffolderRun(ctx context.Context, workflowID 
 		return nil, connect.NewError(connect.CodePermissionDenied, err)
 	}
 	return scaffolderTemporal, nil
+}
+
+// runStartableStatuses are the run states a dispatch may act on. Anything else
+// means the run has already been dispatched or resolved, and starting a
+// workflow for it would overwrite a finished record.
+var runStartableStatuses = map[string]bool{"pending": true, "running": true}
+
+// checkRunMatchesRequest proves the request describes the run it names.
+//
+// Every field in the request is caller-supplied, so each is compared against
+// the record: the workspace (which the caller is already authorized for),
+// the template version, and the dry-run flag. A mismatch means the caller is
+// either confused or trying to point a run record at different work.
+func checkRunMatchesRequest(run *ActionRunData, msg *templatev1.StartScaffolderRunRequest) error {
+	if run.Workspace.ID != msg.GetWorkspaceId() {
+		return connect.NewError(connect.CodePermissionDenied,
+			errors.New("action run belongs to a different workspace"))
+	}
+	if run.TemplateVersionID != msg.GetDefinitionVersionId() {
+		return connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("action run is for template version %q, not %q",
+				run.TemplateVersionID, msg.GetDefinitionVersionId()))
+	}
+	if run.DryRun != msg.GetDryRun() {
+		return connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("action run dryRun is %t, request says %t", run.DryRun, msg.GetDryRun()))
+	}
+	if !runStartableStatuses[run.Status] {
+		return connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("action run status %q cannot be dispatched", run.Status))
+	}
+	return nil
 }
 
 // GetRunProgress answers with the workflow's current per-step snapshot.

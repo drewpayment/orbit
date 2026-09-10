@@ -71,6 +71,7 @@ type TemplateServer struct {
 	temporalClient   TemporalClientInterface
 	payloadClient    PayloadClientInterface
 	definitionClient TemplateDefinitionClientInterface
+	actionRunClient  ActionRunClientInterface
 }
 
 // TemplateServerOption configures optional collaborators. New dependencies are
@@ -82,6 +83,14 @@ type TemplateServerOption func(*TemplateServer)
 // FailedPrecondition rather than starting a run with no definition.
 func WithTemplateDefinitionClient(c TemplateDefinitionClientInterface) TemplateServerOption {
 	return func(s *TemplateServer) { s.definitionClient = c }
+}
+
+// WithActionRunClient supplies the reader StartScaffolderRun uses to prove a
+// run belongs to the caller's workspace and to seed the run's user/workspace
+// expression context. Without it, StartScaffolderRun answers
+// FailedPrecondition rather than dispatching a run it cannot vouch for.
+func WithActionRunClient(c ActionRunClientInterface) TemplateServerOption {
+	return func(s *TemplateServer) { s.actionRunClient = c }
 }
 
 // NewTemplateServer creates a new TemplateServer instance

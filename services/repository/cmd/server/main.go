@@ -546,9 +546,14 @@ func main() {
 	}
 	var templateServerOpts []grpcserver.TemplateServerOption
 	if cfg.OrbitInternalAPIKey != "" {
-		templateServerOpts = append(templateServerOpts, grpcserver.WithTemplateDefinitionClient(
-			grpcserver.NewPayloadTemplateDefinitionClient(cfg.OrbitAPIURL, cfg.OrbitInternalAPIKey),
-		))
+		templateServerOpts = append(templateServerOpts,
+			grpcserver.WithTemplateDefinitionClient(
+				grpcserver.NewPayloadTemplateDefinitionClient(cfg.OrbitAPIURL, cfg.OrbitInternalAPIKey),
+			),
+			grpcserver.WithActionRunClient(
+				grpcserver.NewPayloadActionRunClient(cfg.OrbitAPIURL, cfg.OrbitInternalAPIKey),
+			),
+		)
 	} else {
 		log.Println("Warning: ORBIT_INTERNAL_API_KEY is unset; StartScaffolderRun will be unavailable")
 	}

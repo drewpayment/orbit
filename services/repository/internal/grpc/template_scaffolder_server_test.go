@@ -43,6 +43,51 @@ func (m *MockScaffolderTemporalClient) QueryScaffolderProgress(ctx context.Conte
 	return args.Get(0).(*types.ScaffolderProgress), args.Error(1)
 }
 
+type MockActionRunClient struct {
+	mock.Mock
+}
+
+func (m *MockActionRunClient) GetActionRun(ctx context.Context, runID string) (*ActionRunData, error) {
+	args := m.Called(ctx, runID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ActionRunData), args.Error(1)
+}
+
+// testRun is the run record matching validScaffolderRequest.
+func testRun() *ActionRunData {
+	return &ActionRunData{
+		ID:                testRunID,
+		Workspace:         ActionRunWorkspace{ID: "ws-1", Slug: "acme", Name: "Acme Inc"},
+		TemplateVersionID: "ver-1",
+		DryRun:            true,
+		Status:            "pending",
+		TriggeredBy:       &ActionRunUser{ID: "user-1", Email: "dev@acme.test", Name: "Dev"},
+	}
+}
+
+// passthroughRunClient answers with the matching run for the standard request,
+// so a test that is exercising some OTHER check does not have to restate it.
+func passthroughRunClient() *MockActionRunClient {
+	m := new(MockActionRunClient)
+	m.On("GetActionRun", mock.Anything, mock.Anything).Return(testRun(), nil)
+	return m
+}
+
+// newScaffolderServer wires both readers with matching happy-path records.
+func newScaffolderServer(t *testing.T) (*TemplateServer, *MockScaffolderTemporalClient, *MockActionRunClient, *MockDefinitionClient) {
+	t.Helper()
+	temporalMock := new(MockScaffolderTemporalClient)
+	runMock := new(MockActionRunClient)
+	defMock := new(MockDefinitionClient)
+	runMock.On("GetActionRun", mock.Anything, testRunID).Return(testRun(), nil)
+	defMock.On("GetDefinitionVersion", mock.Anything, "ver-1").Return(testVersion(), nil)
+	server := NewTemplateServer(temporalMock, nil,
+		WithTemplateDefinitionClient(defMock), WithActionRunClient(runMock))
+	return server, temporalMock, runMock, defMock
+}
+
 type MockDefinitionClient struct {
 	mock.Mock
 }
@@ -102,16 +147,13 @@ func connectCode(t *testing.T, err error) connect.Code {
 // --- StartScaffolderRun -----------------------------------------------------
 
 func TestStartScaffolderRun_Success(t *testing.T) {
-	temporalMock := new(MockScaffolderTemporalClient)
-	defMock := new(MockDefinitionClient)
-	defMock.On("GetDefinitionVersion", mock.Anything, "ver-1").Return(testVersion(), nil)
+	server, temporalMock, runMock, defMock := newScaffolderServer(t)
 
 	var got types.ScaffolderWorkflowInput
 	temporalMock.On("StartScaffolderWorkflow", mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) { got = args.Get(1).(types.ScaffolderWorkflowInput) }).
 		Return("scaffolder-run-1", nil)
 
-	server := NewTemplateServer(temporalMock, nil, WithTemplateDefinitionClient(defMock))
 	resp, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(validScaffolderRequest()))
 
 	require.NoError(t, err)
@@ -120,16 +162,25 @@ func TestStartScaffolderRun_Success(t *testing.T) {
 	assert.Equal(t, testRunID, got.RunID)
 	assert.Equal(t, "ver-1", got.DefinitionVersionID)
 	assert.Equal(t, "def-1", got.DefinitionID, "template.id comes from the version's parent definition")
-	assert.Equal(t, "ws-1", got.WorkspaceID)
-	assert.Equal(t, "user-1", got.UserID)
 	assert.True(t, got.DryRun)
 	assert.JSONEq(t, testDefinitionJSON, string(got.Definition))
+
 	// Struct carries typed, nested values; a map<string,string> could not.
 	assert.Equal(t, "orders", got.Parameters["name"])
 	assert.Equal(t, true, got.Parameters["private"])
 	assert.Equal(t, float64(2), got.Parameters["count"])
 
+	// User and workspace context come from the RUN RECORD, not the request:
+	// the record is server-side state, the request is caller input.
+	assert.Equal(t, "ws-1", got.WorkspaceID)
+	assert.Equal(t, "acme", got.WorkspaceSlug)
+	assert.Equal(t, "Acme Inc", got.WorkspaceName)
+	assert.Equal(t, "user-1", got.UserID)
+	assert.Equal(t, "dev@acme.test", got.UserEmail)
+	assert.Equal(t, "Dev", got.UserName)
+
 	temporalMock.AssertExpectations(t)
+	runMock.AssertExpectations(t)
 	defMock.AssertExpectations(t)
 }
 
@@ -149,7 +200,7 @@ func TestStartScaffolderRun_ValidatesRequiredFields(t *testing.T) {
 			req := validScaffolderRequest()
 			tt.mutate(req)
 
-			server := NewTemplateServer(temporalMock, nil, WithTemplateDefinitionClient(defMock))
+			server := NewTemplateServer(temporalMock, nil, WithTemplateDefinitionClient(defMock), WithActionRunClient(passthroughRunClient()))
 			_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(req))
 
 			require.Error(t, err)
@@ -167,7 +218,7 @@ func TestStartScaffolderRun_UnknownVersionIsNotFound(t *testing.T) {
 	defMock.On("GetDefinitionVersion", mock.Anything, "ver-1").
 		Return(nil, ErrTemplateDefinitionVersionNotFound)
 
-	server := NewTemplateServer(temporalMock, nil, WithTemplateDefinitionClient(defMock))
+	server := NewTemplateServer(temporalMock, nil, WithTemplateDefinitionClient(defMock), WithActionRunClient(passthroughRunClient()))
 	_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(validScaffolderRequest()))
 
 	require.Error(t, err)
@@ -179,7 +230,7 @@ func TestStartScaffolderRun_VersionFetchFailureIsInternal(t *testing.T) {
 	defMock := new(MockDefinitionClient)
 	defMock.On("GetDefinitionVersion", mock.Anything, "ver-1").Return(nil, errors.New("payload down"))
 
-	server := NewTemplateServer(new(MockScaffolderTemporalClient), nil, WithTemplateDefinitionClient(defMock))
+	server := NewTemplateServer(new(MockScaffolderTemporalClient), nil, WithTemplateDefinitionClient(defMock), WithActionRunClient(passthroughRunClient()))
 	_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(validScaffolderRequest()))
 
 	require.Error(t, err)
@@ -193,7 +244,7 @@ func TestStartScaffolderRun_VersionOutsideRequestedWorkspaceIsDenied(t *testing.
 	defMock.On("GetDefinitionVersion", mock.Anything, "ver-1").Return(other, nil)
 
 	temporalMock := new(MockScaffolderTemporalClient)
-	server := NewTemplateServer(temporalMock, nil, WithTemplateDefinitionClient(defMock))
+	server := NewTemplateServer(temporalMock, nil, WithTemplateDefinitionClient(defMock), WithActionRunClient(passthroughRunClient()))
 	_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(validScaffolderRequest()))
 
 	require.Error(t, err)
@@ -211,7 +262,7 @@ func TestStartScaffolderRun_WithoutDefinitionClientIsFailedPrecondition(t *testi
 
 func TestStartScaffolderRun_WithoutTemporalIsUnavailable(t *testing.T) {
 	defMock := new(MockDefinitionClient)
-	server := NewTemplateServer(nil, nil, WithTemplateDefinitionClient(defMock))
+	server := NewTemplateServer(nil, nil, WithTemplateDefinitionClient(defMock), WithActionRunClient(passthroughRunClient()))
 	_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(validScaffolderRequest()))
 
 	require.Error(t, err)
@@ -231,7 +282,7 @@ func TestStartScaffolderRun_AcceptsNilParameters(t *testing.T) {
 	req := validScaffolderRequest()
 	req.Parameters = nil
 
-	server := NewTemplateServer(temporalMock, nil, WithTemplateDefinitionClient(defMock))
+	server := NewTemplateServer(temporalMock, nil, WithTemplateDefinitionClient(defMock), WithActionRunClient(passthroughRunClient()))
 	_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(req))
 
 	require.NoError(t, err)
@@ -417,7 +468,7 @@ func TestStartScaffolderRun_RejectsAnotherWorkspace(t *testing.T) {
 	req := validScaffolderRequest()
 	req.WorkspaceId = "ws-2"
 
-	server := NewTemplateServer(temporalMock, nil, WithTemplateDefinitionClient(defMock))
+	server := NewTemplateServer(temporalMock, nil, WithTemplateDefinitionClient(defMock), WithActionRunClient(passthroughRunClient()))
 	_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(req))
 
 	require.Error(t, err)
@@ -428,7 +479,7 @@ func TestStartScaffolderRun_RejectsAnotherWorkspace(t *testing.T) {
 
 func TestStartScaffolderRun_RejectsAnUnauthenticatedCaller(t *testing.T) {
 	defMock := new(MockDefinitionClient)
-	server := NewTemplateServer(new(MockScaffolderTemporalClient), nil, WithTemplateDefinitionClient(defMock))
+	server := NewTemplateServer(new(MockScaffolderTemporalClient), nil, WithTemplateDefinitionClient(defMock), WithActionRunClient(passthroughRunClient()))
 
 	// No identity in the context: the interceptor did not run, or the token
 	// carried no workspace. Fail closed.
@@ -533,7 +584,7 @@ func TestStartScaffolderRun_RejectsAMalformedRunID(t *testing.T) {
 			req := validScaffolderRequest()
 			req.RunId = id
 
-			server := NewTemplateServer(temporalMock, nil, WithTemplateDefinitionClient(defMock))
+			server := NewTemplateServer(temporalMock, nil, WithTemplateDefinitionClient(defMock), WithActionRunClient(passthroughRunClient()))
 			_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(req))
 
 			require.Error(t, err)
@@ -554,9 +605,169 @@ func TestStartScaffolderRun_ReusedRunIDIsAlreadyExists(t *testing.T) {
 	temporalMock.On("StartScaffolderWorkflow", mock.Anything, mock.Anything).
 		Return("", ErrScaffolderRunAlreadyDispatched)
 
-	server := NewTemplateServer(temporalMock, nil, WithTemplateDefinitionClient(defMock))
+	server := NewTemplateServer(temporalMock, nil, WithTemplateDefinitionClient(defMock), WithActionRunClient(passthroughRunClient()))
 	_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(validScaffolderRequest()))
 
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeAlreadyExists, connectCode(t, err))
+}
+
+// --- run ownership (closes the run_id gate) ---------------------------------
+
+// Every field of the request is caller-supplied, so each is proven against the
+// run record. Without this a caller authorized for ws-1 could point another
+// tenant's run record at their own work, and the worker would write status,
+// outputs and logs into it.
+func TestStartScaffolderRun_ChecksTheRunAgainstTheRequest(t *testing.T) {
+	tests := []struct {
+		name     string
+		mutate   func(r *ActionRunData)
+		wantCode connect.Code
+		wantMsg  string
+	}{
+		{
+			name:     "run belongs to another workspace",
+			mutate:   func(r *ActionRunData) { r.Workspace.ID = "ws-2" },
+			wantCode: connect.CodePermissionDenied,
+			wantMsg:  "different workspace",
+		},
+		{
+			name:     "run is for a different template version",
+			mutate:   func(r *ActionRunData) { r.TemplateVersionID = "ver-other" },
+			wantCode: connect.CodeFailedPrecondition,
+			wantMsg:  "ver-other",
+		},
+		{
+			name:     "run has no template version",
+			mutate:   func(r *ActionRunData) { r.TemplateVersionID = "" },
+			wantCode: connect.CodeFailedPrecondition,
+			wantMsg:  "template version",
+		},
+		{
+			name:     "run disagrees about dry run",
+			mutate:   func(r *ActionRunData) { r.DryRun = false },
+			wantCode: connect.CodeFailedPrecondition,
+			wantMsg:  "dryRun",
+		},
+		{
+			name:     "run already succeeded",
+			mutate:   func(r *ActionRunData) { r.Status = "succeeded" },
+			wantCode: connect.CodeFailedPrecondition,
+			wantMsg:  "cannot be dispatched",
+		},
+		{
+			name:     "run already failed",
+			mutate:   func(r *ActionRunData) { r.Status = "failed" },
+			wantCode: connect.CodeFailedPrecondition,
+			wantMsg:  "cannot be dispatched",
+		},
+		{
+			name:     "run was cancelled",
+			mutate:   func(r *ActionRunData) { r.Status = "cancelled" },
+			wantCode: connect.CodeFailedPrecondition,
+			wantMsg:  "cannot be dispatched",
+		},
+		{
+			name:     "run is awaiting approval",
+			mutate:   func(r *ActionRunData) { r.Status = "awaiting-approval" },
+			wantCode: connect.CodeFailedPrecondition,
+			wantMsg:  "cannot be dispatched",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			run := testRun()
+			tt.mutate(run)
+
+			runMock := new(MockActionRunClient)
+			runMock.On("GetActionRun", mock.Anything, testRunID).Return(run, nil)
+			defMock := new(MockDefinitionClient)
+			temporalMock := new(MockScaffolderTemporalClient)
+
+			server := NewTemplateServer(temporalMock, nil,
+				WithTemplateDefinitionClient(defMock), WithActionRunClient(runMock))
+			_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(validScaffolderRequest()))
+
+			require.Error(t, err)
+			assert.Equal(t, tt.wantCode, connectCode(t, err))
+			assert.Contains(t, err.Error(), tt.wantMsg)
+
+			// The run is checked BEFORE the definition version, so an
+			// unauthorized caller cannot learn whether a version id exists.
+			defMock.AssertNotCalled(t, "GetDefinitionVersion", mock.Anything, mock.Anything)
+			temporalMock.AssertNotCalled(t, "StartScaffolderWorkflow", mock.Anything, mock.Anything)
+		})
+	}
+}
+
+func TestStartScaffolderRun_RunsInRunningStatusAreDispatchable(t *testing.T) {
+	// orbit-www may flip the run to running before dispatching.
+	run := testRun()
+	run.Status = "running"
+
+	runMock := new(MockActionRunClient)
+	runMock.On("GetActionRun", mock.Anything, testRunID).Return(run, nil)
+	defMock := new(MockDefinitionClient)
+	defMock.On("GetDefinitionVersion", mock.Anything, "ver-1").Return(testVersion(), nil)
+	temporalMock := new(MockScaffolderTemporalClient)
+	temporalMock.On("StartScaffolderWorkflow", mock.Anything, mock.Anything).Return("wf-1", nil)
+
+	server := NewTemplateServer(temporalMock, nil,
+		WithTemplateDefinitionClient(defMock), WithActionRunClient(runMock))
+	_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(validScaffolderRequest()))
+	require.NoError(t, err)
+}
+
+func TestStartScaffolderRun_UnknownRunIsNotFound(t *testing.T) {
+	runMock := new(MockActionRunClient)
+	runMock.On("GetActionRun", mock.Anything, testRunID).Return(nil, ErrActionRunNotFound)
+	defMock := new(MockDefinitionClient)
+
+	server := NewTemplateServer(new(MockScaffolderTemporalClient), nil,
+		WithTemplateDefinitionClient(defMock), WithActionRunClient(runMock))
+	_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(validScaffolderRequest()))
+
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeNotFound, connectCode(t, err))
+	defMock.AssertNotCalled(t, "GetDefinitionVersion", mock.Anything, mock.Anything)
+}
+
+func TestStartScaffolderRun_WithoutActionRunClientIsFailedPrecondition(t *testing.T) {
+	defMock := new(MockDefinitionClient)
+	server := NewTemplateServer(new(MockScaffolderTemporalClient), nil,
+		WithTemplateDefinitionClient(defMock))
+
+	_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(validScaffolderRequest()))
+
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeFailedPrecondition, connectCode(t, err),
+		"a run whose ownership cannot be proven must not be dispatched")
+}
+
+// An automation-triggered run has no user; the dispatch must still work, with
+// the request's user_id as the only user context.
+func TestStartScaffolderRun_AcceptsARunWithNoTriggeringUser(t *testing.T) {
+	run := testRun()
+	run.TriggeredBy = nil
+
+	runMock := new(MockActionRunClient)
+	runMock.On("GetActionRun", mock.Anything, testRunID).Return(run, nil)
+	defMock := new(MockDefinitionClient)
+	defMock.On("GetDefinitionVersion", mock.Anything, "ver-1").Return(testVersion(), nil)
+
+	var got types.ScaffolderWorkflowInput
+	temporalMock := new(MockScaffolderTemporalClient)
+	temporalMock.On("StartScaffolderWorkflow", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) { got = args.Get(1).(types.ScaffolderWorkflowInput) }).
+		Return("wf-1", nil)
+
+	server := NewTemplateServer(temporalMock, nil,
+		WithTemplateDefinitionClient(defMock), WithActionRunClient(runMock))
+	_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(validScaffolderRequest()))
+
+	require.NoError(t, err)
+	assert.Equal(t, "user-1", got.UserID, "falls back to the request's user id")
+	assert.Empty(t, got.UserEmail)
+	assert.Empty(t, got.UserName)
 }

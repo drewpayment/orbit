@@ -37,7 +37,11 @@ func TestScaffolderWorkflowInput_MatchesSharedType(t *testing.T) {
 		Definition:          rawDef,
 		Parameters:          map[string]any{"name": "orders", "count": float64(2), "nested": map[string]any{"a": true}},
 		WorkspaceID:         "ws-1",
+		WorkspaceSlug:       "acme",
+		WorkspaceName:       "Acme Inc",
 		UserID:              "user-1",
+		UserEmail:           "dev@acme.test",
+		UserName:            "Dev",
 		DryRun:              true,
 	}
 	wire, err := json.Marshal(sent)
@@ -51,7 +55,11 @@ func TestScaffolderWorkflowInput_MatchesSharedType(t *testing.T) {
 	assert.Equal(t, sent.DefinitionVersionID, got.DefinitionVersionID)
 	assert.Equal(t, sent.DefinitionID, got.DefinitionID)
 	assert.Equal(t, sent.WorkspaceID, got.WorkspaceID)
+	assert.Equal(t, sent.WorkspaceSlug, got.WorkspaceSlug)
+	assert.Equal(t, sent.WorkspaceName, got.WorkspaceName)
 	assert.Equal(t, sent.UserID, got.UserID)
+	assert.Equal(t, sent.UserEmail, got.UserEmail)
+	assert.Equal(t, sent.UserName, got.UserName)
 	assert.Equal(t, sent.DryRun, got.DryRun)
 	assert.Equal(t, sent.Parameters, got.Parameters)
 	assert.Equal(t, def.APIVersion, got.Definition.APIVersion)

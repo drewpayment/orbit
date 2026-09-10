@@ -779,13 +779,13 @@ func (s *ScaffolderWorkflowTestSuite) TestDryRunStillFailsOnABadInputBehindASkip
 	in.DryRun = true
 	in.Definition.Spec.Output = nil
 	in.Definition.Spec.Steps[1].If = "${{ steps.create.output.ok }}"
-	in.Definition.Spec.Steps[1].Input = json.RawMessage(`{"message":"${{ user.email }}"}`)
+	in.Definition.Spec.Steps[1].Input = json.RawMessage(`{"message":"${{ parameters.misspelled }}"}`)
 
 	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
 	res := s.result()
 
 	s.Equal(ScaffolderStatusFailed, res.Status)
-	s.Contains(res.Error, "user.email")
+	s.Contains(res.Error, "parameters.misspelled")
 }
 
 // The same shape with a sound input is still skipped, not failed.
@@ -903,27 +903,54 @@ func (s *ScaffolderWorkflowTestSuite) TestBuiltinNamespacesResolve() {
 	s.Equal("ver-1", got["tmplVersion"])
 }
 
-// KNOWN MISMATCH, pinned so it is visible rather than folklore: the validator
-// accepts these, but the run input carries no such fields, so they fail at run
-// time. Seeding a placeholder instead would render an empty string into a real
-// repository, which is worse.
-func (s *ScaffolderWorkflowTestSuite) TestUnseededBuiltinNamespaceKeysFailAtRunTime() {
-	for _, expr := range []string{"${{ user.email }}", "${{ workspace.slug }}"} {
-		s.Run(expr, func() {
-			s.SetupTest()
-			def := twoStepDefinition()
-			def.Spec.Steps = def.Spec.Steps[:1]
-			def.Spec.Steps[0].Input = json.RawMessage(`{"name":"` + expr + `"}`)
-			def.Spec.Output = nil
+// The dispatcher seeds user/workspace context from the run record, so the
+// keys the engine's validator advertises now resolve at run time. This
+// previously failed and was pinned as a known mismatch.
+func (s *ScaffolderWorkflowTestSuite) TestSeededUserAndWorkspaceContextResolve() {
+	def := twoStepDefinition()
+	def.Spec.Steps = def.Spec.Steps[:1]
+	def.Spec.Steps[0].Input = json.RawMessage(`{
+		"email": "${{ user.email }}",
+		"who":   "${{ user.name }}",
+		"slug":  "${{ workspace.slug }}",
+		"wsName": "${{ workspace.name }}"
+	}`)
+	def.Spec.Output = nil
 
-			s.env.ExecuteWorkflow(ScaffolderWorkflow, baseInput(def))
-			res := s.result()
+	in := baseInput(def)
+	in.UserEmail = "dev@acme.test"
+	in.UserName = "Dev"
+	in.WorkspaceSlug = "acme"
+	in.WorkspaceName = "Acme Inc"
 
-			s.Equal(ScaffolderStatusFailed, res.Status)
-			s.Contains(res.Error, "unresolved expression path")
-			s.Empty(s.stubs.executed)
-		})
-	}
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	s.Equal(ScaffolderStatusSucceeded, s.result().Status)
+
+	s.Require().Len(s.stubs.executed, 1)
+	var got map[string]any
+	s.Require().NoError(json.Unmarshal(s.stubs.executed[0].Input, &got))
+	s.Equal("dev@acme.test", got["email"])
+	s.Equal("Dev", got["who"])
+	s.Equal("acme", got["slug"])
+	s.Equal("Acme Inc", got["wsName"])
+}
+
+// A field the run record could not supply resolves to an empty string rather
+// than failing the run. Failing mid-flight over a missing display name would
+// be worse than rendering nothing, and the value is never used for auth.
+func (s *ScaffolderWorkflowTestSuite) TestUnpopulatedUserContextResolvesEmpty() {
+	def := twoStepDefinition()
+	def.Spec.Steps = def.Spec.Steps[:1]
+	def.Spec.Steps[0].Input = json.RawMessage(`{"email":"x${{ user.email }}y"}`)
+	def.Spec.Output = nil
+
+	// An automation-triggered run has no user, so the dispatcher passes none.
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, baseInput(def))
+	s.Equal(ScaffolderStatusSucceeded, s.result().Status)
+
+	var got map[string]any
+	s.Require().NoError(json.Unmarshal(s.stubs.executed[0].Input, &got))
+	s.Equal("xy", got["email"])
 }
 
 // A dry-run plan must account for every step, so a reader can never mistake a

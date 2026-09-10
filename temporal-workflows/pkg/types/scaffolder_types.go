@@ -30,8 +30,15 @@ type ScaffolderWorkflowInput struct {
 	Definition   json.RawMessage `json:"definition"`
 	Parameters   map[string]any  `json:"parameters"`
 	WorkspaceID  string          `json:"workspaceId"`
-	UserID       string          `json:"userId"`
-	DryRun       bool            `json:"dryRun"`
+	// WorkspaceSlug, WorkspaceName, UserEmail and UserName come from the run
+	// record rather than the request, and populate the `${{ workspace.* }}`
+	// and `${{ user.* }}` namespaces the engine's validator advertises.
+	WorkspaceSlug string `json:"workspaceSlug,omitempty"`
+	WorkspaceName string `json:"workspaceName,omitempty"`
+	UserID        string `json:"userId"`
+	UserEmail     string `json:"userEmail,omitempty"`
+	UserName      string `json:"userName,omitempty"`
+	DryRun        bool   `json:"dryRun"`
 }
 
 // ScaffolderStepProgress is one step's state in a run.
