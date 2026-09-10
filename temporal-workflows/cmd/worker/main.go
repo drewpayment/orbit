@@ -430,8 +430,10 @@ func main() {
 	}
 
 	scaffolderRegistry := scaffolder.NewRegistry(actions.DefaultActions(actions.Deps{
-		TokenService:  tokenService,
-		CatalogClient: services.NewPayloadCatalogEntityClient(orbitAPIURL, orbitInternalAPIKey, logger),
+		TokenService:     tokenService,
+		CatalogClient:    services.NewPayloadCatalogEntityClient(orbitAPIURL, orbitInternalAPIKey, logger),
+		KafkaTopicClient: services.NewPayloadKafkaTopicClient(orbitAPIURL, orbitInternalAPIKey, logger),
+		KafkaProvisioner: kafkaActivities,
 	})...)
 	if err := scaffolderRegistry.ValidateSchemas(); err != nil {
 		// A broken action schema is a platform bug: fail at startup rather

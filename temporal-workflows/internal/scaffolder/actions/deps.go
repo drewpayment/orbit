@@ -3,6 +3,7 @@ package actions
 import (
 	"context"
 
+	"github.com/drewpayment/orbit/temporal-workflows/internal/activities"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/services"
 )
 
@@ -35,6 +36,23 @@ type CatalogEntityClient interface {
 	RegisterEntity(ctx context.Context, in services.CatalogEntityRegisterInput) (*services.CatalogEntityRegisterResult, error)
 }
 
+// KafkaTopicClient creates (idempotently, on (workspace, virtualCluster,
+// name)) the kafka-topics Payload row a provisioned topic is tracked
+// against, for kafka:topic:provision. Satisfied by
+// *services.PayloadKafkaTopicClient.
+type KafkaTopicClient interface {
+	CreateTopic(ctx context.Context, in services.KafkaTopicCreateInput) (services.KafkaTopicDoc, error)
+}
+
+// KafkaProvisioner is the subset of activities.KafkaActivitiesImpl that
+// kafka:topic:provision calls as a plain Go method call — never as a nested
+// Temporal activity dispatch, since activities cannot schedule further
+// activities. Satisfied by *activities.KafkaActivitiesImpl.
+type KafkaProvisioner interface {
+	ProvisionTopic(ctx context.Context, input activities.KafkaTopicProvisionInput) (*activities.KafkaTopicProvisionOutput, error)
+	UpdateTopicStatus(ctx context.Context, input activities.KafkaUpdateTopicStatusInput) error
+}
+
 // Deps are the live collaborators DefaultActions wires into every action
 // that needs one. Constructed once at worker startup and passed by value;
 // fields left zero simply mean the actions that need them are omitted by
@@ -54,4 +72,11 @@ type Deps struct {
 	// CatalogClient registers entities for catalog:entity:register. That
 	// action is omitted from DefaultActions when this is nil.
 	CatalogClient CatalogEntityClient
+	// KafkaTopicClient creates the governed kafka-topics row for
+	// kafka:topic:provision. That action is omitted from DefaultActions
+	// unless both this and KafkaProvisioner are set.
+	KafkaTopicClient KafkaTopicClient
+	// KafkaProvisioner provisions the physical topic for
+	// kafka:topic:provision. Required alongside KafkaTopicClient.
+	KafkaProvisioner KafkaProvisioner
 }
