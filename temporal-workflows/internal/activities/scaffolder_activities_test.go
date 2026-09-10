@@ -709,6 +709,20 @@ func TestRedactSecretsInText(t *testing.T) {
 		{name: "a long uppercase hex digest is not a token", in: "digest E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855 mismatch", unchanged: true},
 		{name: "a 40-char hex commit id is not a token", in: "reset to 0123456789abcdef0123456789abcdef0123abcd failed", unchanged: true},
 
+		// --- suffix rule must not eat resource names (R3) -------------------
+		{name: "an image pull secret by name", in: "image-pull-secret: my-registry-creds not found", unchanged: true},
+		{name: "a repo token naming a git ref", in: "repo_token: refs/heads/main is protected", unchanged: true},
+		{name: "a deploy token naming an environment", in: "deploy_token: staging-cluster unreachable", unchanged: true},
+		{name: "an api secret naming a resource", in: "api_secret: orbit-shared-secret missing", unchanged: true},
+		{name: "a bot token naming a file", in: "bot_token: /etc/orbit/creds.json unreadable", unchanged: true},
+
+		// --- URL with a port and an email in the query (R5) -----------------
+		{
+			name:      "a port and an email in a query string are not userinfo",
+			in:        "GET https://gateway:8443/api?owner=admin@corp.com failed",
+			unchanged: true,
+		},
+
 		// --- qualified credential names (suffix rule) -----------------------
 		{
 			name:           "scrubs a webhook secret",
@@ -752,6 +766,13 @@ func TestRedactSecretsInText(t *testing.T) {
 			name:           "scrubs an RSA private key block",
 			in:             "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAxyz123\n-----END RSA PRIVATE KEY-----",
 			mustNotContain: "MIIEowIBAAKCAQEAxyz123",
+		},
+
+		{
+			name:           "scrubs a truncated PEM block with no END line (R6)",
+			in:             "ssh: -----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAxyz123abc456",
+			mustNotContain: "MIIEowIBAAKCAQEAxyz123abc456",
+			mustContain:    []string{"ssh:"},
 		},
 
 		// --- passwords containing "/" (base64) ------------------------------
@@ -884,4 +905,33 @@ func TestScaffolderActivities_WriteRunProgress_LeavesOutputsAloneWithoutTheFlag(
 
 	require.Len(t, writer.calls, 1)
 	assert.Nil(t, writer.calls[0].in.Outputs, "a per-step write must not clobber stored outputs")
+}
+
+// A plan entry's name and description are composed from action input and
+// action errors, either of which can quote a credential. The plan is persisted
+// and rendered, so both are scrubbed on the way out.
+func TestScaffolderActivities_WriteRunProgress_RedactsThePlan(t *testing.T) {
+	writer := &fakeRunWriter{}
+	a := newTestScaffolderActivities(t, nil, writer)
+
+	require.NoError(t, a.WriteRunProgress(context.Background(), WriteRunProgressInput{
+		RunID:   "run-1",
+		Status:  "succeeded",
+		HasPlan: true,
+		Plan: []scaffolder.PlannedChange{{
+			Kind:        "unsupported",
+			Name:        "clone",
+			Description: "fetch:git could not be previewed: clone https://x-access-token:ghp_abcdefghij0123456789@github.com/acme/svc.git failed",
+		}},
+	}))
+
+	require.Len(t, writer.calls, 1)
+	require.NotNil(t, writer.calls[0].in.Plan)
+	plan := *writer.calls[0].in.Plan
+	require.Len(t, plan, 1)
+
+	desc, _ := plan[0]["description"].(string)
+	assert.NotContains(t, desc, "ghp_abcdefghij0123456789")
+	assert.Contains(t, desc, redactedPlaceholder)
+	assert.Contains(t, desc, "github.com/acme/svc.git", "the diagnosable part must survive")
 }

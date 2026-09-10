@@ -457,9 +457,15 @@ func (r *scaffolderRun) runStep(ctx workflow.Context, stepBaseCtx workflow.Conte
 				// the plan is incomplete. Say so rather than leaving a gap
 				// that reads as "this step changes nothing".
 				r.plan = append(r.plan, scaffolder.PlannedChange{
-					Kind:        "unsupported",
-					Name:        step.ID,
-					Description: fmt.Sprintf("%s could not be previewed: %v", step.Action, activityErr),
+					Kind: "unsupported",
+					Name: step.ID,
+					// The activity error can quote the input the action
+					// choked on — a clone URL carrying an installation
+					// token, say — and this description reaches the plan,
+					// the progress query and workflow history. Scrub it
+					// here, not only on the persistence path.
+					Description: scaffolder.RedactText(
+						fmt.Sprintf("%s could not be previewed: %v", step.Action, activityErr)),
 				})
 			}
 			return false, ""

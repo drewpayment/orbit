@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -45,7 +44,7 @@ const ErrTypeScaffolderInvalid = "ScaffolderInvalidStep"
 // redactedPlaceholder replaces secret-looking values before step output is
 // persisted to the run record. It never touches the value the workflow keeps
 // in its expression context, so a later step can still consume the real value.
-const redactedPlaceholder = "[redacted]"
+const redactedPlaceholder = scaffolder.RedactedPlaceholder
 
 // previewMaxFileBytes and previewMaxTotalBytes bound the dry-run preview
 // upload. A template can render an arbitrarily large tree; without these a
@@ -551,9 +550,12 @@ func toPlanMaps(changes []scaffolder.PlannedChange) []map[string]any {
 	out := make([]map[string]any, 0, len(changes))
 	for _, c := range changes {
 		out = append(out, map[string]any{
-			"kind":        c.Kind,
-			"name":        c.Name,
-			"description": c.Description,
+			"kind": c.Kind,
+			// Name and Description are composed from action input and action
+			// errors, either of which can quote a credential. The plan is
+			// persisted and rendered, so scrub both.
+			"name":        scaffolder.RedactText(c.Name),
+			"description": scaffolder.RedactText(c.Description),
 		})
 	}
 	return out
@@ -691,111 +693,11 @@ func planStepError(in ScaffolderStepInput, err error) error {
 	return wrapped
 }
 
-// Credential shapes recognised in free text.
-//
-// This is a BACKSTOP for text this code did not compose (an action's error
-// string). The real control is not putting secrets in messages; the run log
-// only ever carries step lifecycle lines, never a resolved input.
-//
-// It is tuned for precision over recall, because over-redaction actively
-// misleads: "Secret: [redacted] not found" tells an operator less than the
-// unredacted message did. So a field name only counts when it means "the
-// value IS a credential". Deliberately absent as standalone names: `secret`,
-// `token`, `credential`, `auth`, `private_key` — those routinely name a
-// resource (a Kubernetes Secret, a git ref like `token: refs/heads/x`, a key
-// file path), and matching them destroyed the identifying half of real
-// messages. They ARE matched as a suffix (`webhook_secret`, `npm_token`),
-// which is unambiguous.
-var (
-	// secretValueChars: no whitespace or quoting, and no brackets, so
-	// re-running cannot chew an earlier "[redacted]".
-	secretValueChars = `[^\s"'&,;)\[\]{}]`
-
-	// credentialValue requires the value to look like a credential rather than
-	// a word: either it carries a digit or symbol, or it is long enough that no
-	// ordinary word reaches it. Without this the optional auth scheme below can
-	// backtrack and be redacted AS the value, publishing the token after it.
-	credentialValue = `(` + secretValueChars + `{5,}[0-9_\-+/=.@]` + secretValueChars + `*` +
-		`|` + secretValueChars + `{12,})`
-
-	// pemPrivateKeyPattern matches a whole PEM private key block, which no
-	// field-name rule would catch since the key body has no name attached.
-	pemPrivateKeyPattern = regexp.MustCompile(
-		`(?s)-----BEGIN[A-Z ]*PRIVATE KEY-----.*?-----END[A-Z ]*PRIVATE KEY-----`)
-
-	// urlUserinfoPattern matches the password half of scheme://user:pass@host.
-	// Group 1 keeps everything up to and including the ":", group 2 is the
-	// password, and the trailing "@host" is restored by the replacement. The
-	// password class allows "/" because base64 credentials contain it; it
-	// cannot run past the "@", so the host is never eaten.
-	urlUserinfoPattern = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.\-]*://[^/\s:@]+:)([^\s@]+)@`)
-
-	// secretAssignmentPattern matches `<credential name> = <value>`, including
-	// a leading auth scheme ("Bearer", "Basic", "token") which must be KEPT —
-	// eating the scheme while publishing the token after it is worse than not
-	// redacting at all.
-	secretAssignmentPattern = regexp.MustCompile(
-		`(?i)\b((?:access[_-]?token|refresh[_-]?token|id[_-]?token|bearer[_-]?token|api[_-]?key|apikey|api[_-]?secret|client[_-]?secret|password|passwd|pwd|authorization)` +
-			`["']?\s*[=:]\s*["']?(?:(?:bearer|basic|token)\s+)?)` + credentialValue)
-
-	// secretSuffixAssignmentPattern matches a qualified credential name:
-	// webhook_secret, npm_token, GITHUB-TOKEN, db_password. The required prefix
-	// segment is what keeps it off a bare "Secret:" or "token: refs/heads/x".
-	//
-	// `key` is deliberately NOT a suffix here: private_key, ssh_key and
-	// host_key name files at least as often as they name secrets, and matching
-	// them scrubbed the path an operator needs.
-	secretSuffixAssignmentPattern = regexp.MustCompile(
-		`(?i)\b([a-z0-9]+[_-](?:secret|token|password)["']?\s*[=:]\s*["']?(?:(?:bearer|basic|token)\s+)?)` + credentialValue)
-
-	// secretTokenPattern matches tokens that identify themselves, so they are
-	// redacted wherever they appear regardless of any surrounding field name:
-	// GitHub (classic ghp_/gho_/ghu_/ghs_/ghr_ and fine-grained github_pat_),
-	// GitLab (glpat-), Slack (xoxb-/xoxp-/xoxa-/xoxs-), AWS access key ids,
-	// and long opaque alphanumeric strings shaped like an Azure DevOps PAT.
-	//
-	// The opaque rule starts at 40 characters, which alone would swallow git
-	// SHAs and sha256/sha512 digests — so redactSecretsInText skips any
-	// candidate that is pure hexadecimal. Digests and commit ids are therefore
-	// preserved, while a mixed-case opaque PAT is not.
-	secretTokenPattern = regexp.MustCompile(
-		`\b(gh[pousr]_[A-Za-z0-9]{16,}` +
-			`|github_pat_[A-Za-z0-9_]{20,}` +
-			`|glpat-[A-Za-z0-9\-_]{16,}` +
-			`|xox[baps]-[A-Za-z0-9\-]{10,}` +
-			`|AKIA[0-9A-Z]{16}` +
-			`|[A-Za-z0-9]{40,})\b`)
-
-	// hexOnlyPattern identifies a candidate that is a digest or commit id
-	// rather than a credential.
-	hexOnlyPattern = regexp.MustCompile(`^[0-9a-fA-F]+$`)
-)
-
-// redactSecretsInText scrubs credential-shaped substrings from free text.
-//
-// Only the value is replaced, so the reader still sees which field leaked and
-// what the surrounding error said. Running it twice is a no-op.
-func redactSecretsInText(s string) string {
-	if s == "" {
-		return s
-	}
-	// Whole-block rules first, then the most specific field rules, then the
-	// self-identifying token shapes. URL userinfo precedes the assignment
-	// rules so a credentialed clone URL keeps its host.
-	out := pemPrivateKeyPattern.ReplaceAllString(s, redactedPlaceholder)
-	out = urlUserinfoPattern.ReplaceAllString(out, "${1}"+redactedPlaceholder+"@")
-	out = secretSuffixAssignmentPattern.ReplaceAllString(out, "${1}"+redactedPlaceholder)
-	out = secretAssignmentPattern.ReplaceAllString(out, "${1}"+redactedPlaceholder)
-	return secretTokenPattern.ReplaceAllStringFunc(out, func(match string) string {
-		// A pure-hex run of this length is a digest or a commit id, not a
-		// credential. Redacting it would destroy the most useful part of a
-		// git or registry error.
-		if hexOnlyPattern.MatchString(match) {
-			return match
-		}
-		return redactedPlaceholder
-	})
-}
+// redactedPlaceholder and redactSecretsInText delegate to the engine package,
+// which owns the credential patterns so the workflow can apply exactly the
+// same rules to the plan descriptions it composes. Keeping two copies is how
+// the two drifted apart once already.
+func redactSecretsInText(s string) string { return scaffolder.RedactText(s) }
 
 // nonRetryable marks err as a failure no retry can fix.
 func nonRetryable(err error) error {

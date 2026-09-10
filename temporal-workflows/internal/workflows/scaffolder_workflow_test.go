@@ -1027,3 +1027,46 @@ func (s *ScaffolderWorkflowTestSuite) TestLiveRunRecordsNoPlanEntries() {
 	s.Empty(res.Plan)
 	s.False(s.lastProgress().HasPlan)
 }
+
+// The plan description the workflow composes from an activity error reaches
+// the progress query and workflow history, so it must be scrubbed at the point
+// it is built, not only when it is persisted.
+func (s *ScaffolderWorkflowTestSuite) TestDryRunPlanRedactsATokenBearingError() {
+	in := baseInput(twoStepDefinition())
+	in.DryRun = true
+	in.Definition.Spec.Output = nil
+	in.Definition.Spec.Steps[0].ContinueOnError = true
+	in.Definition.Spec.Steps[1].Input = json.RawMessage(`{"message":"static"}`)
+
+	s.stubs.planFn = func(step activities.ScaffolderStepInput) (*activities.ScaffolderPlanResult, error) {
+		if step.StepID == "create" {
+			return nil, temporal.NewNonRetryableApplicationError(
+				"clone https://x-access-token:ghp_abcdefghij0123456789@github.com/acme/svc.git failed",
+				activities.ErrTypeScaffolderInvalid, nil)
+		}
+		return &activities.ScaffolderPlanResult{}, nil
+	}
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+	s.Equal(ScaffolderStatusSucceeded, res.Status)
+
+	var desc string
+	for _, c := range res.Plan {
+		if c.Name == "create" {
+			desc = c.Description
+		}
+	}
+	s.Require().NotEmpty(desc)
+	s.NotContains(desc, "ghp_abcdefghij0123456789")
+	s.Contains(desc, "github.com/acme/svc.git", "the diagnosable part must survive")
+
+	// The progress query serves the same scrubbed text.
+	val, err := s.env.QueryWorkflow(ScaffolderProgressQuery)
+	s.Require().NoError(err)
+	var progress ScaffolderProgress
+	s.Require().NoError(val.Get(&progress))
+	for _, c := range progress.Plan {
+		s.NotContains(c.Description, "ghp_abcdefghij0123456789")
+	}
+}
