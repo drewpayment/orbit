@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ado:pr:open output",
+  "type": "object",
+  "properties": {
+    "prUrl": {
+      "type": "string",
+      "description": "Web URL of the created pull request."
+    },
+    "prId": {
+      "type": "string",
+      "description": "Azure DevOps pull request id."
+    }
+  },
+  "required": ["prUrl", "prId"],
+  "additionalProperties": false
+}

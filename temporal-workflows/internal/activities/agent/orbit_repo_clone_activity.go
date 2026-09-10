@@ -26,7 +26,7 @@ type GitHubTokenClient interface {
 // resolving Azure DevOps connection credentials. Implemented by
 // services.PayloadADOConnectionClient. Tests substitute a fake.
 type ADOTokenClient interface {
-	GetConnectionToken(ctx context.Context, connectionID string) (services.ADOConnectionToken, error)
+	GetConnectionToken(ctx context.Context, connectionID, workspaceID string) (services.ADOConnectionToken, error)
 }
 
 // providerGitHub / providerADO are the canonical provider tags. They match
@@ -183,7 +183,7 @@ func (a *OrbitRepoCloneActivities) OrbitRepoClone(ctx context.Context, in OrbitR
 	case providerGitHub:
 		spec, err = a.githubCloneSpec(ctx, in.WorkspaceID, parsed, revFlag)
 	case providerADO:
-		spec, err = a.adoCloneSpec(ctx, appRepo, parsed, revFlag)
+		spec, err = a.adoCloneSpec(ctx, in.WorkspaceID, appRepo, parsed, revFlag)
 	default:
 		return OrbitRepoCloneResult{}, temporal.NewNonRetryableApplicationError(
 			fmt.Sprintf("unsupported provider %q", parsed.Provider), "InvalidRepoURL", nil)
@@ -247,7 +247,7 @@ echo "ORBIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)"
 // cannot be cloned. For basic-pat the PAT is URL-injected via the $ADO_TOKEN
 // env var (and scrubbed after clone); for bearer the token is presented via
 // git -c http.extraheader and never touches the URL.
-func (a *OrbitRepoCloneActivities) adoCloneSpec(ctx context.Context, appRepo *services.AppRepository, parsed parsedRepo, revFlag string) (cloneSpec, error) {
+func (a *OrbitRepoCloneActivities) adoCloneSpec(ctx context.Context, workspaceID string, appRepo *services.AppRepository, parsed parsedRepo, revFlag string) (cloneSpec, error) {
 	if a.adoClient == nil {
 		return cloneSpec{}, temporal.NewNonRetryableApplicationError(
 			"orbit_repo_clone: Azure DevOps cloning is not configured on this worker", "ADONotConfigured", nil)
@@ -262,7 +262,12 @@ func (a *OrbitRepoCloneActivities) adoCloneSpec(ctx context.Context, appRepo *se
 			"ADOConnectionMissing", nil)
 	}
 
-	conn, err := a.adoClient.GetConnectionToken(ctx, connectionID)
+	// workspaceID scopes the connection lookup to the calling workflow's own
+	// workspace (OrbitRepoClone already validates in.WorkspaceID is
+	// non-empty before this is reached) — the same fix as the ado:* scaffolder
+	// actions', preventing a connection id resolved for one workspace's app
+	// from being usable by another workspace.
+	conn, err := a.adoClient.GetConnectionToken(ctx, connectionID, workspaceID)
 	if err != nil {
 		if errors.Is(err, services.ErrConnectionNotFound) {
 			return cloneSpec{}, temporal.NewNonRetryableApplicationError(
