@@ -49,6 +49,31 @@ func TestCatalogEntityRegister_Execute(t *testing.T) {
 	assert.Equal(t, "run-1", client.got.Source.SourceID)
 }
 
+func TestCatalogEntityRegister_Execute_TemplateProvenance(t *testing.T) {
+	client := &fakeCatalogEntityClient{result: &services.CatalogEntityRegisterResult{EntityID: "ent-1"}}
+	a := NewCatalogEntityRegister(client)
+
+	_, err := a.Execute(context.Background(), runCtx(), json.RawMessage(
+		`{"workspaceId":"ws-1","kind":"app","name":"orders","sourceType":"scaffolder-run","sourceId":"run-1",`+
+			`"templateDefinitionId":"tmpl-1","templateVersionId":"tmpl-1-v2"}`))
+	require.NoError(t, err)
+
+	assert.Equal(t, "tmpl-1", client.got.TemplateDefinitionID)
+	assert.Equal(t, "tmpl-1-v2", client.got.TemplateVersionID)
+}
+
+func TestCatalogEntityRegister_Execute_TemplateProvenanceOptional(t *testing.T) {
+	client := &fakeCatalogEntityClient{result: &services.CatalogEntityRegisterResult{EntityID: "ent-1"}}
+	a := NewCatalogEntityRegister(client)
+
+	_, err := a.Execute(context.Background(), runCtx(), json.RawMessage(
+		`{"workspaceId":"ws-1","kind":"app","name":"orders","sourceType":"scaffolder-run","sourceId":"run-1"}`))
+	require.NoError(t, err)
+
+	assert.Empty(t, client.got.TemplateDefinitionID)
+	assert.Empty(t, client.got.TemplateVersionID)
+}
+
 func TestCatalogEntityRegister_MissingFields(t *testing.T) {
 	a := NewCatalogEntityRegister(&fakeCatalogEntityClient{})
 	_, err := a.Execute(context.Background(), runCtx(), json.RawMessage(`{"kind":"app","name":"orders","sourceType":"t","sourceId":"s"}`))

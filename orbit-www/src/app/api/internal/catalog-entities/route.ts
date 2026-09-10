@@ -6,6 +6,7 @@ import configPromise from '@payload-config'
 import { validateInternalApiKey } from '@/lib/auth/internal-api-auth'
 import { slugify, uniqueSlug } from '@/lib/catalog/entity-crud'
 import { ENTITY_KINDS, type EntityKind } from '@/collections/catalog/constants'
+import type { TemplateDefinition, TemplateDefinitionVersion } from '@/payload-types'
 
 /**
  * POST /api/internal/catalog-entities
@@ -28,6 +29,11 @@ import { ENTITY_KINDS, type EntityKind } from '@/collections/catalog/constants'
  *                              // metadata.owner instead.
  *     links?: [{ title: string, url: string }],
  *     source: { type: string, sourceId: string },
+ *     templateDefinitionId?: string,  // stored as catalog-entities
+ *                                      // source.sourceTemplateDefinition
+ *                                      // (Template Authoring Phase 4, Task E)
+ *     templateVersionId?: string,     // stored as
+ *                                      // source.sourceTemplateVersion
  *   }
  *
  * `source.type` must be one of the CatalogEntities `source.type` select
@@ -74,6 +80,16 @@ function isNonEmptyString(v: unknown): v is string {
   return typeof v === 'string' && v.trim() !== ''
 }
 
+/** Normalise a relationship value (id string or populated doc) to its id, or null. */
+function relationId(v: unknown): string | null {
+  if (v == null) return null
+  if (typeof v === 'string') return v
+  if (typeof v === 'object' && 'id' in (v as Record<string, unknown>)) {
+    return String((v as { id: unknown }).id)
+  }
+  return null
+}
+
 export async function POST(request: NextRequest) {
   const authError = validateInternalApiKey(request.headers.get('X-API-Key'))
   if (authError) return authError
@@ -109,6 +125,18 @@ export async function POST(request: NextRequest) {
   const sourceType = source.type as string
   const sourceId = source.sourceId as string
   const owner = isNonEmptyString(body.owner) ? (body.owner as string) : undefined
+  const templateDefinitionId = isNonEmptyString(body.templateDefinitionId)
+    ? (body.templateDefinitionId as string)
+    : undefined
+  const templateVersionId = isNonEmptyString(body.templateVersionId)
+    ? (body.templateVersionId as string)
+    : undefined
+  if (templateVersionId && !templateDefinitionId) {
+    return NextResponse.json(
+      { error: 'templateVersionId requires templateDefinitionId' },
+      { status: 400 },
+    )
+  }
 
   if (!(ENTITY_KINDS as readonly string[]).includes(kind)) {
     return NextResponse.json(
@@ -160,6 +188,54 @@ export async function POST(request: NextRequest) {
       throw err
     }
 
+    if (templateDefinitionId) {
+      let definitionDoc: TemplateDefinition
+      try {
+        definitionDoc = await payload.findByID({
+          collection: 'template-definitions',
+          id: templateDefinitionId,
+          depth: 0,
+          overrideAccess: true,
+        })
+      } catch (err) {
+        if (err instanceof Error && err.message.toLowerCase().includes('not found')) {
+          return NextResponse.json({ error: 'templateDefinitionId not found' }, { status: 422 })
+        }
+        throw err
+      }
+      const definitionWorkspaceId = relationId(definitionDoc.workspace)
+      if (definitionWorkspaceId !== workspaceId) {
+        return NextResponse.json(
+          { error: 'templateDefinitionId does not belong to workspaceId' },
+          { status: 422 },
+        )
+      }
+
+      if (templateVersionId) {
+        let versionDoc: TemplateDefinitionVersion
+        try {
+          versionDoc = await payload.findByID({
+            collection: 'template-definition-versions',
+            id: templateVersionId,
+            depth: 0,
+            overrideAccess: true,
+          })
+        } catch (err) {
+          if (err instanceof Error && err.message.toLowerCase().includes('not found')) {
+            return NextResponse.json({ error: 'templateVersionId not found' }, { status: 422 })
+          }
+          throw err
+        }
+        const versionDefinitionId = relationId(versionDoc.definition)
+        if (versionDefinitionId !== templateDefinitionId) {
+          return NextResponse.json(
+            { error: 'templateVersionId does not belong to templateDefinitionId' },
+            { status: 422 },
+          )
+        }
+      }
+    }
+
     const existing = await payload.find({
       collection: 'catalog-entities',
       where: {
@@ -198,7 +274,12 @@ export async function POST(request: NextRequest) {
         slug,
         kind: kind as EntityKind,
         workspace: workspaceId,
-        source: { type: sourceType as SourceType, sourceId },
+        source: {
+          type: sourceType as SourceType,
+          sourceId,
+          ...(templateDefinitionId ? { sourceTemplateDefinition: templateDefinitionId } : {}),
+          ...(templateVersionId ? { sourceTemplateVersion: templateVersionId } : {}),
+        },
         ...(links ? { links } : {}),
         ...(owner ? { metadata: { owner } } : {}),
       },
