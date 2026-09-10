@@ -134,11 +134,11 @@ function ParameterPageEditor({
       <CardContent className="space-y-4">
         {rows.map((row, rowIndex) => (
           <FieldRowEditor
-            // Keyed by field name (stable and unique — UPDATE_FIELD rejects
-            // duplicate names) rather than `row.id` (regenerated fresh on
-            // every render by `pageRows`), so an unrelated field's edit
-            // elsewhere on the page doesn't remount this row mid-keystroke.
-            key={row.name}
+            // Keyed by position: `row.id` is regenerated on every render by
+            // `pageRows`, and keying by `row.name` remounted the row on every
+            // rename keystroke (dropping focus from the Name input). Each
+            // row's local drafts resync from props when its row changes.
+            key={rowIndex}
             row={row}
             rowIndex={rowIndex}
             rowCount={rows.length}
@@ -167,6 +167,32 @@ function ParameterPageEditor({
     </Card>
   )
 }
+
+/**
+ * Local draft for a text input whose committed value is normalized by
+ * `propertyFromRow` (trimmed, or split/joined for enum options). Without this
+ * the controlled input re-renders with the normalized value and a trailing
+ * space or comma vanishes the instant it is typed. The draft resyncs from the
+ * committed value only when they genuinely diverge (e.g. YamlView REPLACE_ALL),
+ * not when the difference is whitespace the normalizer will strip.
+ */
+function useDraft(committed: string, normalize: (draft: string) => string): [string, (v: string) => void] {
+  const [draft, setDraft] = React.useState(committed)
+  React.useEffect(() => {
+    setDraft((current) => (normalize(current) === committed ? current : committed))
+  }, [committed, normalize])
+  return [draft, setDraft]
+}
+
+const trimNormalize = (v: string) => v.trim()
+const enumNormalize = (v: string) =>
+  v
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(', ')
+
+const UI_FIELD_DEFAULT_SENTINEL = '__default'
 
 function FieldRowEditor({
   row,
@@ -219,6 +245,13 @@ function FieldRowEditor({
     commit({ name: value })
   }
 
+  const [labelDraft, setLabelDraft] = useDraft(row.label, trimNormalize)
+  const [defaultDraft, setDefaultDraft] = useDraft(row.defaultValue, trimNormalize)
+  const [helpDraft, setHelpDraft] = useDraft(row.help, trimNormalize)
+  const [patternDraft, setPatternDraft] = useDraft(row.pattern, trimNormalize)
+  const [enumDraft, setEnumDraft] = useDraft(row.enumOptions, enumNormalize)
+  const [visibleIfDraft, setVisibleIfDraft] = useDraft(row.visibleIf, trimNormalize)
+
   const fid = (suffix: string) => `${row.id}-${suffix}`
 
   return (
@@ -254,32 +287,60 @@ function FieldRowEditor({
       </div>
       <div>
         <Label htmlFor={fid('label')}>Label</Label>
-        <Input id={fid('label')} value={row.label} onChange={(e) => commit({ label: e.target.value })} />
+        <Input
+          id={fid('label')}
+          value={labelDraft}
+          onChange={(e) => {
+            setLabelDraft(e.target.value)
+            commit({ label: e.target.value })
+          }}
+        />
       </div>
       <div>
         <Label htmlFor={fid('default')}>Default</Label>
         <Input
           id={fid('default')}
-          value={row.defaultValue}
-          onChange={(e) => commit({ defaultValue: e.target.value })}
+          value={defaultDraft}
+          onChange={(e) => {
+            setDefaultDraft(e.target.value)
+            commit({ defaultValue: e.target.value })
+          }}
         />
       </div>
       <div className="sm:col-span-2">
         <Label htmlFor={fid('help')}>Help text</Label>
-        <Textarea id={fid('help')} value={row.help} onChange={(e) => commit({ help: e.target.value })} />
+        <Textarea
+          id={fid('help')}
+          value={helpDraft}
+          onChange={(e) => {
+            setHelpDraft(e.target.value)
+            commit({ help: e.target.value })
+          }}
+        />
       </div>
       {row.type === 'string' && (
         <>
           <div>
             <Label htmlFor={fid('pattern')}>Pattern</Label>
-            <Input id={fid('pattern')} value={row.pattern} onChange={(e) => commit({ pattern: e.target.value })} />
+            <Input
+              id={fid('pattern')}
+              value={patternDraft}
+              onChange={(e) => {
+                setPatternDraft(e.target.value)
+                commit({ pattern: e.target.value })
+              }}
+            />
           </div>
           <div>
             <Label htmlFor={fid('enum')}>Enum options (comma-separated)</Label>
             <Input
               id={fid('enum')}
-              value={row.enumOptions}
-              onChange={(e) => commit({ enumOptions: e.target.value })}
+              value={enumDraft}
+              placeholder="dev, staging, prod"
+              onChange={(e) => {
+                setEnumDraft(e.target.value)
+                commit({ enumOptions: e.target.value })
+              }}
             />
           </div>
         </>
@@ -297,23 +358,34 @@ function FieldRowEditor({
         </>
       )}
       <div>
-        <Label htmlFor={fid('visibleIf')}>Visible if (expression)</Label>
+        <Label htmlFor={fid('visibleIf')}>Show only when (optional)</Label>
         <Input
           id={fid('visibleIf')}
-          value={row.visibleIf}
-          placeholder={'${{ parameters.foo }}'}
-          onChange={(e) => commit({ visibleIf: e.target.value })}
+          value={visibleIfDraft}
+          placeholder={'${{ parameters.deployTarget == "kubernetes" }}'}
+          onChange={(e) => {
+            setVisibleIfDraft(e.target.value)
+            commit({ visibleIf: e.target.value })
+          }}
         />
+        <p className="text-xs text-muted-foreground">
+          Hide this field until another parameter has a value. Supports{' '}
+          <code>{'${{ parameters.x }}'}</code> (truthy), <code>{'${{ !parameters.x }}'}</code>, and{' '}
+          <code>{'${{ parameters.x == "value" }}'}</code>. Leave blank to always show.
+        </p>
       </div>
       <div>
         <Label htmlFor={fid('uiField')}>Field widget</Label>
-        <Select value={row.uiField} onValueChange={(v) => commit({ uiField: v })}>
+        <Select
+          value={row.uiField || UI_FIELD_DEFAULT_SENTINEL}
+          onValueChange={(v) => commit({ uiField: v === UI_FIELD_DEFAULT_SENTINEL ? '' : v })}
+        >
           <SelectTrigger id={fid('uiField')}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {UI_FIELD_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value || '__default'} value={opt.value || '__default'}>
+              <SelectItem key={opt.value || UI_FIELD_DEFAULT_SENTINEL} value={opt.value || UI_FIELD_DEFAULT_SENTINEL}>
                 {opt.label}
               </SelectItem>
             ))}

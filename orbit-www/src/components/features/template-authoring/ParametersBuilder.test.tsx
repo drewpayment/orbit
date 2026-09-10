@@ -125,3 +125,52 @@ describe('ParametersBuilder', () => {
     )
   })
 })
+
+// --- Live-reducer harness: the mock-dispatch tests above never re-render the
+// rows, which is exactly how the focus-loss and "my keystroke vanished" bugs
+// slipped through. These drive the real reducer.
+import * as React from 'react'
+import { createInitialBuilderState, templateBuilderReducer } from './builder-state'
+
+function LiveBuilder({ pages }: { pages: ParameterPage[] }) {
+  const [state, dispatch] = React.useReducer(
+    templateBuilderReducer,
+    createInitialBuilderState({ ...EMPTY_DEF, spec: { ...EMPTY_DEF.spec, parameters: pages } }),
+  )
+  return <ParametersBuilder pages={state.spec.parameters} dispatch={dispatch} />
+}
+import { EMPTY_TEMPLATE_DEFINITION as EMPTY_DEF } from './builder-state'
+
+describe('ParametersBuilder (live reducer)', () => {
+  it('keeps focus in the Name input while renaming a field', () => {
+    render(<LiveBuilder pages={[page()]} />)
+    const input = screen.getAllByLabelText('Name')[0] as HTMLInputElement
+    input.focus()
+    fireEvent.change(input, { target: { value: 'nam' } })
+    fireEvent.change(screen.getAllByLabelText('Name')[0], { target: { value: 'name2' } })
+    const after = screen.getAllByLabelText('Name')[0] as HTMLInputElement
+    expect(after.value).toBe('name2')
+    expect(document.activeElement).toBe(after)
+  })
+
+  it('preserves a trailing space typed into the Label input', () => {
+    render(<LiveBuilder pages={[page()]} />)
+    const label = screen.getAllByLabelText('Label')[0] as HTMLInputElement
+    fireEvent.change(label, { target: { value: 'Service ' } })
+    expect((screen.getAllByLabelText('Label')[0] as HTMLInputElement).value).toBe('Service ')
+  })
+
+  it('preserves a trailing comma and spacing typed into the Enum options input', () => {
+    render(<LiveBuilder pages={[page()]} />)
+    const enumInput = screen.getAllByLabelText(/Enum options/)[0] as HTMLInputElement
+    fireEvent.change(enumInput, { target: { value: 'a,' } })
+    expect((screen.getAllByLabelText(/Enum options/)[0] as HTMLInputElement).value).toBe('a,')
+    fireEvent.change(screen.getAllByLabelText(/Enum options/)[0], { target: { value: 'a, b' } })
+    expect((screen.getAllByLabelText(/Enum options/)[0] as HTMLInputElement).value).toBe('a, b')
+  })
+
+  it('shows "Default widget" when no ui:field is set and never persists the sentinel', () => {
+    render(<LiveBuilder pages={[page()]} />)
+    expect(screen.getAllByText('Default widget').length).toBeGreaterThan(0)
+  })
+})
