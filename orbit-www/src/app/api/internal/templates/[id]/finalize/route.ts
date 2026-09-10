@@ -67,8 +67,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
         id,
         overrideAccess: true,
       })
-    } catch {
-      return NextResponse.json({ error: 'template not found' }, { status: 404 })
+    } catch (err) {
+      // Mirrors patterns/[id]/route.ts: only translate Payload's "not found"
+      // into a 404; any other failure (e.g. a DB outage) stays a 500 below.
+      if (err instanceof Error && err.message.toLowerCase().includes('not found')) {
+        return NextResponse.json({ error: 'template not found' }, { status: 404 })
+      }
+      throw err
     }
     if (!template) {
       return NextResponse.json({ error: 'template not found' }, { status: 404 })
