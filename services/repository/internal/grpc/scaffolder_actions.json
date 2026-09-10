@@ -1,5 +1,54 @@
 [
   {
+    "name": "agent:run",
+    "family": "agent",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "agent:run input",
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Initial prompt for the Infrastructure Agent. May reference prior steps' outputs, e.g. `${{ steps.create.output.repoUrl }}`."
+        },
+        "title": {
+          "type": "string",
+          "description": "Short label for the agent run. Defaults to the first 80 characters of `prompt`."
+        }
+      },
+      "required": [
+        "prompt"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "agent:run output",
+      "type": "object",
+      "properties": {
+        "agentRunId": {
+          "type": "string",
+          "description": "The started Infrastructure Agent run's id."
+        },
+        "status": {
+          "type": "string",
+          "description": "Terminal status of the agent run, e.g. \"completed\"."
+        },
+        "url": {
+          "type": "string",
+          "description": "In-app link to the agent run's chat thread, when the run's workspace slug is known."
+        }
+      },
+      "required": [
+        "agentRunId",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "supportsPlan": true
+  },
+  {
     "name": "api:schema:register",
     "family": "api",
     "inputSchema": {
@@ -378,6 +427,44 @@
         "files"
       ],
       "additionalProperties": false
+    },
+    "supportsPlan": true
+  },
+  {
+    "name": "fetch:template",
+    "family": "fetch",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "fetch:template input",
+      "type": "object",
+      "properties": {
+        "templateDefinitionId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Payload id of the template-definitions document to compose in."
+        },
+        "version": {
+          "type": "string",
+          "description": "Payload id of a specific template-definition-versions document to pin to. Omitted means the definition's current published version, resolved at run time."
+        },
+        "parameters": {
+          "type": "object",
+          "description": "Parameters passed into the nested template run. Values may reference this template's own parameters or prior steps' outputs.",
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "templateDefinitionId"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "fetch:template output",
+      "type": "object",
+      "description": "Shape depends entirely on the nested template's own `spec.output` block; this action's output is that resolved object verbatim.",
+      "properties": {},
+      "additionalProperties": true
     },
     "supportsPlan": true
   },

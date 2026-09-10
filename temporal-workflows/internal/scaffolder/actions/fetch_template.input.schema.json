@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "fetch:template input",
+  "type": "object",
+  "properties": {
+    "templateDefinitionId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Payload id of the template-definitions document to compose in."
+    },
+    "version": {
+      "type": "string",
+      "description": "Payload id of a specific template-definition-versions document to pin to. Omitted means the definition's current published version, resolved at run time."
+    },
+    "parameters": {
+      "type": "object",
+      "description": "Parameters passed into the nested template run. Values may reference this template's own parameters or prior steps' outputs.",
+      "additionalProperties": true
+    }
+  },
+  "required": ["templateDefinitionId"],
+  "additionalProperties": false
+}

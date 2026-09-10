@@ -39,6 +39,10 @@ type ScaffolderWorkflowInput struct {
 	UserEmail     string `json:"userEmail,omitempty"`
 	UserName      string `json:"userName,omitempty"`
 	DryRun        bool   `json:"dryRun"`
+	// TemplateStack mirrors workflows.ScaffolderWorkflowInput.TemplateStack
+	// (Phase 4 Task D, `fetch:template` composition). A top-level run never
+	// sets it.
+	TemplateStack []string `json:"templateStack,omitempty"`
 }
 
 // ScaffolderStepProgress is one step's state in a run.

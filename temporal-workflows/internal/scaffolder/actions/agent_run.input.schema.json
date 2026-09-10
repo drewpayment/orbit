@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "agent:run input",
+  "type": "object",
+  "properties": {
+    "prompt": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Initial prompt for the Infrastructure Agent. May reference prior steps' outputs, e.g. `${{ steps.create.output.repoUrl }}`."
+    },
+    "title": {
+      "type": "string",
+      "description": "Short label for the agent run. Defaults to the first 80 characters of `prompt`."
+    }
+  },
+  "required": ["prompt"],
+  "additionalProperties": false
+}
