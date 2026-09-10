@@ -98,7 +98,7 @@ export function SkeletonEditorShell({ mode, workspaceId, skeleton, actions }: Sk
   // existing skeleton's slug must not silently drift when its name changes.
   function handleNameChange(value: string) {
     setName(value)
-    if (!slugTouched && mode === 'create') setSlug(slugify(value))
+    if (!slugTouched) setSlug(slugify(value))
   }
 
   const precheck = React.useMemo(() => validateSkeletonBundle(files), [files])
@@ -140,9 +140,18 @@ export function SkeletonEditorShell({ mode, workspaceId, skeleton, actions }: Sk
       setRenamingPath(null)
       return
     }
+    // buildFileTree keys nodes by path — a collision with another file would
+    // silently overwrite/hide one of them in the tree, so block it here the
+    // same way addFile does, leaving the rename form open (un-applied) so
+    // the author can pick a different path rather than losing their edit.
+    if (to !== from && files.some((f) => f.path === to)) {
+      setServerErrors([`A file already exists at "${to}".`])
+      return
+    }
     setFiles((prev) => prev.map((f) => (f.path === from ? { ...f, path: to } : f)))
     if (selectedPath === from) setSelectedPath(to)
     setRenamingPath(null)
+    setServerErrors([])
   }
 
   async function handleSave() {

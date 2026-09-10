@@ -150,6 +150,32 @@ describe('SkeletonEditorShell', () => {
     expect(screen.queryAllByText('cmd').length).toBeGreaterThan(0)
   })
 
+  it('blocks renaming a file to a path that already exists on another file', () => {
+    const skeleton = existingSkeleton()
+    render(
+      <SkeletonEditorShell
+        mode="edit"
+        workspaceId="ws-1"
+        skeleton={skeleton}
+        actions={{ createSkeleton: vi.fn(), saveSkeleton: vi.fn() }}
+      />,
+    )
+    fireEvent.click(screen.getByText('main.go'))
+    fireEvent.click(screen.getByRole('button', { name: /rename main\.go/i }))
+    const renameInput = screen.getByDisplayValue('main.go')
+    fireEvent.change(renameInput, { target: { value: 'README.md' } })
+    fireEvent.submit(renameInput.closest('form') as HTMLFormElement)
+
+    expect(screen.getByText(/already exists at "README\.md"/i)).toBeInTheDocument()
+    // The OTHER file (not being renamed) is untouched and still listed as
+    // its own entry — the collision did not silently merge the two.
+    expect(screen.getByText('README.md')).toBeInTheDocument()
+    // Still renaming (the inline rename form stays open, un-applied) rather
+    // than silently reverting to "main.go" or applying the collision.
+    expect(screen.getByDisplayValue('README.md')).toBeInTheDocument()
+    expect(screen.queryByText('main.go')).not.toBeInTheDocument()
+  })
+
   it('deletes a file from the tree', () => {
     const skeleton = existingSkeleton()
     render(

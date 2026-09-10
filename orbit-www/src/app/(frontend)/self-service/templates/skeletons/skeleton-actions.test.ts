@@ -109,6 +109,7 @@ vi.mock('@/lib/auth/session', () => ({
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
 const WORKSPACE_ID = 'ws-1'
+const OTHER_WORKSPACE_ID = 'ws-2'
 
 const SKELETON_ROW = {
   id: 'skel-1',
@@ -121,6 +122,17 @@ const SKELETON_ROW = {
   totalSize: 13,
   createdBy: 'user-1',
   updatedAt: '2026-01-01T00:00:00.000Z',
+}
+
+// A skeleton owned by a DIFFERENT workspace than the caller's own — the
+// fake's `workspace-members` stub only ever grants membership in
+// WORKSPACE_ID, so any check against OTHER_WORKSPACE_ID naturally comes
+// back empty, exactly like a real cross-tenant caller.
+const OTHER_WORKSPACE_SKELETON_ROW = {
+  ...SKELETON_ROW,
+  id: 'skel-2',
+  workspace: OTHER_WORKSPACE_ID,
+  slug: 'other-workspace-service',
 }
 
 describe('skeletons/skeleton-actions', () => {
@@ -289,6 +301,35 @@ describe('skeletons/skeleton-actions', () => {
     const result = await deleteSkeleton('skel-1')
     expect(result.ok).toBe(true)
     expect(fake.delete).toHaveBeenCalledTimes(1)
+  })
+
+  it('saveSkeleton rejects an owner/admin of a DIFFERENT workspace than the doc — cross-tenant guard', async () => {
+    // Caller is owner/admin, but only in WORKSPACE_ID — the fake's
+    // workspace-members stub grants that role solely in that workspace, so
+    // a membership check against OTHER_WORKSPACE_ID (the doc's real
+    // workspace) comes back empty, exactly as it would for a real
+    // cross-tenant caller who happens to manage some OTHER workspace.
+    const fake = makeFakePayload({ membershipRole: 'owner' })
+    fake.col('template-skeletons').set('skel-2', { ...OTHER_WORKSPACE_SKELETON_ROW })
+    mockPayload = fake.payload
+    const { saveSkeleton } = await import('./skeleton-actions')
+    const result = await saveSkeleton('skel-2', {
+      name: 'Hijacked',
+      slug: 'other-workspace-service',
+      files: [{ path: 'main.go', content: 'package main // tampered' }],
+    })
+    expect(result.ok).toBe(false)
+    expect(fake.update).not.toHaveBeenCalled()
+  })
+
+  it('deleteSkeleton rejects an owner/admin of a DIFFERENT workspace than the doc — cross-tenant guard', async () => {
+    const fake = makeFakePayload({ membershipRole: 'admin' })
+    fake.col('template-skeletons').set('skel-2', { ...OTHER_WORKSPACE_SKELETON_ROW })
+    mockPayload = fake.payload
+    const { deleteSkeleton } = await import('./skeleton-actions')
+    const result = await deleteSkeleton('skel-2')
+    expect(result.ok).toBe(false)
+    expect(fake.delete).not.toHaveBeenCalled()
   })
 
   it('every mutation throws "Not authenticated" with no session', async () => {
