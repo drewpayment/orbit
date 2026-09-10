@@ -168,3 +168,70 @@ describe('StepsBuilder', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })
+
+describe('StepsBuilder (typed inputs and step ids)', () => {
+  const httpLike = descriptor({
+    id: 'http:request',
+    family: 'utility',
+    name: 'HTTP request',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string' },
+        timeoutSeconds: { type: 'integer', title: 'Timeout seconds' },
+      },
+    },
+  })
+
+  it('stores a numeric literal typed into an integer input as a number, not a string', () => {
+    const dispatch = vi.fn()
+    const def = definition([{ id: 's1', name: 'S', action: 'http:request', input: { url: 'https://x' } }])
+    render(<StepsBuilder definition={def} dispatch={dispatch} registry={[...registry, httpLike]} />)
+    fireEvent.click(screen.getByRole('button', { name: /configure inputs/i }))
+    fireEvent.change(document.getElementById('timeoutSeconds') as HTMLInputElement, { target: { value: '10' } })
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'UPDATE_STEP',
+        id: 's1',
+        patch: { input: expect.objectContaining({ timeoutSeconds: 10 }) },
+      }),
+    )
+  })
+
+  it('keeps an expression typed into an integer input as a string', () => {
+    const dispatch = vi.fn()
+    const def = definition([{ id: 's1', name: 'S', action: 'http:request', input: {} }])
+    render(<StepsBuilder definition={def} dispatch={dispatch} registry={[...registry, httpLike]} />)
+    fireEvent.click(screen.getByRole('button', { name: /configure inputs/i }))
+    fireEvent.change(document.getElementById('timeoutSeconds') as HTMLInputElement, {
+      target: { value: '${{ parameters.t }}' },
+    })
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        patch: { input: expect.objectContaining({ timeoutSeconds: '${{ parameters.t }}' }) },
+      }),
+    )
+  })
+
+  it('lets the author rename a step id', () => {
+    const dispatch = vi.fn()
+    const def = definition([{ id: 'log', name: 'Log', action: 'fs:render', input: {} }])
+    render(<StepsBuilder definition={def} dispatch={dispatch} registry={registry} />)
+    fireEvent.change(screen.getByLabelText('Step id'), { target: { value: 'announce' } })
+    expect(dispatch).toHaveBeenCalledWith({ type: 'UPDATE_STEP', id: 'log', patch: { id: 'announce' } })
+  })
+
+  it('rejects an invalid or colliding step id inline without dispatching', () => {
+    const dispatch = vi.fn()
+    const def = definition([
+      { id: 'log', name: 'Log', action: 'fs:render', input: {} },
+      { id: 'ping', name: 'Ping', action: 'fs:render', input: {} },
+    ])
+    render(<StepsBuilder definition={def} dispatch={dispatch} registry={registry} />)
+    const idInput = screen.getAllByLabelText('Step id')[0]
+    fireEvent.change(idInput, { target: { value: 'ping' } })
+    fireEvent.change(idInput, { target: { value: 'Bad Id' } })
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(screen.getAllByRole('alert').length).toBeGreaterThan(0)
+  })
+})

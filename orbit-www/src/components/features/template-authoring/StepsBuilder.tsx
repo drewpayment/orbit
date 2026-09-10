@@ -29,7 +29,6 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
-import { Badge } from '@/components/ui/badge'
 import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react'
 
 export interface StepsBuilderProps {
@@ -38,13 +37,30 @@ export interface StepsBuilderProps {
   registry: ActionDescriptor[]
 }
 
+/**
+ * A number/integer input is edited as free text so it can hold an expression,
+ * but a plain numeric literal must be stored as a number — the action's
+ * InputSchema (and the Go engine) reject `"10"` where `10` is expected.
+ * Expressions and non-numeric text pass through untouched for the validator
+ * to report; an empty field clears the value.
+ */
+export function coerceExpressionInput(raw: string, schemaType: unknown): unknown {
+  if (schemaType !== 'number' && schemaType !== 'integer') return raw
+  const trimmed = raw.trim()
+  if (trimmed === '') return undefined
+  const numeric = schemaType === 'integer' ? /^-?\d+$/ : /^-?\d+(\.\d+)?$/
+  return numeric.test(trimmed) ? Number(trimmed) : raw
+}
+
+const STEP_ID_RE = /^[a-z][a-z0-9-]*$/
+
 function buildExpressionAwareRegistry(candidates: ExpressionCandidate[]): FieldRegistry {
   const base = createFieldRegistry()
-  const ExpressionField: FieldComponent = ({ id, value, onChange, disabled, ...rest }) => (
+  const ExpressionField: FieldComponent = ({ id, value, onChange, disabled, schema, ...rest }) => (
     <ExpressionInput
       id={id}
       value={typeof value === 'string' ? value : value === null || value === undefined ? '' : String(value)}
-      onChange={onChange}
+      onChange={(raw) => onChange(coerceExpressionInput(raw, schema.type))}
       candidates={candidates}
       disabled={disabled}
       aria-invalid={rest['aria-invalid']}
@@ -85,6 +101,7 @@ export function StepsBuilder({ definition, dispatch, registry }: StepsBuilderPro
           descriptor={registryById.get(step.action)}
           candidates={getExpressionCandidates(definition, index, registry)}
           dependents={findStepReferences(definition, step.id)}
+          siblingIds={steps.filter((s) => s.id !== step.id).map((s) => s.id)}
           dispatch={dispatch}
         />
       ))}
@@ -146,6 +163,7 @@ function StepRow({
   descriptor,
   candidates,
   dependents,
+  siblingIds,
   dispatch,
 }: {
   step: Step
@@ -154,6 +172,8 @@ function StepRow({
   descriptor: ActionDescriptor | undefined
   candidates: ExpressionCandidate[]
   dependents: StepReference[]
+  /** Ids of the other steps (excludes this one), for inline collision checks. */
+  siblingIds: string[]
   dispatch: React.Dispatch<BuilderAction>
 }) {
   const [expanded, setExpanded] = React.useState(false)
@@ -164,8 +184,32 @@ function StepRow({
     [descriptor],
   )
 
+  // Local draft for the id, mirroring ParametersBuilder's Name field: an
+  // invalid or colliding id must stay visible with an inline error rather
+  // than being silently dropped by the reducer's no-op guard.
+  const [idDraft, setIdDraft] = React.useState(step.id)
+  const [idError, setIdError] = React.useState<string | null>(null)
+  React.useEffect(() => {
+    setIdDraft(step.id)
+    setIdError(null)
+  }, [step.id])
+
   function patch(fields: Partial<Step>) {
     dispatch({ type: 'UPDATE_STEP', id: step.id, patch: fields })
+  }
+
+  function handleIdChange(value: string) {
+    setIdDraft(value)
+    if (!STEP_ID_RE.test(value)) {
+      setIdError('Step id must be lowercase kebab-case, e.g. "create-repo".')
+      return
+    }
+    if (value !== step.id && siblingIds.includes(value)) {
+      setIdError(`A step with id "${value}" already exists.`)
+      return
+    }
+    setIdError(null)
+    if (value !== step.id) patch({ id: value })
   }
 
   function removeStep() {
@@ -183,9 +227,21 @@ function StepRow({
   return (
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-center gap-2">
-        <Badge variant="outline" className="font-mono text-xs">
-          {step.id}
-        </Badge>
+        <div>
+          <Input
+            aria-label="Step id"
+            value={idDraft}
+            onChange={(e) => handleIdChange(e.target.value)}
+            aria-invalid={!!idError}
+            className="max-w-[12rem] font-mono text-xs"
+            placeholder="step-id"
+          />
+          {idError && (
+            <p role="alert" className="text-xs text-destructive">
+              {idError}
+            </p>
+          )}
+        </div>
         <Input
           aria-label="Step name"
           value={step.name}

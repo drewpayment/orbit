@@ -330,3 +330,28 @@ describe('serialize -> REPLACE_ALL -> serialize idempotence', () => {
     expect(result.error).toBeTruthy()
   })
 })
+
+describe('UPDATE_STEP id rename', () => {
+  it('rewrites steps.<old>.output references in later steps and output links', () => {
+    const def = fixtureDefinition()
+    def.spec.steps = [
+      { id: 'ping', name: 'Ping', action: 'http:request', input: {} },
+      { id: 'done', name: 'Done', action: 'debug:log', input: { message: 'got ${{ steps.ping.output.status }}' }, if: '${{ steps.ping.output.status }}' },
+    ]
+    def.spec.output = { links: [{ title: 'x', url: 'https://e/${{ steps.ping.output.status }}' }] }
+    const next = templateBuilderReducer(def, { type: 'UPDATE_STEP', id: 'ping', patch: { id: 'probe' } })
+    expect(next.spec.steps[0].id).toBe('probe')
+    expect(next.spec.steps[1].input.message).toBe('got ${{ steps.probe.output.status }}')
+    expect(next.spec.steps[1].if).toBe('${{ steps.probe.output.status }}')
+    expect(next.spec.output?.links?.[0].url).toBe('https://e/${{ steps.probe.output.status }}')
+  })
+
+  it('is a no-op when renaming to an id another step already uses', () => {
+    const def = fixtureDefinition()
+    def.spec.steps = [
+      { id: 'a', name: 'A', action: 'debug:log', input: {} },
+      { id: 'b', name: 'B', action: 'debug:log', input: {} },
+    ]
+    expect(templateBuilderReducer(def, { type: 'UPDATE_STEP', id: 'a', patch: { id: 'b' } })).toBe(def)
+  })
+})

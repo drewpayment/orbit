@@ -122,6 +122,20 @@ export function createInitialBuilderState(
   }
 }
 
+/** Replace `steps.<oldId>.` with `steps.<newId>.` inside every string of a JSON-ish value. */
+function rewriteStepRefs(value: unknown, oldId: string, newId: string): unknown {
+  if (typeof value === 'string') {
+    return value.split(`steps.${oldId}.`).join(`steps.${newId}.`)
+  }
+  if (Array.isArray(value)) return value.map((v) => rewriteStepRefs(v, oldId, newId))
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value)) out[k] = rewriteStepRefs(v, oldId, newId)
+    return out
+  }
+  return value
+}
+
 export function templateBuilderReducer(
   state: TemplateDefinition,
   action: BuilderAction,
@@ -228,6 +242,24 @@ export function templateBuilderReducer(
     }
 
     case 'UPDATE_STEP': {
+      const newId = action.patch.id
+      if (newId !== undefined && newId !== action.id) {
+        // Renaming: refuse a collision (same no-op contract as UPDATE_FIELD)
+        // and rewrite every `steps.<old>.` reference elsewhere so the author
+        // doesn't have to chase dangling expressions by hand.
+        if (state.spec.steps.some((s) => s.id === newId)) return state
+        const rewrite = (value: unknown): unknown => rewriteStepRefs(value, action.id, newId)
+        const steps = state.spec.steps.map((step) => {
+          if (step.id === action.id) return { ...step, ...action.patch }
+          return {
+            ...step,
+            input: rewrite(step.input) as Step['input'],
+            ...(step.if !== undefined ? { if: rewrite(step.if) as string } : {}),
+          }
+        })
+        const output = state.spec.output ? (rewrite(state.spec.output) as Output) : state.spec.output
+        return { ...state, spec: { ...state.spec, steps, output } }
+      }
       const steps = state.spec.steps.map((step) =>
         step.id === action.id ? { ...step, ...action.patch } : step,
       )
