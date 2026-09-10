@@ -252,7 +252,10 @@ function FieldRowEditor({
   const [enumDraft, setEnumDraft] = useDraft(row.enumOptions, enumNormalize)
   const [visibleIfDraft, setVisibleIfDraft] = useDraft(row.visibleIf, trimNormalize)
 
-  const fid = (suffix: string) => `${row.id}-${suffix}`
+  // Hydration-safe element ids: `row.id` comes from a Date/Math.random
+  // generator, so server and client rendered different htmlFor/id pairs.
+  const uid = React.useId()
+  const fid = (suffix: string) => `${uid}-${suffix}`
 
   return (
     <div className="grid grid-cols-1 gap-2 rounded-md border p-3 sm:grid-cols-2">
@@ -394,11 +397,11 @@ function FieldRowEditor({
       </div>
       <div className="flex items-center gap-2">
         <Checkbox
-          id={`${row.id}-required`}
+          id={fid('required')}
           checked={row.required}
           onCheckedChange={(checked) => commit({ required: checked === true })}
         />
-        <Label htmlFor={`${row.id}-required`}>Required</Label>
+        <Label htmlFor={fid('required')}>Required</Label>
       </div>
       <div className="flex items-center justify-end gap-1 sm:col-span-2">
         <Button
