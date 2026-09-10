@@ -69,18 +69,19 @@ class FakePayload {
   }
   async find({ collection, where, limit }: { collection: string; where?: unknown; limit?: number }) {
     const all = this.collections[collection] ?? []
-    const w = where as { and?: Array<Record<string, unknown>> } | undefined
-    let docs = all
-    if (w?.and) {
-      docs = all.filter((d) =>
-        w.and!.every((clause) => {
-          const [field, cond] = Object.entries(clause)[0] as [string, Record<string, unknown>]
-          if ('equals' in cond) return getPath(d, field) === cond.equals
-          if ('contains' in cond) return String(getPath(d, field) ?? '').includes(String(cond.contains))
-          return true
-        }),
-      )
+    const matchesClause = (d: Doc, clause: Record<string, unknown>): boolean => {
+      if ('and' in clause) {
+        return (clause.and as Array<Record<string, unknown>>).every((c) => matchesClause(d, c))
+      }
+      if ('or' in clause) {
+        return (clause.or as Array<Record<string, unknown>>).some((c) => matchesClause(d, c))
+      }
+      const [field, cond] = Object.entries(clause)[0] as [string, Record<string, unknown>]
+      if ('equals' in cond) return getPath(d, field) === cond.equals
+      if ('contains' in cond) return String(getPath(d, field) ?? '').includes(String(cond.contains))
+      return true
     }
+    const docs = where ? all.filter((d) => matchesClause(d, where as Record<string, unknown>)) : all
     return { docs: typeof limit === 'number' ? docs.slice(0, limit) : docs }
   }
   async create({ collection, data }: { collection: string; data: Record<string, unknown> }) {
@@ -318,16 +319,99 @@ describe('POST /api/internal/api-schemas', () => {
     expect(fp.collections['api-schemas']).toHaveLength(2)
   })
 
-  it('de-duplicates the slug within the workspace', async () => {
+  it('de-duplicates the slug within the workspace for a substring collision (not an exact duplicate)', async () => {
     const fp = new FakePayload()
     seedWorkspace(fp)
-    fp.collections['api-schemas'].push({ id: 'existing', workspace: 'ws-1', slug: 'orders-api' } as Doc)
+    // "orders-api-legacy" contains the candidate base slug "orders-api" but is
+    // neither the same slug nor the same name, so this is NOT the
+    // already-registered case below — it's a plain slug-uniqueness collision,
+    // which still gets a numeric suffix.
+    fp.collections['api-schemas'].push({
+      id: 'existing',
+      workspace: 'ws-1',
+      name: 'Orders API Legacy',
+      slug: 'orders-api-legacy',
+      source: { type: 'manual', sourceId: 'n/a' },
+    } as Doc)
     vi.mocked(getPayload).mockResolvedValue(p(fp))
 
     const res = await POST(req('test-api-key', validBody()))
     expect(res.status).toBe(201)
+  })
+
+  it('returns 409 ALREADY_EXISTS when another row already has the same canonical slug from a different run', async () => {
+    const fp = new FakePayload()
+    seedWorkspace(fp)
+    fp.collections['api-schemas'].push({
+      id: 'existing',
+      workspace: 'ws-1',
+      name: 'Some Other Name',
+      slug: 'orders-api',
+      source: { type: 'scaffolder-run', sourceId: 'run-0' },
+    } as Doc)
+    vi.mocked(getPayload).mockResolvedValue(p(fp))
+
+    const res = await POST(req('test-api-key', validBody()))
+    expect(res.status).toBe(409)
     const json = await res.json()
-    const schema = fp.collections['api-schemas'].find((d) => d.id === json.schemaId)
-    expect(schema?.slug).toBe('orders-api-2')
+    expect(json.code).toBe('ALREADY_EXISTS')
+    expect(json.error).toContain('orders-api')
+    expect(json.slug).toBe('orders-api')
+    expect(fp.collections['api-schemas']).toHaveLength(1)
+  })
+
+  it('returns 409 ALREADY_EXISTS when another row already has the same name from a different run', async () => {
+    const fp = new FakePayload()
+    seedWorkspace(fp)
+    fp.collections['api-schemas'].push({
+      id: 'existing',
+      workspace: 'ws-1',
+      name: 'Orders API',
+      slug: 'orders-api-renamed',
+      source: { type: 'scaffolder-run', sourceId: 'run-0' },
+    } as Doc)
+    vi.mocked(getPayload).mockResolvedValue(p(fp))
+
+    const res = await POST(req('test-api-key', validBody()))
+    expect(res.status).toBe(409)
+    const json = await res.json()
+    expect(json.code).toBe('ALREADY_EXISTS')
+    expect(fp.collections['api-schemas']).toHaveLength(1)
+  })
+
+  it('does NOT 409 when the matching row belongs to the same run but a different name (same-run idempotency stays scoped by name)', async () => {
+    const fp = new FakePayload()
+    seedWorkspace(fp)
+    fp.collections['api-schemas'].push({
+      id: 'existing',
+      workspace: 'ws-1',
+      name: 'Some Other Name',
+      slug: 'orders-api',
+      source: { type: 'scaffolder-run', sourceId: 'run-1' },
+    } as Doc)
+    vi.mocked(getPayload).mockResolvedValue(p(fp))
+
+    // validBody() uses sourceId 'run-1' — same run as the seeded row, but a
+    // different name/slug, so this must NOT be treated as an already-existing
+    // duplicate; it should get a de-duplicated slug and succeed.
+    const res = await POST(req('test-api-key', validBody()))
+    expect(res.status).toBe(201)
+  })
+
+  it('is idempotent even when a same-run row collides on slug (retry path takes priority over the conflict check)', async () => {
+    const fp = new FakePayload()
+    seedWorkspace(fp)
+    vi.mocked(getPayload).mockResolvedValue(p(fp))
+
+    const first = await POST(req('test-api-key', validBody()))
+    const firstJson = await first.json()
+    expect(first.status).toBe(201)
+
+    // Retried by Temporal: identical workspace/source/name — must still
+    // return the existing row, not 409.
+    const second = await POST(req('test-api-key', validBody()))
+    expect(second.status).toBe(200)
+    const secondJson = await second.json()
+    expect(secondJson.schemaId).toBe(firstJson.schemaId)
   })
 })

@@ -117,6 +117,46 @@ func TestPayloadApiSchemaClient_Maps4xxToBadRequestSentinel(t *testing.T) {
 	}
 }
 
+func TestPayloadApiSchemaClient_Maps409ToAlreadyExistsSentinel(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"error":"API schema \"demo-api\" already exists in this workspace","code":"ALREADY_EXISTS","slug":"demo-api"}`))
+	}))
+	defer srv.Close()
+
+	client := NewPayloadApiSchemaClient(srv.URL, "k", nil)
+	_, err := client.RegisterSchema(context.Background(), ApiSchemaRegisterInput{
+		WorkspaceID: "ws-1", UserID: "user-1", Name: "demo-api", SchemaType: "openapi", Content: "c",
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrApiSchemaAlreadyExists)
+	assert.Contains(t, err.Error(), `API schema "demo-api" already exists in this workspace`)
+	// A 409 is a definition problem (a duplicate), not a generic bad
+	// request — keep the two sentinels distinguishable so callers that only
+	// check ErrApiSchemasBadRequest don't accidentally swallow this case.
+	assert.False(t, errors.Is(err, ErrApiSchemasBadRequest))
+}
+
+func TestPayloadApiSchemaClient_Maps409WithoutSlugFieldStillSurfacesSentinel(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`not json`))
+	}))
+	defer srv.Close()
+
+	client := NewPayloadApiSchemaClient(srv.URL, "k", nil)
+	_, err := client.RegisterSchema(context.Background(), ApiSchemaRegisterInput{
+		WorkspaceID: "ws-1", UserID: "user-1", Name: "demo-api", SchemaType: "openapi", Content: "c",
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrApiSchemaAlreadyExists)
+}
+
 func TestPayloadApiSchemaClient_RejectsMissingFieldsBeforeRequest(t *testing.T) {
 	t.Parallel()
 

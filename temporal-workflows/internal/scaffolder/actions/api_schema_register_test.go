@@ -139,6 +139,22 @@ func TestApiSchemaRegister_ClientBadRequest_WrapsAsErrInvalidInput(t *testing.T)
 	assert.True(t, errors.Is(err, scaffolder.ErrInvalidInput))
 }
 
+func TestApiSchemaRegister_ClientAlreadyExists_WrapsAsErrInvalidInputWithSlugMessage(t *testing.T) {
+	// A 409 (another run already registered this slug/name) is a
+	// non-retryable definition problem: Execute must wrap it as
+	// scaffolder.ErrInvalidInput, and the resulting message must name the
+	// conflicting slug so the failure is actionable in the run log.
+	client := &fakeApiSchemaClient{err: fmt.Errorf(
+		"register api schema: API schema %q already exists in this workspace: %w",
+		"demo-api", services.ErrApiSchemaAlreadyExists)}
+	a := NewApiSchemaRegister(client)
+	_, err := a.Execute(context.Background(), runCtxWorkspace("ws-1"), json.RawMessage(
+		`{"name":"demo-api","schemaType":"openapi","content":"c"}`))
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, scaffolder.ErrInvalidInput))
+	assert.ErrorContains(t, err, `API schema "demo-api" already exists in this workspace`)
+}
+
 func TestApiSchemaRegister_ClientTransientError_DoesNotWrapAsErrInvalidInput(t *testing.T) {
 	// A 500 (or network error) IS worth retrying — it must not be classified
 	// as ErrInvalidInput.

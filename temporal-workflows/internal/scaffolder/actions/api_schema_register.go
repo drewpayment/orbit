@@ -124,6 +124,14 @@ func (a *ApiSchemaRegister) Execute(ctx context.Context, rc scaffolder.ActionRun
 		// transient one: wrap it as ErrInvalidInput so the dispatch
 		// activity raises it non-retryable instead of burning the retry
 		// budget on every attempt.
+		// A 409 (a DIFFERENT run already registered this slug/name in the
+		// workspace) is also a non-retryable definition problem — the run
+		// must fail loudly instead of silently duplicating or reusing the
+		// existing schema. Checked before ErrApiSchemasBadRequest since it
+		// is the more specific sentinel.
+		if errors.Is(err, services.ErrApiSchemaAlreadyExists) {
+			return nil, fmt.Errorf("api:schema:register: %w: %v", scaffolder.ErrInvalidInput, err)
+		}
 		if errors.Is(err, services.ErrApiSchemasBadRequest) {
 			return nil, fmt.Errorf("api:schema:register: %w: %v", scaffolder.ErrInvalidInput, err)
 		}
