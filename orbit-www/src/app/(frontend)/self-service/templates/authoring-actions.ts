@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
 import * as yaml from 'yaml'
+import Ajv from 'ajv'
 import type { Where } from 'payload'
 import { getCurrentUser, getPayloadUserFromSession } from '@/lib/auth/session'
 import { isPlatformAdmin } from '@/lib/access/workspace-access'
@@ -312,8 +313,30 @@ export async function validateTemplateDefinition(definitionJson: unknown): Promi
     }
   }
 
-  const registry = await listActionRegistry()
+  let registry: ActionDescriptor[]
+  try {
+    registry = await listActionRegistry()
+  } catch (err) {
+    if (err instanceof RegistryUnavailableError) {
+      // MINOR: a transient gRPC/worker outage should surface as a
+      // validation finding the authoring UI can render inline (design §3.2
+      // "validate" panel), not an unhandled server-action rejection that
+      // crashes the page.
+      return { ok: false, errors: [{ path: '', message: err.message }] }
+    }
+    throw err
+  }
   return validateDefinition(parsed.data, registry)
+}
+
+/** Thrown by {@link listActionRegistry} when the Go worker's ListActions RPC fails — distinguishes "registry down" from a genuine validation failure. */
+export class RegistryUnavailableError extends Error {
+  constructor(cause: unknown) {
+    super(
+      `The action registry is temporarily unavailable (${cause instanceof Error ? cause.message : String(cause)}). Try validating again shortly.`,
+    )
+    this.name = 'RegistryUnavailableError'
+  }
 }
 
 let registryCache: { at: number; entries: ActionDescriptor[] } | null = null
@@ -324,13 +347,21 @@ const REGISTRY_CACHE_MS = 60_000
  * TS validator and Phase 2's step builder. Cached in-process for 60s — this
  * is global, workspace-independent data (every workspace sees the same
  * registry), so a shared cache is safe and never needs workspace scoping.
+ * Throws {@link RegistryUnavailableError} (never the raw gRPC error) when the
+ * worker's ListActions RPC fails.
  */
 export async function listActionRegistry(): Promise<ActionDescriptor[]> {
   if (registryCache && Date.now() - registryCache.at < REGISTRY_CACHE_MS) {
     return registryCache.entries
   }
 
-  const response = await listActionsRpc()
+  let response: Awaited<ReturnType<typeof listActionsRpc>>
+  try {
+    response = await listActionsRpc()
+  } catch (err) {
+    throw new RegistryUnavailableError(err)
+  }
+
   const entries: ActionDescriptor[] = response.actions.map((a) => ({
     id: a.name,
     family: a.family,
@@ -408,6 +439,8 @@ function collectSecretParamKeys(definitionJson: unknown): Set<string> {
   return secretKeys
 }
 
+const SECRET_PLACEHOLDER = '••••••••'
+
 /** Redact `ui:secret`-flagged top-level parameter keys from an inputs object for display/return to a caller. */
 function redactSecrets(
   inputs: Record<string, unknown> | null | undefined,
@@ -415,9 +448,35 @@ function redactSecrets(
 ): Record<string, unknown> {
   const out = { ...(inputs ?? {}) }
   for (const key of secretKeys) {
-    if (key in out) out[key] = '••••••••'
+    if (key in out) out[key] = SECRET_PLACEHOLDER
   }
   return out
+}
+
+/**
+ * MINOR: a secret input value can echo verbatim into a step's declared
+ * `output` (e.g. an action that returns what it was given) or into the dry
+ * run `plan`. Deep-walks arrays/objects (deterministic depth cap — this data
+ * comes from the Go worker, never from a client) replacing any leaf STRING
+ * value that exactly equals one of the known secret values. Exact-match
+ * only, by design: a secret value embedded as a substring of a longer
+ * string (e.g. "used token abc123 to fetch...") is not caught — full
+ * substring scanning has enough false-positive risk (a leaked value being
+ * some other legitimate string) to be a separate follow-up, not folded into
+ * this pass silently.
+ */
+function redactSecretValuesDeep(value: unknown, secretValues: Set<string>, depth = 0): unknown {
+  if (depth > 12) return value
+  if (typeof value === 'string') return secretValues.has(value) ? SECRET_PLACEHOLDER : value
+  if (Array.isArray(value)) return value.map((v) => redactSecretValuesDeep(v, secretValues, depth + 1))
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = redactSecretValuesDeep(v, secretValues, depth + 1)
+    }
+    return out
+  }
+  return value
 }
 
 // ---------------------------------------------------------------------------
@@ -452,6 +511,48 @@ async function loadVersionAndDefinition(
 }
 
 /**
+ * MAJOR 3: merges every `spec.parameters` page of a version's definitionJson
+ * into one JSON Schema (`additionalProperties: false` — an unknown extra key
+ * is rejected, not silently dropped or passed through) and validates
+ * `parameters` against it with ajv (`strict: false`, matching
+ * `lib/scaffolder/validate.ts`'s convention). Throws with a readable,
+ * field-prefixed message on the FIRST validation failure — startDryRun/
+ * startRun call this before persisting anything, so a malformed submission
+ * never becomes an action-run row.
+ */
+function validateRunParameters(version: TemplateDefinitionVersion, parameters: Record<string, unknown>): void {
+  const definitionJson = version.definitionJson as { spec?: { parameters?: unknown[] } } | null
+  const pages = Array.isArray(definitionJson?.spec?.parameters) ? definitionJson!.spec!.parameters : []
+
+  const properties: Record<string, unknown> = {}
+  const required: string[] = []
+  for (const page of pages) {
+    const p = page as { properties?: Record<string, unknown>; required?: string[] }
+    if (p.properties && typeof p.properties === 'object') {
+      Object.assign(properties, p.properties)
+    }
+    if (Array.isArray(p.required)) required.push(...p.required)
+  }
+
+  const schema = {
+    type: 'object',
+    properties,
+    required,
+    additionalProperties: false,
+  }
+
+  const ajv = new Ajv({ allErrors: true, strict: false })
+  const validateFn = ajv.compile(schema)
+  if (!validateFn(parameters)) {
+    const messages = (validateFn.errors ?? []).map((e) => {
+      const path = e.instancePath ? e.instancePath.replace(/^\//, '') : (e.params as { additionalProperty?: string })?.additionalProperty ?? ''
+      return `${path ? `${path}: ` : ''}${e.message}`
+    })
+    throw new Error(`Invalid parameters: ${messages.join('; ')}`)
+  }
+}
+
+/**
  * Creates a `dryRun: true` action-run for a template version and dispatches
  * it. Manage-gated (dry runs are an authoring/preview tool, not the
  * published-template consumer flow — {@link startRun} is that).
@@ -476,6 +577,8 @@ export async function startDryRun(input: StartDryRunInput): Promise<{ runId: str
         ? (fixture.values as Record<string, unknown>)
         : {}
   }
+
+  validateRunParameters(version, parameters)
 
   const action = await ensureRunnerAction(payload, definition)
 
@@ -543,6 +646,8 @@ export async function startRun(input: StartRunInput): Promise<{ runId: string; s
   if (definition.status !== 'published') {
     throw new Error('This template is not published.')
   }
+
+  validateRunParameters(version, input.parameters ?? {})
 
   const action = await ensureRunnerAction(payload, definition)
   const policy = action.approvalPolicy ?? 'none'
@@ -625,7 +730,23 @@ export async function getRun(runId: string): Promise<ActionRun | null> {
       })
       const secretKeys = collectSecretParamKeys(version.definitionJson)
       if (secretKeys.size > 0) {
-        return { ...run, inputs: redactSecrets(run.inputs as Record<string, unknown>, secretKeys) }
+        const rawInputs = run.inputs as Record<string, unknown>
+        // The set of actual secret VALUES (not just key names) — used to
+        // catch a secret echoed into steps[].output / plan, which are keyed
+        // by the action's own output schema, not by the parameter name.
+        const secretValues = new Set(
+          [...secretKeys].map((k) => rawInputs[k]).filter((v): v is string => typeof v === 'string'),
+        )
+        return {
+          ...run,
+          inputs: redactSecrets(rawInputs, secretKeys),
+          ...(secretValues.size > 0 && run.steps
+            ? { steps: redactSecretValuesDeep(run.steps, secretValues) as ActionRun['steps'] }
+            : {}),
+          ...(secretValues.size > 0 && run.plan
+            ? { plan: redactSecretValuesDeep(run.plan, secretValues) as ActionRun['plan'] }
+            : {}),
+        }
       }
     } catch {
       // Version lookup failing shouldn't hide the run — fall through unredacted-but-scoped.

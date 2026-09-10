@@ -57,6 +57,17 @@ export async function createAndDispatchRun(
   input: CreateAndDispatchRunInput,
 ): Promise<{ runId: string; status: string }> {
   const { action } = input
+
+  // BLOCKER 1(c): scaffolder-backed Actions are hidden runner rows the v2
+  // template engine auto-provisions — they must only be dispatched via
+  // startDryRun/startRun (templates/authoring-actions.ts), which record
+  // `templateVersion` and enforce the publish gate BEFORE creating the run.
+  // This is the shared path `runAction` AND the P4 automation dispatcher
+  // both funnel through, so the guard belongs here, not just in `runAction`.
+  if (action.backend?.type === 'scaffolder') {
+    throw new Error('Scaffolder-backed actions cannot be run via createAndDispatchRun; use startRun/startDryRun.')
+  }
+
   const workspaceId = relId(action.workspace)
   if (!workspaceId) throw new Error('Action has no workspace.')
 

@@ -255,11 +255,17 @@ const SCAFFOLDER_ACTION = {
   enabled: true,
 }
 
-const TEMPLATE_DEFINITION = {
+const PUBLISHED_TEMPLATE_DEFINITION = {
   id: 'def-1',
   name: 'go-service',
   workspace: 'ws-1',
+  status: 'published',
   currentVersion: 'ver-1',
+}
+
+const DRAFT_TEMPLATE_DEFINITION = {
+  ...PUBLISHED_TEMPLATE_DEFINITION,
+  status: 'draft',
 }
 
 describe('executeRun — scaffolder dispatch', () => {
@@ -267,17 +273,21 @@ describe('executeRun — scaffolder dispatch', () => {
     mockStartScaffolderRun.mockReset()
   })
 
-  it('calls StartScaffolderRun with the current version + inputs, writes workflowId, leaves status running', async () => {
+  it('calls StartScaffolderRun with the RUN\'S RECORDED templateVersion + inputs, writes workflowId, leaves status running', async () => {
     mockStartScaffolderRun.mockResolvedValue({ workflowId: 'wf-123' })
     const { payload } = makeStatefulPayload({
       collections: {
         actions: [SCAFFOLDER_ACTION],
-        'template-definitions': [TEMPLATE_DEFINITION],
+        // currentVersion has since moved on (v2) — the run must still use
+        // the version it was created/reviewed against (ver-1), not whatever
+        // is current at dispatch time (MAJOR 4).
+        'template-definitions': [{ ...PUBLISHED_TEMPLATE_DEFINITION, currentVersion: 'ver-2' }],
         'action-runs': [
           {
             id: 'run-scaffolder-1',
             action: 'act-scaffolder',
             workspace: 'ws-1',
+            templateVersion: 'ver-1',
             inputs: { name: 'payments-api' },
             status: 'pending',
             dryRun: false,
@@ -305,17 +315,18 @@ describe('executeRun — scaffolder dispatch', () => {
     expect(run.workflowId).toBe('wf-123')
   })
 
-  it('passes dryRun through from the run', async () => {
+  it('dry runs dispatch even when the definition is still draft (dryRun bypasses the published gate)', async () => {
     mockStartScaffolderRun.mockResolvedValue({ workflowId: 'wf-456' })
     const { payload } = makeStatefulPayload({
       collections: {
         actions: [SCAFFOLDER_ACTION],
-        'template-definitions': [TEMPLATE_DEFINITION],
+        'template-definitions': [DRAFT_TEMPLATE_DEFINITION],
         'action-runs': [
           {
             id: 'run-scaffolder-2',
             action: 'act-scaffolder',
             workspace: 'ws-1',
+            templateVersion: 'ver-1',
             inputs: {},
             status: 'pending',
             dryRun: true,
@@ -327,24 +338,24 @@ describe('executeRun — scaffolder dispatch', () => {
 
     await executeRun(payload, 'run-scaffolder-2')
 
-    expect(mockStartScaffolderRun).toHaveBeenCalledWith(
-      expect.objectContaining({ dryRun: true }),
-    )
+    expect(mockStartScaffolderRun).toHaveBeenCalledWith(expect.objectContaining({ dryRun: true }))
   })
 
-  it('fails the run when the template-definitions row has no currentVersion', async () => {
+  it('BLOCKER 1: refuses to dispatch a real (non-dry) run against a draft/unpublished definition', async () => {
     mockStartScaffolderRun.mockResolvedValue({ workflowId: 'wf-should-not-be-called' })
     const { payload } = makeStatefulPayload({
       collections: {
         actions: [SCAFFOLDER_ACTION],
-        'template-definitions': [{ ...TEMPLATE_DEFINITION, currentVersion: undefined }],
+        'template-definitions': [DRAFT_TEMPLATE_DEFINITION],
         'action-runs': [
           {
             id: 'run-scaffolder-3',
             action: 'act-scaffolder',
             workspace: 'ws-1',
+            templateVersion: 'ver-1',
             inputs: {},
             status: 'pending',
+            dryRun: false,
             logs: [],
           },
         ],
@@ -356,20 +367,21 @@ describe('executeRun — scaffolder dispatch', () => {
     expect(mockStartScaffolderRun).not.toHaveBeenCalled()
     const run = await payload.findByID({ collection: 'action-runs', id: 'run-scaffolder-3' })
     expect(run.status).toBe('failed')
-    expect(run.error).toMatch(/current version/i)
+    expect(run.error).toMatch(/published/i)
   })
 
-  it('fails the run when StartScaffolderRun throws', async () => {
-    mockStartScaffolderRun.mockRejectedValue(new Error('worker unreachable'))
+  it('BLOCKER 1: refuses to dispatch when the run has no templateVersion at all (e.g. dispatched via the generic Actions catalog)', async () => {
+    mockStartScaffolderRun.mockResolvedValue({ workflowId: 'wf-should-not-be-called' })
     const { payload } = makeStatefulPayload({
       collections: {
         actions: [SCAFFOLDER_ACTION],
-        'template-definitions': [TEMPLATE_DEFINITION],
+        'template-definitions': [PUBLISHED_TEMPLATE_DEFINITION],
         'action-runs': [
           {
             id: 'run-scaffolder-4',
             action: 'act-scaffolder',
             workspace: 'ws-1',
+            // no templateVersion — this run did NOT come through startDryRun/startRun.
             inputs: {},
             status: 'pending',
             logs: [],
@@ -380,8 +392,115 @@ describe('executeRun — scaffolder dispatch', () => {
 
     await executeRun(payload, 'run-scaffolder-4')
 
+    expect(mockStartScaffolderRun).not.toHaveBeenCalled()
     const run = await payload.findByID({ collection: 'action-runs', id: 'run-scaffolder-4' })
     expect(run.status).toBe('failed')
+    expect(run.error).toMatch(/templateVersion/i)
+  })
+
+  it('BLOCKER 2: refuses to dispatch when the template-definition belongs to a DIFFERENT workspace than the run', async () => {
+    mockStartScaffolderRun.mockResolvedValue({ workflowId: 'wf-should-not-be-called' })
+    const { payload } = makeStatefulPayload({
+      collections: {
+        actions: [SCAFFOLDER_ACTION],
+        'template-definitions': [{ ...PUBLISHED_TEMPLATE_DEFINITION, workspace: 'ws-OTHER-TENANT' }],
+        'action-runs': [
+          {
+            id: 'run-scaffolder-5',
+            action: 'act-scaffolder',
+            workspace: 'ws-1', // the run's own (correct) tenant
+            templateVersion: 'ver-1',
+            inputs: {},
+            status: 'pending',
+            dryRun: false,
+            logs: [],
+          },
+        ],
+      },
+    })
+
+    await executeRun(payload, 'run-scaffolder-5')
+
+    expect(mockStartScaffolderRun).not.toHaveBeenCalled()
+    const run = await payload.findByID({ collection: 'action-runs', id: 'run-scaffolder-5' })
+    expect(run.status).toBe('failed')
+    expect(run.error).toMatch(/workspace/i)
+  })
+
+  it('BLOCKER 2: refuses to dispatch when the ACTION belongs to a different workspace than the definition', async () => {
+    mockStartScaffolderRun.mockResolvedValue({ workflowId: 'wf-should-not-be-called' })
+    const { payload } = makeStatefulPayload({
+      collections: {
+        actions: [{ ...SCAFFOLDER_ACTION, workspace: 'ws-ANOTHER-TENANT' }],
+        'template-definitions': [PUBLISHED_TEMPLATE_DEFINITION],
+        'action-runs': [
+          {
+            id: 'run-scaffolder-6',
+            action: 'act-scaffolder',
+            workspace: 'ws-ANOTHER-TENANT',
+            templateVersion: 'ver-1',
+            inputs: {},
+            status: 'pending',
+            dryRun: false,
+            logs: [],
+          },
+        ],
+      },
+    })
+
+    await executeRun(payload, 'run-scaffolder-6')
+
+    expect(mockStartScaffolderRun).not.toHaveBeenCalled()
+    const run = await payload.findByID({ collection: 'action-runs', id: 'run-scaffolder-6' })
+    expect(run.status).toBe('failed')
+    expect(run.error).toMatch(/workspace/i)
+  })
+
+  it('fails the run when StartScaffolderRun throws', async () => {
+    mockStartScaffolderRun.mockRejectedValue(new Error('worker unreachable'))
+    const { payload } = makeStatefulPayload({
+      collections: {
+        actions: [SCAFFOLDER_ACTION],
+        'template-definitions': [PUBLISHED_TEMPLATE_DEFINITION],
+        'action-runs': [
+          {
+            id: 'run-scaffolder-7',
+            action: 'act-scaffolder',
+            workspace: 'ws-1',
+            templateVersion: 'ver-1',
+            inputs: {},
+            status: 'pending',
+            dryRun: false,
+            logs: [],
+          },
+        ],
+      },
+    })
+
+    await executeRun(payload, 'run-scaffolder-7')
+
+    const run = await payload.findByID({ collection: 'action-runs', id: 'run-scaffolder-7' })
+    expect(run.status).toBe('failed')
     expect(run.error).toMatch(/worker unreachable/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// runAction — BLOCKER 1(c): scaffolder-backed actions must not be runnable
+// through the generic Actions catalog dispatch path.
+// ---------------------------------------------------------------------------
+
+describe('runAction — rejects scaffolder-backed actions', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('rejects with a clear error instead of creating a run', async () => {
+    const env = makeStatefulPayload({ collections: { actions: [SCAFFOLDER_ACTION] } })
+    mockPayload = env.payload
+    const { runAction } = await import('@/app/(frontend)/self-service/actions')
+
+    await expect(runAction({ actionId: 'act-scaffolder', inputs: {} })).rejects.toThrow(
+      /template/i,
+    )
+    expect(env.create.mock.calls.some((c) => c[0].collection === 'action-runs')).toBe(false)
   })
 })
