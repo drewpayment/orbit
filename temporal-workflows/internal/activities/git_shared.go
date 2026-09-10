@@ -6,15 +6,31 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
+
+// gitProtocolGuardArgs is prepended to every git invocation in this package.
+// protocol.ext.allow=never blocks the "ext::" transport (which runs an
+// arbitrary local command as the "remote"); protocol.file.allow=never
+// blocks the "file" transport, which covers both an explicit file:// URL
+// and a bare local filesystem path passed as a remote — either would let a
+// hostile URL read or, via push, write somewhere else on the worker's
+// filesystem instead of talking to an actual git server.
+//
+// This applies unconditionally, including to commands (init/config/add/
+// commit) that never touch a transport: -c settings are inert for those, so
+// there is no behavioral cost to applying it everywhere rather than
+// threading a "does this command need it" decision through every call site.
+var gitProtocolGuardArgs = []string{"-c", "protocol.ext.allow=never", "-c", "protocol.file.allow=never"}
 
 // runGitCommand runs `git <args...>` with dir as the working directory.
 // Output is sanitized before being embedded in an error so a token injected
 // into a remote URL (see injectGitToken) never reaches a workflow history or
 // log. Shared by every activity/action that shells out to git.
 func runGitCommand(ctx context.Context, dir string, args ...string) error {
-	cmd := exec.CommandContext(ctx, "git", args...)
+	fullArgs := append(append([]string{}, gitProtocolGuardArgs...), args...)
+	cmd := exec.CommandContext(ctx, "git", fullArgs...)
 	cmd.Dir = dir
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -39,6 +55,36 @@ func injectGitToken(rawURL, token string) string {
 // against shell metacharacters.
 func isSafeGitRef(ref string) bool {
 	return ref != "" && !strings.HasPrefix(ref, "-")
+}
+
+// gitSCPLikeURL matches git's scp-like remote syntax, "[user@]host:path",
+// e.g. "git@github.com:acme/orders.git". A bare local path never matches
+// this (it has no "user@host:" prefix) — that is exactly what distinguishes
+// a remote-shaped string from a local filesystem path here.
+var gitSCPLikeURL = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]*@[A-Za-z0-9_.-]+:.+$`)
+
+// IsSafeGitURL reports whether url is an acceptable git remote for a
+// template-authored fetch:git/git:push step: http(s)://, ssh://, or the
+// scp-like "user@host:path" form. Every other git transport is rejected —
+// most importantly "ext::" (runs an arbitrary local command as the
+// "remote") and "file://" or a bare local path (reads, or via push writes,
+// somewhere else on the worker's filesystem instead of an actual git
+// server).
+//
+// This is a fast, clear-error check at the point a URL enters the system
+// from a template author's `${{ }}` expression. It backs up, but does not
+// replace, gitProtocolGuardArgs: that -c flag pair is the guarantee that
+// still holds even if some future caller forgets to call IsSafeGitURL.
+func IsSafeGitURL(url string) bool {
+	url = strings.TrimSpace(url)
+	switch {
+	case strings.HasPrefix(url, "https://"), strings.HasPrefix(url, "http://"), strings.HasPrefix(url, "ssh://"):
+		return true
+	case gitSCPLikeURL.MatchString(url):
+		return true
+	default:
+		return false
+	}
 }
 
 // CloneGitRepo clones sourceURL into destDir (created if it does not exist)
