@@ -82,4 +82,46 @@ describe('ParametersBuilder', () => {
       }),
     )
   })
+
+  it('does not dispatch and shows an inline error when renaming a field to an existing sibling name', () => {
+    const dispatch = vi.fn()
+    render(<ParametersBuilder pages={[page()]} dispatch={dispatch} />)
+    const nameInputs = screen.getAllByLabelText('Name') as HTMLInputElement[]
+    // "name" -> "owner" collides with the sibling field already named "owner".
+    fireEvent.change(nameInputs[0], { target: { value: 'owner' } })
+
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert')).toHaveTextContent(/a field named "owner" already exists/i)
+    // The typed value is kept in the input so the author can keep editing.
+    expect(nameInputs[0].value).toBe('owner')
+  })
+
+  it('clears the collision error once the name no longer collides', () => {
+    const dispatch = vi.fn()
+    render(<ParametersBuilder pages={[page()]} dispatch={dispatch} />)
+    const nameInputs = screen.getAllByLabelText('Name') as HTMLInputElement[]
+    fireEvent.change(nameInputs[0], { target: { value: 'owner' } })
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    fireEvent.change(nameInputs[0], { target: { value: 'ownerName' } })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'UPDATE_FIELD', name: 'name', renameTo: 'ownerName' }),
+    )
+  })
+
+  it('allows retyping a field name back to its own current value without an error', () => {
+    const dispatch = vi.fn()
+    render(<ParametersBuilder pages={[page()]} dispatch={dispatch} />)
+    const nameInputs = screen.getAllByLabelText('Name') as HTMLInputElement[]
+    // Detour through a different value first (typing "name" -> "name" as a no-op
+    // change event isn't observable — jsdom's controlled-input value tracker
+    // skips firing onChange when the value doesn't actually change).
+    fireEvent.change(nameInputs[0], { target: { value: 'namex' } })
+    fireEvent.change(nameInputs[0], { target: { value: 'name' } })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'UPDATE_FIELD', name: 'name', renameTo: 'name' }),
+    )
+  })
 })

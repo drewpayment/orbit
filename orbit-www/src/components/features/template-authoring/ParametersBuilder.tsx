@@ -17,6 +17,7 @@ import type { BuilderAction } from './builder-state'
 import {
   PARAMETER_FIELD_TYPE_OPTIONS,
   UI_FIELD_OPTIONS,
+  isDuplicateFieldName,
   propertyFromRow,
   rowFromNameAndProperty,
   validateParameterFieldRows,
@@ -133,11 +134,16 @@ function ParameterPageEditor({
       <CardContent className="space-y-4">
         {rows.map((row, rowIndex) => (
           <FieldRowEditor
-            key={row.id}
+            // Keyed by field name (stable and unique — UPDATE_FIELD rejects
+            // duplicate names) rather than `row.id` (regenerated fresh on
+            // every render by `pageRows`), so an unrelated field's edit
+            // elsewhere on the page doesn't remount this row mid-keystroke.
+            key={row.name}
             row={row}
             rowIndex={rowIndex}
             rowCount={rows.length}
             pageIndex={pageIndex}
+            siblingNames={rows.filter((r) => r.name !== row.name).map((r) => r.name)}
             dispatch={dispatch}
           />
         ))}
@@ -167,14 +173,30 @@ function FieldRowEditor({
   rowIndex,
   rowCount,
   pageIndex,
+  siblingNames,
   dispatch,
 }: {
   row: ParameterFieldRow
   rowIndex: number
   rowCount: number
   pageIndex: number
+  /** Other fields' current names on this page (excludes this row itself). */
+  siblingNames: string[]
   dispatch: React.Dispatch<BuilderAction>
 }) {
+  // The Name field needs its own local draft: `UPDATE_FIELD` is a true no-op
+  // (builder-state.ts) when a rename collides with a sibling, which means no
+  // re-render happens and `row.name` never reflects what was typed. Track it
+  // locally so a rejected keystroke doesn't vanish from the input, and resync
+  // from `row.name` whenever a rename actually lands (or an external edit —
+  // e.g. YamlView's REPLACE_ALL — changes it).
+  const [nameDraft, setNameDraft] = React.useState(row.name)
+  const [nameError, setNameError] = React.useState<string | null>(null)
+  React.useEffect(() => {
+    setNameDraft(row.name)
+    setNameError(null)
+  }, [row.name])
+
   function commit(patch: Partial<ParameterFieldRow>) {
     const next = { ...row, ...patch }
     dispatch({
@@ -187,13 +209,33 @@ function FieldRowEditor({
     })
   }
 
+  function handleNameChange(value: string) {
+    setNameDraft(value)
+    if (isDuplicateFieldName(siblingNames, row.name, value)) {
+      setNameError(`A field named "${value}" already exists on this page.`)
+      return // the reducer would reject this rename too — don't bother dispatching
+    }
+    setNameError(null)
+    commit({ name: value })
+  }
+
   const fid = (suffix: string) => `${row.id}-${suffix}`
 
   return (
     <div className="grid grid-cols-1 gap-2 rounded-md border p-3 sm:grid-cols-2">
       <div>
         <Label htmlFor={fid('name')}>Name</Label>
-        <Input id={fid('name')} value={row.name} onChange={(e) => commit({ name: e.target.value })} />
+        <Input
+          id={fid('name')}
+          value={nameDraft}
+          onChange={(e) => handleNameChange(e.target.value)}
+          aria-invalid={!!nameError}
+        />
+        {nameError && (
+          <p role="alert" className="text-sm text-destructive">
+            {nameError}
+          </p>
+        )}
       </div>
       <div>
         <Label htmlFor={fid('type')}>Type</Label>

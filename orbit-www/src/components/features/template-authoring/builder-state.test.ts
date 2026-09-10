@@ -155,6 +155,59 @@ describe('templateBuilderReducer', () => {
     expect(next.spec.parameters[0].required).toEqual(['renamed'])
   })
 
+  it('UPDATE_FIELD is a true no-op (same state reference) when renaming to a sibling name', () => {
+    let state = createInitialBuilderState()
+    state = templateBuilderReducer(state, { type: 'ADD_PARAMETER_PAGE', title: 'A' })
+    state = templateBuilderReducer(state, {
+      type: 'ADD_FIELD',
+      pageIndex: 0,
+      name: 'a',
+      property: { type: 'string', title: 'A field' },
+    })
+    state = templateBuilderReducer(state, {
+      type: 'ADD_FIELD',
+      pageIndex: 0,
+      name: 'b',
+      property: { type: 'string', title: 'B field' },
+    })
+    const before = state
+
+    const next = templateBuilderReducer(state, {
+      type: 'UPDATE_FIELD',
+      pageIndex: 0,
+      name: 'a',
+      renameTo: 'b', // collides with the existing sibling field "b"
+      property: { type: 'number' }, // this edit must also be discarded, not just the rename
+    })
+
+    // True no-op: same reference, so React's useReducer bails out of re-rendering.
+    expect(next).toBe(before)
+    // Neither field was touched — "b" was not silently overwritten, "a" keeps its old property.
+    expect(next.spec.parameters[0].properties).toEqual({
+      a: { type: 'string', title: 'A field' },
+      b: { type: 'string', title: 'B field' },
+    })
+  })
+
+  it('UPDATE_FIELD renaming a field to its own current name is not treated as a collision', () => {
+    let state = createInitialBuilderState()
+    state = templateBuilderReducer(state, { type: 'ADD_PARAMETER_PAGE', title: 'A' })
+    state = templateBuilderReducer(state, {
+      type: 'ADD_FIELD',
+      pageIndex: 0,
+      name: 'a',
+      property: { type: 'string' },
+    })
+    const next = templateBuilderReducer(state, {
+      type: 'UPDATE_FIELD',
+      pageIndex: 0,
+      name: 'a',
+      renameTo: 'a',
+      property: { type: 'number' },
+    })
+    expect(next.spec.parameters[0].properties.a).toEqual({ type: 'number' })
+  })
+
   it('REMOVE_FIELD removes the property and clears it from required', () => {
     let state = createInitialBuilderState()
     state = templateBuilderReducer(state, { type: 'ADD_PARAMETER_PAGE', title: 'A' })

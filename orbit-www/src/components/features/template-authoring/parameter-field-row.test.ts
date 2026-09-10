@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   createParameterFieldRow,
+  isDuplicateFieldName,
   propertyFromRow,
   rowFromNameAndProperty,
   validateParameterFieldRows,
@@ -86,6 +87,20 @@ describe('rowFromNameAndProperty / propertyFromRow round-trip', () => {
     const row = rowFromNameAndProperty('name', original, true)
     expect(row.required).toBe(true)
     expect(propertyFromRow(row)).toEqual(original)
+  })
+})
+
+describe('isDuplicateFieldName', () => {
+  it('flags a rename that collides with a sibling', () => {
+    expect(isDuplicateFieldName(['a', 'b'], 'a', 'b')).toBe(true)
+  })
+
+  it('does not flag a field renamed to its own current name', () => {
+    expect(isDuplicateFieldName(['a', 'b'], 'a', 'a')).toBe(false)
+  })
+
+  it('does not flag a rename to a name nothing else uses', () => {
+    expect(isDuplicateFieldName(['a', 'b'], 'a', 'c')).toBe(false)
   })
 })
 
