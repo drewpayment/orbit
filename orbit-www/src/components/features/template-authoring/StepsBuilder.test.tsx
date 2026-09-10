@@ -59,6 +59,34 @@ describe('StepsBuilder', () => {
     })
   })
 
+  it('defaults a new catalog:entity:register step to reference the current template id/version', () => {
+    const dispatch = vi.fn()
+    const catalogRegistry: ActionDescriptor[] = [
+      ...registry,
+      descriptor({
+        id: 'catalog:entity:register',
+        family: 'catalog',
+        name: 'Register catalog entity',
+        inputSchema: { type: 'object', properties: {} },
+      }),
+    ]
+    render(<StepsBuilder definition={definition([])} dispatch={dispatch} registry={catalogRegistry} />)
+    fireEvent.click(screen.getByRole('button', { name: /add step/i }))
+    fireEvent.click(screen.getByText('Register catalog entity'))
+    expect(dispatch).toHaveBeenCalledWith({
+      type: 'ADD_STEP',
+      step: {
+        id: 'register',
+        name: 'Register catalog entity',
+        action: 'catalog:entity:register',
+        input: {
+          templateDefinitionId: '${{ template.id }}',
+          templateVersionId: '${{ template.versionId }}',
+        },
+      },
+    })
+  })
+
   it('dispatches REMOVE_STEP when a step is removed', () => {
     const dispatch = vi.fn()
     const def = definition([{ id: 's1', name: 'Step 1', action: 'fs:render', input: {} }])

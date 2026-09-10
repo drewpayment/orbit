@@ -44,6 +44,14 @@
       "type": "string",
       "minLength": 1,
       "description": "Identifies the specific producer, e.g. the run id."
+    },
+    "templateDefinitionId": {
+      "type": "string",
+      "description": "Optional: the template-definitions id this entity was scaffolded from. A step authored from a template composition context typically sets this to ${{ template.id }}."
+    },
+    "templateVersionId": {
+      "type": "string",
+      "description": "Optional: the template-definition-versions id this entity was scaffolded from. A step authored from a template composition context typically sets this to ${{ template.versionId }}."
     }
   },
   "required": ["workspaceId", "kind", "name", "sourceType", "sourceId"],
