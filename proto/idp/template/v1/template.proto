@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package idp.template.v1;
 
+import "google/protobuf/struct.proto";
+
 option go_package = "github.com/drewpayment/orbit/proto/gen/go/idp/template/v1;templatev1";
 
 // TemplateService handles template instantiation operations
@@ -17,6 +19,19 @@ service TemplateService {
 
   // List available GitHub organizations for a workspace
   rpc ListAvailableOrgs(ListAvailableOrgsRequest) returns (ListAvailableOrgsResponse);
+
+  // Start a new v2 ScaffolderWorkflow run for a published template definition version
+  rpc StartScaffolderRun(StartScaffolderRunRequest) returns (StartScaffolderRunResponse);
+
+  // Get the current step-by-step progress of a scaffolder run
+  rpc GetRunProgress(GetRunProgressRequest) returns (GetRunProgressResponse);
+
+  // Cancel an in-progress scaffolder run
+  rpc CancelRun(CancelRunRequest) returns (CancelRunResponse);
+
+  // List the action registry descriptors known to the worker (for definition
+  // validation and Phase 2 authoring UI autocomplete)
+  rpc ListActions(ListActionsRequest) returns (ListActionsResponse);
 }
 
 message StartInstantiationRequest {
@@ -84,4 +99,63 @@ message GitHubOrg {
 
 message ListAvailableOrgsResponse {
   repeated GitHubOrg orgs = 1;
+}
+
+// --- v2 ScaffolderWorkflow (see docs/plans/2026-09-09-template-authoring-phase-1-engine.md §8) ---
+
+message StartScaffolderRunRequest {
+  string run_id = 1;                       // ActionRuns doc id (pre-created by orbit-www)
+  string definition_version_id = 2;        // template-definition-versions doc id
+  string workspace_id = 3;
+  string user_id = 4;
+  // Resolved parameter values, keyed by JSON-Schema property name across all
+  // parameter pages. google.protobuf.Struct carries nested/typed values
+  // (objects, arrays, numbers, bools) — the v1 RPC's map<string,string> can't.
+  google.protobuf.Struct parameters = 5;
+  bool dry_run = 6;
+}
+
+message StartScaffolderRunResponse {
+  string workflow_id = 1;
+}
+
+message GetRunProgressRequest {
+  string workflow_id = 1;
+}
+
+message GetRunProgressResponse {
+  string workflow_id = 1;
+  WorkflowStatus status = 2;
+  repeated StepProgress steps = 3;
+  google.protobuf.Struct outputs = 4;  // spec.output resolved against the final context, once succeeded
+  string error_message = 5;
+}
+
+message StepProgress {
+  string id = 1;
+  string name = 2;
+  string status = 3;  // pending | running | succeeded | failed | skipped
+  string error = 4;
+}
+
+message CancelRunRequest {
+  string workflow_id = 1;
+}
+
+message CancelRunResponse {
+  bool success = 1;
+}
+
+message ListActionsRequest {}
+
+message ListActionsResponse {
+  repeated ActionDescriptor actions = 1;
+}
+
+message ActionDescriptor {
+  string name = 1;               // e.g. "github:repo:create"
+  string family = 2;              // e.g. "github", "fs", "catalog"
+  string input_schema_json = 3;   // JSON Schema, serialized (embedded via go:embed on the worker side)
+  string output_schema_json = 4;  // JSON Schema, serialized
+  bool supports_plan = 5;         // whether the action implements dry-run Plan()
 }
