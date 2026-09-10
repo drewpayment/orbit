@@ -152,6 +152,14 @@ export function validateDefinition(
   const registryById = new Map(registry.map((a) => [a.id, a]))
   const ajv = new Ajv({ allErrors: true, strict: false })
 
+  // Check 0: at least one step. The Go engine refuses to plan or execute a
+  // stepless definition ("a template must declare at least one step"), so
+  // surface it here instead of letting "Validation passed" precede a failed
+  // dry run.
+  if (def.spec.steps.length === 0) {
+    errors.push({ path: 'spec.steps', message: 'A template must declare at least one step' })
+  }
+
   // Check 1: unique step ids.
   const seenIds = new Set<string>()
   for (const [i, step] of def.spec.steps.entries()) {

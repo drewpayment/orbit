@@ -67,6 +67,15 @@ function def(overrides: Partial<TemplateDefinition['spec']>): TemplateDefinition
 }
 
 describe('validateDefinition', () => {
+  it('rejects a definition with no steps (mirrors the Go engine)', () => {
+    const result = validateDefinition(def({ steps: [] }), registry)
+    expect(result.ok).toBe(false)
+    expect(result.errors).toContainEqual({
+      path: 'spec.steps',
+      message: 'A template must declare at least one step',
+    })
+  })
+
   it('passes a well-formed definition referencing parameters, earlier steps, and well-known namespaces', () => {
     const d = def({
       steps: [
