@@ -1,8 +1,13 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import { getPayload } from 'payload'
+import config from '@payload-config'
 import { ArrowLeft } from 'lucide-react'
 import { getTemplateDefinitionBySlug } from '../../../run-actions'
 import { getRun } from '../../../authoring-actions'
+import { getCurrentUser, getPayloadUserFromSession } from '@/lib/auth/session'
+import { isPlatformAdmin } from '@/lib/access/workspace-access'
+import { canApproveActionRun } from '@/lib/actions/authz'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -22,12 +27,14 @@ function relId(value: unknown): string | null {
 }
 
 /**
- * Consumer run detail entry point (Phase 2 plan Task 17). `getRun` already
- * scopes the run to the caller's workspace access (RBAC) — this page adds
- * the one check `getRun` can't make on its own: that the run's
- * `templateVersion` actually belongs to THIS slug's definition, so a
- * same-workspace member can't view a run they have access to under a
- * mismatched (but still-valid-looking) `[slug]/run/[runId]` URL.
+ * Consumer run detail entry point (Phase 2 plan Task 17). `getRun`
+ * (`authoring-actions.ts`) already scopes the run to the caller's
+ * workspace access (RBAC) via its own `depth: 1` findByID + gate — this
+ * page adds the one check `getRun` can't make on its own: that the run's
+ * `templateVersion` actually belongs to THIS slug's definition (see the
+ * guard just below), so a same-workspace member can't view a run they have
+ * access to under a mismatched (but still-valid-looking)
+ * `[slug]/run/[runId]` URL.
  */
 export default async function RunDetailPage({ params }: PageProps) {
   const { slug, runId } = await params
@@ -35,12 +42,37 @@ export default async function RunDetailPage({ params }: PageProps) {
   const [definition, run] = await Promise.all([getTemplateDefinitionBySlug(slug), getRun(runId)])
   if (!definition || !run) notFound()
 
+  // Cross-slug guard — the counterpart to `getRun`'s `depth: 1` populate of
+  // `run.templateVersion` (that's what makes `run.templateVersion.definition`
+  // available here without a second fetch): confirms the run's own
+  // templateVersion->definition chain matches the slug in the URL.
   const runVersionId = relId(run.templateVersion)
   const runDefinitionId =
     run.templateVersion && typeof run.templateVersion === 'object'
       ? relId(run.templateVersion.definition)
       : null
   if (!runVersionId || runDefinitionId !== definition.id) notFound()
+
+  // Server-side approval gate for the `awaiting-approval` UI: `run.action`
+  // is populated by `getRun`'s `depth: 1` findByID, so its `approvalPolicy`
+  // is available here without another round trip. Threaded into
+  // `TemplateRunDetail` -> `ApprovalButtons` as `canApprove` — a UI
+  // affordance only; `approveRun`/`rejectRun` re-check
+  // `canApproveActionRun` server-side regardless (defense in depth, not
+  // the authority).
+  const payload = await getPayload({ config })
+  const user = await getCurrentUser()
+  const payloadUser = await getPayloadUserFromSession()
+  const workspaceId = relId(run.workspace)
+  const approvalPolicy =
+    run.action && typeof run.action === 'object' ? run.action.approvalPolicy ?? 'none' : 'none'
+  const canApprove = await canApproveActionRun(
+    payload,
+    user?.id,
+    workspaceId,
+    approvalPolicy,
+    isPlatformAdmin(payloadUser),
+  )
 
   return (
     <SidebarProvider>
@@ -59,7 +91,7 @@ export default async function RunDetailPage({ params }: PageProps) {
             <h1 className="text-3xl font-bold">Run detail</h1>
           </div>
 
-          <TemplateRunDetail initialRun={run} getRun={getRun} />
+          <TemplateRunDetail initialRun={run} getRun={getRun} canApprove={canApprove} />
         </div>
       </SidebarInset>
     </SidebarProvider>

@@ -24,6 +24,17 @@ import type { ActionRun } from '@/payload-types'
 export interface TemplateRunDetailProps {
   initialRun: ActionRun
   getRun: (id: string) => Promise<ActionRun | null>
+  /**
+   * Whether the current viewer may act on the `awaiting-approval` gate —
+   * a server-side `canApproveActionRun` check (workspace owner/admin, per
+   * the run's approval policy), computed by the page and threaded through
+   * here rather than re-derived client-side. Defaults to `true` (matching
+   * `ApprovalButtons`' own default) so existing callers that don't pass it
+   * are unaffected; `ApprovalButtons` still enforces the real gate
+   * server-side regardless of this prop (defense in depth, not the
+   * authority).
+   */
+  canApprove?: boolean
 }
 
 interface OutputLinkLike {
@@ -49,7 +60,7 @@ function asOutputLinks(outputs: unknown): OutputLinkLike[] {
   return links.filter((l): l is OutputLinkLike => !!l && typeof l === 'object')
 }
 
-export function TemplateRunDetail({ initialRun, getRun }: TemplateRunDetailProps) {
+export function TemplateRunDetail({ initialRun, getRun, canApprove = true }: TemplateRunDetailProps) {
   const { run: polledRun } = useRunPolling(initialRun.id, getRun)
   const run = polledRun ?? initialRun
 
@@ -62,7 +73,7 @@ export function TemplateRunDetail({ initialRun, getRun }: TemplateRunDetailProps
         <div className="flex items-center gap-2">
           <RunStatusBadge status={run.status} />
         </div>
-        {run.status === 'awaiting-approval' && <ApprovalButtons runId={run.id} />}
+        {run.status === 'awaiting-approval' && <ApprovalButtons runId={run.id} canApprove={canApprove} />}
       </div>
 
       {run.error && (

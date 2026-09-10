@@ -108,4 +108,19 @@ describe('TemplateRunDetail', () => {
 
     await waitFor(() => expect(screen.getByText('Succeeded')).toBeInTheDocument())
   })
+
+  it('defaults canApprove to true (ApprovalButtons enabled) when not specified', () => {
+    const getRun = vi.fn().mockResolvedValue(null)
+    render(<TemplateRunDetail initialRun={run({ status: 'awaiting-approval' })} getRun={getRun} />)
+    expect(screen.getByRole('button', { name: /approve/i })).not.toBeDisabled()
+  })
+
+  it('disables ApprovalButtons when canApprove=false is passed through', () => {
+    const getRun = vi.fn().mockResolvedValue(null)
+    render(
+      <TemplateRunDetail initialRun={run({ status: 'awaiting-approval' })} getRun={getRun} canApprove={false} />,
+    )
+    expect(screen.getByRole('button', { name: /approve/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /reject/i })).toBeDisabled()
+  })
 })
