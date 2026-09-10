@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getPayload } from 'payload'
+import { getPayload, NotFound } from 'payload'
 import configPromise from '@payload-config'
 import { validateInternalApiKey } from '@/lib/auth/internal-api-auth'
 
@@ -91,7 +91,7 @@ export async function GET(
       files,
     })
   } catch (err) {
-    if (err instanceof Error && err.message.includes('not found')) {
+    if (err instanceof NotFound) {
       return NextResponse.json({ error: 'template skeleton not found' }, { status: 404 })
     }
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })
