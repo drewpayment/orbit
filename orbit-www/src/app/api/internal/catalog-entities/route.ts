@@ -41,7 +41,14 @@ import { ENTITY_KINDS, type EntityKind } from '@/collections/catalog/constants'
  *
  * Auth: X-API-Key, same convention as the templates finalize route.
  *
- * Response: 200 { entityId: string }.
+ * Response: 201 { entityId: string } — on both the create path and the
+ * idempotent already-exists path, matching PayloadCatalogEntityClient, which
+ * treats any 2xx as success but documents 201 as the contract.
+ *
+ * A missing workspace returns 400, NOT 404: PayloadCatalogEntityClient
+ * special-cases HTTP 404 to mean "this route isn't deployed yet"
+ * (ErrCatalogEntitiesAPINotImplemented) — a 404 for "workspace not found"
+ * would be misread as that sentinel.
  */
 
 // Mirrors the `source.type` select options in
@@ -143,10 +150,12 @@ export async function POST(request: NextRequest) {
         overrideAccess: true,
       })
     } catch (err) {
-      // Mirrors the templates finalize route: only translate a "not found"
-      // lookup failure into a 404; any other failure stays a 500 below.
+      // NOT a 404: the Go client reserves HTTP 404 to mean "this route isn't
+      // implemented" (ErrCatalogEntitiesAPINotImplemented). Only translate a
+      // "not found" lookup failure into a 400; any other failure stays a 500
+      // below.
       if (err instanceof Error && err.message.toLowerCase().includes('not found')) {
-        return NextResponse.json({ error: 'workspace not found' }, { status: 404 })
+        return NextResponse.json({ error: 'workspace not found' }, { status: 400 })
       }
       throw err
     }
@@ -166,7 +175,7 @@ export async function POST(request: NextRequest) {
       overrideAccess: true,
     })
     if (existing.docs.length > 0) {
-      return NextResponse.json({ entityId: String(existing.docs[0].id) })
+      return NextResponse.json({ entityId: String(existing.docs[0].id) }, { status: 201 })
     }
 
     const slugBase = slugify(name) || kind
@@ -196,7 +205,7 @@ export async function POST(request: NextRequest) {
       overrideAccess: true,
     })
 
-    return NextResponse.json({ entityId: String(entity.id) })
+    return NextResponse.json({ entityId: String(entity.id) }, { status: 201 })
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })
   }

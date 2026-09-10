@@ -196,12 +196,12 @@ describe('POST /api/internal/catalog-entities', () => {
     expect(json.error).toContain('source.type')
   })
 
-  it('returns 404 for an unknown workspace id', async () => {
+  it('returns 400 (not 404 — reserved by the Go client for "route not implemented") for an unknown workspace id', async () => {
     const fp = new FakePayload()
     vi.mocked(getPayload).mockResolvedValue(p(fp))
 
     const res = await POST(req('test-api-key', validBody()))
-    expect(res.status).toBe(404)
+    expect(res.status).toBe(400)
     const json = await res.json()
     expect(json.error).toBe('workspace not found')
   })
@@ -212,7 +212,7 @@ describe('POST /api/internal/catalog-entities', () => {
     vi.mocked(getPayload).mockResolvedValue(p(fp))
 
     const res = await POST(req('test-api-key', validBody()))
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(201)
     const json = await res.json()
     expect(typeof json.entityId).toBe('string')
 
@@ -238,7 +238,7 @@ describe('POST /api/internal/catalog-entities', () => {
     delete body.links
 
     const res = await POST(req('test-api-key', body))
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(201)
     const entity = fp.collections['catalog-entities'][0]
     expect(entity.links).toBeUndefined()
   })
@@ -253,8 +253,8 @@ describe('POST /api/internal/catalog-entities', () => {
 
     const firstJson = await first.json()
     const secondJson = await second.json()
-    expect(first.status).toBe(200)
-    expect(second.status).toBe(200)
+    expect(first.status).toBe(201)
+    expect(second.status).toBe(201)
     expect(firstJson.entityId).toBe(secondJson.entityId)
     expect(fp.collections['catalog-entities']).toHaveLength(1)
   })
