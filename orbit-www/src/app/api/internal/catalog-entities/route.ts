@@ -45,7 +45,7 @@ import { ENTITY_KINDS, type EntityKind } from '@/collections/catalog/constants'
  * idempotent already-exists path, matching PayloadCatalogEntityClient, which
  * treats any 2xx as success but documents 201 as the contract.
  *
- * A missing workspace returns 400, NOT 404: PayloadCatalogEntityClient
+ * A missing workspace returns 422, NOT 404: PayloadCatalogEntityClient
  * special-cases HTTP 404 to mean "this route isn't deployed yet"
  * (ErrCatalogEntitiesAPINotImplemented) — a 404 for "workspace not found"
  * would be misread as that sentinel.
@@ -152,10 +152,10 @@ export async function POST(request: NextRequest) {
     } catch (err) {
       // NOT a 404: the Go client reserves HTTP 404 to mean "this route isn't
       // implemented" (ErrCatalogEntitiesAPINotImplemented). Only translate a
-      // "not found" lookup failure into a 400; any other failure stays a 500
+      // "not found" lookup failure into a 422; any other failure stays a 500
       // below.
       if (err instanceof Error && err.message.toLowerCase().includes('not found')) {
-        return NextResponse.json({ error: 'workspace not found' }, { status: 400 })
+        return NextResponse.json({ error: 'workspace not found' }, { status: 422 })
       }
       throw err
     }

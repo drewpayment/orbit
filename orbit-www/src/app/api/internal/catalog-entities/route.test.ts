@@ -196,12 +196,12 @@ describe('POST /api/internal/catalog-entities', () => {
     expect(json.error).toContain('source.type')
   })
 
-  it('returns 400 (not 404 — reserved by the Go client for "route not implemented") for an unknown workspace id', async () => {
+  it('returns 422 (not 404 — reserved by the Go client for "route not implemented") for an unknown workspace id', async () => {
     const fp = new FakePayload()
     vi.mocked(getPayload).mockResolvedValue(p(fp))
 
     const res = await POST(req('test-api-key', validBody()))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
     const json = await res.json()
     expect(json.error).toBe('workspace not found')
   })
