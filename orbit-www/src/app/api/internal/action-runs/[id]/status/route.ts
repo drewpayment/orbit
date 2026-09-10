@@ -17,15 +17,20 @@ import { readLogs, type RunLogEntry } from '@/lib/actions/run'
  *
  * Body (all optional except an implicit at-least-one):
  *   {
- *     status?: 'pending'|'awaiting-approval'|'running'|'succeeded'|'failed',
+ *     status?: 'pending'|'awaiting-approval'|'running'|'succeeded'|'failed'|'cancelled',
  *     appendLogs?: { ts?: string, level?: 'info'|'warn'|'error', message: string }[],
  *     outputs?: object,
  *     error?: string,
  *     workflowId?: string,
- *     entity?: string   // catalog-entities id this run produced
+ *     entity?: string,   // catalog-entities id this run produced
+ *     steps?: object[],  // Scaffolder (Phase 1): per-step status, REPLACES the array
+ *     plan?: object[] | null, // Scaffolder (Phase 1): PlannedChange[] from a dry run, REPLACES
  *   }
  *
- * Logs are APPENDED to the run's existing log array (never replaced).
+ * Logs are APPENDED to the run's existing log array (never replaced). `steps`
+ * and `plan` are replace-for-everything-else semantics, same as `outputs` —
+ * the caller (ScaffolderWorkflow's WriteRunProgress activity) always sends the
+ * full current snapshot of both.
  */
 
 const STATUSES: readonly ActionRun['status'][] = [
@@ -34,6 +39,7 @@ const STATUSES: readonly ActionRun['status'][] = [
   'running',
   'succeeded',
   'failed',
+  'cancelled',
 ]
 const isStatus = (v: unknown): v is ActionRun['status'] =>
   typeof v === 'string' && (STATUSES as readonly string[]).includes(v)
@@ -92,6 +98,8 @@ export async function POST(
   if (typeof body.error === 'string') data.error = body.error
   if (typeof body.workflowId === 'string') data.workflowId = body.workflowId
   if (typeof body.entity === 'string') data.entity = body.entity
+  if (Array.isArray(body.steps)) data.steps = body.steps
+  if (body.plan !== undefined) data.plan = body.plan
 
   if (Array.isArray(body.appendLogs)) {
     const logs = readLogs(run)
@@ -104,7 +112,10 @@ export async function POST(
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json(
-      { error: 'Nothing to update (provide status, appendLogs, outputs, error, workflowId, or entity)' },
+      {
+        error:
+          'Nothing to update (provide status, appendLogs, outputs, error, workflowId, entity, steps, or plan)',
+      },
       { status: 400 },
     )
   }

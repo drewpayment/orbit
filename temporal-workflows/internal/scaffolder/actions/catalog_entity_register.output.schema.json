@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "catalog:entity:register output",
+  "type": "object",
+  "properties": {
+    "entityId": {
+      "type": "string",
+      "description": "Id of the registered catalog entity."
+    }
+  },
+  "required": ["entityId"],
+  "additionalProperties": false
+}

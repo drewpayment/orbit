@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "github:repo:create input",
+  "type": "object",
+  "properties": {
+    "org": {
+      "type": "string",
+      "minLength": 1,
+      "description": "GitHub org or user that will own the new repository."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9_.-]+$",
+      "description": "Repository name."
+    },
+    "description": {
+      "type": "string",
+      "description": "Repository description."
+    },
+    "private": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether the new repository is private."
+    },
+    "installationId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "GitHub App installation id used to obtain a token for this call."
+    }
+  },
+  "required": ["org", "name", "installationId"],
+  "additionalProperties": false
+}
