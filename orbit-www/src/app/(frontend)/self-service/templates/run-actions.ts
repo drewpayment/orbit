@@ -128,7 +128,7 @@ export async function resolveScaffolderApproval(
   approvalId: string,
   approved: boolean,
   comment?: string,
-): Promise<{ runId: string }> {
+): Promise<{ ok: boolean; runId: string; errors?: string[] }> {
   const payload = await getPayload({ config })
   const user = await getCurrentUser()
   const uid = user?.id
@@ -170,15 +170,31 @@ export async function resolveScaffolderApproval(
     throw new Error('You do not have permission to resolve this approval gate.')
   }
 
-  await resolveScaffolderApprovalRPC({
-    workflowId: run.workflowId,
-    approvalId,
-    approved,
-    approverId: uid,
-    comment,
-  })
+  // The RPC call itself is the one failure mode a caller who passed every
+  // check above can still legitimately hit (the workflow already finished,
+  // the worker is unavailable, a transient gRPC error, …), so it's caught
+  // here and reported as a normal `{ ok: false }` result rather than an
+  // uncaught throw — a `ConnectError` crossing the server-action boundary
+  // otherwise surfaces to the client as an opaque 500, not the error message
+  // the UI's toast wants to show.
+  try {
+    await resolveScaffolderApprovalRPC({
+      workflowId: run.workflowId,
+      approvalId,
+      approved,
+      approverId: uid,
+      comment,
+      workspaceId,
+    })
+  } catch (err) {
+    return {
+      ok: false,
+      runId,
+      errors: [err instanceof Error ? err.message : 'Failed to resolve the approval gate.'],
+    }
+  }
 
-  return { runId }
+  return { ok: true, runId }
 }
 
 /** One `approval:request` step's gate info, for the run-detail page's UI. */

@@ -162,6 +162,13 @@ message ResolveScaffolderApprovalRequest {
   bool approved = 3;
   string approver_id = 4;
   string comment = 5;
+  // The run's workspace. Not used by the server for authorization (the
+  // server resolves the run's true workspace from the Temporal workflow
+  // memo via authorizeScaffolderRun, the same as GetRunProgress/CancelRun) —
+  // it exists so the orbit-www gRPC auth interceptor can read a workspace id
+  // off this request message and mint a token carrying the matching `wid`
+  // claim, the same way StartScaffolderRunRequest's workspace_id does.
+  string workspace_id = 6;
 }
 
 message ResolveScaffolderApprovalResponse {

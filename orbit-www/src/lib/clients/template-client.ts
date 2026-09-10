@@ -82,6 +82,14 @@ export async function listActions(): Promise<ListActionsResponse> {
  * owner/admin, or listed in the step's `approvers` —
  * `lib/templates/authz.ts#canApproveScaffolderStep`) BEFORE calling this: the
  * RPC itself only proves tenant isolation, not who may approve.
+ *
+ * `workspaceId` is required — not for the Go server's own authorization
+ * (`authorizeScaffolderRun` resolves the run's true workspace from the
+ * Temporal workflow memo, not from this field), but because
+ * `lib/grpc/auth-interceptor.ts` reads a `workspaceId` field off the request
+ * message to mint the outbound service token's `wid` claim. Without it the
+ * token carries no workspace claim and the server's `EnforceWorkspace` check
+ * rejects the call with `PermissionDenied` even for an authorized caller.
  */
 export async function resolveScaffolderApproval(input: {
   workflowId: string
@@ -89,6 +97,7 @@ export async function resolveScaffolderApproval(input: {
   approved: boolean
   approverId: string
   comment?: string
+  workspaceId: string
 }): Promise<ResolveScaffolderApprovalResponse> {
   const request = create(ResolveScaffolderApprovalRequestSchema, {
     workflowId: input.workflowId,
@@ -96,6 +105,7 @@ export async function resolveScaffolderApproval(input: {
     approved: input.approved,
     approverId: input.approverId,
     comment: input.comment ?? '',
+    workspaceId: input.workspaceId,
   })
   return templateClient.resolveScaffolderApproval(request)
 }

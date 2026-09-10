@@ -21,7 +21,10 @@ import { stepStatusPresentation } from '@/components/features/actions/action-ui'
 import { ScaffolderApprovalGate } from './ScaffolderApprovalGate'
 import { useRunPolling } from './use-run-polling'
 import type { ActionRun } from '@/payload-types'
-import type { ScaffolderApprovalGateInfo } from '@/app/(frontend)/self-service/templates/run-actions'
+import {
+  getScaffolderApprovalGates,
+  type ScaffolderApprovalGateInfo,
+} from '@/app/(frontend)/self-service/templates/run-actions'
 
 export interface TemplateRunDetailProps {
   initialRun: ActionRun
@@ -46,8 +49,25 @@ export interface TemplateRunDetailProps {
    * (`getScaffolderApprovalGates`) since the message/approvers live on the
    * `pending-approvals` row, not on `action-runs.steps[]`. Missing/empty
    * when the run has no open mid-run gate, or on any lookup failure.
+   *
+   * This is the server component's ONE-TIME snapshot at first render — it
+   * is never refreshed by a parent re-render, so a run that reaches
+   * `awaiting-approval` only after this component mounted (the common case:
+   * the run wizard's Submit does a client-side `router.push` straight to
+   * this page while the run is still `pending`/`running`) would otherwise
+   * show a read-only "waiting" card forever, missing the real Approve/
+   * Reject controls, until a hard reload re-runs the server component. See
+   * the effect below, which refetches once polling observes a step newly
+   * `awaiting-approval` that this snapshot doesn't already cover.
    */
   gates?: Record<string, ScaffolderApprovalGateInfo>
+  /**
+   * Fetches fresh gate info for a run — defaults to the real server action.
+   * Overridable so tests can inject a fake without going through the
+   * `run-actions` module mock every other test in this file already uses
+   * for `resolveScaffolderApproval`.
+   */
+  getGates?: (runId: string) => Promise<Record<string, ScaffolderApprovalGateInfo>>
 }
 
 interface OutputLinkLike {
@@ -73,7 +93,13 @@ function asOutputLinks(outputs: unknown): OutputLinkLike[] {
   return links.filter((l): l is OutputLinkLike => !!l && typeof l === 'object')
 }
 
-export function TemplateRunDetail({ initialRun, getRun, canApprove = true, gates = {} }: TemplateRunDetailProps) {
+export function TemplateRunDetail({
+  initialRun,
+  getRun,
+  canApprove = true,
+  gates: initialGates = {},
+  getGates = getScaffolderApprovalGates,
+}: TemplateRunDetailProps) {
   const { run: polledRun } = useRunPolling(initialRun.id, getRun)
   const run = polledRun ?? initialRun
 
@@ -88,6 +114,33 @@ export function TemplateRunDetail({ initialRun, getRun, canApprove = true, gates
   // confusing and `approveRun`/`rejectRun` would reject a run that was never
   // actually sitting at the pre-dispatch gate.
   const awaitingSteps = steps.filter((s) => s.status === 'awaiting-approval')
+
+  // `gates` merges the server-rendered initial snapshot with anything this
+  // effect fetches after the fact. Re-runs whenever polling delivers a new
+  // `run.steps` (a fresh object every tick, per `useRunPolling`/`getRun`)
+  // while some awaiting step still has no entry — which self-heals both the
+  // "gates was empty on mount" case above AND the `OpenApproval` activity's
+  // own race with the step-status writeback (the workflow flips the step to
+  // `awaiting-approval` and writes progress BEFORE the pending-approvals row
+  // exists — see scaffolder_approval.go's `runApprovalStep` — so the very
+  // first poll to observe the step can still legitimately get back `{}`).
+  // Stops re-fetching per step once that step's entry is present.
+  const [gates, setGates] = React.useState(initialGates)
+  React.useEffect(() => {
+    const missing = awaitingSteps.some((s) => s.id && !gates[s.id])
+    if (!missing) return
+    let cancelled = false
+    void (async () => {
+      const fresh = await getGates(run.id)
+      if (!cancelled && Object.keys(fresh).length > 0) {
+        setGates((prev) => ({ ...prev, ...fresh }))
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on step identity/status, not the steps array reference
+  }, [run.id, steps.map((s) => `${s.id}:${s.status}`).join(',')])
 
   return (
     <div className="space-y-6">

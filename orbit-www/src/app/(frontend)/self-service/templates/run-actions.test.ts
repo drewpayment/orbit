@@ -223,14 +223,33 @@ describe('templates/run-actions', () => {
 
       const result = await resolveScaffolderApproval('run-1', 'run-1:gate', true, 'lgtm')
 
-      expect(result).toEqual({ runId: 'run-1' })
+      expect(result).toEqual({ ok: true, runId: 'run-1' })
       expect(rpc).toHaveBeenCalledWith({
         workflowId: 'scaffolder-run-run-1',
         approvalId: 'run-1:gate',
         approved: true,
         approverId: 'user-1',
         comment: 'lgtm',
+        workspaceId: WORKSPACE_ID,
       })
+    })
+
+    it('surfaces an RPC failure as {ok: false, errors} instead of throwing', async () => {
+      const env = makeFakePayload({ 'action-runs': [RUN], 'pending-approvals': [GATE] })
+      env.setMembershipRole('owner')
+      mockPayload = env.payload
+      mockSessionUser = { id: 'user-1', email: 'owner@example.com' }
+      const { resolveScaffolderApproval: rpc } = await import('@/lib/clients/template-client')
+      vi.mocked(rpc).mockRejectedValueOnce(
+        new Error('[permission_denied] token has no workspace claim for a workspace-scoped request'),
+      )
+      const { resolveScaffolderApproval } = await import('./run-actions')
+
+      const result = await resolveScaffolderApproval('run-1', 'run-1:gate', true)
+
+      expect(result.ok).toBe(false)
+      expect(result.runId).toBe('run-1')
+      expect(result.errors?.[0]).toMatch(/workspace claim/i)
     })
 
     it('calls the RPC when the caller is listed by email in approvers, even as a plain member', async () => {
