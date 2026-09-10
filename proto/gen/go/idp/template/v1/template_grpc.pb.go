@@ -19,14 +19,15 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	TemplateService_StartInstantiation_FullMethodName       = "/idp.template.v1.TemplateService/StartInstantiation"
-	TemplateService_GetInstantiationProgress_FullMethodName = "/idp.template.v1.TemplateService/GetInstantiationProgress"
-	TemplateService_CancelInstantiation_FullMethodName      = "/idp.template.v1.TemplateService/CancelInstantiation"
-	TemplateService_ListAvailableOrgs_FullMethodName        = "/idp.template.v1.TemplateService/ListAvailableOrgs"
-	TemplateService_StartScaffolderRun_FullMethodName       = "/idp.template.v1.TemplateService/StartScaffolderRun"
-	TemplateService_GetRunProgress_FullMethodName           = "/idp.template.v1.TemplateService/GetRunProgress"
-	TemplateService_CancelRun_FullMethodName                = "/idp.template.v1.TemplateService/CancelRun"
-	TemplateService_ListActions_FullMethodName              = "/idp.template.v1.TemplateService/ListActions"
+	TemplateService_StartInstantiation_FullMethodName        = "/idp.template.v1.TemplateService/StartInstantiation"
+	TemplateService_GetInstantiationProgress_FullMethodName  = "/idp.template.v1.TemplateService/GetInstantiationProgress"
+	TemplateService_CancelInstantiation_FullMethodName       = "/idp.template.v1.TemplateService/CancelInstantiation"
+	TemplateService_ListAvailableOrgs_FullMethodName         = "/idp.template.v1.TemplateService/ListAvailableOrgs"
+	TemplateService_StartScaffolderRun_FullMethodName        = "/idp.template.v1.TemplateService/StartScaffolderRun"
+	TemplateService_GetRunProgress_FullMethodName            = "/idp.template.v1.TemplateService/GetRunProgress"
+	TemplateService_CancelRun_FullMethodName                 = "/idp.template.v1.TemplateService/CancelRun"
+	TemplateService_ListActions_FullMethodName               = "/idp.template.v1.TemplateService/ListActions"
+	TemplateService_ResolveScaffolderApproval_FullMethodName = "/idp.template.v1.TemplateService/ResolveScaffolderApproval"
 )
 
 // TemplateServiceClient is the client API for TemplateService service.
@@ -52,6 +53,9 @@ type TemplateServiceClient interface {
 	// List the action registry descriptors known to the worker (for definition
 	// validation and Phase 2 authoring UI autocomplete)
 	ListActions(ctx context.Context, in *ListActionsRequest, opts ...grpc.CallOption) (*ListActionsResponse, error)
+	// Resolve an `approval:request` step's human-in-the-loop gate on a running
+	// scaffolder workflow (Phase 4 Task C)
+	ResolveScaffolderApproval(ctx context.Context, in *ResolveScaffolderApprovalRequest, opts ...grpc.CallOption) (*ResolveScaffolderApprovalResponse, error)
 }
 
 type templateServiceClient struct {
@@ -142,6 +146,16 @@ func (c *templateServiceClient) ListActions(ctx context.Context, in *ListActions
 	return out, nil
 }
 
+func (c *templateServiceClient) ResolveScaffolderApproval(ctx context.Context, in *ResolveScaffolderApprovalRequest, opts ...grpc.CallOption) (*ResolveScaffolderApprovalResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveScaffolderApprovalResponse)
+	err := c.cc.Invoke(ctx, TemplateService_ResolveScaffolderApproval_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // TemplateServiceServer is the server API for TemplateService service.
 // All implementations must embed UnimplementedTemplateServiceServer
 // for forward compatibility.
@@ -165,6 +179,9 @@ type TemplateServiceServer interface {
 	// List the action registry descriptors known to the worker (for definition
 	// validation and Phase 2 authoring UI autocomplete)
 	ListActions(context.Context, *ListActionsRequest) (*ListActionsResponse, error)
+	// Resolve an `approval:request` step's human-in-the-loop gate on a running
+	// scaffolder workflow (Phase 4 Task C)
+	ResolveScaffolderApproval(context.Context, *ResolveScaffolderApprovalRequest) (*ResolveScaffolderApprovalResponse, error)
 	mustEmbedUnimplementedTemplateServiceServer()
 }
 
@@ -198,6 +215,9 @@ func (UnimplementedTemplateServiceServer) CancelRun(context.Context, *CancelRunR
 }
 func (UnimplementedTemplateServiceServer) ListActions(context.Context, *ListActionsRequest) (*ListActionsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListActions not implemented")
+}
+func (UnimplementedTemplateServiceServer) ResolveScaffolderApproval(context.Context, *ResolveScaffolderApprovalRequest) (*ResolveScaffolderApprovalResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResolveScaffolderApproval not implemented")
 }
 func (UnimplementedTemplateServiceServer) mustEmbedUnimplementedTemplateServiceServer() {}
 func (UnimplementedTemplateServiceServer) testEmbeddedByValue()                         {}
@@ -364,6 +384,24 @@ func _TemplateService_ListActions_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _TemplateService_ResolveScaffolderApproval_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveScaffolderApprovalRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TemplateServiceServer).ResolveScaffolderApproval(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TemplateService_ResolveScaffolderApproval_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TemplateServiceServer).ResolveScaffolderApproval(ctx, req.(*ResolveScaffolderApprovalRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // TemplateService_ServiceDesc is the grpc.ServiceDesc for TemplateService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -402,6 +440,10 @@ var TemplateService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListActions",
 			Handler:    _TemplateService_ListActions_Handler,
+		},
+		{
+			MethodName: "ResolveScaffolderApproval",
+			Handler:    _TemplateService_ResolveScaffolderApproval_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

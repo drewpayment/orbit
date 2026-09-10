@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CancelRequest, CancelResponse, CancelRunRequest, CancelRunResponse, GetProgressRequest, GetProgressResponse, GetRunProgressRequest, GetRunProgressResponse, ListActionsRequest, ListActionsResponse, ListAvailableOrgsRequest, ListAvailableOrgsResponse, StartInstantiationRequest, StartInstantiationResponse, StartScaffolderRunRequest, StartScaffolderRunResponse } from "./template_pb.js";
+import { CancelRequest, CancelResponse, CancelRunRequest, CancelRunResponse, GetProgressRequest, GetProgressResponse, GetRunProgressRequest, GetRunProgressResponse, ListActionsRequest, ListActionsResponse, ListAvailableOrgsRequest, ListAvailableOrgsResponse, ResolveScaffolderApprovalRequest, ResolveScaffolderApprovalResponse, StartInstantiationRequest, StartInstantiationResponse, StartScaffolderRunRequest, StartScaffolderRunResponse } from "./template_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -101,6 +101,18 @@ export const TemplateService = {
       name: "ListActions",
       I: ListActionsRequest,
       O: ListActionsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Resolve an `approval:request` step's human-in-the-loop gate on a running
+     * scaffolder workflow (Phase 4 Task C)
+     *
+     * @generated from rpc idp.template.v1.TemplateService.ResolveScaffolderApproval
+     */
+    resolveScaffolderApproval: {
+      name: "ResolveScaffolderApproval",
+      I: ResolveScaffolderApprovalRequest,
+      O: ResolveScaffolderApprovalResponse,
       kind: MethodKind.Unary,
     },
   }

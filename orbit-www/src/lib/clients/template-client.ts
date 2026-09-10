@@ -16,10 +16,12 @@ import {
   GetRunProgressRequestSchema,
   CancelRunRequestSchema,
   ListActionsRequestSchema,
+  ResolveScaffolderApprovalRequestSchema,
   type StartScaffolderRunResponse,
   type GetRunProgressResponse,
   type CancelRunResponse,
   type ListActionsResponse,
+  type ResolveScaffolderApprovalResponse,
 } from '@/lib/proto/idp/template/v1/template_pb'
 import type { JsonObject } from '@bufbuild/protobuf'
 import { authInterceptor } from '../grpc/auth-interceptor'
@@ -72,4 +74,28 @@ export async function cancelScaffolderRun(workflowId: string): Promise<CancelRun
 export async function listActions(): Promise<ListActionsResponse> {
   const request = create(ListActionsRequestSchema, {})
   return templateClient.listActions(request)
+}
+
+/**
+ * Resolve an `approval:request` step's human-in-the-loop gate (Phase 4 Task
+ * C). Callers MUST check the caller is authorized to approve (workspace
+ * owner/admin, or listed in the step's `approvers` —
+ * `lib/templates/authz.ts#canApproveScaffolderStep`) BEFORE calling this: the
+ * RPC itself only proves tenant isolation, not who may approve.
+ */
+export async function resolveScaffolderApproval(input: {
+  workflowId: string
+  approvalId: string
+  approved: boolean
+  approverId: string
+  comment?: string
+}): Promise<ResolveScaffolderApprovalResponse> {
+  const request = create(ResolveScaffolderApprovalRequestSchema, {
+    workflowId: input.workflowId,
+    approvalId: input.approvalId,
+    approved: input.approved,
+    approverId: input.approverId,
+    comment: input.comment ?? '',
+  })
+  return templateClient.resolveScaffolderApproval(request)
 }

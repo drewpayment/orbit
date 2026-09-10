@@ -57,6 +57,9 @@ const (
 	// TemplateServiceListActionsProcedure is the fully-qualified name of the TemplateService's
 	// ListActions RPC.
 	TemplateServiceListActionsProcedure = "/idp.template.v1.TemplateService/ListActions"
+	// TemplateServiceResolveScaffolderApprovalProcedure is the fully-qualified name of the
+	// TemplateService's ResolveScaffolderApproval RPC.
+	TemplateServiceResolveScaffolderApprovalProcedure = "/idp.template.v1.TemplateService/ResolveScaffolderApproval"
 )
 
 // TemplateServiceClient is a client for the idp.template.v1.TemplateService service.
@@ -78,6 +81,9 @@ type TemplateServiceClient interface {
 	// List the action registry descriptors known to the worker (for definition
 	// validation and Phase 2 authoring UI autocomplete)
 	ListActions(context.Context, *connect.Request[v1.ListActionsRequest]) (*connect.Response[v1.ListActionsResponse], error)
+	// Resolve an `approval:request` step's human-in-the-loop gate on a running
+	// scaffolder workflow (Phase 4 Task C)
+	ResolveScaffolderApproval(context.Context, *connect.Request[v1.ResolveScaffolderApprovalRequest]) (*connect.Response[v1.ResolveScaffolderApprovalResponse], error)
 }
 
 // NewTemplateServiceClient constructs a client for the idp.template.v1.TemplateService service. By
@@ -139,19 +145,26 @@ func NewTemplateServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(templateServiceMethods.ByName("ListActions")),
 			connect.WithClientOptions(opts...),
 		),
+		resolveScaffolderApproval: connect.NewClient[v1.ResolveScaffolderApprovalRequest, v1.ResolveScaffolderApprovalResponse](
+			httpClient,
+			baseURL+TemplateServiceResolveScaffolderApprovalProcedure,
+			connect.WithSchema(templateServiceMethods.ByName("ResolveScaffolderApproval")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // templateServiceClient implements TemplateServiceClient.
 type templateServiceClient struct {
-	startInstantiation       *connect.Client[v1.StartInstantiationRequest, v1.StartInstantiationResponse]
-	getInstantiationProgress *connect.Client[v1.GetProgressRequest, v1.GetProgressResponse]
-	cancelInstantiation      *connect.Client[v1.CancelRequest, v1.CancelResponse]
-	listAvailableOrgs        *connect.Client[v1.ListAvailableOrgsRequest, v1.ListAvailableOrgsResponse]
-	startScaffolderRun       *connect.Client[v1.StartScaffolderRunRequest, v1.StartScaffolderRunResponse]
-	getRunProgress           *connect.Client[v1.GetRunProgressRequest, v1.GetRunProgressResponse]
-	cancelRun                *connect.Client[v1.CancelRunRequest, v1.CancelRunResponse]
-	listActions              *connect.Client[v1.ListActionsRequest, v1.ListActionsResponse]
+	startInstantiation        *connect.Client[v1.StartInstantiationRequest, v1.StartInstantiationResponse]
+	getInstantiationProgress  *connect.Client[v1.GetProgressRequest, v1.GetProgressResponse]
+	cancelInstantiation       *connect.Client[v1.CancelRequest, v1.CancelResponse]
+	listAvailableOrgs         *connect.Client[v1.ListAvailableOrgsRequest, v1.ListAvailableOrgsResponse]
+	startScaffolderRun        *connect.Client[v1.StartScaffolderRunRequest, v1.StartScaffolderRunResponse]
+	getRunProgress            *connect.Client[v1.GetRunProgressRequest, v1.GetRunProgressResponse]
+	cancelRun                 *connect.Client[v1.CancelRunRequest, v1.CancelRunResponse]
+	listActions               *connect.Client[v1.ListActionsRequest, v1.ListActionsResponse]
+	resolveScaffolderApproval *connect.Client[v1.ResolveScaffolderApprovalRequest, v1.ResolveScaffolderApprovalResponse]
 }
 
 // StartInstantiation calls idp.template.v1.TemplateService.StartInstantiation.
@@ -194,6 +207,11 @@ func (c *templateServiceClient) ListActions(ctx context.Context, req *connect.Re
 	return c.listActions.CallUnary(ctx, req)
 }
 
+// ResolveScaffolderApproval calls idp.template.v1.TemplateService.ResolveScaffolderApproval.
+func (c *templateServiceClient) ResolveScaffolderApproval(ctx context.Context, req *connect.Request[v1.ResolveScaffolderApprovalRequest]) (*connect.Response[v1.ResolveScaffolderApprovalResponse], error) {
+	return c.resolveScaffolderApproval.CallUnary(ctx, req)
+}
+
 // TemplateServiceHandler is an implementation of the idp.template.v1.TemplateService service.
 type TemplateServiceHandler interface {
 	// Start a new template instantiation workflow
@@ -213,6 +231,9 @@ type TemplateServiceHandler interface {
 	// List the action registry descriptors known to the worker (for definition
 	// validation and Phase 2 authoring UI autocomplete)
 	ListActions(context.Context, *connect.Request[v1.ListActionsRequest]) (*connect.Response[v1.ListActionsResponse], error)
+	// Resolve an `approval:request` step's human-in-the-loop gate on a running
+	// scaffolder workflow (Phase 4 Task C)
+	ResolveScaffolderApproval(context.Context, *connect.Request[v1.ResolveScaffolderApprovalRequest]) (*connect.Response[v1.ResolveScaffolderApprovalResponse], error)
 }
 
 // NewTemplateServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -270,6 +291,12 @@ func NewTemplateServiceHandler(svc TemplateServiceHandler, opts ...connect.Handl
 		connect.WithSchema(templateServiceMethods.ByName("ListActions")),
 		connect.WithHandlerOptions(opts...),
 	)
+	templateServiceResolveScaffolderApprovalHandler := connect.NewUnaryHandler(
+		TemplateServiceResolveScaffolderApprovalProcedure,
+		svc.ResolveScaffolderApproval,
+		connect.WithSchema(templateServiceMethods.ByName("ResolveScaffolderApproval")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/idp.template.v1.TemplateService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TemplateServiceStartInstantiationProcedure:
@@ -288,6 +315,8 @@ func NewTemplateServiceHandler(svc TemplateServiceHandler, opts ...connect.Handl
 			templateServiceCancelRunHandler.ServeHTTP(w, r)
 		case TemplateServiceListActionsProcedure:
 			templateServiceListActionsHandler.ServeHTTP(w, r)
+		case TemplateServiceResolveScaffolderApprovalProcedure:
+			templateServiceResolveScaffolderApprovalHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -327,4 +356,8 @@ func (UnimplementedTemplateServiceHandler) CancelRun(context.Context, *connect.R
 
 func (UnimplementedTemplateServiceHandler) ListActions(context.Context, *connect.Request[v1.ListActionsRequest]) (*connect.Response[v1.ListActionsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.template.v1.TemplateService.ListActions is not implemented"))
+}
+
+func (UnimplementedTemplateServiceHandler) ResolveScaffolderApproval(context.Context, *connect.Request[v1.ResolveScaffolderApprovalRequest]) (*connect.Response[v1.ResolveScaffolderApprovalResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("idp.template.v1.TemplateService.ResolveScaffolderApproval is not implemented"))
 }

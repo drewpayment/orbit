@@ -25,6 +25,10 @@ func DefaultActions(deps Deps) []scaffolder.Action {
 		NewFSRender(),
 		NewFetchGit(deps.TokenService),
 		NewGitPush(deps.TokenService),
+		// approval:request is registered for its schema/descriptor only —
+		// ScaffolderWorkflow intercepts it before generic dispatch. See
+		// ApprovalRequest's doc comment.
+		NewApprovalRequest(),
 	}
 
 	if deps.TokenService != nil {
@@ -82,5 +86,6 @@ func DescriptorActions() []scaffolder.Action {
 		NewKafkaTopicProvision(nil, nil),
 		NewApiSchemaRegister(nil),
 		NewFetchOrbitSkeleton(nil),
+		NewApprovalRequest(),
 	}
 }

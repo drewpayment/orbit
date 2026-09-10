@@ -465,6 +465,19 @@ func main() {
 	log.Printf("Scaffolder engine registered with %d actions (dry-run preview storage: %t)",
 		len(scaffolderRegistry.Names()), scaffolderStorage != nil)
 
+	// approval:request's pending-approvals row (Phase 4 Task C) — a separate
+	// PayloadPendingApprovalsClient instance from the agent's own (below),
+	// since this one is constructed here to keep the scaffolder block
+	// self-contained; both talk to the same `pending-approvals` collection.
+	scaffolderApprovalActivities := activities.NewScaffolderApprovalActivities(
+		services.NewPayloadPendingApprovalsClient(orbitAPIURL, orbitInternalAPIKey, logger),
+		logger,
+	)
+	w.RegisterActivityWithOptions(scaffolderApprovalActivities.OpenApproval,
+		activity.RegisterOptions{Name: activities.ActivityScaffolderOpenApproval})
+	w.RegisterActivityWithOptions(scaffolderApprovalActivities.ResolveApproval,
+		activity.RegisterOptions{Name: activities.ActivityScaffolderResolveApproval})
+
 	// Register decommissioning/cleanup workflows
 	w.RegisterWorkflow(workflows.ApplicationDecommissioningWorkflow)
 	w.RegisterWorkflow(workflows.ApplicationCleanupWorkflow)

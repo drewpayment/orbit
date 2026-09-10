@@ -72,6 +72,39 @@ export async function canRunTemplateDefinition(
   return hasWorkspaceRole(payload, userId, workspaceId, ['owner', 'admin', 'member'])
 }
 
+/**
+ * May the user resolve an `approval:request` step's mid-run gate (Phase 4
+ * Task C)? Per the phase 4 plan (§13 decision 6): workspace owner/admin OR
+ * the caller's own id/email is listed in the step's `approvers`. The
+ * internal API key alone is never an approver — this check happens in the
+ * server action BEFORE the RPC is called, not only server-side inside the
+ * RPC.
+ *
+ * `approvers` is free text (emails or team ids), not RBAC-validated at
+ * definition-author time (a known gap, documented on the `approval:request`
+ * action) — matching against the caller's own id or email is the closest
+ * this can get without a team-membership lookup.
+ */
+export async function canApproveScaffolderStep(
+  payload: Payload,
+  userId: string | undefined | null,
+  userEmail: string | undefined | null,
+  workspaceId: string | undefined | null,
+  approvers: string[] | undefined | null,
+  isPayloadAdmin = false,
+): Promise<boolean> {
+  if (isPayloadAdmin) return true
+  if (!userId) return false
+
+  const listed = (approvers ?? []).some(
+    (a) => a === userId || (userEmail && a.toLowerCase() === userEmail.toLowerCase()),
+  )
+  if (listed) return true
+
+  if (!workspaceId) return false
+  return hasWorkspaceRole(payload, userId, workspaceId, ['owner', 'admin'])
+}
+
 /** A `template-definitions.visibility` value (mirrors the collection's select options). */
 export type TemplateVisibility = 'workspace' | 'shared' | 'public' | undefined | null
 

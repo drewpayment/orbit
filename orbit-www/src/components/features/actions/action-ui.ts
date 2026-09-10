@@ -115,13 +115,14 @@ export function runStatusPresentation(status: string): StatusPresentation {
 }
 
 /** A `Steps[number].status` value on an `ActionRun` (per-step lifecycle, Phase 2 plan Task 15). */
-export type StepStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped'
+export type StepStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped' | 'awaiting-approval'
 
 /**
  * Status → badge presentation for one `ActionRun.steps[]` entry. Distinct
- * from {@link RUN_STATUS_PRESENTATION} (whole-run lifecycle includes
- * `awaiting-approval`/`cancelled`, which no individual step has; a step adds
- * `skipped`, which no whole run has).
+ * from {@link RUN_STATUS_PRESENTATION} (whole-run lifecycle also has
+ * `cancelled`, which no individual step has; a step adds `skipped`, which no
+ * whole run has). `awaiting-approval` is shared by both (Phase 4 Task C: an
+ * `approval:request` step parks the whole run in that status too).
  */
 export const STEP_STATUS_PRESENTATION: Record<StepStatus, StatusPresentation> = {
   pending: {
@@ -131,6 +132,10 @@ export const STEP_STATUS_PRESENTATION: Record<StepStatus, StatusPresentation> = 
   running: {
     label: 'Running',
     className: 'border-blue-500/25 bg-blue-500/15 text-blue-600 dark:text-blue-400 animate-pulse',
+  },
+  'awaiting-approval': {
+    label: 'Awaiting approval',
+    className: 'border-amber-500/25 bg-amber-500/15 text-amber-600 dark:text-amber-400',
   },
   succeeded: {
     label: 'Succeeded',

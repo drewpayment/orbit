@@ -93,6 +93,7 @@ export const ActionRuns: CollectionConfig = {
           options: [
             { label: 'Pending', value: 'pending' },
             { label: 'Running', value: 'running' },
+            { label: 'Awaiting approval', value: 'awaiting-approval' },
             { label: 'Succeeded', value: 'succeeded' },
             { label: 'Failed', value: 'failed' },
             { label: 'Skipped', value: 'skipped' },

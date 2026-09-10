@@ -251,6 +251,19 @@ func (tc *TemporalClient) ScaffolderRunWorkspace(ctx context.Context, workflowID
 	return workspaceID, nil
 }
 
+// SignalScaffolderApproval resolves an `approval:request` step's gate
+// (Phase 4 Task C) by sending the signal ScaffolderWorkflow's step loop
+// waits on.
+func (tc *TemporalClient) SignalScaffolderApproval(ctx context.Context, workflowID string, in types.ScaffolderApprovalSignalInput) error {
+	if err := tc.client.SignalWorkflow(ctx, workflowID, "", types.ScaffolderApprovalSignal, in); err != nil {
+		if isTemporalNotFound(err) {
+			return grpcserver.ErrScaffolderRunNotFound
+		}
+		return fmt.Errorf("failed to signal scaffolder approval: %w", err)
+	}
+	return nil
+}
+
 // QueryScaffolderProgress queries a scaffolder run's per-step snapshot.
 func (tc *TemporalClient) QueryScaffolderProgress(ctx context.Context, workflowID string) (*types.ScaffolderProgress, error) {
 	resp, err := tc.client.QueryWorkflow(ctx, workflowID, "", types.ScaffolderProgressQuery)
