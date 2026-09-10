@@ -589,7 +589,8 @@ func TestScaffolderActivities_WriteRunProgress_RedactsRunOutputs(t *testing.T) {
 		},
 	}))
 
-	out := writer.calls[0].in.Outputs
+	require.NotNil(t, writer.calls[0].in.Outputs)
+	out := *writer.calls[0].in.Outputs
 	assert.Equal(t, "created https://example.com/x", out["text"])
 	assert.Equal(t, redactedPlaceholder, out["accessToken"],
 		"spec.output is author-written and can name a credential-bearing step output")
@@ -703,12 +704,75 @@ func TestRedactSecretsInText(t *testing.T) {
 		{name: "scrubs a gitlab pat", in: "push rejected: glpat-ABCDEFGHIJ0123456789", mustNotContain: "glpat-ABCDEFGHIJ0123456789"},
 		{name: "scrubs a slack bot token", in: "slack said no to xoxb-123456789012-abcdefghij", mustNotContain: "xoxb-123456789012-abcdefghij"},
 		{name: "scrubs an aws access key id", in: "using AKIAIOSFODNN7EXAMPLE", mustNotContain: "AKIAIOSFODNN7EXAMPLE"},
+		// --- digests and commit ids must survive ---------------------------
+		{name: "a sha256 digest is not a token", in: "manifest sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 not found", unchanged: true},
+		{name: "a long uppercase hex digest is not a token", in: "digest E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855 mismatch", unchanged: true},
+		{name: "a 40-char hex commit id is not a token", in: "reset to 0123456789abcdef0123456789abcdef0123abcd failed", unchanged: true},
+
+		// --- qualified credential names (suffix rule) -----------------------
+		{
+			name:           "scrubs a webhook secret",
+			in:             "webhook_secret=whsec_0123456789abcdef rejected",
+			mustNotContain: "whsec_0123456789abcdef",
+			mustContain:    []string{"webhook_secret", "rejected"},
+		},
+		{
+			name:           "scrubs an npm token",
+			in:             "npm_token=npm_0123456789abcdefghij",
+			mustNotContain: "npm_0123456789abcdefghij",
+		},
+		{
+			name:           "scrubs an upper-case github token env var",
+			in:             "GITHUB_TOKEN=abcdefghij0123456789 is invalid",
+			mustNotContain: "abcdefghij0123456789",
+			mustContain:    []string{"GITHUB_TOKEN", "is invalid"},
+		},
+		{
+			name:           "scrubs a hyphenated github token",
+			in:             "github-token: abcdefghij0123456789",
+			mustNotContain: "abcdefghij0123456789",
+		},
+		{
+			name:           "scrubs a db password",
+			in:             "db_password=p0stgr3sPassw0rd unreachable",
+			mustNotContain: "p0stgr3sPassw0rd",
+			mustContain:    []string{"db_password", "unreachable"},
+		},
+
+		// --- PEM blocks -----------------------------------------------------
+		{
+			name: "scrubs a whole PEM private key block",
+			in: "deploy key rejected:\n-----BEGIN OPENSSH PRIVATE KEY-----\n" +
+				"b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAAB\n" +
+				"-----END OPENSSH PRIVATE KEY-----\nfor host github.com",
+			mustNotContain: "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAAB",
+			mustContain:    []string{"deploy key rejected", "for host github.com"},
+		},
+		{
+			name:           "scrubs an RSA private key block",
+			in:             "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAxyz123\n-----END RSA PRIVATE KEY-----",
+			mustNotContain: "MIIEowIBAAKCAQEAxyz123",
+		},
+
+		// --- passwords containing "/" (base64) ------------------------------
+		{
+			name:           "scrubs a clone URL password containing a slash",
+			in:             "clone https://svcuser:aB3/dEf+gh=@github.com/acme/svc.git failed",
+			mustNotContain: "aB3/dEf+gh=",
+			mustContain:    []string{"svcuser", "github.com/acme/svc.git"},
+		},
+		{
+			name:           "scrubs a base64 ado pat in a clone URL",
+			in:             "clone https://ado:" + strings.Repeat("aB3/", 12) + "@dev.azure.com/acme/_git/svc failed",
+			mustNotContain: strings.Repeat("aB3/", 12),
+			mustContain:    []string{"dev.azure.com/acme/_git/svc"},
+		},
 		{
 			// A 52-char exact rule missed anything longer; the opaque rule is
-			// now open-ended from 44.
-			name:           "scrubs a long opaque ado pat",
-			in:             "ado auth failed with abcdefghij0123456789abcdefghij0123456789abcdefghij0123456789",
-			mustNotContain: "abcdefghij0123456789abcdefghij0123456789abcdefghij0123456789",
+			// now open-ended from 40, with pure-hex candidates skipped.
+			name:           "scrubs a long opaque mixed-case pat",
+			in:             "ado auth failed with aB3dEfGhIj0123456789aB3dEfGhIj0123456789aB3dEfGhIj0123456789",
+			mustNotContain: "aB3dEfGhIj0123456789aB3dEfGhIj0123456789aB3dEfGhIj0123456789",
 		},
 	}
 
@@ -801,7 +865,13 @@ func TestScaffolderActivities_WriteRunProgress_ClearsOutputsWhenFlagged(t *testi
 
 	require.Len(t, writer.calls, 1)
 	require.NotNil(t, writer.calls[0].in.Outputs)
-	assert.Empty(t, writer.calls[0].in.Outputs)
+	assert.Empty(t, *writer.calls[0].in.Outputs)
+
+	// Assert on the wire form too: a plain map here would be dropped by
+	// omitempty and never reach the route.
+	body, err := json.Marshal(writer.calls[0].in)
+	require.NoError(t, err)
+	assert.Contains(t, string(body), `"outputs":{}`)
 }
 
 func TestScaffolderActivities_WriteRunProgress_LeavesOutputsAloneWithoutTheFlag(t *testing.T) {

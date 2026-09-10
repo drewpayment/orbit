@@ -44,12 +44,16 @@ type ActionRunStep struct {
 type ActionRunStatusInput struct {
 	Status     *string             `json:"status,omitempty"`
 	AppendLogs []ActionRunLogEntry `json:"appendLogs,omitempty"`
-	Outputs    map[string]any      `json:"outputs,omitempty"`
-	Error      *string             `json:"error,omitempty"`
-	WorkflowID *string             `json:"workflowId,omitempty"`
-	Entity     *string             `json:"entity,omitempty"`
-	Steps      []ActionRunStep     `json:"steps,omitempty"`
-	Plan       *[]map[string]any   `json:"plan,omitempty"`
+	// Outputs is a pointer for the same reason as Plan: a run that produced no
+	// outputs must be able to send an empty object and CLEAR the stored value.
+	// A plain map would be dropped by omitempty, arriving indistinguishable
+	// from "don't touch the outputs".
+	Outputs    *map[string]any   `json:"outputs,omitempty"`
+	Error      *string           `json:"error,omitempty"`
+	WorkflowID *string           `json:"workflowId,omitempty"`
+	Entity     *string           `json:"entity,omitempty"`
+	Steps      []ActionRunStep   `json:"steps,omitempty"`
+	Plan       *[]map[string]any `json:"plan,omitempty"`
 }
 
 // IsEmpty reports whether the update would send nothing the route can act on.

@@ -320,6 +320,16 @@ func (r *scaffolderRun) runStep(ctx workflow.Context, stepBaseCtx workflow.Conte
 			r.steps[idx].FinishedAt = workflowNow(ctx)
 			r.logger.Info("Scaffolder step skipped", "stepId", step.ID, "if", step.If)
 			r.appendLog(ctx, "info", fmt.Sprintf("step %s (%s) skipped: condition is false", step.ID, step.Action))
+			if r.input.DryRun {
+				// Record it, so a reader can see the plan accounts for every
+				// step. Silently omitting it makes the preview look complete
+				// when a step was simply not represented.
+				r.plan = append(r.plan, scaffolder.PlannedChange{
+					Kind:        "skipped",
+					Name:        step.ID,
+					Description: fmt.Sprintf("%s will not run: its condition is false", step.Action),
+				})
+			}
 			return false, ""
 		}
 	}
@@ -434,6 +444,16 @@ func (r *scaffolderRun) runStep(ctx workflow.Context, stepBaseCtx workflow.Conte
 			r.logger.Warn("Scaffolder step failed but continueOnError is set",
 				"stepId", step.ID, "action", step.Action, "error", activityErr)
 			r.appendLog(ctx, "warn", fmt.Sprintf("step %s (%s) failed, continuing: %v", step.ID, step.Action, activityErr))
+			if r.input.DryRun {
+				// The step could not be planned and the run carried on, so
+				// the plan is incomplete. Say so rather than leaving a gap
+				// that reads as "this step changes nothing".
+				r.plan = append(r.plan, scaffolder.PlannedChange{
+					Kind:        "unsupported",
+					Name:        step.ID,
+					Description: fmt.Sprintf("%s could not be previewed: %v", step.Action, activityErr),
+				})
+			}
 			return false, ""
 		}
 		r.appendLog(ctx, "error", fmt.Sprintf("step %s (%s) failed: %v", step.ID, step.Action, activityErr))

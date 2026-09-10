@@ -543,3 +543,20 @@ func TestStartScaffolderRun_RejectsAMalformedRunID(t *testing.T) {
 		})
 	}
 }
+
+// One ActionRun is dispatched once, ever. A re-used run id must be reported as
+// a caller error, not as an internal failure and not silently as success.
+func TestStartScaffolderRun_ReusedRunIDIsAlreadyExists(t *testing.T) {
+	defMock := new(MockDefinitionClient)
+	defMock.On("GetDefinitionVersion", mock.Anything, "ver-1").Return(testVersion(), nil)
+
+	temporalMock := new(MockScaffolderTemporalClient)
+	temporalMock.On("StartScaffolderWorkflow", mock.Anything, mock.Anything).
+		Return("", ErrScaffolderRunAlreadyDispatched)
+
+	server := NewTemplateServer(temporalMock, nil, WithTemplateDefinitionClient(defMock))
+	_, err := server.StartScaffolderRun(authCtx(), connect.NewRequest(validScaffolderRequest()))
+
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeAlreadyExists, connectCode(t, err))
+}

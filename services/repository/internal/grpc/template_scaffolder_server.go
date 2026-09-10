@@ -156,6 +156,9 @@ func (s *TemplateServer) StartScaffolderRun(ctx context.Context, req *connect.Re
 		DryRun:              msg.GetDryRun(),
 	})
 	if err != nil {
+		if errors.Is(err, ErrScaffolderRunAlreadyDispatched) {
+			return nil, connect.NewError(connect.CodeAlreadyExists, err)
+		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 

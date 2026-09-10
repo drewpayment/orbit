@@ -49,6 +49,23 @@ func TestPayloadActionRunClient_WriteStatus(t *testing.T) {
 			},
 		},
 		{
+			name:  "sends an explicit empty outputs object so a stored value is cleared",
+			runID: "run-6",
+			in: ActionRunStatusInput{
+				Status:  &status,
+				Outputs: &map[string]any{},
+			},
+			assertBody: func(t *testing.T, raw map[string]json.RawMessage) {
+				t.Helper()
+				// The bug this pins: a plain map would be dropped by
+				// omitempty and the key would never reach the route, so an
+				// empty outputs could not clear the stored one.
+				got, ok := raw["outputs"]
+				require.True(t, ok, "outputs must be present on the wire")
+				assert.JSONEq(t, `{}`, string(got))
+			},
+		},
+		{
 			name:  "sends an explicit null plan when the pointer targets nil",
 			runID: "run-2",
 			in: ActionRunStatusInput{
@@ -64,7 +81,7 @@ func TestPayloadActionRunClient_WriteStatus(t *testing.T) {
 			runID: "run-3",
 			in: ActionRunStatusInput{
 				Steps:   []ActionRunStep{{ID: "a", Name: "A", Status: "succeeded"}},
-				Outputs: map[string]any{"text": "done"},
+				Outputs: &map[string]any{"text": "done"},
 				Plan:    &plan,
 			},
 			assertBody: func(t *testing.T, raw map[string]json.RawMessage) {
@@ -160,4 +177,66 @@ func TestPayloadActionRunClient_WriteStatus_EscapesRunID(t *testing.T) {
 	client := NewPayloadActionRunClient(srv.URL, "k", nil)
 	require.NoError(t, client.WriteStatus(context.Background(), "a/b", ActionRunStatusInput{Status: &status}))
 	assert.Equal(t, "/api/internal/action-runs/a%2Fb/status", gotPath)
+}
+
+// TestActionRunStatusInput_MarshalledBody asserts on the JSON that actually
+// goes over the wire, not on the struct. The distinction matters: an empty map
+// or slice behind `omitempty` vanishes at marshal time, which is exactly how
+// the "clear the stored outputs" path was silently broken.
+func TestActionRunStatusInput_MarshalledBody(t *testing.T) {
+	t.Parallel()
+
+	status := "succeeded"
+	empty := map[string]any{}
+	emptyPlan := []map[string]any{}
+
+	tests := []struct {
+		name string
+		in   ActionRunStatusInput
+		want string
+	}{
+		{
+			name: "an unset field is absent",
+			in:   ActionRunStatusInput{Status: &status},
+			want: `{"status":"succeeded"}`,
+		},
+		{
+			name: "an empty outputs object survives",
+			in:   ActionRunStatusInput{Status: &status, Outputs: &empty},
+			want: `{"status":"succeeded","outputs":{}}`,
+		},
+		{
+			name: "an empty plan array survives",
+			in:   ActionRunStatusInput{Status: &status, Plan: &emptyPlan},
+			want: `{"status":"succeeded","plan":[]}`,
+		},
+		{
+			name: "both empty collections survive together",
+			in:   ActionRunStatusInput{Outputs: &empty, Plan: &emptyPlan},
+			want: `{"outputs":{},"plan":[]}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := json.Marshal(tt.in)
+			require.NoError(t, err)
+			assert.JSONEq(t, tt.want, string(got))
+		})
+	}
+}
+
+// An input carrying only an empty-but-present collection is NOT empty: it has
+// something to say to the route.
+func TestActionRunStatusInput_IsEmpty(t *testing.T) {
+	t.Parallel()
+
+	empty := map[string]any{}
+	emptyPlan := []map[string]any{}
+
+	assert.True(t, ActionRunStatusInput{}.IsEmpty())
+	assert.False(t, ActionRunStatusInput{Outputs: &empty}.IsEmpty(),
+		"an explicit empty outputs clears the stored value and must be sent")
+	assert.False(t, ActionRunStatusInput{Plan: &emptyPlan}.IsEmpty())
 }

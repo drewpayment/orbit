@@ -15,7 +15,13 @@ var ErrNoPlan = errors.New("action does not support dry-run planning")
 // PlannedChange is one side effect an action would cause, surfaced in the
 // dry-run plan.
 type PlannedChange struct {
-	Kind        string `json:"kind"` // repo | entity | topic | file | pr | log | unsupported
+	// Kind is repo | entity | topic | file | pr | log | unsupported | skipped.
+	//
+	// "unsupported" means the step could not be previewed (the action has no
+	// Plan, or planning failed); "skipped" means it will not run at all, e.g.
+	// its `if` condition is false. Both exist so a plan never has a silent gap
+	// that reads as "this step changes nothing".
+	Kind        string `json:"kind"`
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 }

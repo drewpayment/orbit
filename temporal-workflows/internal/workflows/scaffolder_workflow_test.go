@@ -925,3 +925,78 @@ func (s *ScaffolderWorkflowTestSuite) TestUnseededBuiltinNamespaceKeysFailAtRunT
 		})
 	}
 }
+
+// A dry-run plan must account for every step, so a reader can never mistake a
+// silent gap for "this step changes nothing".
+func (s *ScaffolderWorkflowTestSuite) TestDryRunPlanRecordsASkippedStep() {
+	in := baseInput(twoStepDefinition())
+	in.DryRun = true
+	in.Definition.Spec.Output = nil
+	in.Definition.Spec.Steps[1].If = "${{ parameters.wantLog }}"
+	in.Definition.Spec.Steps[1].Input = json.RawMessage(`{"message":"static"}`)
+	in.Parameters["wantLog"] = false
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusSucceeded, res.Status)
+	s.Require().Len(s.stubs.planned, 1, "the skipped step must not be planned")
+
+	var skipped []scaffolder.PlannedChange
+	for _, c := range res.Plan {
+		if c.Kind == "skipped" {
+			skipped = append(skipped, c)
+		}
+	}
+	s.Require().Len(skipped, 1)
+	s.Equal("log", skipped[0].Name)
+	s.Contains(skipped[0].Description, "condition is false")
+}
+
+func (s *ScaffolderWorkflowTestSuite) TestDryRunPlanRecordsAContinueOnErrorPlanFailure() {
+	in := baseInput(twoStepDefinition())
+	in.DryRun = true
+	in.Definition.Spec.Output = nil
+	in.Definition.Spec.Steps[0].ContinueOnError = true
+	in.Definition.Spec.Steps[1].Input = json.RawMessage(`{"message":"static"}`)
+
+	s.stubs.planFn = func(step activities.ScaffolderStepInput) (*activities.ScaffolderPlanResult, error) {
+		if step.StepID == "create" {
+			return nil, temporal.NewNonRetryableApplicationError(
+				"github unreachable", activities.ErrTypeScaffolderInvalid, nil)
+		}
+		return &activities.ScaffolderPlanResult{Changes: []scaffolder.PlannedChange{{Kind: "log", Name: step.StepID}}}, nil
+	}
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusSucceeded, res.Status, "continueOnError carries the dry run on")
+
+	var unsupported []scaffolder.PlannedChange
+	for _, c := range res.Plan {
+		if c.Kind == "unsupported" {
+			unsupported = append(unsupported, c)
+		}
+	}
+	s.Require().Len(unsupported, 1, "a swallowed planning failure must still appear in the plan")
+	s.Equal("create", unsupported[0].Name)
+	s.Contains(unsupported[0].Description, "github unreachable")
+}
+
+// A live run records neither: the plan is a dry-run artefact only.
+func (s *ScaffolderWorkflowTestSuite) TestLiveRunRecordsNoPlanEntries() {
+	def := twoStepDefinition()
+	def.Spec.Output = nil
+	def.Spec.Steps[1].If = "${{ parameters.wantLog }}"
+	def.Spec.Steps[1].Input = json.RawMessage(`{"message":"static"}`)
+	in := baseInput(def)
+	in.Parameters["wantLog"] = false
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusSucceeded, res.Status)
+	s.Empty(res.Plan)
+	s.False(s.lastProgress().HasPlan)
+}

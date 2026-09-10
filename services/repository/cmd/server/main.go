@@ -191,13 +191,22 @@ func (tc *TemporalClient) StartScaffolderWorkflow(ctx context.Context, in types.
 		Memo: map[string]interface{}{
 			scaffolderWorkspaceMemoKey: in.WorkspaceID,
 		},
-		// One ActionRun doc is dispatched exactly once, ever. Rejecting a
-		// duplicate makes a re-used run id fail loudly instead of stamping a
-		// second workflow (and a second workspace memo) over the first — a
-		// re-run is a new ActionRun, not a second dispatch of an old one.
-		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		// One ActionRun doc is dispatched exactly once, ever: a re-run is a
+		// new ActionRun, not a second dispatch of an old one. Rejecting a
+		// duplicate stops a re-used run id stamping a second workflow (and a
+		// second workspace memo) over the first.
+		//
+		// WorkflowExecutionErrorWhenAlreadyStarted must be set explicitly:
+		// it defaults to false, which would return the EXISTING run with a
+		// nil error and make the rejection silent.
+		WorkflowIDReusePolicy:                    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		WorkflowExecutionErrorWhenAlreadyStarted: true,
 	}, types.ScaffolderWorkflowName, in)
 	if err != nil {
+		var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
+		if errors.As(err, &alreadyStarted) {
+			return "", grpcserver.ErrScaffolderRunAlreadyDispatched
+		}
 		return "", fmt.Errorf("failed to start scaffolder workflow: %w", err)
 	}
 	return we.GetID(), nil

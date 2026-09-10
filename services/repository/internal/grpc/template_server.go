@@ -39,6 +39,11 @@ type ScaffolderTemporalClient interface {
 // the handlers can answer NotFound rather than Internal.
 var ErrScaffolderRunNotFound = errors.New("scaffolder run not found")
 
+// ErrScaffolderRunAlreadyDispatched is returned when a run id has already been
+// dispatched. One ActionRun maps to one workflow for its whole life, so this is
+// a caller error (AlreadyExists), not a platform failure.
+var ErrScaffolderRunAlreadyDispatched = errors.New("scaffolder run has already been dispatched")
+
 // PayloadClientInterface defines the interface for Payload CMS operations
 type PayloadClientInterface interface {
 	GetTemplate(ctx context.Context, templateID string) (*TemplateData, error)
