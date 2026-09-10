@@ -100,7 +100,16 @@ export async function listActions(userId?: string): Promise<ActionSummary[]> {
   const result = await payload.find({
     collection: 'actions',
     where: {
-      and: [{ workspace: { in: workspaceIds } }, { enabled: { equals: true } }],
+      and: [
+        { workspace: { in: workspaceIds } },
+        { enabled: { equals: true } },
+        // `scaffolder`-backed rows are hidden runner Actions
+        // auto-provisioned by templates/authoring-actions.ts's
+        // ensureRunnerAction — they must only be reachable through
+        // startDryRun/startRun (phase-1 plan §9.2 BLOCKER 1), never the
+        // generic self-service catalog.
+        { 'backend.type': { not_equals: 'scaffolder' } },
+      ],
     },
     sort: 'name',
     limit: 500,
@@ -183,6 +192,17 @@ export async function runAction(input: {
     })
   } catch {
     throw new Error('Action not found')
+  }
+
+  // BLOCKER 1(c): scaffolder-backed Actions are hidden runner rows for the
+  // v2 template engine — they must go through startDryRun/startRun
+  // (templates/authoring-actions.ts), which enforce the publish gate and
+  // record `templateVersion` on the run. Reject here rather than let the
+  // generic runner dispatch it (lib/actions/run.ts defends in depth too).
+  if (action.backend?.type === 'scaffolder') {
+    throw new Error(
+      'This is a template — run it from the Templates page, not the Actions catalog.',
+    )
   }
 
   const workspaceId = relId(action.workspace)
