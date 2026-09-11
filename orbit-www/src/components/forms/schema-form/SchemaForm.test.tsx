@@ -171,6 +171,93 @@ describe('SchemaForm', () => {
       token: { value: 'shh', secret: true },
     })
   })
+
+  it('seeds a text field from schema default when no explicit value is given', () => {
+    render(
+      <SchemaForm
+        pages={onePage({
+          schema: {
+            type: 'object',
+            properties: {
+              greeting: { type: 'string', title: 'Greeting', default: 'hello' },
+            },
+          },
+        })}
+      />,
+    )
+
+    expect(screen.getByDisplayValue('hello')).toBeInTheDocument()
+  })
+
+  it('seeds a boolean field from schema default and submits it when left untouched', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+
+    render(
+      <SchemaForm
+        pages={onePage({
+          schema: {
+            type: 'object',
+            properties: {
+              private: { type: 'boolean', title: 'Private', default: true },
+            },
+          },
+        })}
+        onSubmit={onSubmit}
+      />,
+    )
+
+    expect(screen.getByRole('switch')).toBeChecked()
+
+    await user.click(screen.getByRole('button', { name: /submit/i }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({ private: true })
+  })
+
+  it('lets an explicit value win over a schema default', () => {
+    render(
+      <SchemaForm
+        pages={onePage({
+          schema: {
+            type: 'object',
+            properties: {
+              greeting: { type: 'string', title: 'Greeting', default: 'hello' },
+            },
+          },
+        })}
+        values={{ greeting: 'goodbye' }}
+      />,
+    )
+
+    expect(screen.getByDisplayValue('goodbye')).toBeInTheDocument()
+    expect(screen.queryByDisplayValue('hello')).not.toBeInTheDocument()
+  })
+
+  it('applies a default from one page while an explicit value from another page is untouched', () => {
+    render(
+      <SchemaForm
+        pages={[
+          {
+            title: 'Page 1',
+            schema: {
+              type: 'object',
+              properties: { name: { type: 'string', title: 'Name', default: 'Alice' } },
+            },
+          },
+          {
+            title: 'Page 2',
+            schema: {
+              type: 'object',
+              properties: { color: { type: 'string', title: 'Color', enum: ['red', 'blue'] } },
+            },
+          },
+        ]}
+        mode="single"
+      />,
+    )
+
+    expect(screen.getByDisplayValue('Alice')).toBeInTheDocument()
+  })
 })
 
 describe('SchemaForm nested object fields', () => {
@@ -383,5 +470,98 @@ describe('SchemaForm hidden-field payload stripping', () => {
     const submitted = onSubmit.mock.calls[0][0]
     expect(submitted).not.toHaveProperty('extra')
     expect(submitted.enableExtra).toBe(false)
+  })
+})
+
+describe('SchemaForm re-seeds defaults when the schema prop changes after mount', () => {
+  it('picks up a newly added default on a schema-identity change, while an already-typed value survives', async () => {
+    const user = userEvent.setup()
+
+    const { rerender } = render(
+      <SchemaForm
+        pages={onePage({
+          schema: {
+            type: 'object',
+            properties: { name: { type: 'string', title: 'Name' } },
+          },
+        })}
+      />,
+    )
+
+    await user.type(screen.getByRole('textbox', { name: /^Name/ }), 'svc')
+    expect(screen.getByDisplayValue('svc')).toBeInTheDocument()
+
+    rerender(
+      <SchemaForm
+        pages={onePage({
+          schema: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', title: 'Name' },
+              greeting: { type: 'string', title: 'Greeting', default: 'hello' },
+            },
+          },
+        })}
+      />,
+    )
+
+    // The newly-added defaulted field appears with its default...
+    expect(screen.getByDisplayValue('hello')).toBeInTheDocument()
+    // ...and the already-typed value in the pre-existing field survives.
+    expect(screen.getByDisplayValue('svc')).toBeInTheDocument()
+  })
+
+  it('does not reset when rerendered with an unrelated prop change (schema itself unchanged)', async () => {
+    const user = userEvent.setup()
+    const pages = onePage({
+      schema: {
+        type: 'object',
+        properties: { name: { type: 'string', title: 'Name' } },
+      },
+    })
+
+    const { rerender } = render(<SchemaForm pages={pages} submitLabel="Submit" />)
+    await user.type(screen.getByRole('textbox', { name: /^Name/ }), 'svc')
+
+    rerender(<SchemaForm pages={pages} submitLabel="Go" />)
+
+    expect(screen.getByDisplayValue('svc')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Go' })).toBeInTheDocument()
+  })
+
+  // Regression test: a caller (RunActionDialog, UseTemplateForm,
+  // StepsBuilder) can pass an inline `pages={[...]}` array literal, so a
+  // completely unrelated sibling state change re-creates that array (and so
+  // `mergedSchema`) with a NEW reference on every render even though its
+  // SHAPE never changed. The reset effect must compare structurally, not by
+  // reference, or a user's typed value gets wiped by something they never
+  // touched.
+  it('does not reset (and does not wipe a typed value) when a structurally-identical `pages` array is passed by a NEW reference', async () => {
+    const user = userEvent.setup()
+    const buildPages = () =>
+      onePage({
+        schema: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', title: 'Name' },
+            greeting: { type: 'string', title: 'Greeting', default: 'hello' },
+          },
+        },
+      })
+
+    const { rerender } = render(<SchemaForm pages={buildPages()} />)
+    await user.type(screen.getByRole('textbox', { name: /^Name/ }), 'svc')
+    // The user also overwrites the seeded default before the rerender.
+    const greetingInput = screen.getByRole('textbox', { name: /^Greeting/ })
+    await user.clear(greetingInput)
+    await user.type(greetingInput, 'howdy')
+
+    // A brand-new array/object reference, but identical structure/content.
+    rerender(<SchemaForm pages={buildPages()} />)
+
+    // Neither typed value was reset back to its seeded/default state.
+    expect(screen.getByDisplayValue('svc')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('howdy')).toBeInTheDocument()
+    expect(screen.queryByDisplayValue('hello')).not.toBeInTheDocument()
   })
 })

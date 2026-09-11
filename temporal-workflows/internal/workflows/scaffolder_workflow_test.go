@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/workflow"
 
 	"github.com/drewpayment/orbit/temporal-workflows/internal/activities"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/scaffolder"
@@ -913,6 +914,64 @@ func (s *ScaffolderWorkflowTestSuite) TestDryRunHandlesQuotedFilterArguments() {
 	s.JSONEq(`{"name":"fallback"}`, string(s.stubs.planned[0].Input))
 }
 
+// A parameter's declared JSON Schema default is applied when the caller
+// omits it, on a real run, so a step expression referencing it resolves
+// instead of failing with an unresolved-path error.
+func (s *ScaffolderWorkflowTestSuite) TestParameterDefaultAppliedOnLiveRun() {
+	def := twoStepDefinition()
+	def.Spec.Parameters[0].Properties["private"] = json.RawMessage(`{"type":"boolean","default":true}`)
+	def.Spec.Steps[0].Input = json.RawMessage(`{"name":"${{ parameters.name }}","private":"${{ parameters.private }}"}`)
+
+	in := baseInput(def)
+	in.Parameters = map[string]any{"name": "orders"} // "private" deliberately omitted
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusSucceeded, res.Status)
+	s.Require().Len(s.stubs.executed, 2)
+	s.JSONEq(`{"name":"orders","private":true}`, string(s.stubs.executed[0].Input))
+}
+
+// The same default fills in on a dry run/plan, not just a real run.
+func (s *ScaffolderWorkflowTestSuite) TestParameterDefaultAppliedOnDryRun() {
+	def := twoStepDefinition()
+	def.Spec.Parameters[0].Properties["private"] = json.RawMessage(`{"type":"boolean","default":true}`)
+	def.Spec.Steps[0].Input = json.RawMessage(`{"name":"${{ parameters.name }}","private":"${{ parameters.private }}"}`)
+
+	in := baseInput(def)
+	in.Parameters = map[string]any{"name": "orders"}
+	in.DryRun = true
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusSucceeded, res.Status)
+	// The second step depends on the first step's (unavailable-in-a-dry-run)
+	// output, so only the first step is actually planned — see
+	// TestDryRunSkipsStepsThatDependOnEarlierOutput for the general case.
+	s.Require().Len(s.stubs.planned, 1)
+	s.JSONEq(`{"name":"orders","private":true}`, string(s.stubs.planned[0].Input))
+}
+
+// An explicit value — even the falsy default's opposite — is never
+// overridden by the schema default.
+func (s *ScaffolderWorkflowTestSuite) TestParameterDefaultDoesNotOverrideExplicitValue() {
+	def := twoStepDefinition()
+	def.Spec.Parameters[0].Properties["private"] = json.RawMessage(`{"type":"boolean","default":true}`)
+	def.Spec.Steps[0].Input = json.RawMessage(`{"name":"${{ parameters.name }}","private":"${{ parameters.private }}"}`)
+
+	in := baseInput(def)
+	in.Parameters = map[string]any{"name": "orders", "private": false}
+
+	s.env.ExecuteWorkflow(ScaffolderWorkflow, in)
+	res := s.result()
+
+	s.Equal(ScaffolderStatusSucceeded, res.Status)
+	s.Require().Len(s.stubs.executed, 2)
+	s.JSONEq(`{"name":"orders","private":false}`, string(s.stubs.executed[0].Input))
+}
+
 // A live run resolves spec.output normally; only a dry run gets the escape.
 func (s *ScaffolderWorkflowTestSuite) TestLiveRunStillFailsOnAnUnresolvableOutput() {
 	def := twoStepDefinition()
@@ -1285,6 +1344,21 @@ func (s *ScaffolderWorkflowTestSuite) TestDryRunRedactsActionProvidedPlanEntries
 	s.NotContains(res.Plan[0].Name, "ghp_abcdefghij0123456789")
 	s.Contains(res.Plan[0].Name, "github.com/acme/svc.git")
 	s.NotContains(res.Plan[0].Description, "hunter2hunter2")
+}
+
+// scaffolderParameterDefaultsEnabled is the version gate's condition,
+// exercised directly (no workflow.Context needed) so the gate itself — not
+// just its net effect on a fresh execution, which always sees the latest
+// version — is under test. A pre-change execution replaying with
+// workflow.DefaultVersion (no marker in its recorded history) must not
+// apply defaults; anything at or past the gated version must.
+func TestScaffolderParameterDefaultsVersionGate(t *testing.T) {
+	require.False(t, scaffolderParameterDefaultsEnabled(workflow.DefaultVersion),
+		"a pre-change execution (no version marker in history) must not apply defaults")
+	require.True(t, scaffolderParameterDefaultsEnabled(scaffolderParameterDefaultsVersion),
+		"an execution at the gated version must apply defaults")
+	require.True(t, scaffolderParameterDefaultsEnabled(scaffolderParameterDefaultsVersion+1),
+		"an execution past the gated version must still apply defaults")
 }
 
 // The shared fixture must itself be valid against the real validator. Without

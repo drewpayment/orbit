@@ -48,6 +48,10 @@ export function RunActionDialog({
   const router = useRouter()
   const normalized = useMemo(() => normalizeInputSchema(action.inputSchema), [action.inputSchema])
   const { schema, uiSchema } = useMemo(() => inputSchemaToJsonSchema(normalized), [normalized])
+  const formPages = useMemo(
+    () => [{ title: action.name, schema, uiSchema }],
+    [action.name, schema, uiSchema],
+  )
 
   const [submitting, setSubmitting] = useState(false)
 
@@ -82,7 +86,7 @@ export function RunActionDialog({
         ) : (
           <SchemaForm
             id={RUN_ACTION_FORM_ID}
-            pages={[{ title: action.name, schema, uiSchema }]}
+            pages={formPages}
             mode="single"
             hideSubmit
             onSubmit={handleSubmit}

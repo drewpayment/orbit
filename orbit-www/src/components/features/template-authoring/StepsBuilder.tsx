@@ -296,6 +296,7 @@ function StepRow({
       descriptor ? stepInputSchemaToSchemaFormPage('Inputs', descriptor.inputSchema, workspaceId) : undefined,
     [descriptor, workspaceId],
   )
+  const inputPages = React.useMemo(() => (inputPage ? [inputPage] : undefined), [inputPage])
 
   // Local draft for the id, mirroring ParametersBuilder's Name field: an
   // invalid or colliding id must stay visible with an inline error rather
@@ -463,10 +464,10 @@ function StepRow({
                 {expanded ? 'Hide inputs' : 'Configure inputs'}
               </Button>
             </div>
-            {expanded && inputPage && (
+            {expanded && inputPages && (
               <div className="rounded-md border p-3">
                 <SchemaForm
-                  pages={[inputPage]}
+                  pages={inputPages}
                   values={step.input}
                   onChange={(values) => patch({ input: values })}
                   fieldRegistry={fieldRegistry}

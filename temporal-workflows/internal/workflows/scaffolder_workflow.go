@@ -180,7 +180,7 @@ func ScaffolderWorkflow(ctx workflow.Context, input ScaffolderWorkflowInput) (*S
 	logger := workflow.GetLogger(ctx)
 	info := workflow.GetInfo(ctx)
 
-	run := newScaffolderRun(input, logger)
+	run := newScaffolderRun(ctx, input, logger)
 
 	// Bookkeeping activities (validate, progress writeback, cleanup) do not
 	// heartbeat, so they get their own options: a heartbeat timeout here would
@@ -304,13 +304,42 @@ func ScaffolderWorkflow(ctx workflow.Context, input ScaffolderWorkflowInput) (*S
 	return run.finish(ctx, bookkeepingCtx, ScaffolderStatusSucceeded, "")
 }
 
+// scaffolderParameterDefaultsChangeID and scaffolderParameterDefaultsVersion
+// gate applying JSON Schema parameter defaults (below) behind
+// workflow.GetVersion: an in-flight run parked at an approval gate (or any
+// other durable wait point) must replay with the exact exprCtx.Parameters
+// history recorded, not a different set reflecting code deployed after it
+// started — see scaffolder_approval.go for the wait points this protects.
+const (
+	scaffolderParameterDefaultsChangeID = "parameter-defaults"
+	scaffolderParameterDefaultsVersion  = 1
+)
+
+// scaffolderParameterDefaultsEnabled is the version gate's condition,
+// factored out so it is unit-testable without a workflow.Context: a
+// pre-change execution (no marker in its history) replays with
+// workflow.DefaultVersion and must NOT apply defaults; anything at or past
+// scaffolderParameterDefaultsVersion must.
+func scaffolderParameterDefaultsEnabled(version workflow.Version) bool {
+	return version >= scaffolderParameterDefaultsVersion
+}
+
 // newScaffolderRun seeds the expression context and the per-step progress
 // slice. Every namespace is a plain map, so an expression can never reach into
 // Go state (see scaffolder.Ctx).
-func newScaffolderRun(input ScaffolderWorkflowInput, logger log.Logger) *scaffolderRun {
+func newScaffolderRun(ctx workflow.Context, input ScaffolderWorkflowInput, logger log.Logger) *scaffolderRun {
 	params := input.Parameters
 	if params == nil {
 		params = map[string]any{}
+	}
+	// Applied once, here, for every path that builds an expression context —
+	// real runs and dry runs/plans alike — so a caller (UI form, API, script)
+	// that omits a parameter with a declared JSON Schema default sees the
+	// same value the workflow actually uses, not an unresolved-path failure.
+	// Version-gated: see scaffolderParameterDefaultsChangeID's doc comment.
+	version := workflow.GetVersion(ctx, scaffolderParameterDefaultsChangeID, workflow.DefaultVersion, scaffolderParameterDefaultsVersion)
+	if scaffolderParameterDefaultsEnabled(version) {
+		params = scaffolder.ApplyParameterDefaults(input.Definition, params)
 	}
 
 	run := &scaffolderRun{
