@@ -82,7 +82,6 @@ spec:
       name: Request approval
       action: approval:request
       if: ${{ parameters.requireApproval }}
-      timeout: 48h
       input:
         message: >-
           Approve provisioning topic "${{ parameters.topicName }}" in

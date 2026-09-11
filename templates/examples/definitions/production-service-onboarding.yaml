@@ -59,7 +59,6 @@ spec:
     - id: approval
       name: Request production approval
       action: approval:request
-      timeout: 48h
       input:
         message: >-
           Production service onboarding requested by ${{ user.email }} for

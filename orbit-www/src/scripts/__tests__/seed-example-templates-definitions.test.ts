@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import * as yaml from 'yaml'
 import { TemplateDefinitionSchema } from '@/lib/scaffolder/schema'
+import { MAX_STEP_TIMEOUT_MS, parseGoDurationMs } from '@/lib/scaffolder/validate'
 import { rewritePlaceholders } from '../seed-example-templates-lib'
 
 // Repo-root-relative: orbit-www/src/scripts/__tests__ -> ../../../../templates/examples/definitions
@@ -51,6 +52,29 @@ describe('templates/examples/definitions/*.yaml', () => {
 
     if (!result.success) {
       throw new Error(`${file} failed TemplateDefinitionSchema: ${JSON.stringify(result.error.format(), null, 2)}`)
+    }
+  })
+
+  it('no step timeout exceeds the engine\'s MAX_STEP_TIMEOUT_MS (2h)', () => {
+    // A gate action like approval:request waits on its own input
+    // (timeoutHours), not the step-level `timeout` — the validator's step
+    // `timeout` is capped at 2h regardless of action, so an approval step
+    // must not set one at all (the fix for the bug this test guards
+    // against: kafka-event-consumer and production-service-onboarding both
+    // shipped `timeout: 48h` on their approval:request step and failed
+    // live validation in the editor).
+    for (const file of files) {
+      const raw = readFileSync(join(DEFINITIONS_DIR, file), 'utf8')
+      const parsed = yaml.parse(raw) as { spec?: { steps?: Array<{ id: string; timeout?: string }> } }
+      for (const step of parsed.spec?.steps ?? []) {
+        if (step.timeout === undefined || step.timeout === '') continue
+        const ms = parseGoDurationMs(step.timeout)
+        expect(ms, `${file} step "${step.id}" has an unparseable timeout "${step.timeout}"`).not.toBeNull()
+        expect(
+          ms as number,
+          `${file} step "${step.id}" timeout "${step.timeout}" exceeds MAX_STEP_TIMEOUT_MS (2h)`,
+        ).toBeLessThanOrEqual(MAX_STEP_TIMEOUT_MS)
+      }
     }
   })
 
