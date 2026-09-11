@@ -2,12 +2,53 @@ import { describe, expect, it } from 'vitest'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import * as yaml from 'yaml'
-import { TemplateDefinitionSchema } from '@/lib/scaffolder/schema'
-import { MAX_STEP_TIMEOUT_MS, parseGoDurationMs } from '@/lib/scaffolder/validate'
+import { TemplateDefinitionSchema, type TemplateDefinition } from '@/lib/scaffolder/schema'
+import { MAX_STEP_TIMEOUT_MS, parseGoDurationMs, validateDefinition, type ActionDescriptor } from '@/lib/scaffolder/validate'
 import { rewritePlaceholders } from '../seed-example-templates-lib'
 
 // Repo-root-relative: orbit-www/src/scripts/__tests__ -> ../../../../templates/examples/definitions
 const DEFINITIONS_DIR = join(__dirname, '..', '..', '..', '..', 'templates', 'examples', 'definitions')
+
+// Repo-root-relative: orbit-www/src/scripts/__tests__ -> ../../../../services/repository/internal/grpc/scaffolder_actions.json
+const ACTIONS_REGISTRY_PATH = join(
+  __dirname,
+  '..',
+  '..',
+  '..',
+  '..',
+  'services',
+  'repository',
+  'internal',
+  'grpc',
+  'scaffolder_actions.json',
+)
+
+interface RawActionDescriptor {
+  name: string
+  family: string
+  inputSchema: Record<string, unknown>
+  outputSchema: Record<string, unknown>
+  supportsPlan: boolean
+}
+
+/**
+ * Loads the checked-in action registry and maps it into `ActionDescriptor`
+ * the same way `listActionRegistry` (authoring-actions.ts) maps the live
+ * gRPC `ListActions` response: `id` and `name` both come from the raw
+ * entry's `name` field (the action's dotted id, e.g. "github:repo:create"),
+ * not a separate display name.
+ */
+function loadActionRegistry(): ActionDescriptor[] {
+  const raw = JSON.parse(readFileSync(ACTIONS_REGISTRY_PATH, 'utf8')) as RawActionDescriptor[]
+  return raw.map((a) => ({
+    id: a.name,
+    family: a.family,
+    name: a.name,
+    inputSchema: a.inputSchema,
+    outputSchema: a.outputSchema,
+    supportsPlan: a.supportsPlan,
+  }))
+}
 
 function definitionFiles(): string[] {
   return readdirSync(DEFINITIONS_DIR)
@@ -76,6 +117,35 @@ describe('templates/examples/definitions/*.yaml', () => {
         ).toBeLessThanOrEqual(MAX_STEP_TIMEOUT_MS)
       }
     }
+  })
+
+  it.each(files)('%s passes the registry-aware validateDefinition with zero problems', (file) => {
+    const registry = loadActionRegistry()
+    const raw = readFileSync(join(DEFINITIONS_DIR, file), 'utf8')
+
+    const { text: rewritten, unresolved } = rewritePlaceholders({
+      text: raw,
+      skeletonIds: {
+        'go-http-service': 'dummy-skeleton-go-http-service',
+        'go-kafka-consumer': 'dummy-skeleton-go-kafka-consumer',
+        'go-openapi-server': 'dummy-skeleton-go-openapi-server',
+      },
+      templateIds: {
+        'go-http-service': 'dummy-template-go-http-service',
+        'nextjs-web-app': 'dummy-template-nextjs-web-app',
+        'kafka-event-consumer': 'dummy-template-kafka-event-consumer',
+        'openapi-rest-api': 'dummy-template-openapi-rest-api',
+        'production-service-onboarding': 'dummy-template-production-service-onboarding',
+      },
+      installationId: 'dummy-installation-id',
+    })
+    expect(unresolved).toEqual([])
+
+    const parsed = TemplateDefinitionSchema.parse(yaml.parse(rewritten)) as TemplateDefinition
+    const result = validateDefinition(parsed, registry)
+
+    expect(result.ok, `${file} failed validateDefinition:\n${JSON.stringify(result.errors, null, 2)}`).toBe(true)
+    expect(result.errors).toEqual([])
   })
 
   it('every step id is unique within its definition', () => {

@@ -104,7 +104,10 @@ All three are real, compiling Go 1.22 code (verified with `go build`,
   `GET /`, graceful shutdown, Dockerfile, Makefile, GitHub Actions CI.
 - **`go-kafka-consumer`** — [franz-go](https://github.com/twmb/franz-go)
   consumer with a small `Consumer` type (config validation, poll loop,
-  graceful shutdown), unit-tested without a live broker.
+  graceful shutdown), unit-tested without a live broker. Ships a checked-in
+  `go.sum` (verified with `GOPROXY=off go build ./...` against the module
+  cache alone) so a fresh scaffold doesn't fail on "missing go.sum entry"
+  before the author has ever run `go mod tidy`.
 - **`go-openapi-server`** — embeds `api/openapi.yaml` via `go:embed` and
   serves it at `GET /openapi.yaml`, plus a `/widgets` example resource
   matching the default OpenAPI document from `openapi-rest-api.yaml`.
