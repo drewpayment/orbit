@@ -171,6 +171,93 @@ describe('SchemaForm', () => {
       token: { value: 'shh', secret: true },
     })
   })
+
+  it('seeds a text field from schema default when no explicit value is given', () => {
+    render(
+      <SchemaForm
+        pages={onePage({
+          schema: {
+            type: 'object',
+            properties: {
+              greeting: { type: 'string', title: 'Greeting', default: 'hello' },
+            },
+          },
+        })}
+      />,
+    )
+
+    expect(screen.getByDisplayValue('hello')).toBeInTheDocument()
+  })
+
+  it('seeds a boolean field from schema default and submits it when left untouched', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+
+    render(
+      <SchemaForm
+        pages={onePage({
+          schema: {
+            type: 'object',
+            properties: {
+              private: { type: 'boolean', title: 'Private', default: true },
+            },
+          },
+        })}
+        onSubmit={onSubmit}
+      />,
+    )
+
+    expect(screen.getByRole('switch')).toBeChecked()
+
+    await user.click(screen.getByRole('button', { name: /submit/i }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({ private: true })
+  })
+
+  it('lets an explicit value win over a schema default', () => {
+    render(
+      <SchemaForm
+        pages={onePage({
+          schema: {
+            type: 'object',
+            properties: {
+              greeting: { type: 'string', title: 'Greeting', default: 'hello' },
+            },
+          },
+        })}
+        values={{ greeting: 'goodbye' }}
+      />,
+    )
+
+    expect(screen.getByDisplayValue('goodbye')).toBeInTheDocument()
+    expect(screen.queryByDisplayValue('hello')).not.toBeInTheDocument()
+  })
+
+  it('applies a default from one page while an explicit value from another page is untouched', () => {
+    render(
+      <SchemaForm
+        pages={[
+          {
+            title: 'Page 1',
+            schema: {
+              type: 'object',
+              properties: { name: { type: 'string', title: 'Name', default: 'Alice' } },
+            },
+          },
+          {
+            title: 'Page 2',
+            schema: {
+              type: 'object',
+              properties: { color: { type: 'string', title: 'Color', enum: ['red', 'blue'] } },
+            },
+          },
+        ]}
+        mode="single"
+      />,
+    )
+
+    expect(screen.getByDisplayValue('Alice')).toBeInTheDocument()
+  })
 })
 
 describe('SchemaForm nested object fields', () => {

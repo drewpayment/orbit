@@ -312,6 +312,11 @@ func newScaffolderRun(input ScaffolderWorkflowInput, logger log.Logger) *scaffol
 	if params == nil {
 		params = map[string]any{}
 	}
+	// Applied once, here, for every path that builds an expression context —
+	// real runs and dry runs/plans alike — so a caller (UI form, API, script)
+	// that omits a parameter with a declared JSON Schema default sees the
+	// same value the workflow actually uses, not an unresolved-path failure.
+	params = scaffolder.ApplyParameterDefaults(input.Definition, params)
 
 	run := &scaffolderRun{
 		input:  input,
