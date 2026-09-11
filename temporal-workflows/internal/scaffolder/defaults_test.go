@@ -193,6 +193,30 @@ func TestApplyParameterDefaultsRespectsVisibleIf(t *testing.T) {
 		assert.Equal(t, map[string]any{"env": "dev"}, ApplyParameterDefaults(def, map[string]any{"env": "dev"}))
 		assert.Equal(t, map[string]any{"env": "prod", "replicas": float64(3)}, ApplyParameterDefaults(def, map[string]any{"env": "prod"}))
 	})
+
+	// The A -> C chain: C's visibleIf references A, and A ITSELF gets
+	// dropped (A's own visibleIf, gated on `controller`, evaluates false).
+	// C must still evaluate against A's DEFAULTED value — not against
+	// whatever A ends up as in the final (post-drop) result — regardless of
+	// which order the two properties happen to be processed in. Run many
+	// times: Go's map iteration order is randomized per-iteration, so a
+	// regression back to evaluating against the mutating `out` map (instead
+	// of a frozen snapshot) would be expected to flip the result across
+	// enough repetitions.
+	t.Run("a field's visibleIf evaluates against another newly-defaulted field's value even when that field is itself dropped (order-independent)", func(t *testing.T) {
+		def := Definition{Spec: Spec{Parameters: []ParameterPage{
+			page(t, "Page 1", map[string]string{
+				"controller": `{"type":"boolean"}`,
+				"a":          `{"type":"string","default":"a-value","ui:visibleIf":"${{ parameters.controller }}"}`,
+				"c":          `{"type":"string","default":"c-value","ui:visibleIf":"${{ parameters.a }}"}`,
+			}),
+		}}}
+		want := map[string]any{"controller": false, "c": "c-value"}
+		for i := 0; i < 200; i++ {
+			got := ApplyParameterDefaults(def, map[string]any{"controller": false})
+			require.Equal(t, want, got, "iteration %d", i)
+		}
+	})
 }
 
 func TestApplyParameterDefaultsDoesNotMutateNestedInput(t *testing.T) {

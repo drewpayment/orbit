@@ -35,6 +35,7 @@ func TestEvaluateVisibleIf(t *testing.T) {
 		{"equality: number literal", "${{ parameters.replicas == 3 }}", map[string]any{"replicas": float64(3)}, true},
 		{"equality: missing field is hidden", "${{ parameters.env == 'prod' }}", map[string]any{}, false},
 		{"equality: unrecognizable literal fails open", "${{ parameters.env == parameters.other }}", map[string]any{"env": "x"}, true},
+		{"equality: quoted literal with an embedded same-type quote is unrecognizable, fails open", "${{ parameters.env == 'it''s' }}", map[string]any{"env": "it's"}, true},
 
 		{"nested path reference", "${{ parameters.address.city }}", map[string]any{"address": map[string]any{"city": "x"}}, true},
 	}

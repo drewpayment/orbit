@@ -528,4 +528,40 @@ describe('SchemaForm re-seeds defaults when the schema prop changes after mount'
     expect(screen.getByDisplayValue('svc')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Go' })).toBeInTheDocument()
   })
+
+  // Regression test: a caller (RunActionDialog, UseTemplateForm,
+  // StepsBuilder) can pass an inline `pages={[...]}` array literal, so a
+  // completely unrelated sibling state change re-creates that array (and so
+  // `mergedSchema`) with a NEW reference on every render even though its
+  // SHAPE never changed. The reset effect must compare structurally, not by
+  // reference, or a user's typed value gets wiped by something they never
+  // touched.
+  it('does not reset (and does not wipe a typed value) when a structurally-identical `pages` array is passed by a NEW reference', async () => {
+    const user = userEvent.setup()
+    const buildPages = () =>
+      onePage({
+        schema: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', title: 'Name' },
+            greeting: { type: 'string', title: 'Greeting', default: 'hello' },
+          },
+        },
+      })
+
+    const { rerender } = render(<SchemaForm pages={buildPages()} />)
+    await user.type(screen.getByRole('textbox', { name: /^Name/ }), 'svc')
+    // The user also overwrites the seeded default before the rerender.
+    const greetingInput = screen.getByRole('textbox', { name: /^Greeting/ })
+    await user.clear(greetingInput)
+    await user.type(greetingInput, 'howdy')
+
+    // A brand-new array/object reference, but identical structure/content.
+    rerender(<SchemaForm pages={buildPages()} />)
+
+    // Neither typed value was reset back to its seeded/default state.
+    expect(screen.getByDisplayValue('svc')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('howdy')).toBeInTheDocument()
+    expect(screen.queryByDisplayValue('hello')).not.toBeInTheDocument()
+  })
 })

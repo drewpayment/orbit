@@ -80,6 +80,10 @@ export function UseTemplateForm({
     () => templateVariablesToJsonSchema(variables),
     [variables],
   )
+  const variableFormPages = useMemo(
+    () => [{ title: 'Template Variables', schema: variablesSchema }],
+    [variablesSchema],
+  )
   const [variableValues, setVariableValues] =
     useState<Record<string, unknown>>(variableDefaults)
 
@@ -340,7 +344,7 @@ export function UseTemplateForm({
             <SchemaForm
               as="div"
               mode="single"
-              pages={[{ title: 'Template Variables', schema: variablesSchema }]}
+              pages={variableFormPages}
               values={variableDefaults}
               onChange={setVariableValues}
             />

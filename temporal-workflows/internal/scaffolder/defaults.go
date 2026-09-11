@@ -1,6 +1,9 @@
 package scaffolder
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"sort"
+)
 
 // rawSchemaProperty is the subset of a JSON Schema property this package
 // needs to apply defaults: its declared `default` (if any), for an
@@ -15,15 +18,22 @@ type rawSchemaProperty struct {
 	UIVisibleIf string                     `json:"ui:visibleIf"`
 }
 
+// defaultedEntry records one TOP-LEVEL property a fill pass just defaulted —
+// see fillPageDefaults's doc comment.
+type defaultedEntry struct {
+	name string
+	prop rawSchemaProperty
+}
+
 // ApplyParameterDefaults fills in each parameter page's declared JSON Schema
 // `default` for any key absent from params, then drops any TOP-LEVEL key this
-// call itself just defaulted whose `ui:visibleIf` evaluates false against the
-// fully-defaulted result — a hidden field's default must never leak into the
-// expression context a step can read, matching what the client's SchemaForm
-// already does for its own submit path. Returns the result; never mutates the
-// map passed in, including any nested object map inside it (a
-// partially-provided nested object is copied before defaults are filled into
-// it, so the caller's own nested map is left untouched).
+// call itself just defaulted whose `ui:visibleIf` evaluates false — a hidden
+// field's default must never leak into the expression context a step can
+// read, matching what the client's SchemaForm already does for its own
+// submit path. Returns the result; never mutates the map passed in, including
+// any nested object map inside it (a partially-provided nested object is
+// copied before defaults are filled into it, so the caller's own nested map
+// is left untouched).
 //
 // A key already present in params always wins, including an explicit
 // `false`/`""`/`0`: only *absence* of the key counts as "not provided" (and so
@@ -34,6 +44,18 @@ type rawSchemaProperty struct {
 // deliberately only checked at the top level, matching the vocabulary's
 // existing scope (nested object properties don't carry `ui:*` directives
 // today).
+//
+// Determinism: every `ui:visibleIf` is evaluated against a SNAPSHOT of the
+// fully-defaulted result taken BEFORE any drop happens — never against `out`
+// as it is being mutated. This makes the outcome independent of BOTH the
+// (Go-map-inherited, otherwise random) processing order and of whether some
+// OTHER newly-defaulted field a `ui:visibleIf` happens to reference is itself
+// later dropped: a chain like `A: default, visibleIf X` / `C: default,
+// visibleIf references A` always evaluates C's condition against A's
+// defaulted value, whether or not A ends up dropped. (Page order and, within
+// a page, property name order are still walked deterministically — see
+// fillPageDefaults — for reproducible test output, but correctness no longer
+// depends on it.)
 //
 // Note: only a value THIS CALL defaulted is drop-checked — a value the caller
 // (or an earlier page) explicitly provided for a currently-hidden field is
@@ -50,29 +72,49 @@ func ApplyParameterDefaults(def Definition, params map[string]any) map[string]an
 		out[k] = v
 	}
 
-	newlyDefaulted := map[string]rawSchemaProperty{}
+	var newlyDefaulted []defaultedEntry
 	for _, page := range def.Spec.Parameters {
-		fillPageDefaults(page.Properties, out, newlyDefaulted)
+		fillPageDefaults(page.Properties, out, &newlyDefaulted)
 	}
 
-	for name, prop := range newlyDefaulted {
-		if prop.UIVisibleIf != "" && !EvaluateVisibleIf(prop.UIVisibleIf, out) {
-			delete(out, name)
+	// Freeze a snapshot BEFORE any drop — see the determinism note above.
+	snapshot := make(map[string]any, len(out))
+	for k, v := range out {
+		snapshot[k] = v
+	}
+
+	for _, entry := range newlyDefaulted {
+		if entry.prop.UIVisibleIf != "" && !EvaluateVisibleIf(entry.prop.UIVisibleIf, snapshot) {
+			delete(out, entry.name)
 		}
 	}
 
 	return out
 }
 
-// fillPageDefaults fills out from properties' declared defaults. record, when
-// non-nil, collects every TOP-LEVEL property this call defaults (name → its
-// parsed schema, so its ui:visibleIf can be checked once every page has been
-// filled) — callers pass nil for a nested recursive fill, since ui:visibleIf
-// has no meaning below the top level.
-func fillPageDefaults(properties map[string]json.RawMessage, out map[string]any, record map[string]rawSchemaProperty) {
-	for name, raw := range properties {
+// sortedPropertyNames returns properties' keys in a deterministic (sorted)
+// order — `map[string]json.RawMessage` carries no source-declaration-order
+// information, so this is the best available stable substitute; see
+// ApplyParameterDefaults's determinism note for why correctness does not
+// actually depend on it.
+func sortedPropertyNames(properties map[string]json.RawMessage) []string {
+	names := make([]string, 0, len(properties))
+	for name := range properties {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// fillPageDefaults fills out from properties' declared defaults, walked in a
+// deterministic order (sortedPropertyNames). record, when non-nil, collects
+// every TOP-LEVEL property this call defaults, in that same order — callers
+// pass nil for a nested recursive fill, since ui:visibleIf has no meaning
+// below the top level.
+func fillPageDefaults(properties map[string]json.RawMessage, out map[string]any, record *[]defaultedEntry) {
+	for _, name := range sortedPropertyNames(properties) {
 		var prop rawSchemaProperty
-		if err := json.Unmarshal(raw, &prop); err != nil {
+		if err := json.Unmarshal(properties[name], &prop); err != nil {
 			continue
 		}
 
@@ -83,7 +125,7 @@ func fillPageDefaults(properties map[string]json.RawMessage, out map[string]any,
 				if err := json.Unmarshal(prop.Default, &def); err == nil {
 					out[name] = def
 					if record != nil {
-						record[name] = prop
+						*record = append(*record, defaultedEntry{name: name, prop: prop})
 					}
 				}
 				continue

@@ -146,7 +146,16 @@ func visibleIfParseLiteral(raw string) (any, bool) {
 	if len(raw) >= 2 {
 		first, last := raw[0], raw[len(raw)-1]
 		if (first == '\'' && last == '\'') || (first == '"' && last == '"') {
-			return raw[1 : len(raw)-1], true
+			inner := raw[1 : len(raw)-1]
+			// Mirrors the TS regex exactly (`/^'([^']*)'$/` /
+			// `/^"([^"]*)"$/`): the inner content must contain NO instance
+			// of the same quote character at all, not merely none at its
+			// own start/end — an embedded same-type quote (e.g. `'it''s'`)
+			// is rejected as unrecognizable, not naively unwrapped.
+			if !strings.ContainsRune(inner, rune(first)) {
+				return inner, true
+			}
+			return nil, false
 		}
 	}
 	return nil, false

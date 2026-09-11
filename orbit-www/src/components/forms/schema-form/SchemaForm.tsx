@@ -97,6 +97,25 @@ function fieldEntries(schema: JsonSchema, uiSchema?: UiSchema): FieldEntry[] {
   }))
 }
 
+/**
+ * Deterministic JSON stringify — object keys sorted recursively — so two
+ * structurally identical values always produce the same string regardless
+ * of key insertion order. Used to derive a stable re-seed key from
+ * `mergedSchema` (see the schema-change `form.reset` effect below): a
+ * caller that reconstructs a `pages` array literal on every render (an
+ * inline `pages={[...]}`, common across call sites) must not fire a reset
+ * merely because the array/object got a new reference — only an actual
+ * schema-shape change should.
+ */
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
+  if (value && typeof value === 'object') {
+    const keys = Object.keys(value as Record<string, unknown>).sort()
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify((value as Record<string, unknown>)[k])}`).join(',')}}`
+  }
+  return JSON.stringify(value)
+}
+
 /** Merge all pages' object schemas into one flat schema (unique property names assumed). */
 function mergePages(pages: SchemaFormPage[]): { schema: JsonSchema; uiSchema: UiSchema } {
   const properties: Record<string, JsonSchema> = {}
@@ -228,6 +247,18 @@ export function SchemaForm({
     mode: 'onSubmit',
   })
 
+  // A structural key, NOT `mergedSchema`'s object reference: several
+  // callers pass an inline `pages={[...]}` array literal
+  // (`RunActionDialog.tsx`, `UseTemplateForm.tsx`, `StepsBuilder.tsx`), so
+  // `mergedSchema` gets a brand-new reference on every render regardless of
+  // whether its actual SHAPE changed — any sibling state change in one of
+  // those callers (a checkbox toggle, an unrelated field edit) would
+  // otherwise re-fire the reset effect below and wipe what the user just
+  // typed. Comparing by value instead means the effect only fires on an
+  // actual schema-shape change, independent of how disciplined a caller is
+  // about memoizing `pages`.
+  const mergedSchemaKey = React.useMemo(() => stableStringify(mergedSchema), [mergedSchema])
+
   /**
    * A caller can pass a new `pages` prop after mount (the editor's live
    * `ParametersPreview`, a `StepsBuilder` step form whose registry action's
@@ -235,12 +266,14 @@ export function SchemaForm({
    * `defaultValues` only seeds the very first render, so a property added
    * (or given a new `default`) after mount would otherwise never appear.
    * Re-seeds from the CURRENT form values (so anything already typed
-   * survives) on every `mergedSchema` identity change after the first.
+   * survives) on every ACTUAL schema-shape change after the first (see
+   * `mergedSchemaKey` above for why this keys on a structural comparison,
+   * not `mergedSchema`'s reference).
    */
-  const previousMergedSchemaRef = React.useRef(mergedSchema)
+  const previousMergedSchemaKeyRef = React.useRef(mergedSchemaKey)
   React.useEffect(() => {
-    if (previousMergedSchemaRef.current === mergedSchema) return
-    previousMergedSchemaRef.current = mergedSchema
+    if (previousMergedSchemaKeyRef.current === mergedSchemaKey) return
+    previousMergedSchemaKeyRef.current = mergedSchemaKey
     // React/RHF may have already auto-registered a field the JUST-CHANGED
     // schema newly renders, seeding it as `undefined` in `getValues()` even
     // though the user never touched it — drop those before re-deriving
@@ -253,7 +286,7 @@ export function SchemaForm({
     }
     form.reset(computeSeedValues(definedValues))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mergedSchema])
+  }, [mergedSchemaKey])
 
   const watched = form.watch()
   const visibleNames = computeVisible(entries, watched)

@@ -155,4 +155,20 @@ describe('applyParameterDefaults respects ui:visibleIf', () => {
     expect(applyParameterDefaults([pageDef], { env: 'dev' })).toEqual({ env: 'dev' })
     expect(applyParameterDefaults([pageDef], { env: 'prod' })).toEqual({ env: 'prod', replicas: 3 })
   })
+
+  // Parity with defaults_test.go's matching chain case: C's visibleIf
+  // references A, and A itself gets dropped (A's own visibleIf, gated on
+  // `controller`, evaluates false). C must still evaluate against A's
+  // DEFAULTED value, not against A's post-drop absence.
+  it("a field's visibleIf evaluates against another newly-defaulted field's value even when that field is itself dropped", () => {
+    const pageDef = page({
+      controller: { type: 'boolean' },
+      a: { type: 'string', default: 'a-value', 'ui:visibleIf': '${{ parameters.controller }}' },
+      c: { type: 'string', default: 'c-value', 'ui:visibleIf': '${{ parameters.a }}' },
+    })
+    expect(applyParameterDefaults([pageDef], { controller: false })).toEqual({
+      controller: false,
+      c: 'c-value',
+    })
+  })
 })

@@ -60,6 +60,19 @@ export interface DefaultableParameterPage {
  * separate, pre-existing concern (`stripHiddenFieldValues` at SchemaForm's
  * own submit time, and `validateRunParameters`'s visibleIf-aware `required`
  * filtering server-side) that this module does not change.
+ *
+ * Determinism/parity with the Go port: every `ui:visibleIf` is evaluated
+ * against a SNAPSHOT of the fully-defaulted result taken BEFORE any drop
+ * happens — never against `out` as it is being mutated. So a chain like
+ * `a: default, ui:visibleIf: controller` / `c: default, ui:visibleIf:
+ * references a` always evaluates `c`'s condition against `a`'s defaulted
+ * value, whether or not `a` itself ends up dropped — the result can never
+ * depend on which of `a`/`c` this function happens to process first (`Map`
+ * iteration is insertion-order in JS, so this was already deterministic
+ * here, unlike Go's map; the snapshot rule is applied identically anyway so
+ * the two implementations can't diverge in RESULT, only in why each is
+ * safe — see `temporal-workflows/internal/scaffolder/defaults.go`'s matching
+ * doc comment).
  */
 export function applyParameterDefaults(
   pages: DefaultableParameterPage[],
@@ -70,9 +83,13 @@ export function applyParameterDefaults(
   for (const page of pages) {
     fillPageDefaults(page.properties ?? {}, out, newlyDefaulted)
   }
+
+  // Freeze a snapshot BEFORE any drop — see the determinism note above.
+  const snapshot: Record<string, unknown> = { ...out }
+
   for (const [name, prop] of newlyDefaulted) {
     const visibleIf = prop['ui:visibleIf']
-    if (typeof visibleIf === 'string' && !evaluateVisibleIf(visibleIf, out)) {
+    if (typeof visibleIf === 'string' && !evaluateVisibleIf(visibleIf, snapshot)) {
       delete out[name]
     }
   }
