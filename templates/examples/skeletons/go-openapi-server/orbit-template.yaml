@@ -1,0 +1,7 @@
+apiVersion: orbit/v1
+kind: Skeleton
+metadata:
+  name: go-openapi-server
+  description: Go server stub that embeds and serves its registered OpenAPI 3.1 document.
+rawFiles:
+  - .github/workflows/ci.yml

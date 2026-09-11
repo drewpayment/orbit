@@ -1,0 +1,5 @@
+# Copy to config.yaml (gitignored) for local overrides, or set the
+# equivalent KAFKA_* environment variables consumed by main.go.
+brokers: localhost:9092
+topic: {{ .TOPIC_NAME }}
+consumerGroup: {{ .SERVICE_NAME }}

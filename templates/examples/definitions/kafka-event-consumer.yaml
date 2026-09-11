@@ -1,0 +1,157 @@
+apiVersion: orbit/v2
+kind: Template
+metadata:
+  name: kafka-event-consumer
+  title: Event consumer with provisioned topic
+  description: >-
+    Provisions a Kafka topic, scaffolds a Go consumer for it, pushes the
+    result to a new GitHub repository, and registers it in the catalog. A
+    production environment can be gated behind an approval.
+  tags: [go, kafka, consumer, golden-path]
+  owner: platform-team
+  targetKind: service
+spec:
+  parameters:
+    - title: About the service
+      required: [name, description, owner, topicName, environment, virtualClusterId]
+      properties:
+        name:
+          type: string
+          title: Service name
+          description: Lowercase, kebab-case. Used as the repo name and consumer group id.
+          pattern: ^[a-z][a-z0-9-]*$
+          ui:help: 'e.g. "order-events-consumer"'
+        description:
+          type: string
+          title: Description
+          description: One sentence describing what this consumer does.
+        owner:
+          type: string
+          title: Owner
+          description: Team that owns this consumer and the topic it reads from.
+          ui:field: OrbitTeamPicker
+        topicName:
+          type: string
+          title: Topic name
+          pattern: ^[a-zA-Z0-9_.-]+$
+          ui:help: 'e.g. "orders.created"'
+        environment:
+          type: string
+          title: Environment
+          enum: [dev, staging, production]
+          default: dev
+        partitions:
+          type: integer
+          title: Partitions
+          default: 3
+          minimum: 1
+        virtualClusterId:
+          type: string
+          title: Kafka virtual cluster id
+          ui:help: >-
+            The kafka-virtual-clusters document id to provision this topic
+            on. Find it at Platform → Kafka → Virtual Clusters.
+        requireApproval:
+          type: boolean
+          title: Require approval before provisioning
+          default: false
+          ui:help: >-
+            Required for production. Gates topic provisioning behind an
+            approval step; leave off for a dev/staging run.
+    - title: Repository
+      required: [githubOrg, installationId]
+      properties:
+        githubOrg:
+          type: string
+          title: GitHub org
+          default: drewpayment
+          ui:help: The GitHub org or user that will own the new repository.
+        installationId:
+          type: string
+          title: GitHub App installation id
+          default: "${installation}"
+          ui:help: >-
+            Find this at Settings → Connections → GitHub. It identifies which
+            installed GitHub App instance Orbit uses to create and push the
+            repository.
+        private:
+          type: boolean
+          title: Private repository
+          default: true
+  steps:
+    - id: approval
+      name: Request approval
+      action: approval:request
+      if: ${{ parameters.requireApproval }}
+      input:
+        message: >-
+          Approve provisioning topic "${{ parameters.topicName }}" in
+          ${{ parameters.environment }} for ${{ parameters.name }} (owner: ${{ parameters.owner }}).
+        timeoutHours: 48
+    - id: topic
+      name: Provision Kafka topic
+      action: kafka:topic:provision
+      input:
+        name: ${{ parameters.topicName }}
+        virtualClusterId: ${{ parameters.virtualClusterId }}
+        owner: ${{ parameters.owner }}
+        partitions: ${{ parameters.partitions }}
+        environment: ${{ parameters.environment }}
+        description: ${{ parameters.description }}
+    - id: fetch-skeleton
+      name: Fetch skeleton
+      action: fetch:orbit-skeleton
+      input:
+        skeletonId: ${skeleton:go-kafka-consumer}
+    - id: render
+      name: Render consumer files
+      action: fs:render
+      input:
+        path: ${{ steps.fetch-skeleton.output.path }}
+        values:
+          SERVICE_NAME: ${{ parameters.name }}
+          MODULE_PATH: github.com/${{ parameters.githubOrg }}/${{ parameters.name }}
+          TOPIC_NAME: ${{ steps.topic.output.topicName }}
+          OWNER: ${{ parameters.owner }}
+          DESCRIPTION: ${{ parameters.description }}
+    - id: create-repo
+      name: Create GitHub repository
+      action: github:repo:create
+      input:
+        org: ${{ parameters.githubOrg }}
+        name: ${{ parameters.name }}
+        description: ${{ parameters.description }}
+        private: ${{ parameters.private }}
+        installationId: ${{ parameters.installationId }}
+    - id: push
+      name: Push scaffolded code
+      action: git:push
+      timeout: 5m
+      input:
+        path: ${{ steps.render.output.path }}
+        repoUrl: ${{ steps.create-repo.output.repoUrl }}
+        commitMessage: "chore: scaffold ${{ parameters.name }} from Orbit template"
+        installationId: ${{ parameters.installationId }}
+    - id: register-entity
+      name: Register in catalog
+      action: catalog:entity:register
+      input:
+        workspaceId: ${{ workspace.id }}
+        kind: service
+        name: ${{ parameters.name }}
+        owner: ${{ parameters.owner }}
+        sourceType: scaffolder-run
+        sourceId: ${{ template.versionId }}
+        templateDefinitionId: ${{ template.id }}
+        templateVersionId: ${{ template.versionId }}
+        links:
+          - title: Repository
+            url: ${{ steps.create-repo.output.repoUrl }}
+  output:
+    links:
+      - title: Repository
+        url: ${{ steps.create-repo.output.repoUrl }}
+      - title: Kafka topic
+        url: /workspaces/${{ workspace.slug }}/kafka/${{ steps.topic.output.topicId }}
+      - title: Catalog entity
+        entity: ${{ steps.register-entity.output.entityId }}

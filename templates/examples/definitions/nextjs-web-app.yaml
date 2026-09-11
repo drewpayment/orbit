@@ -1,0 +1,104 @@
+apiVersion: orbit/v2
+kind: Template
+metadata:
+  name: nextjs-web-app
+  title: Next.js web app from a GitHub template repository
+  description: >-
+    Creates a new repository from an existing GitHub template repository
+    (no rendering step) and registers it in the catalog. Shows that not
+    every template needs to render files itself.
+  tags: [nextjs, web, golden-path]
+  owner: platform-team
+  targetKind: service
+spec:
+  parameters:
+    - title: About the service
+      required: [name, description, owner]
+      properties:
+        name:
+          type: string
+          title: Service name
+          description: Lowercase, kebab-case. Used as the new repository's name.
+          pattern: ^[a-z][a-z0-9-]*$
+          ui:help: 'e.g. "marketing-site"'
+        description:
+          type: string
+          title: Description
+          description: One sentence describing what this app does.
+        owner:
+          type: string
+          title: Owner
+          description: Team that owns this app.
+          ui:field: OrbitTeamPicker
+    - title: Repository
+      required: [githubOrg, installationId, sourceOwner, sourceRepo]
+      properties:
+        githubOrg:
+          type: string
+          title: GitHub org
+          default: drewpayment
+          ui:help: The GitHub org or user that will own the new repository.
+        installationId:
+          type: string
+          title: GitHub App installation id
+          default: "${installation}"
+          ui:help: >-
+            Find this at Settings → Connections → GitHub. It identifies which
+            installed GitHub App instance Orbit uses to create the repository.
+        private:
+          type: boolean
+          title: Private repository
+          default: true
+        sourceOwner:
+          type: string
+          title: Template repository owner
+          default: vercel
+          ui:help: >-
+            Owner of the GitHub template repository to create from. The
+            default is a placeholder — point this at your own org's Next.js
+            template repository before running for real.
+        sourceRepo:
+          type: string
+          title: Template repository name
+          default: next-learn
+          ui:help: Name of the GitHub template repository (must have "Template repository" enabled on GitHub).
+  steps:
+    - id: create-repo
+      name: Create repository from template
+      action: github:repo:create-from-template
+      timeout: 5m
+      input:
+        sourceOwner: ${{ parameters.sourceOwner }}
+        sourceRepo: ${{ parameters.sourceRepo }}
+        targetOrg: ${{ parameters.githubOrg }}
+        name: ${{ parameters.name }}
+        description: ${{ parameters.description }}
+        private: ${{ parameters.private }}
+        installationId: ${{ parameters.installationId }}
+    - id: register-entity
+      name: Register in catalog
+      action: catalog:entity:register
+      input:
+        workspaceId: ${{ workspace.id }}
+        kind: service
+        name: ${{ parameters.name }}
+        owner: ${{ parameters.owner }}
+        sourceType: scaffolder-run
+        sourceId: ${{ template.versionId }}
+        templateDefinitionId: ${{ template.id }}
+        templateVersionId: ${{ template.versionId }}
+        links:
+          - title: Repository
+            url: ${{ steps.create-repo.output.repoUrl }}
+    - id: summary
+      name: Log summary
+      action: debug:log
+      input:
+        message: Scaffolded ${{ parameters.name }} from ${{ parameters.sourceOwner }}/${{ parameters.sourceRepo }}
+        level: info
+  output:
+    links:
+      - title: Repository
+        url: ${{ steps.create-repo.output.repoUrl }}
+      - title: Catalog entity
+        entity: ${{ steps.register-entity.output.entityId }}
