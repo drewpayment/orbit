@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/workflow"
 
 	"github.com/drewpayment/orbit/temporal-workflows/internal/activities"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/scaffolder"
@@ -1343,6 +1344,21 @@ func (s *ScaffolderWorkflowTestSuite) TestDryRunRedactsActionProvidedPlanEntries
 	s.NotContains(res.Plan[0].Name, "ghp_abcdefghij0123456789")
 	s.Contains(res.Plan[0].Name, "github.com/acme/svc.git")
 	s.NotContains(res.Plan[0].Description, "hunter2hunter2")
+}
+
+// scaffolderParameterDefaultsEnabled is the version gate's condition,
+// exercised directly (no workflow.Context needed) so the gate itself — not
+// just its net effect on a fresh execution, which always sees the latest
+// version — is under test. A pre-change execution replaying with
+// workflow.DefaultVersion (no marker in its recorded history) must not
+// apply defaults; anything at or past the gated version must.
+func TestScaffolderParameterDefaultsVersionGate(t *testing.T) {
+	require.False(t, scaffolderParameterDefaultsEnabled(workflow.DefaultVersion),
+		"a pre-change execution (no version marker in history) must not apply defaults")
+	require.True(t, scaffolderParameterDefaultsEnabled(scaffolderParameterDefaultsVersion),
+		"an execution at the gated version must apply defaults")
+	require.True(t, scaffolderParameterDefaultsEnabled(scaffolderParameterDefaultsVersion+1),
+		"an execution past the gated version must still apply defaults")
 }
 
 // The shared fixture must itself be valid against the real validator. Without

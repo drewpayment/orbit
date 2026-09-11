@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func page(t *testing.T, title string, properties map[string]string) ParameterPage {
@@ -120,4 +121,24 @@ func TestApplyParameterDefaultsDoesNotMutateInput(t *testing.T) {
 	params := map[string]any{}
 	_ = ApplyParameterDefaults(def, params)
 	assert.Empty(t, params, "ApplyParameterDefaults must not mutate the caller's map")
+}
+
+func TestApplyParameterDefaultsDoesNotMutateNestedInput(t *testing.T) {
+	def := Definition{Spec: Spec{Parameters: []ParameterPage{
+		page(t, "Page 1", map[string]string{
+			"address": `{"type":"object","properties":{"city":{"type":"string","default":"Anytown"}}}`,
+		}),
+	}}}
+	params := map[string]any{"address": map[string]any{"unrelated": 1}}
+
+	got := ApplyParameterDefaults(def, params)
+
+	// The returned result gets the default filled in...
+	assert.Equal(t, map[string]any{"unrelated": 1, "city": "Anytown"}, got["address"])
+	// ...but the caller's own nested map must be untouched.
+	address, ok := params["address"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, map[string]any{"unrelated": 1}, address)
+	_, hasCity := address["city"]
+	assert.False(t, hasCity, "ApplyParameterDefaults must not write into the caller's nested map")
 }

@@ -17,6 +17,7 @@ import {
 import { createDraftVersion, publishVersion, deprecateDefinition } from '@/lib/scaffolder/versions'
 import { TemplateDefinitionSchema, type TemplateDefinition as DefinitionJson } from '@/lib/scaffolder/schema'
 import { validateDefinition, type ActionDescriptor, type ValidationResult } from '@/lib/scaffolder/validate'
+import { applyParameterDefaults, type DefaultableParameterPage } from '@/lib/scaffolder/defaults'
 import { RegistryUnavailableError } from '@/lib/scaffolder/registry-errors'
 import { listActions as listActionsRpc } from '@/lib/clients/template-client'
 import { executeRun } from '@/lib/actions/run'
@@ -570,9 +571,14 @@ async function loadVersionAndDefinition(
  * (evaluator kept behaviourally aligned with the schema-form one — see that
  * module's docblock).
  */
-function validateRunParameters(version: TemplateDefinitionVersion, parameters: Record<string, unknown>): void {
+function extractParameterPages(version: TemplateDefinitionVersion): DefaultableParameterPage[] {
   const definitionJson = version.definitionJson as { spec?: { parameters?: unknown[] } } | null
   const pages = Array.isArray(definitionJson?.spec?.parameters) ? definitionJson!.spec!.parameters : []
+  return pages as DefaultableParameterPage[]
+}
+
+function validateRunParameters(version: TemplateDefinitionVersion, parameters: Record<string, unknown>): void {
+  const pages = extractParameterPages(version)
 
   const properties: Record<string, unknown> = {}
   const required: string[] = []
@@ -633,6 +639,13 @@ async function createAndDispatchDryRun(
         : {}
   }
 
+  // Authoritative first step, before ajv validation and before this becomes
+  // a persisted action-runs row: a caller (SchemaForm already does this too,
+  // but not every caller is SchemaForm — API/script callers included) that
+  // omits a parameter with a declared JSON Schema default must not be
+  // rejected as missing a required field, and the Go workflow must resolve
+  // the exact value stored here, not re-derive its own.
+  parameters = applyParameterDefaults(extractParameterPages(version), parameters)
   parameters = unwrapSecretParameters(version, parameters)
   validateRunParameters(version, parameters)
 
@@ -740,7 +753,11 @@ export async function startRun(input: StartRunInput): Promise<{ runId: string; s
     throw new Error('This template is not published.')
   }
 
-  const parameters = unwrapSecretParameters(version, input.parameters ?? {})
+  // See createAndDispatchDryRun's identical first step for why this must run
+  // before unwrapSecretParameters/validateRunParameters and before this
+  // becomes a persisted action-runs row.
+  const defaultedParameters = applyParameterDefaults(extractParameterPages(version), input.parameters ?? {})
+  const parameters = unwrapSecretParameters(version, defaultedParameters)
   validateRunParameters(version, parameters)
 
   const action = await ensureRunnerAction(payload, definition)

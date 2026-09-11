@@ -14,7 +14,9 @@ type rawSchemaProperty struct {
 
 // ApplyParameterDefaults fills in each parameter page's declared JSON Schema
 // `default` for any key absent from params, and returns the result — it
-// never mutates the map passed in.
+// never mutates the map passed in, including any nested object map inside it
+// (a partially-provided nested object is copied before defaults are filled
+// into it, so the caller's own nested map is left untouched).
 //
 // A key already present in params always wins, including an explicit
 // `false`/`""`/`0`: only *absence* of the key counts as "not provided". A
@@ -66,7 +68,16 @@ func applyPageDefaults(properties map[string]json.RawMessage, out map[string]any
 
 		if prop.Type == "object" && len(prop.Properties) > 0 {
 			if nestedVal, ok := existing.(map[string]any); ok {
-				applyPageDefaults(prop.Properties, nestedVal)
+				// Copy before filling — `existing` is the caller's own nested
+				// map (params was only shallow-copied one level up in
+				// ApplyParameterDefaults), so filling it in place would leak
+				// defaults into the caller's map for any key it left unset.
+				nestedCopy := make(map[string]any, len(nestedVal))
+				for k, v := range nestedVal {
+					nestedCopy[k] = v
+				}
+				applyPageDefaults(prop.Properties, nestedCopy)
+				out[name] = nestedCopy
 			}
 		}
 	}

@@ -36,6 +36,7 @@ import { jsonSchemaToZod } from './schema-to-zod'
 import { evaluateVisibleIf } from './visible-if'
 import { defaultFieldRegistry, isKeyValueObjectSchema, type FieldRegistry } from './field-registry'
 import type { JsonSchema, SchemaFormPage, UiFieldSchema, UiSchema } from './types'
+import { applyParameterDefaults } from '@/lib/scaffolder/defaults'
 
 export interface SchemaFormProps {
   pages: SchemaFormPage[]
@@ -123,32 +124,6 @@ function zodForVisible(schema: JsonSchema, visibleNames: Set<string>): z.ZodType
   return jsonSchemaToZod(filtered).and(z.record(z.string(), z.unknown()))
 }
 
-/**
- * Fill in each property's declared JSON Schema `default` for any key not
- * already present in `values` — a provided key always wins, including an
- * explicit `false`/`''`/`0` (only *absence* counts as "not provided").
- * Recurses into nested `object` properties (matching the nested-`SchemaForm`
- * recursion below) but never invents a value for a property with no
- * declared `default`.
- */
-function applySchemaDefaults(
-  schema: JsonSchema,
-  uiSchema: UiSchema | undefined,
-  values: Record<string, unknown>,
-): Record<string, unknown> {
-  const out: Record<string, unknown> = { ...values }
-  for (const entry of fieldEntries(schema, uiSchema)) {
-    const provided = Object.prototype.hasOwnProperty.call(out, entry.name)
-    if (entry.schema?.type === 'object' && entry.schema.properties && !isKeyValueObjectSchema(entry.schema)) {
-      const nested = (provided ? out[entry.name] : undefined) as Record<string, unknown> | undefined
-      out[entry.name] = applySchemaDefaults(entry.schema, undefined, nested ?? {})
-    } else if (!provided && entry.schema && 'default' in entry.schema) {
-      out[entry.name] = entry.schema.default
-    }
-  }
-  return out
-}
-
 function computeVisible(
   entries: FieldEntry[],
   values: Record<string, unknown>,
@@ -223,7 +198,12 @@ export function SchemaForm({
   )
 
   const initialValues = React.useMemo(
-    () => applySchemaDefaults(mergedSchema, mergedUiSchema, values ?? {}),
+    // `applyParameterDefaults` — shared with the server's authoritative
+    // defaulting (`lib/scaffolder/defaults.ts`, mirrored by the Go
+    // engine's `ApplyParameterDefaults`) — takes `{ properties }` pages;
+    // `mergedSchema.properties` (already merged across every form page) is
+    // passed as the single page it needs.
+    () => applyParameterDefaults([{ properties: mergedSchema.properties }], values ?? {}),
     // Intentionally computed once for RHF's `defaultValues` (initial mount
     // only) — re-deriving per keystroke would fight the user's own edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
