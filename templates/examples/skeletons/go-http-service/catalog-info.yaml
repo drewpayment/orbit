@@ -1,0 +1,8 @@
+apiVersion: orbit/v1
+kind: Component
+metadata:
+  name: {{ .SERVICE_NAME }}
+  description: {{ .DESCRIPTION }}
+spec:
+  type: service
+  owner: {{ .OWNER }}

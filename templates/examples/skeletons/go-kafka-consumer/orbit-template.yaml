@@ -1,0 +1,7 @@
+apiVersion: orbit/v1
+kind: Skeleton
+metadata:
+  name: go-kafka-consumer
+  description: Go Kafka consumer (franz-go) with graceful shutdown and a provisioned topic.
+rawFiles:
+  - .github/workflows/ci.yml

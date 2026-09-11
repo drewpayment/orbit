@@ -1,0 +1,107 @@
+apiVersion: orbit/v2
+kind: Template
+metadata:
+  name: go-http-service
+  title: Go HTTP service (stdlib)
+  description: >-
+    Scaffolds a Go 1.22 stdlib HTTP service with a health endpoint,
+    Dockerfile, and CI, pushes it to a new GitHub repository, and registers
+    it in the catalog.
+  tags: [go, http, service, golden-path]
+  owner: platform-team
+  targetKind: service
+spec:
+  parameters:
+    - title: About the service
+      required: [name, description, owner]
+      properties:
+        name:
+          type: string
+          title: Service name
+          description: Lowercase, kebab-case. Used as the repo name and Go module suffix.
+          pattern: ^[a-z][a-z0-9-]*$
+          ui:help: 'e.g. "orders-api"'
+        description:
+          type: string
+          title: Description
+          description: One sentence describing what this service does.
+        owner:
+          type: string
+          title: Owner
+          description: Team that owns this service.
+          ui:field: OrbitTeamPicker
+    - title: Repository
+      required: [githubOrg, installationId]
+      properties:
+        githubOrg:
+          type: string
+          title: GitHub org
+          default: drewpayment
+          ui:help: The GitHub org or user that will own the new repository.
+        installationId:
+          type: string
+          title: GitHub App installation id
+          ui:help: >-
+            Find this at Settings → Connections → GitHub. It identifies which
+            installed GitHub App instance Orbit uses to create and push the
+            repository.
+        private:
+          type: boolean
+          title: Private repository
+          default: true
+  steps:
+    - id: fetch-skeleton
+      name: Fetch skeleton
+      action: fetch:orbit-skeleton
+      input:
+        skeletonId: ${skeleton:go-http-service}
+    - id: render
+      name: Render service files
+      action: fs:render
+      input:
+        path: ${{ steps.fetch-skeleton.output.path }}
+        values:
+          SERVICE_NAME: ${{ parameters.name }}
+          MODULE_PATH: github.com/${{ parameters.githubOrg }}/${{ parameters.name }}
+          PORT: '8080'
+          OWNER: ${{ parameters.owner }}
+          DESCRIPTION: ${{ parameters.description }}
+    - id: create-repo
+      name: Create GitHub repository
+      action: github:repo:create
+      input:
+        org: ${{ parameters.githubOrg }}
+        name: ${{ parameters.name }}
+        description: ${{ parameters.description }}
+        private: ${{ parameters.private }}
+        installationId: ${{ parameters.installationId }}
+    - id: push
+      name: Push scaffolded code
+      action: git:push
+      timeout: 5m
+      input:
+        path: ${{ steps.render.output.path }}
+        repoUrl: ${{ steps.create-repo.output.repoUrl }}
+        commitMessage: "chore: scaffold ${{ parameters.name }} from Orbit template"
+        installationId: ${{ parameters.installationId }}
+    - id: register-entity
+      name: Register in catalog
+      action: catalog:entity:register
+      input:
+        workspaceId: ${{ workspace.id }}
+        kind: service
+        name: ${{ parameters.name }}
+        owner: ${{ parameters.owner }}
+        sourceType: scaffolder-run
+        sourceId: ${{ template.versionId }}
+        templateDefinitionId: ${{ template.id }}
+        templateVersionId: ${{ template.versionId }}
+        links:
+          - title: Repository
+            url: ${{ steps.create-repo.output.repoUrl }}
+  output:
+    links:
+      - title: Repository
+        url: ${{ steps.create-repo.output.repoUrl }}
+      - title: Catalog entity
+        entity: ${{ steps.register-entity.output.entityId }}

@@ -1,0 +1,110 @@
+apiVersion: orbit/v2
+kind: Template
+metadata:
+  name: production-service-onboarding
+  title: Production service onboarding (composed)
+  description: >-
+    Requires approval, composes the go-http-service template to scaffold the
+    actual service, then kicks off an Infrastructure Agent run to propose
+    ownership and dependency-update config. Demonstrates composition,
+    approval gating, and the agent action together.
+  tags: [go, onboarding, composition, golden-path]
+  owner: platform-team
+  targetKind: service
+spec:
+  parameters:
+    - title: About the service
+      required: [name, description, owner, justification]
+      properties:
+        name:
+          type: string
+          title: Service name
+          description: Lowercase, kebab-case. Passed through to the go-http-service template.
+          pattern: ^[a-z][a-z0-9-]*$
+          ui:help: 'e.g. "payments-api"'
+        description:
+          type: string
+          title: Description
+          description: One sentence describing what this service does.
+        owner:
+          type: string
+          title: Owner
+          description: Team that will own this production service.
+          ui:field: OrbitTeamPicker
+        justification:
+          type: string
+          title: Justification
+          description: Why does this service need to go to production? Shown to the approver.
+          ui:widget: textarea
+    - title: Repository
+      required: [githubOrg, installationId]
+      properties:
+        githubOrg:
+          type: string
+          title: GitHub org
+          default: drewpayment
+          ui:help: The GitHub org or user that will own the new repository.
+        installationId:
+          type: string
+          title: GitHub App installation id
+          ui:help: >-
+            Find this at Settings → Connections → GitHub. It identifies which
+            installed GitHub App instance Orbit uses to create and push the
+            repository.
+        private:
+          type: boolean
+          title: Private repository
+          default: true
+  steps:
+    - id: approval
+      name: Request production approval
+      action: approval:request
+      timeout: 48h
+      input:
+        message: >-
+          Production service onboarding requested by ${{ user.email }} for
+          "${{ parameters.name }}" (owner: ${{ parameters.owner }}).
+          Justification: ${{ parameters.justification }}
+        timeoutHours: 48
+    - id: scaffold
+      name: Scaffold service
+      action: fetch:template
+      timeout: 10m
+      input:
+        templateDefinitionId: ${template:go-http-service}
+        parameters:
+          name: ${{ parameters.name }}
+          description: ${{ parameters.description }}
+          owner: ${{ parameters.owner }}
+          githubOrg: ${{ parameters.githubOrg }}
+          installationId: ${{ parameters.installationId }}
+          private: ${{ parameters.private }}
+    - id: review
+      name: Post-scaffold review
+      action: agent:run
+      input:
+        title: Post-scaffold review for ${{ parameters.name }}
+        prompt: >-
+          Review the new repository ${{ parameters.githubOrg }}/${{ parameters.name }}
+          that was just scaffolded from the go-http-service template for
+          production use. Propose a CODEOWNERS file assigning
+          ${{ parameters.owner }} as the owner of the whole repository, and a
+          Dependabot config that keeps both Go modules and GitHub Actions up
+          to date on a weekly schedule. Open a pull request with these
+          changes if you are able to, otherwise describe the exact file
+          contents to add and where.
+    - id: summary
+      name: Log summary
+      action: debug:log
+      input:
+        message: >-
+          Production onboarding complete for ${{ parameters.name }}
+          (${{ parameters.githubOrg }}/${{ parameters.name }}). Agent review
+          run: ${{ steps.review.output.agentRunId }} (${{ steps.review.output.status }}).
+        level: info
+  output:
+    links:
+      - title: Repository
+        url: https://github.com/${{ parameters.githubOrg }}/${{ parameters.name }}
+      - title: Agent review run
+        url: ${{ steps.review.output.url }}

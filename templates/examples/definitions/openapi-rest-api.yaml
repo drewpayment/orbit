@@ -1,0 +1,213 @@
+apiVersion: orbit/v2
+kind: Template
+metadata:
+  name: openapi-rest-api
+  title: Spec-first REST API
+  description: >-
+    Registers an OpenAPI 3.1 spec in the API catalog, scaffolds a matching
+    Go server stub that embeds and serves it, pushes it to a new GitHub
+    repository, and registers the service in the catalog linked to its API.
+  tags: [go, openapi, api, golden-path]
+  owner: platform-team
+  targetKind: service
+spec:
+  parameters:
+    - title: About the API
+      required: [name, description, owner, openapiSpec]
+      properties:
+        name:
+          type: string
+          title: Service name
+          description: Lowercase, kebab-case. Used as the repo name.
+          pattern: ^[a-z][a-z0-9-]*$
+          ui:help: 'e.g. "widgets-api"'
+        description:
+          type: string
+          title: Description
+          description: One sentence describing what this API does.
+        owner:
+          type: string
+          title: Owner
+          description: Team that owns this API.
+          ui:field: OrbitTeamPicker
+        openapiSpec:
+          type: string
+          title: OpenAPI spec
+          description: >-
+            The starting OpenAPI 3.1 document. Registered as-is in the API
+            catalog and embedded into the scaffolded server.
+          ui:widget: textarea
+          ui:help: Edit this to add your own paths before running.
+          default: |
+            openapi: 3.1.0
+            info:
+              title: Widgets API
+              version: 1.0.0
+              description: Example spec-first API scaffolded by Orbit.
+            paths:
+              /healthz:
+                get:
+                  summary: Liveness and readiness check
+                  operationId: getHealthz
+                  responses:
+                    '200':
+                      description: OK
+                      content:
+                        application/json:
+                          schema:
+                            type: object
+                            properties:
+                              status:
+                                type: string
+                              service:
+                                type: string
+              /widgets:
+                get:
+                  summary: List widgets
+                  operationId: listWidgets
+                  responses:
+                    '200':
+                      description: OK
+                      content:
+                        application/json:
+                          schema:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Widget'
+                post:
+                  summary: Create a widget
+                  operationId: createWidget
+                  requestBody:
+                    required: true
+                    content:
+                      application/json:
+                        schema:
+                          type: object
+                          required: [name]
+                          properties:
+                            name:
+                              type: string
+                  responses:
+                    '201':
+                      description: Created
+                      content:
+                        application/json:
+                          schema:
+                            $ref: '#/components/schemas/Widget'
+              /widgets/{id}:
+                get:
+                  summary: Get a widget by id
+                  operationId: getWidget
+                  parameters:
+                    - name: id
+                      in: path
+                      required: true
+                      schema:
+                        type: integer
+                  responses:
+                    '200':
+                      description: OK
+                      content:
+                        application/json:
+                          schema:
+                            $ref: '#/components/schemas/Widget'
+                    '404':
+                      description: Not found
+            components:
+              schemas:
+                Widget:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+    - title: Repository
+      required: [githubOrg, installationId]
+      properties:
+        githubOrg:
+          type: string
+          title: GitHub org
+          default: drewpayment
+          ui:help: The GitHub org or user that will own the new repository.
+        installationId:
+          type: string
+          title: GitHub App installation id
+          ui:help: >-
+            Find this at Settings → Connections → GitHub. It identifies which
+            installed GitHub App instance Orbit uses to create and push the
+            repository.
+        private:
+          type: boolean
+          title: Private repository
+          default: true
+  steps:
+    - id: register-schema
+      name: Register API schema
+      action: api:schema:register
+      input:
+        name: ${{ parameters.name }}
+        schemaType: openapi
+        content: ${{ parameters.openapiSpec }}
+        description: ${{ parameters.description }}
+        visibility: workspace
+    - id: fetch-skeleton
+      name: Fetch skeleton
+      action: fetch:orbit-skeleton
+      input:
+        skeletonId: ${skeleton:go-openapi-server}
+    - id: render
+      name: Render server files
+      action: fs:render
+      input:
+        path: ${{ steps.fetch-skeleton.output.path }}
+        values:
+          SERVICE_NAME: ${{ parameters.name }}
+          MODULE_PATH: github.com/${{ parameters.githubOrg }}/${{ parameters.name }}
+          PORT: '8080'
+          OWNER: ${{ parameters.owner }}
+          DESCRIPTION: ${{ parameters.description }}
+          OPENAPI_SPEC: ${{ parameters.openapiSpec }}
+    - id: create-repo
+      name: Create GitHub repository
+      action: github:repo:create
+      input:
+        org: ${{ parameters.githubOrg }}
+        name: ${{ parameters.name }}
+        description: ${{ parameters.description }}
+        private: ${{ parameters.private }}
+        installationId: ${{ parameters.installationId }}
+    - id: push
+      name: Push scaffolded code
+      action: git:push
+      timeout: 5m
+      input:
+        path: ${{ steps.render.output.path }}
+        repoUrl: ${{ steps.create-repo.output.repoUrl }}
+        commitMessage: "chore: scaffold ${{ parameters.name }} from Orbit template"
+        installationId: ${{ parameters.installationId }}
+    - id: register-entity
+      name: Register in catalog
+      action: catalog:entity:register
+      input:
+        workspaceId: ${{ workspace.id }}
+        kind: api
+        name: ${{ parameters.name }}
+        owner: ${{ parameters.owner }}
+        sourceType: scaffolder-run
+        sourceId: ${{ template.versionId }}
+        templateDefinitionId: ${{ template.id }}
+        templateVersionId: ${{ template.versionId }}
+        links:
+          - title: Repository
+            url: ${{ steps.create-repo.output.repoUrl }}
+          - title: API schema
+            url: /workspaces/${{ workspace.slug }}/apis/${{ steps.register-schema.output.schemaId }}
+  output:
+    links:
+      - title: Repository
+        url: ${{ steps.create-repo.output.repoUrl }}
+      - title: API schema
+        url: /workspaces/${{ workspace.slug }}/apis/${{ steps.register-schema.output.schemaId }}
+      - title: Catalog entity
+        entity: ${{ steps.register-entity.output.entityId }}

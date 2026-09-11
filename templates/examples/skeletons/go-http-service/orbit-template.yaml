@@ -1,0 +1,11 @@
+apiVersion: orbit/v1
+kind: Skeleton
+metadata:
+  name: go-http-service
+  description: Go 1.22 stdlib HTTP service with a health endpoint, Dockerfile, and CI.
+# Files listed here are copied verbatim by fs:render instead of being passed
+# through Go text/template substitution. GitHub Actions workflow syntax uses
+# its own `${{ }}` expressions, which must not be treated as template
+# directives.
+rawFiles:
+  - .github/workflows/ci.yml
