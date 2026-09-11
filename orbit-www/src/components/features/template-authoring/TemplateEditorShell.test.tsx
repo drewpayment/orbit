@@ -186,34 +186,44 @@ describe('TemplateEditorShell', () => {
     expect(publish).toBeDisabled()
   })
 
-  it('enables "Publish vN" for a published template once a newer version has passed the gate', () => {
+  // `versions` mirrors `listTemplateDefinitionVersions`'s newest-first sort:
+  // v2 (the newer, not-yet-published draft) precedes v1 (the current,
+  // published version). `currentVersionId`/`currentVersionValidated`/
+  // `currentVersionHasDryRun` describe v1 — what's actually live — while v2
+  // carries its own, independent gate facts, exercising the case where the
+  // shell must seed its publish target from the LATEST version, not from
+  // whatever happens to be current.
+  const newerVersionFixture = (v2Overrides: { dryRunRunId?: string | null; validatedAt?: string | null } = {}) => [
+    {
+      id: 'v2',
+      versionNumber: 2,
+      changeNote: 'Fix the bug',
+      validatedAt: '2026-09-10T00:00:00.000Z',
+      dryRunRunId: 'run-2',
+      createdAt: '2026-09-10T00:00:00.000Z',
+      isCurrent: false,
+      definitionJson: definition,
+      ...v2Overrides,
+    },
+    {
+      id: 'v1',
+      versionNumber: 1,
+      changeNote: null,
+      validatedAt: '2026-09-09T00:00:00.000Z',
+      dryRunRunId: 'run-1',
+      createdAt: '2026-09-09T00:00:00.000Z',
+      isCurrent: true,
+      definitionJson: definition,
+    },
+  ]
+
+  it('enables "Publish vN" on mount for a published template with a newer, already-gated version', () => {
     setup({
       status: 'published',
-      currentVersionId: 'v2',
+      currentVersionId: 'v1',
       currentVersionValidated: true,
       currentVersionHasDryRun: true,
-      versions: [
-        {
-          id: 'v1',
-          versionNumber: 1,
-          changeNote: null,
-          validatedAt: '2026-09-09T00:00:00.000Z',
-          dryRunRunId: 'run-1',
-          createdAt: '2026-09-09T00:00:00.000Z',
-          isCurrent: true,
-          definitionJson: definition,
-        },
-        {
-          id: 'v2',
-          versionNumber: 2,
-          changeNote: 'Fix the bug',
-          validatedAt: '2026-09-10T00:00:00.000Z',
-          dryRunRunId: 'run-2',
-          createdAt: '2026-09-10T00:00:00.000Z',
-          isCurrent: false,
-          definitionJson: definition,
-        },
-      ],
+      versions: newerVersionFixture(),
     })
     const publish = screen.getByRole('button', { name: /publish v2/i })
     expect(publish).toBeEnabled()
@@ -224,31 +234,10 @@ describe('TemplateEditorShell', () => {
     setup({
       actions,
       status: 'published',
-      currentVersionId: 'v2',
+      currentVersionId: 'v1',
       currentVersionValidated: true,
       currentVersionHasDryRun: true,
-      versions: [
-        {
-          id: 'v1',
-          versionNumber: 1,
-          changeNote: null,
-          validatedAt: '2026-09-09T00:00:00.000Z',
-          dryRunRunId: 'run-1',
-          createdAt: '2026-09-09T00:00:00.000Z',
-          isCurrent: true,
-          definitionJson: definition,
-        },
-        {
-          id: 'v2',
-          versionNumber: 2,
-          changeNote: 'Fix the bug',
-          validatedAt: '2026-09-10T00:00:00.000Z',
-          dryRunRunId: 'run-2',
-          createdAt: '2026-09-10T00:00:00.000Z',
-          isCurrent: false,
-          definitionJson: definition,
-        },
-      ],
+      versions: newerVersionFixture(),
     })
     await userEvent.click(screen.getByRole('button', { name: /publish v2/i }))
     await waitFor(() => expect(actions.publishTemplateDefinition).toHaveBeenCalledWith('def-1', 'v2'))
@@ -257,34 +246,33 @@ describe('TemplateEditorShell', () => {
   it('re-activates a deprecated template with a newer version via "Publish vN"', () => {
     setup({
       status: 'deprecated',
-      currentVersionId: 'v2',
+      currentVersionId: 'v1',
       currentVersionValidated: true,
       currentVersionHasDryRun: true,
-      versions: [
-        {
-          id: 'v1',
-          versionNumber: 1,
-          changeNote: null,
-          validatedAt: '2026-09-09T00:00:00.000Z',
-          dryRunRunId: 'run-1',
-          createdAt: '2026-09-09T00:00:00.000Z',
-          isCurrent: true,
-          definitionJson: definition,
-        },
-        {
-          id: 'v2',
-          versionNumber: 2,
-          changeNote: 'Fix the bug',
-          validatedAt: '2026-09-10T00:00:00.000Z',
-          dryRunRunId: 'run-2',
-          createdAt: '2026-09-10T00:00:00.000Z',
-          isCurrent: false,
-          definitionJson: definition,
-        },
-      ],
+      versions: newerVersionFixture(),
     })
     const publish = screen.getByRole('button', { name: /publish v2/i })
     expect(publish).toBeEnabled()
+  })
+
+  it('blocks Publish on mount when the newer version has not passed its own gate', async () => {
+    setup({
+      status: 'published',
+      currentVersionId: 'v1',
+      currentVersionValidated: true,
+      currentVersionHasDryRun: true,
+      // v2 is newer but has no recorded dry run of its own — v1 having
+      // passed the gate must not leak into v2's readiness.
+      versions: newerVersionFixture({ dryRunRunId: null }),
+    })
+    const publish = screen.getByRole('button', { name: /publish v2/i })
+    expect(publish).toBeDisabled()
+    // The blocker reason renders in a Radix tooltip (`publish-blockers`),
+    // which jsdom's thin pointer-event support cannot reliably open in this
+    // test environment. `aria-describedby` pointing at it is the shell's own
+    // signal that a blocker reason exists — v1's gate being satisfied must
+    // not make v2 (the actual publish target) look ready.
+    expect(publish).toHaveAttribute('aria-describedby', 'publish-blockers')
   })
 
   it('lists version history with its publish-gate badges', () => {

@@ -156,16 +156,31 @@ export function TemplateEditorShell({
   const [savedSnapshot, setSavedSnapshot] = React.useState(() =>
     serializeDefinition(createInitialBuilderState(initialDefinition)),
   )
-  const [versionId, setVersionId] = React.useState(currentVersionId)
-  const [gateValidated, setGateValidated] = React.useState(currentVersionValidated)
-  const [gateDryRun, setGateDryRun] = React.useState(currentVersionHasDryRun)
+  // `versions` (from `listTemplateDefinitionVersions`) is sorted newest
+  // first, so `versions[0]` is the definition's latest saved version — which
+  // may be newer than `currentVersionId` (the published pointer) when a
+  // later draft was saved, validated, and dry-run in an earlier session
+  // without ever being published. Seed the editor's publish-target state
+  // from THAT version, not from `currentVersionId`/`currentVersionValidated`/
+  // `currentVersionHasDryRun` — those only describe what's live, and seeding
+  // from them is exactly the bug this fixes: a newer, already-gated version
+  // would show a disabled, plain "Publish" until something was re-saved in
+  // the same browser session.
+  const latestVersion = versions[0] ?? null
+  const [versionId, setVersionId] = React.useState(latestVersion?.id ?? currentVersionId)
+  const [gateValidated, setGateValidated] = React.useState(
+    latestVersion ? !!latestVersion.validatedAt : currentVersionValidated,
+  )
+  const [gateDryRun, setGateDryRun] = React.useState(
+    latestVersion ? !!latestVersion.dryRunRunId : currentVersionHasDryRun,
+  )
   // The version number backing `versionId` — the "latest saved" version this
   // editor session would publish. Tracked alongside `versionId` (rather than
   // looked up from `versions` on every render) because a just-saved version
   // is not yet in the `versions` prop until the next `router.refresh()`
   // resolves.
   const [versionNumber, setVersionNumber] = React.useState(
-    () => versions.find((v) => v.id === currentVersionId)?.versionNumber ?? null,
+    latestVersion?.versionNumber ?? null,
   )
 
   const [tab, setTab] = React.useState<BuilderTab>('parameters')
