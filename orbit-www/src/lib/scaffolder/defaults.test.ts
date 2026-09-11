@@ -97,3 +97,62 @@ describe('applyParameterDefaults', () => {
     expect(got).toEqual({})
   })
 })
+
+// Parity table with temporal-workflows/internal/scaffolder/defaults_test.go's
+// TestApplyParameterDefaultsRespectsVisibleIf — same case names/inputs, run
+// in both languages, so the TS and Go implementations can't silently drift.
+describe('applyParameterDefaults respects ui:visibleIf', () => {
+  function visibleIfPage(controllingDefault?: unknown): DefaultableParameterPage {
+    return page({
+      enableExtra: { type: 'boolean', ...(controllingDefault !== undefined ? { default: controllingDefault } : {}) },
+      extra: { type: 'string', default: 'extra-default', 'ui:visibleIf': '${{ parameters.enableExtra }}' },
+    })
+  }
+
+  it('a hidden field with a default is NOT present in the output', () => {
+    const got = applyParameterDefaults([visibleIfPage()], {})
+    expect(got).toEqual({})
+    expect('extra' in got).toBe(false)
+  })
+
+  it('the field becomes present, with its default, once the controlling boolean is explicitly true', () => {
+    const got = applyParameterDefaults([visibleIfPage()], { enableExtra: true })
+    expect(got).toEqual({ enableExtra: true, extra: 'extra-default' })
+  })
+
+  it('stays hidden when the controlling boolean is explicitly false', () => {
+    const got = applyParameterDefaults([visibleIfPage()], { enableExtra: false })
+    expect(got).toEqual({ enableExtra: false })
+  })
+
+  it('an explicit caller-provided value for a currently-hidden field is left alone (not dropped)', () => {
+    const got = applyParameterDefaults([visibleIfPage()], { enableExtra: false, extra: 'explicit' })
+    expect(got).toEqual({ enableExtra: false, extra: 'explicit' })
+  })
+
+  it('the controlling field can itself come from a default', () => {
+    const got = applyParameterDefaults([visibleIfPage(true)], {})
+    expect(got).toEqual({ enableExtra: true, extra: 'extra-default' })
+  })
+
+  it('respects a negated visibleIf expression', () => {
+    const pageDef = page({
+      useDefault: { type: 'boolean' },
+      customName: { type: 'string', default: 'auto-name', 'ui:visibleIf': '${{ !parameters.useDefault }}' },
+    })
+    expect(applyParameterDefaults([pageDef], { useDefault: true })).toEqual({ useDefault: true })
+    expect(applyParameterDefaults([pageDef], { useDefault: false })).toEqual({
+      useDefault: false,
+      customName: 'auto-name',
+    })
+  })
+
+  it('respects an equality visibleIf expression', () => {
+    const pageDef = page({
+      env: { type: 'string' },
+      replicas: { type: 'integer', default: 3, 'ui:visibleIf': "${{ parameters.env == 'prod' }}" },
+    })
+    expect(applyParameterDefaults([pageDef], { env: 'dev' })).toEqual({ env: 'dev' })
+    expect(applyParameterDefaults([pageDef], { env: 'prod' })).toEqual({ env: 'prod', replicas: 3 })
+  })
+})

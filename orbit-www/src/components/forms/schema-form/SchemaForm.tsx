@@ -197,15 +197,27 @@ export function SchemaForm({
     [entries, mergedSchema],
   )
 
+  // `applyParameterDefaults` — shared with the server's authoritative
+  // defaulting (`lib/scaffolder/defaults.ts`, mirrored by the Go engine's
+  // `ApplyParameterDefaults`) — takes `{ properties }` pages;
+  // `mergedSchema.properties` (already merged across every form page) is
+  // passed as the single page it needs. `stripHiddenFieldValues` (below)
+  // then drops anything currently `ui:visibleIf`-hidden, so a value never
+  // sits in RHF state for a field the form isn't showing.
+  const computeSeedValues = React.useCallback(
+    (base: Record<string, unknown>) =>
+      stripHiddenFieldValues(applyParameterDefaults([{ properties: mergedSchema.properties }], base)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mergedSchema],
+  )
+
   const initialValues = React.useMemo(
-    // `applyParameterDefaults` — shared with the server's authoritative
-    // defaulting (`lib/scaffolder/defaults.ts`, mirrored by the Go
-    // engine's `ApplyParameterDefaults`) — takes `{ properties }` pages;
-    // `mergedSchema.properties` (already merged across every form page) is
-    // passed as the single page it needs.
-    () => applyParameterDefaults([{ properties: mergedSchema.properties }], values ?? {}),
+    () => computeSeedValues(values ?? {}),
     // Intentionally computed once for RHF's `defaultValues` (initial mount
     // only) — re-deriving per keystroke would fight the user's own edits.
+    // A later schema change is instead handled by the `form.reset` effect
+    // below, which starts from the CURRENT form values, not this initial
+    // seed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   )
@@ -215,6 +227,33 @@ export function SchemaForm({
     defaultValues: initialValues,
     mode: 'onSubmit',
   })
+
+  /**
+   * A caller can pass a new `pages` prop after mount (the editor's live
+   * `ParametersPreview`, a `StepsBuilder` step form whose registry action's
+   * `inputSchema` changed under an unchanged `step.id` key) — `useForm`'s
+   * `defaultValues` only seeds the very first render, so a property added
+   * (or given a new `default`) after mount would otherwise never appear.
+   * Re-seeds from the CURRENT form values (so anything already typed
+   * survives) on every `mergedSchema` identity change after the first.
+   */
+  const previousMergedSchemaRef = React.useRef(mergedSchema)
+  React.useEffect(() => {
+    if (previousMergedSchemaRef.current === mergedSchema) return
+    previousMergedSchemaRef.current = mergedSchema
+    // React/RHF may have already auto-registered a field the JUST-CHANGED
+    // schema newly renders, seeding it as `undefined` in `getValues()` even
+    // though the user never touched it — drop those before re-deriving
+    // defaults, or `applyParameterDefaults` would see the key as "provided"
+    // (present, just undefined) and skip filling its declared default.
+    const currentValues = form.getValues()
+    const definedValues: Record<string, unknown> = {}
+    for (const [key, val] of Object.entries(currentValues)) {
+      if (val !== undefined) definedValues[key] = val
+    }
+    form.reset(computeSeedValues(definedValues))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mergedSchema])
 
   const watched = form.watch()
   const visibleNames = computeVisible(entries, watched)

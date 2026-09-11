@@ -472,3 +472,60 @@ describe('SchemaForm hidden-field payload stripping', () => {
     expect(submitted.enableExtra).toBe(false)
   })
 })
+
+describe('SchemaForm re-seeds defaults when the schema prop changes after mount', () => {
+  it('picks up a newly added default on a schema-identity change, while an already-typed value survives', async () => {
+    const user = userEvent.setup()
+
+    const { rerender } = render(
+      <SchemaForm
+        pages={onePage({
+          schema: {
+            type: 'object',
+            properties: { name: { type: 'string', title: 'Name' } },
+          },
+        })}
+      />,
+    )
+
+    await user.type(screen.getByRole('textbox', { name: /^Name/ }), 'svc')
+    expect(screen.getByDisplayValue('svc')).toBeInTheDocument()
+
+    rerender(
+      <SchemaForm
+        pages={onePage({
+          schema: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', title: 'Name' },
+              greeting: { type: 'string', title: 'Greeting', default: 'hello' },
+            },
+          },
+        })}
+      />,
+    )
+
+    // The newly-added defaulted field appears with its default...
+    expect(screen.getByDisplayValue('hello')).toBeInTheDocument()
+    // ...and the already-typed value in the pre-existing field survives.
+    expect(screen.getByDisplayValue('svc')).toBeInTheDocument()
+  })
+
+  it('does not reset when rerendered with an unrelated prop change (schema itself unchanged)', async () => {
+    const user = userEvent.setup()
+    const pages = onePage({
+      schema: {
+        type: 'object',
+        properties: { name: { type: 'string', title: 'Name' } },
+      },
+    })
+
+    const { rerender } = render(<SchemaForm pages={pages} submitLabel="Submit" />)
+    await user.type(screen.getByRole('textbox', { name: /^Name/ }), 'svc')
+
+    rerender(<SchemaForm pages={pages} submitLabel="Go" />)
+
+    expect(screen.getByDisplayValue('svc')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Go' })).toBeInTheDocument()
+  })
+})

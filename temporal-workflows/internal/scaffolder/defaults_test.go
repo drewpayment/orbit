@@ -123,6 +123,78 @@ func TestApplyParameterDefaultsDoesNotMutateInput(t *testing.T) {
 	assert.Empty(t, params, "ApplyParameterDefaults must not mutate the caller's map")
 }
 
+// Parity table with orbit-www/src/lib/scaffolder/defaults.test.ts's
+// "applyParameterDefaults respects ui:visibleIf" describe block — same case
+// names/inputs, run in both languages, so the TS and Go implementations
+// can't silently drift.
+func TestApplyParameterDefaultsRespectsVisibleIf(t *testing.T) {
+	visibleIfPage := func(t *testing.T, controllingDefault string) ParameterPage {
+		t.Helper()
+		enableExtra := `{"type":"boolean"}`
+		if controllingDefault != "" {
+			enableExtra = `{"type":"boolean","default":` + controllingDefault + `}`
+		}
+		return page(t, "Page 1", map[string]string{
+			"enableExtra": enableExtra,
+			"extra":       `{"type":"string","default":"extra-default","ui:visibleIf":"${{ parameters.enableExtra }}"}`,
+		})
+	}
+
+	t.Run("a hidden field with a default is NOT present in the output", func(t *testing.T) {
+		def := Definition{Spec: Spec{Parameters: []ParameterPage{visibleIfPage(t, "")}}}
+		got := ApplyParameterDefaults(def, map[string]any{})
+		assert.Equal(t, map[string]any{}, got)
+		_, hasExtra := got["extra"]
+		assert.False(t, hasExtra)
+	})
+
+	t.Run("the field becomes present, with its default, once the controlling boolean is explicitly true", func(t *testing.T) {
+		def := Definition{Spec: Spec{Parameters: []ParameterPage{visibleIfPage(t, "")}}}
+		got := ApplyParameterDefaults(def, map[string]any{"enableExtra": true})
+		assert.Equal(t, map[string]any{"enableExtra": true, "extra": "extra-default"}, got)
+	})
+
+	t.Run("stays hidden when the controlling boolean is explicitly false", func(t *testing.T) {
+		def := Definition{Spec: Spec{Parameters: []ParameterPage{visibleIfPage(t, "")}}}
+		got := ApplyParameterDefaults(def, map[string]any{"enableExtra": false})
+		assert.Equal(t, map[string]any{"enableExtra": false}, got)
+	})
+
+	t.Run("an explicit caller-provided value for a currently-hidden field is left alone (not dropped)", func(t *testing.T) {
+		def := Definition{Spec: Spec{Parameters: []ParameterPage{visibleIfPage(t, "")}}}
+		got := ApplyParameterDefaults(def, map[string]any{"enableExtra": false, "extra": "explicit"})
+		assert.Equal(t, map[string]any{"enableExtra": false, "extra": "explicit"}, got)
+	})
+
+	t.Run("the controlling field can itself come from a default", func(t *testing.T) {
+		def := Definition{Spec: Spec{Parameters: []ParameterPage{visibleIfPage(t, "true")}}}
+		got := ApplyParameterDefaults(def, map[string]any{})
+		assert.Equal(t, map[string]any{"enableExtra": true, "extra": "extra-default"}, got)
+	})
+
+	t.Run("respects a negated visibleIf expression", func(t *testing.T) {
+		def := Definition{Spec: Spec{Parameters: []ParameterPage{
+			page(t, "Page 1", map[string]string{
+				"useDefault": `{"type":"boolean"}`,
+				"customName": `{"type":"string","default":"auto-name","ui:visibleIf":"${{ !parameters.useDefault }}"}`,
+			}),
+		}}}
+		assert.Equal(t, map[string]any{"useDefault": true}, ApplyParameterDefaults(def, map[string]any{"useDefault": true}))
+		assert.Equal(t, map[string]any{"useDefault": false, "customName": "auto-name"}, ApplyParameterDefaults(def, map[string]any{"useDefault": false}))
+	})
+
+	t.Run("respects an equality visibleIf expression", func(t *testing.T) {
+		def := Definition{Spec: Spec{Parameters: []ParameterPage{
+			page(t, "Page 1", map[string]string{
+				"env":      `{"type":"string"}`,
+				"replicas": `{"type":"integer","default":3,"ui:visibleIf":"${{ parameters.env == 'prod' }}"}`,
+			}),
+		}}}
+		assert.Equal(t, map[string]any{"env": "dev"}, ApplyParameterDefaults(def, map[string]any{"env": "dev"}))
+		assert.Equal(t, map[string]any{"env": "prod", "replicas": float64(3)}, ApplyParameterDefaults(def, map[string]any{"env": "prod"}))
+	})
+}
+
 func TestApplyParameterDefaultsDoesNotMutateNestedInput(t *testing.T) {
 	def := Definition{Spec: Spec{Parameters: []ParameterPage{
 		page(t, "Page 1", map[string]string{

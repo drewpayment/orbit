@@ -876,6 +876,109 @@ describe('templates/authoring-actions', () => {
         const run = await e.payload.findByID({ collection: 'action-runs', id: result.runId })
         expect(run.inputs).toMatchObject({ name: 'svc', private: false })
       })
+
+      // A hidden field's default must not "resurrect" into the persisted
+      // run — SchemaForm never even submits it (it's stripped client-side
+      // by `stripHiddenFieldValues`), so the server applying defaults
+      // blindly would otherwise reintroduce a value the form never showed.
+      it('does NOT resurrect a hidden field\'s default into the persisted inputs', async () => {
+        const conditionalDefinitionJson = {
+          apiVersion: 'orbit/v2',
+          kind: 'Template',
+          metadata: { name: 'go-service', title: 'Go service', owner: 'platform' },
+          spec: {
+            parameters: [
+              {
+                title: 'Basics',
+                required: ['name'],
+                properties: {
+                  name: { type: 'string' },
+                  useDocker: { type: 'boolean' },
+                  dockerTag: {
+                    type: 'string',
+                    default: 'latest',
+                    'ui:visibleIf': '${{ parameters.useDocker }}',
+                  },
+                },
+              },
+            ],
+            steps: [{ id: 'log', name: 'Log', action: 'debug:log', input: { message: 'hi' } }],
+          },
+        }
+        const e = makeFakePayload({
+          'template-definitions': [{ ...DRAFT_DEFINITION, currentVersion: 'ver-hidden-default' }],
+          'template-definition-versions': [
+            {
+              id: 'ver-hidden-default',
+              definition: 'def-1',
+              workspace: WORKSPACE_ID,
+              versionNumber: 1,
+              definitionJson: conditionalDefinitionJson,
+            },
+          ],
+        })
+        mockPayload = e.payload
+        const { startDryRun } = await import('./authoring-actions')
+
+        const result = await startDryRun({
+          templateVersionId: 'ver-hidden-default',
+          parameters: { name: 'svc' }, // useDocker omitted -> false -> dockerTag stays hidden
+        })
+        expect(result.runId).toBeTruthy()
+
+        const run = await e.payload.findByID({ collection: 'action-runs', id: result.runId })
+        expect(run.inputs).toEqual({ name: 'svc' })
+        expect('dockerTag' in (run.inputs as Record<string, unknown>)).toBe(false)
+      })
+
+      it('DOES apply the hidden field\'s default once its controlling field is set to reveal it', async () => {
+        const conditionalDefinitionJson = {
+          apiVersion: 'orbit/v2',
+          kind: 'Template',
+          metadata: { name: 'go-service', title: 'Go service', owner: 'platform' },
+          spec: {
+            parameters: [
+              {
+                title: 'Basics',
+                required: ['name'],
+                properties: {
+                  name: { type: 'string' },
+                  useDocker: { type: 'boolean' },
+                  dockerTag: {
+                    type: 'string',
+                    default: 'latest',
+                    'ui:visibleIf': '${{ parameters.useDocker }}',
+                  },
+                },
+              },
+            ],
+            steps: [{ id: 'log', name: 'Log', action: 'debug:log', input: { message: 'hi' } }],
+          },
+        }
+        const e = makeFakePayload({
+          'template-definitions': [{ ...DRAFT_DEFINITION, currentVersion: 'ver-shown-default' }],
+          'template-definition-versions': [
+            {
+              id: 'ver-shown-default',
+              definition: 'def-1',
+              workspace: WORKSPACE_ID,
+              versionNumber: 1,
+              definitionJson: conditionalDefinitionJson,
+            },
+          ],
+        })
+        mockPayload = e.payload
+        const { startDryRun } = await import('./authoring-actions')
+
+        const result = await startDryRun({
+          templateVersionId: 'ver-shown-default',
+          parameters: { name: 'svc', useDocker: true },
+        })
+        expect(result.runId).toBeTruthy()
+
+        const run = await e.payload.findByID({ collection: 'action-runs', id: result.runId })
+        expect(run.inputs).toMatchObject({ name: 'svc', useDocker: true, dockerTag: 'latest' })
+      })
     })
 
     describe('planRun authorization (published: any member; draft: manage-gated, same as startDryRun)', () => {
