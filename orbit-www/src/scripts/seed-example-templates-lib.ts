@@ -23,6 +23,12 @@ import { join, relative, sep } from 'node:path'
 const SKELETON_PLACEHOLDER = /\$\{skeleton:([a-z0-9-]+)\}/g
 const TEMPLATE_PLACEHOLDER = /\$\{template:([a-z0-9-]+)\}/g
 const INSTALLATION_PLACEHOLDER = /\$\{installation\}/g
+// Matches a whole `default: ${installation}` (or quoted) line, including its
+// leading indentation and trailing newline, so it can be deleted outright —
+// see rewritePlaceholders' doc comment for why an omitted `--installation`
+// removes the line instead of leaving the literal placeholder visible as a
+// parameter's default.
+const INSTALLATION_DEFAULT_LINE = /^[ \t]*default:\s*(?:"\$\{installation\}"|'\$\{installation\}'|\$\{installation\})[ \t]*\r?\n/gm
 
 export interface RewritePlaceholdersInput {
   /** Raw YAML/text containing `${skeleton:<slug>}` / `${template:<slug>}` / `${installation}` tokens. */
@@ -31,7 +37,11 @@ export interface RewritePlaceholdersInput {
   skeletonIds: Record<string, string>
   /** slug -> template-definitions Payload id. */
   templateIds: Record<string, string>
-  /** GitHub App installation id to substitute for `${installation}`. Omitted: left untouched. */
+  /**
+   * GitHub App installation id to substitute for `${installation}`. Omitted:
+   * every `default: ${installation}` line is deleted instead (see the
+   * function doc comment).
+   */
   installationId?: string
 }
 
@@ -48,10 +58,14 @@ export interface RewritePlaceholdersResult {
  * `unresolved` — the caller decides whether that's fatal (it is, for the
  * seed script: an unresolved reference means a skeleton/definition that
  * hasn't been created yet, almost certainly a slug typo or missing seed
- * step). `${installation}` with no `installationId` given is left
- * untouched without being reported, since omitting `--installation` is a
- * supported invocation (the definition keeps its literal placeholder,
- * which is a visibly-wrong default an author must replace before running).
+ * step). Omitting `--installation` is a supported invocation, but leaving
+ * the literal `${installation}` text as a parameter's `default` would
+ * render as a visible, meaningless string in the run form — so instead, a
+ * whole `default: ${installation}` line (quoted or not) is deleted
+ * entirely when no `installationId` is given, leaving the parameter with
+ * no default at all rather than a wrong-looking one. This is never
+ * reported in `unresolved` — omitting `--installation` is expected, not an
+ * error.
  */
 export function rewritePlaceholders(input: RewritePlaceholdersInput): RewritePlaceholdersResult {
   const { text, skeletonIds, templateIds, installationId } = input
@@ -77,6 +91,8 @@ export function rewritePlaceholders(input: RewritePlaceholdersInput): RewritePla
 
   if (installationId) {
     out = out.replace(INSTALLATION_PLACEHOLDER, installationId)
+  } else {
+    out = out.replace(INSTALLATION_DEFAULT_LINE, '')
   }
 
   return { text: out, unresolved }

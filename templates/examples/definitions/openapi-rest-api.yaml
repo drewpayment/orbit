@@ -133,6 +133,7 @@ spec:
         installationId:
           type: string
           title: GitHub App installation id
+          default: "${installation}"
           ui:help: >-
             Find this at Settings → Connections → GitHub. It identifies which
             installed GitHub App instance Orbit uses to create and push the

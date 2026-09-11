@@ -19,10 +19,10 @@ bun run seed:example-templates -- --workspace <workspace-slug> [--installation <
 - `--installation <id>` — a GitHub App installation id, substituted for
   every `${installation}` placeholder in the definitions' `installationId`
   default. On the local dev stack this is `118088915` (the `drewpayment`
-  installation). Omit it and the definitions keep the literal
-  `${installation}` placeholder as their `installationId` default — visibly
-  wrong, on purpose, so nobody accidentally runs a template against the
-  wrong GitHub App.
+  installation). Omit it and the seed script removes the `installationId`
+  parameter's `default` entirely, rather than leaving the literal
+  `${installation}` text visible as a default value — the field is simply
+  blank until an author fills it in.
 - `--publish` — attempts to publish each definition's latest version. **This
   will fail** the first time you seed a definition — see "About `--publish`"
   below — that failure is expected, reported per template, and does not

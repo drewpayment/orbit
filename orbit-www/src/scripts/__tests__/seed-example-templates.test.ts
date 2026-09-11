@@ -39,13 +39,64 @@ describe('rewritePlaceholders', () => {
     expect(result.unresolved).toEqual([])
   })
 
-  it('leaves the installation placeholder untouched when no installationId is given', () => {
+  it('replaces a quoted default: "${installation}" line when installationId is given', () => {
     const result = rewritePlaceholders({
-      text: 'installationId: ${installation}',
+      text: 'installationId:\n  type: string\n  default: "${installation}"\n  title: x',
+      skeletonIds: {},
+      templateIds: {},
+      installationId: '118088915',
+    })
+    expect(result.text).toBe('installationId:\n  type: string\n  default: "118088915"\n  title: x')
+    expect(result.unresolved).toEqual([])
+  })
+
+  it('removes a bare `default: ${installation}` line entirely when no installationId is given', () => {
+    const result = rewritePlaceholders({
+      text: 'installationId:\n  type: string\n  default: ${installation}\n  title: x',
       skeletonIds: {},
       templateIds: {},
     })
-    expect(result.text).toBe('installationId: ${installation}')
+    expect(result.text).toBe('installationId:\n  type: string\n  title: x')
+    expect(result.unresolved).toEqual([])
+  })
+
+  it('removes a quoted `default: "${installation}"` line entirely when no installationId is given', () => {
+    const result = rewritePlaceholders({
+      text: 'installationId:\n  type: string\n  default: "${installation}"\n  title: x',
+      skeletonIds: {},
+      templateIds: {},
+    })
+    expect(result.text).toBe('installationId:\n  type: string\n  title: x')
+    expect(result.unresolved).toEqual([])
+  })
+
+  it('removes a single-quoted `default: \'${installation}\'` line entirely when no installationId is given', () => {
+    const result = rewritePlaceholders({
+      text: "installationId:\n  type: string\n  default: '${installation}'\n  title: x",
+      skeletonIds: {},
+      templateIds: {},
+    })
+    expect(result.text).toBe('installationId:\n  type: string\n  title: x')
+    expect(result.unresolved).toEqual([])
+  })
+
+  it('removes an indented `default: ${installation}` line preserving surrounding indentation of other lines', () => {
+    const result = rewritePlaceholders({
+      text: '        installationId:\n          type: string\n          default: "${installation}"\n          title: x\n',
+      skeletonIds: {},
+      templateIds: {},
+    })
+    expect(result.text).toBe('        installationId:\n          type: string\n          title: x\n')
+    expect(result.unresolved).toEqual([])
+  })
+
+  it('does not remove a default line for an unrelated field, only for ${installation}', () => {
+    const result = rewritePlaceholders({
+      text: 'githubOrg:\n  default: drewpayment\ninstallationId:\n  default: "${installation}"\n',
+      skeletonIds: {},
+      templateIds: {},
+    })
+    expect(result.text).toBe('githubOrg:\n  default: drewpayment\ninstallationId:\n')
     expect(result.unresolved).toEqual([])
   })
 
