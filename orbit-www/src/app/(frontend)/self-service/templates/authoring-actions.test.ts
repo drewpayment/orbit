@@ -1086,6 +1086,111 @@ describe('templates/authoring-actions', () => {
       const definition = await env.payload.findByID({ collection: 'template-definitions', id: 'def-2' })
       expect(definition.status).toBe('deprecated')
     })
+
+    it('publishTemplateDefinition promotes a newer version past an already-published currentVersion', async () => {
+      const now = new Date().toISOString()
+      const env = makeFakePayload({
+        'template-definitions': [{ ...DRAFT_DEFINITION, status: 'published', currentVersion: 'ver-5' }],
+        'template-definition-versions': [
+          { id: 'ver-5', definition: 'def-1', workspace: WORKSPACE_ID, versionNumber: 5, definitionJson: DEFINITION_JSON },
+          {
+            id: 'ver-6',
+            definition: 'def-1',
+            workspace: WORKSPACE_ID,
+            versionNumber: 6,
+            definitionJson: DEFINITION_JSON,
+            validatedAt: now,
+            dryRunRunId: 'run-6',
+          },
+        ],
+        'action-runs': [
+          { id: 'run-6', workspace: WORKSPACE_ID, templateVersion: 'ver-6', status: 'succeeded', dryRun: true },
+        ],
+      })
+      mockPayload = env.payload
+      const { publishTemplateDefinition } = await import('./authoring-actions')
+
+      // No versionId argument: must default to the LATEST version (v6), not
+      // the stale currentVersion pointer (v5) — the bug under test.
+      await publishTemplateDefinition('def-1')
+
+      const definition = await env.payload.findByID({ collection: 'template-definitions', id: 'def-1' })
+      expect(definition.currentVersion).toBe('ver-6')
+      expect(definition.status).toBe('published')
+    })
+
+    it('publishTemplateDefinition enforces the gate on the TARGET version even when the old current version passed it', async () => {
+      const now = new Date().toISOString()
+      const env = makeFakePayload({
+        'template-definitions': [{ ...DRAFT_DEFINITION, status: 'published', currentVersion: 'ver-5' }],
+        'template-definition-versions': [
+          {
+            id: 'ver-5',
+            definition: 'def-1',
+            workspace: WORKSPACE_ID,
+            versionNumber: 5,
+            definitionJson: DEFINITION_JSON,
+            validatedAt: now,
+            dryRunRunId: 'run-5',
+          },
+          // v6 has NOT passed validation or a dry run.
+          { id: 'ver-6', definition: 'def-1', workspace: WORKSPACE_ID, versionNumber: 6, definitionJson: DEFINITION_JSON },
+        ],
+        'action-runs': [
+          { id: 'run-5', workspace: WORKSPACE_ID, templateVersion: 'ver-5', status: 'succeeded', dryRun: true },
+        ],
+      })
+      mockPayload = env.payload
+      const { publishTemplateDefinition } = await import('./authoring-actions')
+
+      await expect(publishTemplateDefinition('def-1')).rejects.toThrow(/publish gate failed/i)
+
+      const definition = await env.payload.findByID({ collection: 'template-definitions', id: 'def-1' })
+      expect(definition.currentVersion).toBe('ver-5')
+    })
+
+    it('publishTemplateDefinition is a no-op with a clear message when the target is already the current version', async () => {
+      const env = makeFakePayload({
+        'template-definitions': [{ ...DRAFT_DEFINITION, status: 'published', currentVersion: 'ver-5' }],
+        'template-definition-versions': [
+          { id: 'ver-5', definition: 'def-1', workspace: WORKSPACE_ID, versionNumber: 5, definitionJson: DEFINITION_JSON },
+        ],
+      })
+      mockPayload = env.payload
+      const { publishTemplateDefinition } = await import('./authoring-actions')
+
+      await expect(publishTemplateDefinition('def-1', 'ver-5')).rejects.toThrow(/already published/i)
+    })
+
+    it('publishTemplateDefinition re-activates a deprecated template when publishing a newer version', async () => {
+      const now = new Date().toISOString()
+      const env = makeFakePayload({
+        'template-definitions': [{ ...DRAFT_DEFINITION, status: 'deprecated', currentVersion: 'ver-1' }],
+        'template-definition-versions': [
+          { id: 'ver-1', definition: 'def-1', workspace: WORKSPACE_ID, versionNumber: 1, definitionJson: DEFINITION_JSON },
+          {
+            id: 'ver-2',
+            definition: 'def-1',
+            workspace: WORKSPACE_ID,
+            versionNumber: 2,
+            definitionJson: DEFINITION_JSON,
+            validatedAt: now,
+            dryRunRunId: 'run-2',
+          },
+        ],
+        'action-runs': [
+          { id: 'run-2', workspace: WORKSPACE_ID, templateVersion: 'ver-2', status: 'succeeded', dryRun: true },
+        ],
+      })
+      mockPayload = env.payload
+      const { publishTemplateDefinition } = await import('./authoring-actions')
+
+      await publishTemplateDefinition('def-1')
+
+      const definition = await env.payload.findByID({ collection: 'template-definitions', id: 'def-1' })
+      expect(definition.status).toBe('published')
+      expect(definition.currentVersion).toBe('ver-2')
+    })
   })
 
   // ---------------------------------------------------------------------------

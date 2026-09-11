@@ -73,7 +73,7 @@ export interface TemplateEditorActions {
     id: string,
     definitionJson: unknown,
     changeNote?: string,
-  ) => Promise<{ versionId: string }>
+  ) => Promise<{ versionId: string; versionNumber: number }>
   validateTemplateDefinition: (definitionJson: unknown) => Promise<ValidationResult>
   markVersionValidated: (versionId: string) => Promise<ValidationResult>
   startDryRun: (input: {
@@ -83,7 +83,7 @@ export interface TemplateEditorActions {
   }) => Promise<{ runId: string }>
   getRun: (runId: string) => Promise<ActionRun | null>
   recordSuccessfulDryRun: (versionId: string, runId: string) => Promise<{ recorded: boolean }>
-  publishTemplateDefinition: (id: string) => Promise<{ id: string }>
+  publishTemplateDefinition: (id: string, versionId?: string) => Promise<{ id: string }>
   deprecateTemplateDefinition: (id: string) => Promise<{ id: string }>
   saveFixture: (
     definitionId: string,
@@ -156,9 +156,32 @@ export function TemplateEditorShell({
   const [savedSnapshot, setSavedSnapshot] = React.useState(() =>
     serializeDefinition(createInitialBuilderState(initialDefinition)),
   )
-  const [versionId, setVersionId] = React.useState(currentVersionId)
-  const [gateValidated, setGateValidated] = React.useState(currentVersionValidated)
-  const [gateDryRun, setGateDryRun] = React.useState(currentVersionHasDryRun)
+  // `versions` (from `listTemplateDefinitionVersions`) is sorted newest
+  // first, so `versions[0]` is the definition's latest saved version — which
+  // may be newer than `currentVersionId` (the published pointer) when a
+  // later draft was saved, validated, and dry-run in an earlier session
+  // without ever being published. Seed the editor's publish-target state
+  // from THAT version, not from `currentVersionId`/`currentVersionValidated`/
+  // `currentVersionHasDryRun` — those only describe what's live, and seeding
+  // from them is exactly the bug this fixes: a newer, already-gated version
+  // would show a disabled, plain "Publish" until something was re-saved in
+  // the same browser session.
+  const latestVersion = versions[0] ?? null
+  const [versionId, setVersionId] = React.useState(latestVersion?.id ?? currentVersionId)
+  const [gateValidated, setGateValidated] = React.useState(
+    latestVersion ? !!latestVersion.validatedAt : currentVersionValidated,
+  )
+  const [gateDryRun, setGateDryRun] = React.useState(
+    latestVersion ? !!latestVersion.dryRunRunId : currentVersionHasDryRun,
+  )
+  // The version number backing `versionId` — the "latest saved" version this
+  // editor session would publish. Tracked alongside `versionId` (rather than
+  // looked up from `versions` on every render) because a just-saved version
+  // is not yet in the `versions` prop until the next `router.refresh()`
+  // resolves.
+  const [versionNumber, setVersionNumber] = React.useState(
+    latestVersion?.versionNumber ?? null,
+  )
 
   const [tab, setTab] = React.useState<BuilderTab>('parameters')
   const [yamlOpen, setYamlOpen] = React.useState(false)
@@ -188,12 +211,13 @@ export function TemplateEditorShell({
 
   async function onSaveDraft() {
     await withBusy('save', async () => {
-      const { versionId: next } = await actions.saveTemplateDefinitionDraft(
+      const { versionId: next, versionNumber: nextNumber } = await actions.saveTemplateDefinitionDraft(
         definitionId,
         definition,
         changeNote.trim() || undefined,
       )
       setVersionId(next)
+      setVersionNumber(nextNumber)
       setSavedSnapshot(currentSnapshot)
       setChangeNote('')
       // A new version starts with neither gate fact.
@@ -224,7 +248,7 @@ export function TemplateEditorShell({
 
   async function onPublish() {
     await withBusy('publish', async () => {
-      await actions.publishTemplateDefinition(definitionId)
+      await actions.publishTemplateDefinition(definitionId, versionId ?? undefined)
       setBanner({ kind: 'ok', text: 'Template published.' })
       router.refresh()
     })
@@ -266,13 +290,35 @@ export function TemplateEditorShell({
     document.getElementById(METADATA_PANEL_ID)?.scrollIntoView({ block: 'center' })
   }
 
+  // The definition's currently-live version, per the freshest `versions`
+  // history the server has sent down (refreshed on every `router.refresh()`
+  // — see the file header comment on why `versionId`/`versionNumber` are
+  // tracked in state instead: a just-saved version isn't in this list yet).
+  const currentVersionNumber = versions.find((v) => v.isCurrent)?.versionNumber ?? null
+  // A draft's first-ever publish has no "current" version to be newer than.
+  // Otherwise (published or deprecated) the saved version being targeted
+  // must be strictly newer than what is already live.
+  const canPublishNewer =
+    status === 'draft' ||
+    currentVersionNumber === null ||
+    (versionNumber !== null && versionNumber > currentVersionNumber)
+  const publishingNewerVersion = status !== 'draft' && versionNumber !== null
+
   const publishBlockers: string[] = []
-  if (status === 'published') publishBlockers.push('This template is already published.')
   if (dirty) publishBlockers.push('Save your changes first.')
   if (!versionId) publishBlockers.push('Save a draft first.')
   if (!gateValidated) publishBlockers.push('Validation has not passed for the saved version.')
   if (!gateDryRun) publishBlockers.push('No successful dry run recorded for the saved version.')
+  if (!canPublishNewer) {
+    publishBlockers.push(
+      status === 'deprecated'
+        ? 'This is already the last published version. Save a new version to republish.'
+        : 'This template is already published. Save a new version to publish again.',
+    )
+  }
   const publishDisabled = publishBlockers.length > 0 || busy !== null
+  const publishLabel =
+    publishingNewerVersion && canPublishNewer ? `Publish v${versionNumber}` : 'Publish'
 
   return (
     <TooltipProvider>
@@ -542,7 +588,7 @@ export function TemplateEditorShell({
                       aria-describedby={publishBlockers.length ? 'publish-blockers' : undefined}
                     >
                       {busy === 'publish' ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                      Publish
+                      {publishLabel}
                     </Button>
                   </span>
                 </TooltipTrigger>
