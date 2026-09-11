@@ -8,6 +8,13 @@
 //   cd orbit-www
 //   bun run seed:example-templates -- --workspace backend-engineers [--installation 118088915] [--publish] [--user drew@example.com]
 //
+// Run with `tsx --conditions=react-server` (wired up in package.json) —
+// `@payload-config` pulls in collections that import `server-only`
+// (e.g. `src/collections/catalog/constants.ts`), which throws "This module
+// cannot be imported from a Client Component module" without the
+// `react-server` export condition active, the same way `generate:importmap`
+// / `generate:types` need it.
+//
 // - Upserts `template-skeletons` by (workspace, slug) from
 //   `templates/examples/skeletons/*/`; content is re-read from disk every
 //   run, so a source edit updates the row (the collection's own
@@ -35,7 +42,8 @@
 
 import 'dotenv/config'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { getPayload, type Payload } from 'payload'
 import * as yaml from 'yaml'
 import config from '@payload-config'
@@ -43,6 +51,11 @@ import { TemplateDefinitionSchema } from '@/lib/scaffolder/schema'
 import { createDraftVersion, publishVersion } from '@/lib/scaffolder/versions'
 import { isPlatformAdmin } from '@/lib/access/workspace-access'
 import { dirToSkeletonFiles, hasContentChanged, rewritePlaceholders } from './seed-example-templates-lib'
+
+// This file runs as an ES module (orbit-www's package.json sets
+// "type": "module"), so CommonJS's `__dirname` is not defined — derive it
+// from `import.meta.url` instead.
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // Repo root is three levels up from this file (orbit-www/src/scripts -> repo root).
 const REPO_ROOT = join(__dirname, '..', '..', '..')

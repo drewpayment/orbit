@@ -19,7 +19,7 @@
     "scorecards:dedupe:apply": "tsx src/scripts/dedupe-scorecard-projections.ts --apply",
     "lint": "cross-env NODE_OPTIONS=--no-deprecation next lint",
     "payload": "cross-env NODE_OPTIONS=--no-deprecation payload",
-    "seed:example-templates": "tsx src/scripts/seed-example-templates.ts",
+    "seed:example-templates": "tsx --conditions=react-server src/scripts/seed-example-templates.ts",
     "seed:oauth2-proxy-client": "tsx src/scripts/seed-oauth2-proxy-client.ts",
     "seed:permissions": "tsx src/scripts/seed-permissions.ts",
     "start": "cross-env NODE_OPTIONS=--no-deprecation next start",
