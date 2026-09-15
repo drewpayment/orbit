@@ -57,6 +57,30 @@ func TestADOItemsToEntriesFeedsSelection(t *testing.T) {
 	require.Equal(t, []string{".orbit.yaml", "docs/openapi.yaml", "Dockerfile"}, sel.Paths)
 }
 
+// TestADOMonorepoSelection proves the shared monorepo-aware selection applies to
+// ADO items too: sub-app orbit manifests and build manifests up to depth 3 are
+// collected, vendored and too-deep paths excluded, shallow files sort first.
+func TestADOMonorepoSelection(t *testing.T) {
+	items := []adoItem{
+		{Path: "/.orbit.yaml", IsFolder: false},
+		{Path: "/apps/api/.orbit.yaml", IsFolder: false},
+		{Path: "/apps/api/pyproject.toml", IsFolder: false},
+		{Path: "/apps/api/Dockerfile", IsFolder: false},
+		{Path: "/apps/web-next/package.json", IsFolder: false},
+		{Path: "/node_modules/dep/package.json", IsFolder: false}, // vendored → excluded
+		{Path: "/a/b/c/d/package.json", IsFolder: false},          // depth 4 → excluded
+	}
+	sel := selectWellKnownFiles(adoItemsToEntries(items), maxFilesPerRepo, maxFileBytes)
+	require.Equal(t, []string{
+		".orbit.yaml",          // manifest depth 0
+		"apps/api/.orbit.yaml", // manifest depth 2
+		// service depth 2 (equal score) → lexical
+		"apps/api/Dockerfile",
+		"apps/api/pyproject.toml",
+		"apps/web-next/package.json",
+	}, sel.Paths)
+}
+
 // adoTestServer is a single httptest server standing in for both orbit-www (the
 // token + ingest routes) and the Azure DevOps REST API. The token route returns
 // baseUrl == the server's own URL so every ADO call loops back here.

@@ -273,11 +273,14 @@ describe('detectService', () => {
   })
 
   it('produces one detection per path scope in a monorepo', () => {
+    // Non-root scopes each need ≥2 signal classes to emit (see the subdir
+    // asymmetry test below), so every sub-app here carries a build + container.
     const detections = detectService(
       bundle({
         'services/a/go.mod': 'module a\n',
         'services/a/Dockerfile': 'FROM golang',
         'services/b/package.json': '{"name":"b"}',
+        'services/b/Dockerfile': 'FROM node',
       }),
     )
     const paths = detections.map((d) => d.path).sort()
@@ -291,6 +294,84 @@ describe('detectService', () => {
       bundle({ 'docker-compose.yml': 'services: {}', 'go.mod': 'module x\n' }),
     )
     expect(detections[0].confidence).toBe('high')
+  })
+
+  it('emits nothing for a lone build manifest in a subdirectory (monorepo package noise)', () => {
+    // A pnpm/turbo monorepo has one package.json per workspace package; a lone
+    // subdir manifest must NOT propose a service or /discovery floods.
+    const detections = detectService(bundle({ 'packages/lib-a/package.json': '{"name":"lib-a"}' }))
+    expect(detections).toHaveLength(0)
+  })
+
+  it('still emits for a lone build manifest at the repo root (root asymmetry preserved)', () => {
+    const detections = detectService(bundle({ 'package.json': '{"name":"root-app"}' }))
+    expect(detections).toHaveLength(1)
+    expect(detections[0].path).toBe('')
+    expect(detections[0].confidence).toBe('medium')
+  })
+
+  it('emits for a subdirectory with two signal classes (build + container)', () => {
+    const detections = detectService(
+      bundle({
+        'apps/api/pyproject.toml': '[project]\nname = "api"\n',
+        'apps/api/Dockerfile': 'FROM python:3.12',
+      }),
+    )
+    expect(detections).toHaveLength(1)
+    expect(detections[0].path).toBe('apps/api')
+  })
+
+  it('counts a nested charts/ values file as k8s evidence for its service', () => {
+    // charts/ must be recognised as k8s evidence (K8S_DIR_RE), giving the
+    // service a second signal class alongside its build manifest.
+    const detections = detectService(
+      bundle({
+        'myservice/go.mod': 'module myservice\n',
+        'myservice/charts/app/values.yaml': 'replicaCount: 1\n',
+      }),
+    )
+    const d = detections.find((x) => x.path === 'myservice')!
+    expect(d).toBeDefined()
+    expect(d.evidence.some((e) => e.detector === 'k8s-manifest')).toBe(true)
+  })
+
+  it('anchors a nested k8s/ dir to the sub-app dir, not its first path segment', () => {
+    // apps/svc/k8s/deployment.yaml must anchor at "apps/svc" so it combines with
+    // the sibling build manifest to clear the ≥2-signal gate (regression: it
+    // used to anchor at "apps", stranding the k8s evidence).
+    const detections = detectService(
+      bundle({
+        'apps/svc/package.json': '{"name":"svc"}',
+        'apps/svc/k8s/deployment.yaml': 'kind: Deployment\n',
+      }),
+    )
+    expect(detections).toHaveLength(1)
+    expect(detections[0].path).toBe('apps/svc')
+    expect(detections[0].evidence.some((e) => e.detector === 'k8s-manifest')).toBe(true)
+  })
+
+  it('anchors a root-level k8s/ dir to the repo root ("")', () => {
+    // k8s/deployment.yaml at repo root must anchor at "" (root, gate-exempt) and
+    // still yield one detection — not a bogus "deployment.yaml" scope.
+    const detections = detectService(bundle({ 'k8s/deployment.yaml': 'kind: Deployment\n' }))
+    expect(detections).toHaveLength(1)
+    expect(detections[0].path).toBe('')
+    expect(detections[0].evidence.some((e) => e.detector === 'k8s-manifest')).toBe(true)
+  })
+
+  it('excludes a sub-app deeper than the depth cap (Go never fetches its content)', () => {
+    const detections = detectService(
+      bundle({ 'a/b/c/d/Dockerfile': 'FROM alpine', 'a/b/c/d/package.json': '{"name":"deep"}' }),
+    )
+    expect(detections).toHaveLength(0)
+  })
+
+  it('emits a sub-app exactly at the depth cap (depth 3)', () => {
+    const detections = detectService(
+      bundle({ 'a/b/c/Dockerfile': 'FROM alpine', 'a/b/c/package.json': '{"name":"atcap"}' }),
+    )
+    expect(detections).toHaveLength(1)
+    expect(detections[0].path).toBe('a/b/c')
   })
 })
 
@@ -353,10 +434,12 @@ describe('runDetectors', () => {
   })
 
   it('keeps a heuristic service at a different path from the orbit root manifest', () => {
+    // services/other carries two signal classes so it clears the subdir gate.
     const detections = runDetectors(
       bundle({
         '.orbit.yaml': ORBIT_YAML,
         'services/other/go.mod': 'module github.com/acme/other\n',
+        'services/other/Dockerfile': 'FROM golang',
       }),
     )
     const services = detections.filter((d) => d.kind === 'service')
