@@ -9,12 +9,52 @@ vi.mock('@payload-config', () => ({
   default: {},
 }))
 
-vi.mock('@/lib/auth', () => ({
-  auth: {
-    api: {
-      getSession: vi.fn(),
-    },
-  },
+/**
+ * Mocked at the `@/lib/authz` module boundary (never the real `actor.ts`,
+ * which pulls in the Better-Auth Mongo client). `getActor` returns the Actor
+ * built from the test's simulated session (`authApi.getSession`, kept as a
+ * drop-in for the old `auth.api.getSession` mock); `check` re-derives the
+ * caller's workspace role by calling the CURRENTLY mocked `getPayload()`'s
+ * `find({ collection: 'workspace-members' })` — the exact `docs: [...]` /
+ * `docs: []` stubs these tests already set per-case — so every existing
+ * membership fixture keeps driving the same ALLOW/DENY outcome it always did.
+ */
+const authApi = { getSession: vi.fn() }
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(async () => {
+    const session = await authApi.getSession()
+    if (!session?.user) return null
+    return {
+      payloadId: session.user.id,
+      betterAuthId: session.user.id,
+      email: session.user.email ?? '',
+      role: 'user',
+      isPlatformAdmin: false,
+      user: session.user,
+    }
+  }),
+  check: vi.fn(async (verb: string, resource: { kind: string; id?: string; roles?: string[] }, actorArg?: unknown) => {
+    const session = await authApi.getSession()
+    const actor = (actorArg as { betterAuthId: string } | undefined) ?? (session?.user ? { betterAuthId: session.user.id } : null)
+    if (!actor) return { allowed: false, reason: 'unauthenticated', actor: null }
+    if (resource.kind !== 'workspace') return { allowed: false, reason: 'platform admin required', actor }
+    const { getPayload } = await import('payload')
+    const payload = await getPayload({} as never)
+    const result = await payload.find({
+      collection: 'workspace-members',
+      where: {
+        and: [
+          { workspace: { equals: resource.id } },
+          { user: { equals: actor.betterAuthId } },
+          { status: { equals: 'active' } },
+        ],
+      },
+    })
+    const role = (result.docs[0]?.role as string | undefined) ?? (result.docs.length > 0 ? 'member' : null)
+    if (!role) return { allowed: false, reason: 'not a member of this workspace', actor }
+    const allowedRoles = resource.roles ?? (verb === 'read' || verb === 'create' ? ['owner', 'admin', 'member'] : ['owner', 'admin'])
+    return { allowed: allowedRoles.includes(role), reason: role, actor }
+  }),
 }))
 
 vi.mock('next/headers', () => ({
@@ -31,7 +71,6 @@ vi.mock('@/lib/clients/deployment-client', () => ({
 }))
 
 import { getPayload } from 'payload'
-import { auth } from '@/lib/auth'
 import { createInstallationToken } from '@/lib/github/octokit'
 import { getRepoBranches, commitGeneratedFiles } from './deployments'
 
@@ -40,7 +79,7 @@ import { getRepoBranches, commitGeneratedFiles } from './deployments'
 // ---------------------------------------------------------------------------
 
 function mockSession(userId = 'user-1') {
-  vi.mocked(auth.api.getSession).mockResolvedValue({
+  authApi.getSession.mockResolvedValue({
     user: { id: userId },
     session: {},
   } as any)
@@ -67,7 +106,7 @@ describe('getRepoBranches', () => {
   })
 
   it('returns Unauthorized when there is no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    authApi.getSession.mockResolvedValue(null)
 
     const result = await getRepoBranches('app-1')
 
@@ -209,7 +248,7 @@ describe('commitGeneratedFiles', () => {
   }
 
   it('returns Unauthorized when there is no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    authApi.getSession.mockResolvedValue(null)
 
     const result = await commitGeneratedFiles(validInput)
 

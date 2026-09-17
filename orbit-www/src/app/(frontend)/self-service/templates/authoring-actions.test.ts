@@ -113,9 +113,58 @@ const mockStartScaffolderRun = vi.fn()
 
 vi.mock('@payload-config', () => ({ default: {} }))
 vi.mock('payload', () => ({ getPayload: vi.fn(async () => mockPayload) }))
-vi.mock('@/lib/auth/session', () => ({
-  getCurrentUser: vi.fn(async () => mockSessionUser),
-  getPayloadUserFromSession: vi.fn(async () => mockPayloadUser),
+
+/**
+ * Mocked at the `@/lib/authz` module boundary (never the real `actor.ts`,
+ * which pulls in the Better-Auth Mongo client). `getActor`/`requireActor`
+ * derive an Actor from the same `mockSessionUser`/`mockPayloadUser` fakes the
+ * old `@/lib/auth/session` mock used; `check` re-derives the caller's
+ * workspace role from the SAME fake Payload's `workspace-members` stub
+ * (`env.setMembershipRole`) that `find`/`findByID` already read, so every
+ * existing `setMembershipRole` call in this file keeps driving the same
+ * ALLOW/DENY outcomes it always did.
+ */
+function fakeActor() {
+  if (!mockSessionUser) return null
+  const role = mockPayloadUser?.role
+  return {
+    payloadId: mockPayloadUser?.id ?? '',
+    betterAuthId: mockSessionUser.id,
+    email: 'user@test.dev',
+    role: role ?? 'user',
+    isPlatformAdmin: role === 'admin' || role === 'super_admin',
+    user: mockPayloadUser,
+  }
+}
+
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(async () => fakeActor()),
+  requireActor: vi.fn(async () => {
+    const actor = fakeActor()
+    if (!actor) throw new Error('Not authenticated')
+    return actor
+  }),
+  check: vi.fn(async (verb: string, resource: { kind: string; id?: string; roles?: string[] }, actorArg?: unknown) => {
+    const actor = (actorArg as ReturnType<typeof fakeActor>) ?? fakeActor()
+    if (!actor) return { allowed: false, reason: 'unauthenticated', actor: null }
+    if (actor.isPlatformAdmin) return { allowed: true, reason: 'platform admin', actor }
+    if (resource.kind !== 'workspace') return { allowed: false, reason: 'platform admin required', actor }
+    const membership = await mockPayload.find({
+      collection: 'workspace-members',
+      where: {
+        and: [
+          { workspace: { equals: resource.id } },
+          { user: { equals: actor.betterAuthId } },
+          { status: { equals: 'active' } },
+        ],
+      },
+      limit: 1,
+    })
+    const role = (membership.docs[0]?.role as string | undefined) ?? null
+    if (!role) return { allowed: false, reason: 'not a member of this workspace', actor }
+    const allowedRoles = resource.roles ?? (verb === 'read' || verb === 'create' ? ['owner', 'admin', 'member'] : ['owner', 'admin'])
+    return { allowed: allowedRoles.includes(role), reason: role, actor }
+  }),
 }))
 vi.mock('@/lib/clients/template-client', () => ({
   listActions: (...args: unknown[]) => mockListActionsRpc(...args),

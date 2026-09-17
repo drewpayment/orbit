@@ -3,9 +3,7 @@ import Link from 'next/link'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { ArrowLeft } from 'lucide-react'
-import { getCurrentUser, getPayloadUserFromSession } from '@/lib/auth/session'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
-import { canRunTemplateDefinition } from '@/lib/templates/authz'
+import { getActor, check } from '@/lib/authz'
 import { getTemplateDefinitionByIdOrSlug } from '../../run-actions'
 import { planRun, startRun } from '../../authoring-actions'
 import { getRun } from '../../authoring-actions'
@@ -43,10 +41,10 @@ export default async function RunTemplatePage({ params }: PageProps) {
   if (!definition || definition.status !== 'published') notFound()
 
   const payload = await getPayload({ config })
-  const user = await getCurrentUser()
-  const payloadUser = await getPayloadUserFromSession()
+  const actor = await getActor()
   const workspaceId = typeof definition.workspace === 'string' ? definition.workspace : definition.workspace?.id
-  const canRun = await canRunTemplateDefinition(payload, user?.id, workspaceId, isPlatformAdmin(payloadUser))
+  const canRun =
+    !!workspaceId && (await check('create', { kind: 'workspace', id: workspaceId }, actor)).allowed
   if (!canRun) notFound()
 
   const versionId = relId(definition.currentVersion)

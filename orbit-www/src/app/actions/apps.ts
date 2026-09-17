@@ -2,8 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor, check } from '@/lib/authz'
 import { revalidatePath } from 'next/cache'
 import { builtInGenerators } from '@/lib/seeds/deployment-generators'
 import { serializeAppManifest } from '@/lib/app-manifest'
@@ -23,30 +22,18 @@ interface CreateAppFromTemplateInput {
 }
 
 export async function createAppFromTemplate(input: CreateAppFromTemplateInput) {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
   const payload = await getPayload({ config })
 
   // Check workspace membership
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: input.workspaceId } },
-        { user: { equals: session.user.id } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
+  const membership = await check('create', { kind: 'workspace', id: input.workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membership.allowed) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 
@@ -93,30 +80,18 @@ interface ImportRepositoryInput {
 }
 
 export async function importRepository(input: ImportRepositoryInput) {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
   const payload = await getPayload({ config })
 
   // Check workspace membership
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: input.workspaceId } },
-        { user: { equals: session.user.id } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
+  const membership = await check('create', { kind: 'workspace', id: input.workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membership.allowed) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 
@@ -198,11 +173,9 @@ export async function importRepository(input: ImportRepositoryInput) {
 }
 
 export async function seedBuiltInGenerators() {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -251,30 +224,18 @@ interface CreateManualAppInput {
 }
 
 export async function createManualApp(input: CreateManualAppInput) {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
   const payload = await getPayload({ config })
 
   // Check workspace membership
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: input.workspaceId } },
-        { user: { equals: session.user.id } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
+  const membership = await check('create', { kind: 'workspace', id: input.workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membership.allowed) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 
@@ -334,11 +295,9 @@ interface GetHealthHistoryInput {
 }
 
 export async function getHealthHistory(input: GetHealthHistoryInput) {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Unauthorized', data: [] }
   }
 
@@ -391,11 +350,9 @@ export async function updateAppSettings(
   appId: string,
   data: UpdateAppSettingsInput
 ): Promise<{ success: boolean; error?: string }> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -414,20 +371,9 @@ export async function updateAppSettings(
   const workspaceId = typeof app.workspace === 'string' ? app.workspace : app.workspace.id
 
   // Verify user has workspace member access
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
-        { role: { in: ['owner', 'admin', 'member'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
+  const membership = await check('update', { kind: 'workspace', id: workspaceId, roles: ['owner', 'admin', 'member'] }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membership.allowed) {
     return { success: false, error: 'Not authorized to update this app' }
   }
 
@@ -478,11 +424,9 @@ export async function deleteApp(
   appId: string,
   confirmName: string
 ): Promise<{ success: boolean; error?: string }> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -506,20 +450,9 @@ export async function deleteApp(
   const workspaceId = typeof app.workspace === 'string' ? app.workspace : app.workspace.id
 
   // Verify user has owner/admin role (not just member)
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
+  const membership = await check('delete', { kind: 'workspace', id: workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membership.allowed) {
     return { success: false, error: 'Only workspace owners and admins can delete apps' }
   }
 
@@ -543,9 +476,8 @@ export async function deleteApp(
 export async function exportAppManifest(appId: string): Promise<void> {
   'use server'
 
-  const reqHeaders = await headers()
-  const session = await auth.api.getSession({ headers: reqHeaders })
-  if (!session) throw new Error('Not authenticated')
+  const actor = await getActor()
+  if (!actor) throw new Error('Not authenticated')
 
   const payload = await getPayload({ config })
   const app = await payload.findByID({ collection: 'apps', id: appId, depth: 0 })
@@ -642,9 +574,8 @@ export async function resolveManifestConflict(
 ): Promise<void> {
   'use server'
 
-  const reqHeaders = await headers()
-  const session = await auth.api.getSession({ headers: reqHeaders })
-  if (!session) throw new Error('Not authenticated')
+  const actor = await getActor()
+  if (!actor) throw new Error('Not authenticated')
 
   const payload = await getPayload({ config })
   const app = await payload.findByID({ collection: 'apps', id: appId, depth: 0 })
@@ -730,9 +661,8 @@ export async function resolveManifestConflict(
 export async function disableManifestSync(appId: string): Promise<void> {
   'use server'
 
-  const reqHeaders = await headers()
-  const session = await auth.api.getSession({ headers: reqHeaders })
-  if (!session) throw new Error('Not authenticated')
+  const actor = await getActor()
+  if (!actor) throw new Error('Not authenticated')
 
   const payload = await getPayload({ config })
   const app = await payload.findByID({ collection: 'apps', id: appId, depth: 0 })

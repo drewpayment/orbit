@@ -9,12 +9,54 @@ vi.mock('@payload-config', () => ({
   default: {},
 }))
 
-vi.mock('@/lib/auth', () => ({
-  auth: {
-    api: {
-      getSession: vi.fn(),
-    },
-  },
+/**
+ * Mocked at the `@/lib/authz` module boundary (never the real `actor.ts`,
+ * which pulls in the Better-Auth Mongo client). `getActor` returns the Actor
+ * built from the test's simulated session (`authApi.getSession`, kept as a
+ * drop-in for the old `auth.api.getSession` mock); `check` re-derives the
+ * caller's workspace role by calling the CURRENTLY mocked `getPayload()`'s
+ * `find({ collection: 'workspace-members' })` — the exact `docs: [...]` /
+ * `docs: []` stubs these tests already set per-case — so every existing
+ * membership fixture (`role: 'admin'`, no docs, …) keeps driving the same
+ * ALLOW/DENY outcome it always did.
+ */
+const authApi = { getSession: vi.fn() }
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(async () => {
+    const session = await authApi.getSession()
+    if (!session?.user) return null
+    return {
+      payloadId: session.user.id,
+      betterAuthId: session.user.id,
+      email: session.user.email ?? '',
+      role: 'user',
+      isPlatformAdmin: false,
+      user: session.user,
+    }
+  }),
+  check: vi.fn(async (verb: string, resource: { kind: string; id?: string; roles?: string[] }, actorArg?: unknown) => {
+    const session = await authApi.getSession()
+    const actor = (actorArg as { betterAuthId: string } | undefined) ?? (session?.user ? { betterAuthId: session.user.id } : null)
+    if (!actor) return { allowed: false, reason: 'unauthenticated', actor: null }
+    if (resource.kind !== 'workspace') return { allowed: false, reason: 'platform admin required', actor }
+    const { getPayload } = await import('payload')
+    const payload = await getPayload({} as never)
+    const result = await payload.find({
+      collection: 'workspace-members',
+      where: {
+        and: [
+          { workspace: { equals: resource.id } },
+          { user: { equals: actor.betterAuthId } },
+          { status: { equals: 'active' } },
+        ],
+      },
+    })
+    const role = (result.docs[0]?.role as string | undefined) ?? (result.docs.length > 0 ? 'member' : null)
+    if (!role) return { allowed: false, reason: 'not a member of this workspace', actor }
+    const allowedRoles = resource.roles ?? (verb === 'read' || verb === 'create' ? ['owner', 'admin', 'member'] : ['owner', 'admin'])
+    return { allowed: allowedRoles.includes(role), reason: role, actor }
+  }),
+  memberWorkspaceIds: vi.fn(async () => []),
 }))
 
 vi.mock('next/headers', () => ({
@@ -26,7 +68,6 @@ vi.mock('@/lib/encryption', () => ({
 }))
 
 import { getPayload } from 'payload'
-import { auth } from '@/lib/auth'
 import { testGhcrConnection, testAcrConnection } from './registries'
 
 describe('testGhcrConnection', () => {
@@ -42,7 +83,7 @@ describe('testGhcrConnection', () => {
   })
 
   it('returns unauthorized if no session', async () => {
-    ;(auth.api.getSession as any).mockResolvedValue(null)
+    authApi.getSession.mockResolvedValue(null)
 
     const result = await testGhcrConnection('config-123')
 
@@ -50,7 +91,7 @@ describe('testGhcrConnection', () => {
   })
 
   it('returns error if registry not found', async () => {
-    ;(auth.api.getSession as any).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-123' },
     })
     mockPayload.findByID.mockResolvedValue(null)
@@ -61,7 +102,7 @@ describe('testGhcrConnection', () => {
   })
 
   it('returns error if not a GHCR registry', async () => {
-    ;(auth.api.getSession as any).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-123' },
     })
     mockPayload.findByID.mockResolvedValue({
@@ -76,7 +117,7 @@ describe('testGhcrConnection', () => {
   })
 
   it('returns error if no PAT configured', async () => {
-    ;(auth.api.getSession as any).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-123' },
     })
     mockPayload.findByID.mockResolvedValue({
@@ -93,7 +134,7 @@ describe('testGhcrConnection', () => {
   })
 
   it('returns error if user not authorized for workspace', async () => {
-    ;(auth.api.getSession as any).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-123' },
     })
     mockPayload.findByID.mockResolvedValue({
@@ -114,7 +155,7 @@ describe('testGhcrConnection', () => {
   })
 
   it('successfully validates PAT against GitHub API', async () => {
-    ;(auth.api.getSession as any).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-123' },
     })
     mockPayload.findByID.mockResolvedValue({
@@ -150,7 +191,7 @@ describe('testGhcrConnection', () => {
   })
 
   it('returns error when GitHub API returns failure', async () => {
-    ;(auth.api.getSession as any).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-123' },
     })
     mockPayload.findByID.mockResolvedValue({
@@ -200,7 +241,7 @@ describe('testAcrConnection', () => {
   })
 
   it('returns unauthorized if no session', async () => {
-    ;(auth.api.getSession as any).mockResolvedValue(null)
+    authApi.getSession.mockResolvedValue(null)
 
     const result = await testAcrConnection('config-123')
 
@@ -208,7 +249,7 @@ describe('testAcrConnection', () => {
   })
 
   it('returns error if registry not found', async () => {
-    ;(auth.api.getSession as any).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-123' },
     })
     mockPayload.findByID.mockResolvedValue(null)
@@ -219,7 +260,7 @@ describe('testAcrConnection', () => {
   })
 
   it('returns error if not an ACR registry', async () => {
-    ;(auth.api.getSession as any).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-123' },
     })
     mockPayload.findByID.mockResolvedValue({
@@ -234,7 +275,7 @@ describe('testAcrConnection', () => {
   })
 
   it('returns error if no token configured', async () => {
-    ;(auth.api.getSession as any).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-123' },
     })
     mockPayload.findByID.mockResolvedValue({
@@ -252,7 +293,7 @@ describe('testAcrConnection', () => {
   })
 
   it('returns error if no username configured', async () => {
-    ;(auth.api.getSession as any).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-123' },
     })
     mockPayload.findByID.mockResolvedValue({
@@ -270,7 +311,7 @@ describe('testAcrConnection', () => {
   })
 
   it('returns error if no login server configured', async () => {
-    ;(auth.api.getSession as any).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-123' },
     })
     mockPayload.findByID.mockResolvedValue({
@@ -288,7 +329,7 @@ describe('testAcrConnection', () => {
   })
 
   it('returns error if user not authorized for workspace', async () => {
-    ;(auth.api.getSession as any).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-123' },
     })
     mockPayload.findByID.mockResolvedValue({
@@ -310,7 +351,7 @@ describe('testAcrConnection', () => {
   })
 
   it('successfully validates token against ACR API', async () => {
-    ;(auth.api.getSession as any).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-123' },
     })
     mockPayload.findByID.mockResolvedValue({
@@ -347,7 +388,7 @@ describe('testAcrConnection', () => {
   })
 
   it('returns error when ACR API returns failure', async () => {
-    ;(auth.api.getSession as any).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-123' },
     })
     mockPayload.findByID.mockResolvedValue({

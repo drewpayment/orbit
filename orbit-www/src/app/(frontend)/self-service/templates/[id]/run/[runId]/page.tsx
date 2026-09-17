@@ -1,13 +1,10 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { getPayload } from 'payload'
-import config from '@payload-config'
 import { ArrowLeft } from 'lucide-react'
 import { getTemplateDefinitionByIdOrSlug, getScaffolderApprovalGates } from '../../../run-actions'
 import { getRun } from '../../../authoring-actions'
-import { getCurrentUser, getPayloadUserFromSession } from '@/lib/auth/session'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
-import { canApproveActionRun } from '@/lib/actions/authz'
+import { getActor } from '@/lib/authz'
+import { canApproveRun } from '../../../../actions'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -65,19 +62,11 @@ export default async function RunDetailPage({ params }: PageProps) {
   // affordance only; `approveRun`/`rejectRun` re-check
   // `canApproveActionRun` server-side regardless (defense in depth, not
   // the authority).
-  const payload = await getPayload({ config })
-  const user = await getCurrentUser()
-  const payloadUser = await getPayloadUserFromSession()
+  const actor = await getActor()
   const workspaceId = relId(run.workspace)
   const approvalPolicy =
     run.action && typeof run.action === 'object' ? run.action.approvalPolicy ?? 'none' : 'none'
-  const canApprove = await canApproveActionRun(
-    payload,
-    user?.id,
-    workspaceId,
-    approvalPolicy,
-    isPlatformAdmin(payloadUser),
-  )
+  const canApprove = actor ? await canApproveRun(actor, workspaceId ?? '', approvalPolicy) : false
   const gates = await getScaffolderApprovalGates(runId)
 
   return (

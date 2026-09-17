@@ -1,5 +1,7 @@
 import type { getPayload } from 'payload'
 import type { EntityKind } from '@/collections/catalog/constants'
+import { membershipRole } from '@/lib/authz/membership'
+import { listWorkspaceMembers } from '@/lib/workspaces/members'
 
 /**
  * Data sources for Orbit-native `SchemaForm` field pickers (Template
@@ -58,26 +60,13 @@ function relId(value: unknown): string | null {
   return null
 }
 
-/** Is `userId` an active member of `workspaceId`? The tenant boundary check every picker gates on. */
+/** Is `userId` (Better-Auth id) an active member of `workspaceId`? The tenant boundary check every picker gates on. */
 async function isActiveMember(
   payload: PayloadClient,
   userId: string,
   workspaceId: string,
 ): Promise<boolean> {
-  const result = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: userId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-    depth: 0,
-    overrideAccess: true,
-  })
-  return result.docs.length > 0
+  return (await membershipRole(payload, userId, workspaceId)) !== null
 }
 
 // ---------------------------------------------------------------------------
@@ -93,22 +82,13 @@ export async function getTeamsForWorkspace(
 ): Promise<PickerOption[]> {
   if (!(await isActiveMember(payload, callerId, workspaceId))) return []
 
-  const members = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [{ workspace: { equals: workspaceId } }, { status: { equals: 'active' } }],
-    },
-    limit: 500,
-    depth: 0,
-    overrideAccess: true,
-    sort: 'role',
-  })
+  const members = await listWorkspaceMembers(payload, workspaceId, { limit: 500, sort: 'role' })
 
   // `workspace-members.user` stores a Better-Auth id (plain text, not a
   // Payload relationship — see the module doc comment), so it never
   // populates via `depth`. Resolve display names with a second lookup
   // against `users.betterAuthId` rather than showing raw ids in the picker.
-  const memberIds = members.docs.map((m) => String(m.user))
+  const memberIds = members.map((m) => String(m.user))
   const nameByBetterAuthId = new Map<string, string>()
   if (memberIds.length > 0) {
     const users = await payload.find({
@@ -125,7 +105,7 @@ export async function getTeamsForWorkspace(
     }
   }
 
-  return members.docs.map((m) => {
+  return members.map((m) => {
     const userId = String(m.user)
     return {
       id: userId,
