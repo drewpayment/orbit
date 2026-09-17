@@ -197,3 +197,11 @@ Epic #138. Phases: #133 (A), #134 (B), #135 (C), #136 (D), #137 (E). Self-servic
   - A caller with no eligible workspaces now gets the explicit `NOTHING` filter instead of `{ field: { in: [] } }`, so denial no longer depends on adapter rendering of an empty `$in`.
   - Read join hops default to a 10000-row page (Deployments/HealthChecks previously used 10000; the first adapter draft regressed to 1000).
 - Adversarial review (2026-09-17): 7 findings, all addressed in the follow-up commit; `create-admin-user.ts` rewritten to set `users.role` directly.
+
+## 9. Phase C execution log
+
+- Inventory on main after A+B (2026-09-17): 61 files with a direct `workspace-members` query, 82 files importing the restricted session helpers, 289 lint warnings across 151 files; 39 non-internal route handlers (only ~6 read the session directly, the rest are webhook / internal-key / auth routes and are out of scope).
+- Foundation (PR #142, `chore/authz-phase-c` → main): `lib/authz/server.ts` (`authorize`, `check`, `memberWorkspaceIds`, `workspaceRole`, `authzErrorResponse`, `AuthzError`), `lib/workspaces/members.ts` (roster data access, lint-exempt), the seven legacy helper modules rewritten as shims over `can()` with unchanged signatures, `.agent/SOPs/authorization.md`. 12 server + 6 roster tests.
+- Roster reads vs authz: six files query `workspace-members` as data (member lists/counts, "notify admins", invite/remove, delete-all). Those go to `lib/workspaces/members.ts`, not to `authorize()`; the lint rule still fences them to that one module.
+- Area migration runs as four parallel worktrees stacked on `chore/authz-phase-c`, one PR each targeting that branch: kafka; self-service/templates/launches/registries/apps; catalog/scorecards/automations/knowledge/discovery (also moves `CatalogEntities`/`CatalogRelations` onto the Payload adapters and retires `entity-authz`); workspaces/platform/github/agent/settings. Each PR: tsc clean, restricted lint warnings for its files = 0, area tests green, semantic changes listed in the PR body.
+- Integration verification on the base branch after merge: agent-browser flows per area, full vitest diffed against main, lint warning count repo-wide → expected 0 (Phase D then flips to error).
