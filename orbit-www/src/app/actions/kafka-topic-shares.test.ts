@@ -23,12 +23,12 @@ vi.mock('@payload-config', () => ({
 }))
 
 const mockActor = {
-  payloadId: 'user-1',
-  betterAuthId: 'user-1',
+  payloadId: 'pl-1',
+  betterAuthId: 'ba-1',
   email: 'user-1@test.com',
   role: 'user',
   isPlatformAdmin: false,
-  user: { id: 'user-1', collection: 'users', _strategy: 'better-auth' },
+  user: { id: 'pl-1', collection: 'users', _strategy: 'better-auth' },
 }
 
 describe('kafka-topic-shares actions', () => {
@@ -198,7 +198,7 @@ describe('kafka-topic-shares actions', () => {
           id: 'share-1',
           data: expect.objectContaining({
             status: 'approved',
-            approvedBy: 'user-1',
+            approvedBy: 'pl-1',
           }),
         })
       )

@@ -24,12 +24,12 @@ vi.mock('@payload-config', () => ({
 }))
 
 const mockActor = {
-  payloadId: 'user-1',
-  betterAuthId: 'user-1',
+  payloadId: 'pl-1',
+  betterAuthId: 'ba-1',
   email: 'user-1@test.com',
   role: 'user',
   isPlatformAdmin: false,
-  user: { id: 'user-1', collection: 'users', _strategy: 'better-auth' },
+  user: { id: 'pl-1', collection: 'users', _strategy: 'better-auth' },
 }
 
 describe('kafka-topic-catalog actions', () => {
@@ -256,6 +256,13 @@ describe('kafka-topic-catalog actions', () => {
       expect(result.success).toBe(true)
       expect(result.shareId).toBe('share-1')
       expect(result.autoApproved).toBe(false)
+      expect(mockPayload.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            requestedBy: 'pl-1',
+          }),
+        })
+      )
     })
 
     it('should auto-approve when policy allows', async () => {
