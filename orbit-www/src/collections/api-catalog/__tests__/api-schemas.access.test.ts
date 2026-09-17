@@ -87,3 +87,50 @@ describe('APISchemas access: read', () => {
     })
   })
 })
+
+describe('APISchemas access: update / delete via createdBy (Payload id)', () => {
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const schemas: Record<string, any> = {
+    mine: { id: 'mine', workspace: 'ws-1', createdBy: 'payload-1' },
+    theirs: { id: 'theirs', workspace: 'ws-1', createdBy: { id: 'payload-2' } },
+    // createdBy holding the caller's Better-Auth id must NOT count as ownership
+    baOwned: { id: 'baOwned', workspace: 'ws-1', createdBy: 'ba-1' },
+  }
+  const withDocs = (members: MemberDoc[]) => {
+    const { payload, find } = makePayload(members)
+    ;(payload as any).findByID = vi.fn(async ({ id }: any) => {
+      if (!schemas[id]) throw new Error('not found')
+      return schemas[id]
+    })
+    return payload
+  }
+  const mutate = (access: Access, user: unknown, payload: Payload, id: string) =>
+    access({ req: { user, payload }, id } as any)
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
+  it('the creator can update and delete even without a workspace role', async () => {
+    const payload = withDocs([])
+    expect(await mutate(APISchemas.access!.update!, plainUser, payload, 'mine')).toBe(true)
+    expect(await mutate(APISchemas.access!.delete!, plainUser, payload, 'mine')).toBe(true)
+  })
+
+  it('a Better-Auth id in createdBy is not ownership', async () => {
+    const payload = withDocs([])
+    expect(await mutate(APISchemas.access!.update!, plainUser, payload, 'baOwned')).toBe(false)
+    expect(await mutate(APISchemas.access!.delete!, plainUser, payload, 'baOwned')).toBe(false)
+  })
+
+  it("someone else's schema: any active member may update, only owner/admin may delete", async () => {
+    const asMember = withDocs([member('member', 'ws-1')])
+    expect(await mutate(APISchemas.access!.update!, plainUser, asMember, 'theirs')).toBe(true)
+    expect(await mutate(APISchemas.access!.delete!, plainUser, asMember, 'theirs')).toBe(false)
+    const asAdmin = withDocs([member('admin', 'ws-1')])
+    expect(await mutate(APISchemas.access!.delete!, plainUser, asAdmin, 'theirs')).toBe(true)
+  })
+
+  it('a non-member cannot touch another workspace’s schema; platform admin can', async () => {
+    const payload = withDocs([member('owner', 'ws-other')])
+    expect(await mutate(APISchemas.access!.update!, plainUser, payload, 'theirs')).toBe(false)
+    expect(await mutate(APISchemas.access!.update!, adminUser, payload, 'theirs')).toBe(true)
+  })
+})
