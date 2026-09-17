@@ -76,9 +76,6 @@ export interface Config {
     'knowledge-pages': KnowledgePage;
     'page-links': PageLink;
     'github-installations': GithubInstallation;
-    permissions: Permission;
-    roles: Role;
-    'user-workspace-roles': UserWorkspaceRole;
     templates: Template;
     'template-definitions': TemplateDefinition;
     'template-definition-versions': TemplateDefinitionVersion;
@@ -158,9 +155,6 @@ export interface Config {
     'knowledge-pages': KnowledgePagesSelect<false> | KnowledgePagesSelect<true>;
     'page-links': PageLinksSelect<false> | PageLinksSelect<true>;
     'github-installations': GithubInstallationsSelect<false> | GithubInstallationsSelect<true>;
-    permissions: PermissionsSelect<false> | PermissionsSelect<true>;
-    roles: RolesSelect<false> | RolesSelect<true>;
-    'user-workspace-roles': UserWorkspaceRolesSelect<false> | UserWorkspaceRolesSelect<true>;
     templates: TemplatesSelect<false> | TemplatesSelect<true>;
     'template-definitions': TemplateDefinitionsSelect<false> | TemplateDefinitionsSelect<true>;
     'template-definition-versions': TemplateDefinitionVersionsSelect<false> | TemplateDefinitionVersionsSelect<true>;
@@ -666,78 +660,6 @@ export interface GithubInstallation {
    * For multi-tenant SaaS (null = default tenant for self-hosted)
    */
   tenant?: (string | null) | Tenant;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "permissions".
- */
-export interface Permission {
-  id: string;
-  /**
-   * Unique identifier (e.g., "template:create", "repository:delete")
-   */
-  slug: string;
-  /**
-   * Human-readable name (e.g., "Create Templates")
-   */
-  name: string;
-  /**
-   * What this permission allows
-   */
-  description?: string | null;
-  /**
-   * Category for grouping permissions
-   */
-  category: 'template' | 'repository' | 'workspace' | 'knowledge' | 'admin';
-  /**
-   * Where this permission applies
-   */
-  scope: 'platform' | 'workspace';
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "roles".
- */
-export interface Role {
-  id: string;
-  /**
-   * Unique identifier (e.g., "workspace-admin")
-   */
-  slug: string;
-  name: string;
-  description?: string | null;
-  scope: 'platform' | 'workspace';
-  /**
-   * Permissions granted by this role
-   */
-  permissions?: (string | Permission)[] | null;
-  /**
-   * Auto-assigned to new workspace members
-   */
-  isDefault?: boolean | null;
-  /**
-   * Built-in role that cannot be deleted
-   */
-  isSystem?: boolean | null;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "user-workspace-roles".
- */
-export interface UserWorkspaceRole {
-  id: string;
-  user: string | User;
-  /**
-   * Leave empty for platform-level roles
-   */
-  workspace?: (string | null) | Workspace;
-  role: string | Role;
   updatedAt: string;
   createdAt: string;
 }
@@ -4532,18 +4454,6 @@ export interface PayloadLockedDocument {
         value: string | GithubInstallation;
       } | null)
     | ({
-        relationTo: 'permissions';
-        value: string | Permission;
-      } | null)
-    | ({
-        relationTo: 'roles';
-        value: string | Role;
-      } | null)
-    | ({
-        relationTo: 'user-workspace-roles';
-        value: string | UserWorkspaceRole;
-      } | null)
-    | ({
         relationTo: 'templates';
         value: string | Template;
       } | null)
@@ -5037,45 +4947,6 @@ export interface GithubInstallationsSelect<T extends boolean = true> {
   installedBy?: T;
   installedAt?: T;
   tenant?: T;
-  updatedAt?: T;
-  createdAt?: T;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "permissions_select".
- */
-export interface PermissionsSelect<T extends boolean = true> {
-  slug?: T;
-  name?: T;
-  description?: T;
-  category?: T;
-  scope?: T;
-  updatedAt?: T;
-  createdAt?: T;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "roles_select".
- */
-export interface RolesSelect<T extends boolean = true> {
-  slug?: T;
-  name?: T;
-  description?: T;
-  scope?: T;
-  permissions?: T;
-  isDefault?: T;
-  isSystem?: T;
-  updatedAt?: T;
-  createdAt?: T;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "user-workspace-roles_select".
- */
-export interface UserWorkspaceRolesSelect<T extends boolean = true> {
-  user?: T;
-  workspace?: T;
-  role?: T;
   updatedAt?: T;
   createdAt?: T;
 }

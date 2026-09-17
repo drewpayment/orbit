@@ -10,8 +10,10 @@ export const KafkaTopicPolicies: CollectionConfig = {
     description: 'Guardrails and policies for topic creation',
   },
   access: {
-    // Platform admins manage policies. The `workspace` field is not yet used
-    // to scope access — workspace-scoping these policies is a follow-up.
+    // Platform admins manage policies (decided 2026-09-17, issue #69 item 4;
+    // Kafka is frozen scope). The `workspace` field is NOT an access scope: the
+    // kafka server actions use it to pick which policy applies to a workspace
+    // (`workspace == X` or platform-wide `workspace` unset), so it stays.
     read: adminOnly,
     create: adminOnly,
     update: adminOnly,

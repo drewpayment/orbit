@@ -17,9 +17,6 @@ import { KnowledgePages } from './collections/KnowledgePages'
 import { GitHubInstallations } from './collections/GitHubInstallations'
 import { Tenants } from './collections/Tenants'
 import { PageLinks } from './collections/PageLinks'
-import { Permissions } from './collections/Permissions'
-import { Roles } from './collections/Roles'
-import { UserWorkspaceRoles } from './collections/UserWorkspaceRoles'
 import { Templates } from './collections/Templates'
 import { TemplateDefinitions } from './collections/TemplateDefinitions'
 import { TemplateDefinitionVersions } from './collections/TemplateDefinitionVersions'
@@ -121,9 +118,6 @@ export default buildConfig({
     KnowledgePages,
     PageLinks,
     GitHubInstallations,
-    Permissions,
-    Roles,
-    UserWorkspaceRoles,
     Templates,
     TemplateDefinitions,
     TemplateDefinitionVersions,

@@ -21,7 +21,6 @@
     "payload": "cross-env NODE_OPTIONS=--no-deprecation payload",
     "seed:example-templates": "tsx --conditions=react-server src/scripts/seed-example-templates.ts",
     "seed:oauth2-proxy-client": "tsx src/scripts/seed-oauth2-proxy-client.ts",
-    "seed:permissions": "tsx src/scripts/seed-permissions.ts",
     "start": "cross-env NODE_OPTIONS=--no-deprecation next start",
     "test": "bun run test:int && bun run test:e2e",
     "test:e2e": "cross-env NODE_OPTIONS=\"--no-deprecation --no-experimental-strip-types\" bun exec playwright test",
