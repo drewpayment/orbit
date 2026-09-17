@@ -1,6 +1,5 @@
 import type { CollectionConfig } from 'payload'
-import { getMemberWorkspaceIds, isWorkspaceAdminOrOwner } from '@/lib/access/workspace-access'
-import { memberCreate } from '@/lib/access/collection-access'
+import { memberCreate, workspaceScopedRead, docWorkspaceMutate, relationId } from '@/lib/authz/payload'
 
 export const KnowledgePages: CollectionConfig = {
   slug: 'knowledge-pages',
@@ -13,28 +12,7 @@ export const KnowledgePages: CollectionConfig = {
   },
   access: {
     // Read: Based on knowledge space access (workspace members)
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-
-      const betterAuthId = user.betterAuthId
-      const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
-
-      // Filter pages by knowledge spaces that belong to user's workspaces
-      const spaces = await payload.find({
-        collection: 'knowledge-spaces',
-        where: {
-          workspace: { in: workspaceIds }
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-
-      const spaceIds = spaces.docs.map(s => s.id)
-
-      return {
-        knowledgeSpace: { in: spaceIds }
-      }
-    },
+    read: workspaceScopedRead({ via: [{ collection: 'knowledge-spaces', on: 'knowledgeSpace' }] }),
     // Create: active member of the workspace owning `data.knowledgeSpace`
     // (was `!!user` — gap closed). Indirect relation, so resolve via the
     // knowledge-spaces record rather than a direct `workspace` field.
@@ -59,65 +37,43 @@ export const KnowledgePages: CollectionConfig = {
       },
     }),
     // Update: Authors and workspace admins
-    update: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-      
-      const page = await payload.findByID({
-        collection: 'knowledge-pages',
-        id,
-        depth: 2,
-        overrideAccess: true,
-      })
-
-      // Get workspace through space relationship
-      const space = typeof page.knowledgeSpace === 'object'
-        ? page.knowledgeSpace
-        : await payload.findByID({ collection: 'knowledge-spaces', id: page.knowledgeSpace as string, overrideAccess: true })
-
-      const workspaceId = typeof space.workspace === 'string'
-        ? space.workspace
-        : space.workspace.id
-
-      // Check if user is author or workspace admin/owner
-      const isAuthor = page.author === user.id ||
-        (typeof page.author === 'object' && page.author.id === user.id)
-
-      if (isAuthor) return true
-
-      const betterAuthId = user.betterAuthId
-      if (!betterAuthId) return false
-
-      return isWorkspaceAdminOrOwner(payload, betterAuthId, workspaceId)
-    },
+    update: docWorkspaceMutate('knowledge-pages', ['owner', 'admin'], {
+      ownerField: 'author',
+      resolveWorkspace: async ({ doc, payload }) => {
+        const spaceId = relationId((doc as { knowledgeSpace?: unknown }).knowledgeSpace)
+        if (!spaceId) return null
+        try {
+          const space = await payload.findByID({
+            collection: 'knowledge-spaces',
+            id: spaceId,
+            depth: 0,
+            overrideAccess: true,
+          })
+          return relationId(space.workspace)
+        } catch {
+          return null
+        }
+      },
+    }),
     // Delete: Authors and workspace admins
-    delete: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-
-      const page = await payload.findByID({
-        collection: 'knowledge-pages',
-        id,
-        depth: 2,
-        overrideAccess: true,
-      })
-
-      const space = typeof page.knowledgeSpace === 'object'
-        ? page.knowledgeSpace
-        : await payload.findByID({ collection: 'knowledge-spaces', id: page.knowledgeSpace as string, overrideAccess: true })
-
-      const workspaceId = typeof space.workspace === 'string'
-        ? space.workspace
-        : space.workspace.id
-
-      const isAuthor = page.author === user.id ||
-        (typeof page.author === 'object' && page.author.id === user.id)
-
-      if (isAuthor) return true
-
-      const betterAuthId = user.betterAuthId
-      if (!betterAuthId) return false
-
-      return isWorkspaceAdminOrOwner(payload, betterAuthId, workspaceId)
-    },
+    delete: docWorkspaceMutate('knowledge-pages', ['owner', 'admin'], {
+      ownerField: 'author',
+      resolveWorkspace: async ({ doc, payload }) => {
+        const spaceId = relationId((doc as { knowledgeSpace?: unknown }).knowledgeSpace)
+        if (!spaceId) return null
+        try {
+          const space = await payload.findByID({
+            collection: 'knowledge-spaces',
+            id: spaceId,
+            depth: 0,
+            overrideAccess: true,
+          })
+          return relationId(space.workspace)
+        } catch {
+          return null
+        }
+      },
+    }),
   },
   fields: [
     {

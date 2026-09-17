@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { authenticatedOnly, denyAll } from '@/lib/authz/payload'
 
 /**
  * Patterns Collection
@@ -36,13 +37,13 @@ export const Patterns: CollectionConfig = {
     // Global catalog — every authenticated user can browse approved
     // patterns. Pending/rejected/deprecated rows are filtered by the
     // catalog UI, not by access control, since admins need to see them.
-    read: ({ req: { user } }) => Boolean(user),
+    read: authenticatedOnly,
     // Mutations only via the temporal worker's internal API (X-API-Key);
     // humans resolve via the chat-UI approve/reject path which routes
     // to /api/internal/patterns/[id]/resolve.
-    create: () => false,
-    update: () => false,
-    delete: () => false,
+    create: denyAll,
+    update: denyAll,
+    delete: denyAll,
   },
   fields: [
     {

@@ -1,5 +1,6 @@
 import type { CollectionConfig, Where } from 'payload'
 import { encrypt } from '@/lib/encryption'
+import { manageCreate, workspaceScopedRead, docWorkspaceMutate } from '@/lib/authz/payload'
 
 export const EnvironmentVariables: CollectionConfig = {
   slug: 'environment-variables',
@@ -73,134 +74,13 @@ export const EnvironmentVariables: CollectionConfig = {
   },
   access: {
     // Read: Only workspace members can view variables
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-
-      // Platform admins can see all variables
-      if (user.role === 'super_admin' || user.role === 'admin') return true
-
-      // workspace-members.user stores the Better Auth ID — fail closed if absent.
-      const userKey = user.betterAuthId
-      if (!userKey) return false
-
-      // Get user's workspace memberships
-      const memberships = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          user: { equals: userKey },
-          status: { equals: 'active' },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-
-      const workspaceIds = memberships.docs.map(m =>
-        String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
-      )
-
-      // Return query constraint: in user's workspaces
-      return {
-        workspace: { in: workspaceIds },
-      } as Where
-    },
+    read: workspaceScopedRead(),
     // Create: Only workspace owners/admins can create variables
-    create: async ({ req: { user, payload }, data }) => {
-      if (!user) return false
-
-      // Platform admins can create all variables
-      if (user.role === 'super_admin' || user.role === 'admin') return true
-
-      if (!data?.workspace) return false
-
-      const workspaceId = typeof data.workspace === 'string'
-        ? data.workspace
-        : data.workspace.id
-
-      const createUserKey = user.betterAuthId
-      if (!createUserKey) return false
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: createUserKey } },
-            { role: { in: ['owner', 'admin'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
-
-      return members.docs.length > 0
-    },
+    create: manageCreate(['owner', 'admin']),
     // Update: Only workspace owners/admins can update variables
-    update: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-
-      // Platform admins can update all variables
-      if (user.role === 'super_admin' || user.role === 'admin') return true
-
-      const envVar = await payload.findByID({
-        collection: 'environment-variables',
-        id,
-        overrideAccess: true,
-      })
-
-      const workspaceId = typeof envVar.workspace === 'string'
-        ? envVar.workspace
-        : envVar.workspace.id
-
-      const updateUserKey = user.betterAuthId
-      if (!updateUserKey) return false
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: updateUserKey } },
-            { role: { in: ['owner', 'admin'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
-
-      return members.docs.length > 0
-    },
+    update: docWorkspaceMutate('environment-variables', ['owner', 'admin']),
     // Delete: Only workspace owners/admins can delete variables
-    delete: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-
-      // Platform admins can delete all variables
-      if (user.role === 'super_admin' || user.role === 'admin') return true
-
-      const envVar = await payload.findByID({
-        collection: 'environment-variables',
-        id,
-        overrideAccess: true,
-      })
-
-      const workspaceId = typeof envVar.workspace === 'string'
-        ? envVar.workspace
-        : envVar.workspace.id
-
-      const deleteUserKey = user.betterAuthId
-      if (!deleteUserKey) return false
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: deleteUserKey } },
-            { role: { in: ['owner', 'admin'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
-
-      return members.docs.length > 0
-    },
+    delete: docWorkspaceMutate('environment-variables', ['owner', 'admin']),
   },
   fields: [
     {

@@ -1,5 +1,5 @@
 import type { CollectionConfig } from 'payload'
-import { getMemberWorkspaceIds } from '@/lib/access/workspace-access'
+import { workspaceScopedRead, denyAll } from '@/lib/authz/payload'
 
 /**
  * AgentEvents Collection
@@ -29,16 +29,11 @@ export const AgentEvents: CollectionConfig = {
     group: 'Agent',
   },
   access: {
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-      const betterAuthId = user.betterAuthId
-      const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
-      return { workspace: { in: workspaceIds } }
-    },
+    read: workspaceScopedRead(),
     // Events are written by the temporal worker via the internal API only.
-    create: () => false,
-    update: () => false,
-    delete: () => false,
+    create: denyAll,
+    update: denyAll,
+    delete: denyAll,
   },
   fields: [
     {

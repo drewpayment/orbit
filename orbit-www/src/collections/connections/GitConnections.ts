@@ -1,6 +1,6 @@
 import type { CollectionConfig } from 'payload'
 import { encrypt } from '@/lib/encryption'
-import { adminOnly } from '@/lib/access/collection-access'
+import { adminOnly } from '@/lib/authz/payload'
 
 /**
  * GitConnections — non-GitHub git provider connections for catalog discovery

@@ -1,5 +1,5 @@
 import type { CollectionConfig } from 'payload'
-import { adminOnly } from '@/lib/access/collection-access'
+import { adminOnly, authenticatedOnly } from '@/lib/authz/payload'
 
 export const KafkaProviders: CollectionConfig = {
   slug: 'kafka-providers',
@@ -14,7 +14,7 @@ export const KafkaProviders: CollectionConfig = {
     // enum-like reference data (adapter names/capabilities), not
     // workspace-scoped, so no membership check is needed. Not public: an
     // internal IDP has no legitimate anonymous consumer (UAC-4).
-    read: ({ req: { user } }) => !!user,
+    read: authenticatedOnly,
     // Only platform admins can manage providers
     create: adminOnly,
     update: adminOnly,

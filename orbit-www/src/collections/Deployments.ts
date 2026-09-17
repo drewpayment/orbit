@@ -1,5 +1,5 @@
-import type { CollectionConfig, Where } from 'payload'
-import { memberCreate } from '@/lib/access/collection-access'
+import type { CollectionConfig } from 'payload'
+import { memberCreate, workspaceScopedRead, docWorkspaceMutate, relationId } from '@/lib/authz/payload'
 
 export const Deployments: CollectionConfig = {
   slug: 'deployments',
@@ -10,44 +10,7 @@ export const Deployments: CollectionConfig = {
   },
   access: {
     // Read: Based on workspace membership through app relationship
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-
-      // workspace-members.user stores the Better Auth ID — fail closed if absent.
-      const userKey = user.betterAuthId
-      if (!userKey) return false
-      // Get user's workspace memberships
-      const memberships = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          user: { equals: userKey },
-          status: { equals: 'active' },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-
-      const workspaceIds = memberships.docs.map(m =>
-        String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
-      )
-
-      // Get apps in user's workspaces
-      const apps = await payload.find({
-        collection: 'apps',
-        where: {
-          workspace: { in: workspaceIds },
-        },
-        limit: 10000,
-        overrideAccess: true,
-      })
-
-      const appIds = apps.docs.map(app => String(app.id))
-
-      // Return query constraint: deployments where app is in user's workspaces
-      return {
-        app: { in: appIds },
-      } as Where
-    },
+    read: workspaceScopedRead({ via: [{ collection: 'apps', on: 'app' }] }),
     // Create: active member of the workspace owning `data.app` (was `!!user`
     // — gap closed; the app→workspace relation is indirect, so resolve via
     // the apps record rather than a direct `workspace` field).
@@ -73,87 +36,43 @@ export const Deployments: CollectionConfig = {
       },
     }),
     // Update: Workspace members (owner, admin, or member role)
-    update: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-
-      const deployment = await payload.findByID({
-        collection: 'deployments',
-        id,
-        overrideAccess: true,
-      })
-
-      const appId = typeof deployment.app === 'string'
-        ? deployment.app
-        : deployment.app.id
-
-      const app = await payload.findByID({
-        collection: 'apps',
-        id: appId,
-        overrideAccess: true,
-      })
-
-      const workspaceId = typeof app.workspace === 'string'
-        ? app.workspace
-        : app.workspace.id
-
-      const updateUserKey = user.betterAuthId
-      if (!updateUserKey) return false
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: updateUserKey } },
-            { role: { in: ['owner', 'admin', 'member'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
-
-      return members.docs.length > 0
-    },
+    update: docWorkspaceMutate('deployments', ['owner', 'admin', 'member'], {
+      field: 'app',
+      resolveWorkspace: async ({ doc, payload }) => {
+        const appId = relationId((doc as { app?: unknown }).app)
+        if (!appId) return null
+        try {
+          const app = await payload.findByID({
+            collection: 'apps',
+            id: appId,
+            depth: 0,
+            overrideAccess: true,
+          })
+          return relationId(app.workspace)
+        } catch {
+          return null
+        }
+      },
+    }),
     // Delete: Workspace owners and admins only
-    delete: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-
-      const deployment = await payload.findByID({
-        collection: 'deployments',
-        id,
-        overrideAccess: true,
-      })
-
-      const appId = typeof deployment.app === 'string'
-        ? deployment.app
-        : deployment.app.id
-
-      const app = await payload.findByID({
-        collection: 'apps',
-        id: appId,
-        overrideAccess: true,
-      })
-
-      const workspaceId = typeof app.workspace === 'string'
-        ? app.workspace
-        : app.workspace.id
-
-      const deleteUserKey = user.betterAuthId
-      if (!deleteUserKey) return false
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: deleteUserKey } },
-            { role: { in: ['owner', 'admin'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
-
-      return members.docs.length > 0
-    },
+    delete: docWorkspaceMutate('deployments', ['owner', 'admin'], {
+      field: 'app',
+      resolveWorkspace: async ({ doc, payload }) => {
+        const appId = relationId((doc as { app?: unknown }).app)
+        if (!appId) return null
+        try {
+          const app = await payload.findByID({
+            collection: 'apps',
+            id: appId,
+            depth: 0,
+            overrideAccess: true,
+          })
+          return relationId(app.workspace)
+        } catch {
+          return null
+        }
+      },
+    }),
   },
   fields: [
     {

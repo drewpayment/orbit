@@ -1,5 +1,5 @@
 import type { CollectionConfig } from 'payload'
-import { isAdmin } from '../access/isAdmin'
+import { adminOnly, authenticatedOnly } from '@/lib/authz/payload'
 
 export const LaunchTemplates: CollectionConfig = {
   slug: 'launch-templates',
@@ -10,11 +10,11 @@ export const LaunchTemplates: CollectionConfig = {
   },
   access: {
     // Read: Any authenticated user
-    read: ({ req: { user } }) => !!user,
+    read: authenticatedOnly,
     // Create/Update/Delete: Admins only
-    create: isAdmin,
-    update: isAdmin,
-    delete: isAdmin,
+    create: adminOnly,
+    update: adminOnly,
+    delete: adminOnly,
   },
   fields: [
     {

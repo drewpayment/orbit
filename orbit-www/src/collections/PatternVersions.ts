@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { authenticatedOnly, denyAll } from '@/lib/authz/payload'
 
 /**
  * PatternVersions Collection
@@ -31,10 +32,10 @@ export const PatternVersions: CollectionConfig = {
   access: {
     // Global catalog — every authenticated user can read pattern history
     // (mirrors the catalog's read-open policy).
-    read: ({ req: { user } }) => Boolean(user),
-    create: () => false,
-    update: () => false,
-    delete: () => false,
+    read: authenticatedOnly,
+    create: denyAll,
+    update: denyAll,
+    delete: denyAll,
   },
   fields: [
     {

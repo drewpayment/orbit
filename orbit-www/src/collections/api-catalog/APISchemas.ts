@@ -1,11 +1,51 @@
-import type { CollectionConfig, Where } from 'payload'
-import { memberCreate } from '@/lib/access/collection-access'
-import {
-  isPlatformAdmin,
-  isWorkspaceMember,
-  isWorkspaceAdminOrOwner,
-  getMemberWorkspaceIds,
-} from '@/lib/access/workspace-access'
+import type { Access, CollectionConfig, Where } from 'payload'
+import { docWorkspaceMutate, memberCreate } from '@/lib/authz/payload'
+import { workspaceIdsFor } from '@/lib/authz/membership'
+import { principalOf } from '@/lib/authz/policy'
+
+// Read: visibility-based access (public=all, workspace=members, private=creator).
+// This is NOT `workspaceScopedRead` with `extend`, because the adapter's
+// default branch (`{ workspace: { in: ids } }`) would expose private/draft
+// schemas sitting in a member's workspace — the workspace branch here must
+// additionally require `visibility: 'workspace'`.
+const readApiSchema: Access = async ({ req: { user, payload } }) => {
+  if (!user) {
+    // Unauthenticated users can only see public APIs
+    return {
+      visibility: { equals: 'public' },
+    } as Where
+  }
+
+  const principal = principalOf(user)!
+  if (principal.isPlatformAdmin) return true
+
+  // Get user's workspace memberships (keyed on the Better-Auth id)
+  const workspaceIds = principal.betterAuthId
+    ? await workspaceIdsFor(payload, principal.betterAuthId, 'member')
+    : []
+
+  // Can see: public APIs, workspace APIs in their workspaces, private APIs
+  // they created. `createdBy` is a relationship to `users`, so comparing
+  // against the caller's Payload id here is correct (unlike workspace-members
+  // lookups, which store the Better-Auth id).
+  return {
+    or: [
+      { visibility: { equals: 'public' } },
+      {
+        and: [
+          { visibility: { equals: 'workspace' } },
+          { workspace: { in: workspaceIds } },
+        ],
+      },
+      {
+        and: [
+          { visibility: { equals: 'private' } },
+          { createdBy: { equals: principal.payloadId } },
+        ],
+      },
+    ],
+  } as Where
+}
 
 export const APISchemas: CollectionConfig = {
   slug: 'api-schemas',
@@ -16,102 +56,13 @@ export const APISchemas: CollectionConfig = {
     description: 'OpenAPI schemas registered in the API catalog',
   },
   access: {
-    // Read: Visibility-based access (public=all, workspace=members, private=creator)
-    read: async ({ req: { user, payload } }) => {
-      if (!user) {
-        // Unauthenticated users can only see public APIs
-        return {
-          visibility: { equals: 'public' },
-        } as Where
-      }
-
-      // Platform admin can see all
-      if (isPlatformAdmin(user)) return true
-
-      // Get user's workspace memberships (keyed on the Better-Auth id)
-      const betterAuthId = user.betterAuthId
-      const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
-
-      // Can see: public APIs, workspace APIs in their workspaces, private APIs
-      // they created. `createdBy` is a relationship to `users`, so comparing
-      // against the Payload `user.id` here is correct (unlike workspace-members
-      // lookups, which store the Better-Auth id).
-      return {
-        or: [
-          { visibility: { equals: 'public' } },
-          {
-            and: [
-              { visibility: { equals: 'workspace' } },
-              { workspace: { in: workspaceIds } },
-            ],
-          },
-          {
-            and: [
-              { visibility: { equals: 'private' } },
-              { createdBy: { equals: user.id } },
-            ],
-          },
-        ],
-      } as Where
-    },
+    read: readApiSchema,
     // Create: any active member of the target `data.workspace`.
     create: memberCreate(),
-    update: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-      if (isPlatformAdmin(user)) return true
-
-      const schema = await payload.findByID({
-        collection: 'api-schemas',
-        id,
-        depth: 0,
-        overrideAccess: true,
-      })
-
-      // Creator can always edit (createdBy is a relationship to `users`, so
-      // user.id is the correct comparison here).
-      const createdById = typeof schema.createdBy === 'string'
-        ? schema.createdBy
-        : schema.createdBy?.id
-      if (createdById === user.id) return true
-
-      const workspaceId = typeof schema.workspace === 'string'
-        ? schema.workspace
-        : schema.workspace?.id
-      if (!workspaceId) return false
-
-      // Workspace owners/admins/members can edit
-      const betterAuthId = user.betterAuthId
-      if (!betterAuthId) return false
-      return isWorkspaceMember(payload, betterAuthId, workspaceId)
-    },
-    delete: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-      if (isPlatformAdmin(user)) return true
-
-      const schema = await payload.findByID({
-        collection: 'api-schemas',
-        id,
-        depth: 0,
-        overrideAccess: true,
-      })
-
-      // Creator can delete (createdBy is a relationship to `users`, so user.id
-      // is the correct comparison here).
-      const createdById = typeof schema.createdBy === 'string'
-        ? schema.createdBy
-        : schema.createdBy?.id
-      if (createdById === user.id) return true
-
-      const workspaceId = typeof schema.workspace === 'string'
-        ? schema.workspace
-        : schema.workspace?.id
-      if (!workspaceId) return false
-
-      // Only workspace owners/admins can delete
-      const betterAuthId = user.betterAuthId
-      if (!betterAuthId) return false
-      return isWorkspaceAdminOrOwner(payload, betterAuthId, workspaceId)
-    },
+    // Update: creator (createdBy) or any active workspace member.
+    update: docWorkspaceMutate('api-schemas', ['owner', 'admin', 'member'], { ownerField: 'createdBy' }),
+    // Delete: creator (createdBy) or workspace owner/admin.
+    delete: docWorkspaceMutate('api-schemas', ['owner', 'admin'], { ownerField: 'createdBy' }),
   },
   fields: [
     {

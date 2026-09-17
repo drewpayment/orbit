@@ -1,5 +1,5 @@
-import type { CollectionConfig, Where } from 'payload'
-import { getMemberWorkspaceIds, isWorkspaceAdminOrOwner, getWorkspaceMembership } from '@/lib/access/workspace-access'
+import type { CollectionConfig } from 'payload'
+import { manageCreate, workspaceScopedRead, docWorkspaceMutate } from '@/lib/authz/payload'
 
 export const DeploymentGenerators: CollectionConfig = {
   slug: 'deployment-generators',
@@ -10,85 +10,19 @@ export const DeploymentGenerators: CollectionConfig = {
   },
   access: {
     // Read: Users can read generators in their workspaces OR built-in generators
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-
-      // Get user's workspace memberships
-      const betterAuthId = user.betterAuthId
-      const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
-
-      // Return generators in user's workspaces OR built-in generators (no workspace)
-      return {
-        or: [
-          { workspace: { in: workspaceIds } },
-          { workspace: { exists: false } },
-        ],
-      } as Where
-    },
+    read: workspaceScopedRead({ includeGlobal: true }),
     // Create: Only for custom generators, workspace admins
-    create: async ({ req: { user, payload }, data }) => {
-      if (!user) return false
-      // Built-in generators can't be created via API
-      if (data?.isBuiltIn) return false
-      if (!data?.workspace) return false
-
-      const betterAuthId = user.betterAuthId
-      if (!betterAuthId) return false
-
-      const workspaceId = typeof data.workspace === 'string' ? data.workspace : data.workspace?.id
-      if (!workspaceId) return false
-
-      return isWorkspaceAdminOrOwner(payload, betterAuthId, workspaceId)
-    },
+    create: manageCreate(['owner', 'admin'], {
+      guard: (data) => !(data as { isBuiltIn?: boolean } | undefined)?.isBuiltIn,
+    }),
     // Update: Built-in = admin only, custom = workspace admins
-    update: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-
-      const generator = await payload.findByID({
-        collection: 'deployment-generators',
-        id,
-        overrideAccess: true,
-      })
-
-      // Built-in generators cannot be modified
-      if (generator.isBuiltIn) return false
-
-      if (!generator.workspace) return false
-
-      const workspaceId = typeof generator.workspace === 'string'
-        ? generator.workspace
-        : generator.workspace.id
-
-      const betterAuthId = user.betterAuthId
-      if (!betterAuthId) return false
-
-      return isWorkspaceAdminOrOwner(payload, betterAuthId, workspaceId)
-    },
+    update: docWorkspaceMutate('deployment-generators', ['owner', 'admin'], {
+      guard: (doc) => !doc.isBuiltIn,
+    }),
     // Delete: Only custom generators, workspace owners only
-    delete: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-
-      const generator = await payload.findByID({
-        collection: 'deployment-generators',
-        id,
-        overrideAccess: true,
-      })
-
-      // Built-in generators cannot be deleted
-      if (generator.isBuiltIn) return false
-
-      if (!generator.workspace) return false
-
-      const workspaceId = typeof generator.workspace === 'string'
-        ? generator.workspace
-        : generator.workspace.id
-
-      const betterAuthId = user.betterAuthId
-      if (!betterAuthId) return false
-
-      const membership = await getWorkspaceMembership(payload, betterAuthId, workspaceId)
-      return membership?.role === 'owner'
-    },
+    delete: docWorkspaceMutate('deployment-generators', ['owner'], {
+      guard: (doc) => !doc.isBuiltIn,
+    }),
   },
   fields: [
     {

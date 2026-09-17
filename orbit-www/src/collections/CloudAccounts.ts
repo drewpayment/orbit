@@ -1,6 +1,5 @@
-import type { CollectionConfig, Where } from 'payload'
-import { isAdmin } from '../access/isAdmin'
-import { getMemberWorkspaceIds } from '@/lib/access/workspace-access'
+import type { CollectionConfig } from 'payload'
+import { adminOnly, workspaceScopedRead } from '@/lib/authz/payload'
 
 export const CloudAccounts: CollectionConfig = {
   slug: 'cloud-accounts',
@@ -11,28 +10,13 @@ export const CloudAccounts: CollectionConfig = {
   },
   access: {
     // Read: Platform admins see all. Workspace members see accounts linked to their workspaces.
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-
-      // Platform admins can see all cloud accounts
-      const role = user?.role
-      if (role === 'super_admin' || role === 'admin') return true
-
-      // Get user's workspace memberships
-      const betterAuthId = user.betterAuthId
-      const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
-
-      // Return query constraint: cloud accounts linked to user's workspaces
-      return {
-        workspaces: { in: workspaceIds },
-      } as Where
-    },
+    read: workspaceScopedRead({ field: 'workspaces' }),
     // Create: Admins only
-    create: isAdmin,
+    create: adminOnly,
     // Update: Admins only
-    update: isAdmin,
+    update: adminOnly,
     // Delete: Admins only
-    delete: isAdmin,
+    delete: adminOnly,
   },
   fields: [
     {

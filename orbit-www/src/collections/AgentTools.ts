@@ -1,5 +1,5 @@
 import type { CollectionConfig } from 'payload'
-import { getMemberWorkspaceIds } from '@/lib/access/workspace-access'
+import { workspaceScopedRead, denyAll } from '@/lib/authz/payload'
 
 /**
  * AgentTools Collection
@@ -22,19 +22,14 @@ export const AgentTools: CollectionConfig = {
     group: 'Agent',
   },
   access: {
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-      const betterAuthId = user.betterAuthId
-      const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
-      return { workspace: { in: workspaceIds } }
-    },
+    read: workspaceScopedRead(),
     // Rows are written via the temporal worker's internal API; humans
     // resolve them through the chat-UI Approve/Reject path which calls the
     // /resolve endpoint server-side. Direct CRUD via Payload's REST is
     // disabled to keep the registry's audit trail unambiguous.
-    create: () => false,
-    update: () => false,
-    delete: () => false,
+    create: denyAll,
+    update: denyAll,
+    delete: denyAll,
   },
   fields: [
     {

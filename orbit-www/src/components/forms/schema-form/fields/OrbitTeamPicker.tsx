@@ -3,9 +3,9 @@
 /**
  * Orbit-native `SchemaForm` field: pick a workspace "team" member.
  *
- * There is no `teams` collection in this repo yet (verified against
- * `src/collections/*` — only `Workspaces`/`WorkspaceMembers`/
- * `UserWorkspaceRoles`). Per the Phase 2 task instructions, this proxies with
+ * There is no `teams` collection in this repo yet (only `Workspaces` /
+ * `WorkspaceMembers`; a `team-members` roster is planned in self-service
+ * RBAC Phase 2, #129). Per the Phase 2 task instructions, this proxies with
  * the workspace's active members (server-scoped to the caller's own
  * membership — see `picker-data.ts#getTeamsForWorkspace`) rather than a real
  * team entity. Revisit once a `teams` collection exists.

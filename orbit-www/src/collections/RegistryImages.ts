@@ -2,6 +2,7 @@
 // See README.md "Frozen Capabilities" and docs/plans/2026-06-09-product-focus-strategy.md.
 
 import type { CollectionConfig } from 'payload'
+import { authenticatedOnly, denyAll } from '@/lib/authz/payload'
 
 export const RegistryImages: CollectionConfig = {
   slug: 'registry-images',
@@ -14,10 +15,10 @@ export const RegistryImages: CollectionConfig = {
   access: {
     // System-managed collection - read access for authenticated users
     // Workspace filtering should be done at query time, not access level
-    read: ({ req: { user } }) => !!user,
-    create: () => false, // Only created by system
-    update: () => false,
-    delete: () => false,
+    read: authenticatedOnly,
+    create: denyAll, // Only created by system
+    update: denyAll,
+    delete: denyAll,
   },
   fields: [
     {

@@ -1,7 +1,8 @@
 // FROZEN capability: functional but accepts no new feature work.
 // See README.md "Frozen Capabilities" and docs/plans/2026-06-09-product-focus-strategy.md.
 
-import type { CollectionConfig, Where } from 'payload'
+import type { CollectionConfig } from 'payload'
+import { docWorkspaceMutate, manageCreate, workspaceScopedRead } from '@/lib/authz/payload'
 import { encrypt } from '@/lib/encryption'
 
 export const RegistryConfigs: CollectionConfig = {
@@ -12,123 +13,13 @@ export const RegistryConfigs: CollectionConfig = {
     defaultColumns: ['name', 'type', 'workspace', 'isDefault', 'updatedAt'],
   },
   access: {
-    read: async ({ req: { user, payload }, id }) => {
-      if (!user) return false
-      const userId = user.betterAuthId
-      if (!userId) return false
-      if (!id) {
-        // List view - filter by workspace membership
-        const workspaceIds = await getWorkspaceIdsForUser(payload, userId)
-        // If user has no workspaces, return empty result (but not 403)
-        if (workspaceIds.length === 0) {
-          return {
-            id: { equals: 'nonexistent-id-to-return-empty-results' },
-          } as Where
-        }
-        return {
-          workspace: {
-            in: workspaceIds,
-          },
-        } as Where
-      }
-      // Single-doc read: verify the caller belongs to the config's workspace
-      const cfg = await payload.findByID({
-        collection: 'registry-configs',
-        id,
-        overrideAccess: true,
-        depth: 0,
-      })
-      if (!cfg?.workspace) return false
-      const cfgWorkspaceId = typeof cfg.workspace === 'string' ? cfg.workspace : cfg.workspace.id
-      const workspaceIds = await getWorkspaceIdsForUser(payload, userId)
-      return workspaceIds.includes(cfgWorkspaceId)
-    },
-    create: async ({ req: { user, payload }, data }) => {
-      if (!user || !data?.workspace) return false
-      const userId = user.betterAuthId
-      if (!userId) return false
-
-      const workspaceId =
-        typeof data.workspace === 'string' ? data.workspace : data.workspace.id
-
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: userId } },
-            { role: { in: ['owner', 'admin'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
-      return members.docs.length > 0
-    },
-    update: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-      const userId = user.betterAuthId
-      if (!userId) return false
-
-      const config = await payload.findByID({
-        collection: 'registry-configs',
-        id,
-        overrideAccess: true,
-      })
-
-      if (!config?.workspace) return false
-
-      const workspaceId =
-        typeof config.workspace === 'string'
-          ? config.workspace
-          : config.workspace.id
-
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: userId } },
-            { role: { in: ['owner', 'admin'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
-      return members.docs.length > 0
-    },
-    delete: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-      const userId = user.betterAuthId
-      if (!userId) return false
-
-      const config = await payload.findByID({
-        collection: 'registry-configs',
-        id,
-        overrideAccess: true,
-      })
-
-      if (!config?.workspace) return false
-
-      const workspaceId =
-        typeof config.workspace === 'string'
-          ? config.workspace
-          : config.workspace.id
-
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: userId } },
-            { role: { equals: 'owner' } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
-      return members.docs.length > 0
-    },
+    // The original per-id branch re-checked membership against the loaded
+    // doc's workspace, which is equivalent to the list filter Payload applies
+    // when evaluating a single-document read against a `Where`.
+    read: workspaceScopedRead(),
+    create: manageCreate(['owner', 'admin']),
+    update: docWorkspaceMutate('registry-configs', ['owner', 'admin']),
+    delete: docWorkspaceMutate('registry-configs', ['owner']),
   },
   hooks: {
     beforeChange: [
@@ -292,23 +183,4 @@ export const RegistryConfigs: CollectionConfig = {
     },
   ],
   timestamps: true,
-}
-
-// Helper function to get workspace IDs for a user
-async function getWorkspaceIdsForUser(
-  payload: any,
-  userId: string
-): Promise<string[]> {
-  const members = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [{ user: { equals: userId } }, { status: { equals: 'active' } }],
-    },
-    overrideAccess: true,
-    limit: 100,
-  })
-
-  return members.docs.map((m: any) =>
-    typeof m.workspace === 'string' ? m.workspace : m.workspace.id
-  )
 }
