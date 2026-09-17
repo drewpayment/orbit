@@ -1,5 +1,5 @@
-import type { CollectionConfig, Where } from 'payload'
-import { getMemberWorkspaceIds } from '@/lib/access/workspace-access'
+import type { CollectionConfig } from 'payload'
+import { workspaceScopedRead, denyAll } from '@/lib/authz/payload'
 
 /**
  * AgentToolVersions Collection
@@ -31,30 +31,10 @@ export const AgentToolVersions: CollectionConfig = {
     // workspace's tools. Writes only via the temporal worker's internal
     // API; direct CRUD via Payload's REST is disabled to keep the audit
     // trail unambiguous.
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-      if (user.role === 'super_admin' || user.role === 'admin') return true
-      const betterAuthId = user.betterAuthId
-      const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
-      if (workspaceIds.length === 0) {
-        const denyAll: Where = { id: { equals: '__nope__' } }
-        return denyAll
-      }
-      // Join through the parent AgentTools row's workspace: a version row
-      // is visible only if its `tool` belongs to a workspace the caller is
-      // an active member of.
-      const tools = await payload.find({
-        collection: 'agent-tools',
-        where: { workspace: { in: workspaceIds } },
-        limit: 1000,
-        overrideAccess: true,
-      })
-      const toolIds = tools.docs.map((t) => t.id)
-      return { tool: { in: toolIds } }
-    },
-    create: () => false,
-    update: () => false,
-    delete: () => false,
+    read: workspaceScopedRead({ via: [{ collection: 'agent-tools', on: 'tool' }] }),
+    create: denyAll,
+    update: denyAll,
+    delete: denyAll,
   },
   fields: [
     {

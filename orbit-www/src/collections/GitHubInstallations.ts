@@ -1,5 +1,5 @@
 import type { CollectionConfig } from 'payload'
-import { isAdmin } from '../access/isAdmin'
+import { adminOnly } from '@/lib/authz/payload'
 
 export const GitHubInstallations: CollectionConfig = {
   slug: 'github-installations',
@@ -13,10 +13,10 @@ export const GitHubInstallations: CollectionConfig = {
 
   access: {
     // Only admins can view/manage GitHub installations
-    read: isAdmin,
-    create: isAdmin,
-    update: isAdmin,
-    delete: isAdmin,
+    read: adminOnly,
+    create: adminOnly,
+    update: adminOnly,
+    delete: adminOnly,
   },
 
   fields: [

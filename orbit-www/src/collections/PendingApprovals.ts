@@ -1,5 +1,5 @@
-import type { CollectionConfig, Where } from 'payload'
-import { getMemberWorkspaceIds } from '@/lib/access/workspace-access'
+import type { CollectionConfig } from 'payload'
+import { workspaceScopedRead, denyAll } from '@/lib/authz/payload'
 
 /**
  * PendingApprovals Collection (Spike 7 commit γ)
@@ -34,22 +34,12 @@ export const PendingApprovals: CollectionConfig = {
     group: 'Agent',
   },
   access: {
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-      // Platform admins see everything (they own the queue page).
-      if (user.role === 'super_admin' || user.role === 'admin') return true
-      const betterAuthId = user.betterAuthId
-      const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
-      if (workspaceIds.length === 0) {
-        const denyAll: Where = { id: { equals: '__none__' } }
-        return denyAll
-      }
-      const where: Where = { workspace: { in: workspaceIds } }
-      return where
-    },
-    create: () => false,
-    update: () => false,
-    delete: () => false,
+    // Platform admins see everything (they own the queue page) — the
+    // adapter's admin bypass covers this.
+    read: workspaceScopedRead(),
+    create: denyAll,
+    update: denyAll,
+    delete: denyAll,
   },
   fields: [
     {

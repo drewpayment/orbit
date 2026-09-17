@@ -1,5 +1,5 @@
 import type { CollectionConfig } from 'payload'
-import { isAdmin } from '../access/isAdmin'
+import { adminOnly } from '@/lib/authz/payload'
 
 /**
  * Tenants Collection
@@ -22,10 +22,10 @@ export const Tenants: CollectionConfig = {
 
   access: {
     // Only admins can manage tenants
-    read: isAdmin,
-    create: isAdmin,
-    update: isAdmin,
-    delete: isAdmin,
+    read: adminOnly,
+    create: adminOnly,
+    update: adminOnly,
+    delete: adminOnly,
   },
 
   fields: [

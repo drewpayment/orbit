@@ -1,5 +1,5 @@
 import type { CollectionConfig } from 'payload'
-import { isAdmin } from '../access/isAdmin'
+import { adminOnly, authenticatedOnly } from '@/lib/authz/payload'
 
 export const Feedback: CollectionConfig = {
   slug: 'feedback',
@@ -13,11 +13,11 @@ export const Feedback: CollectionConfig = {
 
   access: {
     // Anyone authenticated can create feedback
-    create: ({ req: { user } }) => !!user,
+    create: authenticatedOnly,
     // Only admins can read/update/delete
-    read: isAdmin,
-    update: isAdmin,
-    delete: isAdmin,
+    read: adminOnly,
+    update: adminOnly,
+    delete: adminOnly,
   },
 
   fields: [

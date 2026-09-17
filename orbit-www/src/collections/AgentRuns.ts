@@ -1,6 +1,5 @@
 import type { CollectionConfig } from 'payload'
-import { getMemberWorkspaceIds } from '@/lib/access/workspace-access'
-import { memberCreate, docWorkspaceMutate } from '@/lib/access/collection-access'
+import { workspaceScopedRead, memberCreate, docWorkspaceMutate, denyAll } from '@/lib/authz/payload'
 
 /**
  * AgentRuns Collection
@@ -22,19 +21,14 @@ export const AgentRuns: CollectionConfig = {
     group: 'Agent',
   },
   access: {
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-      const betterAuthId = user.betterAuthId
-      const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
-      return { workspace: { in: workspaceIds } }
-    },
+    read: workspaceScopedRead(),
     // Runs are created/updated server-side (infra-agent server action, the
     // internal agent-runs API route) with overrideAccess: true — verified by
     // grepping every `collection: 'agent-runs'` write site. These rules only
     // gate direct end-user access via Payload's REST/GraphQL API.
     create: memberCreate(),
     update: docWorkspaceMutate('agent-runs', ['owner', 'admin', 'member']),
-    delete: () => false,
+    delete: denyAll,
   },
   fields: [
     {

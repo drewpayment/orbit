@@ -1,5 +1,5 @@
 import type { CollectionConfig } from 'payload'
-import { getMemberWorkspaceIds, isWorkspaceAdminOrOwner, getWorkspaceMembership, isPlatformAdmin } from '@/lib/access/workspace-access'
+import { workspaceScopedRead, manageCreate, docWorkspaceMutate } from '@/lib/authz/payload'
 
 /**
  * LLMProviders Collection
@@ -22,58 +22,13 @@ export const LLMProviders: CollectionConfig = {
     group: 'Agent',
   },
   access: {
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-      const betterAuthId = user.betterAuthId
-      const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
-      return { workspace: { in: workspaceIds } }
-    },
-    create: async ({ req: { user, payload }, data }) => {
-      if (!user) return false
-      // A null workspace means global/platform-level provider config —
-      // restricted to platform admins, not every authenticated user.
-      if (!data?.workspace) return isPlatformAdmin(user)
-      const betterAuthId = user.betterAuthId
-      if (!betterAuthId) return false
-      const workspaceId = typeof data.workspace === 'string' ? data.workspace : data.workspace?.id
-      if (!workspaceId) return false
-      return isWorkspaceAdminOrOwner(payload, betterAuthId, workspaceId)
-    },
-    update: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-      try {
-        const doc = await payload.findByID({
-          collection: 'llm-providers',
-          id: id as string,
-          overrideAccess: true,
-        })
-        const betterAuthId = user.betterAuthId
-        if (!betterAuthId) return false
-        const workspaceId = typeof doc.workspace === 'string' ? doc.workspace : doc.workspace?.id
-        if (!workspaceId) return false
-        return isWorkspaceAdminOrOwner(payload, betterAuthId, workspaceId)
-      } catch {
-        return false
-      }
-    },
-    delete: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-      try {
-        const doc = await payload.findByID({
-          collection: 'llm-providers',
-          id: id as string,
-          overrideAccess: true,
-        })
-        const betterAuthId = user.betterAuthId
-        if (!betterAuthId) return false
-        const workspaceId = typeof doc.workspace === 'string' ? doc.workspace : doc.workspace?.id
-        if (!workspaceId) return false
-        const membership = await getWorkspaceMembership(payload, betterAuthId, workspaceId)
-        return membership?.role === 'owner'
-      } catch {
-        return false
-      }
-    },
+    read: workspaceScopedRead(),
+    // A null workspace means global/platform-level provider config —
+    // restricted to platform admins (the adapter's admin bypass runs before
+    // workspace resolution, so a missing workspace only denies non-admins).
+    create: manageCreate(['owner', 'admin']),
+    update: docWorkspaceMutate('llm-providers', ['owner', 'admin']),
+    delete: docWorkspaceMutate('llm-providers', ['owner']),
   },
   fields: [
     {
