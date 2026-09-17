@@ -4,17 +4,13 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { builtInGenerators } from '@/lib/seeds/deployment-generators'
 import { NextResponse } from 'next/server'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
+import { authorize, authzErrorResponse } from '@/lib/authz'
 
 export async function POST() {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  if (!isPlatformAdmin(payloadUser)) {
-    return NextResponse.json({ error: 'Forbidden: platform admin required' }, { status: 403 })
+  try {
+    await authorize('manage', { kind: 'platform' })
+  } catch (err) {
+    return authzErrorResponse(err) ?? NextResponse.json({ error: 'Internal error' }, { status: 500 })
   }
 
   const payload = await getPayload({ config })

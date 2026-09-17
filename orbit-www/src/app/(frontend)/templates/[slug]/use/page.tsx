@@ -1,7 +1,6 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor, memberWorkspaceIds } from '@/lib/authz'
 import { notFound, redirect } from 'next/navigation'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
@@ -29,33 +28,20 @@ export default async function UseTemplatePage({ params }: PageProps) {
   const { slug } = await params
 
   // Phase 1: Parallelize initial setup
-  const [payload, reqHeaders] = await Promise.all([
-    getPayload({ config }),
-    headers(),
-  ])
+  const [payload, actor] = await Promise.all([getPayload({ config }), getActor()])
 
-  const session = await auth.api.getSession({ headers: reqHeaders })
-
-  if (!session?.user) {
+  if (!actor) {
     redirect('/login')
   }
 
-  // Phase 2: Fetch template and memberships in parallel (both independent)
-  const [templatesResult, memberships] = await Promise.all([
+  // Phase 2: Fetch template and the caller's workspace ids in parallel (both independent)
+  const [templatesResult, memberWorkspaceIdList] = await Promise.all([
     payload.find({
       collection: 'templates',
       where: { slug: { equals: slug } },
       limit: 1,
     }),
-    payload.find({
-      collection: 'workspace-members',
-      where: {
-        user: { equals: session.user.id },
-        status: { equals: 'active' },
-      },
-      depth: 1,
-      limit: 100,
-    }),
+    memberWorkspaceIds('member', actor),
   ])
 
   if (templatesResult.docs.length === 0) {
@@ -65,13 +51,16 @@ export default async function UseTemplatePage({ params }: PageProps) {
   const template = templatesResult.docs[0]
   const emoji = languageEmoji[template.language?.toLowerCase() || ''] || '📦'
 
-  const workspaces = memberships.docs
-    .map((m) => {
-      const ws = typeof m.workspace === 'object' ? m.workspace : null
-      if (!ws) return null
-      return { id: String(ws.id), name: ws.name }
-    })
-    .filter((ws): ws is { id: string; name: string } => ws !== null)
+  const workspaces =
+    memberWorkspaceIdList.length === 0
+      ? []
+      : (
+          await payload.find({
+            collection: 'workspaces',
+            where: { id: { in: memberWorkspaceIdList } },
+            limit: 100,
+          })
+        ).docs.map((w) => ({ id: String(w.id), name: w.name }))
 
   // Phase 3: Get GitHub health (depends on workspaces)
   const workspaceIds = workspaces.map(ws => ws.id)

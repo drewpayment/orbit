@@ -1,11 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { getCurrentUser, getPayloadUserFromSession } from '@/lib/auth/session'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
-import { canManageTemplateDefinitions } from '@/lib/templates/authz'
-import { getPayload } from 'payload'
-import config from '@payload-config'
+import { getActor, check } from '@/lib/authz'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -32,10 +28,8 @@ export default async function EditSkeletonPage({ params }: PageProps) {
   const skeleton = await getSkeleton(id)
   if (!skeleton) notFound()
 
-  const payload = await getPayload({ config })
-  const uid = (await getCurrentUser())?.id
-  const isAdmin = isPlatformAdmin(await getPayloadUserFromSession())
-  if (!(await canManageTemplateDefinitions(payload, uid, skeleton.workspaceId, isAdmin))) {
+  const actor = await getActor()
+  if (!(await check('manage', { kind: 'workspace', id: skeleton.workspaceId }, actor)).allowed) {
     notFound()
   }
 
