@@ -275,6 +275,13 @@ export async function listApplicationsWithProvisioningIssues(
       return { success: false, error: 'Not authenticated' }
     }
 
+    const listDecision = workspaceId
+      ? await check('read', { kind: 'workspace', id: workspaceId }, actor)
+      : await check('read', { kind: 'platform' }, actor)
+    if (!listDecision.allowed) {
+      return { success: false, error: 'Not a member of this workspace' }
+    }
+
     const payload = await getPayload({ config })
 
     // Fetch applications with provisioning issues

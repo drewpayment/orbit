@@ -482,6 +482,10 @@ export async function exportAppManifest(appId: string): Promise<void> {
   const payload = await getPayload({ config })
   const app = await payload.findByID({ collection: 'apps', id: appId, depth: 0 })
 
+  const appWorkspaceId = typeof app.workspace === 'string' ? app.workspace : app.workspace?.id
+  const readDecision = await check('read', { kind: 'workspace', id: appWorkspaceId ?? '' }, actor)
+  if (!readDecision.allowed) throw new Error('You do not have permission to view this app.')
+
   const repoUrl = app.repository?.url
   const installationId = app.repository?.installationId
   if (!repoUrl || !installationId) {
@@ -580,6 +584,10 @@ export async function resolveManifestConflict(
   const payload = await getPayload({ config })
   const app = await payload.findByID({ collection: 'apps', id: appId, depth: 0 })
 
+  const appWorkspaceId = typeof app.workspace === 'string' ? app.workspace : app.workspace?.id
+  const updateDecision = await check('update', { kind: 'workspace', id: appWorkspaceId ?? '' }, actor)
+  if (!updateDecision.allowed) throw new Error('You do not have permission to update this app.')
+
   if (!app.conflictDetected) {
     throw new Error('No conflict to resolve')
   }
@@ -666,6 +674,10 @@ export async function disableManifestSync(appId: string): Promise<void> {
 
   const payload = await getPayload({ config })
   const app = await payload.findByID({ collection: 'apps', id: appId, depth: 0 })
+
+  const appWorkspaceId = typeof app.workspace === 'string' ? app.workspace : app.workspace?.id
+  const updateDecision = await check('update', { kind: 'workspace', id: appWorkspaceId ?? '' }, actor)
+  if (!updateDecision.allowed) throw new Error('You do not have permission to update this app.')
 
   if (app.webhookId && app.repository?.url && app.repository?.installationId) {
     try {

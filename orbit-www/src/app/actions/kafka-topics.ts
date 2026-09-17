@@ -3,7 +3,7 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
-import { getActor } from '@/lib/authz'
+import { getActor, check } from '@/lib/authz'
 import { getTemporalClient } from '@/lib/temporal/client'
 
 export type CreateTopicInput = {
@@ -260,6 +260,12 @@ export async function deleteTopic(topicId: string): Promise<{ success: boolean; 
       return { success: false, error: 'Topic not found' }
     }
 
+    const deleteTopicWsId = typeof topic.workspace === 'string' ? topic.workspace : topic.workspace?.id
+    const deleteTopicDecision = await check('manage', { kind: 'workspace', id: deleteTopicWsId ?? '' }, actor)
+    if (!deleteTopicDecision.allowed) {
+      return { success: false, error: 'Not a member of this workspace' }
+    }
+
     if (topic.status === 'deleted' || topic.status === 'deleting') {
       return { success: false, error: 'Topic is already deleted or being deleted' }
     }
@@ -314,6 +320,12 @@ export async function approveTopic(
 
     if (!topic) {
       return { success: false, error: 'Topic not found' }
+    }
+
+    const approveTopicWsId = typeof topic.workspace === 'string' ? topic.workspace : topic.workspace?.id
+    const approveTopicDecision = await check('manage', { kind: 'workspace', id: approveTopicWsId ?? '' }, actor)
+    if (!approveTopicDecision.allowed) {
+      return { success: false, error: 'Not a member of this workspace' }
     }
 
     // Debug logging to understand virtualCluster state

@@ -321,6 +321,34 @@ export async function getDeploymentWorkflowProgress(workflowId: string) {
     return { success: false, error: 'Unauthorized' }
   }
 
+  const payload = await getPayload({ config })
+  const deploymentLookup = await payload.find({
+    collection: 'deployments',
+    where: { workflowId: { equals: workflowId } },
+    limit: 1,
+    depth: 1,
+    overrideAccess: true,
+  })
+  const deploymentDoc = deploymentLookup.docs[0]
+  if (!deploymentDoc) {
+    return { success: false, error: 'Deployment not found' }
+  }
+  const deploymentApp = deploymentDoc.app as unknown
+  const deploymentWorkspaceId: string | { id: string } | undefined =
+    typeof deploymentApp === 'string'
+      ? undefined
+      : (deploymentApp as { workspace?: string | { id: string } } | null)?.workspace
+  const deploymentWorkspaceIdStr =
+    typeof deploymentWorkspaceId === 'string' ? deploymentWorkspaceId : deploymentWorkspaceId?.id
+  const readDecision = await check(
+    'read',
+    { kind: 'workspace', id: deploymentWorkspaceIdStr ?? '' },
+    actor,
+  )
+  if (!readDecision.allowed) {
+    return { success: false, error: 'Not a member of this workspace' }
+  }
+
   try {
     const progress = await getDeploymentProgress(workflowId)
 
@@ -707,6 +735,23 @@ export async function skipCommitAndComplete(deploymentId: string) {
   const payload = await getPayload({ config })
 
   try {
+    const deployment = await payload.findByID({
+      collection: 'deployments',
+      id: deploymentId,
+      depth: 1,
+      overrideAccess: true,
+    })
+    const deploymentApp = deployment.app as unknown
+    const appWorkspace: string | { id: string } | undefined =
+      typeof deploymentApp === 'string'
+        ? undefined
+        : (deploymentApp as { workspace?: string | { id: string } } | null)?.workspace
+    const workspaceId = typeof appWorkspace === 'string' ? appWorkspace : appWorkspace?.id
+    const updateDecision = await check('update', { kind: 'workspace', id: workspaceId ?? '' }, actor)
+    if (!updateDecision.allowed) {
+      return { success: false, error: 'Not a member of this workspace' }
+    }
+
     await payload.update({
       collection: 'deployments',
       id: deploymentId,
@@ -744,16 +789,36 @@ export async function syncDeploymentStatusFromWorkflow(
   const payload = await getPayload({ config })
 
   try {
+    const deploymentForAuthz = await payload.findByID({
+      collection: 'deployments',
+      id: deploymentId,
+      depth: 1,
+      overrideAccess: true,
+    })
+    const deploymentForAuthzApp = deploymentForAuthz.app as unknown
+    const deploymentForAuthzWorkspace: string | { id: string } | undefined =
+      typeof deploymentForAuthzApp === 'string'
+        ? undefined
+        : (deploymentForAuthzApp as { workspace?: string | { id: string } } | null)?.workspace
+    const deploymentWorkspaceId =
+      typeof deploymentForAuthzWorkspace === 'string'
+        ? deploymentForAuthzWorkspace
+        : deploymentForAuthzWorkspace?.id
+    const syncUpdateDecision = await check(
+      'update',
+      { kind: 'workspace', id: deploymentWorkspaceId ?? '' },
+      actor,
+    )
+    if (!syncUpdateDecision.allowed) {
+      return { success: false, error: 'Not a member of this workspace' }
+    }
+
     // Map workflow status to deployment status
     let newStatus: 'pending' | 'deploying' | 'generated' | 'deployed' | 'failed'
     switch (workflowStatus) {
-      case 'completed':
+      case 'completed': {
         // Check if this was a generate-mode workflow by looking at current status
-        const deployment = await payload.findByID({
-          collection: 'deployments',
-          id: deploymentId,
-          overrideAccess: true,
-        })
+        const deployment = deploymentForAuthz
         // If generator is docker-compose or helm, it's generate mode -> status should be 'generated'
         if (deployment?.generator === 'docker-compose' || deployment?.generator === 'helm') {
           newStatus = 'generated'
@@ -761,6 +826,7 @@ export async function syncDeploymentStatusFromWorkflow(
           newStatus = 'deployed'
         }
         break
+      }
       case 'failed':
         newStatus = 'failed'
         break

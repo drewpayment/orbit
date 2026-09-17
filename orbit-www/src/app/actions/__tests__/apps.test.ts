@@ -484,13 +484,37 @@ describe('exportAppManifest', () => {
       findByID: vi.fn().mockResolvedValue({
         id: 'app-1',
         name: 'my-app',
+        workspace: 'ws-1',
         repository: {},
       }),
+      find: vi.fn().mockResolvedValue({ docs: [{ role: 'owner' }] }),
     }
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
 
     await expect(exportAppManifest('app-1')).rejects.toThrow(
       'App must have a linked repository with a GitHub installation to export a manifest',
+    )
+  })
+
+  it('throws when the actor is not a member of the app workspace', async () => {
+    authApi.getSession.mockResolvedValue({
+      user: { id: 'user-1' },
+      session: {},
+    } as any)
+
+    const mockPayload = {
+      findByID: vi.fn().mockResolvedValue({
+        id: 'app-1',
+        name: 'my-app',
+        workspace: 'ws-1',
+        repository: { url: 'https://github.com/acme/repo', installationId: '123' },
+      }),
+      find: vi.fn().mockResolvedValue({ docs: [] }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    await expect(exportAppManifest('app-1')).rejects.toThrow(
+      'You do not have permission to view this app.',
     )
   })
 })
@@ -504,6 +528,27 @@ describe('resolveManifestConflict', () => {
     authApi.getSession.mockResolvedValueOnce(null)
     await expect(resolveManifestConflict('app-id', 'keep-orbit')).rejects.toThrow('Not authenticated')
   })
+
+  it('throws when the actor is not a member of the app workspace', async () => {
+    authApi.getSession.mockResolvedValue({
+      user: { id: 'user-1' },
+      session: {},
+    } as any)
+
+    const mockPayload = {
+      findByID: vi.fn().mockResolvedValue({
+        id: 'app-id',
+        workspace: 'ws-1',
+        conflictDetected: true,
+      }),
+      find: vi.fn().mockResolvedValue({ docs: [] }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    await expect(resolveManifestConflict('app-id', 'keep-orbit')).rejects.toThrow(
+      'You do not have permission to update this app.',
+    )
+  })
 })
 
 describe('disableManifestSync', () => {
@@ -514,5 +559,25 @@ describe('disableManifestSync', () => {
   it('throws if user is not authenticated', async () => {
     authApi.getSession.mockResolvedValueOnce(null)
     await expect(disableManifestSync('app-id')).rejects.toThrow('Not authenticated')
+  })
+
+  it('throws when the actor is not a member of the app workspace', async () => {
+    authApi.getSession.mockResolvedValue({
+      user: { id: 'user-1' },
+      session: {},
+    } as any)
+
+    const mockPayload = {
+      findByID: vi.fn().mockResolvedValue({
+        id: 'app-id',
+        workspace: 'ws-1',
+      }),
+      find: vi.fn().mockResolvedValue({ docs: [] }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    await expect(disableManifestSync('app-id')).rejects.toThrow(
+      'You do not have permission to update this app.',
+    )
   })
 })

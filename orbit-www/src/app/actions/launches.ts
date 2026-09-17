@@ -380,6 +380,24 @@ export async function approveLaunchAction(
     return { success: false, error: 'Unauthorized' }
   }
 
+  const payload = await getPayload({ config })
+  const launchLookup = await payload.find({
+    collection: 'launches',
+    where: { workflowId: { equals: workflowId } },
+    limit: 1,
+    depth: 0,
+    overrideAccess: true,
+  })
+  const launchDoc = launchLookup.docs[0]
+  if (!launchDoc) {
+    return { success: false, error: 'Launch not found' }
+  }
+  const approveWsId = typeof launchDoc.workspace === 'string' ? launchDoc.workspace : launchDoc.workspace?.id
+  const approveMembership = await check('manage', { kind: 'workspace', id: approveWsId ?? '' }, actor)
+  if (!approveMembership.allowed) {
+    return { success: false, error: 'Not a member of this workspace' }
+  }
+
   try {
     const response = await approveLaunch(
       workflowId,
@@ -406,6 +424,25 @@ export async function deorbitLaunchAction(workflowId: string, reason?: string) {
     return { success: false, error: 'Unauthorized' }
   }
 
+  const payload = await getPayload({ config })
+  const deorbitLookup = await payload.find({
+    collection: 'launches',
+    where: { workflowId: { equals: workflowId } },
+    limit: 1,
+    depth: 0,
+    overrideAccess: true,
+  })
+  const deorbitLaunchDoc = deorbitLookup.docs[0]
+  if (!deorbitLaunchDoc) {
+    return { success: false, error: 'Launch not found' }
+  }
+  const deorbitWsId =
+    typeof deorbitLaunchDoc.workspace === 'string' ? deorbitLaunchDoc.workspace : deorbitLaunchDoc.workspace?.id
+  const deorbitMembership = await check('manage', { kind: 'workspace', id: deorbitWsId ?? '' }, actor)
+  if (!deorbitMembership.allowed) {
+    return { success: false, error: 'Not a member of this workspace' }
+  }
+
   try {
     const response = await deorbitLaunch(
       workflowId,
@@ -429,6 +466,29 @@ export async function abortLaunchAction(workflowId: string) {
   const actor = await getActor()
   if (!actor) {
     return { success: false, error: 'Unauthorized' }
+  }
+
+  const payload = await getPayload({ config })
+  const abortLookup = await payload.find({
+    collection: 'launches',
+    where: { workflowId: { equals: workflowId } },
+    limit: 1,
+    depth: 0,
+    overrideAccess: true,
+  })
+  const abortLaunchDoc = abortLookup.docs[0]
+  if (!abortLaunchDoc) {
+    return { success: false, error: 'Launch not found' }
+  }
+  const abortLaunchedBy =
+    typeof abortLaunchDoc.launchedBy === 'string' ? abortLaunchDoc.launchedBy : abortLaunchDoc.launchedBy?.id
+  const isOwner = !!abortLaunchedBy && abortLaunchedBy === actor.payloadId
+  if (!isOwner) {
+    const abortWsId = typeof abortLaunchDoc.workspace === 'string' ? abortLaunchDoc.workspace : abortLaunchDoc.workspace?.id
+    const abortMembership = await check('update', { kind: 'workspace', id: abortWsId ?? '' }, actor)
+    if (!abortMembership.allowed) {
+      return { success: false, error: 'Not a member of this workspace' }
+    }
   }
 
   try {

@@ -72,7 +72,14 @@ vi.mock('@/lib/clients/deployment-client', () => ({
 
 import { getPayload } from 'payload'
 import { createInstallationToken } from '@/lib/github/octokit'
-import { getRepoBranches, commitGeneratedFiles } from './deployments'
+import {
+  getRepoBranches,
+  commitGeneratedFiles,
+  getDeploymentWorkflowProgress,
+  skipCommitAndComplete,
+  syncDeploymentStatusFromWorkflow,
+} from './deployments'
+import { getDeploymentProgress } from '@/lib/clients/deployment-client'
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -492,5 +499,127 @@ describe('commitGeneratedFiles', () => {
     const result = await commitGeneratedFiles(validInput)
 
     expect(result).toEqual({ success: true, sha: commitSha })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// getDeploymentWorkflowProgress
+// ---------------------------------------------------------------------------
+
+describe('getDeploymentWorkflowProgress', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns Unauthorized when there is no session', async () => {
+    authApi.getSession.mockResolvedValue(null)
+
+    const result = await getDeploymentWorkflowProgress('workflow-1')
+
+    expect(result).toEqual({ success: false, error: 'Unauthorized' })
+  })
+
+  it('returns Not a member of this workspace when the actor is not an active member', async () => {
+    mockSession()
+
+    const mockPayload = buildMockPayload({
+      find: vi.fn().mockImplementation(async (args: { collection: string }) => {
+        if (args.collection === 'deployments') {
+          return { docs: [{ id: 'deployment-1', app: { workspace: 'workspace-1' } }] }
+        }
+        return { docs: [] } // no workspace-members row → deny
+      }),
+    })
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await getDeploymentWorkflowProgress('workflow-1')
+
+    expect(result).toEqual({ success: false, error: 'Not a member of this workspace' })
+    expect(getDeploymentProgress).not.toHaveBeenCalled()
+  })
+
+  it('returns Deployment not found when no deployment matches the workflow id', async () => {
+    mockSession()
+
+    const mockPayload = buildMockPayload({
+      find: vi.fn().mockResolvedValue({ docs: [] }),
+    })
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await getDeploymentWorkflowProgress('workflow-1')
+
+    expect(result).toEqual({ success: false, error: 'Deployment not found' })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// skipCommitAndComplete
+// ---------------------------------------------------------------------------
+
+describe('skipCommitAndComplete', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns Unauthorized when there is no session', async () => {
+    authApi.getSession.mockResolvedValue(null)
+
+    const result = await skipCommitAndComplete('deployment-1')
+
+    expect(result).toEqual({ success: false, error: 'Unauthorized' })
+  })
+
+  it('returns Not a member of this workspace when the actor is not an active member', async () => {
+    mockSession()
+
+    const mockPayload = buildMockPayload({
+      findByID: vi.fn().mockResolvedValue({
+        id: 'deployment-1',
+        app: { workspace: 'workspace-1' },
+      }),
+      find: vi.fn().mockResolvedValue({ docs: [] }),
+    })
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await skipCommitAndComplete('deployment-1')
+
+    expect(result).toEqual({ success: false, error: 'Not a member of this workspace' })
+    expect(mockPayload.update).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// syncDeploymentStatusFromWorkflow
+// ---------------------------------------------------------------------------
+
+describe('syncDeploymentStatusFromWorkflow', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns Unauthorized when there is no session', async () => {
+    authApi.getSession.mockResolvedValue(null)
+
+    const result = await syncDeploymentStatusFromWorkflow('deployment-1', 'completed')
+
+    expect(result).toEqual({ success: false, error: 'Unauthorized' })
+  })
+
+  it('returns Not a member of this workspace when the actor is not an active member', async () => {
+    mockSession()
+
+    const mockPayload = buildMockPayload({
+      findByID: vi.fn().mockResolvedValue({
+        id: 'deployment-1',
+        app: { workspace: 'workspace-1' },
+      }),
+      find: vi.fn().mockResolvedValue({ docs: [] }),
+    })
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await syncDeploymentStatusFromWorkflow('deployment-1', 'completed')
+
+    expect(result).toEqual({ success: false, error: 'Not a member of this workspace' })
+    expect(mockPayload.update).not.toHaveBeenCalled()
   })
 })
