@@ -211,3 +211,52 @@ describe('authenticatedOnly / denyAll', () => {
     expect(await invoke(denyAll, { user: adminUser })).toBe(false)
   })
 })
+
+describe('docWorkspaceMutate: tenant immutability through resolveWorkspace (review finding)', () => {
+  const byId = {
+    'dep-1': { id: 'dep-1', app: 'app-a' },
+    'app-a': { id: 'app-a', workspace: 'ws-1' },
+    'app-b': { id: 'app-b', workspace: 'ws-2' },
+  }
+  const resolveViaApp = async ({ doc, payload }: { doc: unknown; payload: Payload }) => {
+    const appId = (doc as { app?: string }).app
+    if (!appId) return null
+    const app = (await payload.findByID({ collection: 'apps' as never, id: appId })) as { workspace?: string }
+    return app.workspace ?? null
+  }
+
+  it('denies a member of ws-1 repointing a deployment at an app in ws-2', async () => {
+    const { invoke } = makePayload([active('owner', 'ws-1')], {}, byId)
+    const access = docWorkspaceMutate('deployments', ['owner', 'admin', 'member'], { field: 'app', resolveWorkspace: resolveViaApp })
+    expect(await invoke(access, { user: plainUser, id: 'dep-1', data: { app: 'app-b' } })).toBe(false)
+  })
+
+  it('allows an update that keeps the parent inside the same workspace', async () => {
+    const { invoke } = makePayload([active('owner', 'ws-1')], {}, { ...byId, 'app-c': { id: 'app-c', workspace: 'ws-1' } })
+    const access = docWorkspaceMutate('deployments', ['owner', 'admin', 'member'], { field: 'app', resolveWorkspace: resolveViaApp })
+    expect(await invoke(access, { user: plainUser, id: 'dep-1', data: { app: 'app-c' } })).toBe(true)
+    expect(await invoke(access, { user: plainUser, id: 'dep-1', data: { title: 'x' } })).toBe(true)
+  })
+
+  it('the owner bypass does not let an author move a doc across tenants', async () => {
+    const { invoke } = makePayload([], {}, { 'pg-1': { id: 'pg-1', knowledgeSpace: 'sp-1', author: 'payload-1' }, 'sp-1': { id: 'sp-1', workspace: 'ws-1' }, 'sp-2': { id: 'sp-2', workspace: 'ws-2' } })
+    const resolveViaSpace = async ({ doc, payload }: { doc: unknown; payload: Payload }) => {
+      const sp = (await payload.findByID({ collection: 'knowledge-spaces' as never, id: (doc as { knowledgeSpace: string }).knowledgeSpace })) as { workspace?: string }
+      return sp.workspace ?? null
+    }
+    const access = docWorkspaceMutate('knowledge-pages', ['owner', 'admin'], { field: 'knowledgeSpace', resolveWorkspace: resolveViaSpace, ownerField: 'author' })
+    expect(await invoke(access, { user: plainUser, id: 'pg-1', data: { knowledgeSpace: 'sp-2' } })).toBe(false)
+    expect(await invoke(access, { user: plainUser, id: 'pg-1', data: { title: 'edit' } })).toBe(true)
+  })
+})
+
+describe('workspaceScopedRead: no workspaces ⇒ NOTHING (review finding)', () => {
+  it('direct-field read for a non-member returns the match-nothing filter, not in: []', async () => {
+    const { invoke } = makePayload([])
+    expect(await invoke(workspaceScopedRead(), { user: plainUser })).toEqual(NOTHING)
+  })
+  it('includeGlobal still exposes global rows to a non-member', async () => {
+    const { invoke } = makePayload([])
+    expect(await invoke(workspaceScopedRead({ includeGlobal: true }), { user: plainUser })).toEqual({ or: [NOTHING, { workspace: { exists: false } }] })
+  })
+})

@@ -44,7 +44,10 @@ export const authenticatedOnly: Access = ({ req: { user } }) => !!user
 /** No end-user access; rows are written by system paths with overrideAccess. */
 export const denyAll: Access = () => false
 
-/** A `Where` that matches nothing (Payload treats `in: []` inconsistently across adapters). */
+/**
+ * A `Where` that matches nothing. Used instead of `{ field: { in: [] } }` so a
+ * deny does not depend on how a database adapter renders an empty `$in`.
+ */
 export const NOTHING: Where = { id: { equals: '__authz_no_match__' } }
 
 /** Resolve the workspace id a create is bound to from the incoming `data`. */
@@ -76,7 +79,7 @@ export interface ReadHop {
   field?: string
   /** Field on the next hop / target doc that points at this collection. */
   on: string
-  /** Page size for the hop query (default 1000). */
+  /** Page size for the hop query (default 10000; only ids are held in memory). */
   limit?: number
 }
 
@@ -140,7 +143,7 @@ export function workspaceScopedRead(options: WorkspaceScopedReadOptions = {}): A
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             collection: hop.collection as any,
             where: { [matchField]: { in: ids } },
-            limit: hop.limit ?? 1000,
+            limit: hop.limit ?? 10000,
             depth: 0,
             overrideAccess: true,
           })
@@ -151,13 +154,15 @@ export function workspaceScopedRead(options: WorkspaceScopedReadOptions = {}): A
         }
         branches.push(ids.length > 0 ? { [onField]: { in: ids } } : NOTHING)
       }
+    } else if (workspaceIds.length === 0) {
+      branches.push(NOTHING)
     } else if (targetFields.length === 1) {
       branches.push({ [targetFields[0]]: { in: workspaceIds } })
     } else {
       branches.push(...targetFields.map((f) => ({ [f]: { in: workspaceIds } }) as Where))
     }
 
-    if (includeGlobal) branches.push({ [field]: { exists: false } })
+    if (includeGlobal) branches.push(...targetFields.map((f) => ({ [f]: { exists: false } }) as Where))
     if (extend) branches.push(...extend({ principal, workspaceIds }))
 
     return branches.length === 1 ? branches[0] : ({ or: branches } as Where)
@@ -257,12 +262,19 @@ export function docWorkspaceMutate(
       ? await resolveWorkspace({ doc, payload })
       : relationId(doc![field])
 
-    if (!resolveWorkspace && workspaceId && data && Object.prototype.hasOwnProperty.call(data, field)) {
-      const requested = relationId((data as Record<string, unknown>)[field])
-      if (!requested || requested !== workspaceId) return false
+    // Tenant identity is immutable for non-admin callers. Access is decided
+    // from the doc's CURRENT workspace, so an update that repoints `field`
+    // (workspace, or the parent relation an indirect collection hangs off)
+    // must resolve to the same workspace or it is denied.
+    if (workspaceId && data && Object.prototype.hasOwnProperty.call(data, field)) {
+      const requestedValue = (data as Record<string, unknown>)[field]
+      const requestedWorkspaceId = resolveWorkspace
+        ? await resolveWorkspace({ doc: { ...doc!, [field]: requestedValue }, payload })
+        : relationId(requestedValue)
+      if (!requestedWorkspaceId || requestedWorkspaceId !== workspaceId) return false
     }
 
-    const decision = await can(payload, principal, 'update', {
+    const decision = await can(payload, principal, 'manage', {
       kind: 'doc',
       workspaceId,
       ownerPayloadId: ownerField ? relationId(doc![ownerField]) : null,

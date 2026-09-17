@@ -163,7 +163,7 @@ Recommendation: A and B before #127. C in parallel with #127. D right after C. E
 |---|---|---|
 | D1 | Do the `workspace-members.user` data migration (Phase E)? | **Yes** (Drew, 2026-09-17). No prod data exists, so it is a schema flip plus a dev script. |
 | D2 | Accept "authorize then `overrideAccess: true`" as the server-action pattern? | **Yes.** Revisit after C. |
-| D3 | Kafka topic-policy collections (#69 item 4)? | **Platform-only**, drop the dead `workspace` field in B. |
+| D3 | Kafka topic-policy collections (#69 item 4)? | **Platform-only** access. Correction 2026-09-17: the `workspace` field is *not* dead — the kafka server actions use it to select the applicable policy (workspace-specific vs platform-wide). It stays; only the misleading comment was fixed. |
 | D4 | Fresh branch off main? | **Yes**: `chore/authz-consolidation` (Phase A), later phases on their own branches. |
 
 ## 6. Tracking
@@ -183,3 +183,17 @@ Epic #138. Phases: #133 (A), #134 (B), #135 (C), #136 (D), #137 (E). Self-servic
   - (`UserWorkspaceRoles.ts`, `app/actions/permissions.ts` are deleted in B, not fixed)
 - [x] `orbit-www/eslint.config.mjs` (baseline 2026-09-16: 149 `no-restricted-imports` + 155 `no-restricted-syntax` warnings across 156 files) — `no-restricted-imports` (session helpers outside `src/lib/authz`, `src/lib/auth`) and `no-restricted-syntax` (`collection: 'workspace-members'` outside `src/lib/authz`, `src/lib/access`, `src/collections/WorkspaceMembers.ts`) as **warn**; record baseline count in the PR.
 - [x] Verification: vitest for actor (11 tests); `bunx tsc --noEmit` 0 errors; agent-browser on `/agent` (apps + runs listed), stream route returns 200 `: connected`, `/catalog/apis/[id]` renders with Edit. **Caveat**: the seeded dev user's Payload `_id` equals its `betterAuthId`, so the id bugs never reproduced locally and the browser pass only proves no regression; the unit tests carry the id distinction. A second user with distinct ids should be seeded before Phase C verification.
+
+## 8. Phase B execution log
+
+- Core (a81481ed): `lib/authz/policy.ts`, `membership.ts`, `payload.ts`; `collection-access.ts` is a re-export shim (41 existing tests unchanged, green); 23 policy + 17 adapter tests added; dormant permissions system deleted (collections, seed, scripts, server action, client cache, hook, setup-route wiring, `seed:permissions` script); types regenerated.
+- Adapter additions used by the inline collections: `via` (indirect read joins, multi-hop), `includeGlobal`, `extend`, `anonymous`, `scope: 'owner'`, `guard` (create + mutate, runs before the admin bypass), `ownerField` (Payload-id ownership), `authenticatedOnly`, `denyAll`, `NOTHING`.
+- Collection migration ran as three parallel worktrees (agent/platform; knowledge/templates/deployments; workspaces/launches/registry/api), merged into `chore/authz-phase-b`.
+- Left for Phase C on purpose: `CatalogEntities`/`CatalogRelations` (go through `lib/catalog/entity-authz`), kafka collections with named in-file helpers (frozen scope), `UserWorkspaceRoles`-era code is gone.
+- Intended semantic changes across migrated collections (all additive for platform admins, non-admin gates unchanged):
+  - Reads that previously had no platform-admin bypass now return `true` for platform admins (AgentEvents, AgentRuns, AgentTools, LLMProviders, KnowledgePages, DeploymentGenerators, Deployments).
+  - Mutations that previously had no platform-admin bypass now allow platform admins (DeploymentGenerators create/update/delete, Deployments update/delete, PageLinks delete, Launches update/delete, Templates update/delete, RegistryConfigs create/update/delete, LLMProviders create/update/delete, KnowledgePages update/delete). `guard` still blocks built-in / projected rows for admins too.
+  - Tightening: `docWorkspaceMutate` denies an update that would move a doc to another tenant, including through an indirect parent relation (`app`, `knowledgeSpace`) — adversarial review found the old inline rules and the first adapter draft both missed the indirect case.
+  - A caller with no eligible workspaces now gets the explicit `NOTHING` filter instead of `{ field: { in: [] } }`, so denial no longer depends on adapter rendering of an empty `$in`.
+  - Read join hops default to a 10000-row page (Deployments/HealthChecks previously used 10000; the first adapter draft regressed to 1000).
+- Adversarial review (2026-09-17): 7 findings, all addressed in the follow-up commit; `create-admin-user.ts` rewritten to set `users.role` directly.

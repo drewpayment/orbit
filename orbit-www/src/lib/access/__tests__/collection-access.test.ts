@@ -125,10 +125,10 @@ describe('workspaceScopedRead', () => {
     )
   })
 
-  it('filters a non-member to an empty set', async () => {
+  it('filters a non-member to a match-nothing filter', async () => {
     const { payload } = makePayload([member('member', 'ws-1', 'ba-OTHER')])
     expect(await invoke(workspaceScopedRead(), { user: plainUser, payload })).toEqual({
-      workspace: { in: [] },
+      id: { equals: '__authz_no_match__' },
     })
   })
 
@@ -170,7 +170,7 @@ describe('workspaceScopedRead', () => {
         user: { ...plainUser, betterAuthId: undefined },
         payload,
       }),
-    ).toEqual({ workspace: { in: [] } })
+    ).toEqual({ id: { equals: '__authz_no_match__' } })
     expect(find).not.toHaveBeenCalled()
   })
 })
