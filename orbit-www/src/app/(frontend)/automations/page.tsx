@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import { Zap, Plus, Pencil, ArrowRight } from 'lucide-react'
-import { getCurrentUser } from '@/lib/auth/session'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -15,10 +14,9 @@ import { listAutomations, getManageableAutomationWorkspaces } from './actions'
  * user manages at least one workspace, and the server actions re-enforce it.
  */
 export default async function AutomationsPage() {
-  const user = await getCurrentUser()
   const [automations, manageableWorkspaces] = await Promise.all([
-    listAutomations(user?.id),
-    getManageableAutomationWorkspaces(user?.id),
+    listAutomations(),
+    getManageableAutomationWorkspaces(),
   ])
   const canManage = manageableWorkspaces.length > 0
   const manageableIds = new Set(manageableWorkspaces.map((w) => w.id))

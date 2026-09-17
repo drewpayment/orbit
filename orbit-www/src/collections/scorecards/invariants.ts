@@ -1,4 +1,5 @@
 import type { CollectionBeforeValidateHook } from 'payload'
+import { membershipRole } from '@/lib/authz/membership'
 
 type MutableDoc = Record<string, unknown>
 
@@ -159,20 +160,10 @@ export const validateActionItemRelationships: CollectionBeforeValidateHook = asy
         depth: 0,
         overrideAccess: true,
       })
-      const membership = await req.payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: assignee.betterAuthId } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        limit: 1,
-        depth: 0,
-        overrideAccess: true,
-      })
-      if (membership.docs.length === 0) {
+      const role = assignee.betterAuthId
+        ? await membershipRole(req.payload, assignee.betterAuthId, workspaceId)
+        : null
+      if (!role) {
         throw new Error('Action item assignee must be an active workspace member.')
       }
     }

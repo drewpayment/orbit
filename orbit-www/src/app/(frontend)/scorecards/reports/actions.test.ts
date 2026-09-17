@@ -2,11 +2,23 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 vi.mock('payload', () => ({ getPayload: vi.fn() }))
 vi.mock('@payload-config', () => ({ default: {} }))
-vi.mock('@/lib/auth/session', () => ({ getCurrentUser: vi.fn() }))
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(),
+  check: vi.fn(),
+}))
 
 import { getPayload } from 'payload'
-import { getCurrentUser } from '@/lib/auth/session'
+import { getActor, check } from '@/lib/authz'
 import { getScorecardReport } from './actions'
+
+const actor = {
+  payloadId: 'payload-user',
+  betterAuthId: 'ba-user',
+  email: 'user@example.com',
+  role: 'user' as const,
+  isPlatformAdmin: false,
+  user: {} as never,
+}
 
 function whereText(value: unknown): string {
   return JSON.stringify(value)
@@ -14,25 +26,21 @@ function whereText(value: unknown): string {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  ;(getCurrentUser as Mock).mockResolvedValue({ id: 'ba-user' })
+  ;(getActor as Mock).mockResolvedValue(actor)
+  ;(check as Mock).mockResolvedValue({ allowed: true, reason: 'workspace member', actor })
 })
 
 describe('getScorecardReport workspace boundary', () => {
   it('rejects a workspace without an active membership before loading report data', async () => {
-    const payload = {
-      find: vi.fn(async ({ collection }: { collection: string }) => {
-        if (collection === 'workspace-members') return { docs: [], hasNextPage: false, totalDocs: 0 }
-        throw new Error(`unexpected query: ${collection}`)
-      }),
-    }
+    const payload = { find: vi.fn() }
     ;(getPayload as Mock).mockResolvedValue(payload)
+    ;(check as Mock).mockResolvedValue({ allowed: false, reason: 'not a member', actor })
 
     const report = await getScorecardReport('ws-victim', 30)
 
     expect(report.kpis.entityTotal).toBe(0)
-    expect(payload.find).toHaveBeenCalledTimes(1)
-    const membershipQuery = payload.find.mock.calls[0][0] as Record<string, unknown>
-    expect(whereText(membershipQuery.where)).toContain('ws-victim')
+    expect(check).toHaveBeenCalledWith('read', { kind: 'workspace', id: 'ws-victim' }, actor)
+    expect(payload.find).not.toHaveBeenCalled()
   })
 
   it('scopes every data query to one workspace and includes all result pages', async () => {
@@ -42,9 +50,6 @@ describe('getScorecardReport workspace boundary', () => {
         const where = whereText(args.where)
         const page = Number(args.page ?? 1)
 
-        if (collection === 'workspace-members') {
-          return { docs: [{ id: 'm1', workspace: 'ws1' }], hasNextPage: false, totalDocs: 1 }
-        }
         if (collection === 'entity-scores' && where.includes('overall')) {
           return page === 1
             ? {
@@ -98,10 +103,9 @@ describe('getScorecardReport workspace boundary', () => {
     expect(report.workspaceId).toBe('ws1')
     expect(report.kpis.avgScore).toBe(60)
     expect(report.kpis.entityTotal).toBe(2)
+    expect(check).toHaveBeenCalledWith('read', { kind: 'workspace', id: 'ws1' }, actor)
 
-    const dataQueries = payload.find.mock.calls
-      .map(([args]) => args as Record<string, unknown>)
-      .filter((args) => args.collection !== 'workspace-members')
+    const dataQueries = payload.find.mock.calls.map(([args]) => args as Record<string, unknown>)
     expect(dataQueries.length).toBeGreaterThan(0)
     for (const query of dataQueries) {
       expect(whereText(query.where)).toContain('"equals":"ws1"')

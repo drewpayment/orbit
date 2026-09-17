@@ -3,7 +3,7 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
+import { getActor } from '@/lib/authz'
 
 export async function createKnowledgeSpace(data: {
   name: string
@@ -12,8 +12,8 @@ export async function createKnowledgeSpace(data: {
   visibility: 'private' | 'internal' | 'public'
   workspaceSlug: string
 }) {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     throw new Error('Not authenticated')
   }
 
@@ -48,7 +48,7 @@ export async function createKnowledgeSpace(data: {
       icon: data.icon || undefined,
       visibility: data.visibility,
     },
-    user: payloadUser,
+    user: actor.user,
     overrideAccess: false,
   })
 
@@ -66,8 +66,8 @@ export async function createKnowledgePage(data: {
   workspaceSlug: string
   spaceSlug: string
 }) {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     throw new Error('Not authenticated')
   }
 
@@ -98,7 +98,7 @@ export async function createKnowledgePage(data: {
       sortOrder: 0,
       tags: [],
     },
-    user: payloadUser,
+    user: actor.user,
     overrideAccess: false,
   })
 
@@ -114,8 +114,8 @@ export async function renamePage(
   workspaceSlug: string,
   spaceSlug: string
 ) {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     throw new Error('Not authenticated')
   }
 
@@ -127,7 +127,7 @@ export async function renamePage(
     data: {
       title: newTitle,
     },
-    user: payloadUser,
+    user: actor.user,
     overrideAccess: false,
   })
 
@@ -140,8 +140,8 @@ export async function movePage(
   workspaceSlug: string,
   spaceSlug: string
 ) {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     throw new Error('Not authenticated')
   }
 
@@ -153,7 +153,7 @@ export async function movePage(
     data: {
       parentPage: newParentId,
     },
-    user: payloadUser,
+    user: actor.user,
     overrideAccess: false,
   })
 
@@ -165,8 +165,8 @@ export async function duplicatePage(
   workspaceSlug: string,
   spaceSlug: string
 ) {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     throw new Error('Not authenticated')
   }
 
@@ -194,7 +194,7 @@ export async function duplicatePage(
       sortOrder: (original.sortOrder ?? 0) + 1,
       version: 1,
     },
-    user: payloadUser,
+    user: actor.user,
     overrideAccess: false,
   })
 
@@ -207,8 +207,8 @@ export async function deletePage(
   workspaceSlug: string,
   spaceSlug: string
 ) {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     throw new Error('Not authenticated')
   }
 
@@ -217,7 +217,7 @@ export async function deletePage(
   await payload.delete({
     collection: 'knowledge-pages',
     id: pageId,
-    user: payloadUser,
+    user: actor.user,
     overrideAccess: false,
   })
 
@@ -232,8 +232,8 @@ export async function updatePageSortOrder(
 ) {
   'use server'
 
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     throw new Error('Not authenticated')
   }
 
@@ -293,7 +293,7 @@ export async function updatePageSortOrder(
         collection: 'knowledge-pages',
         id: page.id,
         data: { sortOrder: index },
-        user: payloadUser,
+        user: actor.user,
         overrideAccess: false,
       })
     )

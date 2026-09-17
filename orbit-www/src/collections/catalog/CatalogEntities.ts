@@ -1,7 +1,7 @@
 import type { CollectionConfig } from 'payload'
 import { ENTITY_KINDS } from './constants'
-import { canCreateEntity, canManageEntity, canDeleteEntity } from '@/lib/catalog/entity-authz'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
+import { authenticatedOnly, memberCreate, docWorkspaceMutate } from '@/lib/authz/payload'
+import { ALL_ROLES, MANAGE_ROLES } from '@/lib/authz/policy'
 
 /**
  * CatalogEntities — the unified software-catalog read model (IDP refocus P1).
@@ -40,47 +40,19 @@ export const CatalogEntities: CollectionConfig = {
     // surface (Catalog Entity CRUD, docs/plans/2026-07-02-catalog-entity-crud.md).
     // Server actions and projections run with overrideAccess and bypass these
     // rules; they are defense-in-depth for direct Payload REST/GraphQL access.
-    read: ({ req: { user } }) => !!user,
-    // Create/update: platform admin, or an active member of the entity's
-    // workspace. IMPORTANT: workspace-members.user holds a Better-Auth id, so we
-    // pass req.user.betterAuthId — NOT req.user.id (a Payload doc id), which was
-    // the latent access bug. A null workspace (global entity) ⇒ platform admin only.
-    create: async ({ req: { user, payload }, data }) => {
-      if (!user) return false
-      const ws = (data as { workspace?: string | { id: string } } | undefined)?.workspace
-      const workspaceId = ws ? (typeof ws === 'string' ? ws : ws.id) : null
-      return canCreateEntity(payload, user.betterAuthId, isPlatformAdmin(user), workspaceId)
-    },
-    update: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-      const entity = await payload.findByID({
-        collection: 'catalog-entities',
-        id,
-        depth: 0,
-        overrideAccess: true,
-      })
-      const ws = entity.workspace
-      const workspaceId = ws ? (typeof ws === 'string' ? ws : ws.id) : null
-      return canManageEntity(payload, user.betterAuthId, isPlatformAdmin(user), { workspaceId })
-    },
-    // Delete: manual entities only (projected rows are deleted by removing their
-    // source), by a platform admin or workspace owner/admin.
-    delete: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-      const entity = await payload.findByID({
-        collection: 'catalog-entities',
-        id,
-        depth: 0,
-        overrideAccess: true,
-      })
-      const ws = entity.workspace
-      const workspaceId = ws ? (typeof ws === 'string' ? ws : ws.id) : null
-      const sourceType = entity.source?.type ?? 'manual'
-      return canDeleteEntity(payload, user.betterAuthId, isPlatformAdmin(user), {
-        workspaceId,
-        sourceType,
-      })
-    },
+    read: authenticatedOnly,
+    // Create: platform admin, or an active member of the entity's workspace (a
+    // null workspace ⇒ platform admin only — `memberCreate`'s built-in
+    // behaviour). Update: any active member of the entity's current workspace
+    // (ALL_ROLES, matching the prior `canManageEntity`). Delete: manual
+    // entities only (projected rows are deleted by removing their source), by
+    // an owner/admin (or platform admin) — the `guard` runs before the admin
+    // bypass, same as the prior `canDeleteEntity`.
+    create: memberCreate(),
+    update: docWorkspaceMutate('catalog-entities', ALL_ROLES),
+    delete: docWorkspaceMutate('catalog-entities', MANAGE_ROLES, {
+      guard: (doc) => (doc as { source?: { type?: string } }).source?.type === 'manual',
+    }),
   },
   hooks: {
     // Automation event source (IDP refocus P4): emit `entity-changed`.

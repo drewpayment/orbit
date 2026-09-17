@@ -3,7 +3,7 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
-import { getCurrentUser, getPayloadUserFromSession } from '@/lib/auth/session'
+import { getActor, requireActor, check, memberWorkspaceIds, ALL_ROLES, type Actor } from '@/lib/authz'
 import type {
   CatalogEntity,
   Initiative,
@@ -11,7 +11,6 @@ import type {
   Scorecard,
   ScorecardRule,
 } from '@/payload-types'
-import { canManageScorecards } from '@/lib/scorecards/authz'
 import {
   syncInitiativeActionItems,
   assertAssigneeInWorkspace,
@@ -26,8 +25,6 @@ import {
   type ScorecardOption,
 } from '@/lib/scorecards/initiatives'
 
-type Payload = Awaited<ReturnType<typeof getPayload>>
-
 /** Extract a relationship's id whether it arrived as a string or a populated doc. */
 function relId(value: unknown): string | null {
   if (!value) return null
@@ -38,37 +35,12 @@ function relId(value: unknown): string | null {
   return null
 }
 
-/**
- * Workspace IDs the user actively belongs to — the tenant boundary for every
- * query here. Mirrors `scorecards/actions.ts`'s `getMemberWorkspaceIds`.
- */
-async function getMemberWorkspaceIds(payload: Payload, userId: string): Promise<string[]> {
-  const memberships = await payload.find({
-    collection: 'workspace-members',
-    where: { user: { equals: userId }, status: { equals: 'active' } },
-    limit: 1000,
-    depth: 0,
-    overrideAccess: true,
-  })
-  return memberships.docs.map((m) =>
-    typeof m.workspace === 'string' ? m.workspace : m.workspace.id,
-  )
-}
-
-/** Resolve + assert the session user; throws when unauthenticated. */
-async function requireUserId(): Promise<string> {
-  const uid = (await getCurrentUser())?.id
-  if (!uid) throw new Error('Not authenticated')
-  return uid
-}
-
-/** Throw unless the user may manage initiatives (owner/admin) in `workspaceId`. */
-async function assertCanManage(
-  payload: Payload,
-  userId: string,
-  workspaceId: string | null,
-): Promise<void> {
-  if (!workspaceId || !(await canManageScorecards(payload, userId, workspaceId))) {
+/** Throw unless the actor may manage initiatives (owner/admin) in `workspaceId`. */
+async function assertCanManage(actor: Actor, workspaceId: string | null): Promise<void> {
+  const decision = workspaceId
+    ? await check('manage', { kind: 'workspace', id: workspaceId }, actor)
+    : { allowed: false }
+  if (!decision.allowed) {
     throw new Error('You do not have permission to manage initiatives in this workspace.')
   }
 }
@@ -91,10 +63,10 @@ function revalidateInitiatives(id?: string): void {
 
 export async function listInitiatives(): Promise<InitiativeSummary[]> {
   const payload = await getPayload({ config })
-  const uid = (await getCurrentUser())?.id
-  if (!uid) return []
+  const actor = await getActor()
+  if (!actor) return []
 
-  const workspaceIds = await getMemberWorkspaceIds(payload, uid)
+  const workspaceIds = await memberWorkspaceIds('member', actor)
   if (workspaceIds.length === 0) return []
 
   const res = await payload.find({
@@ -151,10 +123,10 @@ export async function listInitiatives(): Promise<InitiativeSummary[]> {
 
 export async function getInitiativeDetail(id: string): Promise<InitiativeDetail | null> {
   const payload = await getPayload({ config })
-  const uid = (await getCurrentUser())?.id
-  if (!uid || !id) return null
+  const actor = await getActor()
+  if (!actor || !id) return null
 
-  const workspaceIds = await getMemberWorkspaceIds(payload, uid)
+  const workspaceIds = await memberWorkspaceIds('member', actor)
   if (workspaceIds.length === 0) return null
 
   let initiative: Initiative
@@ -203,7 +175,8 @@ export async function getInitiativeDetail(id: string): Promise<InitiativeDetail 
   })
 
   const progress = computeInitiativeProgress(itemRows.map(toActionItemLite))
-  const canManage = await canManageScorecards(payload, uid, workspaceId)
+  const canManageDecision = await check('manage', { kind: 'workspace', id: workspaceId }, actor)
+  const canManage = canManageDecision.allowed
 
   return {
     id: initiative.id,
@@ -236,9 +209,7 @@ export interface CreateInitiativeInput {
 
 export async function createInitiative(input: CreateInitiativeInput): Promise<{ id: string }> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser || payloadUser.betterAuthId !== uid) throw new Error('Not authenticated')
+  const actor = await requireActor()
 
   if (!input.name?.trim()) throw new Error('An initiative name is required.')
   if (!input.scorecardId) throw new Error('A scorecard is required.')
@@ -256,7 +227,7 @@ export async function createInitiative(input: CreateInitiativeInput): Promise<{ 
     throw new Error('Scorecard not found')
   }
   const workspaceId = relId(scorecard.workspace)
-  await assertCanManage(payload, uid, workspaceId)
+  await assertCanManage(actor, workspaceId)
 
   const levelNames = (scorecard.levels ?? []).map((l) => l.name)
   if (!input.targetLevel || !levelNames.includes(input.targetLevel)) {
@@ -271,7 +242,7 @@ export async function createInitiative(input: CreateInitiativeInput): Promise<{ 
       workspace: workspaceId as string,
       scorecard: input.scorecardId,
       targetLevel: input.targetLevel,
-      owner: payloadUser.id,
+      owner: actor.payloadId,
       deadline: input.deadline || undefined,
       status: 'active',
     },
@@ -291,7 +262,7 @@ export async function createInitiative(input: CreateInitiativeInput): Promise<{ 
 
 export async function updateInitiativeStatus(id: string, status: InitiativeStatus): Promise<void> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
+  const actor = await requireActor()
 
   let initiative: Initiative
   try {
@@ -304,7 +275,7 @@ export async function updateInitiativeStatus(id: string, status: InitiativeStatu
   } catch {
     throw new Error('Initiative not found')
   }
-  await assertCanManage(payload, uid, relId(initiative.workspace))
+  await assertCanManage(actor, relId(initiative.workspace))
 
   if (!['active', 'completed', 'cancelled'].includes(status)) {
     throw new Error('Invalid initiative status.')
@@ -328,7 +299,7 @@ export async function syncInitiative(
   id: string,
 ): Promise<{ created: number; completed: number; reopened: number }> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
+  const actor = await requireActor()
 
   let initiative: Initiative
   try {
@@ -341,7 +312,7 @@ export async function syncInitiative(
   } catch {
     throw new Error('Initiative not found')
   }
-  await assertCanManage(payload, uid, relId(initiative.workspace))
+  await assertCanManage(actor, relId(initiative.workspace))
 
   const result = await syncInitiativeActionItems(payload, id)
   revalidateInitiatives(id)
@@ -360,7 +331,7 @@ export interface UpdateActionItemPatch {
 
 export async function updateActionItem(id: string, patch: UpdateActionItemPatch): Promise<void> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
+  const actor = await requireActor()
 
   let item: InitiativeActionItem
   try {
@@ -375,17 +346,20 @@ export async function updateActionItem(id: string, patch: UpdateActionItemPatch)
   }
 
   // Any active member of the item's workspace may update it (assignees work
-  // their items) — no owner/admin gate here, unlike lifecycle actions.
+  // their items) — no owner/admin gate here, unlike lifecycle actions. `update`
+  // defaults to owner/admin, so `roles: ALL_ROLES` explicitly overrides that.
   const workspaceId = relId(item.workspace)
-  const workspaceIds = await getMemberWorkspaceIds(payload, uid)
-  if (!workspaceId || !workspaceIds.includes(workspaceId)) {
+  const decision = workspaceId
+    ? await check('update', { kind: 'workspace', id: workspaceId, roles: ALL_ROLES }, actor)
+    : { allowed: false }
+  if (!decision.allowed) {
     throw new Error('You do not have access to this action item.')
   }
 
   // A concrete assignee must be an active member of the item's workspace —
   // block pinning an arbitrary/foreign user (their name/email would leak via
   // the detail page's depth-1 populate). Clearing the assignee always passes.
-  if (patch.assigneeId !== undefined) {
+  if (patch.assigneeId !== undefined && workspaceId) {
     await assertAssigneeInWorkspace(payload, patch.assigneeId, workspaceId)
   }
 
@@ -415,10 +389,10 @@ export async function updateActionItem(id: string, patch: UpdateActionItemPatch)
 
 export async function listScorecardOptions(): Promise<ScorecardOption[]> {
   const payload = await getPayload({ config })
-  const uid = (await getCurrentUser())?.id
-  if (!uid) return []
+  const actor = await getActor()
+  if (!actor) return []
 
-  const workspaceIds = await getMemberWorkspaceIds(payload, uid)
+  const workspaceIds = await memberWorkspaceIds('member', actor)
   if (workspaceIds.length === 0) return []
 
   const res = await payload.find({
