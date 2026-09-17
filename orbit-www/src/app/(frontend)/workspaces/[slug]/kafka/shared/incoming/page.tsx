@@ -1,8 +1,7 @@
 import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor, workspaceRole } from '@/lib/authz'
 import { SharedTopicsList } from '@/components/features/kafka/SharedTopicsList'
 
 interface IncomingPageProps {
@@ -11,9 +10,9 @@ interface IncomingPageProps {
 
 export default async function IncomingSharesPage({ params }: IncomingPageProps) {
   const { slug } = await params
-  const session = await auth.api.getSession({ headers: await headers() })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     notFound()
   }
 
@@ -31,24 +30,12 @@ export default async function IncomingSharesPage({ params }: IncomingPageProps) 
 
   const workspace = workspaces.docs[0]
 
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspace.id } },
-        { user: { equals: session.user.id } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-    overrideAccess: true,
-  })
+  const userRole = await workspaceRole(workspace.id, actor)
 
-  if (membership.docs.length === 0) {
+  if (!userRole) {
     notFound()
   }
 
-  const userRole = membership.docs[0].role as string
   const canManage = ['owner', 'admin'].includes(userRole)
 
   return (

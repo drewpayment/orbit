@@ -5,18 +5,12 @@ vi.mock('payload', () => ({
   getPayload: vi.fn(),
 }))
 
-// Mock auth
-vi.mock('@/lib/auth', () => ({
-  auth: {
-    api: {
-      getSession: vi.fn(),
-    },
-  },
-}))
-
-// Mock next/headers
-vi.mock('next/headers', () => ({
-  headers: vi.fn(),
+// Mock @/lib/authz at the module boundary (do not import the real actor.ts;
+// it pulls in the Better-Auth Mongo client).
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(),
+  check: vi.fn(),
+  memberWorkspaceIds: vi.fn(),
 }))
 
 // Mock next/cache
@@ -28,6 +22,15 @@ vi.mock('next/cache', () => ({
 vi.mock('@payload-config', () => ({
   default: {},
 }))
+
+const mockActor = {
+  payloadId: 'user-1',
+  betterAuthId: 'user-1',
+  email: 'user-1@test.com',
+  role: 'user',
+  isPlatformAdmin: false,
+  user: { id: 'user-1', collection: 'users', _strategy: 'better-auth' },
+}
 
 describe('kafka-topic-catalog actions', () => {
   beforeEach(() => {
@@ -42,8 +45,8 @@ describe('kafka-topic-catalog actions', () => {
     })
 
     it('should return error when user is not authenticated', async () => {
-      const { auth } = await import('@/lib/auth')
-      ;(auth.api.getSession as any).mockResolvedValue(null)
+      const { getActor } = await import('@/lib/authz')
+      ;(getActor as any).mockResolvedValue(null)
 
       const { searchTopicCatalog } = await import('./kafka-topic-catalog')
       const result = await searchTopicCatalog({ query: 'test' })
@@ -53,19 +56,14 @@ describe('kafka-topic-catalog actions', () => {
     })
 
     it('should search for discoverable and public topics', async () => {
-      const { auth } = await import('@/lib/auth')
+      const { getActor, memberWorkspaceIds } = await import('@/lib/authz')
       const { getPayload } = await import('payload')
 
-      ;(auth.api.getSession as any).mockResolvedValue({
-        user: { id: 'user-1' },
-      })
+      ;(getActor as any).mockResolvedValue(mockActor)
+      ;(memberWorkspaceIds as any).mockResolvedValue(['ws-1', 'ws-2'])
 
       const mockPayload = {
         find: vi.fn()
-          .mockResolvedValueOnce({
-            // workspace-members query
-            docs: [{ workspace: 'ws-1' }, { workspace: 'ws-2' }],
-          })
           .mockResolvedValueOnce({
             // kafka-topics query
             docs: [
@@ -105,18 +103,14 @@ describe('kafka-topic-catalog actions', () => {
     })
 
     it('should include workspace visibility topics from user workspaces', async () => {
-      const { auth } = await import('@/lib/auth')
+      const { getActor, memberWorkspaceIds } = await import('@/lib/authz')
       const { getPayload } = await import('payload')
 
-      ;(auth.api.getSession as any).mockResolvedValue({
-        user: { id: 'user-1' },
-      })
+      ;(getActor as any).mockResolvedValue(mockActor)
+      ;(memberWorkspaceIds as any).mockResolvedValue(['ws-1'])
 
       const mockPayload = {
         find: vi.fn()
-          .mockResolvedValueOnce({
-            docs: [{ workspace: 'ws-1' }],
-          })
           .mockResolvedValueOnce({
             docs: [
               {
@@ -154,8 +148,8 @@ describe('kafka-topic-catalog actions', () => {
     })
 
     it('should return error when user is not authenticated', async () => {
-      const { auth } = await import('@/lib/auth')
-      ;(auth.api.getSession as any).mockResolvedValue(null)
+      const { getActor } = await import('@/lib/authz')
+      ;(getActor as any).mockResolvedValue(null)
 
       const { requestTopicAccess } = await import('./kafka-topic-catalog')
       const result = await requestTopicAccess({
@@ -170,17 +164,14 @@ describe('kafka-topic-catalog actions', () => {
     })
 
     it('should verify user membership in requesting workspace', async () => {
-      const { auth } = await import('@/lib/auth')
+      const { getActor, check } = await import('@/lib/authz')
       const { getPayload } = await import('payload')
 
-      ;(auth.api.getSession as any).mockResolvedValue({
-        user: { id: 'user-1' },
-      })
+      ;(getActor as any).mockResolvedValue(mockActor)
+      ;(check as any).mockResolvedValue({ allowed: false, reason: 'not a member', actor: mockActor })
 
       const mockPayload = {
-        find: vi.fn().mockResolvedValueOnce({
-          docs: [], // User not a member of requesting workspace
-        }),
+        find: vi.fn(),
       }
       ;(getPayload as any).mockResolvedValue(mockPayload)
 
@@ -197,18 +188,14 @@ describe('kafka-topic-catalog actions', () => {
     })
 
     it('should check for existing share requests', async () => {
-      const { auth } = await import('@/lib/auth')
+      const { getActor, check } = await import('@/lib/authz')
       const { getPayload } = await import('payload')
 
-      ;(auth.api.getSession as any).mockResolvedValue({
-        user: { id: 'user-1' },
-      })
+      ;(getActor as any).mockResolvedValue(mockActor)
+      ;(check as any).mockResolvedValue({ allowed: true, reason: 'workspace member', actor: mockActor })
 
       const mockPayload = {
         find: vi.fn()
-          .mockResolvedValueOnce({
-            docs: [{ workspace: 'ws-1', role: 'member' }], // User is member
-          })
           .mockResolvedValueOnce({
             docs: [{ id: 'share-1', status: 'pending' }], // Existing share request
           }),
@@ -232,18 +219,14 @@ describe('kafka-topic-catalog actions', () => {
     })
 
     it('should create a pending share request when no auto-approve policy', async () => {
-      const { auth } = await import('@/lib/auth')
+      const { getActor, check } = await import('@/lib/authz')
       const { getPayload } = await import('payload')
 
-      ;(auth.api.getSession as any).mockResolvedValue({
-        user: { id: 'user-1' },
-      })
+      ;(getActor as any).mockResolvedValue(mockActor)
+      ;(check as any).mockResolvedValue({ allowed: true, reason: 'workspace member', actor: mockActor })
 
       const mockPayload = {
         find: vi.fn()
-          .mockResolvedValueOnce({
-            docs: [{ workspace: 'ws-1', role: 'member' }],
-          })
           .mockResolvedValueOnce({
             docs: [], // No existing share
           })
@@ -276,18 +259,14 @@ describe('kafka-topic-catalog actions', () => {
     })
 
     it('should auto-approve when policy allows', async () => {
-      const { auth } = await import('@/lib/auth')
+      const { getActor, check } = await import('@/lib/authz')
       const { getPayload } = await import('payload')
 
-      ;(auth.api.getSession as any).mockResolvedValue({
-        user: { id: 'user-1' },
-      })
+      ;(getActor as any).mockResolvedValue(mockActor)
+      ;(check as any).mockResolvedValue({ allowed: true, reason: 'workspace member', actor: mockActor })
 
       const mockPayload = {
         find: vi.fn()
-          .mockResolvedValueOnce({
-            docs: [{ workspace: 'ws-1', role: 'member' }],
-          })
           .mockResolvedValueOnce({
             docs: [], // No existing share
           })
