@@ -65,6 +65,10 @@ export function actorFromPayloadUser(payloadUser: User, sessionBetterAuthId?: st
  * Resolve the current Actor, or null if unauthenticated / deactivated.
  * Memoised per request via React `cache` so layouts, pages and server actions in
  * the same render share one session read and one users lookup.
+ *
+ * Route Handlers: verified 2026-09-16 (Next 15.4 / React 19) that `cache` has no
+ * request-scoped store there, so each call resolves fresh — no memoisation, and
+ * therefore no possibility of one request observing another request's Actor.
  */
 export const getActor = cache(async (): Promise<Actor | null> => {
   const reqHeaders = await headers()

@@ -70,7 +70,7 @@ const eslintConfig = [
       'no-restricted-syntax': [
         'warn',
         {
-          selector: "Property[key.name='collection'] > Literal[value='workspace-members']",
+          selector: "Property[key.name='collection'] Literal[value='workspace-members']",
           message:
             'Do not query workspace-members directly. Use the membership helpers in @/lib/access (Phase B: @/lib/authz).',
         },
