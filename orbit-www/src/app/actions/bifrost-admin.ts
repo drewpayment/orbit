@@ -2,7 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
+import { requireActor } from '@/lib/authz'
 import {
   PermissionTemplate,
   type VirtualClusterConfig as ProtoVirtualClusterConfig,
@@ -244,21 +244,13 @@ function mapProtoToPolicy(proto: ProtoPolicy): PolicyConfig {
 /**
  * Checks if the current user has admin privileges.
  * Throws an error if the user is not authenticated or not an admin.
- *
- * This function follows the same pattern as kafka-admin.ts requireAdmin.
  */
 export async function requireAdmin(): Promise<{ userId: string }> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
-    throw new Error('Unauthorized: Authentication required')
-  }
-
-  const role = payloadUser.role
-  if (role !== 'super_admin' && role !== 'admin') {
+  const actor = await requireActor()
+  if (!actor.isPlatformAdmin) {
     throw new Error('Unauthorized: Admin privileges required')
   }
-
-  return { userId: payloadUser.betterAuthId || payloadUser.id }
+  return { userId: actor.betterAuthId }
 }
 
 // ============================================================================

@@ -3,57 +3,40 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
+import { requireActor } from '@/lib/authz'
+import { findMembership, requestWorkspaceMembership } from '@/lib/workspaces/members'
 
-export async function requestJoinWorkspace(workspaceId: string, userId: string) {
+/**
+ * Self-service join request: any authenticated user may request to join any
+ * workspace (there is no workspace role to check yet — that's the point of a
+ * join request), so this only needs an authenticated actor, not `authorize()`.
+ * `_userId` is accepted for source compatibility with the client caller
+ * (`workspace-client.tsx`, outside this migration's file list) but ignored —
+ * identity for the write comes from the actor's own session, never a
+ * client-supplied id (SEMANTIC CHANGE: previously trusted the caller's id).
+ */
+export async function requestJoinWorkspace(workspaceId: string, _userId?: string) {
   try {
-    const payload = await getPayload({ config })
+    const actor = await requireActor()
 
     // Check if a request already exists
-    const existing = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          {
-            workspace: {
-              equals: workspaceId,
-            },
-          },
-          {
-            user: {
-              equals: userId,
-            },
-          },
-        ],
-      },
-      limit: 1,
-      overrideAccess: true,
-    })
+    const payload = await getPayload({ config })
+    const existing = await findMembership(payload, actor.betterAuthId, workspaceId)
 
-    if (existing.docs.length > 0) {
-      const status = existing.docs[0].status
-      if (status === 'active') {
+    if (existing) {
+      if (existing.status === 'active') {
         return { success: false, error: 'You are already a member of this workspace' }
       }
-      if (status === 'pending') {
+      if (existing.status === 'pending') {
         return { success: false, error: 'You already have a pending request' }
       }
     }
 
     // Create join request
-    await payload.create({
-      collection: 'workspace-members',
-      data: {
-        workspace: workspaceId,
-        user: userId,
-        role: 'member',
-        status: 'pending',
-        requestedAt: new Date().toISOString(),
-      },
-      overrideAccess: true,
-    })
+    await requestWorkspaceMembership(payload, { workspaceId, betterAuthId: actor.betterAuthId })
 
     revalidatePath(`/workspaces/[slug]`, 'page')
-    
+
     return { success: true }
   } catch (error) {
     console.error('Failed to create join request:', error)
@@ -61,35 +44,15 @@ export async function requestJoinWorkspace(workspaceId: string, userId: string) 
   }
 }
 
-export async function checkMembershipStatus(workspaceId: string, userId: string) {
+export async function checkMembershipStatus(workspaceId: string, betterAuthId: string) {
   try {
     const payload = await getPayload({ config })
+    const member = await findMembership(payload, betterAuthId, workspaceId)
 
-    const result = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          {
-            workspace: {
-              equals: workspaceId,
-            },
-          },
-          {
-            user: {
-              equals: userId,
-            },
-          },
-        ],
-      },
-      limit: 1,
-      overrideAccess: true,
-    })
-
-    if (result.docs.length === 0) {
+    if (!member) {
       return { isMember: false, isPending: false }
     }
 
-    const member = result.docs[0]
     return {
       isMember: member.status === 'active',
       isPending: member.status === 'pending',

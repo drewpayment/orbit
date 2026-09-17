@@ -10,8 +10,8 @@ import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { WorkspaceClient } from './workspace-client'
 import { checkMembershipStatus } from './actions'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor } from '@/lib/authz'
+import { listWorkspaceMembers } from '@/lib/workspaces/members'
 import { getBetterAuthUsers } from '@/lib/data/cached-queries'
 import { RegistryQuotaWarning } from '@/components/features/workspace/RegistryQuotaWarning'
 import {
@@ -35,14 +35,11 @@ interface PageProps {
 export default async function WorkspacePage({ params }: PageProps) {
   const { slug } = await params
 
-  // Phase 1: Parallelize initial setup (payload, session, headers all independent)
-  const [payload, reqHeaders] = await Promise.all([
+  // Phase 1: Parallelize initial setup (payload, actor are independent)
+  const [payload, actor] = await Promise.all([
     getPayload({ config }),
-    headers(),
+    getActor(),
   ])
-
-  // Get session (needs headers)
-  const session = await auth.api.getSession({ headers: reqHeaders })
 
   // Fetch workspace with relationships
   const workspaceResult = await payload.find({
@@ -65,7 +62,7 @@ export default async function WorkspacePage({ params }: PageProps) {
   // Phase 2: Parallelize all workspace-dependent fetches
   // These are all independent once we have workspace.id
   const [
-    membersResult,
+    members,
     membershipStatus,
     spacesResult,
     appsResult,
@@ -77,17 +74,10 @@ export default async function WorkspacePage({ params }: PageProps) {
     catalogEntitiesResult,
   ] = await Promise.all([
     // Fetch members
-    payload.find({
-      collection: 'workspace-members',
-      where: {
-        workspace: { equals: workspace.id },
-        status: { equals: 'active' },
-      },
-      limit: 100,
-    }),
+    listWorkspaceMembers(payload, String(workspace.id), { limit: 100 }),
     // Check membership status for current user (using BA user ID directly)
-    session?.user
-      ? checkMembershipStatus(workspace.id, session.user.id)
+    actor
+      ? checkMembershipStatus(workspace.id, actor.betterAuthId)
       : Promise.resolve(undefined),
     // Fetch knowledge spaces
     payload.find({
@@ -153,8 +143,6 @@ export default async function WorkspacePage({ params }: PageProps) {
       overrideAccess: true,
     }),
   ])
-
-  const members = membersResult.docs
 
   const catalogEntities: WorkspaceEntitySummary[] = catalogEntitiesResult.docs.map((e) => ({
     id: e.id,
