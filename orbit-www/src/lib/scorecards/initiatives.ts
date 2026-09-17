@@ -478,22 +478,48 @@ export function userDisplayName(user: unknown): string | null {
 
 // --- assignee validation ----------------------------------------------------
 
-/** True when `userId` is an active member of `workspaceId`. */
+/**
+ * True when `payloadUserId` (a `relationTo: 'users'` id, i.e. a Payload id —
+ * NOT a Better-Auth id) is an active member of `workspaceId`.
+ *
+ * SEMANTIC FIX (authz consolidation Phase C, #135): this used to call
+ * `membershipRole(payload, userId, workspaceId)` directly with the caller's
+ * id as-is. `membershipRole` (and `workspace-members.user`) key on the
+ * Better-Auth id, but every caller here passes a `relationTo: 'users'` value
+ * (`InitiativeActionItems.assignee`), which is a Payload id — the same class
+ * of bug fixed in `collections/scorecards/invariants.ts`'s assignee guard.
+ * Before this fix the check only ever passed for the seeded dev account
+ * (whose Payload id and Better-Auth id happen to be equal), silently letting
+ * any other user be pinned as an assignee regardless of membership.
+ */
 export async function isActiveWorkspaceMember(
   payload: Payload,
-  userId: string,
+  payloadUserId: string,
   workspaceId: string,
 ): Promise<boolean> {
-  return (await membershipRole(payload, userId, workspaceId)) !== null
+  let user: User
+  try {
+    user = await payload.findByID({
+      collection: 'users',
+      id: payloadUserId,
+      depth: 0,
+      overrideAccess: true,
+    })
+  } catch {
+    return false
+  }
+  if (!user?.betterAuthId) return false
+  return (await membershipRole(payload, user.betterAuthId, workspaceId)) !== null
 }
 
 /**
- * Guard an action-item assignee change: when `assigneeId` is a concrete user
- * id, that user MUST be an active member of the item's `workspaceId` (otherwise
- * a member could pin an arbitrary/foreign user, whose name/email would then
- * render via the detail page's populate — a mild info-disclosure). Clearing the
- * assignee (`null`/`undefined`) always passes and issues no query. Throws a
- * clear Error when the target user is not a member.
+ * Guard an action-item assignee change: when `assigneeId` (a Payload user id)
+ * is a concrete user id, that user MUST be an active member of the item's
+ * `workspaceId` (otherwise a member could pin an arbitrary/foreign user, whose
+ * name/email would then render via the detail page's populate — a mild
+ * info-disclosure). Clearing the assignee (`null`/`undefined`) always passes
+ * and issues no query. Throws a clear Error when the target user is not a
+ * member.
  */
 export async function assertAssigneeInWorkspace(
   payload: Payload,
