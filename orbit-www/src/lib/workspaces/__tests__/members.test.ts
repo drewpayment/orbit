@@ -9,7 +9,6 @@ import {
   listMembershipsFor,
   addWorkspaceMember,
   deleteWorkspaceMembers,
-  findActiveMembershipWithOptions,
   listActiveMembershipDocsFor,
   getMembershipById,
   requestWorkspaceMembership,
@@ -104,30 +103,6 @@ describe('addWorkspaceMember', () => {
     const up = await addWorkspaceMember(payload, { workspaceId: 'ws-1', betterAuthId: 'ba-1', role: 'admin', upgradeRole: true })
     expect(up.created).toBe(false)
     expect(update.mock.calls[0][0]).toMatchObject({ id: 'm1', data: { role: 'admin', status: 'active' } })
-  })
-})
-
-describe('findActiveMembershipWithOptions', () => {
-  it('filters by workspace/user/active status, optionally by role set, defaulting overrideAccess to false', async () => {
-    find.mockResolvedValue({ docs: [{ id: 'm1', role: 'admin' }] })
-    const row = await findActiveMembershipWithOptions(payload, 'ws-1', 'ba-1', { roles: ['owner', 'admin'] })
-    const args = find.mock.calls[0][0]
-    expect(args.collection).toBe('workspace-members')
-    expect(args.where.and).toEqual([
-      { workspace: { equals: 'ws-1' } },
-      { user: { equals: 'ba-1' } },
-      { status: { equals: 'active' } },
-      { role: { in: ['owner', 'admin'] } },
-    ])
-    expect(args.overrideAccess).toBe(false)
-    expect(row).toEqual({ id: 'm1', role: 'admin' })
-  })
-
-  it('honors an explicit overrideAccess and returns null when no row matches', async () => {
-    find.mockResolvedValue({ docs: [] })
-    const row = await findActiveMembershipWithOptions(payload, 'ws-1', 'ba-1', { overrideAccess: true })
-    expect(find.mock.calls[0][0].overrideAccess).toBe(true)
-    expect(row).toBeNull()
   })
 })
 

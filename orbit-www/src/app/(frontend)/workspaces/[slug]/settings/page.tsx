@@ -4,11 +4,8 @@ import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { Separator } from '@/components/ui/separator'
 import { WorkspaceSettingsClient } from './settings-client'
-import {
-  getActor,
-  getWorkspaceBySlug,
-  getWorkspaceMembership,
-} from '@/lib/data/cached-queries'
+import { getActor, getWorkspaceBySlug } from '@/lib/data/cached-queries'
+import { workspaceRole } from '@/lib/authz'
 
 interface PageProps {
   params: Promise<{
@@ -30,14 +27,10 @@ export default async function WorkspaceSettingsPage({ params }: PageProps) {
     notFound()
   }
 
-  // Check if user is admin/owner
-  const member = await getWorkspaceMembership(workspace.id, actor.betterAuthId)
-  if (!member) {
-    redirect(`/workspaces/${slug}`)
-  }
-
-  const isAdmin = member.role === 'owner' || member.role === 'admin'
-  if (!isAdmin) {
+  // Owner/admin only (membership, no platform-admin bypass: preserved from the
+  // pre-Phase-C page; the settings client actions enforce the policy themselves).
+  const role = await workspaceRole(workspace.id, actor)
+  if (role !== 'owner' && role !== 'admin') {
     redirect(`/workspaces/${slug}`)
   }
 

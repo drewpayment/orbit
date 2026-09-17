@@ -3,10 +3,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { getActor } from '@/lib/authz'
 import { getMongoClient } from '@/lib/mongodb'
-import {
-  findActiveMembershipWithOptions,
-  listActiveMembershipDocsFor,
-} from '@/lib/workspaces/members'
+import { listActiveMembershipDocsFor } from '@/lib/workspaces/members'
 
 /**
  * Cached data fetchers using React.cache() for request-level deduplication.
@@ -96,18 +93,6 @@ export const getKnowledgePageBySlug = cache(async (pageSlug: string, spaceId: st
     depth,
   })
   return result.docs[0] ?? null
-})
-
-/**
- * Check workspace membership for a user (cached per request)
- */
-export const getWorkspaceMembership = cache(async (
-  workspaceId: string,
-  userId: string,
-  options?: { roles?: string[]; overrideAccess?: boolean }
-) => {
-  const payload = await getPayloadClient()
-  return findActiveMembershipWithOptions(payload, workspaceId, userId, options)
 })
 
 export interface BetterAuthUser {
