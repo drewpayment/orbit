@@ -1,7 +1,7 @@
 import type { CollectionConfig } from 'payload'
 import { RELATION_TYPES } from './constants'
 import { authenticatedOnly, memberCreate, docWorkspaceMutate } from '@/lib/authz/payload'
-import { ALL_ROLES, MANAGE_ROLES } from '@/lib/authz/policy'
+import { ALL_ROLES } from '@/lib/authz/policy'
 
 /**
  * CatalogRelations — typed edges in the catalog graph (IDP refocus P1).
@@ -41,11 +41,10 @@ export const CatalogRelations: CollectionConfig = {
     create: memberCreate(),
     update: docWorkspaceMutate('catalog-relations', ALL_ROLES),
     // Delete: manual relations only (projected edges belong to their
-    // projector), by an owner/admin (or platform admin). SEMANTIC CHANGE
-    // (Phase C, #135): the prior rule reused `canManageEntity` (ALL_ROLES, any
-    // active member) for delete; this tightens it to MANAGE_ROLES so deleting
-    // a relation requires the same owner/admin rights as deleting an entity.
-    delete: docWorkspaceMutate('catalog-relations', MANAGE_ROLES, {
+    // projector), by any active member (ALL_ROLES, matching the prior
+    // `canManageEntity`) or a platform admin. A relation is a link, not an
+    // entity: members who can create one can remove one.
+    delete: docWorkspaceMutate('catalog-relations', ALL_ROLES, {
       guard: (doc) => (doc as { source?: { type?: string } }).source?.type === 'manual',
     }),
   },

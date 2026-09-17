@@ -5,10 +5,9 @@
  * shared authz adapters (memberCreate, docWorkspaceMutate, authenticatedOnly)
  * in docs/plans/2026-09-16-authz-consolidation.md, Phase C (#135).
  *
- * SEMANTIC CHANGE: the prior `delete` rule reused the update rule's ALL_ROLES
- * (any active member) via `canManageEntity`. This migration uses MANAGE_ROLES
- * (owner/admin) per the Phase C brief, so deleting a manual relation now needs
- * the same rights as deleting an entity.
+ * Behaviour-identical to the prior rules: any active member may create, update
+ * and delete (manual only) relations in their workspace; platform admins
+ * bypass except for the projected-row guard.
  */
 import { describe, it, expect, vi } from 'vitest'
 import type { Access, Payload } from 'payload'
@@ -136,8 +135,15 @@ describe('CatalogRelations access', () => {
       ).toBe(true)
     })
 
-    it('denies a plain member deleting a manual relation (delete now needs owner/admin)', async () => {
+    it('allows a plain member to delete a manual relation (any member, as before)', async () => {
       const { invoke } = makePayload([active('member')], byId)
+      expect(
+        await invoke(CatalogRelations.access!.delete as Access, { user: plainUser, id: 'r-manual' }),
+      ).toBe(true)
+    })
+
+    it('denies a non-member deleting a manual relation', async () => {
+      const { invoke } = makePayload([], byId)
       expect(
         await invoke(CatalogRelations.access!.delete as Access, { user: plainUser, id: 'r-manual' }),
       ).toBe(false)
