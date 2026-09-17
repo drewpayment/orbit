@@ -1,8 +1,7 @@
 'use server'
 
 import { cookies } from 'next/headers'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
+import { check } from '@/lib/authz'
 import {
   GITHUB_APP_NAME,
   GITHUB_INSTALL_STATE_COOKIE,
@@ -26,8 +25,8 @@ export async function createGithubInstallUrl(): Promise<{
   url?: string
   error?: string
 }> {
-  const actor = await getPayloadUserFromSession()
-  if (!actor || !isPlatformAdmin(actor)) {
+  const d = await check('manage', { kind: 'platform' })
+  if (!d.allowed) {
     return { success: false, error: 'Platform admin required' }
   }
 

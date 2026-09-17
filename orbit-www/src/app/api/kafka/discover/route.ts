@@ -1,8 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor } from '@/lib/authz'
 import { discoverTopics } from '@/app/(frontend)/workspaces/[slug]/kafka/actions'
 
 /**
@@ -10,11 +9,9 @@ import { discoverTopics } from '@/app/(frontend)/workspaces/[slug]/kafka/actions
  * Discover topics available to a workspace
  */
 export async function GET(request: NextRequest) {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
 

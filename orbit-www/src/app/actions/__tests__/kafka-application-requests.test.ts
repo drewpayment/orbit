@@ -8,16 +8,9 @@ vi.mock('@payload-config', () => ({
   default: {},
 }))
 
-vi.mock('@/lib/auth', () => ({
-  auth: {
-    api: {
-      getSession: vi.fn(),
-    },
-  },
-}))
-
-vi.mock('next/headers', () => ({
-  headers: vi.fn(() => Promise.resolve(new Headers())),
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(),
+  check: vi.fn(),
 }))
 
 vi.mock('next/cache', () => ({
@@ -25,7 +18,18 @@ vi.mock('next/cache', () => ({
 }))
 
 import { getPayload } from 'payload'
-import { auth } from '@/lib/auth'
+import { getActor, check } from '@/lib/authz'
+const mockActor = {
+  payloadId: 'pl-1',
+  betterAuthId: 'ba-1',
+  email: 'user-1@test.com',
+  role: 'user',
+  isPlatformAdmin: false,
+  user: { id: 'pl-1', collection: 'users', _strategy: 'better-auth' },
+}
+
+const mockAdminActor = { ...mockActor, role: 'admin', isPlatformAdmin: true }
+
 import {
   submitApplicationRequest,
   getMyRequests,
@@ -44,7 +48,7 @@ describe('submitApplicationRequest', () => {
   })
 
   it('should return unauthorized when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    vi.mocked(getActor).mockResolvedValue(null)
 
     const result = await submitApplicationRequest({
       workspaceId: 'workspace-1',
@@ -56,15 +60,13 @@ describe('submitApplicationRequest', () => {
   })
 
   it('should return error when user is not a workspace member', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+    vi.mocked(getActor).mockResolvedValue(mockActor as any)
 
     const mockPayload = {
       find: vi.fn().mockResolvedValue({ docs: [] }),
     }
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+    vi.mocked(check).mockResolvedValue({ allowed: false, reason: 'not a member', actor: mockActor } as any)
 
     const result = await submitApplicationRequest({
       workspaceId: 'workspace-1',
@@ -76,20 +78,17 @@ describe('submitApplicationRequest', () => {
   })
 
   it('should create request successfully', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+    vi.mocked(getActor).mockResolvedValue(mockActor as any)
 
     const mockPayload = {
       find: vi
         .fn()
-        .mockResolvedValueOnce({ docs: [{ id: 'membership-1' }] }) // membership check
         .mockResolvedValueOnce({ docs: [] }) // existing request check
         .mockResolvedValueOnce({ docs: [] }), // existing app check
       create: vi.fn().mockResolvedValue({ id: 'request-1' }),
     }
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'workspace member', actor: mockActor } as any)
 
     const result = await submitApplicationRequest({
       workspaceId: 'workspace-1',
@@ -106,10 +105,11 @@ describe('submitApplicationRequest', () => {
         applicationName: 'Test App',
         applicationSlug: 'test-app',
         description: 'Test description',
-        requestedBy: 'user-1',
+        requestedBy: 'pl-1',
         status: 'pending_workspace',
       },
-      overrideAccess: true,
+      user: mockActor.user,
+      overrideAccess: false,
     })
   })
 })
@@ -120,7 +120,7 @@ describe('getMyRequests', () => {
   })
 
   it('should return error when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    vi.mocked(getActor).mockResolvedValue(null)
 
     const result = await getMyRequests('workspace-1')
 
@@ -128,10 +128,7 @@ describe('getMyRequests', () => {
   })
 
   it('should return user requests', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+    vi.mocked(getActor).mockResolvedValue(mockActor as any)
 
     const mockRequest = {
       id: 'request-1',
@@ -162,7 +159,7 @@ describe('getPendingWorkspaceApprovals', () => {
   })
 
   it('should return unauthorized when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    vi.mocked(getActor).mockResolvedValue(null)
 
     const result = await getPendingWorkspaceApprovals('workspace-1')
 
@@ -170,15 +167,13 @@ describe('getPendingWorkspaceApprovals', () => {
   })
 
   it('should return error when user is not a workspace admin', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+    vi.mocked(getActor).mockResolvedValue(mockActor as any)
 
     const mockPayload = {
       find: vi.fn().mockResolvedValue({ docs: [] }),
     }
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+    vi.mocked(check).mockResolvedValue({ allowed: false, reason: 'not admin', actor: mockActor } as any)
 
     const result = await getPendingWorkspaceApprovals('workspace-1')
 
@@ -186,10 +181,7 @@ describe('getPendingWorkspaceApprovals', () => {
   })
 
   it('should return pending requests for workspace admin', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+    vi.mocked(getActor).mockResolvedValue(mockActor as any)
 
     const mockRequest = {
       id: 'request-1',
@@ -202,12 +194,10 @@ describe('getPendingWorkspaceApprovals', () => {
     }
 
     const mockPayload = {
-      find: vi
-        .fn()
-        .mockResolvedValueOnce({ docs: [{ id: 'membership-1', role: 'admin' }] }) // membership check
-        .mockResolvedValueOnce({ docs: [mockRequest] }), // requests
+      find: vi.fn().mockResolvedValueOnce({ docs: [mockRequest] }), // requests
     }
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'workspace admin', actor: mockActor } as any)
 
     const result = await getPendingWorkspaceApprovals('workspace-1')
 
@@ -222,7 +212,7 @@ describe('getPendingPlatformApprovals', () => {
   })
 
   it('should return unauthorized when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    vi.mocked(getActor).mockResolvedValue(null)
 
     const result = await getPendingPlatformApprovals()
 
@@ -230,10 +220,7 @@ describe('getPendingPlatformApprovals', () => {
   })
 
   it('should return error when user is not a platform admin', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+    vi.mocked(getActor).mockResolvedValue(mockActor as any)
 
     const mockPayload = {
       findByID: vi.fn().mockResolvedValue(null),
@@ -242,14 +229,15 @@ describe('getPendingPlatformApprovals', () => {
 
     const result = await getPendingPlatformApprovals()
 
-    expect(result).toEqual({ success: false, error: 'Not a platform admin' })
+    expect(result).toEqual({
+      success: false,
+      error: 'Forbidden: platform admin access required',
+      requests: [],
+    })
   })
 
   it('should return pending platform requests for platform admin', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+    vi.mocked(getActor).mockResolvedValue(mockAdminActor as any)
 
     const mockRequest = {
       id: 'request-1',
@@ -264,7 +252,6 @@ describe('getPendingPlatformApprovals', () => {
     }
 
     const mockPayload = {
-      findByID: vi.fn().mockResolvedValue({ id: 'user-1' }), // platform admin check
       find: vi.fn().mockResolvedValue({ docs: [mockRequest] }),
     }
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
@@ -283,7 +270,7 @@ describe('approveRequestAsWorkspaceAdmin', () => {
   })
 
   it('should return unauthorized when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    vi.mocked(getActor).mockResolvedValue(null)
 
     const result = await approveRequestAsWorkspaceAdmin('request-1')
 
@@ -291,10 +278,7 @@ describe('approveRequestAsWorkspaceAdmin', () => {
   })
 
   it('should return error when request not found', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+    vi.mocked(getActor).mockResolvedValue(mockActor as any)
 
     const mockPayload = {
       findByID: vi.fn().mockResolvedValue(null),
@@ -307,10 +291,7 @@ describe('approveRequestAsWorkspaceAdmin', () => {
   })
 
   it('should return error when request is not pending workspace approval', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+    vi.mocked(getActor).mockResolvedValue(mockActor as any)
 
     const mockPayload = {
       findByID: vi.fn().mockResolvedValue({
@@ -327,10 +308,7 @@ describe('approveRequestAsWorkspaceAdmin', () => {
   })
 
   it('should approve request successfully', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+    vi.mocked(getActor).mockResolvedValue(mockActor as any)
 
     const mockPayload = {
       findByID: vi.fn().mockResolvedValue({
@@ -338,10 +316,10 @@ describe('approveRequestAsWorkspaceAdmin', () => {
         status: 'pending_workspace',
         workspace: 'workspace-1',
       }),
-      find: vi.fn().mockResolvedValue({ docs: [{ id: 'membership-1', role: 'admin' }] }),
       update: vi.fn().mockResolvedValue({ id: 'request-1' }),
     }
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'workspace admin', actor: mockActor } as any)
 
     const result = await approveRequestAsWorkspaceAdmin('request-1')
 
@@ -352,7 +330,7 @@ describe('approveRequestAsWorkspaceAdmin', () => {
         id: 'request-1',
         data: expect.objectContaining({
           status: 'pending_platform',
-          workspaceApprovedBy: 'user-1',
+          workspaceApprovedBy: 'pl-1',
         }),
       })
     )
@@ -365,10 +343,7 @@ describe('rejectRequestAsWorkspaceAdmin', () => {
   })
 
   it('should reject request with reason', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+    vi.mocked(getActor).mockResolvedValue(mockActor as any)
 
     const mockPayload = {
       findByID: vi.fn().mockResolvedValue({
@@ -376,10 +351,10 @@ describe('rejectRequestAsWorkspaceAdmin', () => {
         status: 'pending_workspace',
         workspace: 'workspace-1',
       }),
-      find: vi.fn().mockResolvedValue({ docs: [{ id: 'membership-1', role: 'admin' }] }),
       update: vi.fn().mockResolvedValue({ id: 'request-1' }),
     }
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'workspace admin', actor: mockActor } as any)
 
     const result = await rejectRequestAsWorkspaceAdmin('request-1', 'Duplicate request')
 
@@ -388,7 +363,7 @@ describe('rejectRequestAsWorkspaceAdmin', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           status: 'rejected',
-          rejectedBy: 'user-1',
+          rejectedBy: 'pl-1',
           rejectionReason: 'Duplicate request',
         }),
       })
@@ -402,7 +377,7 @@ describe('approveRequestAsPlatformAdmin', () => {
   })
 
   it('should return unauthorized when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    vi.mocked(getActor).mockResolvedValue(null)
 
     const result = await approveRequestAsPlatformAdmin('request-1', 'single')
 
@@ -410,10 +385,7 @@ describe('approveRequestAsPlatformAdmin', () => {
   })
 
   it('should return error when not a platform admin', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+    vi.mocked(getActor).mockResolvedValue(mockActor as any)
 
     const mockPayload = {
       findByID: vi.fn().mockResolvedValue(null),
@@ -422,24 +394,21 @@ describe('approveRequestAsPlatformAdmin', () => {
 
     const result = await approveRequestAsPlatformAdmin('request-1', 'single')
 
-    expect(result).toEqual({ success: false, error: 'Not a platform admin' })
+    expect(result).toEqual({
+      success: false,
+      error: 'Forbidden: platform admin access required',
+    })
   })
 
   it('should approve request with single action', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+    vi.mocked(getActor).mockResolvedValue(mockAdminActor as any)
 
     const mockPayload = {
-      findByID: vi
-        .fn()
-        .mockResolvedValueOnce({ id: 'user-1' }) // platform admin check
-        .mockResolvedValueOnce({
-          id: 'request-1',
-          status: 'pending_platform',
-          workspace: 'workspace-1',
-        }), // request
+      findByID: vi.fn().mockResolvedValue({
+        id: 'request-1',
+        status: 'pending_platform',
+        workspace: 'workspace-1',
+      }), // request
       update: vi.fn().mockResolvedValue({ id: 'request-1' }),
     }
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
@@ -451,7 +420,7 @@ describe('approveRequestAsPlatformAdmin', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           status: 'approved',
-          platformApprovedBy: 'user-1',
+          platformApprovedBy: 'pl-1',
           platformAction: 'approved_single',
         }),
       })
@@ -459,20 +428,14 @@ describe('approveRequestAsPlatformAdmin', () => {
   })
 
   it('should approve request with increase_quota action', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+    vi.mocked(getActor).mockResolvedValue(mockAdminActor as any)
 
     const mockPayload = {
-      findByID: vi
-        .fn()
-        .mockResolvedValueOnce({ id: 'user-1' }) // platform admin check
-        .mockResolvedValueOnce({
-          id: 'request-1',
-          status: 'pending_platform',
-          workspace: 'workspace-1',
-        }), // request
+      findByID: vi.fn().mockResolvedValue({
+        id: 'request-1',
+        status: 'pending_platform',
+        workspace: 'workspace-1',
+      }), // request
       update: vi.fn().mockResolvedValue({ id: 'request-1' }),
     }
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
@@ -496,20 +459,14 @@ describe('rejectRequestAsPlatformAdmin', () => {
   })
 
   it('should reject request with reason', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+    vi.mocked(getActor).mockResolvedValue(mockAdminActor as any)
 
     const mockPayload = {
-      findByID: vi
-        .fn()
-        .mockResolvedValueOnce({ id: 'user-1' }) // platform admin check
-        .mockResolvedValueOnce({
-          id: 'request-1',
-          status: 'pending_platform',
-          workspace: 'workspace-1',
-        }), // request
+      findByID: vi.fn().mockResolvedValue({
+        id: 'request-1',
+        status: 'pending_platform',
+        workspace: 'workspace-1',
+      }), // request
       update: vi.fn().mockResolvedValue({ id: 'request-1' }),
     }
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
@@ -521,7 +478,7 @@ describe('rejectRequestAsPlatformAdmin', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           status: 'rejected',
-          rejectedBy: 'user-1',
+          rejectedBy: 'pl-1',
           rejectionReason: 'Policy violation',
         }),
       })
@@ -535,7 +492,7 @@ describe('getWorkspaceAdminStatus', () => {
   })
 
   it('should return not admin when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    vi.mocked(getActor).mockResolvedValue(null)
 
     const result = await getWorkspaceAdminStatus('workspace-1')
 
@@ -543,15 +500,13 @@ describe('getWorkspaceAdminStatus', () => {
   })
 
   it('should return not admin when user is not workspace admin', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+    vi.mocked(getActor).mockResolvedValue(mockActor as any)
 
     const mockPayload = {
       find: vi.fn().mockResolvedValue({ docs: [] }),
     }
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+    vi.mocked(check).mockResolvedValue({ allowed: false, reason: 'not admin', actor: mockActor } as any)
 
     const result = await getWorkspaceAdminStatus('workspace-1')
 
@@ -559,18 +514,13 @@ describe('getWorkspaceAdminStatus', () => {
   })
 
   it('should return admin status with pending count', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+    vi.mocked(getActor).mockResolvedValue(mockActor as any)
 
     const mockPayload = {
-      find: vi
-        .fn()
-        .mockResolvedValueOnce({ docs: [{ id: 'membership-1', role: 'admin' }] }) // membership
-        .mockResolvedValueOnce({ totalDocs: 3 }), // pending count
+      find: vi.fn().mockResolvedValueOnce({ totalDocs: 3 }), // pending count
     }
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'workspace admin', actor: mockActor } as any)
 
     const result = await getWorkspaceAdminStatus('workspace-1')
 

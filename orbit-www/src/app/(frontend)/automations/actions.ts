@@ -3,8 +3,7 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
-import { getCurrentUser } from '@/lib/auth/session'
-import { canManageAutomations } from '@/lib/automations/authz'
+import { getActor, requireActor, check, memberWorkspaceIds, type Actor } from '@/lib/authz'
 import {
   ensureAutomationSchedule,
   deleteAutomationSchedule,
@@ -18,9 +17,9 @@ import type { Automation, ActionRun, Action } from '@/payload-types'
  * Automation authoring + query server actions (IDP refocus P4).
  *
  * Listing is workspace-scoped to the caller's active memberships; authoring
- * (create/update/delete) is gated on workspace owner/admin via
- * {@link canManageAutomations}. Mirrors the P3 actions authoring conventions:
- * resolve the session user, gate, then write with `overrideAccess: true` (the
+ * (create/update/delete) is gated on workspace owner/admin via `@/lib/authz`'s
+ * `check('manage', ...)`. Mirrors the P3 actions authoring conventions:
+ * resolve the session actor, gate, then write with `overrideAccess: true` (the
  * gate IS the authz). Workspace is fixed at create and never reassigned.
  */
 
@@ -34,24 +33,6 @@ function relId(value: unknown): string | null {
     return String((value as { id: unknown }).id)
   }
   return null
-}
-
-async function requireUserId(): Promise<string> {
-  const uid = (await getCurrentUser())?.id
-  if (!uid) throw new Error('Not authenticated')
-  return uid
-}
-
-/** Workspace ids the user actively belongs to — the read tenant boundary. */
-async function getMemberWorkspaceIds(payload: PayloadClient, userId: string): Promise<string[]> {
-  const memberships = await payload.find({
-    collection: 'workspace-members',
-    where: { user: { equals: userId }, status: { equals: 'active' } },
-    limit: 1000,
-    depth: 0,
-    overrideAccess: true,
-  })
-  return memberships.docs.map((m) => (typeof m.workspace === 'string' ? m.workspace : m.workspace.id))
 }
 
 // ---------------------------------------------------------------------------
@@ -86,13 +67,20 @@ function toSummary(a: Automation): AutomationSummary {
   }
 }
 
-/** List automations in the user's workspaces (action populated). */
-export async function listAutomations(userId?: string): Promise<AutomationSummary[]> {
+/**
+ * List automations in the user's workspaces (action populated).
+ *
+ * SEMANTIC CHANGE: previously took an optional `userId` that overrode the
+ * session — since this is an exported `'use server'` action, callable from the
+ * client with arbitrary arguments, that let a caller list ANY user's
+ * workspace automations. It is now always resolved from the session actor.
+ */
+export async function listAutomations(): Promise<AutomationSummary[]> {
   const payload = await getPayload({ config })
-  const uid = userId ?? (await getCurrentUser())?.id
-  if (!uid) return []
+  const actor = await getActor()
+  if (!actor) return []
 
-  const workspaceIds = await getMemberWorkspaceIds(payload, uid)
+  const workspaceIds = await memberWorkspaceIds('member', actor)
   if (workspaceIds.length === 0) return []
 
   const result = await payload.find({
@@ -107,31 +95,18 @@ export async function listAutomations(userId?: string): Promise<AutomationSummar
   return result.docs.map(toSummary)
 }
 
-/** Workspaces where the user is owner/admin — the authoring picker source. */
-export async function getManageableAutomationWorkspaces(
-  userId?: string,
-): Promise<{ id: string; name: string }[]> {
+/**
+ * Workspaces where the user is owner/admin — the authoring picker source.
+ *
+ * SEMANTIC CHANGE: dropped the optional `userId` override for the same
+ * client-injected-identity reason as {@link listAutomations}.
+ */
+export async function getManageableAutomationWorkspaces(): Promise<{ id: string; name: string }[]> {
   const payload = await getPayload({ config })
-  const uid = userId ?? (await getCurrentUser())?.id
-  if (!uid) return []
+  const actor = await getActor()
+  if (!actor) return []
 
-  const memberships = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { user: { equals: uid } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1000,
-    depth: 0,
-    overrideAccess: true,
-  })
-
-  const workspaceIds = [
-    ...new Set(memberships.docs.map((m) => relId(m.workspace)).filter((v): v is string => !!v)),
-  ]
+  const workspaceIds = await memberWorkspaceIds('manage', actor)
   if (workspaceIds.length === 0) return []
 
   const wsResult = await payload.find({
@@ -226,14 +201,16 @@ function asRecord(v: unknown): Record<string, unknown> | null {
   return v != null && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null
 }
 
-/** Load an automation the user may manage, shaped for the edit form, or null. */
-export async function getAutomationForEdit(
-  userId: string | undefined,
-  automationId: string,
-): Promise<AutomationEditData | null> {
+/**
+ * Load an automation the user may manage, shaped for the edit form, or null.
+ *
+ * SEMANTIC CHANGE: dropped the optional `userId` override — same
+ * client-injected-identity issue as {@link listAutomations}.
+ */
+export async function getAutomationForEdit(automationId: string): Promise<AutomationEditData | null> {
   const payload = await getPayload({ config })
-  const uid = userId ?? (await getCurrentUser())?.id
-  if (!uid) return null
+  const actor = await getActor()
+  if (!actor) return null
 
   let automation: Automation
   try {
@@ -247,7 +224,9 @@ export async function getAutomationForEdit(
     return null
   }
   const workspaceId = relId(automation.workspace)
-  if (!workspaceId || !(await canManageAutomations(payload, uid, workspaceId))) return null
+  if (!workspaceId) return null
+  const decision = await check('manage', { kind: 'workspace', id: workspaceId }, actor)
+  if (!decision.allowed) return null
 
   const byWs = await getActionsByWorkspace([workspaceId])
 
@@ -322,14 +301,14 @@ function toRunSummary(r: ActionRun): AutomationRunSummary {
  * Load an automation for the read-only detail page. Workspace-scoped: any active
  * member of the automation's workspace may view it; `canManage` (owner/admin)
  * gates the Edit affordance. Returns null when not found or not a member.
+ *
+ * SEMANTIC CHANGE: dropped the optional `userId` override — same
+ * client-injected-identity issue as {@link listAutomations}.
  */
-export async function getAutomationDetail(
-  userId: string | undefined,
-  automationId: string,
-): Promise<AutomationDetail | null> {
+export async function getAutomationDetail(automationId: string): Promise<AutomationDetail | null> {
   const payload = await getPayload({ config })
-  const uid = userId ?? (await getCurrentUser())?.id
-  if (!uid) return null
+  const actor = await getActor()
+  if (!actor) return null
 
   let automation: Automation
   try {
@@ -346,10 +325,11 @@ export async function getAutomationDetail(
   const workspaceId = relId(automation.workspace)
   if (!workspaceId) return null
   // Tenant boundary: the viewer must be an active member of this workspace.
-  const memberWorkspaceIds = await getMemberWorkspaceIds(payload, uid)
-  if (!memberWorkspaceIds.includes(workspaceId)) return null
+  const readDecision = await check('read', { kind: 'workspace', id: workspaceId }, actor)
+  if (!readDecision.allowed) return null
 
-  const canManage = await canManageAutomations(payload, uid, workspaceId)
+  const manageDecision = await check('manage', { kind: 'workspace', id: workspaceId }, actor)
+  const canManage = manageDecision.allowed
 
   const runsResult = await payload.find({
     collection: 'action-runs',
@@ -424,12 +404,11 @@ export interface CreateAutomationInput extends AutomationFormValues {
 }
 export type UpdateAutomationInput = AutomationFormValues
 
-async function assertCanManage(
-  payload: PayloadClient,
-  userId: string,
-  workspaceId: string | null,
-): Promise<void> {
-  if (!workspaceId || !(await canManageAutomations(payload, userId, workspaceId))) {
+async function assertCanManage(actor: Actor, workspaceId: string | null): Promise<void> {
+  const decision = workspaceId
+    ? await check('manage', { kind: 'workspace', id: workspaceId }, actor)
+    : { allowed: false }
+  if (!decision.allowed) {
     throw new Error('You do not have permission to manage automations in this workspace.')
   }
 }
@@ -553,8 +532,8 @@ const SCHEDULE_CRON_REQUIRED = 'A cron schedule is required for schedule-trigger
 
 export async function createAutomation(input: CreateAutomationInput): Promise<{ id: string }> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  await assertCanManage(payload, uid, input.workspace)
+  const actor = await requireActor()
+  await assertCanManage(actor, input.workspace)
   const action = await assertActionInWorkspace(payload, input.actionId, input.workspace)
 
   const data = buildTriggerAndRest(input)
@@ -610,7 +589,7 @@ export async function updateAutomation(
   input: UpdateAutomationInput,
 ): Promise<{ id: string }> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
+  const actor = await requireActor()
 
   let automation: Automation
   try {
@@ -624,7 +603,7 @@ export async function updateAutomation(
     throw new Error('Automation not found')
   }
   const workspaceId = relId(automation.workspace)
-  await assertCanManage(payload, uid, workspaceId)
+  await assertCanManage(actor, workspaceId)
   const action = await assertActionInWorkspace(payload, input.actionId, workspaceId as string)
 
   const data = buildTriggerAndRest(input)
@@ -685,7 +664,7 @@ export async function updateAutomation(
 
 export async function deleteAutomation(automationId: string): Promise<{ id: string }> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
+  const actor = await requireActor()
 
   let automation: Automation
   try {
@@ -698,7 +677,7 @@ export async function deleteAutomation(automationId: string): Promise<{ id: stri
   } catch {
     throw new Error('Automation not found')
   }
-  await assertCanManage(payload, uid, relId(automation.workspace))
+  await assertCanManage(actor, relId(automation.workspace))
 
   // Schedule automations: tear down the Temporal Schedule first so we never leave
   // an orphaned Schedule firing for a deleted record (fail-closed). Event

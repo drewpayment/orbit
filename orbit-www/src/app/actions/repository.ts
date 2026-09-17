@@ -1,12 +1,8 @@
 'use server'
 
-import { getPayload } from 'payload'
-import config from '@payload-config'
 import { repositoryServerClient } from '@/lib/clients/repository-server-client'
 import { Visibility } from '@/lib/proto/common_pb'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
-import { requireWorkspaceMembership, WorkspaceMembershipError } from '@/lib/auth/workspace-membership'
+import { getActor, check } from '@/lib/authz'
 
 const visibilityMap: Record<'private' | 'internal' | 'public', Visibility> = {
   private: Visibility.PRIVATE,
@@ -22,19 +18,14 @@ export async function createRepositoryAction(input: {
   visibility: 'private' | 'internal' | 'public'
   templateId: string
 }) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false as const, error: 'Unauthorized', repositoryId: null }
   }
 
-  try {
-    const payload = await getPayload({ config })
-    await requireWorkspaceMembership(payload, session.user.id, input.workspaceId)
-  } catch (error) {
-    if (error instanceof WorkspaceMembershipError) {
-      return { success: false as const, error: error.message, repositoryId: null }
-    }
-    throw error
+  const decision = await check('read', { kind: 'workspace', id: input.workspaceId }, actor)
+  if (!decision.allowed) {
+    return { success: false as const, error: 'Not a member of this workspace', repositoryId: null }
   }
 
   try {

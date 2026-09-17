@@ -4,15 +4,9 @@ import { getPayload } from 'payload'
 import type { Where } from 'payload'
 import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
-import {
-  canCreateEntity,
-  canManageEntity,
-  canDeleteEntity,
-  getManageableWorkspaceIds,
-  isTeamEntity,
-} from '@/lib/catalog/entity-authz'
+import { requireActor, memberWorkspaceIds, check, type Actor } from '@/lib/authz'
+import { ALL_ROLES } from '@/lib/authz/policy'
+import { isTeamEntity } from '@/lib/catalog/entities'
 import {
   slugify,
   uniqueSlug,
@@ -33,8 +27,8 @@ import type { CatalogEntity } from '@/payload-types'
  * docs/plans/2026-07-02-catalog-entity-crud.md, WP1).
  *
  * These are the primary write gate. Every mutation resolves the session,
- * enforces RBAC through `lib/catalog/entity-authz` (the single source of truth),
- * and then writes with `overrideAccess: true`. Identity comes from the session
+ * enforces RBAC through `@/lib/authz` (the single source of truth), and then
+ * writes with `overrideAccess: true`. Identity comes from the session
  * (Better-Auth id + Payload role) — never from client-supplied ids. Validation
  * reuses the pure `lib/catalog/entity-crud` validators.
  */
@@ -43,20 +37,40 @@ type Payload = Awaited<ReturnType<typeof getPayload>>
 
 interface CatalogSession {
   payload: Payload
-  betterAuthId: string | undefined
+  actor: Actor
   isAdmin: boolean
 }
 
 /** Resolve the caller's session or throw. */
 async function requireSession(): Promise<CatalogSession> {
-  const user = await getPayloadUserFromSession()
-  if (!user) throw new Error('Not authenticated')
+  const actor = await requireActor()
   const payload = await getPayload({ config })
   return {
     payload,
-    betterAuthId: user.betterAuthId ?? undefined,
-    isAdmin: isPlatformAdmin(user),
+    actor,
+    isAdmin: actor.isPlatformAdmin,
   }
+}
+
+/**
+ * Create/edit rights: platform admin, or any active member of the target
+ * workspace (a null workspace ⇒ platform admin only — the policy's `create`
+ * default of ALL_ROLES on a `doc` resource, reused for edit too since Catalog
+ * Entity CRUD grants any member edit rights, not just owner/admin).
+ */
+async function canAuthorEntity(actor: Actor, workspaceId: string | null): Promise<boolean> {
+  const d = await check('create', { kind: 'doc', workspaceId, roles: ALL_ROLES }, actor)
+  return d.allowed
+}
+
+/** Delete rights: MANUAL entities only, by a platform admin or workspace owner/admin. */
+async function canDeleteEntity(
+  actor: Actor,
+  entity: { workspaceId: string | null; sourceType: string },
+): Promise<boolean> {
+  if (entity.sourceType !== 'manual') return false
+  const d = await check('delete', { kind: 'doc', workspaceId: entity.workspaceId }, actor)
+  return d.allowed
 }
 
 /** Resolve a relationship value (populated or raw id) to its id, or null. */
@@ -125,13 +139,13 @@ async function revalidateCatalog(payload: Payload, workspaceId: string | null, e
 
 /** Create a manual catalog entity. RBAC: platform admin or member of the target workspace. */
 export async function createCatalogEntity(input: CreateEntityInput): Promise<{ id: string }> {
-  const { payload, betterAuthId, isAdmin } = await requireSession()
+  const { payload, actor } = await requireSession()
 
   const validationError = validateCreateInput(input)
   if (validationError) throw new Error(validationError)
 
   const workspaceId = input.workspaceId ?? null
-  if (!(await canCreateEntity(payload, betterAuthId, isAdmin, workspaceId))) {
+  if (!(await canAuthorEntity(actor, workspaceId))) {
     throw new Error('You do not have permission to create an entity here.')
   }
 
@@ -166,7 +180,7 @@ export async function createCatalogEntity(input: CreateEntityInput): Promise<{ i
 
 /** Edit an entity. RBAC: manage rights on its workspace. Enforces field ownership. */
 export async function updateCatalogEntity(id: string, patch: UpdateEntityPatch): Promise<void> {
-  const { payload, betterAuthId, isAdmin } = await requireSession()
+  const { payload, actor } = await requireSession()
 
   const existing = (await payload.findByID({
     collection: 'catalog-entities',
@@ -176,7 +190,7 @@ export async function updateCatalogEntity(id: string, patch: UpdateEntityPatch):
   })) as CatalogEntity
 
   const workspaceId = refId(existing.workspace)
-  if (!(await canManageEntity(payload, betterAuthId, isAdmin, { workspaceId }))) {
+  if (!(await canAuthorEntity(actor, workspaceId))) {
     throw new Error('You do not have permission to edit this entity.')
   }
 
@@ -222,7 +236,7 @@ export async function updateCatalogEntity(id: string, patch: UpdateEntityPatch):
 
 /** Delete a manual entity and every relation touching it. RBAC: owner/admin (or platform admin). */
 export async function deleteCatalogEntity(id: string): Promise<void> {
-  const { payload, betterAuthId, isAdmin } = await requireSession()
+  const { payload, actor } = await requireSession()
 
   const existing = (await payload.findByID({
     collection: 'catalog-entities',
@@ -233,7 +247,7 @@ export async function deleteCatalogEntity(id: string): Promise<void> {
 
   const workspaceId = refId(existing.workspace)
   const sourceType = existing.source?.type ?? 'manual'
-  if (!(await canDeleteEntity(payload, betterAuthId, isAdmin, { workspaceId, sourceType }))) {
+  if (!(await canDeleteEntity(actor, { workspaceId, sourceType }))) {
     throw new Error('You do not have permission to delete this entity.')
   }
 
@@ -274,7 +288,7 @@ export async function deleteCatalogEntity(id: string): Promise<void> {
 export async function createCatalogRelation(
   input: RelationInput,
 ): Promise<{ id: string }> {
-  const { payload, betterAuthId, isAdmin } = await requireSession()
+  const { payload, actor } = await requireSession()
 
   const validationError = validateRelationInput(input)
   if (validationError) throw new Error(validationError)
@@ -292,7 +306,7 @@ export async function createCatalogRelation(
   }
 
   const workspaceId = refId(fromEntity.workspace)
-  if (!(await canManageEntity(payload, betterAuthId, isAdmin, { workspaceId }))) {
+  if (!(await canAuthorEntity(actor, workspaceId))) {
     throw new Error('You do not have permission to add relations to this entity.')
   }
 
@@ -347,7 +361,7 @@ export async function createCatalogRelation(
 
 /** Delete a MANUAL relation. RBAC: manage rights on the `from` entity's workspace. */
 export async function deleteCatalogRelation(id: string): Promise<void> {
-  const { payload, betterAuthId, isAdmin } = await requireSession()
+  const { payload, actor } = await requireSession()
 
   const relation = await payload.findByID({
     collection: 'catalog-relations',
@@ -376,7 +390,7 @@ export async function deleteCatalogRelation(id: string): Promise<void> {
     }
   }
 
-  if (!(await canManageEntity(payload, betterAuthId, isAdmin, { workspaceId }))) {
+  if (!(await canAuthorEntity(actor, workspaceId))) {
     throw new Error('You do not have permission to remove this relation.')
   }
 
@@ -414,7 +428,7 @@ function toEntityOption(entity: CatalogEntity): EntityOption {
  * grouped by workspace plus the global set.
  */
 export async function getEntityFormOptions(): Promise<EntityFormOptions> {
-  const { payload, betterAuthId, isAdmin } = await requireSession()
+  const { payload, actor, isAdmin } = await requireSession()
 
   let workspaces: { id: string; name: string }[] = []
   if (isAdmin) {
@@ -427,7 +441,7 @@ export async function getEntityFormOptions(): Promise<EntityFormOptions> {
     })
     workspaces = all.docs.map((w) => ({ id: w.id, name: w.name }))
   } else {
-    const ids = await getManageableWorkspaceIds(payload, betterAuthId)
+    const ids = await memberWorkspaceIds('member', actor)
     if (ids.length > 0) {
       const ws = await payload.find({
         collection: 'workspaces',

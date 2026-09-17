@@ -1,8 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor } from '@/lib/authz'
 import { registerSchema, listSchemas } from '@/app/(frontend)/workspaces/[slug]/kafka/actions'
 
 /**
@@ -10,11 +9,9 @@ import { registerSchema, listSchemas } from '@/app/(frontend)/workspaces/[slug]/
  * List schemas for a topic
  */
 export async function GET(request: NextRequest) {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
 
@@ -39,11 +36,9 @@ export async function GET(request: NextRequest) {
  * Register a new schema for a topic
  */
 export async function POST(request: NextRequest) {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
 

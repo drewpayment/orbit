@@ -1,7 +1,6 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor, check, memberWorkspaceIds, workspaceRole } from '@/lib/authz'
 import { notFound, redirect } from 'next/navigation'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
@@ -18,11 +17,9 @@ export default async function TemplateEditPage({ params }: PageProps) {
   const { slug } = await params
   const payload = await getPayload({ config })
 
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     redirect('/api/auth/signin')
   }
 
@@ -45,40 +42,15 @@ export default async function TemplateEditPage({ params }: PageProps) {
     : template.workspace.id
 
   // Check if user is admin/owner in the template's workspace
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
-
-  if (membership.docs.length === 0) {
+  const canManageWorkspace = (await check('manage', { kind: 'workspace', id: workspaceId }, actor)).allowed
+  if (!canManageWorkspace) {
     redirect(`/templates/${slug}`)
   }
 
-  const isOwner = membership.docs[0].role === 'owner'
+  const isOwner = (await workspaceRole(workspaceId, actor)) === 'owner'
 
   // Get available workspaces for sharing (user must be member)
-  const userMemberships = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { user: { equals: session.user.id } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1000,
-  })
-
-  const workspaceIds = userMemberships.docs.map((m) =>
-    typeof m.workspace === 'string' ? m.workspace : m.workspace.id
-  )
+  const workspaceIds = await memberWorkspaceIds('member', actor)
 
   const workspacesResult = await payload.find({
     collection: 'workspaces',

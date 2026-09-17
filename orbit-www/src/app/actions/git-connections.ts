@@ -3,8 +3,7 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
+import { getActor } from '@/lib/authz'
 import { startCatalogScanWorkflow, describeCatalogScanWorkflow } from '@/lib/temporal/client'
 import {
   listConnectionsAdminCore,
@@ -28,8 +27,8 @@ import {
  */
 
 async function requirePlatformAdmin() {
-  const actor = await getPayloadUserFromSession()
-  if (!actor || !isPlatformAdmin(actor)) return null
+  const actor = await getActor()
+  if (!actor || !actor.isPlatformAdmin) return null
   return actor
 }
 

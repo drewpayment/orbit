@@ -3,7 +3,7 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
+import { getActor, check } from '@/lib/authz'
 import { getTemporalClient } from '@/lib/temporal/client'
 
 export type CreateTopicInput = {
@@ -42,8 +42,8 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
     partitions: input.partitions,
   })
 
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -127,7 +127,7 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
         createdVia: 'orbit-ui',
         fullTopicName: `${virtualCluster.topicPrefix}${input.name}`,
       },
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -198,8 +198,8 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
 }
 
 export async function listTopicsByVirtualCluster(virtualClusterId: string) {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) { return [] }
+  const actor = await getActor()
+  if (!actor) { return [] }
 
   const payload = await getPayload({ config })
 
@@ -211,7 +211,7 @@ export async function listTopicsByVirtualCluster(virtualClusterId: string) {
     },
     sort: '-createdAt',
     limit: 100,
-    user: payloadUser,
+    user: actor.user,
     overrideAccess: false,
   })
 
@@ -219,8 +219,8 @@ export async function listTopicsByVirtualCluster(virtualClusterId: string) {
 }
 
 export async function listTopicsByApplication(applicationId: string) {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) { return [] }
+  const actor = await getActor()
+  if (!actor) { return [] }
 
   const payload = await getPayload({ config })
 
@@ -233,7 +233,7 @@ export async function listTopicsByApplication(applicationId: string) {
     sort: '-createdAt',
     limit: 100,
     depth: 1,
-    user: payloadUser,
+    user: actor.user,
     overrideAccess: false,
   })
 
@@ -241,8 +241,8 @@ export async function listTopicsByApplication(applicationId: string) {
 }
 
 export async function deleteTopic(topicId: string): Promise<{ success: boolean; error?: string }> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -258,6 +258,12 @@ export async function deleteTopic(topicId: string): Promise<{ success: boolean; 
 
     if (!topic) {
       return { success: false, error: 'Topic not found' }
+    }
+
+    const deleteTopicWsId = typeof topic.workspace === 'string' ? topic.workspace : topic.workspace?.id
+    const deleteTopicDecision = await check('manage', { kind: 'workspace', id: deleteTopicWsId ?? '' }, actor)
+    if (!deleteTopicDecision.allowed) {
+      return { success: false, error: 'Not a member of this workspace' }
     }
 
     if (topic.status === 'deleted' || topic.status === 'deleting') {
@@ -297,8 +303,8 @@ export async function deleteTopic(topicId: string): Promise<{ success: boolean; 
 export async function approveTopic(
   topicId: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -314,6 +320,12 @@ export async function approveTopic(
 
     if (!topic) {
       return { success: false, error: 'Topic not found' }
+    }
+
+    const approveTopicWsId = typeof topic.workspace === 'string' ? topic.workspace : topic.workspace?.id
+    const approveTopicDecision = await check('manage', { kind: 'workspace', id: approveTopicWsId ?? '' }, actor)
+    if (!approveTopicDecision.allowed) {
+      return { success: false, error: 'Not a member of this workspace' }
     }
 
     // Debug logging to understand virtualCluster state
@@ -338,7 +350,7 @@ export async function approveTopic(
       id: topicId,
       data: {
         status: 'provisioning',
-        approvedBy: payloadUser.betterAuthId || payloadUser.id,
+        approvedBy: actor.payloadId,
         approvedAt: new Date().toISOString(),
       },
       overrideAccess: true,

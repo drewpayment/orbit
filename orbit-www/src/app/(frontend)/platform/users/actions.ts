@@ -6,9 +6,9 @@ import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
 import { ObjectId } from 'mongodb'
 
-import { getPayloadUserFromSession } from '@/lib/auth/session'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
+import { getActor } from '@/lib/authz'
 import { getMongoClient } from '@/lib/mongodb'
+// eslint-disable-next-line no-restricted-imports -- Better-Auth admin API (signUpEmail, requestPasswordReset, sendVerificationEmail), not a session read
 import { auth } from '@/lib/auth'
 import { canManageTarget, canAssignRole, type UserRole, type ActionResult } from './policy'
 
@@ -44,14 +44,14 @@ const forbidden: ActionResult<never> = { ok: false, error: 'Forbidden' }
 
 /** Session-gate + platform-admin check shared by every action. */
 async function requirePlatformAdmin(): Promise<ActorUser | null> {
-  const user = await getPayloadUserFromSession()
-  if (!user || !isPlatformAdmin(user)) return null
+  const actor = await getActor()
+  if (!actor || !actor.isPlatformAdmin) return null
   return {
-    id: String(user.id),
-    email: user.email,
-    role: (user.role ?? 'user') as UserRole,
-    betterAuthId: user.betterAuthId,
-    status: user.status,
+    id: actor.payloadId,
+    email: actor.email,
+    role: actor.role as UserRole,
+    betterAuthId: actor.betterAuthId,
+    status: actor.user.status,
   }
 }
 

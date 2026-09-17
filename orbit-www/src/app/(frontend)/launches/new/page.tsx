@@ -1,7 +1,6 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor, memberWorkspaceIds } from '@/lib/authz'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,14 +12,9 @@ import { LaunchWizard } from '@/components/features/launches/LaunchWizard'
 import type { TemplateDoc, CloudAccountDoc } from '@/components/features/launches/LaunchWizard'
 
 export default async function NewLaunchPage() {
-  const [payload, reqHeaders] = await Promise.all([
-    getPayload({ config }),
-    headers(),
-  ])
+  const [payload, actor] = await Promise.all([getPayload({ config }), getActor()])
 
-  const session = await auth.api.getSession({ headers: reqHeaders })
-
-  if (!session?.user) {
+  if (!actor) {
     return (
       <SidebarProvider>
         <AppSidebar />
@@ -44,18 +38,7 @@ export default async function NewLaunchPage() {
   }
 
   // Get user's workspace memberships
-  const memberships = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      user: { equals: session.user.id },
-      status: { equals: 'active' },
-    },
-    limit: 1000,
-  })
-
-  const workspaceIds = memberships.docs.map(m =>
-    String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
-  )
+  const workspaceIds = await memberWorkspaceIds('member', actor)
 
   // Use the first workspace as default (user can change if multi-workspace support is added later)
   const workspaceId = workspaceIds[0] || ''

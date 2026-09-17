@@ -2,7 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
+import { getActor, check } from '@/lib/authz'
 import type { KafkaVirtualCluster, KafkaApplication, Workspace } from '@/payload-types'
 import { getTemporalClient } from '@/lib/temporal/client'
 
@@ -72,28 +72,17 @@ export async function listVirtualClusters(
   input: ListVirtualClustersInput
 ): Promise<ListVirtualClustersResult> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
     const payload = await getPayload({ config })
 
     // Verify user is member of workspace
-    const membership = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: input.workspaceId } },
-          { user: { equals: payloadUser.betterAuthId || payloadUser.id } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      limit: 1,
-      overrideAccess: true,
-    })
+    const membershipDecision = await check('read', { kind: 'workspace', id: input.workspaceId }, actor)
 
-    if (membership.docs.length === 0) {
+    if (!membershipDecision.allowed) {
       return { success: false, error: 'Not a member of this workspace' }
     }
 
@@ -185,28 +174,17 @@ export async function createVirtualCluster(
   input: CreateVirtualClusterInput
 ): Promise<CreateVirtualClusterResult> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
     const payload = await getPayload({ config })
 
-    // Verify user is member of workspace
-    const membership = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: input.workspaceId } },
-          { user: { equals: payloadUser.betterAuthId || payloadUser.id } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      limit: 1,
-      overrideAccess: true,
-    })
+    // Verify user is member of workspace (create requires an active role)
+    const membershipDecision = await check('create', { kind: 'workspace', id: input.workspaceId }, actor)
 
-    if (membership.docs.length === 0) {
+    if (!membershipDecision.allowed) {
       return { success: false, error: 'Not a member of this workspace' }
     }
 
@@ -332,7 +310,7 @@ export async function createVirtualCluster(
           status: 'active',
           provisioningStatus: 'completed',
         },
-        user: payloadUser,
+        user: actor.user,
         overrideAccess: false,
       })
       applicationId = newApp.id
@@ -355,7 +333,7 @@ export async function createVirtualCluster(
         // Start as provisioning, workflow will update to active after Bifrost sync
         status: 'provisioning',
       },
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -397,8 +375,8 @@ export async function getVirtualCluster(
   input: GetVirtualClusterInput
 ): Promise<GetVirtualClusterResult> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -408,7 +386,7 @@ export async function getVirtualCluster(
       collection: 'kafka-virtual-clusters',
       id: input.clusterId,
       depth: 1,
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 

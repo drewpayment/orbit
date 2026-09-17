@@ -2,7 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
+import { getActor, check } from '@/lib/authz'
 import { startDeploymentWorkflow, getDeploymentProgress } from '@/lib/clients/deployment-client'
 import type { JsonObject } from '@bufbuild/protobuf'
 import type { Deployment } from '@/payload-types'
@@ -26,8 +26,8 @@ interface CreateDeploymentInput {
 }
 
 export async function createDeployment(input: CreateDeploymentInput) {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -50,19 +50,9 @@ export async function createDeployment(input: CreateDeploymentInput) {
     : app.workspace.id
 
   // Check workspace membership
-  const members = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    overrideAccess: true,
-  })
+  const members = await check('create', { kind: 'workspace', id: workspaceId }, actor)
 
-  if (members.docs.length === 0) {
+  if (!members.allowed) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 
@@ -122,7 +112,7 @@ export async function createDeployment(input: CreateDeploymentInput) {
           launchOutputs: launchData.launchOutputs,
         } : {}),
       },
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -139,11 +129,11 @@ export async function createDeployment(input: CreateDeploymentInput) {
 }
 
 export async function startDeployment(deploymentId: string) {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser?.betterAuthId) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
-  const userId = payloadUser.betterAuthId
+  const userId = actor.betterAuthId
 
   const payload = await getPayload({ config })
 
@@ -180,19 +170,9 @@ export async function startDeployment(deploymentId: string) {
     : app.workspace.id
 
   // Check workspace membership
-  const members = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    overrideAccess: true,
-  })
+  const members = await check('create', { kind: 'workspace', id: workspaceId }, actor)
 
-  if (members.docs.length === 0) {
+  if (!members.allowed) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 
@@ -243,7 +223,7 @@ export async function startDeployment(deploymentId: string) {
         status: 'deploying',
         workflowId: response.workflowId,
       },
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -261,7 +241,7 @@ export async function startDeployment(deploymentId: string) {
           status: 'failed',
           deploymentError: errorMessage,
         },
-        user: payloadUser,
+        user: actor.user,
         overrideAccess: false,
       })
     } catch (updateError) {
@@ -273,8 +253,8 @@ export async function startDeployment(deploymentId: string) {
 }
 
 export async function getDeploymentStatus(deploymentId: string) {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return null
   }
 
@@ -313,19 +293,9 @@ export async function getDeploymentStatus(deploymentId: string) {
       : app.workspace.id
 
     // Check workspace membership
-    const members = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: workspaceId } },
-          { user: { equals: payloadUser.betterAuthId } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      overrideAccess: true,
-    })
+    const members = await check('read', { kind: 'workspace', id: workspaceId }, actor)
 
-    if (members.docs.length === 0) {
+    if (!members.allowed) {
       return null
     }
 
@@ -346,9 +316,37 @@ export async function getDeploymentStatus(deploymentId: string) {
 }
 
 export async function getDeploymentWorkflowProgress(workflowId: string) {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
+  }
+
+  const payload = await getPayload({ config })
+  const deploymentLookup = await payload.find({
+    collection: 'deployments',
+    where: { workflowId: { equals: workflowId } },
+    limit: 1,
+    depth: 1,
+    overrideAccess: true,
+  })
+  const deploymentDoc = deploymentLookup.docs[0]
+  if (!deploymentDoc) {
+    return { success: false, error: 'Deployment not found' }
+  }
+  const deploymentApp = deploymentDoc.app as unknown
+  const deploymentWorkspaceId: string | { id: string } | undefined =
+    typeof deploymentApp === 'string'
+      ? undefined
+      : (deploymentApp as { workspace?: string | { id: string } } | null)?.workspace
+  const deploymentWorkspaceIdStr =
+    typeof deploymentWorkspaceId === 'string' ? deploymentWorkspaceId : deploymentWorkspaceId?.id
+  const readDecision = await check(
+    'read',
+    { kind: 'workspace', id: deploymentWorkspaceIdStr ?? '' },
+    actor,
+  )
+  if (!readDecision.allowed) {
+    return { success: false, error: 'Not a member of this workspace' }
   }
 
   try {
@@ -374,8 +372,8 @@ export async function getDeploymentWorkflowProgress(workflowId: string) {
 }
 
 export async function getDeploymentGenerators() {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized', generators: [] }
   }
 
@@ -411,8 +409,8 @@ export async function getDeploymentGenerators() {
 }
 
 export async function getGeneratedFiles(deploymentId: string) {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized', files: [] }
   }
 
@@ -442,19 +440,8 @@ export async function getGeneratedFiles(deploymentId: string) {
     if (!wsId) {
       return { success: false, error: 'App has no workspace', files: [] }
     }
-    const members = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: wsId } },
-          { user: { equals: payloadUser.betterAuthId } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      limit: 1,
-      overrideAccess: true,
-    })
-    if (members.docs.length === 0) {
+    const members = await check('read', { kind: 'workspace', id: wsId }, actor)
+    if (!members.allowed) {
       return { success: false, error: 'Not a member of this workspace', files: [] }
     }
 
@@ -467,8 +454,8 @@ export async function getGeneratedFiles(deploymentId: string) {
 }
 
 export async function getRepoBranches(appId: string) {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized', branches: [] as string[] }
   }
 
@@ -489,17 +476,8 @@ export async function getRepoBranches(appId: string) {
     if (!repoWorkspaceId) {
       return { success: false, error: 'App has no associated workspace', branches: [] as string[] }
     }
-    const repoMembers = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: repoWorkspaceId } },
-          { user: { equals: payloadUser.betterAuthId } },
-          { status: { equals: 'active' } },
-        ],
-      },
-    })
-    if (repoMembers.docs.length === 0) {
+    const repoMembers = await check('read', { kind: 'workspace', id: repoWorkspaceId }, actor)
+    if (!repoMembers.allowed) {
       return { success: false, error: 'Not a member of this workspace', branches: [] as string[] }
     }
 
@@ -557,8 +535,8 @@ export async function commitGeneratedFiles(input: {
   newBranch?: string
   message: string
 }) {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -600,18 +578,8 @@ export async function commitGeneratedFiles(input: {
     if (!workspaceId) {
       return { success: false, error: 'App has no associated workspace' }
     }
-    const members = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: workspaceId } },
-          { user: { equals: payloadUser.betterAuthId } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      overrideAccess: true,
-    })
-    if (members.docs.length === 0) {
+    const members = await check('create', { kind: 'workspace', id: workspaceId }, actor)
+    if (!members.allowed) {
       return { success: false, error: 'Not a member of this workspace' }
     }
 
@@ -743,7 +711,7 @@ export async function commitGeneratedFiles(input: {
         status: 'deployed',
         lastDeployedAt: new Date().toISOString(),
       },
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -759,14 +727,31 @@ export async function commitGeneratedFiles(input: {
  * Used when user copies the generated files manually.
  */
 export async function skipCommitAndComplete(deploymentId: string) {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
   const payload = await getPayload({ config })
 
   try {
+    const deployment = await payload.findByID({
+      collection: 'deployments',
+      id: deploymentId,
+      depth: 1,
+      overrideAccess: true,
+    })
+    const deploymentApp = deployment.app as unknown
+    const appWorkspace: string | { id: string } | undefined =
+      typeof deploymentApp === 'string'
+        ? undefined
+        : (deploymentApp as { workspace?: string | { id: string } } | null)?.workspace
+    const workspaceId = typeof appWorkspace === 'string' ? appWorkspace : appWorkspace?.id
+    const updateDecision = await check('update', { kind: 'workspace', id: workspaceId ?? '' }, actor)
+    if (!updateDecision.allowed) {
+      return { success: false, error: 'Not a member of this workspace' }
+    }
+
     await payload.update({
       collection: 'deployments',
       id: deploymentId,
@@ -774,7 +759,7 @@ export async function skipCommitAndComplete(deploymentId: string) {
         status: 'deployed',
         lastDeployedAt: new Date().toISOString(),
       },
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -796,24 +781,44 @@ export async function syncDeploymentStatusFromWorkflow(
   errorMessage?: string,
   generatedFiles?: Array<{ path: string; content: string }>
 ) {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
   const payload = await getPayload({ config })
 
   try {
+    const deploymentForAuthz = await payload.findByID({
+      collection: 'deployments',
+      id: deploymentId,
+      depth: 1,
+      overrideAccess: true,
+    })
+    const deploymentForAuthzApp = deploymentForAuthz.app as unknown
+    const deploymentForAuthzWorkspace: string | { id: string } | undefined =
+      typeof deploymentForAuthzApp === 'string'
+        ? undefined
+        : (deploymentForAuthzApp as { workspace?: string | { id: string } } | null)?.workspace
+    const deploymentWorkspaceId =
+      typeof deploymentForAuthzWorkspace === 'string'
+        ? deploymentForAuthzWorkspace
+        : deploymentForAuthzWorkspace?.id
+    const syncUpdateDecision = await check(
+      'update',
+      { kind: 'workspace', id: deploymentWorkspaceId ?? '' },
+      actor,
+    )
+    if (!syncUpdateDecision.allowed) {
+      return { success: false, error: 'Not a member of this workspace' }
+    }
+
     // Map workflow status to deployment status
     let newStatus: 'pending' | 'deploying' | 'generated' | 'deployed' | 'failed'
     switch (workflowStatus) {
-      case 'completed':
+      case 'completed': {
         // Check if this was a generate-mode workflow by looking at current status
-        const deployment = await payload.findByID({
-          collection: 'deployments',
-          id: deploymentId,
-          overrideAccess: true,
-        })
+        const deployment = deploymentForAuthz
         // If generator is docker-compose or helm, it's generate mode -> status should be 'generated'
         if (deployment?.generator === 'docker-compose' || deployment?.generator === 'helm') {
           newStatus = 'generated'
@@ -821,6 +826,7 @@ export async function syncDeploymentStatusFromWorkflow(
           newStatus = 'deployed'
         }
         break
+      }
       case 'failed':
         newStatus = 'failed'
         break
@@ -838,7 +844,7 @@ export async function syncDeploymentStatusFromWorkflow(
         ...(newStatus === 'deployed' ? { lastDeployedAt: new Date().toISOString() } : {}),
         ...(newStatus === 'generated' && generatedFiles?.length ? { generatedFiles } : {}),
       },
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -850,8 +856,8 @@ export async function syncDeploymentStatusFromWorkflow(
 }
 
 export async function deleteDeployment(deploymentId: string) {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -889,26 +895,22 @@ export async function deleteDeployment(deploymentId: string) {
       ? app.workspace
       : app.workspace.id
 
-    const members = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: workspaceId } },
-          { user: { equals: payloadUser.betterAuthId } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      overrideAccess: true,
-    })
+    // Any active member may delete (matches the old ALL_ROLES membership check
+    // — narrower than `delete`'s owner/admin default, so pass `roles` explicitly).
+    const members = await check(
+      'delete',
+      { kind: 'workspace', id: workspaceId, roles: ['owner', 'admin', 'member'] },
+      actor,
+    )
 
-    if (members.docs.length === 0) {
+    if (!members.allowed) {
       return { success: false, error: 'Not a member of this workspace' }
     }
 
     await payload.delete({
       collection: 'deployments',
       id: deploymentId,
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -920,25 +922,14 @@ export async function deleteDeployment(deploymentId: string) {
 }
 
 export async function getActiveLaunchesForWorkspace(workspaceId: string) {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) return { success: false as const, launches: [] }
+  const actor = await getActor()
+  if (!actor) return { success: false as const, launches: [] }
 
   const payload = await getPayload({ config })
 
   // Verify workspace membership
-  const memberCheck = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-    overrideAccess: true,
-  })
-  if (memberCheck.docs.length === 0) {
+  const memberCheck = await check('read', { kind: 'workspace', id: workspaceId }, actor)
+  if (!memberCheck.allowed) {
     return { success: false as const, launches: [] }
   }
 
@@ -970,8 +961,8 @@ export async function getActiveLaunchesForWorkspace(workspaceId: string) {
 }
 
 export async function startDeployToLaunch(deploymentId: string) {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -999,19 +990,8 @@ export async function startDeployToLaunch(deploymentId: string) {
   if (!deployWsId) {
     return { success: false, error: 'App has no workspace' }
   }
-  const deployMembers = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: deployWsId } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-    overrideAccess: true,
-  })
-  if (deployMembers.docs.length === 0) {
+  const deployMembers = await check('create', { kind: 'workspace', id: deployWsId }, actor)
+  if (!deployMembers.allowed) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 

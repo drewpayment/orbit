@@ -16,8 +16,8 @@ import * as actions from '@/collections/actions/access'
 import * as automations from '@/collections/automations/access'
 
 /**
- * Hand-rolled payload mock (mirrors src/lib/catalog/entity-authz.test.ts). `members`
- * is the workspace-member fixture the `workspace-members` collection returns; the
+ * Hand-rolled payload mock (mirrors src/collections/__tests__/CatalogEntities.access.test.ts).
+ * `members` is the workspace-member fixture the `workspace-members` collection returns; the
  * mock filters it against the `where.and` clauses the shared helpers build. `byId`
  * backs `findByID` for the doc-mutate factory and its indirect resolvers.
  */

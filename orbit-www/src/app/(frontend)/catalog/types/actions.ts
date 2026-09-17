@@ -2,9 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getCurrentUser } from '@/lib/auth/session'
-import { getCurrentWorkspaceId } from '@/lib/workspace'
-import { canManageScorecards } from '@/lib/scorecards/authz'
+import { getActor, check, memberWorkspaceIds } from '@/lib/authz'
 import { ENTITY_KINDS, type EntityKind } from '@/collections/catalog/constants'
 import { listEntityTypes, mergeEntityType, type EntityTypeDefinition } from '@/lib/catalog/entity-types'
 import {
@@ -15,27 +13,32 @@ import {
 } from '@/components/features/catalog/EntityTypeFormLogic'
 import type { EntityType } from '@/payload-types'
 
-type Payload = Awaited<ReturnType<typeof getPayload>>
-
 /**
  * The types home + per-kind editor server actions (Entity Scores & Golden
  * Paths, docs/plans/2026-07-01-entity-scores-and-golden-paths.md).
  *
  * `entity-types` is a per-(workspace, kind) row, so these actions resolve a
- * single "current" workspace via `lib/workspace.ts` — the same helper the rest
- * of the app uses for workspace-scoped settings surfaces — rather than
+ * single "current" workspace via `getCurrentWorkspaceId` below (the first id
+ * from `memberWorkspaceIds()`, the same resolution the rest of the app uses
+ * for workspace-scoped settings surfaces) — rather than
  * aggregating across every workspace the user belongs to (contrast with
  * `scorecards/actions.ts`, which lists scorecards across all memberships since
  * a scorecard's own `workspace` field disambiguates each card).
  *
- * `canManageScorecards` (lib/scorecards/authz.ts) is reused verbatim for the
- * owner/admin gate: authoring entity-type definitions is the identical
+ * The owner/admin gate is `check('manage', { kind: 'workspace' })` from
+ * `@/lib/authz`: authoring entity-type definitions is the identical
  * workspace-owner/admin privilege as authoring scorecards, so this is not a
  * new policy, just the existing one applied to a sibling collection.
  */
 
 function isEntityKind(value: string): value is EntityKind {
   return (ENTITY_KINDS as readonly string[]).includes(value)
+}
+
+/** First workspace the current actor is an active member of, or null. */
+async function getCurrentWorkspaceId(): Promise<string | null> {
+  const ids = await memberWorkspaceIds('member')
+  return ids[0] ?? null
 }
 
 // ---------------------------------------------------------------------------
@@ -61,15 +64,15 @@ const EMPTY_HOME: EntityTypesHome = { workspaceId: null, canManage: false, items
  * (a stored row merged over the built-in default, or the pure default) for
  * the caller's current workspace, plus whether each kind has been customized.
  */
-export async function getEntityTypesHome(userId?: string): Promise<EntityTypesHome> {
+export async function getEntityTypesHome(): Promise<EntityTypesHome> {
   const payload = await getPayload({ config })
-  const uid = userId ?? (await getCurrentUser())?.id
-  if (!uid) return EMPTY_HOME
+  const actor = await getActor()
+  if (!actor) return EMPTY_HOME
 
   const workspaceId = await getCurrentWorkspaceId()
   if (!workspaceId) return EMPTY_HOME
 
-  const [definitions, rowsResult, canManage] = await Promise.all([
+  const [definitions, rowsResult, manageDecision] = await Promise.all([
     listEntityTypes(payload, workspaceId),
     payload.find({
       collection: 'entity-types',
@@ -78,8 +81,9 @@ export async function getEntityTypesHome(userId?: string): Promise<EntityTypesHo
       depth: 0,
       overrideAccess: true,
     }),
-    canManageScorecards(payload, uid, workspaceId),
+    check('manage', { kind: 'workspace', id: workspaceId }, actor),
   ])
+  const canManage = manageDecision.allowed
 
   const definedKinds = new Set(rowsResult.docs.map((row) => row.kind))
   const items: EntityTypeListItem[] = definitions.map((def) => ({
@@ -105,20 +109,17 @@ export interface EntityTypeDetail {
  * `null` for an unrecognised kind or when there's no session/workspace
  * (caller → notFound()).
  */
-export async function getEntityTypeDetail(
-  userId: string | undefined,
-  kind: string,
-): Promise<EntityTypeDetail | null> {
+export async function getEntityTypeDetail(kind: string): Promise<EntityTypeDetail | null> {
   if (!isEntityKind(kind)) return null
 
   const payload = await getPayload({ config })
-  const uid = userId ?? (await getCurrentUser())?.id
-  if (!uid) return null
+  const actor = await getActor()
+  if (!actor) return null
 
   const workspaceId = await getCurrentWorkspaceId()
   if (!workspaceId) return null
 
-  const [rowsResult, canManage] = await Promise.all([
+  const [rowsResult, manageDecision] = await Promise.all([
     payload.find({
       collection: 'entity-types',
       where: { and: [{ workspace: { equals: workspaceId } }, { kind: { equals: kind } }] },
@@ -126,8 +127,9 @@ export async function getEntityTypeDetail(
       depth: 0,
       overrideAccess: true,
     }),
-    canManageScorecards(payload, uid, workspaceId),
+    check('manage', { kind: 'workspace', id: workspaceId }, actor),
   ])
+  const canManage = manageDecision.allowed
 
   const stored = (rowsResult.docs[0] as EntityType | undefined) ?? null
   const definition = mergeEntityType(stored, kind)
@@ -140,19 +142,20 @@ export async function getEntityTypeDetail(
 // (the check IS the authz; the Payload mutation runs with overrideAccess).
 // ---------------------------------------------------------------------------
 
-/** Throw unless `userId` may author entity types in the current workspace. */
-async function requireManage(payload: Payload): Promise<{ userId: string; workspaceId: string }> {
-  const userId = (await getCurrentUser())?.id
-  if (!userId) throw new Error('Not authenticated')
+/** Throw unless the current actor may author entity types in the current workspace. */
+async function requireManage(): Promise<{ workspaceId: string }> {
+  const actor = await getActor()
+  if (!actor) throw new Error('Not authenticated')
 
   const workspaceId = await getCurrentWorkspaceId()
   if (!workspaceId) throw new Error('No workspace access')
 
-  if (!(await canManageScorecards(payload, userId, workspaceId))) {
+  const decision = await check('manage', { kind: 'workspace', id: workspaceId }, actor)
+  if (!decision.allowed) {
     throw new Error('You do not have permission to manage entity types in this workspace.')
   }
 
-  return { userId, workspaceId }
+  return { workspaceId }
 }
 
 /**
@@ -163,7 +166,7 @@ async function requireManage(payload: Payload): Promise<{ userId: string; worksp
  */
 export async function saveEntityType(input: SaveEntityTypeInput): Promise<{ id: string }> {
   const payload = await getPayload({ config })
-  const { workspaceId } = await requireManage(payload)
+  const { workspaceId } = await requireManage()
 
   if (!isEntityKind(input.kind)) throw new Error('Unknown entity kind.')
   const formError = validateEntityTypeForm({ displayName: input.displayName })

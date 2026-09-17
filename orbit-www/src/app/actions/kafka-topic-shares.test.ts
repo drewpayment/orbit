@@ -5,18 +5,11 @@ vi.mock('payload', () => ({
   getPayload: vi.fn(),
 }))
 
-// Mock auth
-vi.mock('@/lib/auth', () => ({
-  auth: {
-    api: {
-      getSession: vi.fn(),
-    },
-  },
-}))
-
-// Mock next/headers
-vi.mock('next/headers', () => ({
-  headers: vi.fn(),
+// Mock @/lib/authz at the module boundary (do not import the real actor.ts;
+// it pulls in the Better-Auth Mongo client).
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(),
+  check: vi.fn(),
 }))
 
 // Mock next/cache
@@ -28,6 +21,15 @@ vi.mock('next/cache', () => ({
 vi.mock('@payload-config', () => ({
   default: {},
 }))
+
+const mockActor = {
+  payloadId: 'pl-1',
+  betterAuthId: 'ba-1',
+  email: 'user-1@test.com',
+  role: 'user',
+  isPlatformAdmin: false,
+  user: { id: 'pl-1', collection: 'users', _strategy: 'better-auth' },
+}
 
 describe('kafka-topic-shares actions', () => {
   beforeEach(() => {
@@ -89,8 +91,8 @@ describe('kafka-topic-shares actions', () => {
     })
 
     it('should return error when user is not authenticated', async () => {
-      const { auth } = await import('@/lib/auth')
-      ;(auth.api.getSession as any).mockResolvedValue(null)
+      const { getActor } = await import('@/lib/authz')
+      ;(getActor as any).mockResolvedValue(null)
 
       const { approveShare } = await import('./kafka-topic-shares')
       const result = await approveShare({ shareId: 'share-1' })
@@ -100,12 +102,10 @@ describe('kafka-topic-shares actions', () => {
     })
 
     it('should return error when share not found', async () => {
-      const { auth } = await import('@/lib/auth')
+      const { getActor } = await import('@/lib/authz')
       const { getPayload } = await import('payload')
 
-      ;(auth.api.getSession as any).mockResolvedValue({
-        user: { id: 'user-1' },
-      })
+      ;(getActor as any).mockResolvedValue(mockActor)
 
       const mockPayload = {
         findByID: vi.fn().mockResolvedValue(null),
@@ -120,12 +120,10 @@ describe('kafka-topic-shares actions', () => {
     })
 
     it('should return error when user is not owner/admin of owner workspace', async () => {
-      const { auth } = await import('@/lib/auth')
+      const { getActor, check } = await import('@/lib/authz')
       const { getPayload } = await import('payload')
 
-      ;(auth.api.getSession as any).mockResolvedValue({
-        user: { id: 'user-1' },
-      })
+      ;(getActor as any).mockResolvedValue(mockActor)
 
       const mockPayload = {
         findByID: vi.fn().mockResolvedValue({
@@ -134,11 +132,9 @@ describe('kafka-topic-shares actions', () => {
           targetWorkspace: { id: 'ws-target' },
           status: 'pending',
         }),
-        find: vi.fn().mockResolvedValue({
-          docs: [], // User is not a member
-        }),
       }
       ;(getPayload as any).mockResolvedValue(mockPayload)
+      ;(check as any).mockResolvedValue({ allowed: false, reason: 'not authorized', actor: mockActor })
 
       const { approveShare } = await import('./kafka-topic-shares')
       const result = await approveShare({ shareId: 'share-1' })
@@ -148,12 +144,10 @@ describe('kafka-topic-shares actions', () => {
     })
 
     it('should return error when share is not pending', async () => {
-      const { auth } = await import('@/lib/auth')
+      const { getActor } = await import('@/lib/authz')
       const { getPayload } = await import('payload')
 
-      ;(auth.api.getSession as any).mockResolvedValue({
-        user: { id: 'user-1' },
-      })
+      ;(getActor as any).mockResolvedValue(mockActor)
 
       const mockPayload = {
         findByID: vi.fn().mockResolvedValue({
@@ -173,12 +167,10 @@ describe('kafka-topic-shares actions', () => {
     })
 
     it('should successfully approve a pending share', async () => {
-      const { auth } = await import('@/lib/auth')
+      const { getActor, check } = await import('@/lib/authz')
       const { getPayload } = await import('payload')
 
-      ;(auth.api.getSession as any).mockResolvedValue({
-        user: { id: 'user-1' },
-      })
+      ;(getActor as any).mockResolvedValue(mockActor)
 
       const mockPayload = {
         findByID: vi.fn().mockResolvedValue({
@@ -188,15 +180,13 @@ describe('kafka-topic-shares actions', () => {
           targetWorkspace: { id: 'ws-target' },
           status: 'pending',
         }),
-        find: vi.fn().mockResolvedValue({
-          docs: [{ workspace: 'ws-owner', role: 'admin', status: 'active' }],
-        }),
         update: vi.fn().mockResolvedValue({
           id: 'share-1',
           status: 'approved',
         }),
       }
       ;(getPayload as any).mockResolvedValue(mockPayload)
+      ;(check as any).mockResolvedValue({ allowed: true, reason: 'workspace admin', actor: mockActor })
 
       const { approveShare } = await import('./kafka-topic-shares')
       const result = await approveShare({ shareId: 'share-1' })
@@ -208,7 +198,7 @@ describe('kafka-topic-shares actions', () => {
           id: 'share-1',
           data: expect.objectContaining({
             status: 'approved',
-            approvedBy: 'user-1',
+            approvedBy: 'pl-1',
           }),
         })
       )
@@ -223,8 +213,8 @@ describe('kafka-topic-shares actions', () => {
     })
 
     it('should return error when user is not authenticated', async () => {
-      const { auth } = await import('@/lib/auth')
-      ;(auth.api.getSession as any).mockResolvedValue(null)
+      const { getActor } = await import('@/lib/authz')
+      ;(getActor as any).mockResolvedValue(null)
 
       const { rejectShare } = await import('./kafka-topic-shares')
       const result = await rejectShare({ shareId: 'share-1', reason: 'Not approved' })
@@ -234,12 +224,10 @@ describe('kafka-topic-shares actions', () => {
     })
 
     it('should return error when user is not owner/admin of owner workspace', async () => {
-      const { auth } = await import('@/lib/auth')
+      const { getActor, check } = await import('@/lib/authz')
       const { getPayload } = await import('payload')
 
-      ;(auth.api.getSession as any).mockResolvedValue({
-        user: { id: 'user-1' },
-      })
+      ;(getActor as any).mockResolvedValue(mockActor)
 
       const mockPayload = {
         findByID: vi.fn().mockResolvedValue({
@@ -248,11 +236,9 @@ describe('kafka-topic-shares actions', () => {
           targetWorkspace: { id: 'ws-target' },
           status: 'pending',
         }),
-        find: vi.fn().mockResolvedValue({
-          docs: [], // User is not a member
-        }),
       }
       ;(getPayload as any).mockResolvedValue(mockPayload)
+      ;(check as any).mockResolvedValue({ allowed: false, reason: 'not authorized', actor: mockActor })
 
       const { rejectShare } = await import('./kafka-topic-shares')
       const result = await rejectShare({ shareId: 'share-1', reason: 'Not approved' })
@@ -262,12 +248,10 @@ describe('kafka-topic-shares actions', () => {
     })
 
     it('should return error when share is not pending', async () => {
-      const { auth } = await import('@/lib/auth')
+      const { getActor } = await import('@/lib/authz')
       const { getPayload } = await import('payload')
 
-      ;(auth.api.getSession as any).mockResolvedValue({
-        user: { id: 'user-1' },
-      })
+      ;(getActor as any).mockResolvedValue(mockActor)
 
       const mockPayload = {
         findByID: vi.fn().mockResolvedValue({
@@ -287,12 +271,10 @@ describe('kafka-topic-shares actions', () => {
     })
 
     it('should successfully reject a pending share with reason', async () => {
-      const { auth } = await import('@/lib/auth')
+      const { getActor, check } = await import('@/lib/authz')
       const { getPayload } = await import('payload')
 
-      ;(auth.api.getSession as any).mockResolvedValue({
-        user: { id: 'user-1' },
-      })
+      ;(getActor as any).mockResolvedValue(mockActor)
 
       const mockPayload = {
         findByID: vi.fn().mockResolvedValue({
@@ -303,15 +285,13 @@ describe('kafka-topic-shares actions', () => {
           status: 'pending',
           requestedBy: { id: 'user-2', email: 'requester@test.com' },
         }),
-        find: vi.fn().mockResolvedValue({
-          docs: [{ workspace: 'ws-owner', role: 'owner', status: 'active' }],
-        }),
         update: vi.fn().mockResolvedValue({
           id: 'share-1',
           status: 'rejected',
         }),
       }
       ;(getPayload as any).mockResolvedValue(mockPayload)
+      ;(check as any).mockResolvedValue({ allowed: true, reason: 'workspace owner', actor: mockActor })
 
       const { rejectShare } = await import('./kafka-topic-shares')
       const result = await rejectShare({ shareId: 'share-1', reason: 'Insufficient justification' })
@@ -338,8 +318,8 @@ describe('kafka-topic-shares actions', () => {
     })
 
     it('should return error when user is not authenticated', async () => {
-      const { auth } = await import('@/lib/auth')
-      ;(auth.api.getSession as any).mockResolvedValue(null)
+      const { getActor } = await import('@/lib/authz')
+      ;(getActor as any).mockResolvedValue(null)
 
       const { revokeShare } = await import('./kafka-topic-shares')
       const result = await revokeShare({ shareId: 'share-1' })
@@ -349,12 +329,10 @@ describe('kafka-topic-shares actions', () => {
     })
 
     it('should return error when user is not owner/admin of owner workspace', async () => {
-      const { auth } = await import('@/lib/auth')
+      const { getActor, check } = await import('@/lib/authz')
       const { getPayload } = await import('payload')
 
-      ;(auth.api.getSession as any).mockResolvedValue({
-        user: { id: 'user-1' },
-      })
+      ;(getActor as any).mockResolvedValue(mockActor)
 
       const mockPayload = {
         findByID: vi.fn().mockResolvedValue({
@@ -363,11 +341,9 @@ describe('kafka-topic-shares actions', () => {
           targetWorkspace: { id: 'ws-target' },
           status: 'approved',
         }),
-        find: vi.fn().mockResolvedValue({
-          docs: [], // User is not a member
-        }),
       }
       ;(getPayload as any).mockResolvedValue(mockPayload)
+      ;(check as any).mockResolvedValue({ allowed: false, reason: 'not authorized', actor: mockActor })
 
       const { revokeShare } = await import('./kafka-topic-shares')
       const result = await revokeShare({ shareId: 'share-1' })
@@ -377,12 +353,10 @@ describe('kafka-topic-shares actions', () => {
     })
 
     it('should return error when share is not approved', async () => {
-      const { auth } = await import('@/lib/auth')
+      const { getActor } = await import('@/lib/authz')
       const { getPayload } = await import('payload')
 
-      ;(auth.api.getSession as any).mockResolvedValue({
-        user: { id: 'user-1' },
-      })
+      ;(getActor as any).mockResolvedValue(mockActor)
 
       const mockPayload = {
         findByID: vi.fn().mockResolvedValue({
@@ -402,12 +376,10 @@ describe('kafka-topic-shares actions', () => {
     })
 
     it('should successfully revoke an approved share', async () => {
-      const { auth } = await import('@/lib/auth')
+      const { getActor, check } = await import('@/lib/authz')
       const { getPayload } = await import('payload')
 
-      ;(auth.api.getSession as any).mockResolvedValue({
-        user: { id: 'user-1' },
-      })
+      ;(getActor as any).mockResolvedValue(mockActor)
 
       const mockPayload = {
         findByID: vi.fn().mockResolvedValue({
@@ -417,15 +389,13 @@ describe('kafka-topic-shares actions', () => {
           targetWorkspace: { id: 'ws-target' },
           status: 'approved',
         }),
-        find: vi.fn().mockResolvedValue({
-          docs: [{ workspace: 'ws-owner', role: 'admin', status: 'active' }],
-        }),
         update: vi.fn().mockResolvedValue({
           id: 'share-1',
           status: 'revoked',
         }),
       }
       ;(getPayload as any).mockResolvedValue(mockPayload)
+      ;(check as any).mockResolvedValue({ allowed: true, reason: 'workspace admin', actor: mockActor })
 
       const { revokeShare } = await import('./kafka-topic-shares')
       const result = await revokeShare({ shareId: 'share-1' })
@@ -451,8 +421,8 @@ describe('kafka-topic-shares actions', () => {
     })
 
     it('should return error when user is not authenticated', async () => {
-      const { auth } = await import('@/lib/auth')
-      ;(auth.api.getSession as any).mockResolvedValue(null)
+      const { getActor } = await import('@/lib/authz')
+      ;(getActor as any).mockResolvedValue(null)
 
       const { listPendingShares } = await import('./kafka-topic-shares')
       const result = await listPendingShares({ workspaceId: 'ws-1', type: 'incoming' })
@@ -462,19 +432,15 @@ describe('kafka-topic-shares actions', () => {
     })
 
     it('should return error when user is not member of workspace', async () => {
-      const { auth } = await import('@/lib/auth')
+      const { getActor, check } = await import('@/lib/authz')
       const { getPayload } = await import('payload')
 
-      ;(auth.api.getSession as any).mockResolvedValue({
-        user: { id: 'user-1' },
-      })
+      ;(getActor as any).mockResolvedValue(mockActor)
 
       const mockPayload = {
-        find: vi.fn().mockResolvedValue({
-          docs: [], // User is not a member
-        }),
       }
       ;(getPayload as any).mockResolvedValue(mockPayload)
+      ;(check as any).mockResolvedValue({ allowed: false, reason: 'not a member', actor: mockActor })
 
       const { listPendingShares } = await import('./kafka-topic-shares')
       const result = await listPendingShares({ workspaceId: 'ws-1', type: 'incoming' })
@@ -484,19 +450,13 @@ describe('kafka-topic-shares actions', () => {
     })
 
     it('should list incoming pending shares for owner workspace', async () => {
-      const { auth } = await import('@/lib/auth')
+      const { getActor, check } = await import('@/lib/authz')
       const { getPayload } = await import('payload')
 
-      ;(auth.api.getSession as any).mockResolvedValue({
-        user: { id: 'user-1' },
-      })
+      ;(getActor as any).mockResolvedValue(mockActor)
 
       const mockPayload = {
         find: vi.fn()
-          .mockResolvedValueOnce({
-            // workspace-members query
-            docs: [{ workspace: 'ws-1', role: 'admin', status: 'active' }],
-          })
           .mockResolvedValueOnce({
             // kafka-topic-shares query
             docs: [
@@ -515,6 +475,7 @@ describe('kafka-topic-shares actions', () => {
           }),
       }
       ;(getPayload as any).mockResolvedValue(mockPayload)
+      ;(check as any).mockResolvedValue({ allowed: true, reason: 'workspace member', actor: mockActor })
 
       const { listPendingShares } = await import('./kafka-topic-shares')
       const result = await listPendingShares({ workspaceId: 'ws-1', type: 'incoming' })
@@ -526,19 +487,13 @@ describe('kafka-topic-shares actions', () => {
     })
 
     it('should list outgoing pending shares for target workspace', async () => {
-      const { auth } = await import('@/lib/auth')
+      const { getActor, check } = await import('@/lib/authz')
       const { getPayload } = await import('payload')
 
-      ;(auth.api.getSession as any).mockResolvedValue({
-        user: { id: 'user-1' },
-      })
+      ;(getActor as any).mockResolvedValue(mockActor)
 
       const mockPayload = {
         find: vi.fn()
-          .mockResolvedValueOnce({
-            // workspace-members query
-            docs: [{ workspace: 'ws-2', role: 'member', status: 'active' }],
-          })
           .mockResolvedValueOnce({
             // kafka-topic-shares query
             docs: [
@@ -557,6 +512,7 @@ describe('kafka-topic-shares actions', () => {
           }),
       }
       ;(getPayload as any).mockResolvedValue(mockPayload)
+      ;(check as any).mockResolvedValue({ allowed: true, reason: 'workspace member', actor: mockActor })
 
       const { listPendingShares } = await import('./kafka-topic-shares')
       const result = await listPendingShares({ workspaceId: 'ws-2', type: 'outgoing' })

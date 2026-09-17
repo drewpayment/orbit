@@ -2,7 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
+import { getActor, type Actor } from '@/lib/authz'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -40,16 +40,17 @@ export interface UserOption {
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function requireAdmin() {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
-    return { authorized: false as const, error: 'Unauthorized' }
+async function requireAdmin(): Promise<
+  { authorized: false; error: string } | { authorized: true; actor: Actor }
+> {
+  const actor = await getActor()
+  if (!actor) {
+    return { authorized: false, error: 'Unauthorized' }
   }
-  const role = payloadUser.role
-  if (role !== 'super_admin' && role !== 'admin') {
-    return { authorized: false as const, error: 'Forbidden: admin access required' }
+  if (!actor.isPlatformAdmin) {
+    return { authorized: false, error: 'Forbidden: admin access required' }
   }
-  return { authorized: true as const, userId: payloadUser.betterAuthId, payloadUser }
+  return { authorized: true, actor }
 }
 
 // ---------------------------------------------------------------------------
@@ -142,10 +143,10 @@ export async function createCloudAccount(data: {
         workspaces: data.workspaces,
         approvalRequired: data.approvalRequired,
         approvers: data.approvers || [],
-        createdBy: check.userId,
+        createdBy: check.actor.payloadId,
         status: 'disconnected',
       } as any,
-      user: check.payloadUser,
+      user: check.actor.user,
       overrideAccess: false,
     })
 
@@ -192,7 +193,7 @@ export async function updateCloudAccount(
       collection: 'cloud-accounts',
       id,
       data: updateData as any,
-      user: check.payloadUser,
+      user: check.actor.user,
       overrideAccess: false,
     })
 
@@ -220,7 +221,7 @@ export async function deleteCloudAccount(
     await payload.delete({
       collection: 'cloud-accounts',
       id,
-      user: check.payloadUser,
+      user: check.actor.user,
       overrideAccess: false,
     })
 

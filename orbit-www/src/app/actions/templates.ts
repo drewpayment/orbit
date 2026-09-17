@@ -3,7 +3,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
+import { getActor, check, memberWorkspaceIds } from '@/lib/authz'
 import { headers } from 'next/headers'
 import { parseManifest } from '@/lib/template-manifest'
 import { parseGitHubUrl, fetchRepoInfo, fetchManifestContent, generateWebhookSecret, fileExists } from '@/lib/github-manifest'
@@ -60,9 +60,9 @@ export async function checkManifestExists(
   workspaceId: string,
   manifestPath?: string
 ): Promise<CheckManifestResult> {
-  const payloadUser = await getPayloadUserFromSession()
+  const actor = await getActor()
 
-  if (!payloadUser) {
+  if (!actor) {
     return { exists: false, error: 'Not authenticated' }
   }
 
@@ -75,19 +75,9 @@ export async function checkManifestExists(
   }
 
   // Check workspace membership
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
+  const membership = await check('create', { kind: 'workspace', id: workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membership.allowed) {
     return { exists: false, error: 'Not a member of this workspace' }
   }
 
@@ -146,9 +136,9 @@ export async function commitManifestToRepo(input: {
   manifestPath?: string
   commitMessage?: string
 }): Promise<{ success: boolean; error?: string }> {
-  const payloadUser = await getPayloadUserFromSession()
+  const actor = await getActor()
 
-  if (!payloadUser) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -161,19 +151,9 @@ export async function commitManifestToRepo(input: {
   }
 
   // Check workspace membership
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: input.workspaceId } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
+  const membership = await check('create', { kind: 'workspace', id: input.workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membership.allowed) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 
@@ -259,9 +239,9 @@ export interface ImportTemplateResult {
  * Import a GitHub repository as a template
  */
 export async function importTemplate(input: ImportTemplateInput): Promise<ImportTemplateResult> {
-  const payloadUser = await getPayloadUserFromSession()
+  const actor = await getActor()
 
-  if (!payloadUser) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -275,19 +255,9 @@ export async function importTemplate(input: ImportTemplateInput): Promise<Import
   }
 
   // Check workspace membership
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: input.workspaceId } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
+  const membership = await check('create', { kind: 'workspace', id: input.workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membership.allowed) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 
@@ -390,9 +360,11 @@ export async function importTemplate(input: ImportTemplateInput): Promise<Import
       lastSyncedAt: new Date().toISOString(),
       syncStatus: 'synced',
       variables: manifest.variables || [],
-      createdBy: payloadUser.betterAuthId,
+      // Semantic fix: `createdBy` is `relationTo: 'users'` — the Payload id,
+      // not the Better-Auth id the old code stored here.
+      createdBy: actor.payloadId,
     },
-    user: payloadUser,
+    user: actor.user,
     overrideAccess: false,
   })
 
@@ -585,9 +557,9 @@ async function syncTemplateManifestInternal(templateId: string): Promise<ImportT
  * Sync template manifest from GitHub (requires authentication)
  */
 export async function syncTemplateManifest(templateId: string): Promise<ImportTemplateResult> {
-  const payloadUser = await getPayloadUserFromSession()
+  const actor = await getActor()
 
-  if (!payloadUser) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -618,9 +590,9 @@ export interface InstantiateTemplateResult {
 export async function instantiateTemplate(
   input: InstantiateTemplateInput
 ): Promise<InstantiateTemplateResult> {
-  const payloadUser = await getPayloadUserFromSession()
+  const actor = await getActor()
 
-  if (!payloadUser) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -637,19 +609,9 @@ export async function instantiateTemplate(
   }
 
   // Validate workspace membership
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: input.workspaceId } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
+  const membership = await check('create', { kind: 'workspace', id: input.workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membership.allowed) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 
@@ -674,7 +636,7 @@ export async function instantiateTemplate(
     data: {
       usageCount: (template.usageCount || 0) + 1,
     },
-    user: payloadUser,
+    user: actor.user,
     overrideAccess: false,
   })
 
@@ -702,9 +664,9 @@ export interface UpdateTemplateResult {
  * Update template metadata
  */
 export async function updateTemplate(input: UpdateTemplateInput): Promise<UpdateTemplateResult> {
-  const payloadUser = await getPayloadUserFromSession()
+  const actor = await getActor()
 
-  if (!payloadUser) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -725,20 +687,9 @@ export async function updateTemplate(input: UpdateTemplateInput): Promise<Update
     : template.workspace.id
 
   // Check if user is admin/owner in the template's workspace
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
+  const membership = await check('manage', { kind: 'workspace', id: workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membership.allowed) {
     return { success: false, error: 'Permission denied. You must be an admin or owner of this workspace.' }
   }
 
@@ -762,7 +713,7 @@ export async function updateTemplate(input: UpdateTemplateInput): Promise<Update
     collection: 'templates',
     id: input.templateId,
     data: updateData,
-    user: payloadUser,
+    user: actor.user,
     overrideAccess: false,
   })
 
@@ -780,9 +731,9 @@ export async function updateTemplate(input: UpdateTemplateInput): Promise<Update
  * Delete a template (only by workspace owners)
  */
 export async function deleteTemplate(templateId: string): Promise<UpdateTemplateResult> {
-  const payloadUser = await getPayloadUserFromSession()
+  const actor = await getActor()
 
-  if (!payloadUser) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -803,20 +754,9 @@ export async function deleteTemplate(templateId: string): Promise<UpdateTemplate
     : template.workspace.id
 
   // Check if user is owner in the template's workspace
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { role: { equals: 'owner' } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
+  const membership = await check('delete', { kind: 'workspace', id: workspaceId, roles: ['owner'] }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membership.allowed) {
     return { success: false, error: 'Permission denied. Only workspace owners can delete templates.' }
   }
 
@@ -824,7 +764,7 @@ export async function deleteTemplate(templateId: string): Promise<UpdateTemplate
   await payload.delete({
     collection: 'templates',
     id: templateId,
-    user: payloadUser,
+    user: actor.user,
     overrideAccess: false,
   })
 
@@ -838,9 +778,9 @@ export async function deleteTemplate(templateId: string): Promise<UpdateTemplate
  * Archive a template (soft delete by setting visibility to workspace and removing sharing)
  */
 export async function archiveTemplate(templateId: string): Promise<UpdateTemplateResult> {
-  const payloadUser = await getPayloadUserFromSession()
+  const actor = await getActor()
 
-  if (!payloadUser) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -861,20 +801,9 @@ export async function archiveTemplate(templateId: string): Promise<UpdateTemplat
     : template.workspace.id
 
   // Check if user is admin/owner in the template's workspace
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
+  const membership = await check('manage', { kind: 'workspace', id: workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membership.allowed) {
     return { success: false, error: 'Permission denied. You must be an admin or owner of this workspace.' }
   }
 
@@ -886,7 +815,7 @@ export async function archiveTemplate(templateId: string): Promise<UpdateTemplat
       visibility: 'workspace',
       sharedWith: [],
     },
-    user: payloadUser,
+    user: actor.user,
     overrideAccess: false,
   })
 
@@ -901,9 +830,9 @@ export async function archiveTemplate(templateId: string): Promise<UpdateTemplat
  * Register a GitHub webhook for a template
  */
 export async function registerTemplateWebhook(templateId: string): Promise<{ success: boolean; error?: string }> {
-  const payloadUser = await getPayloadUserFromSession()
+  const actor = await getActor()
 
-  if (!payloadUser) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -924,20 +853,9 @@ export async function registerTemplateWebhook(templateId: string): Promise<{ suc
     : template.workspace.id
 
   // Check if user is admin/owner in the template's workspace
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
+  const membership = await check('manage', { kind: 'workspace', id: workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membership.allowed) {
     return { success: false, error: 'Permission denied. You must be an admin or owner of this workspace.' }
   }
 
@@ -1004,7 +922,7 @@ export async function registerTemplateWebhook(templateId: string): Promise<{ suc
         webhookId: String(hook.id),
         webhookSecret,
       },
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -1051,36 +969,20 @@ export async function getAllTemplatesForAdmin(): Promise<{
   templates: AdminTemplate[]
   error?: string
 }> {
-  const payloadUser = await getPayloadUserFromSession()
+  const actor = await getActor()
 
-  if (!payloadUser) {
+  if (!actor) {
     return { templates: [], error: 'Not authenticated' }
   }
 
   const payload = await getPayload({ config })
 
   // Get workspaces where user is owner/admin
-  const memberships = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { user: { equals: payloadUser.betterAuthId } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 100,
-    overrideAccess: true, // Bypass collection access control since we already authenticated
-  })
+  const adminWorkspaceIds = await memberWorkspaceIds('manage', actor)
 
-  if (memberships.docs.length === 0) {
+  if (adminWorkspaceIds.length === 0) {
     return { templates: [], error: 'You must be an admin or owner in at least one workspace' }
   }
-
-  // Get workspace IDs where user is admin/owner
-  const adminWorkspaceIds = memberships.docs.map((m) =>
-    typeof m.workspace === 'string' ? m.workspace : m.workspace.id
-  )
 
   // Get all templates from those workspaces
   const templatesResult = await payload.find({
@@ -1127,9 +1029,9 @@ export async function getAllTemplatesForAdmin(): Promise<{
  * Force sync a template manifest (admin only)
  */
 export async function forceSyncTemplate(templateId: string): Promise<ImportTemplateResult> {
-  const payloadUser = await getPayloadUserFromSession()
+  const actor = await getActor()
 
-  if (!payloadUser) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -1150,20 +1052,9 @@ export async function forceSyncTemplate(templateId: string): Promise<ImportTempl
     : template.workspace.id
 
   // Check if user is admin/owner in the template's workspace
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
+  const membership = await check('manage', { kind: 'workspace', id: workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membership.allowed) {
     return { success: false, error: 'Permission denied. You must be an admin or owner of this workspace.' }
   }
 
@@ -1232,28 +1123,18 @@ export async function getAvailableOrgs(workspaceId: string): Promise<{
   orgs: GitHubOrg[]
   error?: string
 }> {
-  const payloadUser = await getPayloadUserFromSession()
+  const actor = await getActor()
 
-  if (!payloadUser) {
+  if (!actor) {
     return { orgs: [], error: 'Not authenticated' }
   }
 
   const payload = await getPayload({ config })
 
   // Check workspace membership
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
+  const membership = await check('create', { kind: 'workspace', id: workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membership.allowed) {
     return { orgs: [], error: 'Not a member of this workspace' }
   }
 
@@ -1280,8 +1161,8 @@ export async function getAvailableOrgs(workspaceId: string): Promise<{
 
 export async function getGitHubHealth(workspaceIds: string | string[]): Promise<GitHubHealthStatus> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { healthy: true, installations: [], availableOrgs: [] }
     }
 
@@ -1295,19 +1176,10 @@ export async function getGitHubHealth(workspaceIds: string | string[]): Promise<
     }
 
     // Verify user has access to at least one of these workspaces
-    const membership = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { in: workspaceIdArray } },
-          { user: { equals: payloadUser.betterAuthId } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      limit: 1,
-    })
+    const callerWorkspaceIds = await memberWorkspaceIds('member', actor)
+    const hasAccess = workspaceIdArray.some((id) => callerWorkspaceIds.includes(id))
 
-    if (membership.docs.length === 0) {
+    if (!hasAccess) {
       return { healthy: true, installations: [], availableOrgs: [] }
     }
 
@@ -1390,9 +1262,9 @@ export interface TriggerTokenRefreshResult {
  * Calls the restart-workflow API for each invalid installation
  */
 export async function triggerTokenRefresh(installationIds: string[]): Promise<TriggerTokenRefreshResult> {
-  const payloadUser = await getPayloadUserFromSession()
+  const actor = await getActor()
 
-  if (!payloadUser) {
+  if (!actor) {
     return { success: false, results: [] }
   }
 
@@ -1465,9 +1337,9 @@ export async function triggerTokenRefresh(installationIds: string[]): Promise<Tr
  * TODO: Replace mock implementation with actual gRPC call to template service
  */
 export async function startInstantiation(input: StartInstantiationInput): Promise<StartInstantiationResult> {
-  const payloadUser = await getPayloadUserFromSession()
+  const actor = await getActor()
 
-  if (!payloadUser) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -1492,19 +1364,9 @@ export async function startInstantiation(input: StartInstantiationInput): Promis
   })
 
   // Validate workspace membership
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: input.workspaceId } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
+  const membership = await check('create', { kind: 'workspace', id: input.workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membership.allowed) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 
@@ -1542,7 +1404,7 @@ export async function startInstantiation(input: StartInstantiationInput): Promis
     data: {
       usageCount: (template.usageCount || 0) + 1,
     },
-    user: payloadUser,
+    user: actor.user,
     overrideAccess: false,
   })
 
@@ -1557,9 +1419,9 @@ export async function startInstantiation(input: StartInstantiationInput): Promis
  * TODO: Implement via HTTP REST to Go service - gRPC client breaks Next.js bundling
  */
 export async function getInstantiationProgress(workflowId: string): Promise<ProgressResult> {
-  const payloadUser = await getPayloadUserFromSession()
+  const actor = await getActor()
 
-  if (!payloadUser) {
+  if (!actor) {
     return { error: 'Not authenticated' }
   }
 
@@ -1601,9 +1463,9 @@ export async function getInstantiationProgress(workflowId: string): Promise<Prog
 }
 
 export async function unregisterTemplateWebhook(templateId: string): Promise<{ success: boolean; error?: string }> {
-  const payloadUser = await getPayloadUserFromSession()
+  const actor = await getActor()
 
-  if (!payloadUser) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -1624,20 +1486,9 @@ export async function unregisterTemplateWebhook(templateId: string): Promise<{ s
     : template.workspace.id
 
   // Check if user is admin/owner in the template's workspace
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
+  const membership = await check('manage', { kind: 'workspace', id: workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membership.allowed) {
     return { success: false, error: 'Permission denied. You must be an admin or owner of this workspace.' }
   }
 
@@ -1689,7 +1540,7 @@ export async function unregisterTemplateWebhook(templateId: string): Promise<{ s
         webhookId: null,
         webhookSecret: null,
       },
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -1710,7 +1561,7 @@ export async function unregisterTemplateWebhook(templateId: string): Promise<{ s
           webhookId: null,
           webhookSecret: null,
         },
-        user: payloadUser,
+        user: actor.user,
         overrideAccess: false,
       })
       return { success: true }

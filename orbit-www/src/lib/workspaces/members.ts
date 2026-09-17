@@ -76,6 +76,35 @@ export async function listMembershipsFor(payload: Payload, betterAuthId: string)
   }))
 }
 
+/**
+ * A single membership row by its own id, with the workspace/user ids
+ * normalized. Used by callers that only hold a member id (e.g. a role-change
+ * or removal action) and need the workspace id to make an authorization
+ * decision before acting.
+ */
+export async function getMembershipById(
+  payload: Payload,
+  memberId: string,
+): Promise<{ id: string; workspaceId: string; betterAuthId: string; role: WorkspaceRole } | null> {
+  try {
+    const doc = await payload.findByID({
+      collection: COLLECTION,
+      id: memberId,
+      depth: 0,
+      overrideAccess: true,
+    })
+    if (!doc) return null
+    return {
+      id: String(doc.id),
+      workspaceId: workspaceIdOf(doc),
+      betterAuthId: doc.user,
+      role: doc.role as WorkspaceRole,
+    }
+  } catch {
+    return null
+  }
+}
+
 /** The user's membership row in a workspace (any status), or null. */
 export async function findMembership(
   payload: Payload,
@@ -90,6 +119,26 @@ export async function findMembership(
     overrideAccess: true,
   })
   return result.docs[0] ?? null
+}
+
+/**
+ * Every ACTIVE membership row for a user, depth 1 (populated workspace). Used
+ * by `@/lib/data/cached-queries.ts` (`getUserWorkspaceMemberships`) — moved
+ * here only to get the raw `workspace-members` query out of a non-roster file;
+ * behavior (shape, depth, limit, `overrideAccess: true`) is unchanged.
+ */
+export async function listActiveMembershipDocsFor(
+  payload: Payload,
+  betterAuthId: string,
+): Promise<WorkspaceMember[]> {
+  const result = await payload.find({
+    collection: COLLECTION,
+    where: { user: { equals: betterAuthId }, status: { equals: 'active' } },
+    depth: 1,
+    limit: 100,
+    overrideAccess: true,
+  })
+  return result.docs
 }
 
 /**
@@ -127,6 +176,28 @@ export async function addWorkspaceMember(
     overrideAccess: true,
   })
   return { member, created: true }
+}
+
+/**
+ * Create a self-service, `pending` join request for `betterAuthId` in
+ * `workspaceId`. Callers must check `findMembership` first for an existing
+ * row (active or pending) — this always creates a new one.
+ */
+export async function requestWorkspaceMembership(
+  payload: Payload,
+  args: { workspaceId: string; betterAuthId: string },
+): Promise<WorkspaceMember> {
+  return payload.create({
+    collection: COLLECTION,
+    data: {
+      workspace: args.workspaceId,
+      user: args.betterAuthId,
+      role: 'member',
+      status: 'pending',
+      requestedAt: new Date().toISOString(),
+    },
+    overrideAccess: true,
+  })
 }
 
 export async function updateWorkspaceMemberRole(

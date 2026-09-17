@@ -1,7 +1,7 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor } from '@/lib/authz'
+import { listMembershipsFor, countWorkspaceMembers } from '@/lib/workspaces/members'
 import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -14,12 +14,10 @@ import { Building2, Users } from 'lucide-react'
 
 export default async function WorkspacesPage() {
   // Phase 1: Parallelize initial setup
-  const [payload, reqHeaders] = await Promise.all([
+  const [payload, actor] = await Promise.all([
     getPayload({ config }),
-    headers(),
+    getActor(),
   ])
-
-  const session = await auth.api.getSession({ headers: reqHeaders })
 
   let userWorkspaces: Array<{
     id: string
@@ -31,43 +29,27 @@ export default async function WorkspacesPage() {
     userRole: string
   }> = []
 
-  if (session?.user) {
-    // Fetch workspaces where user is a member (using Better Auth user ID directly)
-    const membershipsResult = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        user: { equals: session.user.id },
-        status: { equals: 'active' },
-      },
-      limit: 100,
-      overrideAccess: true,
-    })
+  if (actor) {
+    // Active memberships for the current actor (roster data access, not an
+    // authorization decision — the caller IS the subject of this query).
+    const memberships = await listMembershipsFor(payload, actor.betterAuthId)
 
     // Phase 3: Get full workspace details with member counts in parallel
     // Also parallelize workspace + members fetch within each iteration
     userWorkspaces = await Promise.all(
-      membershipsResult.docs.map(async (membership) => {
-        const workspaceId = typeof membership.workspace === 'object' ? membership.workspace.id : membership.workspace
-
+      memberships.map(async (membership) => {
         // Fetch workspace and member count in parallel
-        const [workspace, membersResult] = await Promise.all([
+        const [workspace, memberCount] = await Promise.all([
           payload.findByID({
             collection: 'workspaces',
-            id: workspaceId,
+            id: membership.workspaceId,
           }),
-          payload.find({
-            collection: 'workspace-members',
-            where: {
-              workspace: { equals: workspaceId },
-              status: { equals: 'active' },
-            },
-            limit: 0,
-          }),
+          countWorkspaceMembers(payload, membership.workspaceId),
         ])
 
         return {
           ...workspace,
-          memberCount: membersResult.totalDocs,
+          memberCount,
           userRole: membership.role,
         }
       })
@@ -95,7 +77,7 @@ export default async function WorkspacesPage() {
             </Button>
           </div>
 
-          {!session?.user ? (
+          {!actor ? (
             <Card>
               <CardHeader>
                 <CardTitle>Sign in to view your workspaces</CardTitle>

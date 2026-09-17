@@ -4,9 +4,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
 import type { Where } from 'payload'
-import { getCurrentUser, getPayloadUserFromSession } from '@/lib/auth/session'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
-import { canManageTemplateDefinitions } from '@/lib/templates/authz'
+import { getActor, requireActor, check, memberWorkspaceIds as authzMemberWorkspaceIds, type Actor } from '@/lib/authz'
 import type { ValidationResult } from '@/lib/scaffolder/validate'
 import { validateTemplateDefinition } from './authoring-actions'
 import type {
@@ -25,7 +23,7 @@ import type {
  * conventions are identical and deliberately duplicated rather than
  * cross-imported: a `'use server'` module may only export async functions, so
  * the small private helpers below cannot be shared across the boundary.
- * Resolve the session user, gate through `lib/templates/authz.ts` BEFORE
+ * Resolve the session user, gate through `authorize()`/`check()` from `@/lib/authz` BEFORE
  * every read and write, then use `overrideAccess: true` — the gate here IS
  * the source of truth.
  *
@@ -50,16 +48,10 @@ function relId(value: unknown): string | null {
   return null
 }
 
-/** Resolve + assert the session user; throws when unauthenticated. */
-async function requireUserId(): Promise<string> {
-  const uid = (await getCurrentUser())?.id
-  if (!uid) throw new Error('Not authenticated')
-  return uid
-}
-
-/** Whether the current session belongs to a platform admin (super_admin/admin). */
-async function currentUserIsPlatformAdmin(): Promise<boolean> {
-  return isPlatformAdmin(await getPayloadUserFromSession())
+/** May `actor` author (list/version/publish-gate manage) definitions in `workspaceId`? Owner/admin. */
+async function canManage(actor: Actor, workspaceId: string | null): Promise<boolean> {
+  if (!workspaceId) return false
+  return (await check('manage', { kind: 'workspace', id: workspaceId }, actor)).allowed
 }
 
 async function loadDefinitionOrThrow(
@@ -111,7 +103,7 @@ export interface TemplateListItem {
 function toListItem(
   definition: TemplateDefinitionDoc,
   workspaceNames: Map<string, string>,
-  uid: string,
+  payloadId: string,
 ): TemplateListItem {
   const workspaceId = relId(definition.workspace) ?? ''
   return {
@@ -130,7 +122,9 @@ function toListItem(
     lastDryRunAt: definition.lastDryRunAt ?? null,
     lastDryRunStatus: definition.lastDryRunStatus ?? 'unknown',
     updatedAt: definition.updatedAt,
-    mine: relId(definition.createdBy) === uid,
+    // Semantic fix: `createdBy` is `relationTo: 'users'` — compare against the
+    // Payload id, not the Better-Auth id the old `getCurrentUser().id` gave us.
+    mine: relId(definition.createdBy) === payloadId,
     currentVersionId: relId(definition.currentVersion),
   }
 }
@@ -158,10 +152,10 @@ async function workspaceNameMap(
  */
 export async function getManageableTemplateWorkspaces(): Promise<{ id: string; name: string }[]> {
   const payload = await getPayload({ config })
-  const uid = (await getCurrentUser())?.id
-  if (!uid) return []
+  const actor = await getActor()
+  if (!actor) return []
 
-  if (await currentUserIsPlatformAdmin()) {
+  if (actor.isPlatformAdmin) {
     const all = await payload.find({
       collection: 'workspaces',
       sort: 'name',
@@ -172,23 +166,7 @@ export async function getManageableTemplateWorkspaces(): Promise<{ id: string; n
     return all.docs.map((w) => ({ id: w.id, name: w.name }))
   }
 
-  const memberships = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { user: { equals: uid } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1000,
-    depth: 0,
-    overrideAccess: true,
-  })
-
-  const workspaceIds = [
-    ...new Set(memberships.docs.map((m) => relId(m.workspace)).filter((v): v is string => !!v)),
-  ]
+  const workspaceIds = await authzMemberWorkspaceIds('manage', actor)
   if (workspaceIds.length === 0) return []
 
   const wsResult = await payload.find({
@@ -202,22 +180,6 @@ export async function getManageableTemplateWorkspaces(): Promise<{ id: string; n
   return wsResult.docs.map((w) => ({ id: w.id, name: w.name }))
 }
 
-/** Workspace ids the caller is an active member of (any role). */
-async function memberWorkspaceIds(payload: PayloadClient, uid: string): Promise<string[]> {
-  const memberships = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [{ user: { equals: uid } }, { status: { equals: 'active' } }],
-    },
-    limit: 1000,
-    depth: 0,
-    overrideAccess: true,
-  })
-  return [
-    ...new Set(memberships.docs.map((m) => relId(m.workspace)).filter((v): v is string => !!v)),
-  ]
-}
-
 /**
  * PUBLISHED templates the caller may run — the "Run" tab of
  * `/self-service/templates`. Scoped to the caller's active memberships (a
@@ -226,13 +188,12 @@ async function memberWorkspaceIds(payload: PayloadClient, uid: string): Promise<
  */
 export async function listRunnableTemplates(): Promise<TemplateListItem[]> {
   const payload = await getPayload({ config })
-  const uid = (await getCurrentUser())?.id
-  if (!uid) return []
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await getActor()
+  if (!actor) return []
 
   const and: Where[] = [{ status: { equals: 'published' } }]
-  if (!isAdmin) {
-    const ids = await memberWorkspaceIds(payload, uid)
+  if (!actor.isPlatformAdmin) {
+    const ids = await authzMemberWorkspaceIds('member', actor)
     if (ids.length === 0) return []
     and.push({ workspace: { in: ids } })
   }
@@ -247,7 +208,7 @@ export async function listRunnableTemplates(): Promise<TemplateListItem[]> {
   })
 
   const names = await workspaceNameMap(payload, result.docs.map((d) => relId(d.workspace) ?? ''))
-  return result.docs.map((d) => toListItem(d, names, uid))
+  return result.docs.map((d) => toListItem(d, names, actor.payloadId))
 }
 
 export interface ListAuthorableTemplatesInput {
@@ -269,13 +230,13 @@ export async function listAuthorableTemplates(
   input: ListAuthorableTemplatesInput = {},
 ): Promise<TemplateListItem[]> {
   const payload = await getPayload({ config })
-  const uid = (await getCurrentUser())?.id
-  if (!uid) return []
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await getActor()
+  if (!actor) return []
 
   const and: Where[] = []
-  if (input.mine) and.push({ createdBy: { equals: uid } })
-  if (!isAdmin) {
+  // Semantic fix: `createdBy` is `relationTo: 'users'` — the Payload id.
+  if (input.mine) and.push({ createdBy: { equals: actor.payloadId } })
+  if (!actor.isPlatformAdmin) {
     const manageable = await getManageableTemplateWorkspaces()
     if (manageable.length === 0) return []
     and.push({ workspace: { in: manageable.map((w) => w.id) } })
@@ -293,7 +254,7 @@ export async function listAuthorableTemplates(
   })
 
   const names = await workspaceNameMap(payload, result.docs.map((d) => relId(d.workspace) ?? ''))
-  return result.docs.map((d) => toListItem(d, names, uid))
+  return result.docs.map((d) => toListItem(d, names, actor.payloadId))
 }
 
 /** A version-history row for the editor's Versions panel. */
@@ -316,11 +277,10 @@ export async function listTemplateDefinitionVersions(
   definitionId: string,
 ): Promise<TemplateVersionSummary[]> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await requireActor()
 
   const definition = await loadDefinitionOrThrow(payload, definitionId)
-  if (!(await canManageTemplateDefinitions(payload, uid, relId(definition.workspace), isAdmin))) {
+  if (!(await canManage(actor, relId(definition.workspace)))) {
     return []
   }
 
@@ -359,8 +319,7 @@ export async function listTemplateDefinitionVersions(
  */
 export async function markVersionValidated(versionId: string): Promise<ValidationResult> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await requireActor()
 
   let version: TemplateDefinitionVersion
   try {
@@ -377,7 +336,7 @@ export async function markVersionValidated(versionId: string): Promise<Validatio
   const definitionId = relId(version.definition)
   if (!definitionId) throw new Error('Template version has no parent definition')
   const definition = await loadDefinitionOrThrow(payload, definitionId)
-  if (!(await canManageTemplateDefinitions(payload, uid, relId(definition.workspace), isAdmin))) {
+  if (!(await canManage(actor, relId(definition.workspace)))) {
     throw new Error('You do not have permission to author templates in this workspace.')
   }
 
@@ -408,8 +367,7 @@ export async function recordSuccessfulDryRun(
   runId: string,
 ): Promise<{ recorded: boolean }> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await requireActor()
 
   let version: TemplateDefinitionVersion
   try {
@@ -426,7 +384,7 @@ export async function recordSuccessfulDryRun(
   const definitionId = relId(version.definition)
   if (!definitionId) throw new Error('Template version has no parent definition')
   const definition = await loadDefinitionOrThrow(payload, definitionId)
-  if (!(await canManageTemplateDefinitions(payload, uid, relId(definition.workspace), isAdmin))) {
+  if (!(await canManage(actor, relId(definition.workspace)))) {
     throw new Error('You do not have permission to author templates in this workspace.')
   }
 

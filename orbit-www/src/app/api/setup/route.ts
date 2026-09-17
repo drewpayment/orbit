@@ -3,8 +3,10 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
+// eslint-disable-next-line no-restricted-imports -- Better-Auth admin API (auth.api.signUpEmail), not a session read
 import { auth } from '@/lib/auth'
 import { hasUsers, resetSetupCache } from '@/lib/setup'
+import { addWorkspaceMember } from '@/lib/workspaces/members'
 
 function slugify(name: string): string {
   return name
@@ -120,16 +122,10 @@ export async function POST(request: Request) {
       overrideAccess: true,
     })
 
-    await payload.create({
-      collection: 'workspace-members',
-      data: {
-        workspace: workspace.id,
-        user: authUserId!,
-        role: 'owner',
-        status: 'active',
-        requestedAt: new Date().toISOString(),
-      },
-      overrideAccess: true,
+    await addWorkspaceMember(payload, {
+      workspaceId: String(workspace.id),
+      betterAuthId: authUserId!,
+      role: 'owner',
     })
 
     resetSetupCache()

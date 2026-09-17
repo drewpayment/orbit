@@ -3,11 +3,7 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 
-import { getPayloadUserFromSession } from '@/lib/auth/session'
-import {
-  isWorkspaceMember,
-  isWorkspaceAdminOrOwner,
-} from '@/lib/access/workspace-access'
+import { getActor, check } from '@/lib/authz'
 import { agentClient } from '@/lib/grpc/agent-client'
 
 // Server actions for the Infrastructure Agent chat UI. Live event streaming
@@ -23,11 +19,12 @@ interface StartAgentRunInput {
 }
 
 export async function startAgentRun(input: StartAgentRunInput) {
-  const user = await getPayloadUserFromSession()
-  if (!user) return { success: false as const, error: 'Unauthorized' }
+  const actor = await getActor()
+  if (!actor) return { success: false as const, error: 'Unauthorized' }
 
   const payload = await getPayload({ config })
-  if (!(await isWorkspaceMember(payload, user.id, input.workspaceId))) {
+  const d = await check('read', { kind: 'workspace', id: input.workspaceId }, actor)
+  if (!d.allowed) {
     return { success: false as const, error: 'Not a member of this workspace' }
   }
 
@@ -44,7 +41,7 @@ export async function startAgentRun(input: StartAgentRunInput) {
       repositoryId: input.repositoryId ?? '',
       initialPrompt: promptWithContext,
       llmProviderId: input.llmProviderId,
-      userId: user.id,
+      userId: actor.payloadId,
     })
   } catch (err) {
     // Workflow never started — nothing to compensate.
@@ -64,7 +61,7 @@ export async function startAgentRun(input: StartAgentRunInput) {
         initialPrompt: input.initialPrompt,
         llmProvider: input.llmProviderId,
         status: 'starting',
-        startedBy: user.id,
+        startedBy: actor.payloadId,
         startedAt: new Date().toISOString(),
       },
       overrideAccess: true,
@@ -76,7 +73,7 @@ export async function startAgentRun(input: StartAgentRunInput) {
     try {
       await agentClient.abortAgent({
         workflowId: resp.workflowId,
-        requestedBy: user.id,
+        requestedBy: actor.payloadId,
         reason: 'run record creation failed',
       })
     } catch (abortErr) {
@@ -101,16 +98,16 @@ export async function sendAgentMessage(input: {
   workflowId: string
   message: string
 }) {
-  const user = await getPayloadUserFromSession()
-  if (!user) return { success: false as const, error: 'Unauthorized' }
-  const payload = await getPayload({ config })
-  if (!(await isWorkspaceMember(payload, user.id, input.workspaceId))) {
+  const actor = await getActor()
+  if (!actor) return { success: false as const, error: 'Unauthorized' }
+  const d = await check('read', { kind: 'workspace', id: input.workspaceId }, actor)
+  if (!d.allowed) {
     return { success: false as const, error: 'Forbidden' }
   }
   try {
     await agentClient.sendMessage({
       workflowId: input.workflowId,
-      userId: user.id,
+      userId: actor.payloadId,
       message: input.message,
     })
     return { success: true as const }
@@ -125,17 +122,17 @@ export async function approveAgentAction(input: {
   approvalId: string
   notes?: string
 }) {
-  const user = await getPayloadUserFromSession()
-  if (!user) return { success: false as const, error: 'Unauthorized' }
-  const payload = await getPayload({ config })
-  if (!(await isWorkspaceAdminOrOwner(payload, user.id, input.workspaceId))) {
+  const actor = await getActor()
+  if (!actor) return { success: false as const, error: 'Unauthorized' }
+  const d = await check('manage', { kind: 'workspace', id: input.workspaceId }, actor)
+  if (!d.allowed) {
     return { success: false as const, error: 'Approval requires workspace admin or owner' }
   }
   try {
     await agentClient.approveAction({
       workflowId: input.workflowId,
       approvalId: input.approvalId,
-      approvedBy: user.id,
+      approvedBy: actor.payloadId,
       notes: input.notes ?? '',
     })
     return { success: true as const }
@@ -150,17 +147,17 @@ export async function rejectAgentAction(input: {
   approvalId: string
   reason: string
 }) {
-  const user = await getPayloadUserFromSession()
-  if (!user) return { success: false as const, error: 'Unauthorized' }
-  const payload = await getPayload({ config })
-  if (!(await isWorkspaceAdminOrOwner(payload, user.id, input.workspaceId))) {
+  const actor = await getActor()
+  if (!actor) return { success: false as const, error: 'Unauthorized' }
+  const d = await check('manage', { kind: 'workspace', id: input.workspaceId }, actor)
+  if (!d.allowed) {
     return { success: false as const, error: 'Rejection requires workspace admin or owner' }
   }
   try {
     await agentClient.rejectAction({
       workflowId: input.workflowId,
       approvalId: input.approvalId,
-      rejectedBy: user.id,
+      rejectedBy: actor.payloadId,
       reason: input.reason,
     })
     return { success: true as const }
@@ -209,17 +206,17 @@ export async function approveAgentActionWithEdits(input: {
     inputSchemaJson?: string
   }
 }) {
-  const user = await getPayloadUserFromSession()
-  if (!user) return { success: false as const, error: 'Unauthorized' }
-  const payload = await getPayload({ config })
-  if (!(await isWorkspaceAdminOrOwner(payload, user.id, input.workspaceId))) {
+  const actor = await getActor()
+  if (!actor) return { success: false as const, error: 'Unauthorized' }
+  const d = await check('manage', { kind: 'workspace', id: input.workspaceId }, actor)
+  if (!d.allowed) {
     return { success: false as const, error: 'Approval requires workspace admin or owner' }
   }
   try {
     await agentClient.approveAction({
       workflowId: input.workflowId,
       approvalId: input.approvalId,
-      approvedBy: user.id,
+      approvedBy: actor.payloadId,
       notes: input.notes ?? '',
       edits: {
         name: input.edits.name ?? '',
@@ -255,10 +252,10 @@ export async function sendReviewerMessage(input: {
   approvalId: string
   message: string
 }) {
-  const user = await getPayloadUserFromSession()
-  if (!user) return { success: false as const, error: 'Unauthorized' }
-  const payload = await getPayload({ config })
-  if (!(await isWorkspaceMember(payload, user.id, input.workspaceId))) {
+  const actor = await getActor()
+  if (!actor) return { success: false as const, error: 'Unauthorized' }
+  const d = await check('read', { kind: 'workspace', id: input.workspaceId }, actor)
+  if (!d.allowed) {
     return { success: false as const, error: 'Forbidden' }
   }
   if (!input.message.trim()) {
@@ -268,7 +265,7 @@ export async function sendReviewerMessage(input: {
     await agentClient.sendReviewerMessage({
       workflowId: input.workflowId,
       approvalId: input.approvalId,
-      userId: user.id,
+      userId: actor.payloadId,
       message: input.message,
     })
     return { success: true as const }
@@ -282,16 +279,16 @@ export async function abortAgentRun(input: {
   workflowId: string
   reason?: string
 }) {
-  const user = await getPayloadUserFromSession()
-  if (!user) return { success: false as const, error: 'Unauthorized' }
-  const payload = await getPayload({ config })
-  if (!(await isWorkspaceMember(payload, user.id, input.workspaceId))) {
+  const actor = await getActor()
+  if (!actor) return { success: false as const, error: 'Unauthorized' }
+  const d = await check('read', { kind: 'workspace', id: input.workspaceId }, actor)
+  if (!d.allowed) {
     return { success: false as const, error: 'Forbidden' }
   }
   try {
     await agentClient.abortAgent({
       workflowId: input.workflowId,
-      requestedBy: user.id,
+      requestedBy: actor.payloadId,
       reason: input.reason ?? '',
     })
     return { success: true as const }
