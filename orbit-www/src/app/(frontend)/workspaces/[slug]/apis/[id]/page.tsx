@@ -4,7 +4,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { ArrowLeft } from 'lucide-react'
 import { EditAPIClient } from './edit-api-client'
-import { getCurrentUser } from '@/lib/auth/session'
+import { getActor } from '@/lib/authz'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -16,9 +16,9 @@ interface PageProps {
 export default async function EditAPIPage({ params }: PageProps) {
   const { slug, id } = await params
   const payload = await getPayload({ config })
-  const user = await getCurrentUser()
+  const actor = await getActor()
 
-  if (!user) {
+  if (!actor) {
     redirect('/login')
   }
 
@@ -78,7 +78,7 @@ export default async function EditAPIPage({ params }: PageProps) {
           <EditAPIClient
             api={api}
             workspaceSlug={slug}
-            userId={user.id}
+            userId={actor.payloadId}
           />
         </div>
       </SidebarInset>

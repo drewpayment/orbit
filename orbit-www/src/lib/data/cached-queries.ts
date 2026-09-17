@@ -1,9 +1,12 @@
 import { cache } from 'react'
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { headers } from 'next/headers'
-import { auth } from '@/lib/auth'
+import { getSession as getSessionFromAuth } from '@/lib/auth/session'
 import { getMongoClient } from '@/lib/mongodb'
+import {
+  findActiveMembershipWithOptions,
+  listActiveMembershipDocsFor,
+} from '@/lib/workspaces/members'
 
 /**
  * Cached data fetchers using React.cache() for request-level deduplication.
@@ -26,12 +29,24 @@ export const getPayloadClient = cache(async () => {
 })
 
 /**
- * Get the current user session (cached per request)
+ * Get the current user session (cached per request).
+ *
+ * Delegates to `@/lib/auth/session` (the only allowed place to read the
+ * session directly) instead of calling `auth.api.getSession` here directly.
+ *
+ * NOT FULLY MIGRATED (authz consolidation Phase C, #135): this still trips
+ * `no-restricted-imports` because the rule also flags re-importing the
+ * restricted names from their own allowed source module, and this file isn't
+ * on the rule's ignore list. The only clean fixes are out of this slice's
+ * scope: (a) move its four remaining callers (`app/(frontend)/dashboard/page.tsx`,
+ * `app/(frontend)/notifications/page.tsx`,
+ * `app/(frontend)/workspaces/[slug]/settings/page.tsx`,
+ * `app/(frontend)/workspaces/[slug]/kafka/catalog/page.tsx`) onto
+ * `getActor()`/`requireActor()` from `@/lib/authz` and delete this export, or
+ * (b) add this file to the eslint ignore list alongside `lib/auth/**`. Left
+ * as-is; reported instead of worked around.
  */
-export const getSession = cache(async () => {
-  const reqHeaders = await headers()
-  return auth.api.getSession({ headers: reqHeaders })
-})
+export const getSession = cache(getSessionFromAuth)
 
 /**
  * Get a workspace by slug (cached per request)
@@ -104,22 +119,7 @@ export const getWorkspaceMembership = cache(async (
   options?: { roles?: string[]; overrideAccess?: boolean }
 ) => {
   const payload = await getPayloadClient()
-
-  const result = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: userId } },
-        { status: { equals: 'active' } },
-        ...(options?.roles?.length ? [{ role: { in: options.roles } }] : []),
-      ],
-    },
-    limit: 1,
-    overrideAccess: options?.overrideAccess ?? false,
-  })
-
-  return result.docs[0] ?? null
+  return findActiveMembershipWithOptions(payload, workspaceId, userId, options)
 })
 
 export interface BetterAuthUser {
@@ -198,15 +198,5 @@ export const getBetterAuthUserByEmail = cache(async (email: string): Promise<Bet
  */
 export const getUserWorkspaceMemberships = cache(async (userId: string) => {
   const payload = await getPayloadClient()
-  const result = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      user: { equals: userId },
-      status: { equals: 'active' },
-    },
-    depth: 1,
-    limit: 100,
-    overrideAccess: true,
-  })
-  return result.docs
+  return listActiveMembershipDocsFor(payload, userId)
 })

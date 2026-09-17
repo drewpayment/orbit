@@ -2,12 +2,11 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
+import { getActor, check, type Actor } from '@/lib/authz'
+import { ALL_ROLES } from '@/lib/authz/policy'
 import type { CatalogEntity, CatalogRelation, EntityScore } from '@/payload-types'
 import { resolveEntityType } from '@/lib/catalog/entity-types'
 import type { EntityKind } from '@/collections/catalog/constants'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
-import { canManageEntity, canDeleteEntity } from '@/lib/catalog/entity-authz'
 
 /** A knowledge page best-effort linked to a catalog entity (via tag == slug). */
 export interface LinkedDoc {
@@ -36,8 +35,8 @@ export interface EntityDetailData {
  * entity's workspace gets a not-found (the access filter excludes the row).
  */
 export async function getCatalogEntityDetail(id: string): Promise<EntityDetailData | null> {
-  const user = await getPayloadUserFromSession()
-  if (!user) return null
+  const actor = await getActor()
+  if (!actor) return null
 
   const payload = await getPayload({ config })
 
@@ -73,18 +72,23 @@ export async function getCatalogEntityDetail(id: string): Promise<EntityDetailDa
     overrideAccess: true,
   })
 
-  const docs = await findLinkedDocs(payload, entity, user)
+  const docs = await findLinkedDocs(payload, entity, actor.user)
 
-  const isAdmin = isPlatformAdmin(user)
-  const betterAuthId = user.betterAuthId ?? undefined
   const workspaceId =
     entity.workspace ? (typeof entity.workspace === 'string' ? entity.workspace : entity.workspace.id) : null
   const sourceType = entity.source?.type ?? 'manual'
 
-  const [canManage, canDelete] = await Promise.all([
-    canManageEntity(payload, betterAuthId, isAdmin, { workspaceId }),
-    canDeleteEntity(payload, betterAuthId, isAdmin, { workspaceId, sourceType }),
+  // Manage: platform admin, or any active member of the entity's workspace
+  // (ALL_ROLES — Catalog Entity CRUD grants any member edit rights). Delete:
+  // MANUAL entities only, by a platform admin or workspace owner/admin.
+  const [manageDecision, deleteDecision] = await Promise.all([
+    check('create', { kind: 'doc', workspaceId, roles: ALL_ROLES }, actor),
+    sourceType === 'manual'
+      ? check('delete', { kind: 'doc', workspaceId }, actor)
+      : Promise.resolve({ allowed: false }),
   ])
+  const canManage = manageDecision.allowed
+  const canDelete = deleteDecision.allowed
 
   return {
     entity,
@@ -104,7 +108,7 @@ export async function getCatalogEntityDetail(id: string): Promise<EntityDetailDa
 async function findLinkedDocs(
   payload: Awaited<ReturnType<typeof getPayload>>,
   entity: CatalogEntity,
-  user: NonNullable<Awaited<ReturnType<typeof getPayloadUserFromSession>>>,
+  user: Actor['user'],
 ): Promise<LinkedDoc[]> {
   if (!entity.slug) return []
 
@@ -171,8 +175,8 @@ const EMPTY_SCORE_BREAKDOWN: EntityScoreBreakdown = {
  * & Golden Paths, docs/plans/2026-07-01-entity-scores-and-golden-paths.md).
  */
 export async function getEntityScoreBreakdown(entityId: string): Promise<EntityScoreBreakdown> {
-  const user = await getPayloadUserFromSession()
-  if (!user) return EMPTY_SCORE_BREAKDOWN
+  const actor = await getActor()
+  if (!actor) return EMPTY_SCORE_BREAKDOWN
 
   const payload = await getPayload({ config })
 
@@ -182,7 +186,7 @@ export async function getEntityScoreBreakdown(entityId: string): Promise<EntityS
       collection: 'catalog-entities',
       id: entityId,
       depth: 0,
-      user,
+      user: actor.user,
     })) as CatalogEntity
   } catch {
     return EMPTY_SCORE_BREAKDOWN
@@ -198,7 +202,7 @@ export async function getEntityScoreBreakdown(entityId: string): Promise<EntityS
       where: { entity: { equals: entityId } },
       limit: 200,
       depth: 0,
-      user,
+      user: actor.user,
     }),
     resolveEntityType(payload, workspaceId, entity.kind as EntityKind),
   ])

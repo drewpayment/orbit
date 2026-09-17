@@ -8,6 +8,7 @@ import type {
   User,
 } from '@/payload-types'
 import type { LevelDef } from '@/components/features/scorecards/scorecard-ui'
+import { membershipRole } from '@/lib/authz/membership'
 
 /**
  * Initiatives sync engine (Initiatives UI + auto-generated action items,
@@ -483,20 +484,7 @@ export async function isActiveWorkspaceMember(
   userId: string,
   workspaceId: string,
 ): Promise<boolean> {
-  const members = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { user: { equals: userId } },
-        { workspace: { equals: workspaceId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-    depth: 0,
-    overrideAccess: true,
-  })
-  return members.docs.length > 0
+  return (await membershipRole(payload, userId, workspaceId)) !== null
 }
 
 /**

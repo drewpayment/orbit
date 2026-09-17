@@ -1,4 +1,5 @@
 import type { Payload } from 'payload'
+import { workspaceIdsFor } from '@/lib/authz/membership'
 
 /**
  * Testable core for the dashboard Attention Hub discovery card (WP7, Phase 1.5,
@@ -44,16 +45,6 @@ export interface DiscoveryAttention {
 
 const EMPTY: DiscoveryAttention = { total: 0, groups: [] }
 
-/** Normalize a relationship value (`string` id or populated `{ id }`) to its id. */
-function relId(value: unknown): string | null {
-  if (!value) return null
-  if (typeof value === 'string') return value
-  if (typeof value === 'object' && 'id' in (value as Record<string, unknown>)) {
-    return String((value as { id: unknown }).id)
-  }
-  return null
-}
-
 /**
  * Proposed-discovery counts grouped by workspace for the dashboard hub. Returns
  * one group per member workspace with at least one `proposed` row, plus a single
@@ -70,19 +61,7 @@ export async function getDiscoveryAttention(
   if (!betterAuthId) return EMPTY
 
   // Active member workspaces, keyed on the Better-Auth id (tenant isolation).
-  const members = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [{ user: { equals: betterAuthId } }, { status: { equals: 'active' } }],
-    },
-    limit: 1000,
-    depth: 0,
-    overrideAccess: true,
-  })
-
-  const workspaceIds = Array.from(
-    new Set(members.docs.map((d) => relId(d.workspace)).filter((id): id is string => !!id)),
-  )
+  const workspaceIds = await workspaceIdsFor(payload, betterAuthId, 'member')
 
   const groups: DiscoveryAttentionGroup[] = []
 
