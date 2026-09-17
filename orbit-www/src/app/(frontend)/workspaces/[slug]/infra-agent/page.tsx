@@ -3,7 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 
-import { getActor, authorize, isAuthzError } from '@/lib/authz'
+import { getActor, check } from '@/lib/authz'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -33,12 +33,8 @@ export default async function InfraAgentRunsPage({ params }: Props) {
   const workspace = wsResult.docs[0]
   if (!workspace) notFound()
 
-  try {
-    await authorize('read', { kind: 'workspace', id: workspace.id }, actor)
-  } catch (err) {
-    if (isAuthzError(err)) notFound()
-    throw err
-  }
+  const d = await check('read', { kind: 'workspace', id: workspace.id }, actor)
+  if (!d.allowed) notFound()
 
   const [runs, providers] = await Promise.all([
     payload.find({

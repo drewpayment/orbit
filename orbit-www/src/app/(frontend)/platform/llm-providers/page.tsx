@@ -1,8 +1,9 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 
-import { authorize } from '@/lib/authz'
+import { getActor, check } from '@/lib/authz'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
@@ -18,7 +19,10 @@ export const metadata = {
 }
 
 export default async function PlatformLLMProvidersPage() {
-  await authorize('manage', { kind: 'platform' })
+  const actor = await getActor()
+  if (!actor) redirect('/login')
+  const d = await check('manage', { kind: 'platform' }, actor)
+  if (!d.allowed) redirect('/')
 
   const payload = await getPayload({ config })
 

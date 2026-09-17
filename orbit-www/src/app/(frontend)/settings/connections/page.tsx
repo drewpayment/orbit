@@ -1,9 +1,10 @@
+import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
-import { authorize } from '@/lib/authz'
+import { getActor, check } from '@/lib/authz'
 import { listConnectionsAdminCore } from '@/lib/connections/connections-core'
 import { listInstallationsAdminCore } from '@/lib/github/installations-core'
 import { ConnectionsClient } from '@/components/features/connections/ConnectionsClient'
@@ -22,7 +23,10 @@ export const metadata = {
  * client — both loaders return PAT-less / token-less projections.
  */
 export default async function ConnectionsSettingsPage() {
-  await authorize('manage', { kind: 'platform' })
+  const actor = await getActor()
+  if (!actor) redirect('/login')
+  const d = await check('manage', { kind: 'platform' }, actor)
+  if (!d.allowed) redirect('/')
 
   const payload = await getPayload({ config })
   const [installations, connections, workspacesResult] = await Promise.all([

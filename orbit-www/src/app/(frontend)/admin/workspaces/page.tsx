@@ -1,6 +1,7 @@
+import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { authorize } from '@/lib/authz'
+import { getActor, check } from '@/lib/authz'
 import { countWorkspaceMembers } from '@/lib/workspaces/members'
 import { WorkspaceManager } from '@/components/features/workspace/WorkspaceManager'
 
@@ -8,7 +9,10 @@ import { WorkspaceManager } from '@/components/features/workspace/WorkspaceManag
 // install, not just the caller's own. (This route previously had no auth
 // check at all — SEMANTIC CHANGE, see migration report.)
 export default async function WorkspacesPage() {
-  await authorize('read', { kind: 'platform' })
+  const actor = await getActor()
+  if (!actor) redirect('/login')
+  const d = await check('read', { kind: 'platform' }, actor)
+  if (!d.allowed) redirect('/dashboard')
 
   const payload = await getPayload({ config })
 

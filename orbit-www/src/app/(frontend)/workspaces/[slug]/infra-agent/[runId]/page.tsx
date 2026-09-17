@@ -2,7 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 
-import { getActor, authorize, isAuthzError } from '@/lib/authz'
+import { getActor, check } from '@/lib/authz'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -35,12 +35,8 @@ export default async function AgentRunPage({ params }: Props) {
   const workspace = wsResult.docs[0]
   if (!workspace) notFound()
 
-  try {
-    await authorize('read', { kind: 'workspace', id: workspace.id }, actor)
-  } catch (err) {
-    if (isAuthzError(err)) notFound()
-    throw err
-  }
+  const d = await check('read', { kind: 'workspace', id: workspace.id }, actor)
+  if (!d.allowed) notFound()
 
   const runResult = await payload.find({
     collection: 'agent-runs',
