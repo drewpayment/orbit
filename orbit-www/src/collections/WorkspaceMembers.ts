@@ -1,5 +1,5 @@
 import type { CollectionConfig } from 'payload'
-import { isSuperAdmin, isWorkspaceAdminOrOwner, getMemberWorkspaceIds } from '@/lib/access/workspace-access'
+import { docWorkspaceMutate, manageCreate, workspaceScopedRead } from '@/lib/authz/payload'
 
 export const WorkspaceMembers: CollectionConfig = {
   slug: 'workspace-members',
@@ -9,59 +9,13 @@ export const WorkspaceMembers: CollectionConfig = {
   },
   access: {
     // Members can read memberships for their workspaces
-    read: async ({ req }) => {
-      if (!req.user) return false
-      if (isSuperAdmin(req.user)) return true
-      const betterAuthId = req.user?.betterAuthId
-      if (!betterAuthId) return false
-      const ids = await getMemberWorkspaceIds(req.payload, betterAuthId)
-      if (ids.length === 0) return false
-      return { workspace: { in: ids } }
-    },
+    read: workspaceScopedRead(),
     // Only workspace owners/admins can invite members
-    create: async ({ req, data }) => {
-      if (!req.user) return false
-      if (isSuperAdmin(req.user)) return true
-      const workspaceId = data?.workspace
-      if (!workspaceId) return false
-      const betterAuthId = req.user?.betterAuthId
-      if (!betterAuthId) return false
-      return isWorkspaceAdminOrOwner(req.payload, betterAuthId, workspaceId as string)
-    },
+    create: manageCreate(['owner', 'admin']),
     // Only workspace owners/admins can change roles
-    update: async ({ req, id }) => {
-      if (!req.user) return false
-      if (isSuperAdmin(req.user)) return true
-      const betterAuthId = req.user?.betterAuthId
-      if (!betterAuthId) return false
-      if (!id) return false
-      const member = await req.payload.findByID({
-        collection: 'workspace-members',
-        id,
-        overrideAccess: true,
-        depth: 0,
-      })
-      const wsId = typeof member.workspace === 'string' ? member.workspace : member.workspace?.id
-      if (!wsId) return false
-      return isWorkspaceAdminOrOwner(req.payload, betterAuthId, wsId)
-    },
+    update: docWorkspaceMutate('workspace-members', ['owner', 'admin']),
     // Only workspace owners/admins can remove members
-    delete: async ({ req, id }) => {
-      if (!req.user) return false
-      if (isSuperAdmin(req.user)) return true
-      const betterAuthId = req.user?.betterAuthId
-      if (!betterAuthId) return false
-      if (!id) return false
-      const member = await req.payload.findByID({
-        collection: 'workspace-members',
-        id,
-        overrideAccess: true,
-        depth: 0,
-      })
-      const wsId = typeof member.workspace === 'string' ? member.workspace : member.workspace?.id
-      if (!wsId) return false
-      return isWorkspaceAdminOrOwner(req.payload, betterAuthId, wsId)
-    },
+    delete: docWorkspaceMutate('workspace-members', ['owner', 'admin']),
   },
   fields: [
     {

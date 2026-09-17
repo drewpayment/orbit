@@ -1,5 +1,14 @@
-import type { CollectionConfig, Where } from 'payload'
-import { getAdminOrOwnerWorkspaceIds, getOwnerWorkspaceIds, getMemberWorkspaceIds, isSuperAdmin } from '@/lib/access/workspace-access'
+import type { Access, CollectionConfig } from 'payload'
+import { authenticatedOnly, workspaceScopedRead } from '@/lib/authz/payload'
+
+// Read: authenticated users may read any individual workspace document
+// (needed for join-page discovery and slug-based page layouts), but list
+// queries are scoped to workspaces the caller is a member of.
+const readWorkspace: Access = (args) => {
+  const { req, id } = args
+  if (req.user && id) return true
+  return workspaceScopedRead({ field: 'id' })(args)
+}
 
 export const Workspaces: CollectionConfig = {
   slug: 'workspaces',
@@ -8,46 +17,13 @@ export const Workspaces: CollectionConfig = {
     defaultColumns: ['name', 'slug', 'createdAt'],
   },
   access: {
-    // Read: authenticated users may read any individual workspace document
-    // (needed for join-page discovery and slug-based page layouts), but
-    // list queries are scoped to workspaces the caller is a member of.
-    read: async ({ req, id }) => {
-      if (!req.user) return false
-      if (isSuperAdmin(req.user)) return true
-      const betterAuthId = req.user?.betterAuthId
-      // Single-document reads (id present): allow any authenticated user
-      // so join/invite flows can display workspace info.
-      if (id) return true
-      // List reads: restrict to the caller's member workspaces
-      if (!betterAuthId) return false
-      const ids = await getMemberWorkspaceIds(req.payload, betterAuthId)
-      if (ids.length === 0) {
-        return { id: { equals: 'nonexistent-id-no-results' } } as Where
-      }
-      return { id: { in: ids } } as Where
-    },
+    read: readWorkspace,
     // Any authenticated user can create workspaces
-    create: ({ req: { user } }) => !!user,
+    create: authenticatedOnly,
     // Platform admins or workspace owners/admins
-    update: async ({ req }) => {
-      if (!req.user) return false
-      if (isSuperAdmin(req.user)) return true
-      const betterAuthId = req.user?.betterAuthId
-      if (!betterAuthId) return false
-      const ids = await getAdminOrOwnerWorkspaceIds(req.payload, betterAuthId)
-      if (ids.length === 0) return false
-      return { id: { in: ids } }
-    },
+    update: workspaceScopedRead({ field: 'id', scope: 'manage' }),
     // Platform admins or workspace owners only (not admins — extra safety)
-    delete: async ({ req }) => {
-      if (!req.user) return false
-      if (isSuperAdmin(req.user)) return true
-      const betterAuthId = req.user?.betterAuthId
-      if (!betterAuthId) return false
-      const ids = await getOwnerWorkspaceIds(req.payload, betterAuthId)
-      if (ids.length === 0) return false
-      return { id: { in: ids } }
-    },
+    delete: workspaceScopedRead({ field: 'id', scope: 'owner' }),
   },
   fields: [
     {

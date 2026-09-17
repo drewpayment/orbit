@@ -1,6 +1,5 @@
-import type { CollectionConfig, Where } from 'payload'
-import { getMemberWorkspaceIds, isWorkspaceMember, isWorkspaceAdminOrOwner } from '@/lib/access/workspace-access'
-import { memberCreate } from '@/lib/access/collection-access'
+import type { CollectionConfig } from 'payload'
+import { docWorkspaceMutate, memberCreate, workspaceScopedRead } from '@/lib/authz/payload'
 
 export const Launches: CollectionConfig = {
   slug: 'launches',
@@ -11,63 +10,13 @@ export const Launches: CollectionConfig = {
   },
   access: {
     // Read: Workspace-scoped. Admins see all.
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-
-      // Platform admins can see all launches
-      const role = user?.role
-      if (role === 'super_admin' || role === 'admin') return true
-
-      // Get user's workspace memberships
-      const betterAuthId = user.betterAuthId
-      const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
-
-      // Return query constraint: launches in user's workspaces
-      return {
-        workspace: { in: workspaceIds },
-      } as Where
-    },
+    read: workspaceScopedRead(),
     // Create: active member of the target `data.workspace` (was `!!user` — gap closed)
     create: memberCreate(),
-    // Update: Workspace members with owner, admin, or member role
-    update: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-
-      const launch = await payload.findByID({
-        collection: 'launches',
-        id,
-        overrideAccess: true,
-      })
-
-      const workspaceId = typeof launch.workspace === 'string'
-        ? launch.workspace
-        : launch.workspace.id
-
-      const betterAuthId = user.betterAuthId
-      if (!betterAuthId) return false
-
-      // owner/admin/member is every active role, i.e. any active member
-      return isWorkspaceMember(payload, betterAuthId, workspaceId)
-    },
+    // Update: Workspace members with owner, admin, or member role (any active member)
+    update: docWorkspaceMutate('launches', ['owner', 'admin', 'member']),
     // Delete: Workspace owners and admins only
-    delete: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-
-      const launch = await payload.findByID({
-        collection: 'launches',
-        id,
-        overrideAccess: true,
-      })
-
-      const workspaceId = typeof launch.workspace === 'string'
-        ? launch.workspace
-        : launch.workspace.id
-
-      const betterAuthId = user.betterAuthId
-      if (!betterAuthId) return false
-
-      return isWorkspaceAdminOrOwner(payload, betterAuthId, workspaceId)
-    },
+    delete: docWorkspaceMutate('launches', ['owner', 'admin']),
   },
   fields: [
     {
