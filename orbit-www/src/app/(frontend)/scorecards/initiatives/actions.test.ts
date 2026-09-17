@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 vi.mock('payload', () => ({ getPayload: vi.fn() }))
 vi.mock('@payload-config', () => ({ default: {} }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
-vi.mock('@/lib/auth/session', () => ({
-  getCurrentUser: vi.fn(),
-  getPayloadUserFromSession: vi.fn(),
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(),
+  requireActor: vi.fn(),
+  check: vi.fn(),
+  memberWorkspaceIds: vi.fn(),
+  ALL_ROLES: ['owner', 'admin', 'member'],
 }))
-vi.mock('@/lib/scorecards/authz', () => ({ canManageScorecards: vi.fn() }))
 vi.mock('@/lib/scorecards/initiatives', () => ({
   syncInitiativeActionItems: vi.fn(),
   assertAssigneeInWorkspace: vi.fn(),
@@ -24,21 +26,25 @@ vi.mock('@/lib/scorecards/initiatives', () => ({
 }))
 
 import { getPayload } from 'payload'
-import { getCurrentUser, getPayloadUserFromSession } from '@/lib/auth/session'
-import { canManageScorecards } from '@/lib/scorecards/authz'
+import { requireActor, check } from '@/lib/authz'
 import { syncInitiativeActionItems } from '@/lib/scorecards/initiatives'
-import { createInitiative } from './actions'
+import { createInitiative, updateInitiativeStatus } from './actions'
 import { Initiatives } from '@/collections/scorecards/Initiatives'
 import { InitiativeActionItems } from '@/collections/scorecards/InitiativeActionItems'
 
+const ownerActor = {
+  payloadId: 'payload-owner',
+  betterAuthId: 'ba-owner',
+  email: 'owner@example.com',
+  role: 'user' as const,
+  isPlatformAdmin: false,
+  user: {} as never,
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
-  ;(getCurrentUser as Mock).mockResolvedValue({ id: 'ba-owner' })
-  ;(getPayloadUserFromSession as Mock).mockResolvedValue({
-    id: 'payload-owner',
-    betterAuthId: 'ba-owner',
-  })
-  ;(canManageScorecards as Mock).mockResolvedValue(true)
+  ;(requireActor as Mock).mockResolvedValue(ownerActor)
+  ;(check as Mock).mockResolvedValue({ allowed: true, reason: 'workspace owner', actor: ownerActor })
   ;(syncInitiativeActionItems as Mock).mockResolvedValue({ created: 0, completed: 0, reopened: 0 })
 })
 
@@ -60,13 +66,29 @@ describe('createInitiative user identity bridging', () => {
       targetLevel: 'Silver',
     })
 
-    expect(canManageScorecards).toHaveBeenCalledWith(payload, 'ba-owner', 'ws-1')
+    expect(check).toHaveBeenCalledWith('manage', { kind: 'workspace', id: 'ws-1' }, ownerActor)
     expect(payload.create).toHaveBeenCalledWith(
       expect.objectContaining({
         collection: 'initiatives',
         data: expect.objectContaining({ owner: 'payload-owner' }),
       }),
     )
+  })
+})
+
+describe('initiative lifecycle authorization boundary', () => {
+  it('denies updateInitiativeStatus when the policy denies management of the workspace', async () => {
+    const payload = {
+      findByID: vi.fn().mockResolvedValue({ id: 'ini-1', workspace: 'ws-1' }),
+      update: vi.fn(),
+    }
+    ;(getPayload as Mock).mockResolvedValue(payload)
+    ;(check as Mock).mockResolvedValue({ allowed: false, reason: 'not a member', actor: ownerActor })
+
+    await expect(updateInitiativeStatus('ini-1', 'completed')).rejects.toThrow(
+      /do not have permission/i,
+    )
+    expect(payload.update).not.toHaveBeenCalled()
   })
 })
 

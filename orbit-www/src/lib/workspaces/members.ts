@@ -93,6 +93,55 @@ export async function findMembership(
 }
 
 /**
+ * The user's ACTIVE membership row in a workspace, optionally narrowed to a
+ * role set, with the caller choosing whether access control applies. Used by
+ * `@/lib/data/cached-queries.ts` (`getWorkspaceMembership`), whose several
+ * out-of-area callers rely on its exact current signature/behavior including
+ * the `overrideAccess` default of `false` (Phase C, #135) — moved here only to
+ * get the raw `workspace-members` query out of a non-roster file.
+ */
+export async function findActiveMembershipWithOptions(
+  payload: Payload,
+  workspaceId: string,
+  betterAuthId: string,
+  options: { roles?: string[]; overrideAccess?: boolean } = {},
+): Promise<WorkspaceMember | null> {
+  const and: Where[] = [
+    { workspace: { equals: workspaceId } },
+    { user: { equals: betterAuthId } },
+    { status: { equals: 'active' } },
+  ]
+  if (options.roles?.length) and.push({ role: { in: options.roles } })
+  const result = await payload.find({
+    collection: COLLECTION,
+    where: { and },
+    limit: 1,
+    overrideAccess: options.overrideAccess ?? false,
+  })
+  return result.docs[0] ?? null
+}
+
+/**
+ * Every ACTIVE membership row for a user, depth 1 (populated workspace). Used
+ * by `@/lib/data/cached-queries.ts` (`getUserWorkspaceMemberships`) — moved
+ * here only to get the raw `workspace-members` query out of a non-roster file;
+ * behavior (shape, depth, limit, `overrideAccess: true`) is unchanged.
+ */
+export async function listActiveMembershipDocsFor(
+  payload: Payload,
+  betterAuthId: string,
+): Promise<WorkspaceMember[]> {
+  const result = await payload.find({
+    collection: COLLECTION,
+    where: { user: { equals: betterAuthId }, status: { equals: 'active' } },
+    depth: 1,
+    limit: 100,
+    overrideAccess: true,
+  })
+  return result.docs
+}
+
+/**
  * Add an active member. Idempotent: an existing row (any status) is returned
  * unchanged rather than duplicated; pass `upgradeRole` to raise its role.
  */
