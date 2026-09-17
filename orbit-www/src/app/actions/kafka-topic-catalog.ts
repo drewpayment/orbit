@@ -2,7 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
+import { getActor, check, memberWorkspaceIds } from '@/lib/authz'
 import { getTemporalClient } from '@/lib/temporal/client'
 
 // ============================================================================
@@ -228,31 +228,16 @@ async function sendShareRequestNotification(
 export async function searchTopicCatalog(
   input: SearchTopicCatalogInput
 ): Promise<SearchTopicCatalogResult> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
   const payload = await getPayload({ config })
-  const userId = payloadUser.betterAuthId || payloadUser.id
 
   try {
     // Get user's workspace memberships
-    const memberships = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { user: { equals: userId } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      limit: 1000,
-      overrideAccess: true,
-    })
-
-    const userWorkspaceIds = memberships.docs.map(m =>
-      typeof m.workspace === 'string' ? m.workspace : m.workspace.id
-    )
+    const userWorkspaceIds = await memberWorkspaceIds('member', actor)
 
     // Build visibility filter
     // By default, show discoverable and public topics
@@ -441,30 +426,18 @@ export async function searchTopicCatalog(
 export async function requestTopicAccess(
   input: RequestTopicAccessInput
 ): Promise<RequestTopicAccessResult> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
   const payload = await getPayload({ config })
-  const userId = payloadUser.betterAuthId || payloadUser.id
 
   try {
     // Verify user is a member of the requesting workspace
-    const membership = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: input.requestingWorkspaceId } },
-          { user: { equals: userId } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      limit: 1,
-      overrideAccess: true,
-    })
+    const membershipDecision = await check('create', { kind: 'workspace', id: input.requestingWorkspaceId }, actor)
 
-    if (membership.docs.length === 0) {
+    if (!membershipDecision.allowed) {
       return { success: false, error: 'Not a member of the requesting workspace' }
     }
 
@@ -534,13 +507,13 @@ export async function requestTopicAccess(
         accessLevel: input.accessLevel,
         status: shouldAutoApprove ? 'approved' : 'pending',
         reason: input.reason,
-        requestedBy: userId,
+        requestedBy: actor.payloadId,
         ...(shouldAutoApprove && {
           approvedAt: new Date().toISOString(),
           // System auto-approval - no approvedBy user
         }),
       },
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -578,13 +551,12 @@ export async function requestTopicAccess(
 export async function getConnectionDetails(
   shareId: string
 ): Promise<GetConnectionDetailsResult> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
   const payload = await getPayload({ config })
-  const userId = payloadUser.betterAuthId || payloadUser.id
 
   try {
     // Fetch the share with related data
@@ -608,25 +580,12 @@ export async function getConnectionDetails(
       : share.targetWorkspace.id
 
     // Verify user has access (member of owner or target workspace)
-    const memberships = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { user: { equals: userId } },
-          { status: { equals: 'active' } },
-          {
-            or: [
-              { workspace: { equals: ownerWorkspaceId } },
-              { workspace: { equals: targetWorkspaceId } },
-            ],
-          },
-        ],
-      },
-      limit: 1,
-      overrideAccess: true,
-    })
+    const [ownerDecision, targetDecision] = await Promise.all([
+      check('read', { kind: 'workspace', id: ownerWorkspaceId }, actor),
+      check('read', { kind: 'workspace', id: targetWorkspaceId }, actor),
+    ])
 
-    if (memberships.docs.length === 0) {
+    if (!ownerDecision.allowed && !targetDecision.allowed) {
       return { success: false, error: 'Access denied' }
     }
 
@@ -743,13 +702,12 @@ export async function getConnectionDetails(
 export async function getOwnTopicConnectionDetails(
   topicId: string
 ): Promise<GetConnectionDetailsResult> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
   const payload = await getPayload({ config })
-  const userId = payloadUser.betterAuthId || payloadUser.id
 
   try {
     // Fetch the topic with related data
@@ -774,20 +732,9 @@ export async function getOwnTopicConnectionDetails(
     }
 
     // Verify user is a member of this workspace
-    const memberships = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { user: { equals: userId } },
-          { status: { equals: 'active' } },
-          { workspace: { equals: workspaceId } },
-        ],
-      },
-      limit: 1,
-      overrideAccess: true,
-    })
+    const membershipDecision = await check('read', { kind: 'workspace', id: workspaceId }, actor)
 
-    if (memberships.docs.length === 0) {
+    if (!membershipDecision.allowed) {
       return { success: false, error: 'Access denied - you must be a workspace member' }
     }
 
