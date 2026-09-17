@@ -1,7 +1,6 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, ShieldAlert } from 'lucide-react'
-import { getActor } from '@/lib/authz'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -24,8 +23,7 @@ interface PageProps {
  */
 export default async function EntityTypeDetailPage({ params }: PageProps) {
   const { kind } = await params
-  const actor = await getActor()
-  const detail = await getEntityTypeDetail(actor?.betterAuthId, kind)
+  const detail = await getEntityTypeDetail(kind)
   if (!detail) notFound()
 
   const { definition, canManage, isCustomized } = detail

@@ -15,8 +15,6 @@ import {
 export type CatalogScope = 'all' | 'mine'
 
 export interface SearchCatalogInput {
-  /** Legacy — identity is resolved from the session; kept for call-site stability. */
-  userId?: string
   kind?: string
   query?: string
   limit?: number
@@ -101,8 +99,7 @@ function computeCanManage(
  *
  * Reads run with `overrideAccess: true`; the where clause is the boundary. Each
  * returned doc carries a `canManage` flag computed from a single manageable-ids
- * set (no per-row query). Identity is resolved from the session — the client
- * `userId` is not trusted for authorization.
+ * set (no per-row query). Identity is resolved from the session.
  */
 export async function searchCatalogEntities(
   input: SearchCatalogInput = {},
@@ -181,7 +178,7 @@ export type CatalogKindCounts = {
  * restricts to the caller's active workspaces. Respects the active text `query`.
  */
 export async function getCatalogKindCounts(
-  input: { userId?: string; query?: string; scope?: CatalogScope; workspaceId?: string } = {},
+  input: { query?: string; scope?: CatalogScope; workspaceId?: string } = {},
 ): Promise<CatalogKindCounts> {
   const payload = await getPayload({ config })
   const { query, scope = 'all', workspaceId } = input

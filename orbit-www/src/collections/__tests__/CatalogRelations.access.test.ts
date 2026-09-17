@@ -60,6 +60,7 @@ const byId = {
   'r-manual': { id: 'r-manual', workspace: 'ws-1', source: { type: 'manual' } },
   'r-global-manual': { id: 'r-global-manual', workspace: null, source: { type: 'manual' } },
   'r-projected': { id: 'r-projected', workspace: 'ws-1', source: { type: 'kafka-lineage' } },
+  'r-no-source': { id: 'r-no-source', workspace: 'ws-1' },
 }
 
 describe('CatalogRelations access', () => {
@@ -153,6 +154,13 @@ describe('CatalogRelations access', () => {
       const { invoke } = makePayload([], byId)
       expect(
         await invoke(CatalogRelations.access!.delete as Access, { user: adminUser, id: 'r-global-manual' }),
+      ).toBe(true)
+    })
+
+    it('treats a missing source group as manual (defaults, does not strictly require source.type)', async () => {
+      const { invoke } = makePayload([active('member')], byId)
+      expect(
+        await invoke(CatalogRelations.access!.delete as Access, { user: plainUser, id: 'r-no-source' }),
       ).toBe(true)
     })
   })

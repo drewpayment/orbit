@@ -57,6 +57,7 @@ const byId = {
   'e-manual': { id: 'e-manual', workspace: 'ws-1', source: { type: 'manual' } },
   'e-global-manual': { id: 'e-global-manual', workspace: null, source: { type: 'manual' } },
   'e-projected': { id: 'e-projected', workspace: 'ws-1', source: { type: 'apps' } },
+  'e-no-source': { id: 'e-no-source', workspace: 'ws-1' },
 }
 
 describe('CatalogEntities access', () => {
@@ -158,6 +159,13 @@ describe('CatalogEntities access', () => {
       const { invoke } = makePayload([], byId)
       expect(
         await invoke(CatalogEntities.access!.delete as Access, { user: adminUser, id: 'e-global-manual' }),
+      ).toBe(true)
+    })
+
+    it('treats a missing source group as manual (defaults, does not strictly require source.type)', async () => {
+      const { invoke } = makePayload([active('admin')], byId)
+      expect(
+        await invoke(CatalogEntities.access!.delete as Access, { user: plainUser, id: 'e-no-source' }),
       ).toBe(true)
     })
   })

@@ -51,7 +51,8 @@ export const CatalogEntities: CollectionConfig = {
     create: memberCreate(),
     update: docWorkspaceMutate('catalog-entities', ALL_ROLES),
     delete: docWorkspaceMutate('catalog-entities', MANAGE_ROLES, {
-      guard: (doc) => (doc as { source?: { type?: string } }).source?.type === 'manual',
+      guard: (doc) =>
+        ((doc as { source?: { type?: string } }).source?.type ?? 'manual') === 'manual',
     }),
   },
   hooks: {

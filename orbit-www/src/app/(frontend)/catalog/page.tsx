@@ -1,7 +1,6 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
 import { Compass, Loader2 } from 'lucide-react'
-import { getActor } from '@/lib/authz'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -45,7 +44,6 @@ function resolveWorkspaceName(
 
 async function CatalogContent({ searchParams }: PageProps) {
   const params = await searchParams
-  const actor = await getActor()
 
   const activeKind: EntityKind | 'all' = isEntityKind(params.kind) ? params.kind : 'all'
   const page = params.page ? Math.max(1, parseInt(params.page, 10) || 1) : 1
@@ -54,14 +52,13 @@ async function CatalogContent({ searchParams }: PageProps) {
 
   const [result, counts] = await Promise.all([
     searchCatalogEntities({
-      userId: actor?.payloadId,
       kind: activeKind === 'all' ? undefined : activeKind,
       query: params.q,
       page,
       scope,
       workspaceId,
     }),
-    getCatalogKindCounts({ userId: actor?.payloadId, query: params.q, scope, workspaceId }),
+    getCatalogKindCounts({ query: params.q, scope, workspaceId }),
   ])
 
   // Resolve the filtered workspace's display name from a returned doc's

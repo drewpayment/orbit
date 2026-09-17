@@ -290,11 +290,10 @@ export async function getScorecardDetail(scorecardId: string): Promise<Scorecard
 
   const summary = summarise(scorecard, rules, resultsResult.docs)
 
-  const canManageDecision = await check(
-    'manage',
-    { kind: 'workspace', id: relId(scorecard.workspace) ?? '' },
-    actor,
-  )
+  const scorecardWorkspaceId = relId(scorecard.workspace)
+  const canManageDecision = scorecardWorkspaceId
+    ? await check('manage', { kind: 'workspace', id: scorecardWorkspaceId }, actor)
+    : { allowed: false }
   const canManage = canManageDecision.allowed
 
   return { scorecard, levels, rules, rows, summary, canManage }

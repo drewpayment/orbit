@@ -20,12 +20,12 @@ vi.mock('next/cache', () => ({
 import { getPayload } from 'payload'
 import { getActor, check } from '@/lib/authz'
 const mockActor = {
-  payloadId: 'user-1',
-  betterAuthId: 'user-1',
+  payloadId: 'pl-1',
+  betterAuthId: 'ba-1',
   email: 'user-1@test.com',
   role: 'user',
   isPlatformAdmin: false,
-  user: { id: 'user-1', collection: 'users', _strategy: 'better-auth' },
+  user: { id: 'pl-1', collection: 'users', _strategy: 'better-auth' },
 }
 
 const mockAdminActor = { ...mockActor, role: 'admin', isPlatformAdmin: true }
@@ -105,10 +105,11 @@ describe('submitApplicationRequest', () => {
         applicationName: 'Test App',
         applicationSlug: 'test-app',
         description: 'Test description',
-        requestedBy: 'user-1',
+        requestedBy: 'pl-1',
         status: 'pending_workspace',
       },
-      overrideAccess: true,
+      user: mockActor.user,
+      overrideAccess: false,
     })
   })
 })
@@ -228,7 +229,11 @@ describe('getPendingPlatformApprovals', () => {
 
     const result = await getPendingPlatformApprovals()
 
-    expect(result).toEqual({ success: false, error: 'Not a platform admin' })
+    expect(result).toEqual({
+      success: false,
+      error: 'Forbidden: platform admin access required',
+      requests: [],
+    })
   })
 
   it('should return pending platform requests for platform admin', async () => {
@@ -325,7 +330,7 @@ describe('approveRequestAsWorkspaceAdmin', () => {
         id: 'request-1',
         data: expect.objectContaining({
           status: 'pending_platform',
-          workspaceApprovedBy: 'user-1',
+          workspaceApprovedBy: 'pl-1',
         }),
       })
     )
@@ -358,7 +363,7 @@ describe('rejectRequestAsWorkspaceAdmin', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           status: 'rejected',
-          rejectedBy: 'user-1',
+          rejectedBy: 'pl-1',
           rejectionReason: 'Duplicate request',
         }),
       })
@@ -389,7 +394,10 @@ describe('approveRequestAsPlatformAdmin', () => {
 
     const result = await approveRequestAsPlatformAdmin('request-1', 'single')
 
-    expect(result).toEqual({ success: false, error: 'Not a platform admin' })
+    expect(result).toEqual({
+      success: false,
+      error: 'Forbidden: platform admin access required',
+    })
   })
 
   it('should approve request with single action', async () => {
@@ -412,7 +420,7 @@ describe('approveRequestAsPlatformAdmin', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           status: 'approved',
-          platformApprovedBy: 'user-1',
+          platformApprovedBy: 'pl-1',
           platformAction: 'approved_single',
         }),
       })
@@ -470,7 +478,7 @@ describe('rejectRequestAsPlatformAdmin', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           status: 'rejected',
-          rejectedBy: 'user-1',
+          rejectedBy: 'pl-1',
           rejectionReason: 'Policy violation',
         }),
       })

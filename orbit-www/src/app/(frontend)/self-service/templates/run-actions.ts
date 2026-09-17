@@ -55,6 +55,7 @@ async function canApproveScaffolderStep(
   workspaceId: string | null,
   approvers: string[],
 ): Promise<boolean> {
+  if (actor.isPlatformAdmin) return true
   const listed = approvers.some(
     (a) => a === actor.betterAuthId || a.toLowerCase() === actor.email.toLowerCase(),
   )

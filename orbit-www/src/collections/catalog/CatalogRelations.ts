@@ -45,7 +45,8 @@ export const CatalogRelations: CollectionConfig = {
     // `canManageEntity`) or a platform admin. A relation is a link, not an
     // entity: members who can create one can remove one.
     delete: docWorkspaceMutate('catalog-relations', ALL_ROLES, {
-      guard: (doc) => (doc as { source?: { type?: string } }).source?.type === 'manual',
+      guard: (doc) =>
+        ((doc as { source?: { type?: string } }).source?.type ?? 'manual') === 'manual',
     }),
   },
   fields: [

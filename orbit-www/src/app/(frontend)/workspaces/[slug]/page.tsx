@@ -75,10 +75,8 @@ export default async function WorkspacePage({ params }: PageProps) {
   ] = await Promise.all([
     // Fetch members
     listWorkspaceMembers(payload, String(workspace.id), { limit: 100 }),
-    // Check membership status for current user (using BA user ID directly)
-    actor
-      ? checkMembershipStatus(workspace.id, actor.betterAuthId)
-      : Promise.resolve(undefined),
+    // Check membership status for current user
+    actor ? checkMembershipStatus(workspace.id) : Promise.resolve(undefined),
     // Fetch knowledge spaces
     payload.find({
       collection: 'knowledge-spaces',

@@ -20,6 +20,10 @@ vi.mock('@/lib/grpc/agent-client', () => ({
   agentClient: {
     startInfrastructureAgent: vi.fn(),
     abortAgent: vi.fn(),
+    sendMessage: vi.fn(),
+    approveAction: vi.fn(),
+    rejectAction: vi.fn(),
+    sendReviewerMessage: vi.fn(),
   },
 }))
 
@@ -32,7 +36,15 @@ import {
 } from '@/lib/proto/idp/agent/v1/agent_pb'
 import { getActor, check } from '@/lib/authz'
 import { agentClient } from '@/lib/grpc/agent-client'
-const { startAgentRun } = await import('./infra-agent')
+const {
+  startAgentRun,
+  sendAgentMessage,
+  approveAgentAction,
+  rejectAgentAction,
+  approveAgentActionWithEdits,
+  sendReviewerMessage,
+  abortAgentRun,
+} = await import('./infra-agent')
 
 describe('startAgentRun compensation', () => {
   const mockPayload = {
@@ -114,6 +126,127 @@ describe('startAgentRun compensation', () => {
       expect(result.workflowId).toBe('wf-123')
       expect(result.runId).toBe('run-123')
     }
+    expect(agentClient.abortAgent).not.toHaveBeenCalled()
+  })
+})
+
+describe('workspace authorization gates', () => {
+  const actor = { payloadId: 'user-1', betterAuthId: 'ba-user-1' } as unknown as Awaited<
+    ReturnType<typeof getActor>
+  >
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getActor).mockResolvedValue(actor)
+  })
+
+  it('startAgentRun denies when check() denies and does not call the agent client', async () => {
+    vi.mocked(check).mockResolvedValue({ allowed: false, reason: 'x', actor: null })
+
+    const result = await startAgentRun({
+      workspaceId: 'ws-1',
+      repositoryId: 'repo-1',
+      llmProviderId: 'llm-1',
+      initialPrompt: 'do the thing',
+    })
+
+    expect(check).toHaveBeenCalledWith('read', { kind: 'workspace', id: 'ws-1' }, actor)
+    expect(result).toEqual({ success: false, error: 'Not a member of this workspace' })
+    expect(agentClient.startInfrastructureAgent).not.toHaveBeenCalled()
+  })
+
+  it('sendAgentMessage denies when check() denies and does not call the agent client', async () => {
+    vi.mocked(check).mockResolvedValue({ allowed: false, reason: 'x', actor: null })
+
+    const result = await sendAgentMessage({
+      workspaceId: 'ws-1',
+      workflowId: 'wf-1',
+      message: 'hi',
+    })
+
+    expect(check).toHaveBeenCalledWith('read', { kind: 'workspace', id: 'ws-1' }, actor)
+    expect(result).toEqual({ success: false, error: 'Forbidden' })
+    expect(agentClient.sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('approveAgentAction denies when check() denies and does not call the agent client', async () => {
+    vi.mocked(check).mockResolvedValue({ allowed: false, reason: 'x', actor: null })
+
+    const result = await approveAgentAction({
+      workspaceId: 'ws-1',
+      workflowId: 'wf-1',
+      approvalId: 'ap-1',
+    })
+
+    expect(check).toHaveBeenCalledWith('manage', { kind: 'workspace', id: 'ws-1' }, actor)
+    expect(result).toEqual({
+      success: false,
+      error: 'Approval requires workspace admin or owner',
+    })
+    expect(agentClient.approveAction).not.toHaveBeenCalled()
+  })
+
+  it('rejectAgentAction denies when check() denies and does not call the agent client', async () => {
+    vi.mocked(check).mockResolvedValue({ allowed: false, reason: 'x', actor: null })
+
+    const result = await rejectAgentAction({
+      workspaceId: 'ws-1',
+      workflowId: 'wf-1',
+      approvalId: 'ap-1',
+      reason: 'nope',
+    })
+
+    expect(check).toHaveBeenCalledWith('manage', { kind: 'workspace', id: 'ws-1' }, actor)
+    expect(result).toEqual({
+      success: false,
+      error: 'Rejection requires workspace admin or owner',
+    })
+    expect(agentClient.rejectAction).not.toHaveBeenCalled()
+  })
+
+  it('approveAgentActionWithEdits denies when check() denies and does not call the agent client', async () => {
+    vi.mocked(check).mockResolvedValue({ allowed: false, reason: 'x', actor: null })
+
+    const result = await approveAgentActionWithEdits({
+      workspaceId: 'ws-1',
+      workflowId: 'wf-1',
+      approvalId: 'ap-1',
+      edits: {},
+    })
+
+    expect(check).toHaveBeenCalledWith('manage', { kind: 'workspace', id: 'ws-1' }, actor)
+    expect(result).toEqual({
+      success: false,
+      error: 'Approval requires workspace admin or owner',
+    })
+    expect(agentClient.approveAction).not.toHaveBeenCalled()
+  })
+
+  it('sendReviewerMessage denies when check() denies and does not call the agent client', async () => {
+    vi.mocked(check).mockResolvedValue({ allowed: false, reason: 'x', actor: null })
+
+    const result = await sendReviewerMessage({
+      workspaceId: 'ws-1',
+      workflowId: 'wf-1',
+      approvalId: 'ap-1',
+      message: 'question?',
+    })
+
+    expect(check).toHaveBeenCalledWith('read', { kind: 'workspace', id: 'ws-1' }, actor)
+    expect(result).toEqual({ success: false, error: 'Forbidden' })
+    expect(agentClient.sendReviewerMessage).not.toHaveBeenCalled()
+  })
+
+  it('abortAgentRun denies when check() denies and does not call the agent client', async () => {
+    vi.mocked(check).mockResolvedValue({ allowed: false, reason: 'x', actor: null })
+
+    const result = await abortAgentRun({
+      workspaceId: 'ws-1',
+      workflowId: 'wf-1',
+    })
+
+    expect(check).toHaveBeenCalledWith('read', { kind: 'workspace', id: 'ws-1' }, actor)
+    expect(result).toEqual({ success: false, error: 'Forbidden' })
     expect(agentClient.abortAgent).not.toHaveBeenCalled()
   })
 })

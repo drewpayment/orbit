@@ -44,10 +44,11 @@ export async function requestJoinWorkspace(workspaceId: string, _userId?: string
   }
 }
 
-export async function checkMembershipStatus(workspaceId: string, betterAuthId: string) {
+export async function checkMembershipStatus(workspaceId: string) {
   try {
+    const actor = await requireActor()
     const payload = await getPayload({ config })
-    const member = await findMembership(payload, betterAuthId, workspaceId)
+    const member = await findMembership(payload, actor.betterAuthId, workspaceId)
 
     if (!member) {
       return { isMember: false, isPending: false }
