@@ -1,7 +1,6 @@
 // orbit-www/src/collections/Templates.ts
 import type { CollectionConfig, Where } from 'payload'
-import { getMemberWorkspaceIds, isWorkspaceAdminOrOwner, getWorkspaceMembership } from '@/lib/access/workspace-access'
-import { memberCreate } from '@/lib/access/collection-access'
+import { memberCreate, workspaceScopedRead, docWorkspaceMutate } from '@/lib/authz/payload'
 
 export const Templates: CollectionConfig = {
   slug: 'templates',
@@ -12,63 +11,18 @@ export const Templates: CollectionConfig = {
   },
   access: {
     // Read: Based on visibility and workspace membership
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-
-      // Get user's workspace memberships
-      const betterAuthId = user.betterAuthId
-      const workspaceIds = betterAuthId ? await getMemberWorkspaceIds(payload, betterAuthId) : []
-
-      // Return query constraint: public OR in user's workspaces OR shared with user's workspaces
-      return {
-        or: [
-          { visibility: { equals: 'public' } },
-          { workspace: { in: workspaceIds } },
-          { sharedWith: { in: workspaceIds } },
-        ],
-      } as Where
-    },
+    read: workspaceScopedRead({
+      extend: ({ workspaceIds }): Where[] => [
+        { visibility: { equals: 'public' } },
+        { sharedWith: { in: workspaceIds } },
+      ],
+    }),
     // Create: active member of the target `data.workspace` (was `!!user` — gap closed)
     create: memberCreate(),
     // Update: Workspace admins/owners
-    update: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-
-      const template = await payload.findByID({
-        collection: 'templates',
-        id,
-        overrideAccess: true,
-      })
-
-      const workspaceId = typeof template.workspace === 'string'
-        ? template.workspace
-        : template.workspace.id
-
-      const betterAuthId = user.betterAuthId
-      if (!betterAuthId) return false
-
-      return isWorkspaceAdminOrOwner(payload, betterAuthId, workspaceId)
-    },
+    update: docWorkspaceMutate('templates', ['owner', 'admin']),
     // Delete: Workspace owners only
-    delete: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-
-      const template = await payload.findByID({
-        collection: 'templates',
-        id,
-        overrideAccess: true,
-      })
-
-      const workspaceId = typeof template.workspace === 'string'
-        ? template.workspace
-        : template.workspace.id
-
-      const betterAuthId = user.betterAuthId
-      if (!betterAuthId) return false
-
-      const membership = await getWorkspaceMembership(payload, betterAuthId, workspaceId)
-      return membership?.role === 'owner'
-    },
+    delete: docWorkspaceMutate('templates', ['owner']),
   },
   fields: [
     // Identity

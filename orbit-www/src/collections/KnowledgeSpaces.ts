@@ -1,5 +1,5 @@
 import type { CollectionConfig } from 'payload'
-import { memberCreate } from '@/lib/access/collection-access'
+import { memberCreate, workspaceScopedRead, docWorkspaceMutate } from '@/lib/authz/payload'
 
 export const KnowledgeSpaces: CollectionConfig = {
   slug: 'knowledge-spaces',
@@ -10,104 +10,13 @@ export const KnowledgeSpaces: CollectionConfig = {
   },
   access: {
     // Read: Platform admins see all, workspace members see their workspaces' spaces
-    read: async ({ req: { user, payload } }) => {
-      if (!user) return false
-      const role = user?.role
-      if (role === 'super_admin' || role === 'admin') return true
-
-      const betterAuthId = user?.betterAuthId
-      if (!betterAuthId) return false
-
-      const memberships = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          user: { equals: betterAuthId },
-          status: { equals: 'active' },
-        },
-        limit: 1000,
-        overrideAccess: true,
-      })
-
-      const workspaceIds = memberships.docs.map(m =>
-        typeof m.workspace === 'string' ? m.workspace : m.workspace.id
-      )
-
-      if (workspaceIds.length === 0) return false
-
-      return {
-        workspace: { in: workspaceIds }
-      }
-    },
+    read: workspaceScopedRead(),
     // Create: active member of the target `data.workspace` (was `!!user` — gap closed)
     create: memberCreate(),
     // Update: Platform admins or workspace admins/owners
-    update: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-      const role = user?.role
-      if (role === 'super_admin' || role === 'admin') return true
-
-      const betterAuthId = user?.betterAuthId
-      if (!betterAuthId) return false
-
-      const space = await payload.findByID({
-        collection: 'knowledge-spaces',
-        id,
-        overrideAccess: true,
-      })
-
-      const workspaceId = typeof space.workspace === 'string'
-        ? space.workspace
-        : space.workspace.id
-
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: betterAuthId } },
-            { role: { in: ['owner', 'admin'] } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
-
-      return members.docs.length > 0
-    },
+    update: docWorkspaceMutate('knowledge-spaces', ['owner', 'admin']),
     // Delete: Platform admins or workspace owners only
-    delete: async ({ req: { user, payload }, id }) => {
-      if (!user || !id) return false
-      const role = user?.role
-      if (role === 'super_admin' || role === 'admin') return true
-
-      const betterAuthId = user?.betterAuthId
-      if (!betterAuthId) return false
-
-      const space = await payload.findByID({
-        collection: 'knowledge-spaces',
-        id,
-        overrideAccess: true,
-      })
-
-      const workspaceId = typeof space.workspace === 'string'
-        ? space.workspace
-        : space.workspace.id
-
-      const members = await payload.find({
-        collection: 'workspace-members',
-        where: {
-          and: [
-            { workspace: { equals: workspaceId } },
-            { user: { equals: betterAuthId } },
-            { role: { equals: 'owner' } },
-            { status: { equals: 'active' } },
-          ],
-        },
-        overrideAccess: true,
-      })
-
-      return members.docs.length > 0
-    },
+    delete: docWorkspaceMutate('knowledge-spaces', ['owner']),
   },
   fields: [
     {
