@@ -1,51 +1,39 @@
 import type { Payload } from 'payload'
-import {
-  isWorkspaceMember,
-  isWorkspaceAdminOrOwner,
-  getMemberWorkspaceIds,
-} from '@/lib/access/workspace-access'
+import { can, ALL_ROLES, MANAGE_ROLES } from '@/lib/authz/policy'
+import { workspaceIdsFor } from '@/lib/authz/membership'
 
 /**
- * Catalog entity authorization — the SINGLE server-side source of truth for
- * "can this user create / manage / delete this entity" (Catalog Entity CRUD,
- * docs/plans/2026-07-02-catalog-entity-crud.md, WP1). The collection `access`
- * rules, the authoring server actions, and the server-computed UI `canManage`
- * flags all route through these functions.
+ * Catalog entity authorization (Catalog Entity CRUD, WP1), expressed over the
+ * shared policy in `@/lib/authz/policy`. Reachable from collections, so no
+ * `server-only` and no Actor here: callers pass `betterAuthId` +
+ * `isPlatformAdmin` (from `principalOf(req.user)` or the Actor).
  *
- * Policy (PM decisions 1–4):
- *  - create / manage = platform admin, OR an active workspace member (ANY role)
- *    of the entity's workspace. A null workspace (global entity) ⇒ platform
- *    admin only.
- *  - delete = the entity is MANUAL (`source.type === 'manual'`) AND the caller
- *    is a platform admin or a workspace owner/admin. Projected entities are not
- *    deletable anywhere — deleting them means deleting their source.
- *
- * IMPORTANT: `workspace-members.user` holds a **Better-Auth** id, so every
- * membership lookup here takes `betterAuthId` — NEVER a Payload `user.id`.
- * Comparing the Payload doc id against `workspace-members.user` was the latent
- * access bug this feature fixes.
+ *  - create / manage = platform admin, OR any active member of the entity's
+ *    workspace. A null workspace (global entity) ⇒ platform admin only.
+ *  - delete = MANUAL entity AND platform admin or workspace owner/admin.
+ *    Projected entities are never deletable.
  */
 
-/**
- * True if `betterAuthId` may create an entity in `workspaceId`. Platform admins
- * may create anywhere (incl. global); a null `workspaceId` is global and so is
- * platform-admin-only.
- */
+const principal = (betterAuthId: string | null | undefined, isPlatformAdmin: boolean) => ({
+  payloadId: null,
+  betterAuthId: betterAuthId ?? null,
+  isPlatformAdmin,
+})
+
 export async function canCreateEntity(
   payload: Payload,
   betterAuthId: string | null | undefined,
   isPlatformAdmin: boolean,
   workspaceId: string | null,
 ): Promise<boolean> {
-  if (isPlatformAdmin) return true
-  if (!workspaceId || !betterAuthId) return false
-  return isWorkspaceMember(payload, betterAuthId, workspaceId)
+  const d = await can(payload, principal(betterAuthId, isPlatformAdmin), 'create', {
+    kind: 'doc',
+    workspaceId,
+    roles: ALL_ROLES,
+  })
+  return d.allowed
 }
 
-/**
- * True if `betterAuthId` may edit `entity`. Same rule as create against the
- * entity's own workspace (active membership, any role; global ⇒ admin only).
- */
 export async function canManageEntity(
   payload: Payload,
   betterAuthId: string | null | undefined,
@@ -55,11 +43,6 @@ export async function canManageEntity(
   return canCreateEntity(payload, betterAuthId, isPlatformAdmin, entity.workspaceId)
 }
 
-/**
- * True if `betterAuthId` may delete `entity`. Requires the entity to be manual
- * AND the caller to be a platform admin or workspace owner/admin. Projected
- * entities (`sourceType !== 'manual'`) are never deletable — even for admins.
- */
 export async function canDeleteEntity(
   payload: Payload,
   betterAuthId: string | null | undefined,
@@ -67,30 +50,24 @@ export async function canDeleteEntity(
   entity: { workspaceId: string | null; sourceType: string },
 ): Promise<boolean> {
   if (entity.sourceType !== 'manual') return false
-  if (isPlatformAdmin) return true
-  if (!entity.workspaceId || !betterAuthId) return false
-  return isWorkspaceAdminOrOwner(payload, betterAuthId, entity.workspaceId)
+  const d = await can(payload, principal(betterAuthId, isPlatformAdmin), 'delete', {
+    kind: 'doc',
+    workspaceId: entity.workspaceId,
+    roles: MANAGE_ROLES,
+  })
+  return d.allowed
 }
 
-/**
- * Workspace ids the user is an active member of (any role) — the set they can
- * create/manage entities in. Reuses the shared membership helper. Returns [] for
- * a missing id.
- */
+/** Workspace ids the user is an active member of. `[]` for a missing id. */
 export async function getManageableWorkspaceIds(
   payload: Payload,
   betterAuthId: string | null | undefined,
 ): Promise<string[]> {
   if (!betterAuthId) return []
-  return getMemberWorkspaceIds(payload, betterAuthId)
+  return workspaceIdsFor(payload, betterAuthId, 'member')
 }
 
-/**
- * True if `entityId` references an existing catalog entity of kind `team`. Used
- * to validate an `owner` pointer before persisting it — ownership is keyed to a
- * team entity (the Cortex/Backstage pattern), so a non-team or missing id is
- * rejected. Missing rows (findByID throws) are treated as invalid.
- */
+/** True if `entityId` is an existing catalog entity of kind `team`. */
 export async function isTeamEntity(payload: Payload, entityId: string): Promise<boolean> {
   try {
     const entity = await payload.findByID({

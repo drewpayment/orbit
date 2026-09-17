@@ -11,22 +11,11 @@ const { canManageTemplateDefinitions, canPublishTemplateDefinition, canRunTempla
   await import('./authz')
 
 /**
- * Simulates the membership row's role, respecting `hasWorkspaceRole`'s
- * `where.and[].role.in` filter (a bare `mockResolvedValue` would ignore the
- * query and always "match", which would silently pass a member as an
- * owner/admin).
+ * The shim delegates to the shared policy, which loads the membership row and
+ * checks its `role` in code, so the mock just returns the row (or nothing).
  */
 function mockRole(role: string | null) {
-  mockFind.mockImplementation(async ({ where }: { where?: { and?: unknown[] } }) => {
-    if (!role) return { docs: [] }
-    const roleClause = where?.and?.find(
-      (c): c is { role: { in: string[] } } =>
-        typeof c === 'object' && c !== null && 'role' in c,
-    )
-    const allowedRoles = roleClause?.role.in ?? []
-    if (!allowedRoles.includes(role)) return { docs: [] }
-    return { docs: [{ id: 'm-1', role, status: 'active' }] }
-  })
+  mockFind.mockImplementation(async () => (role ? { docs: [{ id: 'm-1', role, status: 'active' }] } : { docs: [] }))
 }
 
 describe('lib/templates/authz', () => {

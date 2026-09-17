@@ -1,27 +1,11 @@
 import 'server-only'
 import type { Payload } from 'payload'
+import { can, MANAGE_ROLES } from '@/lib/authz/policy'
 
 /**
- * Authoring authorization for scorecards (IDP refocus P2, Option A).
- *
- * Standards-authoring (create/edit/delete scorecards and their rules) is a
- * privileged capability gated on **workspace owner/admin** via the working
- * `workspace-members` system — the same authz everything else in the app
- * actually enforces. Members get read-only + can run evaluations.
- *
- * This is the SINGLE server-side source of truth for the "can manage
- * scorecards" decision; the collection `access` rules, the authoring server
- * actions, and the server-computed UI `canManage` flags all route through it.
- * It is intentionally named for a future `scorecards:manage` permission: when
- * the granular Permissions/Roles system is activated, only this file changes.
- */
-
-const MANAGE_ROLES = ['owner', 'admin'] as const
-
-/**
- * True if `userId` may author scorecards in `workspaceId` (active owner/admin
- * membership). Pass `isPayloadAdmin` for Payload-authenticated admin users
- * (admin panel), who bypass the membership check.
+ * @deprecated Phase C shim over `@/lib/authz`; deleted once consumers migrate
+ * (#135). Authoring scorecards = workspace owner/admin. `userId` is the
+ * Better-Auth id.
  */
 export async function canManageScorecards(
   payload: Payload,
@@ -31,21 +15,11 @@ export async function canManageScorecards(
 ): Promise<boolean> {
   if (isPayloadAdmin) return true
   if (!userId || !workspaceId) return false
-
-  const members = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: userId } },
-        { role: { in: [...MANAGE_ROLES] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-    depth: 0,
-    overrideAccess: true,
-  })
-
-  return members.docs.length > 0
+  const d = await can(
+    payload,
+    { payloadId: null, betterAuthId: userId, isPlatformAdmin: false },
+    'manage',
+    { kind: 'workspace', id: workspaceId, roles: MANAGE_ROLES },
+  )
+  return d.allowed
 }

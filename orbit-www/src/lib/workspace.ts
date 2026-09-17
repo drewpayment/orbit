@@ -1,66 +1,14 @@
 'use server'
 
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
-import { getPayload } from 'payload'
-import config from '@payload-config'
+import { memberWorkspaceIds } from '@/lib/authz/server'
 
+/** First workspace the current actor is an active member of, or null. */
 export async function getCurrentWorkspaceId(): Promise<string | null> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
-
-  if (!session?.user) {
-    return null
-  }
-
-  const payload = await getPayload({ config })
-
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { user: { equals: session.user.id } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-    overrideAccess: true,
-  })
-
-  if (membership.docs.length === 0) {
-    return null
-  }
-
-  const workspace = membership.docs[0].workspace
-  return typeof workspace === 'string' ? workspace : workspace.id
+  const ids = await memberWorkspaceIds('member')
+  return ids[0] ?? null
 }
 
+/** All workspace ids the current actor is an active member of. */
 export async function getAllWorkspaceIds(): Promise<string[]> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
-
-  if (!session?.user) {
-    return []
-  }
-
-  const payload = await getPayload({ config })
-
-  const memberships = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { user: { equals: session.user.id } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 100,
-    overrideAccess: true,
-  })
-
-  return memberships.docs.map(m => {
-    const workspace = m.workspace
-    return typeof workspace === 'string' ? workspace : workspace.id
-  })
+  return memberWorkspaceIds('member')
 }

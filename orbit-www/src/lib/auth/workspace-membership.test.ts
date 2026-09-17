@@ -31,7 +31,7 @@ interface FindCallArgs {
 
 describe('requireWorkspaceMembership', () => {
   it('resolves when the user is an active member', async () => {
-    const payload = makePayload([{ id: 'mem-1', user: 'bauth-1', workspace: 'ws-1', status: 'active' }])
+    const payload = makePayload([{ id: 'mem-1', user: 'bauth-1', workspace: 'ws-1', status: 'active', role: 'member' }])
     await expect(requireWorkspaceMembership(payload, 'bauth-1', 'ws-1')).resolves.toBeUndefined()
   })
 
@@ -81,7 +81,7 @@ describe('requireWorkspaceMembership', () => {
 
 describe('checkWorkspaceMembership', () => {
   it('returns { ok: true } when the user is a member', async () => {
-    const payload = makePayload([{ id: 'mem-1' }])
+    const payload = makePayload([{ id: 'mem-1', role: 'member' }])
     const result = await checkWorkspaceMembership(payload, 'bauth-1', 'ws-1')
     expect(result).toEqual({ ok: true })
   })
