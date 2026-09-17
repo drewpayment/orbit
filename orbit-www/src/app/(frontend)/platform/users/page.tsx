@@ -1,9 +1,7 @@
-import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 
-import { getPayloadUserFromSession } from '@/lib/auth/session'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
+import { authorize } from '@/lib/authz'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
@@ -18,9 +16,7 @@ export const metadata = {
 }
 
 export default async function PlatformUsersPage() {
-  const actor = await getPayloadUserFromSession()
-  if (!actor) redirect('/login')
-  if (!isPlatformAdmin(actor)) redirect('/')
+  const actor = await authorize('manage', { kind: 'platform' })
 
   const payload = await getPayload({ config })
 
@@ -66,8 +62,8 @@ export default async function PlatformUsersPage() {
         <div className="container mx-auto py-8 px-6 max-w-6xl space-y-6">
           <UsersTable
             users={users}
-            actorId={String(actor.id)}
-            actorRole={(actor.role ?? 'user') as UserRole}
+            actorId={actor.payloadId}
+            actorRole={actor.role as UserRole}
           />
         </div>
       </SidebarInset>

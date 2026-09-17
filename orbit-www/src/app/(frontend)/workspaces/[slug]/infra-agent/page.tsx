@@ -3,8 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 
-import { getPayloadUserFromSession } from '@/lib/auth/session'
-import { isWorkspaceMember } from '@/lib/access/workspace-access'
+import { getActor, authorize, isAuthzError } from '@/lib/authz'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -21,8 +20,8 @@ interface Props {
 
 export default async function InfraAgentRunsPage({ params }: Props) {
   const { slug } = await params
-  const user = await getPayloadUserFromSession()
-  if (!user) redirect('/sign-in')
+  const actor = await getActor()
+  if (!actor) redirect('/sign-in')
 
   const payload = await getPayload({ config })
   const wsResult = await payload.find({
@@ -33,7 +32,13 @@ export default async function InfraAgentRunsPage({ params }: Props) {
   })
   const workspace = wsResult.docs[0]
   if (!workspace) notFound()
-  if (!(await isWorkspaceMember(payload, user.id, workspace.id))) notFound()
+
+  try {
+    await authorize('read', { kind: 'workspace', id: workspace.id }, actor)
+  } catch (err) {
+    if (isAuthzError(err)) notFound()
+    throw err
+  }
 
   const [runs, providers] = await Promise.all([
     payload.find({

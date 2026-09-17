@@ -2,8 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 
-import { getPayloadUserFromSession } from '@/lib/auth/session'
-import { isWorkspaceMember } from '@/lib/access/workspace-access'
+import { getActor, authorize, isAuthzError } from '@/lib/authz'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -23,8 +22,8 @@ export default async function AgentRunPage({ params }: Props) {
   const { slug, runId } = await params
   const workflowId = decodeURIComponent(runId)
 
-  const user = await getPayloadUserFromSession()
-  if (!user) redirect('/sign-in')
+  const actor = await getActor()
+  if (!actor) redirect('/sign-in')
 
   const payload = await getPayload({ config })
   const wsResult = await payload.find({
@@ -35,7 +34,13 @@ export default async function AgentRunPage({ params }: Props) {
   })
   const workspace = wsResult.docs[0]
   if (!workspace) notFound()
-  if (!(await isWorkspaceMember(payload, user.id, workspace.id))) notFound()
+
+  try {
+    await authorize('read', { kind: 'workspace', id: workspace.id }, actor)
+  } catch (err) {
+    if (isAuthzError(err)) notFound()
+    throw err
+  }
 
   const runResult = await payload.find({
     collection: 'agent-runs',

@@ -1,10 +1,8 @@
-import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 
-import { getPayloadUserFromSession } from '@/lib/auth/session'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
+import { authorize } from '@/lib/authz'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
@@ -18,9 +16,7 @@ export const metadata = {
 }
 
 export default async function NewLLMProviderPage() {
-  const user = await getPayloadUserFromSession()
-  if (!user) redirect('/login')
-  if (!isPlatformAdmin(user)) redirect('/')
+  await authorize('manage', { kind: 'platform' })
 
   const payload = await getPayload({ config })
   const workspaces = await payload.find({
