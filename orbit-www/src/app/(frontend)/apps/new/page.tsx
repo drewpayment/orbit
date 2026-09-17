@@ -1,5 +1,4 @@
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor } from '@/lib/authz'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -9,11 +8,9 @@ import { SiteHeader } from '@/components/site-header'
 import { FileCode, GitBranch, ArrowLeft, Plus } from 'lucide-react'
 
 export default async function NewAppPage() {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return (
       <SidebarProvider>
         <AppSidebar />

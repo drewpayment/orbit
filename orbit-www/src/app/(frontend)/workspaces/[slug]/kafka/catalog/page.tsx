@@ -2,7 +2,7 @@ import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
 import { TopicCatalog } from '@/components/features/kafka/TopicCatalog'
 import {
-  getSession,
+  getActor,
   getWorkspaceBySlug,
   getWorkspaceMembership,
 } from '@/lib/data/cached-queries'
@@ -15,8 +15,8 @@ export default async function CatalogPage({ params }: CatalogPageProps) {
   const { slug } = await params
 
   // Use cached fetchers for request-level deduplication
-  const session = await getSession()
-  if (!session?.user) {
+  const actor = await getActor()
+  if (!actor) {
     notFound()
   }
 
@@ -26,7 +26,7 @@ export default async function CatalogPage({ params }: CatalogPageProps) {
   }
 
   // Verify user is member using cached membership query
-  const membership = await getWorkspaceMembership(workspace.id, session.user.id, {
+  const membership = await getWorkspaceMembership(workspace.id, actor.betterAuthId, {
     overrideAccess: true,
   })
   if (!membership) {

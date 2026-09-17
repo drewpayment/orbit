@@ -8,6 +8,7 @@ import { ObjectId } from 'mongodb'
 
 import { getActor } from '@/lib/authz'
 import { getMongoClient } from '@/lib/mongodb'
+// eslint-disable-next-line no-restricted-imports -- Better-Auth admin API (signUpEmail, requestPasswordReset, sendVerificationEmail), not a session read
 import { auth } from '@/lib/auth'
 import { canManageTarget, canAssignRole, type UserRole, type ActionResult } from './policy'
 

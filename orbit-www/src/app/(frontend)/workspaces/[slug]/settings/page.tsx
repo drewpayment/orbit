@@ -5,7 +5,7 @@ import { SiteHeader } from '@/components/site-header'
 import { Separator } from '@/components/ui/separator'
 import { WorkspaceSettingsClient } from './settings-client'
 import {
-  getSession,
+  getActor,
   getWorkspaceBySlug,
   getWorkspaceMembership,
 } from '@/lib/data/cached-queries'
@@ -20,8 +20,8 @@ export default async function WorkspaceSettingsPage({ params }: PageProps) {
   const { slug } = await params
 
   // Use cached fetchers for request-level deduplication
-  const session = await getSession()
-  if (!session?.user) {
+  const actor = await getActor()
+  if (!actor) {
     redirect('/sign-in')
   }
 
@@ -31,7 +31,7 @@ export default async function WorkspaceSettingsPage({ params }: PageProps) {
   }
 
   // Check if user is admin/owner
-  const member = await getWorkspaceMembership(workspace.id, session.user.id)
+  const member = await getWorkspaceMembership(workspace.id, actor.betterAuthId)
   if (!member) {
     redirect(`/workspaces/${slug}`)
   }

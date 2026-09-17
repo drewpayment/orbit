@@ -2,8 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getActor, check } from '@/lib/authz'
-import { getCurrentWorkspaceId } from '@/lib/workspace'
+import { getActor, check, memberWorkspaceIds } from '@/lib/authz'
 import { ENTITY_KINDS, type EntityKind } from '@/collections/catalog/constants'
 import { listEntityTypes, mergeEntityType, type EntityTypeDefinition } from '@/lib/catalog/entity-types'
 import {
@@ -21,8 +20,9 @@ type Payload = Awaited<ReturnType<typeof getPayload>>
  * Paths, docs/plans/2026-07-01-entity-scores-and-golden-paths.md).
  *
  * `entity-types` is a per-(workspace, kind) row, so these actions resolve a
- * single "current" workspace via `lib/workspace.ts` — the same helper the rest
- * of the app uses for workspace-scoped settings surfaces — rather than
+ * single "current" workspace via `getCurrentWorkspaceId` below (the first id
+ * from `memberWorkspaceIds()`, the same resolution the rest of the app uses
+ * for workspace-scoped settings surfaces) — rather than
  * aggregating across every workspace the user belongs to (contrast with
  * `scorecards/actions.ts`, which lists scorecards across all memberships since
  * a scorecard's own `workspace` field disambiguates each card).
@@ -35,6 +35,12 @@ type Payload = Awaited<ReturnType<typeof getPayload>>
 
 function isEntityKind(value: string): value is EntityKind {
   return (ENTITY_KINDS as readonly string[]).includes(value)
+}
+
+/** First workspace the current actor is an active member of, or null. */
+async function getCurrentWorkspaceId(): Promise<string | null> {
+  const ids = await memberWorkspaceIds('member')
+  return ids[0] ?? null
 }
 
 // ---------------------------------------------------------------------------

@@ -12,6 +12,7 @@
 //   TEMPORAL_UI_ORIGIN    - Temporal UI public URL (default: https://orbit-temporal.hoytlabs.app)
 
 import 'dotenv/config'
+// eslint-disable-next-line no-restricted-imports -- Better-Auth admin API (auth.api.adminCreateOAuthClient), not a session read
 import { auth } from '@/lib/auth'
 
 const temporalUiOrigin =

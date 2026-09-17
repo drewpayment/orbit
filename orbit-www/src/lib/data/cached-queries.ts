@@ -1,7 +1,7 @@
 import { cache } from 'react'
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getSession as getSessionFromAuth } from '@/lib/auth/session'
+import { getActor } from '@/lib/authz'
 import { getMongoClient } from '@/lib/mongodb'
 import {
   findActiveMembershipWithOptions,
@@ -29,24 +29,12 @@ export const getPayloadClient = cache(async () => {
 })
 
 /**
- * Get the current user session (cached per request).
- *
- * Delegates to `@/lib/auth/session` (the only allowed place to read the
- * session directly) instead of calling `auth.api.getSession` here directly.
- *
- * NOT FULLY MIGRATED (authz consolidation Phase C, #135): this still trips
- * `no-restricted-imports` because the rule also flags re-importing the
- * restricted names from their own allowed source module, and this file isn't
- * on the rule's ignore list. The only clean fixes are out of this slice's
- * scope: (a) move its four remaining callers (`app/(frontend)/dashboard/page.tsx`,
- * `app/(frontend)/notifications/page.tsx`,
- * `app/(frontend)/workspaces/[slug]/settings/page.tsx`,
- * `app/(frontend)/workspaces/[slug]/kafka/catalog/page.tsx`) onto
- * `getActor()`/`requireActor()` from `@/lib/authz` and delete this export, or
- * (b) add this file to the eslint ignore list alongside `lib/auth/**`. Left
- * as-is; reported instead of worked around.
+ * The current Actor (cached per request). `getActor` is already
+ * React-`cache`'d in `@/lib/authz`; re-exported here so existing callers in
+ * this module's family keep one import surface. (Phase C, #135 — replaces the
+ * former `getSession` re-export of `@/lib/auth/session`.)
  */
-export const getSession = cache(getSessionFromAuth)
+export { getActor }
 
 /**
  * Get a workspace by slug (cached per request)

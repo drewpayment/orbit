@@ -79,9 +79,10 @@ export async function listActions(): Promise<ListActionsResponse> {
 /**
  * Resolve an `approval:request` step's human-in-the-loop gate (Phase 4 Task
  * C). Callers MUST check the caller is authorized to approve (workspace
- * owner/admin, or listed in the step's `approvers` —
- * `lib/templates/authz.ts#canApproveScaffolderStep`) BEFORE calling this: the
- * RPC itself only proves tenant isolation, not who may approve.
+ * owner/admin, or listed in the step's `approvers` — see
+ * `canApproveScaffolderStep` in
+ * `app/(frontend)/self-service/templates/run-actions.ts`) BEFORE calling
+ * this: the RPC itself only proves tenant isolation, not who may approve.
  *
  * `workspaceId` is required — not for the Go server's own authorization
  * (`authorizeScaffolderRun` resolves the run's true workspace from the

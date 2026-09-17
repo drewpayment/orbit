@@ -9,16 +9,8 @@ vi.mock('@payload-config', () => ({
   default: {},
 }))
 
-vi.mock('@/lib/auth', () => ({
-  auth: {
-    api: {
-      getSession: vi.fn(),
-    },
-  },
-}))
-
-vi.mock('next/headers', () => ({
-  headers: vi.fn(() => Promise.resolve(new Headers())),
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(),
 }))
 
 vi.mock('@/lib/github/octokit', () => ({
@@ -26,7 +18,7 @@ vi.mock('@/lib/github/octokit', () => ({
 }))
 
 import { getPayload } from 'payload'
-import { auth } from '@/lib/auth'
+import { getActor } from '@/lib/authz'
 import { getInstallationOctokit } from '@/lib/github/octokit'
 import { getWorkspaceGitHubInstallations, listInstallationRepositories, searchInstallationRepositories, getRepositoryBranches } from '../github'
 
@@ -36,7 +28,7 @@ describe('getWorkspaceGitHubInstallations', () => {
   })
 
   it('should return unauthorized error when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    vi.mocked(getActor).mockResolvedValue(null)
 
     const result = await getWorkspaceGitHubInstallations('workspace-1')
 
@@ -48,9 +40,13 @@ describe('getWorkspaceGitHubInstallations', () => {
   })
 
   it('should return installations for workspace', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
+    vi.mocked(getActor).mockResolvedValue({
+      payloadId: 'payload-user-1',
+      betterAuthId: 'user-1',
+      email: 'user@example.com',
+      role: 'user',
+      isPlatformAdmin: false,
+      user: { id: 'payload-user-1', email: 'user@example.com', role: 'user' },
     } as any)
 
     const mockPayload = {
@@ -82,9 +78,13 @@ describe('getWorkspaceGitHubInstallations', () => {
   })
 
   it('should filter by allowedWorkspaces', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
+    vi.mocked(getActor).mockResolvedValue({
+      payloadId: 'payload-user-1',
+      betterAuthId: 'user-1',
+      email: 'user@example.com',
+      role: 'user',
+      isPlatformAdmin: false,
+      user: { id: 'payload-user-1', email: 'user@example.com', role: 'user' },
     } as any)
 
     const mockPayload = {
@@ -112,7 +112,7 @@ describe('listInstallationRepositories', () => {
   })
 
   it('should return unauthorized error when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    vi.mocked(getActor).mockResolvedValue(null)
 
     const result = await listInstallationRepositories('install-1')
 
@@ -125,9 +125,13 @@ describe('listInstallationRepositories', () => {
   })
 
   it('should return repositories from GitHub API', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
+    vi.mocked(getActor).mockResolvedValue({
+      payloadId: 'payload-user-1',
+      betterAuthId: 'user-1',
+      email: 'user@example.com',
+      role: 'user',
+      isPlatformAdmin: false,
+      user: { id: 'payload-user-1', email: 'user@example.com', role: 'user' },
     } as any)
 
     const mockPayload = {
@@ -180,9 +184,13 @@ describe('listInstallationRepositories', () => {
   })
 
   it('should handle pagination', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
+    vi.mocked(getActor).mockResolvedValue({
+      payloadId: 'payload-user-1',
+      betterAuthId: 'user-1',
+      email: 'user@example.com',
+      role: 'user',
+      isPlatformAdmin: false,
+      user: { id: 'payload-user-1', email: 'user@example.com', role: 'user' },
     } as any)
 
     const mockPayload = {
@@ -219,9 +227,13 @@ describe('listInstallationRepositories', () => {
   })
 
   it('should return error when installation not found', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
+    vi.mocked(getActor).mockResolvedValue({
+      payloadId: 'payload-user-1',
+      betterAuthId: 'user-1',
+      email: 'user@example.com',
+      role: 'user',
+      isPlatformAdmin: false,
+      user: { id: 'payload-user-1', email: 'user@example.com', role: 'user' },
     } as any)
 
     const mockPayload = {
@@ -246,9 +258,13 @@ describe('searchInstallationRepositories', () => {
   })
 
   it('should search repositories by query', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
+    vi.mocked(getActor).mockResolvedValue({
+      payloadId: 'payload-user-1',
+      betterAuthId: 'user-1',
+      email: 'user@example.com',
+      role: 'user',
+      isPlatformAdmin: false,
+      user: { id: 'payload-user-1', email: 'user@example.com', role: 'user' },
     } as any)
 
     const mockPayload = {
@@ -290,9 +306,13 @@ describe('searchInstallationRepositories', () => {
   })
 
   it('should return empty when query is too short', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
+    vi.mocked(getActor).mockResolvedValue({
+      payloadId: 'payload-user-1',
+      betterAuthId: 'user-1',
+      email: 'user@example.com',
+      role: 'user',
+      isPlatformAdmin: false,
+      user: { id: 'payload-user-1', email: 'user@example.com', role: 'user' },
     } as any)
 
     const result = await searchInstallationRepositories('install-1', 'ab')
@@ -308,7 +328,7 @@ describe('getRepositoryBranches', () => {
   })
 
   it('should return unauthorized error when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    vi.mocked(getActor).mockResolvedValue(null)
 
     const result = await getRepositoryBranches('install-1', 'acme', 'repo')
 
@@ -319,9 +339,13 @@ describe('getRepositoryBranches', () => {
   })
 
   it('should return error when installation not found', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
+    vi.mocked(getActor).mockResolvedValue({
+      payloadId: 'payload-user-1',
+      betterAuthId: 'user-1',
+      email: 'user@example.com',
+      role: 'user',
+      isPlatformAdmin: false,
+      user: { id: 'payload-user-1', email: 'user@example.com', role: 'user' },
     } as any)
 
     const mockPayload = {
@@ -338,9 +362,13 @@ describe('getRepositoryBranches', () => {
   })
 
   it('should return branches sorted with main/master first', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
+    vi.mocked(getActor).mockResolvedValue({
+      payloadId: 'payload-user-1',
+      betterAuthId: 'user-1',
+      email: 'user@example.com',
+      role: 'user',
+      isPlatformAdmin: false,
+      user: { id: 'payload-user-1', email: 'user@example.com', role: 'user' },
     } as any)
 
     const mockPayload = {
@@ -375,9 +403,13 @@ describe('getRepositoryBranches', () => {
   })
 
   it('should handle GitHub API errors', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
+    vi.mocked(getActor).mockResolvedValue({
+      payloadId: 'payload-user-1',
+      betterAuthId: 'user-1',
+      email: 'user@example.com',
+      role: 'user',
+      isPlatformAdmin: false,
+      user: { id: 'payload-user-1', email: 'user@example.com', role: 'user' },
     } as any)
 
     const mockPayload = {
