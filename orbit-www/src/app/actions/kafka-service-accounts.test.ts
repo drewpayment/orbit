@@ -886,9 +886,11 @@ describe('listServiceAccounts', () => {
     ]
 
     const mockPayload = createMockPayload({
+      findByID: vi.fn().mockResolvedValue({ id: 'vc-1', workspace: { id: 'ws-1' } }),
       find: vi.fn().mockResolvedValue({ docs: mockServiceAccounts }),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'workspace member', actor: mockActor } as never)
 
     const result = await listServiceAccounts({ virtualClusterId: 'vc-1' })
 
@@ -905,6 +907,7 @@ describe('listServiceAccounts', () => {
     })
     expect(result.serviceAccounts?.[1].lastRotatedAt).toBeUndefined()
 
+    expect(check).toHaveBeenCalledWith('read', { kind: 'workspace', id: 'ws-1' }, mockActor)
     expect(mockPayload.find).toHaveBeenCalledWith({
       collection: 'kafka-service-accounts',
       where: {
@@ -912,6 +915,7 @@ describe('listServiceAccounts', () => {
       },
       sort: '-createdAt',
       limit: 100,
+      overrideAccess: true,
     })
   })
 
@@ -919,9 +923,11 @@ describe('listServiceAccounts', () => {
     vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
+      findByID: vi.fn().mockResolvedValue({ id: 'vc-1', workspace: { id: 'ws-1' } }),
       find: vi.fn().mockResolvedValue({ docs: [] }),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'workspace member', actor: mockActor } as never)
 
     const result = await listServiceAccounts({ virtualClusterId: 'vc-1' })
 
@@ -933,9 +939,11 @@ describe('listServiceAccounts', () => {
     vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
+      findByID: vi.fn().mockResolvedValue({ id: 'vc-1', workspace: { id: 'ws-1' } }),
       find: vi.fn().mockRejectedValue(new Error('Database connection failed')),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'workspace member', actor: mockActor } as never)
 
     const result = await listServiceAccounts({ virtualClusterId: 'vc-1' })
 
