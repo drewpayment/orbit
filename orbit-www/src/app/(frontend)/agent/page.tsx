@@ -14,7 +14,7 @@ import type {
   AppOption,
   ProviderOption,
 } from '@/components/features/infra-agent/CrossWorkspaceAgentRunForm'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
+import { getActor } from '@/lib/authz'
 
 // /agent — top-level Infrastructure Agent entry point.
 //
@@ -25,8 +25,8 @@ import { getPayloadUserFromSession } from '@/lib/auth/session'
 // and all tool isolation continues to apply at the workflow layer.
 
 export default async function AgentHubPage() {
-  const user = await getPayloadUserFromSession()
-  if (!user) redirect('/sign-in')
+  const actor = await getActor()
+  if (!actor) redirect('/sign-in')
 
   const payload = await getPayload({ config })
 
@@ -35,7 +35,7 @@ export default async function AgentHubPage() {
     collection: 'workspace-members',
     where: {
       and: [
-        { user: { equals: user.id } },
+        { user: { equals: actor.betterAuthId } },
         { status: { equals: 'active' } },
       ],
     },

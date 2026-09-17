@@ -4,7 +4,7 @@ import config from '@payload-config'
 import { getAPIById, getAPIVersions } from '../actions'
 import { APIDetailClient } from './api-detail-client'
 import type { APISchema, APISchemaVersion } from '@/types/api-catalog'
-import { getCurrentUser } from '@/lib/auth/session'
+import { getActor } from '@/lib/authz'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -15,7 +15,7 @@ interface PageProps {
 
 export default async function APIDetailPage({ params }: PageProps) {
   const { id } = await params
-  const user = await getCurrentUser()
+  const actor = await getActor()
 
   const [api, versions] = await Promise.all([
     getAPIById(id),
@@ -28,11 +28,11 @@ export default async function APIDetailPage({ params }: PageProps) {
 
   // Check if user can edit (creator or workspace member with sufficient role)
   let canEdit = false
-  if (user) {
+  if (actor) {
     const createdById = typeof api.createdBy === 'object'
       ? api.createdBy.id
       : api.createdBy
-    canEdit = createdById === user.id
+    canEdit = createdById === actor.payloadId
 
     if (!canEdit) {
       const workspaceId = typeof api.workspace === 'string'
@@ -43,7 +43,7 @@ export default async function APIDetailPage({ params }: PageProps) {
         const memberships = await payload.find({
           collection: 'workspace-members',
           where: {
-            user: { equals: user.id },
+            user: { equals: actor.betterAuthId },
             workspace: { equals: workspaceId },
             status: { equals: 'active' },
             role: { in: ['owner', 'admin', 'member'] },
@@ -66,7 +66,7 @@ export default async function APIDetailPage({ params }: PageProps) {
             api={api as unknown as APISchema}
             versions={versions as unknown as APISchemaVersion[]}
             canEdit={canEdit}
-            userId={user?.id}
+            userId={actor?.payloadId}
           />
         </div>
       </SidebarInset>

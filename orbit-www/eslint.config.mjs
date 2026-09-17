@@ -30,6 +30,53 @@ const eslintConfig = [
       ],
     },
   },
+  // Authz consolidation (docs/plans/2026-09-16-authz-consolidation.md, Phase A).
+  // Feature code obtains identity via `getActor()` / `requireActor()` from
+  // `@/lib/authz` and must not read the session or query workspace membership
+  // directly. Warnings for now; flipped to errors in Phase D once the
+  // remaining call sites are migrated (Phase C).
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: [
+      'src/lib/authz/**',
+      'src/lib/auth/**',
+      'src/lib/auth.ts',
+      'src/lib/access/**',
+      'src/lib/payload-better-auth-strategy.ts',
+      'src/collections/WorkspaceMembers.ts',
+      'src/app/api/auth/**',
+      'src/**/*.test.{ts,tsx}',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'warn',
+        {
+          paths: [
+            {
+              name: '@/lib/auth/session',
+              importNames: ['getCurrentUser', 'getPayloadUserFromSession', 'getSession'],
+              message:
+                'Use getActor()/requireActor() from @/lib/authz. Actor exposes payloadId and betterAuthId by name; a bare session .id is ambiguous.',
+            },
+            {
+              name: '@/lib/auth',
+              importNames: ['auth'],
+              message:
+                'Do not read the session directly in feature code. Use getActor()/requireActor() from @/lib/authz.',
+            },
+          ],
+        },
+      ],
+      'no-restricted-syntax': [
+        'warn',
+        {
+          selector: "Property[key.name='collection'] Literal[value='workspace-members']",
+          message:
+            'Do not query workspace-members directly. Use the membership helpers in @/lib/access (Phase B: @/lib/authz).',
+        },
+      ],
+    },
+  },
   {
     ignores: ['.next/'],
   },
