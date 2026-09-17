@@ -22,20 +22,10 @@ vi.mock('@payload-config', () => ({
   default: {},
 }))
 
-vi.mock('@/lib/auth/session', () => ({
-  getPayloadUserFromSession: vi.fn(),
-}))
-
-vi.mock('@/lib/auth', () => ({
-  auth: {
-    api: {
-      getSession: vi.fn(),
-    },
-  },
-}))
-
-vi.mock('next/headers', () => ({
-  headers: vi.fn(() => Promise.resolve(new Headers())),
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(),
+  check: vi.fn(),
+  memberWorkspaceIds: vi.fn(),
 }))
 
 vi.mock('next/cache', () => ({
@@ -60,8 +50,7 @@ vi.mock('@/lib/bifrost-config', () => ({
   }),
 }))
 
-const { getPayloadUserFromSession } = await import('@/lib/auth/session')
-const { auth } = await import('@/lib/auth')
+const { getActor, check, memberWorkspaceIds } = await import('@/lib/authz')
 
 // ============================================================================
 // Helpers
@@ -69,30 +58,28 @@ const { auth } = await import('@/lib/auth')
 
 let mockPayload: any
 
-function setupAuth(userId: string, betterAuthId: string) {
-  vi.mocked(getPayloadUserFromSession).mockResolvedValue({
-    id: userId,
+function makeActor(userId: string, betterAuthId: string, role: 'user' | 'admin' = 'user') {
+  return {
+    payloadId: userId,
     betterAuthId,
     email: `${userId}@test.com`,
-    role: 'user',
-  } as any)
-  vi.mocked(auth.api.getSession).mockResolvedValue({
-    user: { id: userId },
-    session: {},
-  } as any)
+    role,
+    isPlatformAdmin: role === 'admin',
+    user: { id: userId, collection: 'users', _strategy: 'better-auth' },
+  }
 }
 
-function setupAdminAuth(userId: string, betterAuthId: string) {
-  vi.mocked(getPayloadUserFromSession).mockResolvedValue({
-    id: userId,
-    betterAuthId,
-    email: `${userId}@test.com`,
-    role: 'admin',
-  } as any)
-  vi.mocked(auth.api.getSession).mockResolvedValue({
-    user: { id: userId },
-    session: {},
-  } as any)
+function setupAuth(userId: string, betterAuthId: string) {
+  vi.mocked(getActor).mockResolvedValue(makeActor(userId, betterAuthId) as any)
+}
+
+// Membership decision helpers standing in for `check()` from @/lib/authz.
+function allow(reason = 'ok') {
+  return { allowed: true, reason, actor: undefined } as any
+}
+
+function deny(reason = 'denied') {
+  return { allowed: false, reason, actor: undefined } as any
 }
 
 function createMockPayload() {
@@ -102,10 +89,6 @@ function createMockPayload() {
     create: vi.fn().mockResolvedValue({ id: 'new-record' }),
     update: vi.fn().mockResolvedValue({ id: 'updated-record' }),
   }
-}
-
-function mockMembership(workspaceId: string, userId: string, role = 'member') {
-  return { id: `mem-${Date.now()}`, workspace: workspaceId, user: userId, role, status: 'active' }
 }
 
 function mockTopic(id: string, workspaceId: string, opts: Partial<any> = {}) {
@@ -152,8 +135,8 @@ describe('Topic Sharing Integration', () => {
   describe('Catalog Discovery', () => {
     it('user can search catalog and see discoverable topics', async () => {
       setupAuth(USER_A, USER_A)
+      vi.mocked(memberWorkspaceIds).mockResolvedValue([WS_A])
       mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_A, USER_A)] }) // memberships
         .mockResolvedValueOnce({ docs: [mockTopic(TOPIC_1, WS_B, { visibility: 'discoverable' })], totalDocs: 1, page: 1, totalPages: 1 }) // topics
         .mockResolvedValueOnce({ docs: [] }) // existing shares
 
@@ -165,8 +148,8 @@ describe('Topic Sharing Integration', () => {
 
     it('user can filter catalog by environment', async () => {
       setupAuth(USER_A, USER_A)
+      vi.mocked(memberWorkspaceIds).mockResolvedValue([WS_A])
       mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_A, USER_A)] })
         .mockResolvedValueOnce({ docs: [mockTopic(TOPIC_1, WS_B, { environment: 'staging' })], totalDocs: 1, page: 1, totalPages: 1 })
         .mockResolvedValueOnce({ docs: [] })
 
@@ -177,8 +160,8 @@ describe('Topic Sharing Integration', () => {
 
     it('user can filter catalog by visibility', async () => {
       setupAuth(USER_A, USER_A)
+      vi.mocked(memberWorkspaceIds).mockResolvedValue([WS_A])
       mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_A, USER_A)] })
         .mockResolvedValueOnce({ docs: [mockTopic(TOPIC_1, WS_B, { visibility: 'public' })], totalDocs: 1, page: 1, totalPages: 1 })
         .mockResolvedValueOnce({ docs: [] })
 
@@ -190,8 +173,8 @@ describe('Topic Sharing Integration', () => {
 
     it('private topics are not visible in catalog to other workspaces', async () => {
       setupAuth(USER_A, USER_A)
+      vi.mocked(memberWorkspaceIds).mockResolvedValue([WS_A])
       mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_A, USER_A)] })
         .mockResolvedValueOnce({ docs: [], totalDocs: 0, page: 1, totalPages: 0 })
         .mockResolvedValueOnce({ docs: [] })
 
@@ -202,8 +185,8 @@ describe('Topic Sharing Integration', () => {
 
     it('workspace-visible topics are only visible to workspace members', async () => {
       setupAuth(USER_A, USER_A)
+      vi.mocked(memberWorkspaceIds).mockResolvedValue([WS_A])
       mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_A, USER_A)] })
         .mockResolvedValueOnce({ docs: [mockTopic(TOPIC_1, WS_A, { visibility: 'workspace' })], totalDocs: 1, page: 1, totalPages: 1 })
         .mockResolvedValueOnce({ docs: [] })
 
@@ -216,8 +199,8 @@ describe('Topic Sharing Integration', () => {
   describe('Access Requests', () => {
     it('user can request access to a discoverable topic', async () => {
       setupAuth(USER_B, USER_B)
+      vi.mocked(check).mockResolvedValue(allow('workspace member'))
       mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_B, USER_B)] }) // verify membership
         .mockResolvedValueOnce({ docs: [] }) // existing shares check
         .mockResolvedValueOnce({ docs: [] }) // auto-approve policy check
       mockPayload.findByID.mockResolvedValueOnce(mockTopic(TOPIC_1, WS_A)) // topic lookup
@@ -236,7 +219,7 @@ describe('Topic Sharing Integration', () => {
 
     it('user cannot request access to their own workspace topics', async () => {
       setupAuth(USER_A, USER_A)
-      mockPayload.find.mockResolvedValueOnce({ docs: [mockMembership(WS_A, USER_A)] })
+      vi.mocked(check).mockResolvedValue(allow('workspace member'))
       mockPayload.findByID.mockResolvedValueOnce(mockTopic(TOPIC_1, WS_A))
 
       const result = await requestTopicAccess({
@@ -252,8 +235,8 @@ describe('Topic Sharing Integration', () => {
 
     it('duplicate access requests are prevented', async () => {
       setupAuth(USER_B, USER_B)
+      vi.mocked(check).mockResolvedValue(allow('workspace member'))
       mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_B, USER_B)] })
         .mockResolvedValueOnce({ docs: [{ id: 'existing-share', status: 'pending' }] }) // existing share found
       mockPayload.findByID.mockResolvedValueOnce(mockTopic(TOPIC_1, WS_A))
 
@@ -270,8 +253,8 @@ describe('Topic Sharing Integration', () => {
 
     it('request includes access level and reason', async () => {
       setupAuth(USER_B, USER_B)
+      vi.mocked(check).mockResolvedValue(allow('workspace member'))
       mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_B, USER_B)] })
         .mockResolvedValueOnce({ docs: [] })
         .mockResolvedValueOnce({ docs: [] })
       mockPayload.findByID.mockResolvedValueOnce(mockTopic(TOPIC_1, WS_A))
@@ -299,10 +282,8 @@ describe('Topic Sharing Integration', () => {
   describe('Approval Workflow', () => {
     it('workspace admin can approve a share request', async () => {
       setupAuth(USER_A, USER_A)
-      vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: USER_A }, session: {} } as any)
+      vi.mocked(check).mockResolvedValue(allow('workspace admin'))
       mockPayload.findByID.mockResolvedValueOnce(mockShare('share-1', TOPIC_1, WS_A, WS_B, { status: 'pending' }))
-      mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_A, USER_A, 'admin')] }) // admin check
       mockPayload.update.mockResolvedValueOnce({ id: 'share-1', status: 'approved' })
 
       const result = await approveShare({ shareId: 'share-1' })
@@ -311,10 +292,8 @@ describe('Topic Sharing Integration', () => {
 
     it('workspace admin can reject a share request with reason', async () => {
       setupAuth(USER_A, USER_A)
-      vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: USER_A }, session: {} } as any)
+      vi.mocked(check).mockResolvedValue(allow('workspace admin'))
       mockPayload.findByID.mockResolvedValueOnce(mockShare('share-1', TOPIC_1, WS_A, WS_B, { status: 'pending' }))
-      mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_A, USER_A, 'admin')] })
       mockPayload.update.mockResolvedValueOnce({ id: 'share-1', status: 'rejected' })
 
       const result = await rejectShare({ shareId: 'share-1', reason: 'Not justified' })
@@ -323,10 +302,8 @@ describe('Topic Sharing Integration', () => {
 
     it('non-admin members cannot approve requests', async () => {
       setupAuth(USER_B, USER_B)
-      vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: USER_B }, session: {} } as any)
+      vi.mocked(check).mockResolvedValue(deny('not authorized')) // no admin membership
       mockPayload.findByID.mockResolvedValueOnce(mockShare('share-1', TOPIC_1, WS_A, WS_B, { status: 'pending' }))
-      mockPayload.find
-        .mockResolvedValueOnce({ docs: [] }) // no admin membership
 
       const result = await approveShare({ shareId: 'share-1' })
       expect(result.success).toBe(false)
@@ -334,10 +311,8 @@ describe('Topic Sharing Integration', () => {
 
     it('approved share changes status to approved', async () => {
       setupAuth(USER_A, USER_A)
-      vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: USER_A }, session: {} } as any)
+      vi.mocked(check).mockResolvedValue(allow('workspace owner'))
       mockPayload.findByID.mockResolvedValueOnce(mockShare('share-1', TOPIC_1, WS_A, WS_B, { status: 'pending' }))
-      mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_A, USER_A, 'owner')] })
       mockPayload.update.mockResolvedValueOnce({ id: 'share-1', status: 'approved' })
 
       await approveShare({ shareId: 'share-1' })
@@ -353,10 +328,8 @@ describe('Topic Sharing Integration', () => {
 
     it('rejected share changes status to rejected', async () => {
       setupAuth(USER_A, USER_A)
-      vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: USER_A }, session: {} } as any)
+      vi.mocked(check).mockResolvedValue(allow('workspace admin'))
       mockPayload.findByID.mockResolvedValueOnce(mockShare('share-1', TOPIC_1, WS_A, WS_B, { status: 'pending' }))
-      mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_A, USER_A, 'admin')] })
       mockPayload.update.mockResolvedValueOnce({ id: 'share-1', status: 'rejected' })
 
       await rejectShare({ shareId: 'share-1', reason: 'No' })
@@ -374,10 +347,8 @@ describe('Topic Sharing Integration', () => {
   describe('Share Management', () => {
     it('workspace admin can revoke an approved share', async () => {
       setupAuth(USER_A, USER_A)
-      vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: USER_A }, session: {} } as any)
+      vi.mocked(check).mockResolvedValue(allow('workspace owner'))
       mockPayload.findByID.mockResolvedValueOnce(mockShare('share-1', TOPIC_1, WS_A, WS_B, { status: 'approved' }))
-      mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_A, USER_A, 'owner')] })
       mockPayload.update.mockResolvedValueOnce({ id: 'share-1', status: 'revoked' })
 
       const result = await revokeShare({ shareId: 'share-1' })
@@ -386,10 +357,8 @@ describe('Topic Sharing Integration', () => {
 
     it('revoked share changes status to revoked', async () => {
       setupAuth(USER_A, USER_A)
-      vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: USER_A }, session: {} } as any)
+      vi.mocked(check).mockResolvedValue(allow('workspace admin'))
       mockPayload.findByID.mockResolvedValueOnce(mockShare('share-1', TOPIC_1, WS_A, WS_B, { status: 'approved' }))
-      mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_A, USER_A, 'admin')] })
       mockPayload.update.mockResolvedValueOnce({ id: 'share-1', status: 'revoked' })
 
       await revokeShare({ shareId: 'share-1' })
@@ -405,9 +374,8 @@ describe('Topic Sharing Integration', () => {
 
     it('user can view incoming share requests for their workspace', async () => {
       setupAuth(USER_A, USER_A)
-      vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: USER_A }, session: {} } as any)
+      vi.mocked(check).mockResolvedValue(allow('workspace admin'))
       mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_A, USER_A, 'admin')] }) // admin check
         .mockResolvedValueOnce({ docs: [mockShare('share-1', TOPIC_1, WS_A, WS_B)] }) // incoming shares
 
       const result = await listPendingShares({ workspaceId: WS_A, type: 'incoming' })
@@ -417,9 +385,8 @@ describe('Topic Sharing Integration', () => {
 
     it('user can view outgoing share requests they created', async () => {
       setupAuth(USER_B, USER_B)
-      vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: USER_B }, session: {} } as any)
+      vi.mocked(check).mockResolvedValue(allow('workspace member'))
       mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_B, USER_B)] }) // member check
         .mockResolvedValueOnce({ docs: [mockShare('share-1', TOPIC_1, WS_A, WS_B)] }) // outgoing shares
 
       const result = await listPendingShares({ workspaceId: WS_B, type: 'outgoing' })
@@ -435,10 +402,8 @@ describe('Topic Sharing Integration', () => {
       vi.mocked(getTemporalClient).mockResolvedValue({ workflow: { start: mockStart } } as any)
 
       setupAuth(USER_A, USER_A)
-      vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: USER_A }, session: {} } as any)
+      vi.mocked(check).mockResolvedValue(allow('workspace owner'))
       mockPayload.findByID.mockResolvedValueOnce(mockShare('share-1', TOPIC_1, WS_A, WS_B, { status: 'pending' }))
-      mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_A, USER_A, 'owner')] })
       mockPayload.update.mockResolvedValueOnce({ id: 'share-1', status: 'approved' })
 
       await approveShare({ shareId: 'share-1' })
@@ -457,10 +422,8 @@ describe('Topic Sharing Integration', () => {
       vi.mocked(getTemporalClient).mockResolvedValue({ workflow: { start: mockStart } } as any)
 
       setupAuth(USER_A, USER_A)
-      vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: USER_A }, session: {} } as any)
+      vi.mocked(check).mockResolvedValue(allow('workspace admin'))
       mockPayload.findByID.mockResolvedValueOnce(mockShare('share-1', TOPIC_1, WS_A, WS_B, { status: 'approved' }))
-      mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_A, USER_A, 'admin')] })
       mockPayload.update.mockResolvedValueOnce({ id: 'share-1', status: 'revoked' })
 
       await revokeShare({ shareId: 'share-1' })
@@ -479,12 +442,10 @@ describe('Topic Sharing Integration', () => {
       vi.mocked(getTemporalClient).mockResolvedValue({ workflow: { start: mockStart } } as any)
 
       setupAuth(USER_A, USER_A)
-      vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: USER_A }, session: {} } as any)
+      vi.mocked(check).mockResolvedValue(allow('workspace owner'))
       mockPayload.findByID.mockResolvedValueOnce(
         mockShare('share-1', TOPIC_1, WS_A, WS_B, { status: 'pending', accessLevel: 'read-write' })
       )
-      mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_A, USER_A, 'owner')] })
       mockPayload.update.mockResolvedValueOnce({ id: 'share-1', status: 'approved' })
 
       await approveShare({ shareId: 'share-1' })
@@ -508,12 +469,10 @@ describe('Topic Sharing Integration', () => {
 
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
       setupAuth(USER_A, USER_A)
-      vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: USER_A }, session: {} } as any)
+      vi.mocked(check).mockResolvedValue(allow('workspace owner'))
       mockPayload.findByID.mockResolvedValueOnce(
         mockShare('share-1', TOPIC_1, WS_A, WS_B, { status: 'pending', expiresAt })
       )
-      mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_A, USER_A, 'owner')] })
       mockPayload.update.mockResolvedValueOnce({ id: 'share-1', status: 'approved' })
 
       await approveShare({ shareId: 'share-1' })
@@ -534,9 +493,9 @@ describe('Topic Sharing Integration', () => {
   describe('Policy Enforcement', () => {
     it('auto-approve policy grants access automatically', async () => {
       setupAuth(USER_B, USER_B)
+      vi.mocked(check).mockResolvedValue(allow('workspace member'))
       const topicData = mockTopic(TOPIC_1, WS_A)
       mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_B, USER_B)] }) // membership
         .mockResolvedValueOnce({ docs: [] }) // no existing shares
         .mockResolvedValueOnce({ docs: [{ autoApprove: true, enabled: true, priority: 1 }] }) // auto-approve policy
       mockPayload.findByID
@@ -558,8 +517,8 @@ describe('Topic Sharing Integration', () => {
 
     it('auto-approve respects allowed access levels', async () => {
       setupAuth(USER_B, USER_B)
+      vi.mocked(check).mockResolvedValue(allow('workspace member'))
       mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_B, USER_B)] })
         .mockResolvedValueOnce({ docs: [] })
         .mockResolvedValueOnce({ docs: [{ autoApprove: true, enabled: true, priority: 1, allowedAccessLevels: ['read'] }] })
       mockPayload.findByID.mockResolvedValueOnce(mockTopic(TOPIC_1, WS_A))
@@ -580,8 +539,8 @@ describe('Topic Sharing Integration', () => {
     it('auto-approve respects allowed workspaces', async () => {
       const APPROVED_WS = 'ws-approved'
       setupAuth(USER_B, USER_B)
+      vi.mocked(check).mockResolvedValue(allow('workspace member'))
       mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_B, USER_B)] })
         .mockResolvedValueOnce({ docs: [] })
         .mockResolvedValueOnce({ docs: [{ autoApprove: true, enabled: true, priority: 1, autoApproveWorkspaces: [APPROVED_WS] }] })
       mockPayload.findByID.mockResolvedValueOnce(mockTopic(TOPIC_1, WS_A))
@@ -611,8 +570,8 @@ describe('Topic Visibility', () => {
   describe('Topic Creation', () => {
     it('new topic defaults to private visibility', async () => {
       setupAuth(USER_A, USER_A)
+      vi.mocked(memberWorkspaceIds).mockResolvedValue([WS_A])
       mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_A, USER_A)] })
         .mockResolvedValueOnce({ docs: [], totalDocs: 0, page: 1, totalPages: 0 })
         .mockResolvedValueOnce({ docs: [] })
 
@@ -624,8 +583,8 @@ describe('Topic Visibility', () => {
 
     it('topic can be created with discoverable visibility', async () => {
       setupAuth(USER_A, USER_A)
+      vi.mocked(memberWorkspaceIds).mockResolvedValue([WS_A])
       mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_A, USER_A)] })
         .mockResolvedValueOnce({ docs: [mockTopic(TOPIC_1, WS_A, { visibility: 'discoverable' })], totalDocs: 1, page: 1, totalPages: 1 })
         .mockResolvedValueOnce({ docs: [] })
 
@@ -638,8 +597,8 @@ describe('Topic Visibility', () => {
     it('topic visibility can be updated after creation', async () => {
       // This tests that searching with different visibility filters returns different results
       setupAuth(USER_A, USER_A)
+      vi.mocked(memberWorkspaceIds).mockResolvedValue([WS_A])
       mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_A, USER_A)] })
         .mockResolvedValueOnce({ docs: [mockTopic(TOPIC_1, WS_B, { visibility: 'public' })], totalDocs: 1, page: 1, totalPages: 1 })
         .mockResolvedValueOnce({ docs: [] })
 
@@ -653,9 +612,8 @@ describe('Topic Visibility', () => {
   describe('Visibility Enforcement', () => {
     it('private topics only allow owning application access', async () => {
       setupAuth(USER_B, USER_B)
+      vi.mocked(memberWorkspaceIds).mockResolvedValue([WS_B])
       // Private topics should not appear in catalog for non-owners
-      mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_B, USER_B)] })
 
       const result = await searchTopicCatalog({ visibility: ['private'] })
       expect(result.success).toBe(true)
@@ -664,8 +622,8 @@ describe('Topic Visibility', () => {
 
     it('workspace topics allow same workspace applications', async () => {
       setupAuth(USER_A, USER_A)
+      vi.mocked(memberWorkspaceIds).mockResolvedValue([WS_A])
       mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_A, USER_A)] })
         .mockResolvedValueOnce({ docs: [mockTopic(TOPIC_1, WS_A, { visibility: 'workspace' })], totalDocs: 1, page: 1, totalPages: 1 })
         .mockResolvedValueOnce({ docs: [] })
 
@@ -676,8 +634,8 @@ describe('Topic Visibility', () => {
 
     it('discoverable topics appear in catalog', async () => {
       setupAuth(USER_A, USER_A)
+      vi.mocked(memberWorkspaceIds).mockResolvedValue([WS_A])
       mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_A, USER_A)] })
         .mockResolvedValueOnce({ docs: [
           mockTopic('t1', WS_B, { visibility: 'discoverable' }),
           mockTopic('t2', WS_B, { visibility: 'discoverable' }),
@@ -691,8 +649,8 @@ describe('Topic Visibility', () => {
 
     it('public topics allow all applications', async () => {
       setupAuth(USER_B, USER_B)
+      vi.mocked(memberWorkspaceIds).mockResolvedValue([WS_B])
       mockPayload.find
-        .mockResolvedValueOnce({ docs: [mockMembership(WS_B, USER_B)] })
         .mockResolvedValueOnce({ docs: [mockTopic(TOPIC_1, WS_A, { visibility: 'public' })], totalDocs: 1, page: 1, totalPages: 1 })
         .mockResolvedValueOnce({ docs: [] })
 

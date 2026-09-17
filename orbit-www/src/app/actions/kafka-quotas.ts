@@ -2,7 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
+import { getActor, check } from '@/lib/authz'
 import { getWorkspaceQuotaInfo as getQuotaInfo, type QuotaInfo } from '@/lib/kafka/quotas'
 
 export interface GetWorkspaceQuotaInfoInput {
@@ -22,28 +22,17 @@ export async function getWorkspaceQuotaInfo(
   input: GetWorkspaceQuotaInfoInput
 ): Promise<GetWorkspaceQuotaInfoResult> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
     const payload = await getPayload({ config })
 
     // Verify user is member of workspace
-    const membership = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: input.workspaceId } },
-          { user: { equals: payloadUser.betterAuthId } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      limit: 1,
-      overrideAccess: true,
-    })
+    const membershipDecision = await check('read', { kind: 'workspace', id: input.workspaceId }, actor)
 
-    if (membership.docs.length === 0) {
+    if (!membershipDecision.allowed) {
       return { success: false, error: 'Not a member of this workspace' }
     }
 
@@ -74,13 +63,12 @@ export async function setWorkspaceQuotaOverride(
   input: SetWorkspaceQuotaOverrideInput
 ): Promise<SetWorkspaceQuotaOverrideResult> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
-    const role = (payloadUser as any).role
-    if (role !== 'super_admin' && role !== 'admin') {
+    if (!actor.isPlatformAdmin) {
       return { success: false, error: 'Forbidden: platform admin access required' }
     }
 
@@ -113,9 +101,9 @@ export async function setWorkspaceQuotaOverride(
         data: {
           applicationQuota: input.newQuota,
           reason: input.reason,
-          setBy: payloadUser.id,
+          setBy: actor.payloadId,
         },
-        user: payloadUser,
+        user: actor.user,
         overrideAccess: false,
       })
     } else {
@@ -126,9 +114,9 @@ export async function setWorkspaceQuotaOverride(
           workspace: input.workspaceId,
           applicationQuota: input.newQuota,
           reason: input.reason,
-          setBy: payloadUser.id,
+          setBy: actor.payloadId,
         },
-        user: payloadUser,
+        user: actor.user,
         overrideAccess: false,
       })
     }

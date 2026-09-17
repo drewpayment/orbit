@@ -2,7 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
+import { getActor, check } from '@/lib/authz'
 import type { KafkaApplicationRequest, User, Workspace } from '@/payload-types'
 
 // Types for application requests
@@ -62,28 +62,17 @@ export async function submitApplicationRequest(
   input: SubmitApplicationRequestInput
 ): Promise<SubmitApplicationRequestResult> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
     const payload = await getPayload({ config })
 
     // Verify user is member of workspace
-    const membership = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: input.workspaceId } },
-          { user: { equals: payloadUser.betterAuthId || payloadUser.id } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      limit: 1,
-      overrideAccess: true,
-    })
+    const membershipDecision = await check('read', { kind: 'workspace', id: input.workspaceId }, actor)
 
-    if (membership.docs.length === 0) {
+    if (!membershipDecision.allowed) {
       return { success: false, error: 'Not a member of this workspace' }
     }
 
@@ -131,10 +120,10 @@ export async function submitApplicationRequest(
         applicationName: input.applicationName,
         applicationSlug: input.applicationSlug,
         description: input.description || '',
-        requestedBy: payloadUser.betterAuthId || payloadUser.id,
+        requestedBy: actor.payloadId,
         status: 'pending_workspace',
       },
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -154,8 +143,8 @@ export async function getMyRequests(workspaceId: string): Promise<{
   error?: string
 }> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -166,7 +155,7 @@ export async function getMyRequests(workspaceId: string): Promise<{
       where: {
         and: [
           { workspace: { equals: workspaceId } },
-          { requestedBy: { equals: payloadUser.betterAuthId || payloadUser.id } },
+          { requestedBy: { equals: actor.payloadId } },
         ],
       },
       sort: '-createdAt',
@@ -194,29 +183,17 @@ export async function getPendingWorkspaceApprovals(workspaceId: string): Promise
   error?: string
 }> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
     const payload = await getPayload({ config })
 
     // Verify user is workspace admin
-    const membership = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: workspaceId } },
-          { user: { equals: payloadUser.betterAuthId || payloadUser.id } },
-          { role: { in: ['owner', 'admin'] } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      limit: 1,
-      overrideAccess: true,
-    })
+    const adminDecision = await check('manage', { kind: 'workspace', id: workspaceId }, actor)
 
-    if (membership.docs.length === 0) {
+    if (!adminDecision.allowed) {
       return { success: false, error: 'Not a workspace admin' }
     }
 
@@ -253,13 +230,12 @@ export async function getPendingPlatformApprovals(): Promise<{
   error?: string
 }> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
-    const role = (payloadUser as any).role
-    if (role !== 'super_admin' && role !== 'admin') {
+    if (!actor.isPlatformAdmin) {
       return { success: false, error: 'Forbidden: platform admin access required', requests: [] }
     }
 
@@ -294,8 +270,8 @@ export async function approveRequestAsWorkspaceAdmin(requestId: string): Promise
   error?: string
 }> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -321,21 +297,9 @@ export async function approveRequestAsWorkspaceAdmin(requestId: string): Promise
         : (request.workspace as { id: string }).id
 
     // Verify user is workspace admin
-    const membership = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: workspaceId } },
-          { user: { equals: payloadUser.betterAuthId || payloadUser.id } },
-          { role: { in: ['owner', 'admin'] } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      limit: 1,
-      overrideAccess: true,
-    })
+    const adminDecision = await check('manage', { kind: 'workspace', id: workspaceId }, actor)
 
-    if (membership.docs.length === 0) {
+    if (!adminDecision.allowed) {
       return { success: false, error: 'Not a workspace admin' }
     }
 
@@ -345,7 +309,7 @@ export async function approveRequestAsWorkspaceAdmin(requestId: string): Promise
       id: requestId,
       data: {
         status: 'pending_platform',
-        workspaceApprovedBy: payloadUser.betterAuthId || payloadUser.id,
+        workspaceApprovedBy: actor.payloadId,
         workspaceApprovedAt: new Date().toISOString(),
       },
       overrideAccess: true,
@@ -369,8 +333,8 @@ export async function rejectRequestAsWorkspaceAdmin(
   error?: string
 }> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -396,21 +360,9 @@ export async function rejectRequestAsWorkspaceAdmin(
         : (request.workspace as { id: string }).id
 
     // Verify user is workspace admin
-    const membership = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: workspaceId } },
-          { user: { equals: payloadUser.betterAuthId || payloadUser.id } },
-          { role: { in: ['owner', 'admin'] } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      limit: 1,
-      overrideAccess: true,
-    })
+    const adminDecision = await check('manage', { kind: 'workspace', id: workspaceId }, actor)
 
-    if (membership.docs.length === 0) {
+    if (!adminDecision.allowed) {
       return { success: false, error: 'Not a workspace admin' }
     }
 
@@ -420,7 +372,7 @@ export async function rejectRequestAsWorkspaceAdmin(
       id: requestId,
       data: {
         status: 'rejected',
-        rejectedBy: payloadUser.betterAuthId || payloadUser.id,
+        rejectedBy: actor.payloadId,
         rejectedAt: new Date().toISOString(),
         rejectionReason: reason || null,
       },
@@ -445,13 +397,12 @@ export async function approveRequestAsPlatformAdmin(
   error?: string
 }> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
-    const role = (payloadUser as any).role
-    if (role !== 'super_admin' && role !== 'admin') {
+    if (!actor.isPlatformAdmin) {
       return { success: false, error: 'Forbidden: platform admin access required' }
     }
 
@@ -479,7 +430,7 @@ export async function approveRequestAsPlatformAdmin(
       id: requestId,
       data: {
         status: 'approved',
-        platformApprovedBy: payloadUser.betterAuthId || payloadUser.id,
+        platformApprovedBy: actor.payloadId,
         platformApprovedAt: new Date().toISOString(),
         platformAction,
       },
@@ -507,13 +458,12 @@ export async function rejectRequestAsPlatformAdmin(
   error?: string
 }> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
-    const role = (payloadUser as any).role
-    if (role !== 'super_admin' && role !== 'admin') {
+    if (!actor.isPlatformAdmin) {
       return { success: false, error: 'Forbidden: platform admin access required' }
     }
 
@@ -539,7 +489,7 @@ export async function rejectRequestAsPlatformAdmin(
       id: requestId,
       data: {
         status: 'rejected',
-        rejectedBy: payloadUser.betterAuthId || payloadUser.id,
+        rejectedBy: actor.payloadId,
         rejectedAt: new Date().toISOString(),
         rejectionReason: reason || null,
       },
@@ -561,29 +511,17 @@ export async function getWorkspaceAdminStatus(workspaceId: string): Promise<{
   pendingCount: number
 }> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { isAdmin: false, pendingCount: 0 }
     }
 
     const payload = await getPayload({ config })
 
     // Check workspace admin membership
-    const membership = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: workspaceId } },
-          { user: { equals: payloadUser.betterAuthId || payloadUser.id } },
-          { role: { in: ['owner', 'admin'] } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      limit: 1,
-      overrideAccess: true,
-    })
+    const adminDecision = await check('manage', { kind: 'workspace', id: workspaceId }, actor)
 
-    const isAdmin = membership.docs.length > 0
+    const isAdmin = adminDecision.allowed
 
     if (!isAdmin) {
       return { isAdmin: false, pendingCount: 0 }

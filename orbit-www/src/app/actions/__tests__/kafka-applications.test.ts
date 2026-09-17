@@ -8,16 +8,8 @@ vi.mock('@payload-config', () => ({
   default: {},
 }))
 
-vi.mock('@/lib/auth', () => ({
-  auth: {
-    api: {
-      getSession: vi.fn(),
-    },
-  },
-}))
-
-vi.mock('next/headers', () => ({
-  headers: vi.fn(() => Promise.resolve(new Headers())),
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(),
 }))
 
 vi.mock('@/lib/kafka/quotas', () => ({
@@ -30,8 +22,17 @@ vi.mock('@/lib/temporal/client', () => ({
 }))
 
 import { getPayload } from 'payload'
-import { auth } from '@/lib/auth'
+import { getActor } from '@/lib/authz'
 import { listApplicationsWithProvisioningIssues } from '../kafka-applications'
+
+const mockActor = {
+  payloadId: 'user-1',
+  betterAuthId: 'user-1',
+  email: 'user-1@test.com',
+  role: 'user' as const,
+  isPlatformAdmin: false,
+  user: { id: 'user-1', collection: 'users' as const, _strategy: 'better-auth' as const },
+}
 
 describe('listApplicationsWithProvisioningIssues', () => {
   beforeEach(() => {
@@ -39,7 +40,7 @@ describe('listApplicationsWithProvisioningIssues', () => {
   })
 
   it('should return error when not authenticated', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    vi.mocked(getActor).mockResolvedValue(null)
 
     const result = await listApplicationsWithProvisioningIssues()
 
@@ -47,10 +48,7 @@ describe('listApplicationsWithProvisioningIssues', () => {
   })
 
   it('should return applications with provisioning issues', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+    vi.mocked(getActor).mockResolvedValue(mockActor as any)
 
     const mockApps = {
       docs: [
@@ -116,10 +114,7 @@ describe('listApplicationsWithProvisioningIssues', () => {
   })
 
   it('should filter by workspaceId when provided', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+    vi.mocked(getActor).mockResolvedValue(mockActor as any)
 
     const mockPayload = {
       find: vi.fn().mockResolvedValue({ docs: [] }),
@@ -140,10 +135,7 @@ describe('listApplicationsWithProvisioningIssues', () => {
   })
 
   it('should handle workspace as string ID', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+    vi.mocked(getActor).mockResolvedValue(mockActor as any)
 
     const mockApps = {
       docs: [

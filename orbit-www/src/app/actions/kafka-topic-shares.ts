@@ -2,8 +2,7 @@
 
 import { getPayload, type Where } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor, check, type Actor } from '@/lib/authz'
 import { revalidatePath } from 'next/cache'
 import { getTemporalClient } from '@/lib/temporal/client'
 
@@ -83,49 +82,22 @@ export type ListPendingSharesResult = {
  * Check if user is owner or admin of the specified workspace
  */
 async function isWorkspaceOwnerOrAdmin(
-  payload: Awaited<ReturnType<typeof getPayload>>,
-  userId: string,
+  actor: Actor,
   workspaceId: string
 ): Promise<boolean> {
-  const members = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: userId } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-    overrideAccess: true,
-  })
-
-  return members.docs.length > 0
+  const decision = await check('manage', { kind: 'workspace', id: workspaceId }, actor)
+  return decision.allowed
 }
 
 /**
  * Check if user is a member of the specified workspace
  */
 async function isWorkspaceMember(
-  payload: Awaited<ReturnType<typeof getPayload>>,
-  userId: string,
+  actor: Actor,
   workspaceId: string
 ): Promise<boolean> {
-  const members = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: userId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-    overrideAccess: true,
-  })
-
-  return members.docs.length > 0
+  const decision = await check('read', { kind: 'workspace', id: workspaceId }, actor)
+  return decision.allowed
 }
 
 /**
@@ -213,16 +185,13 @@ async function sendShareRejectedNotification(
 export async function approveShare(
   input: ApproveShareInput
 ): Promise<ApproveShareResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
   const payload = await getPayload({ config })
-  const userId = session.user.id
 
   try {
     // Get the share
@@ -248,7 +217,7 @@ export async function approveShare(
       : share.ownerWorkspace.id
 
     // Verify user is owner/admin of owner workspace
-    const isAuthorized = await isWorkspaceOwnerOrAdmin(payload, userId, ownerWorkspaceId)
+    const isAuthorized = await isWorkspaceOwnerOrAdmin(actor, ownerWorkspaceId)
     if (!isAuthorized) {
       return { success: false, error: 'Not authorized to approve this share' }
     }
@@ -259,7 +228,7 @@ export async function approveShare(
       id: input.shareId,
       data: {
         status: 'approved',
-        approvedBy: userId,
+        approvedBy: actor.payloadId,
         approvedAt: new Date().toISOString(),
       },
       overrideAccess: true,
@@ -306,16 +275,13 @@ export async function approveShare(
 export async function rejectShare(
   input: RejectShareInput
 ): Promise<RejectShareResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
   const payload = await getPayload({ config })
-  const userId = session.user.id
 
   try {
     // Get the share
@@ -341,7 +307,7 @@ export async function rejectShare(
       : share.ownerWorkspace.id
 
     // Verify user is owner/admin of owner workspace
-    const isAuthorized = await isWorkspaceOwnerOrAdmin(payload, userId, ownerWorkspaceId)
+    const isAuthorized = await isWorkspaceOwnerOrAdmin(actor, ownerWorkspaceId)
     if (!isAuthorized) {
       return { success: false, error: 'Not authorized to reject this share' }
     }
@@ -401,16 +367,13 @@ export async function rejectShare(
 export async function revokeShare(
   input: RevokeShareInput
 ): Promise<RevokeShareResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
   const payload = await getPayload({ config })
-  const userId = session.user.id
 
   try {
     // Get the share
@@ -436,7 +399,7 @@ export async function revokeShare(
       : share.ownerWorkspace.id
 
     // Verify user is owner/admin of owner workspace
-    const isAuthorized = await isWorkspaceOwnerOrAdmin(payload, userId, ownerWorkspaceId)
+    const isAuthorized = await isWorkspaceOwnerOrAdmin(actor, ownerWorkspaceId)
     if (!isAuthorized) {
       return { success: false, error: 'Not authorized to revoke this share' }
     }
@@ -491,20 +454,17 @@ export async function revokeShare(
 export async function listPendingShares(
   input: ListPendingSharesInput
 ): Promise<ListPendingSharesResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
   const payload = await getPayload({ config })
-  const userId = session.user.id
 
   try {
     // Verify user is a member of the workspace
-    const isMember = await isWorkspaceMember(payload, userId, input.workspaceId)
+    const isMember = await isWorkspaceMember(actor, input.workspaceId)
     if (!isMember) {
       return { success: false, error: 'Not a member of this workspace' }
     }
