@@ -42,6 +42,7 @@ const eslintConfig = [
       'src/lib/auth/**',
       'src/lib/auth.ts',
       'src/lib/access/**',
+      'src/lib/workspaces/members.ts',
       'src/lib/payload-better-auth-strategy.ts',
       'src/collections/WorkspaceMembers.ts',
       'src/app/api/auth/**',
@@ -56,7 +57,7 @@ const eslintConfig = [
               name: '@/lib/auth/session',
               importNames: ['getCurrentUser', 'getPayloadUserFromSession', 'getSession'],
               message:
-                'Use getActor()/requireActor() from @/lib/authz. Actor exposes payloadId and betterAuthId by name; a bare session .id is ambiguous.',
+                'Use getActor()/requireActor() or authorize() from @/lib/authz. Actor exposes payloadId and betterAuthId by name; a bare session .id is ambiguous.',
             },
             {
               name: '@/lib/auth',
@@ -72,7 +73,7 @@ const eslintConfig = [
         {
           selector: "Property[key.name='collection'] Literal[value='workspace-members']",
           message:
-            'Do not query workspace-members directly. Use the membership helpers in @/lib/access (Phase B: @/lib/authz).',
+            'Do not query workspace-members directly. Authorization: authorize()/check()/memberWorkspaceIds()/workspaceRole() from @/lib/authz. Roster data: @/lib/workspaces/members.',
         },
       ],
     },
