@@ -24,7 +24,7 @@ import config from '@payload-config'
 import { ConnectError, Code } from '@connectrpc/connect'
 
 import { agentClient } from '@/lib/grpc/agent-client'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
+import { getActor } from '@/lib/authz'
 import { isWorkspaceMember } from '@/lib/access/workspace-access'
 import { mapGrpcEvent } from '@/components/features/infra-agent/lib/agent-event-dto'
 
@@ -58,8 +58,8 @@ export async function GET(
   }
 
   // Auth: cookie session → AgentRun → workspace membership.
-  const user = await getPayloadUserFromSession()
-  if (!user) {
+  const actor = await getActor()
+  if (!actor) {
     return new Response('Unauthorized', { status: 401 })
   }
   const payload = await getPayload({ config })
@@ -75,7 +75,7 @@ export async function GET(
   }
   const workspaceId =
     typeof run.workspace === 'string' ? run.workspace : run.workspace?.id
-  if (!workspaceId || !(await isWorkspaceMember(payload, user.id, workspaceId))) {
+  if (!workspaceId || !(await isWorkspaceMember(payload, actor.betterAuthId, workspaceId))) {
     return new Response('Forbidden', { status: 403 })
   }
 
