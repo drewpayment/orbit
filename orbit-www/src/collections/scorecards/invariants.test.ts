@@ -1,3 +1,13 @@
+/**
+ * @vitest-environment node
+ *
+ * `validateActionItemRelationships`'s assignee check (Phase C, #135) delegates
+ * to `@/lib/authz/membership`'s `membershipRole`, which is wrapped in React
+ * `cache()` — under the suite's default `jsdom` environment that resolves to
+ * React's client build, where `cache()` silently no-ops instead of invoking
+ * the wrapped function (matches the pattern in
+ * `lib/authz/__tests__/policy.test.ts`).
+ */
 import { describe, expect, it, vi } from 'vitest'
 import {
   validateActionItemRelationships,
@@ -8,7 +18,10 @@ import { EntityScores } from './EntityScores'
 import { InitiativeActionItems } from './InitiativeActionItems'
 import { ScorecardRuleResults } from './ScorecardRuleResults'
 
-function requestWith(docs: Record<string, Record<string, unknown>>) {
+function requestWith(
+  docs: Record<string, Record<string, unknown>>,
+  members: Array<{ workspace: string; user: string; role: string; status: string }> = [],
+) {
   return {
     payload: {
       findByID: vi.fn(async ({ collection, id }: { collection: string; id: string }) => {
@@ -16,7 +29,21 @@ function requestWith(docs: Record<string, Record<string, unknown>>) {
         if (!doc) throw new Error(`${collection}/${id} not found`)
         return doc
       }),
-      find: vi.fn(async () => ({ docs: [], totalDocs: 0 })),
+      find: vi.fn(async ({ collection, where }: { collection: string; where?: unknown }) => {
+        if (collection !== 'workspace-members') return { docs: [], totalDocs: 0 }
+        /* eslint-disable @typescript-eslint/no-explicit-any */
+        const and: any[] = (where as any)?.and ?? []
+        const filtered = members.filter((m) =>
+          and.every((c) => {
+            if (c.workspace) return m.workspace === c.workspace.equals
+            if (c.user) return m.user === c.user.equals
+            if (c.status) return m.status === c.status.equals
+            return true
+          }),
+        )
+        /* eslint-enable @typescript-eslint/no-explicit-any */
+        return { docs: filtered, totalDocs: filtered.length }
+      }),
     },
   }
 }
@@ -64,11 +91,14 @@ describe('scorecard relationship invariants', () => {
   })
 
   it('rejects an assignee without an active membership in the action-item workspace', async () => {
-    const req = requestWith({
-      'initiatives:i1': { id: 'i1', workspace: 'ws1', scorecard: 'sc1' },
-      'catalog-entities:e1': { id: 'e1', workspace: 'ws1' },
-      'users:u1': { id: 'u1', betterAuthId: 'ba1' },
-    })
+    const req = requestWith(
+      {
+        'initiatives:i1': { id: 'i1', workspace: 'ws1', scorecard: 'sc1' },
+        'catalog-entities:e1': { id: 'e1', workspace: 'ws1' },
+        'users:u1': { id: 'u1', betterAuthId: 'ba1' },
+      },
+      [],
+    )
 
     await expect(
       validateActionItemRelationships({
@@ -76,6 +106,24 @@ describe('scorecard relationship invariants', () => {
         req,
       } as never),
     ).rejects.toThrow('active workspace member')
+  })
+
+  it('accepts an assignee who is an active member of the action-item workspace', async () => {
+    const req = requestWith(
+      {
+        'initiatives:i1': { id: 'i1', workspace: 'ws1', scorecard: 'sc1' },
+        'catalog-entities:e1': { id: 'e1', workspace: 'ws1' },
+        'users:u1': { id: 'u1', betterAuthId: 'ba1' },
+      },
+      [{ workspace: 'ws1', user: 'ba1', role: 'member', status: 'active' }],
+    )
+
+    await expect(
+      validateActionItemRelationships({
+        data: { initiative: 'i1', entity: 'e1', assignee: 'u1', workspace: 'ws1' },
+        req,
+      } as never),
+    ).resolves.toBeDefined()
   })
 })
 
