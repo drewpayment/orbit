@@ -11,19 +11,41 @@ import {
   deleteWorkspaceMembers,
   findActiveMembershipWithOptions,
   listActiveMembershipDocsFor,
+  getMembershipById,
+  requestWorkspaceMembership,
 } from '../members'
 
 const find = vi.fn()
 const create = vi.fn()
 const update = vi.fn()
 const del = vi.fn()
-const payload = { find, create, update, delete: del } as unknown as Payload
+const findByID = vi.fn()
+const payload = { find, create, update, delete: del, findByID } as unknown as Payload
 
 beforeEach(() => {
   find.mockReset()
   create.mockReset()
   update.mockReset()
   del.mockReset()
+  findByID.mockReset()
+})
+
+describe('getMembershipById', () => {
+  it('normalizes workspace/user ids and role from a membership row', async () => {
+    findByID.mockResolvedValue({ id: 'm1', workspace: { id: 'ws-1' }, user: 'ba-1', role: 'admin' })
+    const row = await getMembershipById(payload, 'm1')
+    expect(row).toEqual({ id: 'm1', workspaceId: 'ws-1', betterAuthId: 'ba-1', role: 'admin' })
+    expect(findByID.mock.calls[0][0]).toMatchObject({
+      collection: 'workspace-members',
+      id: 'm1',
+      overrideAccess: true,
+    })
+  })
+
+  it('returns null when the row does not exist', async () => {
+    findByID.mockRejectedValue(new Error('not found'))
+    expect(await getMembershipById(payload, 'missing')).toBeNull()
+  })
 })
 
 describe('roster reads', () => {
@@ -118,6 +140,15 @@ describe('listActiveMembershipDocsFor', () => {
     expect(args.depth).toBe(1)
     expect(args.overrideAccess).toBe(true)
     expect(rows).toEqual([{ id: 'm1', workspace: { id: 'ws-1' } }])
+describe('requestWorkspaceMembership', () => {
+  it('creates a pending, member-role row unconditionally', async () => {
+    create.mockResolvedValue({ id: 'm-req' })
+    await requestWorkspaceMembership(payload, { workspaceId: 'ws-1', betterAuthId: 'ba-1' })
+    expect(create.mock.calls[0][0]).toMatchObject({
+      collection: 'workspace-members',
+      data: { workspace: 'ws-1', user: 'ba-1', role: 'member', status: 'pending' },
+      overrideAccess: true,
+    })
   })
 })
 

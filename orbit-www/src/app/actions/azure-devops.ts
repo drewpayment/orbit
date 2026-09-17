@@ -2,8 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor, check } from '@/lib/authz'
 import { listConnectionRepositoriesCore } from '@/lib/connections/ado-repos-core'
 import type { Repository } from './github'
 
@@ -26,22 +25,8 @@ export interface GitConnectionSource {
 }
 
 async function requireMember(workspaceId: string): Promise<{ ok: boolean }> {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) return { ok: false }
-
-  const payload = await getPayload({ config })
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
-  return { ok: membership.docs.length > 0 }
+  const d = await check('read', { kind: 'workspace', id: workspaceId })
+  return { ok: d.allowed }
 }
 
 /**
@@ -98,8 +83,8 @@ export async function listConnectionRepositories(
   connectionId: string,
   _page: number = 1,
 ): Promise<{ success: boolean; error?: string; repos: Repository[]; hasMore: boolean }> {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized', repos: [], hasMore: false }
   }
 

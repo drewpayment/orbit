@@ -11,13 +11,9 @@ vi.mock('@payload-config', () => ({
   default: {},
 }))
 
-vi.mock('@/lib/auth/session', () => ({
-  getPayloadUserFromSession: vi.fn(),
-}))
-
-vi.mock('@/lib/access/workspace-access', () => ({
-  isWorkspaceMember: vi.fn(),
-  isWorkspaceAdminOrOwner: vi.fn(),
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(),
+  check: vi.fn(),
 }))
 
 vi.mock('@/lib/grpc/agent-client', () => ({
@@ -34,8 +30,7 @@ import {
   StartInfrastructureAgentResponseSchema,
   AbortAgentResponseSchema,
 } from '@/lib/proto/idp/agent/v1/agent_pb'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
-import { isWorkspaceMember } from '@/lib/access/workspace-access'
+import { getActor, check } from '@/lib/authz'
 import { agentClient } from '@/lib/grpc/agent-client'
 const { startAgentRun } = await import('./infra-agent')
 
@@ -56,10 +51,11 @@ describe('startAgentRun compensation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(getPayload).mockResolvedValue(mockPayload as unknown as BasePayload)
-    vi.mocked(getPayloadUserFromSession).mockResolvedValue({
-      id: 'user-1',
-    } as unknown as Awaited<ReturnType<typeof getPayloadUserFromSession>>)
-    vi.mocked(isWorkspaceMember).mockResolvedValue(true)
+    vi.mocked(getActor).mockResolvedValue({
+      payloadId: 'user-1',
+      betterAuthId: 'ba-user-1',
+    } as unknown as Awaited<ReturnType<typeof getActor>>)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'workspace member', actor: null })
     // buildPromptWithWorkspaceContext does payload.findByID + payload.find; keep them benign.
     mockPayload.findByID.mockResolvedValue({ id: 'ws-1', name: 'WS', slug: 'ws' })
     mockPayload.find.mockResolvedValue({ docs: [] })
