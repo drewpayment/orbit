@@ -2,7 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
+import { getActor, check, type Actor } from '@/lib/authz'
 import { encrypt, decrypt } from '@/lib/encryption'
 import type { EnvironmentVariable } from '@/payload-types'
 
@@ -49,49 +49,14 @@ export interface EnvironmentVariableDisplay {
 // Helper Functions
 // ============================================================================
 
-async function checkWorkspaceAdminAccess(
-  userId: string | null | undefined,
-  workspaceId: string
-): Promise<boolean> {
-  const payload = await getPayload({ config })
-
-  const members = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: userId } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-    overrideAccess: true,
-  })
-
-  return members.docs.length > 0
+/** Owner/admin gate for managing environment variables. */
+async function checkWorkspaceAdminAccess(actor: Actor, workspaceId: string): Promise<boolean> {
+  return (await check('manage', { kind: 'workspace', id: workspaceId }, actor)).allowed
 }
 
-async function checkWorkspaceMemberAccess(
-  userId: string | null | undefined,
-  workspaceId: string
-): Promise<boolean> {
-  const payload = await getPayload({ config })
-
-  const members = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: userId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-    overrideAccess: true,
-  })
-
-  return members.docs.length > 0
+/** Any-active-member gate for reading environment variables. */
+async function checkWorkspaceMemberAccess(actor: Actor, workspaceId: string): Promise<boolean> {
+  return (await check('read', { kind: 'workspace', id: workspaceId }, actor)).allowed
 }
 
 function maskValue(value: string): string {
@@ -129,12 +94,12 @@ function toDisplayVariable(
 export async function createEnvironmentVariable(
   input: EnvironmentVariableInput
 ): Promise<{ success: boolean; error?: string; variable?: EnvironmentVariableDisplay }> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
-  const hasAccess = await checkWorkspaceAdminAccess(payloadUser.betterAuthId, input.workspaceId)
+  const hasAccess = await checkWorkspaceAdminAccess(actor, input.workspaceId)
   if (!hasAccess) {
     return { success: false, error: 'You must be a workspace owner or admin to manage environment variables' }
   }
@@ -152,9 +117,9 @@ export async function createEnvironmentVariable(
         useInBuilds: input.useInBuilds ?? true,
         useInDeployments: input.useInDeployments ?? true,
         description: input.description,
-        createdBy: payloadUser.id,
+        createdBy: actor.payloadId,
       },
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -175,8 +140,8 @@ export async function updateEnvironmentVariable(
   id: string,
   input: Partial<EnvironmentVariableInput>
 ): Promise<{ success: boolean; error?: string; variable?: EnvironmentVariableDisplay }> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -197,7 +162,7 @@ export async function updateEnvironmentVariable(
     ? existing.workspace
     : existing.workspace.id
 
-  const hasAccess = await checkWorkspaceAdminAccess(payloadUser.betterAuthId, workspaceId)
+  const hasAccess = await checkWorkspaceAdminAccess(actor, workspaceId)
   if (!hasAccess) {
     return { success: false, error: 'You must be a workspace owner or admin to manage environment variables' }
   }
@@ -215,7 +180,7 @@ export async function updateEnvironmentVariable(
       collection: 'environment-variables',
       id,
       data: updateData,
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -235,8 +200,8 @@ export async function updateEnvironmentVariable(
 export async function deleteEnvironmentVariable(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -257,7 +222,7 @@ export async function deleteEnvironmentVariable(
     ? existing.workspace
     : existing.workspace.id
 
-  const hasAccess = await checkWorkspaceAdminAccess(payloadUser.betterAuthId, workspaceId)
+  const hasAccess = await checkWorkspaceAdminAccess(actor, workspaceId)
   if (!hasAccess) {
     return { success: false, error: 'You must be a workspace owner or admin to manage environment variables' }
   }
@@ -266,7 +231,7 @@ export async function deleteEnvironmentVariable(
     await payload.delete({
       collection: 'environment-variables',
       id,
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -287,12 +252,12 @@ export async function deleteEnvironmentVariable(
 export async function bulkImportEnvironmentVariables(
   input: BulkImportInput
 ): Promise<{ success: boolean; error?: string; imported: number; errors: string[] }> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized', imported: 0, errors: [] }
   }
 
-  const hasAccess = await checkWorkspaceAdminAccess(payloadUser.betterAuthId, input.workspaceId)
+  const hasAccess = await checkWorkspaceAdminAccess(actor, input.workspaceId)
   if (!hasAccess) {
     return {
       success: false,
@@ -317,9 +282,9 @@ export async function bulkImportEnvironmentVariables(
           app: input.appId || undefined,
           useInBuilds: input.useInBuilds ?? true,
           useInDeployments: input.useInDeployments ?? true,
-          createdBy: payloadUser.id,
+          createdBy: actor.payloadId,
         },
-        user: payloadUser,
+        user: actor.user,
         overrideAccess: false,
       })
       imported++
@@ -343,12 +308,12 @@ export async function bulkImportEnvironmentVariables(
 export async function getWorkspaceEnvironmentVariables(
   workspaceId: string
 ): Promise<{ success: boolean; error?: string; variables?: EnvironmentVariableDisplay[] }> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
-  const hasAccess = await checkWorkspaceMemberAccess(payloadUser.betterAuthId, workspaceId)
+  const hasAccess = await checkWorkspaceMemberAccess(actor, workspaceId)
   if (!hasAccess) {
     return { success: false, error: 'Not a member of this workspace' }
   }
@@ -390,8 +355,8 @@ export async function getAppEnvironmentVariables(
   variables?: EnvironmentVariableDisplay[]
   workspaceVariables?: EnvironmentVariableDisplay[]
 }> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -412,7 +377,7 @@ export async function getAppEnvironmentVariables(
     ? app.workspace
     : app.workspace.id
 
-  const hasAccess = await checkWorkspaceMemberAccess(payloadUser.betterAuthId, workspaceId)
+  const hasAccess = await checkWorkspaceMemberAccess(actor, workspaceId)
   if (!hasAccess) {
     return { success: false, error: 'Not a member of this workspace' }
   }
@@ -560,8 +525,8 @@ export async function resolveEnvironmentVariables(
 export async function revealEnvironmentVariableValue(
   id: string
 ): Promise<{ success: boolean; error?: string; value?: string }> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -583,7 +548,7 @@ export async function revealEnvironmentVariableValue(
     : envVar.workspace.id
 
   // Only admins can reveal values
-  const hasAccess = await checkWorkspaceAdminAccess(payloadUser.betterAuthId, workspaceId)
+  const hasAccess = await checkWorkspaceAdminAccess(actor, workspaceId)
   if (!hasAccess) {
     return { success: false, error: 'You must be a workspace owner or admin to reveal values' }
   }
@@ -605,8 +570,8 @@ export async function createAppOverride(
   appId: string,
   workspaceVariableId: string
 ): Promise<{ success: boolean; error?: string; variable?: EnvironmentVariableDisplay }> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -627,7 +592,7 @@ export async function createAppOverride(
     ? workspaceVar.workspace
     : workspaceVar.workspace.id
 
-  const hasAccess = await checkWorkspaceAdminAccess(payloadUser.betterAuthId, workspaceId)
+  const hasAccess = await checkWorkspaceAdminAccess(actor, workspaceId)
   if (!hasAccess) {
     return { success: false, error: 'You must be a workspace owner or admin to create overrides' }
   }
@@ -644,9 +609,9 @@ export async function createAppOverride(
         useInBuilds: workspaceVar.useInBuilds,
         useInDeployments: workspaceVar.useInDeployments,
         description: workspaceVar.description,
-        createdBy: payloadUser.id,
+        createdBy: actor.payloadId,
       },
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 

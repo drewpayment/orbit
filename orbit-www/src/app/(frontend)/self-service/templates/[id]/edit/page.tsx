@@ -3,9 +3,7 @@ import Link from 'next/link'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { ArrowLeft } from 'lucide-react'
-import { getCurrentUser, getPayloadUserFromSession } from '@/lib/auth/session'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
-import { canManageTemplateDefinitions } from '@/lib/templates/authz'
+import { getActor, check } from '@/lib/authz'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -51,8 +49,7 @@ interface PageProps {
 export default async function EditTemplatePage({ params }: PageProps) {
   const { id } = await params
   const payload = await getPayload({ config })
-  const uid = (await getCurrentUser())?.id
-  const isAdmin = isPlatformAdmin(await getPayloadUserFromSession())
+  const actor = await getActor()
 
   let definition: TemplateDefinitionDoc
   try {
@@ -68,7 +65,7 @@ export default async function EditTemplatePage({ params }: PageProps) {
 
   const workspaceId =
     typeof definition.workspace === 'string' ? definition.workspace : definition.workspace?.id
-  if (!workspaceId || !(await canManageTemplateDefinitions(payload, uid, workspaceId, isAdmin))) {
+  if (!workspaceId || !(await check('manage', { kind: 'workspace', id: workspaceId }, actor)).allowed) {
     notFound()
   }
 

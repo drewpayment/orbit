@@ -2,7 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
+import { getActor, check } from '@/lib/authz'
 import { decrypt } from '@/lib/encryption'
 import { getTemporalClient } from '@/lib/temporal/client'
 import { resolveEnvironmentVariables } from './environment-variables'
@@ -21,11 +21,11 @@ interface StartBuildInput {
 }
 
 export async function startBuild(input: StartBuildInput) {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser?.betterAuthId) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
-  const userId = payloadUser.betterAuthId
+  const userId = actor.betterAuthId
 
   const payload = await getPayload({ config })
 
@@ -46,19 +46,9 @@ export async function startBuild(input: StartBuildInput) {
     ? app.workspace
     : app.workspace.id
 
-  const members = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    overrideAccess: true,
-  })
+  const members = await check('create', { kind: 'workspace', id: workspaceId }, actor)
 
-  if (members.docs.length === 0) {
+  if (!members.allowed) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 
@@ -288,7 +278,8 @@ export async function startBuild(input: StartBuildInput) {
         latestBuild: {
           status: 'analyzing',
           builtAt: null,
-          builtBy: payloadUser.betterAuthId,
+          // Semantic fix: `builtBy` is `relationTo: 'users'` — the Payload id.
+          builtBy: actor.payloadId,
           imageUrl: null,
           imageDigest: null,
           imageTag: null,
@@ -296,7 +287,7 @@ export async function startBuild(input: StartBuildInput) {
           error: null,
         },
       },
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -308,8 +299,8 @@ export async function startBuild(input: StartBuildInput) {
 }
 
 export async function cancelBuild(appId: string) {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -332,19 +323,15 @@ export async function cancelBuild(appId: string) {
     ? app.workspace
     : app.workspace.id
 
-  const members = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    overrideAccess: true,
-  })
+  // Any active member may cancel (matches the old ALL_ROLES membership check —
+  // narrower than `update`'s owner/admin default, so pass `roles` explicitly).
+  const members = await check(
+    'update',
+    { kind: 'workspace', id: workspaceId, roles: ['owner', 'admin', 'member'] },
+    actor,
+  )
 
-  if (members.docs.length === 0) {
+  if (!members.allowed) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 
@@ -365,7 +352,7 @@ export async function cancelBuild(appId: string) {
           error: null,
         },
       },
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -399,8 +386,8 @@ export interface BuildStatus {
 }
 
 export async function getBuildStatus(appId: string): Promise<BuildStatus | null> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return null
   }
 
@@ -437,8 +424,8 @@ export async function checkRegistryAvailable(appId: string): Promise<{
   registryType?: 'ghcr' | 'acr' | 'orbit'
   isWorkspaceDefault?: boolean
 }> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { available: false }
   }
 
@@ -523,8 +510,8 @@ export async function checkRegistryAvailable(appId: string): Promise<{
 }
 
 export async function analyzeRepository(appId: string) {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -561,8 +548,8 @@ export async function selectPackageManager(
   packageManager: 'npm' | 'yarn' | 'pnpm' | 'bun'
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Unauthorized' }
     }
 

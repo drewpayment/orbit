@@ -3,13 +3,11 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
-import { getCurrentUser } from '@/lib/auth/session'
-import { canManageActions } from '@/lib/actions/authz'
+import { requireActor, check, type Actor } from '@/lib/authz'
 import { normalizeInputSchema, type ActionInputSchema } from '@/lib/actions/input-schema'
 import { isBackendType } from '@/components/features/actions/action-backends'
 import type { Action } from '@/payload-types'
 
-type Payload = Awaited<ReturnType<typeof getPayload>>
 type BackendType = Action['backend']['type']
 type ApprovalPolicy = NonNullable<Action['approvalPolicy']>
 
@@ -52,20 +50,9 @@ export interface CreateActionInput extends ActionFormValues {
 /** Update payload — `workspace` is intentionally omitted (not mutable). */
 export type UpdateActionInput = ActionFormValues
 
-/** Resolve + assert the session user; throws when unauthenticated. */
-async function requireUserId(): Promise<string> {
-  const uid = (await getCurrentUser())?.id
-  if (!uid) throw new Error('Not authenticated')
-  return uid
-}
-
-/** Throw unless the user may author Actions in `workspaceId`. */
-async function assertCanManage(
-  payload: Payload,
-  userId: string,
-  workspaceId: string | null,
-): Promise<void> {
-  if (!workspaceId || !(await canManageActions(payload, userId, workspaceId))) {
+/** Throw unless the actor may author Actions in `workspaceId`. */
+async function assertCanManage(actor: Actor, workspaceId: string | null): Promise<void> {
+  if (!workspaceId || !(await check('manage', { kind: 'workspace', id: workspaceId }, actor)).allowed) {
     throw new Error('You do not have permission to manage actions in this workspace.')
   }
 }
@@ -122,8 +109,8 @@ function buildActionData(values: ActionFormValues): {
 
 export async function createAction(input: CreateActionInput): Promise<{ id: string }> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  await assertCanManage(payload, uid, input.workspace)
+  const actor = await requireActor()
+  await assertCanManage(actor, input.workspace)
 
   const data = buildActionData(input)
 
@@ -142,7 +129,7 @@ export async function updateAction(
   input: UpdateActionInput,
 ): Promise<{ id: string }> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
+  const actor = await requireActor()
 
   let action: Action
   try {
@@ -156,7 +143,7 @@ export async function updateAction(
     throw new Error('Action not found')
   }
   // Authorize against the EXISTING workspace; the field is never reassigned.
-  await assertCanManage(payload, uid, relId(action.workspace))
+  await assertCanManage(actor, relId(action.workspace))
 
   const data = buildActionData(input)
 
@@ -174,7 +161,7 @@ export async function updateAction(
 
 export async function deleteAction(actionId: string): Promise<{ id: string }> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
+  const actor = await requireActor()
 
   let action: Action
   try {
@@ -187,7 +174,7 @@ export async function deleteAction(actionId: string): Promise<{ id: string }> {
   } catch {
     throw new Error('Action not found')
   }
-  await assertCanManage(payload, uid, relId(action.workspace))
+  await assertCanManage(actor, relId(action.workspace))
 
   await payload.delete({
     collection: 'actions',
