@@ -140,6 +140,9 @@ describe('listActiveMembershipDocsFor', () => {
     expect(args.depth).toBe(1)
     expect(args.overrideAccess).toBe(true)
     expect(rows).toEqual([{ id: 'm1', workspace: { id: 'ws-1' } }])
+  })
+})
+
 describe('requestWorkspaceMembership', () => {
   it('creates a pending, member-role row unconditionally', async () => {
     create.mockResolvedValue({ id: 'm-req' })
