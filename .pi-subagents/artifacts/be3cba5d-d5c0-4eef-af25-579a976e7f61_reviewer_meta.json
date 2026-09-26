@@ -1,0 +1,28 @@
+{
+  "runId": "be3cba5d-d5c0-4eef-af25-579a976e7f61",
+  "agent": "reviewer",
+  "task": "Read the current uncommitted scorecards/reports hardening diff and its changed/new tests. Do not edit anything. Build an evidence matrix mapping each claimed fix (identity/security, tenant invariants/RBAC, stale evaluation reconciliation/uniqueness, workspace sweep/snapshot consistency, report correctness, UI/accessibility) to exact test names/files. Identify missing or weak coverage, especially changes with no direct test. Distinguish unit/mock evidence from integration/database/browser evidence. Return concise findings with file paths and line numbers.\n\n## Acceptance Contract\nAcceptance level: reviewed\nCompletion is not accepted from prose alone. End with a structured acceptance report.\n\nCriteria:\n- criterion-1: Implement the requested change without widening scope\n- criterion-2: Return evidence sufficient for an independent acceptance review\n\nRequired evidence: changed-files, tests-added, commands-run, validation-output, residual-risks, no-staged-files\n\nReview gate: required by reviewer.\n\nFinish with a fenced JSON block tagged `acceptance-report` in this shape:\nUse empty arrays when no items apply; array fields contain strings unless object entries are shown.\n```acceptance-report\n{\n  \"criteriaSatisfied\": [\n    {\n      \"id\": \"criterion-1\",\n      \"status\": \"satisfied\",\n      \"evidence\": \"specific proof\"\n    }\n  ],\n  \"changedFiles\": [\n    \"src/file.ts\"\n  ],\n  \"testsAddedOrUpdated\": [\n    \"test/file.test.ts\"\n  ],\n  \"commandsRun\": [\n    {\n      \"command\": \"command\",\n      \"result\": \"passed\",\n      \"summary\": \"short result\"\n    }\n  ],\n  \"validationOutput\": [\n    \"validation output or concise summary\"\n  ],\n  \"residualRisks\": [\n    \"none\"\n  ],\n  \"noStagedFiles\": true,\n  \"diffSummary\": \"short description of the diff\",\n  \"reviewFindings\": [\n    \"blocker: file.ts:12 - issue found, or no blockers\"\n  ],\n  \"manualNotes\": \"anything else the parent should know\"\n}\n```",
+  "exitCode": 0,
+  "model": "openai-codex/gpt-5.6-sol:high",
+  "attemptedModels": [
+    "openai-codex/gpt-5.6-sol:high"
+  ],
+  "modelAttempts": [
+    {
+      "model": "openai-codex/gpt-5.6-sol:high",
+      "success": true,
+      "exitCode": 0,
+      "usage": {
+        "input": 82256,
+        "output": 8649,
+        "cacheRead": 457216,
+        "cacheWrite": 0,
+        "cost": 0.899358,
+        "turns": 12
+      }
+    }
+  ],
+  "transcriptPath": "/Users/drewpayment/dev/orbit/.pi-subagents/artifacts/be3cba5d-d5c0-4eef-af25-579a976e7f61_reviewer_transcript.jsonl",
+  "skills": [],
+  "timestamp": 1784211643056
+}
