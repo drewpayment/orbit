@@ -2,20 +2,24 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 vi.mock('payload', () => ({ getPayload: vi.fn() }))
 vi.mock('@payload-config', () => ({ default: {} }))
-vi.mock('@/lib/auth/session', () => ({ getCurrentUser: vi.fn() }))
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(),
+  requireActor: vi.fn(),
+  check: vi.fn(),
+  memberWorkspaceIds: vi.fn(),
+}))
 vi.mock('@/lib/scorecards/evaluate', () => ({
   clearScorecardProjections: vi.fn(),
   runScorecardEvaluation: vi.fn(),
 }))
-vi.mock('@/lib/scorecards/authz', () => ({ canManageScorecards: vi.fn() }))
 
 import { getPayload } from 'payload'
-import { getCurrentUser } from '@/lib/auth/session'
-import { canManageScorecards } from '@/lib/scorecards/authz'
+import { getActor, requireActor, check, memberWorkspaceIds } from '@/lib/authz'
 import { clearScorecardProjections, runScorecardEvaluation } from '@/lib/scorecards/evaluate'
 import { Scorecards } from '@/collections/scorecards/Scorecards'
 import { ScorecardRules } from '@/collections/scorecards/ScorecardRules'
 import {
+  createScorecard,
   deleteRule,
   deleteScorecard,
   getEntityScoreSummary,
@@ -25,12 +29,18 @@ import {
   updateScorecard,
 } from './actions'
 
+const attackerActor = {
+  payloadId: 'pl-attacker',
+  betterAuthId: 'ba-attacker',
+  email: 'attacker@example.com',
+  role: 'user' as const,
+  isPlatformAdmin: false,
+  user: {} as never,
+}
+
 function makePayload() {
   return {
     find: vi.fn(async ({ collection }: { collection: string }) => {
-      if (collection === 'workspace-members') {
-        return { docs: [{ workspace: 'ws-attacker' }] }
-      }
       if (collection === 'scorecards') return { docs: [] }
       throw new Error(`unexpected find ${collection}`)
     }),
@@ -40,8 +50,10 @@ function makePayload() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  ;(getCurrentUser as Mock).mockResolvedValue({ id: 'ba-attacker' })
-  ;(canManageScorecards as Mock).mockResolvedValue(true)
+  ;(getActor as Mock).mockResolvedValue(attackerActor)
+  ;(requireActor as Mock).mockResolvedValue(attackerActor)
+  ;(check as Mock).mockResolvedValue({ allowed: true, reason: 'workspace owner', actor: attackerActor })
+  ;(memberWorkspaceIds as Mock).mockResolvedValue(['ws-attacker'])
 })
 
 describe('scorecard projection lifecycle', () => {
@@ -98,6 +110,21 @@ describe('scorecard projection lifecycle', () => {
   })
 })
 
+describe('scorecard authoring authorization boundary', () => {
+  it('denies createScorecard when the policy denies management of the target workspace', async () => {
+    const payload = { findByID: vi.fn(), create: vi.fn() }
+    ;(getPayload as Mock).mockResolvedValue(payload)
+    ;(check as Mock).mockResolvedValue({ allowed: false, reason: 'not a member', actor: attackerActor })
+
+    await expect(
+      createScorecard({ workspace: 'ws-foreign', name: 'Foreign scorecard' }),
+    ).rejects.toThrow(/do not have permission/i)
+
+    expect(check).toHaveBeenCalledWith('manage', { kind: 'workspace', id: 'ws-foreign' }, attackerActor)
+    expect(payload.create).not.toHaveBeenCalled()
+  })
+})
+
 describe('scorecard collection mutation boundary', () => {
   it.each([
     [Scorecards, 'create'],
@@ -133,10 +160,13 @@ describe('scorecard server-action identity boundary', () => {
 
     await (listScorecards as unknown as (injectedUserId: string) => Promise<unknown>)('ba-victim')
 
+    // memberWorkspaceIds is driven by the session actor resolved from getActor(),
+    // never by any argument the caller passes in.
+    expect(memberWorkspaceIds).toHaveBeenCalledWith('member', attackerActor)
     expect(payload.find).toHaveBeenCalledWith(
       expect.objectContaining({
-        collection: 'workspace-members',
-        where: expect.objectContaining({ user: { equals: 'ba-attacker' } }),
+        collection: 'scorecards',
+        where: { workspace: { in: ['ws-attacker'] } },
       }),
     )
   })

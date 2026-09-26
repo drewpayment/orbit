@@ -1,9 +1,9 @@
 import { cache } from 'react'
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { headers } from 'next/headers'
-import { auth } from '@/lib/auth'
+import { getActor } from '@/lib/authz'
 import { getMongoClient } from '@/lib/mongodb'
+import { listActiveMembershipDocsFor } from '@/lib/workspaces/members'
 
 /**
  * Cached data fetchers using React.cache() for request-level deduplication.
@@ -26,12 +26,12 @@ export const getPayloadClient = cache(async () => {
 })
 
 /**
- * Get the current user session (cached per request)
+ * The current Actor (cached per request). `getActor` is already
+ * React-`cache`'d in `@/lib/authz`; re-exported here so existing callers in
+ * this module's family keep one import surface. (Phase C, #135 — replaces the
+ * former `getSession` re-export of `@/lib/auth/session`.)
  */
-export const getSession = cache(async () => {
-  const reqHeaders = await headers()
-  return auth.api.getSession({ headers: reqHeaders })
-})
+export { getActor }
 
 /**
  * Get a workspace by slug (cached per request)
@@ -92,33 +92,6 @@ export const getKnowledgePageBySlug = cache(async (pageSlug: string, spaceId: st
     limit: 1,
     depth,
   })
-  return result.docs[0] ?? null
-})
-
-/**
- * Check workspace membership for a user (cached per request)
- */
-export const getWorkspaceMembership = cache(async (
-  workspaceId: string,
-  userId: string,
-  options?: { roles?: string[]; overrideAccess?: boolean }
-) => {
-  const payload = await getPayloadClient()
-
-  const result = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: userId } },
-        { status: { equals: 'active' } },
-        ...(options?.roles?.length ? [{ role: { in: options.roles } }] : []),
-      ],
-    },
-    limit: 1,
-    overrideAccess: options?.overrideAccess ?? false,
-  })
-
   return result.docs[0] ?? null
 })
 
@@ -198,15 +171,5 @@ export const getBetterAuthUserByEmail = cache(async (email: string): Promise<Bet
  */
 export const getUserWorkspaceMemberships = cache(async (userId: string) => {
   const payload = await getPayloadClient()
-  const result = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      user: { equals: userId },
-      status: { equals: 'active' },
-    },
-    depth: 1,
-    limit: 100,
-    overrideAccess: true,
-  })
-  return result.docs
+  return listActiveMembershipDocsFor(payload, userId)
 })

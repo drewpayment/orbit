@@ -2,10 +2,9 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getCurrentUser } from '@/lib/auth/session'
+import { getActor, check, memberWorkspaceIds, type Actor } from '@/lib/authz'
 import type { Where } from 'payload'
 import type { Action, ActionRun } from '@/payload-types'
-import { canRunActions, canApproveActionRun } from '@/lib/actions/authz'
 import { normalizeInputSchema, type ActionInputSchema } from '@/lib/actions/input-schema'
 import { executeRun, readLogs } from '@/lib/actions/run'
 import { createAndDispatchRun } from '@/lib/actions/create-run'
@@ -38,21 +37,6 @@ function relId(value: unknown): string | null {
     return String((value as { id: unknown }).id)
   }
   return null
-}
-
-/** Workspace IDs the user actively belongs to — the tenant boundary. */
-async function getMemberWorkspaceIds(payload: PayloadClient, userId: string): Promise<string[]> {
-  const memberships = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      user: { equals: userId },
-      status: { equals: 'active' },
-    },
-    limit: 1000,
-    depth: 0,
-    overrideAccess: true,
-  })
-  return memberships.docs.map((m) => (typeof m.workspace === 'string' ? m.workspace : m.workspace.id))
 }
 
 // ---------------------------------------------------------------------------
@@ -89,12 +73,12 @@ function toSummary(action: Action): ActionSummary {
 /**
  * List the enabled Actions in the user's workspaces — the self-service catalog.
  */
-export async function listActions(userId?: string): Promise<ActionSummary[]> {
+export async function listActions(actor?: Actor | null): Promise<ActionSummary[]> {
   const payload = await getPayload({ config })
-  const uid = userId ?? (await getCurrentUser())?.id
-  if (!uid) return []
+  const a = actor === undefined ? await getActor() : actor
+  if (!a) return []
 
-  const workspaceIds = await getMemberWorkspaceIds(payload, uid)
+  const workspaceIds = await memberWorkspaceIds('member', a)
   if (workspaceIds.length === 0) return []
 
   const result = await payload.find({
@@ -125,29 +109,13 @@ export async function listActions(userId?: string): Promise<ActionSummary[]> {
  * Engineer C's New-Action workspace picker (and the "can author" gate).
  */
 export async function getManageableActionWorkspaces(
-  userId?: string,
+  actor?: Actor | null,
 ): Promise<{ id: string; name: string }[]> {
   const payload = await getPayload({ config })
-  const uid = userId ?? (await getCurrentUser())?.id
-  if (!uid) return []
+  const a = actor === undefined ? await getActor() : actor
+  if (!a) return []
 
-  const memberships = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { user: { equals: uid } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1000,
-    depth: 0,
-    overrideAccess: true,
-  })
-
-  const workspaceIds = [
-    ...new Set(memberships.docs.map((m) => relId(m.workspace)).filter((v): v is string => !!v)),
-  ]
+  const workspaceIds = await memberWorkspaceIds('manage', a)
   if (workspaceIds.length === 0) return []
 
   const wsResult = await payload.find({
@@ -179,8 +147,8 @@ export async function runAction(input: {
   inputs: Record<string, unknown>
 }): Promise<{ runId: string; status: string }> {
   const payload = await getPayload({ config })
-  const uid = (await getCurrentUser())?.id
-  if (!uid) throw new Error('Not authenticated')
+  const actor = await getActor()
+  if (!actor) throw new Error('Not authenticated')
 
   let action: Action
   try {
@@ -207,7 +175,7 @@ export async function runAction(input: {
 
   const workspaceId = relId(action.workspace)
   if (action.enabled === false) throw new Error('This action is disabled.')
-  if (!(await canRunActions(payload, uid, workspaceId))) {
+  if (!workspaceId || !(await check('create', { kind: 'workspace', id: workspaceId }, actor)).allowed) {
     throw new Error('You do not have permission to run actions in this workspace.')
   }
 
@@ -217,7 +185,9 @@ export async function runAction(input: {
     action,
     inputs: input.inputs ?? {},
     trigger: 'manual',
-    triggeredBy: uid,
+    // `triggeredBy` is a `relationTo: 'users'` field — the Payload id, not the
+    // Better-Auth id the old `getCurrentUser().id` returned here (semantic fix).
+    triggeredBy: actor.payloadId,
   })
 }
 
@@ -227,14 +197,14 @@ export async function runAction(input: {
 
 /** List action-runs in the user's workspaces, newest first (action populated). */
 export async function listRuns(
-  userId?: string,
+  actor?: Actor | null,
   opts?: { actionId?: string },
 ): Promise<ActionRun[]> {
   const payload = await getPayload({ config })
-  const uid = userId ?? (await getCurrentUser())?.id
-  if (!uid) return []
+  const a = actor === undefined ? await getActor() : actor
+  if (!a) return []
 
-  const workspaceIds = await getMemberWorkspaceIds(payload, uid)
+  const workspaceIds = await memberWorkspaceIds('member', a)
   if (workspaceIds.length === 0) return []
 
   const and: Where[] = [{ workspace: { in: workspaceIds } }]
@@ -253,12 +223,12 @@ export async function listRuns(
 }
 
 /** Fetch one run (action populated), workspace-scoped, or null. */
-export async function getRun(userId: string | undefined, runId: string): Promise<ActionRun | null> {
+export async function getRun(actor: Actor | null | undefined, runId: string): Promise<ActionRun | null> {
   const payload = await getPayload({ config })
-  const uid = userId ?? (await getCurrentUser())?.id
-  if (!uid) return null
+  const a = actor === undefined ? await getActor() : actor
+  if (!a) return null
 
-  const workspaceIds = await getMemberWorkspaceIds(payload, uid)
+  const workspaceIds = await memberWorkspaceIds('member', a)
   if (workspaceIds.length === 0) return null
 
   let run: ActionRun
@@ -283,10 +253,10 @@ export async function getRun(userId: string | undefined, runId: string): Promise
 /** Load a run + its policy, asserting the run is awaiting approval. */
 async function loadGatedRun(
   payload: PayloadClient,
-  uid: string,
+  actor: Actor,
   runId: string,
 ): Promise<{ run: ActionRun; workspaceId: string; policy: NonNullable<Action['approvalPolicy']> }> {
-  const workspaceIds = await getMemberWorkspaceIds(payload, uid)
+  const workspaceIds = await memberWorkspaceIds('member', actor)
   if (workspaceIds.length === 0) throw new Error('No workspace access')
 
   let run: ActionRun
@@ -313,16 +283,32 @@ async function loadGatedRun(
 }
 
 /**
+ * May `actor` approve/reject a run gated by `policy`? Platform admins pass
+ * everything via the policy's bypass. `'platform-admin'` policy requires that
+ * bypass specifically (a workspace owner/admin who is not a platform admin is
+ * denied); `'workspace-admin'` accepts workspace owner/admin.
+ */
+export async function canApproveRun(
+  actor: Actor,
+  workspaceId: string,
+  policy: NonNullable<Action['approvalPolicy']>,
+): Promise<boolean> {
+  if (policy === 'none') return true
+  if (policy === 'platform-admin') return (await check('manage', { kind: 'platform' }, actor)).allowed
+  return (await check('manage', { kind: 'workspace', id: workspaceId }, actor)).allowed
+}
+
+/**
  * Approve an awaiting-approval run and continue execution. Verifies the caller
- * may approve under the action's policy via `canApproveActionRun`.
+ * may approve under the action's policy via `canApproveRun`.
  */
 export async function approveRun(runId: string): Promise<{ runId: string; status: string }> {
   const payload = await getPayload({ config })
-  const uid = (await getCurrentUser())?.id
-  if (!uid) throw new Error('Not authenticated')
+  const actor = await getActor()
+  if (!actor) throw new Error('Not authenticated')
 
-  const { run, workspaceId, policy } = await loadGatedRun(payload, uid, runId)
-  if (!(await canApproveActionRun(payload, uid, workspaceId, policy))) {
+  const { run, workspaceId, policy } = await loadGatedRun(payload, actor, runId)
+  if (!(await canApproveRun(actor, workspaceId, policy))) {
     throw new Error('You do not have permission to approve this run.')
   }
 
@@ -351,11 +337,11 @@ export async function approveRun(runId: string): Promise<{ runId: string; status
  */
 export async function rejectRun(runId: string): Promise<{ runId: string; status: string }> {
   const payload = await getPayload({ config })
-  const uid = (await getCurrentUser())?.id
-  if (!uid) throw new Error('Not authenticated')
+  const actor = await getActor()
+  if (!actor) throw new Error('Not authenticated')
 
-  const { run, workspaceId, policy } = await loadGatedRun(payload, uid, runId)
-  if (!(await canApproveActionRun(payload, uid, workspaceId, policy))) {
+  const { run, workspaceId, policy } = await loadGatedRun(payload, actor, runId)
+  if (!(await canApproveRun(actor, workspaceId, policy))) {
     throw new Error('You do not have permission to reject this run.')
   }
 

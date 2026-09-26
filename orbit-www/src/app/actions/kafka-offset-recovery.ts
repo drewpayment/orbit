@@ -2,8 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor, check, type Actor } from '@/lib/authz'
 import type { KafkaConsumerGroup } from '@/payload-types'
 
 // =============================================================================
@@ -78,7 +77,7 @@ export interface RestoreOffsetsResult {
  */
 async function verifyConsumerGroupAccess(
   payload: Awaited<ReturnType<typeof getPayload>>,
-  userId: string,
+  actor: Actor,
   consumerGroupId: string
 ): Promise<{ allowed: boolean; error?: string; workspaceId?: string }> {
   const consumerGroup = await payload.findByID({
@@ -97,20 +96,9 @@ async function verifyConsumerGroupAccess(
       : consumerGroup.workspace.id
 
   // Check if user is a member of the workspace
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: userId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-    overrideAccess: true,
-  })
+  const decision = await check('read', { kind: 'workspace', id: workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!decision.allowed) {
     return {
       allowed: false,
       error: 'You do not have access to this consumer group',
@@ -132,11 +120,9 @@ export async function getConsumerGroupsForApplication(
   applicationId: string
 ): Promise<GetConsumerGroupsForApplicationResult> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
+    const actor = await getActor()
 
-    if (!session?.user) {
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -159,20 +145,9 @@ export async function getConsumerGroupsForApplication(
         : application.workspace.id
 
     // Verify membership
-    const membership = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: workspaceId } },
-          { user: { equals: session.user.id } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      limit: 1,
-      overrideAccess: true,
-    })
+    const membershipDecision = await check('read', { kind: 'workspace', id: workspaceId }, actor)
 
-    if (membership.docs.length === 0) {
+    if (!membershipDecision.allowed) {
       return { success: false, error: 'Not a member of this workspace' }
     }
 
@@ -249,11 +224,9 @@ export async function getCheckpointsForConsumerGroup(
   input: GetCheckpointsInput
 ): Promise<GetCheckpointsResult> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
+    const actor = await getActor()
 
-    if (!session?.user) {
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -262,7 +235,7 @@ export async function getCheckpointsForConsumerGroup(
     // Verify access to the consumer group
     const accessCheck = await verifyConsumerGroupAccess(
       payload,
-      session.user.id,
+      actor,
       input.consumerGroupId
     )
 
@@ -319,11 +292,9 @@ export async function restoreOffsets(
   input: RestoreOffsetsInput
 ): Promise<RestoreOffsetsResult> {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
+    const actor = await getActor()
 
-    if (!session?.user) {
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -332,7 +303,7 @@ export async function restoreOffsets(
     // Verify access to the consumer group
     const accessCheck = await verifyConsumerGroupAccess(
       payload,
-      session.user.id,
+      actor,
       input.consumerGroupId
     )
 
@@ -378,7 +349,7 @@ export async function restoreOffsets(
     // 3. The workflow would handle the actual Kafka offset reset
 
     console.log(
-      `[Offset Recovery] User ${session.user.id} requested restore to checkpoint ${input.checkpointId}`,
+      `[Offset Recovery] User ${actor.betterAuthId} requested restore to checkpoint ${input.checkpointId}`,
       {
         consumerGroupId: input.consumerGroupId,
         checkpointedAt: checkpoint.checkpointedAt,

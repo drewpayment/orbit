@@ -1,5 +1,6 @@
 import type { Access, CollectionConfig } from 'payload'
 import { authenticatedOnly, workspaceScopedRead } from '@/lib/authz/payload'
+import { addWorkspaceMember } from '@/lib/workspaces/members'
 
 // Read: authenticated users may read any individual workspace document
 // (needed for join-page discovery and slug-based page layouts), but list
@@ -248,17 +249,10 @@ export const Workspaces: CollectionConfig = {
           try {
             const betterAuthId = user?.betterAuthId
             if (betterAuthId) {
-              await payload.create({
-                collection: 'workspace-members',
-                data: {
-                  workspace: doc.id,
-                  user: betterAuthId,
-                  role: 'owner',
-                  status: 'active',
-                  requestedAt: new Date().toISOString(),
-                  approvedAt: new Date().toISOString(),
-                },
-                overrideAccess: true,
+              await addWorkspaceMember(payload, {
+                workspaceId: String(doc.id),
+                betterAuthId,
+                role: 'owner',
               })
             }
           } catch (error) {

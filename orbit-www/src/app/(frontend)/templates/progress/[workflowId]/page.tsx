@@ -1,5 +1,4 @@
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor } from '@/lib/authz'
 import { redirect } from 'next/navigation'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
@@ -15,11 +14,9 @@ export default async function WorkflowProgressPage({ params, searchParams }: Pag
   const { workflowId } = await params
   const { templateId, workspaceId, githubOrg } = await searchParams
 
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     redirect('/login')
   }
 

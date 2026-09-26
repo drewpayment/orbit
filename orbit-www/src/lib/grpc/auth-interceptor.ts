@@ -19,10 +19,7 @@
  */
 import 'server-only'
 import type { Interceptor } from '@connectrpc/connect'
-import { getPayload } from 'payload'
-import config from '@payload-config'
-import { getCurrentUser } from '@/lib/auth/session'
-import { isWorkspaceMember, isPlatformAdmin } from '@/lib/access/workspace-access'
+import { getActor, workspaceRole } from '@/lib/authz'
 import { mintServiceToken } from './svc-auth-token'
 
 /**
@@ -37,8 +34,8 @@ function workspaceIdFromMessage(message: unknown): string {
 }
 
 export const authInterceptor: Interceptor = (next) => async (req) => {
-  const user = await getCurrentUser()
-  if (!user?.id) {
+  const actor = await getActor()
+  if (!actor) {
     throw new Error('authInterceptor: no authenticated user for outbound service call')
   }
 
@@ -47,25 +44,30 @@ export const authInterceptor: Interceptor = (next) => async (req) => {
   // Only sign a `wid` the user is actually authorized for. If the request
   // targets a workspace, confirm membership; refuse to mint a cross-tenant
   // token. RPCs with no workspace scope sign an empty `wid`.
+  //
+  // Deliberately NOT using authorize()/check() here: those apply the
+  // platform-admin bypass, but this gate historically required actual
+  // workspace membership even for platform admins (the `adm` claim below is
+  // the separate, intentional admin bypass for platform-scoped RPCs). Use
+  // workspaceRole(), which resolves membership only, to preserve that.
   let workspaceId = ''
   if (requestedWorkspaceId) {
-    const payload = await getPayload({ config })
-    const isMember = await isWorkspaceMember(payload, user.id, requestedWorkspaceId)
-    if (!isMember) {
+    const role = await workspaceRole(requestedWorkspaceId, actor)
+    if (!role) {
       throw new Error(
-        `authInterceptor: user ${user.id} is not a member of workspace ${requestedWorkspaceId}`,
+        `authInterceptor: user ${actor.betterAuthId} is not a member of workspace ${requestedWorkspaceId}`,
       )
     }
     workspaceId = requestedWorkspaceId
   }
 
-  // Platform-admin status is derived from the server-side session user role
-  // (a server-set, input:false field) — never from the request message — so a
+  // Platform-admin status is derived from the server-side Actor (backed by the
+  // Payload users doc's role field) — never from the request message — so a
   // client cannot self-elevate. It gates the Go services' platform-scoped RPCs
   // (Kafka cluster management) via the `adm` claim.
-  const platformAdmin = isPlatformAdmin(user)
+  const platformAdmin = actor.isPlatformAdmin
 
-  const token = await mintServiceToken(user.id, workspaceId, { platformAdmin })
+  const token = await mintServiceToken(actor.betterAuthId, workspaceId, { platformAdmin })
   req.header.set('Authorization', `Bearer ${token}`)
 
   return next(req)

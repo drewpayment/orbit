@@ -2,8 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getCurrentUser, getPayloadUserFromSession } from '@/lib/auth/session'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
+import { getActor } from '@/lib/authz'
 import { getDiscoveryAttention, type DiscoveryAttention } from '@/lib/discovery/attention-core'
 
 /**
@@ -16,14 +15,9 @@ import { getDiscoveryAttention, type DiscoveryAttention } from '@/lib/discovery/
  * empty aggregate for a signed-out caller so the card can safely render nothing.
  */
 export async function getDiscoveryAttentionAction(): Promise<DiscoveryAttention> {
-  const user = await getCurrentUser()
-  if (!user) return { total: 0, groups: [] }
-
-  // Platform-admin detection matches the other dashboard/admin paths: the role
-  // lives on the Payload `users` doc, not the Better-Auth session user.
-  const payloadUser = await getPayloadUserFromSession()
-  const admin = isPlatformAdmin(payloadUser)
+  const actor = await getActor()
+  if (!actor) return { total: 0, groups: [] }
 
   const payload = await getPayload({ config })
-  return getDiscoveryAttention(payload, user.id, admin)
+  return getDiscoveryAttention(payload, actor.betterAuthId, actor.isPlatformAdmin)
 }

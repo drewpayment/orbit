@@ -1,7 +1,6 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor, workspaceRole } from '@/lib/authz'
 import { redirect, notFound } from 'next/navigation'
 import { ClusterDetailClient } from './cluster-detail-client'
 import type { KafkaApplication, Workspace } from '@/payload-types'
@@ -17,14 +16,12 @@ export default async function ClusterDetailPage({ params }: PageProps) {
   const { slug: workspaceSlug, clusterId } = await params
 
   // Phase 1: Parallelize initial setup
-  const [payload, reqHeaders] = await Promise.all([
+  const [payload, actor] = await Promise.all([
     getPayload({ config }),
-    headers(),
+    getActor(),
   ])
 
-  const session = await auth.api.getSession({ headers: reqHeaders })
-
-  if (!session?.user) {
+  if (!actor) {
     redirect('/sign-in')
   }
 
@@ -40,20 +37,9 @@ export default async function ClusterDetailPage({ params }: PageProps) {
     notFound()
   }
 
-  // Phase 3: Fetch membership and virtual cluster in parallel
-  const [membership, cluster] = await Promise.all([
-    payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: workspace.id } },
-          { user: { equals: session.user.id } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      limit: 1,
-      overrideAccess: true,
-    }),
+  // Phase 3: Fetch membership role and virtual cluster in parallel
+  const [memberRole, cluster] = await Promise.all([
+    workspaceRole(workspace.id, actor),
     payload.findByID({
       collection: 'kafka-virtual-clusters',
       id: clusterId,
@@ -62,11 +48,9 @@ export default async function ClusterDetailPage({ params }: PageProps) {
     }),
   ])
 
-  if (membership.docs.length === 0) {
+  if (!memberRole) {
     redirect(`/workspaces`)
   }
-
-  const memberRole = membership.docs[0].role
 
   if (!cluster) {
     notFound()
@@ -127,7 +111,7 @@ export default async function ClusterDetailPage({ params }: PageProps) {
       applicationSlug={applicationSlug}
       canManage={memberRole === 'owner' || memberRole === 'admin' || memberRole === 'member'}
       canApprove={memberRole === 'owner' || memberRole === 'admin'}
-      userId={session.user.id}
+      userId={actor.betterAuthId}
     />
   )
 }

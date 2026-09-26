@@ -2,20 +2,17 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { listProviders } from '@/app/(frontend)/workspaces/[slug]/kafka/actions'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
+import { authorize, authzErrorResponse } from '@/lib/authz'
 
 /**
  * GET /api/kafka/admin/providers
  * List available Kafka providers (admin only)
  */
 export async function GET() {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
-  }
-  if (!isPlatformAdmin(payloadUser)) {
-    return NextResponse.json({ error: 'Forbidden: platform admin required' }, { status: 403 })
+  try {
+    await authorize('manage', { kind: 'platform' })
+  } catch (err) {
+    return authzErrorResponse(err) ?? NextResponse.json({ error: 'Internal error' }, { status: 500 })
   }
 
   const result = await listProviders()

@@ -1,7 +1,6 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor } from '@/lib/authz'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,14 +12,12 @@ import { TemplateCatalog } from '@/components/features/templates/TemplateCatalog
 
 export default async function TemplatesPage() {
   // Phase 1: Parallelize initial setup
-  const [payload, reqHeaders] = await Promise.all([
+  const [payload, actor] = await Promise.all([
     getPayload({ config }),
-    headers(),
+    getActor(),
   ])
 
-  const session = await auth.api.getSession({ headers: reqHeaders })
-
-  if (!session?.user) {
+  if (!actor) {
     return (
       <SidebarProvider>
         <AppSidebar />

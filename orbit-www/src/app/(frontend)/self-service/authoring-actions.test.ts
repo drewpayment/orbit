@@ -17,7 +17,19 @@ let mockPayload: ReturnType<typeof makeFakePayload>['payload']
 
 vi.mock('@payload-config', () => ({ default: {} }))
 vi.mock('payload', () => ({ getPayload: vi.fn(async () => mockPayload) }))
-vi.mock('@/lib/auth/session', () => ({ getCurrentUser: vi.fn(async () => ({ id: 'user-1' })) }))
+// Mocked at the `@/lib/authz` module boundary (never the real `actor.ts`).
+// This test always exercises an authorized owner, so `check` allows unconditionally.
+vi.mock('@/lib/authz', () => ({
+  requireActor: vi.fn(async () => ({
+    payloadId: 'payload-user-1',
+    betterAuthId: 'user-1',
+    email: 'user@test.dev',
+    role: 'user',
+    isPlatformAdmin: false,
+    user: { id: 'payload-user-1' },
+  })),
+  check: vi.fn(async (_verb: string, _resource: unknown, actor: unknown) => ({ allowed: true, reason: 'owner', actor })),
+}))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
 describe('self-service/authoring-actions — createAction', () => {

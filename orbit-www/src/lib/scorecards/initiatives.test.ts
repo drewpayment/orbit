@@ -1,3 +1,13 @@
+/**
+ * @vitest-environment node
+ *
+ * `isActiveWorkspaceMember` (Phase C, #135) now delegates to
+ * `@/lib/authz/membership`'s `membershipRole`, which is wrapped in React
+ * `cache()` — under the suite's default `jsdom` environment that resolves to
+ * React's client build, where `cache()` silently no-ops instead of invoking
+ * the wrapped function (matches the pattern in
+ * `lib/authz/__tests__/policy.test.ts`).
+ */
 import { describe, it, expect } from 'vitest'
 import type { Payload } from 'payload'
 import type { InitiativeActionItem, ScorecardRuleResult } from '@/payload-types'
@@ -570,12 +580,28 @@ describe('runScorecardEvaluation → initiative sync hook', () => {
 // --- assignee workspace validation ------------------------------------------
 
 describe('isActiveWorkspaceMember / assertAssigneeInWorkspace', () => {
+  // `assignee` is a `relationTo: 'users'` field (a Payload id), but
+  // `workspace-members.user` keys on the Better-Auth id — deliberately DIFFERENT
+  // strings here (Phase C, #135) so a test that only worked because the two ids
+  // happened to match (the seeded dev account's case) can't hide a regression.
   function seed(): FakePayload {
     const fp = new FakePayload()
+    fp.collections['users'] = [
+      { id: 'u-member', betterAuthId: 'ba-member' },
+      { id: 'u-inactive', betterAuthId: 'ba-inactive' },
+      { id: 'u-other-ws', betterAuthId: 'ba-other-ws' },
+      // A Payload user doc that exists but has never linked a Better-Auth
+      // session (no betterAuthId) — must be treated as a non-member, not throw.
+      { id: 'u-no-better-auth-id', betterAuthId: null },
+    ]
+    // `role` is required in real `workspace-members` rows (used by
+    // `membershipRole`/`@/lib/authz/membership`, which `isActiveWorkspaceMember`
+    // now delegates to, Phase C #135); any role qualifies here since this check
+    // is membership-only, not role-gated.
     fp.collections['workspace-members'] = [
-      { id: 'm1', user: 'u-member', workspace: 'ws1', status: 'active' },
-      { id: 'm2', user: 'u-inactive', workspace: 'ws1', status: 'invited' },
-      { id: 'm3', user: 'u-other-ws', workspace: 'ws2', status: 'active' },
+      { id: 'm1', user: 'ba-member', workspace: 'ws1', role: 'member', status: 'active' },
+      { id: 'm2', user: 'ba-inactive', workspace: 'ws1', role: 'member', status: 'invited' },
+      { id: 'm3', user: 'ba-other-ws', workspace: 'ws2', role: 'member', status: 'active' },
     ]
     return fp
   }
@@ -586,6 +612,21 @@ describe('isActiveWorkspaceMember / assertAssigneeInWorkspace', () => {
     expect(await isActiveWorkspaceMember(fp as unknown as Payload, 'u-inactive', 'ws1')).toBe(false)
     expect(await isActiveWorkspaceMember(fp as unknown as Payload, 'u-other-ws', 'ws1')).toBe(false)
     expect(await isActiveWorkspaceMember(fp as unknown as Payload, 'u-nobody', 'ws1')).toBe(false)
+  })
+
+  it('isActiveWorkspaceMember is false for a Payload user with no linked Better-Auth id', async () => {
+    const fp = seed()
+    expect(
+      await isActiveWorkspaceMember(fp as unknown as Payload, 'u-no-better-auth-id', 'ws1'),
+    ).toBe(false)
+  })
+
+  it('isActiveWorkspaceMember resolves the Payload user id to its Better-Auth id before checking membership (regression: previously compared the Payload id directly against workspace-members.user, which always failed except when the two ids coincided)', async () => {
+    const fp = seed()
+    // The assignee id below ('u-member') does NOT appear anywhere in
+    // workspace-members — only its resolved Better-Auth id ('ba-member') does.
+    expect(fp.collections['workspace-members'].some((m) => m.user === 'u-member')).toBe(false)
+    expect(await isActiveWorkspaceMember(fp as unknown as Payload, 'u-member', 'ws1')).toBe(true)
   })
 
   it('assertAssigneeInWorkspace accepts an active member of the workspace', async () => {

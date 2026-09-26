@@ -1,8 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor } from '@/lib/authz'
 import { checkSchemaCompatibility } from '@/app/(frontend)/workspaces/[slug]/kafka/actions'
 
 /**
@@ -10,11 +9,9 @@ import { checkSchemaCompatibility } from '@/app/(frontend)/workspaces/[slug]/kaf
  * Check if a schema is compatible with existing schemas
  */
 export async function POST(request: NextRequest) {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
 

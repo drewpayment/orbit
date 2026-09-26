@@ -2,8 +2,7 @@
 
 import { getPayload, type Where } from 'payload'
 import config from '@payload-config'
-import { headers } from 'next/headers'
-import { auth } from '@/lib/auth'
+import { getActor, check, memberWorkspaceIds } from '@/lib/authz'
 import {
   startLaunchWorkflow,
   getLaunchProgress,
@@ -26,26 +25,17 @@ interface CreateLaunchInput {
 }
 
 export async function createLaunch(data: CreateLaunchInput) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
   const payload = await getPayload({ config })
 
   // Check workspace membership
-  const members = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: data.workspaceId } },
-        { user: { equals: session.user.id } },
-        { status: { equals: 'active' } },
-      ],
-    },
-  })
+  const members = await check('create', { kind: 'workspace', id: data.workspaceId }, actor)
 
-  if (members.docs.length === 0) {
+  if (!members.allowed) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 
@@ -86,7 +76,8 @@ export async function createLaunch(data: CreateLaunchInput) {
         region: data.region,
         parameters: data.parameters,
         status: 'pending',
-        launchedBy: session.user.id,
+        // Semantic fix: `launchedBy` is `relationTo: 'users'` — the Payload id.
+        launchedBy: actor.payloadId,
         ...(data.appId ? { app: data.appId } : {}),
         approvalConfig: {
           required: cloudAccount.approvalRequired || false,
@@ -105,8 +96,8 @@ export async function createLaunch(data: CreateLaunchInput) {
 }
 
 export async function startLaunch(launchId: string) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -129,19 +120,8 @@ export async function startLaunch(launchId: string) {
   if (!launchWsId) {
     return { success: false, error: 'Launch has no workspace' }
   }
-  const launchMembership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: launchWsId } },
-        { user: { equals: session.user.id } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-    overrideAccess: true,
-  })
-  if (launchMembership.docs.length === 0) {
+  const launchMembership = await check('create', { kind: 'workspace', id: launchWsId }, actor)
+  if (!launchMembership.allowed) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 
@@ -166,24 +146,17 @@ export async function startLaunch(launchId: string) {
   try {
     const approvalRequired = launch.approvalConfig?.required || false
 
-    // Determine if auto-approval applies (launcher is in the approvers list)
-    // Note: session.user.id is a Better Auth ID, but approvers are Payload user IDs.
-    // We need to look up the Payload user by email to compare.
+    // Determine if auto-approval applies (launcher is in the approvers list).
+    // `approvers` holds Payload user ids — compare against `actor.payloadId`
+    // directly (previously this re-derived the Payload id via an email
+    // lookup because only the Better-Auth session was available; the Actor
+    // already carries both ids by name).
     let autoApproved = false
     if (approvalRequired) {
-      const payloadUser = await payload.find({
-        collection: 'users',
-        where: { email: { equals: session.user.email } },
-        limit: 1,
-        depth: 0,
-      })
-      const payloadUserId = payloadUser.docs[0]?.id
-      if (payloadUserId) {
-        const approverIds = (launch.approvalConfig?.approvers || []).map(
-          (a: string | { id: string }) => typeof a === 'string' ? a : a.id,
-        )
-        autoApproved = approverIds.includes(payloadUserId)
-      }
+      const approverIds = (launch.approvalConfig?.approvers || []).map(
+        (a: string | { id: string }) => typeof a === 'string' ? a : a.id,
+      )
+      autoApproved = approverIds.includes(actor.payloadId)
     }
 
     // Call gRPC to start the workflow
@@ -199,7 +172,7 @@ export async function startLaunch(launchId: string) {
       template.pulumiProjectPath,
       workspaceId,
       autoApproved,
-      session.user.id,
+      actor.betterAuthId,
     )
 
     if (!response.success) {
@@ -213,7 +186,8 @@ export async function startLaunch(launchId: string) {
       lastLaunchedAt: new Date().toISOString(),
     }
     if (autoApproved) {
-      updateData.approvedBy = session.user.id
+      // Semantic fix: `approvedBy` is `relationTo: 'users'` — the Payload id.
+      updateData.approvedBy = actor.payloadId
     }
     await payload.update({
       collection: 'launches',
@@ -245,8 +219,8 @@ export async function startLaunch(launchId: string) {
 }
 
 export async function retryLaunch(launchId: string) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -264,24 +238,13 @@ export async function retryLaunch(launchId: string) {
   }
 
   // Explicit workspace membership check — defense-in-depth, consistent with
-  // startLaunch/deleteLaunch siblings. session.user.id is the Better Auth ID.
+  // startLaunch/deleteLaunch siblings.
   const retryWsId = typeof launch.workspace === 'string' ? launch.workspace : launch.workspace.id
   if (!retryWsId) {
     return { success: false, error: 'Launch has no workspace' }
   }
-  const retryMembership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: retryWsId } },
-        { user: { equals: session.user.id } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-    overrideAccess: true,
-  })
-  if (retryMembership.docs.length === 0) {
+  const retryMembership = await check('create', { kind: 'workspace', id: retryWsId }, actor)
+  if (!retryMembership.allowed) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 
@@ -305,8 +268,8 @@ export async function retryLaunch(launchId: string) {
 }
 
 export async function deleteLaunch(launchId: string) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -328,19 +291,8 @@ export async function deleteLaunch(launchId: string) {
   if (!delWsId) {
     return { success: false, error: 'Launch has no workspace' }
   }
-  const delMembership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: delWsId } },
-        { user: { equals: session.user.id } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-    overrideAccess: true,
-  })
-  if (delMembership.docs.length === 0) {
+  const delMembership = await check('create', { kind: 'workspace', id: delWsId }, actor)
+  if (!delMembership.allowed) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 
@@ -357,8 +309,8 @@ export async function deleteLaunch(launchId: string) {
 }
 
 export async function getLaunchStatus(launchId: string) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const actor = await getActor()
+  if (!actor) {
     return null
   }
 
@@ -381,19 +333,8 @@ export async function getLaunchStatus(launchId: string) {
     if (!statusWsId) {
       return null
     }
-    const statusMembership = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: statusWsId } },
-          { user: { equals: session.user.id } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      limit: 1,
-      overrideAccess: true,
-    })
-    if (statusMembership.docs.length === 0) {
+    const statusMembership = await check('read', { kind: 'workspace', id: statusWsId }, actor)
+    if (!statusMembership.allowed) {
       return null
     }
 
@@ -405,8 +346,8 @@ export async function getLaunchStatus(launchId: string) {
 }
 
 export async function getLaunchWorkflowProgress(workflowId: string) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -434,16 +375,34 @@ export async function approveLaunchAction(
   approved: boolean,
   notes?: string,
 ) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
+  }
+
+  const payload = await getPayload({ config })
+  const launchLookup = await payload.find({
+    collection: 'launches',
+    where: { workflowId: { equals: workflowId } },
+    limit: 1,
+    depth: 0,
+    overrideAccess: true,
+  })
+  const launchDoc = launchLookup.docs[0]
+  if (!launchDoc) {
+    return { success: false, error: 'Launch not found' }
+  }
+  const approveWsId = typeof launchDoc.workspace === 'string' ? launchDoc.workspace : launchDoc.workspace?.id
+  const approveMembership = await check('manage', { kind: 'workspace', id: approveWsId ?? '' }, actor)
+  if (!approveMembership.allowed) {
+    return { success: false, error: 'Not a member of this workspace' }
   }
 
   try {
     const response = await approveLaunch(
       workflowId,
       approved,
-      session.user.id,
+      actor.betterAuthId,
       notes || '',
     )
 
@@ -460,15 +419,34 @@ export async function approveLaunchAction(
 }
 
 export async function deorbitLaunchAction(workflowId: string, reason?: string) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
+  }
+
+  const payload = await getPayload({ config })
+  const deorbitLookup = await payload.find({
+    collection: 'launches',
+    where: { workflowId: { equals: workflowId } },
+    limit: 1,
+    depth: 0,
+    overrideAccess: true,
+  })
+  const deorbitLaunchDoc = deorbitLookup.docs[0]
+  if (!deorbitLaunchDoc) {
+    return { success: false, error: 'Launch not found' }
+  }
+  const deorbitWsId =
+    typeof deorbitLaunchDoc.workspace === 'string' ? deorbitLaunchDoc.workspace : deorbitLaunchDoc.workspace?.id
+  const deorbitMembership = await check('manage', { kind: 'workspace', id: deorbitWsId ?? '' }, actor)
+  if (!deorbitMembership.allowed) {
+    return { success: false, error: 'Not a member of this workspace' }
   }
 
   try {
     const response = await deorbitLaunch(
       workflowId,
-      session.user.id,
+      actor.betterAuthId,
       reason || '',
     )
 
@@ -485,15 +463,38 @@ export async function deorbitLaunchAction(workflowId: string, reason?: string) {
 }
 
 export async function abortLaunchAction(workflowId: string) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
+  }
+
+  const payload = await getPayload({ config })
+  const abortLookup = await payload.find({
+    collection: 'launches',
+    where: { workflowId: { equals: workflowId } },
+    limit: 1,
+    depth: 0,
+    overrideAccess: true,
+  })
+  const abortLaunchDoc = abortLookup.docs[0]
+  if (!abortLaunchDoc) {
+    return { success: false, error: 'Launch not found' }
+  }
+  const abortLaunchedBy =
+    typeof abortLaunchDoc.launchedBy === 'string' ? abortLaunchDoc.launchedBy : abortLaunchDoc.launchedBy?.id
+  const isOwner = !!abortLaunchedBy && abortLaunchedBy === actor.payloadId
+  if (!isOwner) {
+    const abortWsId = typeof abortLaunchDoc.workspace === 'string' ? abortLaunchDoc.workspace : abortLaunchDoc.workspace?.id
+    const abortMembership = await check('update', { kind: 'workspace', id: abortWsId ?? '' }, actor)
+    if (!abortMembership.allowed) {
+      return { success: false, error: 'Not a member of this workspace' }
+    }
   }
 
   try {
     const response = await abortLaunch(
       workflowId,
-      session.user.id,
+      actor.betterAuthId,
     )
 
     if (!response.success) {
@@ -509,8 +510,8 @@ export async function abortLaunchAction(workflowId: string) {
 }
 
 export async function getLaunchTemplates(provider?: string) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized', docs: [] }
   }
 
@@ -535,27 +536,16 @@ export async function getLaunchTemplates(provider?: string) {
 }
 
 export async function getCloudAccounts(workspaceId: string) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized', docs: [] }
   }
 
   const payload = await getPayload({ config })
 
   // Verify workspace membership before returning cloud account data
-  const caCheck = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-    overrideAccess: true,
-  })
-  if (caCheck.docs.length === 0) {
+  const caCheck = await check('read', { kind: 'workspace', id: workspaceId }, actor)
+  if (!caCheck.allowed) {
     return { success: false, error: 'Not a member of this workspace', docs: [] }
   }
 
@@ -579,27 +569,16 @@ export async function getCloudAccounts(workspaceId: string) {
 }
 
 export async function getLaunches(workspaceId: string) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized', docs: [] }
   }
 
   const payload = await getPayload({ config })
 
   // Verify workspace membership before enumerating launches
-  const glCheck = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-    overrideAccess: true,
-  })
-  if (glCheck.docs.length === 0) {
+  const glCheck = await check('read', { kind: 'workspace', id: workspaceId }, actor)
+  if (!glCheck.allowed) {
     return { success: false, error: 'Not a member of this workspace', docs: [] }
   }
 
@@ -623,8 +602,8 @@ export async function getLaunches(workspaceId: string) {
 }
 
 export async function getAllUserLaunches() {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized', docs: [] }
   }
 
@@ -632,18 +611,7 @@ export async function getAllUserLaunches() {
 
   try {
     // Get user's workspace memberships
-    const memberships = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        user: { equals: session.user.id },
-        status: { equals: 'active' },
-      },
-      limit: 1000,
-    })
-
-    const workspaceIds = memberships.docs.map(m =>
-      String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id)
-    )
+    const workspaceIds = await memberWorkspaceIds('member', actor)
 
     if (workspaceIds.length === 0) {
       return { success: true, docs: [] }

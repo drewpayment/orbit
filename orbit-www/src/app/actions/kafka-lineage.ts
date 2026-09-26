@@ -2,8 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor } from '@/lib/authz'
 import {
   getTopicLineageGraph,
   getApplicationLineageGraph,
@@ -67,11 +66,9 @@ export async function getTopicLineage(
   topicId: string,
   options: LineageQueryOptions = {}
 ): Promise<GetTopicLineageResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -110,11 +107,9 @@ export async function getApplicationLineage(
   applicationId: string,
   options: LineageQueryOptions = {}
 ): Promise<GetApplicationLineageResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -152,11 +147,9 @@ export async function getApplicationLineage(
 export async function getTopicLineageSummaryAction(
   topicId: string
 ): Promise<GetTopicLineageSummaryResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -193,11 +186,9 @@ export async function getTopicLineageSummaryAction(
 export async function getApplicationLineageSummaryAction(
   applicationId: string
 ): Promise<GetApplicationLineageSummaryResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -236,11 +227,9 @@ export async function getCrossWorkspaceLineageAction(
   workspaceId: string,
   direction: 'inbound' | 'outbound' | 'both' = 'both'
 ): Promise<GetCrossWorkspaceLineageResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -280,11 +269,9 @@ export async function getTopicLineageEdges(
   topicId: string,
   options: { includeInactive?: boolean; limit?: number } = {}
 ): Promise<{ success: boolean; edges?: KafkaLineageEdge[]; error?: string }> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -323,11 +310,9 @@ export async function getApplicationLineageEdges(
   applicationId: string,
   options: { includeInactive?: boolean; limit?: number } = {}
 ): Promise<{ success: boolean; edges?: KafkaLineageEdge[]; error?: string }> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 

@@ -1,7 +1,6 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor } from '@/lib/authz'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -18,14 +17,12 @@ interface LaunchDetailPageProps {
 export default async function LaunchDetailPage({ params }: LaunchDetailPageProps) {
   const { id } = await params
 
-  const [payload, reqHeaders] = await Promise.all([
+  const [payload, actor] = await Promise.all([
     getPayload({ config }),
-    headers(),
+    getActor(),
   ])
 
-  const session = await auth.api.getSession({ headers: reqHeaders })
-
-  if (!session?.user) {
+  if (!actor) {
     return (
       <SidebarProvider>
         <AppSidebar />
@@ -69,7 +66,7 @@ export default async function LaunchDetailPage({ params }: LaunchDetailPageProps
       <SidebarInset>
         <SiteHeader />
         <div className="flex-1 space-y-4 p-8 pt-6">
-          <LaunchDetail launch={launch as any} currentUserId={session.user.id} />
+          <LaunchDetail launch={launch as any} currentUserId={actor.payloadId} />
         </div>
       </SidebarInset>
     </SidebarProvider>

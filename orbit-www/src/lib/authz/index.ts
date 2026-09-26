@@ -1,2 +1,6 @@
 export { getActor, requireActor, actorFromPayloadUser, UnauthenticatedError } from './actor'
 export type { Actor } from './actor'
+export { authorize, check, memberWorkspaceIds, workspaceRole, isAuthzError, authzErrorResponse, AuthzError } from './server'
+export { can, principalOf, defaultRoles, ALL_ROLES, MANAGE_ROLES, OWNER_ROLES } from './policy'
+export type { Verb, Resource, Decision, Principal } from './policy'
+export type { WorkspaceRole, MembershipScope } from './membership'

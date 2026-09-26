@@ -2,7 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getCurrentUser } from '@/lib/auth/session'
+import { getActor } from '@/lib/authz'
 import type { EntityKind } from '@/collections/catalog/constants'
 import {
   getEntitiesForWorkspace,
@@ -21,37 +21,37 @@ import {
  */
 
 export async function listTeamsForPicker(workspaceId: string): Promise<PickerOption[]> {
-  const user = await getCurrentUser()
-  if (!user) return []
+  const actor = await getActor()
+  if (!actor) return []
   const payload = await getPayload({ config })
-  return getTeamsForWorkspace(payload, user.id, workspaceId)
+  return getTeamsForWorkspace(payload, actor.betterAuthId, workspaceId)
 }
 
 export async function listEntitiesForPicker(
   workspaceId: string,
   kind: EntityKind | string,
 ): Promise<PickerOption[]> {
-  const user = await getCurrentUser()
-  if (!user) return []
+  const actor = await getActor()
+  if (!actor) return []
   const payload = await getPayload({ config })
-  return getEntitiesForWorkspace(payload, user.id, workspaceId, kind)
+  return getEntitiesForWorkspace(payload, actor.betterAuthId, workspaceId, kind)
 }
 
 export async function listReposForPicker(
   workspaceId: string,
   connectionId: string,
 ): Promise<PickerOption[]> {
-  const user = await getCurrentUser()
-  if (!user) return []
+  const actor = await getActor()
+  if (!actor) return []
   const payload = await getPayload({ config })
-  return getReposForConnection(payload, user.id, workspaceId, connectionId)
+  return getReposForConnection(payload, actor.betterAuthId, workspaceId, connectionId)
 }
 
 export async function listSkeletonsForPicker(workspaceId: string): Promise<SkeletonPickerOption[]> {
-  const user = await getCurrentUser()
-  if (!user) return []
+  const actor = await getActor()
+  if (!actor) return []
   const payload = await getPayload({ config })
-  return getSkeletonsForWorkspace(payload, user.id, workspaceId)
+  return getSkeletonsForWorkspace(payload, actor.betterAuthId, workspaceId)
 }
 
 export type { PickerOption, SkeletonPickerOption }

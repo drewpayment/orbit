@@ -8,12 +8,54 @@ vi.mock('@payload-config', () => ({
   default: {},
 }))
 
-vi.mock('@/lib/auth', () => ({
-  auth: {
-    api: {
-      getSession: vi.fn(),
-    },
-  },
+/**
+ * Mocked at the `@/lib/authz` module boundary (never the real `actor.ts`,
+ * which pulls in the Better-Auth Mongo client). `getActor` returns the Actor
+ * built from the test's simulated session (`mockSessionUser`, set via
+ * `authApi.getSession`'s mocked resolution below); `check` re-derives the
+ * caller's workspace role by calling the CURRENTLY mocked `getPayload()`'s
+ * `find({ collection: 'workspace-members' })` — the exact query surface these
+ * tests already control per-case — so every existing `find` stub (membership
+ * present/absent, `role: 'owner'`, …) keeps driving the same ALLOW/DENY
+ * outcome it always did.
+ */
+const authApi = { getSession: vi.fn() }
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(async () => {
+    const session = await authApi.getSession()
+    if (!session?.user) return null
+    return {
+      payloadId: session.user.id,
+      betterAuthId: session.user.id,
+      email: session.user.email ?? '',
+      role: 'user',
+      isPlatformAdmin: false,
+      user: session.user,
+    }
+  }),
+  check: vi.fn(async (verb: string, resource: { kind: string; id?: string; roles?: string[] }, actorArg?: unknown) => {
+    const session = await authApi.getSession()
+    const actor = (actorArg as { betterAuthId: string } | undefined) ?? (session?.user ? { betterAuthId: session.user.id } : null)
+    if (!actor) return { allowed: false, reason: 'unauthenticated', actor: null }
+    if (resource.kind !== 'workspace') return { allowed: false, reason: 'platform admin required', actor }
+    const { getPayload } = await import('payload')
+    const payload = await getPayload({} as never)
+    const result = await payload.find({
+      collection: 'workspace-members',
+      where: {
+        and: [
+          { workspace: { equals: resource.id } },
+          { user: { equals: actor.betterAuthId } },
+          { status: { equals: 'active' } },
+        ],
+      },
+      limit: 1,
+    })
+    const role = (result.docs[0]?.role as string | undefined) ?? (result.docs.length > 0 ? 'member' : null)
+    if (!role) return { allowed: false, reason: 'not a member of this workspace', actor }
+    const allowedRoles = resource.roles ?? (verb === 'read' || verb === 'create' ? ['owner', 'admin', 'member'] : ['owner', 'admin'])
+    return { allowed: allowedRoles.includes(role), reason: role, actor }
+  }),
 }))
 
 vi.mock('next/headers', () => ({
@@ -42,7 +84,6 @@ vi.mock('@/lib/github/octokit', () => ({
 }))
 
 import { getPayload } from 'payload'
-import { auth } from '@/lib/auth'
 import { getInstallationOctokit } from '@/lib/github/octokit'
 import { importRepository, updateAppSettings, deleteApp, exportAppManifest, resolveManifestConflict, disableManifestSync } from '../apps'
 
@@ -52,7 +93,7 @@ describe('importRepository', () => {
   })
 
   it('should store installationId when provided', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-1' },
       session: {},
     } as any)
@@ -81,7 +122,7 @@ describe('importRepository', () => {
   })
 
   it('should work without installationId', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-1' },
       session: {},
     } as any)
@@ -137,7 +178,7 @@ describe('importRepository — Azure DevOps', () => {
   }
 
   it('creates an ADO row with provider, org, project, connection from a connectionId', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(session as never)
+    authApi.getSession.mockResolvedValue(session as never)
     const create = vi.fn().mockResolvedValue({ id: 'app-ado' })
     const mockPayload = payloadWith({ create })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
@@ -166,7 +207,7 @@ describe('importRepository — Azure DevOps', () => {
   })
 
   it('parses an on-prem _git URL into org/project/repo', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(session as never)
+    authApi.getSession.mockResolvedValue(session as never)
     const create = vi.fn().mockResolvedValue({ id: 'app-ado' })
     vi.mocked(getPayload).mockResolvedValue(payloadWith({ create }) as never)
 
@@ -190,7 +231,7 @@ describe('importRepository — Azure DevOps', () => {
   })
 
   it('rejects when the connection is not allowed for the workspace', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(session as never)
+    authApi.getSession.mockResolvedValue(session as never)
     const create = vi.fn()
     vi.mocked(getPayload).mockResolvedValue(
       payloadWith({ connectionAllowed: false, create }) as never,
@@ -208,7 +249,7 @@ describe('importRepository — Azure DevOps', () => {
   })
 
   it('rejects an unparseable URL naming both accepted shapes', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(session as never)
+    authApi.getSession.mockResolvedValue(session as never)
     const create = vi.fn()
     vi.mocked(getPayload).mockResolvedValue(payloadWith({ create }) as never)
 
@@ -225,7 +266,7 @@ describe('importRepository — Azure DevOps', () => {
   })
 
   it('leaves GitHub imports on the unchanged github path (no provider field)', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(session as never)
+    authApi.getSession.mockResolvedValue(session as never)
     const create = vi.fn().mockResolvedValue({ id: 'app-gh' })
     vi.mocked(getPayload).mockResolvedValue(payloadWith({ create }) as never)
 
@@ -249,7 +290,7 @@ describe('updateAppSettings', () => {
   })
 
   it('should return unauthorized when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    authApi.getSession.mockResolvedValue(null)
 
     const result = await updateAppSettings('app-1', { name: 'new-name' })
 
@@ -257,7 +298,7 @@ describe('updateAppSettings', () => {
   })
 
   it('should return error when app not found', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-1' },
       session: {},
     } as any)
@@ -273,7 +314,7 @@ describe('updateAppSettings', () => {
   })
 
   it('should return error when user is not a workspace member', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-1' },
       session: {},
     } as any)
@@ -290,7 +331,7 @@ describe('updateAppSettings', () => {
   })
 
   it('should update app settings successfully', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-1' },
       session: {},
     } as any)
@@ -343,7 +384,7 @@ describe('deleteApp', () => {
   })
 
   it('should return unauthorized when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    authApi.getSession.mockResolvedValue(null)
 
     const result = await deleteApp('app-1', 'my-app')
 
@@ -351,7 +392,7 @@ describe('deleteApp', () => {
   })
 
   it('should return error when app not found', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-1' },
       session: {},
     } as any)
@@ -367,7 +408,7 @@ describe('deleteApp', () => {
   })
 
   it('should return error when confirmation name does not match', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-1' },
       session: {},
     } as any)
@@ -383,7 +424,7 @@ describe('deleteApp', () => {
   })
 
   it('should return error when user is not an owner or admin', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-1' },
       session: {},
     } as any)
@@ -400,7 +441,7 @@ describe('deleteApp', () => {
   })
 
   it('should delete app successfully when user is owner', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-1' },
       session: {},
     } as any)
@@ -428,13 +469,13 @@ describe('exportAppManifest', () => {
   })
 
   it('should throw Not authenticated when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    authApi.getSession.mockResolvedValue(null)
 
     await expect(exportAppManifest('app-1')).rejects.toThrow('Not authenticated')
   })
 
   it('should throw when app has no repository URL or installationId', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
+    authApi.getSession.mockResolvedValue({
       user: { id: 'user-1' },
       session: {},
     } as any)
@@ -443,13 +484,37 @@ describe('exportAppManifest', () => {
       findByID: vi.fn().mockResolvedValue({
         id: 'app-1',
         name: 'my-app',
+        workspace: 'ws-1',
         repository: {},
       }),
+      find: vi.fn().mockResolvedValue({ docs: [{ role: 'owner' }] }),
     }
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
 
     await expect(exportAppManifest('app-1')).rejects.toThrow(
       'App must have a linked repository with a GitHub installation to export a manifest',
+    )
+  })
+
+  it('throws when the actor is not a member of the app workspace', async () => {
+    authApi.getSession.mockResolvedValue({
+      user: { id: 'user-1' },
+      session: {},
+    } as any)
+
+    const mockPayload = {
+      findByID: vi.fn().mockResolvedValue({
+        id: 'app-1',
+        name: 'my-app',
+        workspace: 'ws-1',
+        repository: { url: 'https://github.com/acme/repo', installationId: '123' },
+      }),
+      find: vi.fn().mockResolvedValue({ docs: [] }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    await expect(exportAppManifest('app-1')).rejects.toThrow(
+      'You do not have permission to view this app.',
     )
   })
 })
@@ -460,8 +525,29 @@ describe('resolveManifestConflict', () => {
   })
 
   it('throws if user is not authenticated', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValueOnce(null)
+    authApi.getSession.mockResolvedValueOnce(null)
     await expect(resolveManifestConflict('app-id', 'keep-orbit')).rejects.toThrow('Not authenticated')
+  })
+
+  it('throws when the actor is not a member of the app workspace', async () => {
+    authApi.getSession.mockResolvedValue({
+      user: { id: 'user-1' },
+      session: {},
+    } as any)
+
+    const mockPayload = {
+      findByID: vi.fn().mockResolvedValue({
+        id: 'app-id',
+        workspace: 'ws-1',
+        conflictDetected: true,
+      }),
+      find: vi.fn().mockResolvedValue({ docs: [] }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    await expect(resolveManifestConflict('app-id', 'keep-orbit')).rejects.toThrow(
+      'You do not have permission to update this app.',
+    )
   })
 })
 
@@ -471,7 +557,27 @@ describe('disableManifestSync', () => {
   })
 
   it('throws if user is not authenticated', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValueOnce(null)
+    authApi.getSession.mockResolvedValueOnce(null)
     await expect(disableManifestSync('app-id')).rejects.toThrow('Not authenticated')
+  })
+
+  it('throws when the actor is not a member of the app workspace', async () => {
+    authApi.getSession.mockResolvedValue({
+      user: { id: 'user-1' },
+      session: {},
+    } as any)
+
+    const mockPayload = {
+      findByID: vi.fn().mockResolvedValue({
+        id: 'app-id',
+        workspace: 'ws-1',
+      }),
+      find: vi.fn().mockResolvedValue({ docs: [] }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    await expect(disableManifestSync('app-id')).rejects.toThrow(
+      'You do not have permission to update this app.',
+    )
   })
 })

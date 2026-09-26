@@ -1,8 +1,7 @@
 // orbit-www/src/app/(frontend)/templates/[slug]/page.tsx
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor, check } from '@/lib/authz'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -45,14 +44,9 @@ export default async function TemplateDetailPage({ params }: PageProps) {
   const { slug } = await params
 
   // Phase 1: Parallelize initial setup
-  const [payload, reqHeaders] = await Promise.all([
-    getPayload({ config }),
-    headers(),
-  ])
+  const [payload, actor] = await Promise.all([getPayload({ config }), getActor()])
 
-  const session = await auth.api.getSession({ headers: reqHeaders })
-
-  if (!session?.user) {
+  if (!actor) {
     notFound()
   }
 
@@ -85,20 +79,7 @@ export default async function TemplateDetailPage({ params }: PageProps) {
     ? template.workspace
     : template.workspace.id
 
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: session.user.id } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
-
-  const canEdit = membership.docs.length > 0
+  const canEdit = (await check('manage', { kind: 'workspace', id: workspaceId }, actor)).allowed
 
   return (
     <SidebarProvider>

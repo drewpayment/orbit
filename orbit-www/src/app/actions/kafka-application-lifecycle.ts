@@ -2,7 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
+import { getActor, check, type Actor } from '@/lib/authz'
 import { getTemporalClient } from '@/lib/temporal/client'
 import {
   calculateGracePeriodEnd,
@@ -83,7 +83,7 @@ export interface ApplicationLifecycleStatusResult {
  */
 async function verifyWorkspaceAdminAccess(
   payload: Awaited<ReturnType<typeof getPayload>>,
-  userId: string,
+  actor: Actor,
   applicationId: string
 ): Promise<{ allowed: boolean; error?: string; workspaceId?: string }> {
   // Fetch the application
@@ -101,21 +101,9 @@ async function verifyWorkspaceAdminAccess(
     typeof app.workspace === 'string' ? app.workspace : app.workspace.id
 
   // Check if user is admin/owner of the workspace
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: userId } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-    overrideAccess: true,
-  })
+  const decision = await check('manage', { kind: 'workspace', id: workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!decision.allowed) {
     return {
       allowed: false,
       error: 'You must be an admin or owner of this workspace',
@@ -200,8 +188,8 @@ export async function decommissionApplication(
   input: DecommissionApplicationInput
 ): Promise<DecommissionApplicationResult> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -210,7 +198,7 @@ export async function decommissionApplication(
     // Verify admin access
     const accessCheck = await verifyWorkspaceAdminAccess(
       payload,
-      payloadUser.betterAuthId || payloadUser.id,
+      actor,
       input.applicationId
     )
 
@@ -279,7 +267,7 @@ export async function decommissionApplication(
         gracePeriodDaysOverride: input.gracePeriodDaysOverride,
         decommissionReason: input.reason,
       } as any,
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -382,8 +370,8 @@ export async function cancelDecommissioning(
   applicationId: string
 ): Promise<CancelDecommissioningResult> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -392,7 +380,7 @@ export async function cancelDecommissioning(
     // Verify admin access
     const accessCheck = await verifyWorkspaceAdminAccess(
       payload,
-      payloadUser.betterAuthId || payloadUser.id,
+      actor,
       applicationId
     )
 
@@ -464,7 +452,7 @@ export async function cancelDecommissioning(
         decommissionReason: null,
         cleanupWorkflowId: null,
       } as any,
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -503,8 +491,8 @@ export async function forceDeleteApplication(
   reason?: string
 ): Promise<ForceDeleteApplicationResult> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -513,7 +501,7 @@ export async function forceDeleteApplication(
     // Verify admin access
     const accessCheck = await verifyWorkspaceAdminAccess(
       payload,
-      payloadUser.betterAuthId || payloadUser.id,
+      actor,
       applicationId
     )
 
@@ -621,12 +609,12 @@ export async function forceDeleteApplication(
       data: {
         status: 'deleted',
         deletedAt: new Date().toISOString(),
-        deletedBy: payloadUser.betterAuthId || payloadUser.id,
+        deletedBy: actor.payloadId,
         forceDeleted: true,
         decommissionReason: reason || app.decommissionReason,
         decommissionWorkflowId: workflowId,
       } as any,
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -654,8 +642,8 @@ export async function getApplicationLifecycleStatus(
   applicationId: string
 ): Promise<ApplicationLifecycleStatusResult> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -676,20 +664,9 @@ export async function getApplicationLifecycleStatus(
     const workspaceId =
       typeof app.workspace === 'string' ? app.workspace : app.workspace.id
 
-    const membership = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: workspaceId } },
-          { user: { equals: payloadUser.betterAuthId || payloadUser.id } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      limit: 1,
-      overrideAccess: true,
-    })
+    const membershipDecision = await check('read', { kind: 'workspace', id: workspaceId }, actor)
 
-    if (membership.docs.length === 0) {
+    if (!membershipDecision.allowed) {
       return { success: false, error: 'Not a member of this workspace' }
     }
 

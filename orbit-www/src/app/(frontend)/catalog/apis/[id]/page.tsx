@@ -1,10 +1,8 @@
 import { notFound } from 'next/navigation'
-import { getPayload } from 'payload'
-import config from '@payload-config'
 import { getAPIById, getAPIVersions } from '../actions'
 import { APIDetailClient } from './api-detail-client'
 import type { APISchema, APISchemaVersion } from '@/types/api-catalog'
-import { getActor } from '@/lib/authz'
+import { getActor, check, ALL_ROLES } from '@/lib/authz'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -26,34 +24,24 @@ export default async function APIDetailPage({ params }: PageProps) {
     notFound()
   }
 
-  // Check if user can edit (creator or workspace member with sufficient role)
+  // Check if user can edit (creator, workspace member with any active role, or
+  // platform admin — platform admins are not excluded by the previous check,
+  // so `check()`'s bypass is a semantic addition, not a restriction).
   let canEdit = false
   if (actor) {
     const createdById = typeof api.createdBy === 'object'
       ? api.createdBy.id
       : api.createdBy
-    canEdit = createdById === actor.payloadId
+    const workspaceId = typeof api.workspace === 'string'
+      ? api.workspace
+      : (api.workspace?.id ?? null)
 
-    if (!canEdit) {
-      const workspaceId = typeof api.workspace === 'string'
-        ? api.workspace
-        : api.workspace?.id
-      if (workspaceId) {
-        const payload = await getPayload({ config })
-        const memberships = await payload.find({
-          collection: 'workspace-members',
-          where: {
-            user: { equals: actor.betterAuthId },
-            workspace: { equals: workspaceId },
-            status: { equals: 'active' },
-            role: { in: ['owner', 'admin', 'member'] },
-          },
-          limit: 1,
-          overrideAccess: true,
-        })
-        canEdit = memberships.docs.length > 0
-      }
-    }
+    const decision = await check(
+      'update',
+      { kind: 'doc', workspaceId, ownerPayloadId: createdById ?? null, roles: ALL_ROLES },
+      actor,
+    )
+    canEdit = decision.allowed
   }
 
   return (

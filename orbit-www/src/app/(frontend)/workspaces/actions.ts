@@ -3,31 +3,30 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
-import { headers } from 'next/headers'
 import { getBetterAuthUserByEmail, getBetterAuthUsers } from '@/lib/data/cached-queries'
-import { auth } from '@/lib/auth'
+import { getActor, check } from '@/lib/authz'
+import {
+  listWorkspaceMembers,
+  findMembership,
+  addWorkspaceMember,
+  updateWorkspaceMemberRole,
+  removeWorkspaceMember,
+  deleteWorkspaceMembers,
+  getMembershipById,
+} from '@/lib/workspaces/members'
 
 export async function getWorkspaceMembers(workspaceId: string) {
   try {
-    const payload = await getPayload({ config })
+    const d = await check('read', { kind: 'workspace', id: workspaceId })
+    if (!d.allowed) {
+      return { success: false, error: d.reason, members: [] }
+    }
 
-    const membersResult = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        workspace: {
-          equals: workspaceId,
-        },
-        status: {
-          equals: 'active',
-        },
-      },
-      limit: 100,
-      sort: '-createdAt',
-      overrideAccess: true,
-    })
+    const payload = await getPayload({ config })
+    const members = await listWorkspaceMembers(payload, workspaceId, { limit: 100 })
 
     // Batch-fetch Better Auth user details for all members
-    const userIds = membersResult.docs
+    const userIds = members
       .map((m) => (typeof m.user === 'string' ? m.user : ''))
       .filter(Boolean)
     const baUsers = await getBetterAuthUsers(userIds)
@@ -35,7 +34,7 @@ export async function getWorkspaceMembers(workspaceId: string) {
 
     return {
       success: true,
-      members: membersResult.docs.map((member) => {
+      members: members.map((member) => {
         const baUserId = typeof member.user === 'string' ? member.user : ''
         const baUser = userMap.get(baUserId)
         return {
@@ -67,6 +66,9 @@ export async function inviteWorkspaceMember(
   role: 'owner' | 'admin' | 'member'
 ) {
   try {
+    const d = await check('manage', { kind: 'workspace', id: workspaceId })
+    if (!d.allowed) return { success: false, error: d.reason }
+
     const payload = await getPayload({ config })
 
     // Find user by email in Better Auth user collection
@@ -79,49 +81,16 @@ export async function inviteWorkspaceMember(
       }
     }
 
-    const user = baUser
-
     // Check if user is already a member
-    const existingMember = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          {
-            workspace: {
-              equals: workspaceId,
-            },
-          },
-          {
-            user: {
-              equals: user.id,
-            },
-          },
-        ],
-      },
-      limit: 1,
-      overrideAccess: true,
-    })
-
-    if (existingMember.docs.length > 0) {
+    const existing = await findMembership(payload, baUser.id, workspaceId)
+    if (existing) {
       return {
         success: false,
         error: 'User is already a member of this workspace',
       }
     }
 
-    // Create membership
-    await payload.create({
-      collection: 'workspace-members',
-      data: {
-        workspace: workspaceId,
-        user: user.id,
-        role,
-        status: 'active',
-        requestedAt: new Date().toISOString(),
-        approvedAt: new Date().toISOString(),
-      },
-      overrideAccess: true,
-    })
+    await addWorkspaceMember(payload, { workspaceId, betterAuthId: baUser.id, role })
 
     revalidatePath('/workspaces')
     revalidatePath('/admin/workspaces')
@@ -145,13 +114,13 @@ export async function updateMemberRole(
   try {
     const payload = await getPayload({ config })
 
-    await payload.update({
-      collection: 'workspace-members',
-      id: memberId,
-      data: {
-        role: newRole,
-      },
-    })
+    const membership = await getMembershipById(payload, memberId)
+    if (!membership) return { success: false, error: 'Membership not found' }
+
+    const d = await check('manage', { kind: 'workspace', id: membership.workspaceId })
+    if (!d.allowed) return { success: false, error: d.reason }
+
+    await updateWorkspaceMemberRole(payload, memberId, newRole)
 
     revalidatePath('/workspaces')
     revalidatePath('/admin/workspaces')
@@ -172,10 +141,13 @@ export async function removeMember(memberId: string) {
   try {
     const payload = await getPayload({ config })
 
-    await payload.delete({
-      collection: 'workspace-members',
-      id: memberId,
-    })
+    const membership = await getMembershipById(payload, memberId)
+    if (!membership) return { success: false, error: 'Membership not found' }
+
+    const d = await check('manage', { kind: 'workspace', id: membership.workspaceId })
+    if (!d.allowed) return { success: false, error: d.reason }
+
+    await removeWorkspaceMember(payload, memberId)
 
     revalidatePath('/workspaces')
     revalidatePath('/admin/workspaces')
@@ -198,11 +170,8 @@ export async function createWorkspace(data: {
   description?: string
 }) {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -234,17 +203,10 @@ export async function createWorkspace(data: {
     })
 
     // Add the creating user as workspace owner
-    await payload.create({
-      collection: 'workspace-members',
-      data: {
-        workspace: workspace.id,
-        user: session.user.id,
-        role: 'owner',
-        status: 'active',
-        requestedAt: new Date().toISOString(),
-        approvedAt: new Date().toISOString(),
-      },
-      overrideAccess: true,
+    await addWorkspaceMember(payload, {
+      workspaceId: String(workspace.id),
+      betterAuthId: actor.betterAuthId,
+      role: 'owner',
     })
 
     revalidatePath('/workspaces')
@@ -276,6 +238,9 @@ export async function updateWorkspaceSettings(
   }
 ) {
   try {
+    const d = await check('update', { kind: 'workspace', id: workspaceId })
+    if (!d.allowed) return { success: false, error: d.reason }
+
     const payload = await getPayload({ config })
 
     await payload.update({
@@ -286,6 +251,7 @@ export async function updateWorkspaceSettings(
         description: data.description || null,
         ...(data.slug && { slug: data.slug }),
       },
+      overrideAccess: true,
     })
 
     revalidatePath('/workspaces')
@@ -305,33 +271,19 @@ export async function updateWorkspaceSettings(
 
 export async function deleteWorkspace(workspaceId: string) {
   try {
+    const d = await check('delete', { kind: 'workspace', id: workspaceId, roles: ['owner'] })
+    if (!d.allowed) return { success: false, error: d.reason }
+
     const payload = await getPayload({ config })
 
     // First, delete all workspace members
-    const membersResult = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        workspace: {
-          equals: workspaceId,
-        },
-      },
-      limit: 1000,
-    })
-
-    // Delete all members
-    await Promise.all(
-      membersResult.docs.map((member) =>
-        payload.delete({
-          collection: 'workspace-members',
-          id: member.id,
-        })
-      )
-    )
+    await deleteWorkspaceMembers(payload, workspaceId)
 
     // Then delete the workspace
     await payload.delete({
       collection: 'workspaces',
       id: workspaceId,
+      overrideAccess: true,
     })
 
     revalidatePath('/workspaces')

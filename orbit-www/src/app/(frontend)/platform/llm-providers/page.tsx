@@ -1,10 +1,9 @@
-import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 
-import { getPayloadUserFromSession } from '@/lib/auth/session'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
+import { getActor, check } from '@/lib/authz'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
@@ -20,9 +19,10 @@ export const metadata = {
 }
 
 export default async function PlatformLLMProvidersPage() {
-  const user = await getPayloadUserFromSession()
-  if (!user) redirect('/login')
-  if (!isPlatformAdmin(user)) redirect('/')
+  const actor = await getActor()
+  if (!actor) redirect('/login')
+  const d = await check('manage', { kind: 'platform' }, actor)
+  if (!d.allowed) redirect('/')
 
   const payload = await getPayload({ config })
 

@@ -1,7 +1,6 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor } from '@/lib/authz'
 import { redirect, notFound } from 'next/navigation'
 import { AppDetail } from '@/components/features/apps/AppDetail'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
@@ -16,14 +15,12 @@ export default async function AppDetailPage({ params }: AppDetailPageProps) {
   const { id } = await params
 
   // Phase 1: Parallelize initial setup
-  const [payload, reqHeaders] = await Promise.all([
+  const [payload, actor] = await Promise.all([
     getPayload({ config }),
-    headers(),
+    getActor(),
   ])
 
-  const session = await auth.api.getSession({ headers: reqHeaders })
-
-  if (!session?.user) {
+  if (!actor) {
     redirect('/login')
   }
 

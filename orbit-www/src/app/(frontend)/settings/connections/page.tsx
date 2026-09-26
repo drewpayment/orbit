@@ -4,8 +4,7 @@ import config from '@payload-config'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
+import { getActor, check } from '@/lib/authz'
 import { listConnectionsAdminCore } from '@/lib/connections/connections-core'
 import { listInstallationsAdminCore } from '@/lib/github/installations-core'
 import { ConnectionsClient } from '@/components/features/connections/ConnectionsClient'
@@ -24,9 +23,10 @@ export const metadata = {
  * client — both loaders return PAT-less / token-less projections.
  */
 export default async function ConnectionsSettingsPage() {
-  const user = await getPayloadUserFromSession()
-  if (!user) redirect('/login')
-  if (!isPlatformAdmin(user)) redirect('/')
+  const actor = await getActor()
+  if (!actor) redirect('/login')
+  const d = await check('manage', { kind: 'platform' }, actor)
+  if (!d.allowed) redirect('/')
 
   const payload = await getPayload({ config })
   const [installations, connections, workspacesResult] = await Promise.all([

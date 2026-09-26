@@ -1,7 +1,6 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Compass, Loader2 } from 'lucide-react'
-import { getCurrentUser } from '@/lib/auth/session'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -20,8 +19,7 @@ import { getEntityTypesHome } from './actions'
  */
 
 async function TypesContent() {
-  const user = await getCurrentUser()
-  const home = await getEntityTypesHome(user?.id)
+  const home = await getEntityTypesHome()
 
   if (!home.workspaceId) {
     return (

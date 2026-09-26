@@ -2,7 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
+import { getActor, check } from '@/lib/authz'
 import { canCreateApplication, getWorkspaceQuotaInfo, type QuotaInfo } from '@/lib/kafka/quotas'
 import { startVirtualClusterProvisionWorkflow } from '@/lib/temporal/client'
 
@@ -27,28 +27,17 @@ export async function createApplication(
   input: CreateApplicationInput
 ): Promise<CreateApplicationResult> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
     const payload = await getPayload({ config })
 
     // Verify user is member of workspace
-    const membership = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: input.workspaceId } },
-          { user: { equals: payloadUser.betterAuthId || payloadUser.id } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      limit: 1,
-      overrideAccess: true,
-    })
+    const membershipDecision = await check('create', { kind: 'workspace', id: input.workspaceId }, actor)
 
-    if (membership.docs.length === 0) {
+    if (!membershipDecision.allowed) {
       return { success: false, error: 'Not a member of this workspace' }
     }
 
@@ -103,7 +92,7 @@ export async function createApplication(
         workspace: input.workspaceId,
         status: 'active',
         provisioningStatus: 'pending',
-        createdBy: payloadUser.betterAuthId || payloadUser.id,
+        createdBy: actor.payloadId,
       },
       overrideAccess: true,
     })
@@ -198,28 +187,17 @@ export async function listApplications(
   input: ListApplicationsInput
 ): Promise<ListApplicationsResult> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
     const payload = await getPayload({ config })
 
     // Verify user is member of workspace
-    const membership = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: input.workspaceId } },
-          { user: { equals: payloadUser.betterAuthId || payloadUser.id } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      limit: 1,
-      overrideAccess: true,
-    })
+    const membershipDecision = await check('read', { kind: 'workspace', id: input.workspaceId }, actor)
 
-    if (membership.docs.length === 0) {
+    if (!membershipDecision.allowed) {
       return { success: false, error: 'Not a member of this workspace' }
     }
 
@@ -292,9 +270,16 @@ export async function listApplicationsWithProvisioningIssues(
   workspaceId?: string
 ): Promise<ListProvisioningIssuesResult> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
+    }
+
+    const listDecision = workspaceId
+      ? await check('read', { kind: 'workspace', id: workspaceId }, actor)
+      : await check('read', { kind: 'platform' }, actor)
+    if (!listDecision.allowed) {
+      return { success: false, error: 'Not a member of this workspace' }
     }
 
     const payload = await getPayload({ config })
@@ -370,8 +355,8 @@ export async function getApplication(
   input: GetApplicationInput
 ): Promise<GetApplicationResult> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -380,7 +365,7 @@ export async function getApplication(
     const app = await payload.findByID({
       collection: 'kafka-applications',
       id: input.applicationId,
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
       depth: 1,
     })
@@ -432,8 +417,8 @@ export async function retryVirtualClusterProvisioning(
   applicationId: string
 ): Promise<{ success: boolean; workflowId?: string; error?: string }> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -443,7 +428,7 @@ export async function retryVirtualClusterProvisioning(
     const application = await payload.findByID({
       collection: 'kafka-applications',
       id: applicationId,
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
       depth: 1,
     })

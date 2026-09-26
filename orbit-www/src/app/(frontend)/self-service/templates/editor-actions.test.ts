@@ -117,9 +117,75 @@ const mockValidate = vi.fn()
 
 vi.mock('@payload-config', () => ({ default: {} }))
 vi.mock('payload', () => ({ getPayload: vi.fn(async () => fake.payload) }))
-vi.mock('@/lib/auth/session', () => ({
-  getCurrentUser: vi.fn(async () => mockSessionUser),
-  getPayloadUserFromSession: vi.fn(async () => mockPayloadUser),
+
+/**
+ * Mocked at the `@/lib/authz` module boundary (never the real `actor.ts`).
+ * `getActor`/`requireActor` derive an Actor from `mockSessionUser`/
+ * `mockPayloadUser`; `check`/`memberWorkspaceIds` re-derive the caller's
+ * workspace role(s) from the SAME fake Payload's `workspace-members` stub
+ * (`fake.setRoles`) that `find`/`findByID` already read.
+ */
+function fakeActor() {
+  if (!mockSessionUser) return null
+  const role = mockPayloadUser?.role
+  return {
+    payloadId: mockPayloadUser?.id ?? '',
+    betterAuthId: mockSessionUser.id,
+    email: 'user@test.dev',
+    role: role ?? 'user',
+    isPlatformAdmin: role === 'admin' || role === 'super_admin',
+    user: mockPayloadUser,
+  }
+}
+
+const MANAGE_ROLES = ['owner', 'admin']
+const ALL_ROLES = ['owner', 'admin', 'member']
+
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(async () => fakeActor()),
+  requireActor: vi.fn(async () => {
+    const actor = fakeActor()
+    if (!actor) throw new Error('Not authenticated')
+    return actor
+  }),
+  check: vi.fn(async (verb: string, resource: { kind: string; id?: string; roles?: string[] }, actorArg?: unknown) => {
+    const actor = (actorArg as ReturnType<typeof fakeActor>) ?? fakeActor()
+    if (!actor) return { allowed: false, reason: 'unauthenticated', actor: null }
+    if (actor.isPlatformAdmin) return { allowed: true, reason: 'platform admin', actor }
+    if (resource.kind !== 'workspace') return { allowed: false, reason: 'platform admin required', actor }
+    const membership = await fake.payload.find({
+      collection: 'workspace-members',
+      where: {
+        and: [
+          { workspace: { equals: resource.id } },
+          { user: { equals: actor.betterAuthId } },
+          { status: { equals: 'active' } },
+        ],
+      },
+      limit: 1,
+    })
+    const role = (membership.docs[0]?.role as string | undefined) ?? null
+    if (!role) return { allowed: false, reason: 'not a member of this workspace', actor }
+    const allowedRoles = resource.roles ?? (verb === 'read' || verb === 'create' ? ALL_ROLES : MANAGE_ROLES)
+    return { allowed: allowedRoles.includes(role), reason: role, actor }
+  }),
+  memberWorkspaceIds: vi.fn(async (scope: 'member' | 'manage' | 'owner', actorArg?: unknown) => {
+    const actor = (actorArg as ReturnType<typeof fakeActor>) ?? fakeActor()
+    if (!actor) return []
+    const roles = scope === 'owner' ? ['owner'] : scope === 'manage' ? MANAGE_ROLES : ALL_ROLES
+    const membership = await fake.payload.find({
+      collection: 'workspace-members',
+      where: {
+        and: [
+          { user: { equals: actor.betterAuthId } },
+          { status: { equals: 'active' } },
+          { role: { in: roles } },
+        ],
+      },
+      limit: 1000,
+    })
+    return [...new Set(membership.docs.map((m: { workspace: unknown }) => String(m.workspace)))]
+  }),
 }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('./authoring-actions', () => ({
@@ -136,7 +202,9 @@ const DEFINITION = {
   status: 'draft',
   visibility: 'workspace',
   sourceMode: 'orbit',
-  createdBy: 'user-1',
+  // The Payload id (mockPayloadUser.id) — `createdBy` is `relationTo: 'users'`,
+  // not the Better-Auth session id (see the "mine" semantic fix in editor-actions.ts).
+  createdBy: 'pu-1',
   currentVersion: 'ver-1',
   fixtures: [],
   usageCount: 0,

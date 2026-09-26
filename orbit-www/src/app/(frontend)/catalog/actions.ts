@@ -4,46 +4,17 @@ import { getPayload } from 'payload'
 import type { Where } from 'payload'
 import config from '@payload-config'
 import type { CatalogEntity, EntityScore, EntityType } from '@/payload-types'
-import { getCurrentUser, getPayloadUserFromSession } from '@/lib/auth/session'
+import { getActor, memberWorkspaceIds } from '@/lib/authz'
 import { DEFAULT_ENTITY_TYPE } from '@/lib/catalog/entity-types'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
-import { getManageableWorkspaceIds } from '@/lib/catalog/entity-authz'
 import {
   ENTITY_KIND_VALUES,
   isEntityKind,
   type EntityKind,
 } from '@/components/features/catalog/catalog-query'
 
-/**
- * Resolve the set of workspace IDs the given user is an active member of.
- * This is the tenant boundary for every catalog query below — mirrors the
- * workspace-membership filtering used in `catalog/apis/actions.ts`.
- */
-async function getMemberWorkspaceIds(
-  payload: Awaited<ReturnType<typeof getPayload>>,
-  userId: string,
-): Promise<string[]> {
-  const memberships = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      user: { equals: userId },
-      status: { equals: 'active' },
-    },
-    limit: 1000,
-    depth: 0,
-    overrideAccess: true,
-  })
-
-  return memberships.docs.map((m) =>
-    typeof m.workspace === 'string' ? m.workspace : m.workspace.id,
-  )
-}
-
 export type CatalogScope = 'all' | 'mine'
 
 export interface SearchCatalogInput {
-  /** Legacy — identity is resolved from the session; kept for call-site stability. */
-  userId?: string
   kind?: string
   query?: string
   limit?: number
@@ -128,8 +99,7 @@ function computeCanManage(
  *
  * Reads run with `overrideAccess: true`; the where clause is the boundary. Each
  * returned doc carries a `canManage` flag computed from a single manageable-ids
- * set (no per-row query). Identity is resolved from the session — the client
- * `userId` is not trusted for authorization.
+ * set (no per-row query). Identity is resolved from the session.
  */
 export async function searchCatalogEntities(
   input: SearchCatalogInput = {},
@@ -149,12 +119,11 @@ export async function searchCatalogEntities(
     workspaceId,
   }
 
-  const sessionUser = await getPayloadUserFromSession()
-  if (!sessionUser) return empty
+  const actor = await getActor()
+  if (!actor) return empty
 
-  const isAdmin = isPlatformAdmin(sessionUser)
-  const betterAuthId = sessionUser.betterAuthId ?? undefined
-  const manageableIds = betterAuthId ? await getManageableWorkspaceIds(payload, betterAuthId) : []
+  const isAdmin = actor.isPlatformAdmin
+  const manageableIds = await memberWorkspaceIds('member', actor)
   const manageableSet = new Set(manageableIds)
   const canCreate = isAdmin || manageableIds.length > 0
 
@@ -209,7 +178,7 @@ export type CatalogKindCounts = {
  * restricts to the caller's active workspaces. Respects the active text `query`.
  */
 export async function getCatalogKindCounts(
-  input: { userId?: string; query?: string; scope?: CatalogScope; workspaceId?: string } = {},
+  input: { query?: string; scope?: CatalogScope; workspaceId?: string } = {},
 ): Promise<CatalogKindCounts> {
   const payload = await getPayload({ config })
   const { query, scope = 'all', workspaceId } = input
@@ -219,15 +188,12 @@ export async function getCatalogKindCounts(
     {} as Record<EntityKind, number>,
   )
 
-  const sessionUser = await getPayloadUserFromSession()
-  if (!sessionUser) return { all: 0, byKind: zero }
+  const actor = await getActor()
+  if (!actor) return { all: 0, byKind: zero }
 
   let workspaceFilter: string[] | undefined
   if (scope === 'mine') {
-    const betterAuthId = sessionUser.betterAuthId ?? undefined
-    const manageableIds = betterAuthId
-      ? await getManageableWorkspaceIds(payload, betterAuthId)
-      : []
+    const manageableIds = await memberWorkspaceIds('member', actor)
     if (manageableIds.length === 0) return { all: 0, byKind: zero }
     workspaceFilter = manageableIds
   }
@@ -286,10 +252,10 @@ export async function getOverallEntityScores(
   if (entityIds.length === 0) return empty
 
   const payload = await getPayload({ config })
-  const uid = (await getCurrentUser())?.id
-  if (!uid) return empty
+  const actor = await getActor()
+  if (!actor) return empty
 
-  const workspaceIds = await getMemberWorkspaceIds(payload, uid)
+  const workspaceIds = await memberWorkspaceIds('member', actor)
   if (workspaceIds.length === 0) return empty
 
   const result = await payload.find({

@@ -2,8 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor } from '@/lib/authz'
 import { getInstallationOctokit } from '@/lib/github/octokit'
 
 export interface GitHubInstallation {
@@ -19,11 +18,9 @@ export async function getWorkspaceGitHubInstallations(workspaceId: string): Prom
   error?: string
   installations: GitHubInstallation[]
 }> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Unauthorized', installations: [] }
   }
 
@@ -71,11 +68,9 @@ export async function listInstallationRepositories(
   repos: Repository[]
   hasMore: boolean
 }> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Unauthorized', repos: [], hasMore: false }
   }
 
@@ -129,11 +124,9 @@ export async function searchInstallationRepositories(
   repos: Repository[]
   hasMore: boolean
 }> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Unauthorized', repos: [], hasMore: false }
   }
 
@@ -187,11 +180,9 @@ export async function getRepositoryBranches(
   owner: string,
   repo: string
 ): Promise<{ success: boolean; branches?: string[]; error?: string }> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 

@@ -2,7 +2,7 @@
 
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
-import { getCurrentUser } from '@/lib/auth/session'
+import { getActor } from '@/lib/authz'
 
 interface FeedbackInput {
   category: string
@@ -15,8 +15,8 @@ interface FeedbackInput {
 }
 
 export async function submitFeedback(input: FeedbackInput) {
-  const user = await getCurrentUser()
-  if (!user) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'You must be signed in to submit feedback.' }
   }
 
@@ -39,7 +39,7 @@ export async function submitFeedback(input: FeedbackInput) {
       subject,
       message,
       steps: category === 'bug' ? steps : undefined,
-      submittedBy: user.id,
+      submittedBy: actor.payloadId,
     },
   })
 

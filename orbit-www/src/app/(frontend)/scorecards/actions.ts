@@ -2,10 +2,9 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getCurrentUser } from '@/lib/auth/session'
+import { getActor, requireActor, check, memberWorkspaceIds, type Actor } from '@/lib/authz'
 import type { Scorecard, ScorecardRule, ScorecardRuleResult, CatalogEntity } from '@/payload-types'
 import { clearScorecardProjections, runScorecardEvaluation } from '@/lib/scorecards/evaluate'
-import { canManageScorecards } from '@/lib/scorecards/authz'
 import { validateExpression } from '@/components/features/scorecards/rule-builder'
 import {
   buildLevelDistribution,
@@ -13,8 +12,6 @@ import {
   type LevelBucket,
   type LevelDef,
 } from '@/components/features/scorecards/scorecard-ui'
-
-type Payload = Awaited<ReturnType<typeof getPayload>>
 
 /** Extract a relationship's id whether it arrived as a string or a populated doc. */
 function relId(value: unknown): string | null {
@@ -24,28 +21,6 @@ function relId(value: unknown): string | null {
     return String((value as { id: unknown }).id)
   }
   return null
-}
-
-/**
- * Resolve the workspace IDs the given user actively belongs to — the tenant
- * boundary for every scorecard query below. Mirrors the catalog actions'
- * `getMemberWorkspaceIds`.
- */
-async function getMemberWorkspaceIds(payload: Payload, userId: string): Promise<string[]> {
-  const memberships = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      user: { equals: userId },
-      status: { equals: 'active' },
-    },
-    limit: 1000,
-    depth: 0,
-    overrideAccess: true,
-  })
-
-  return memberships.docs.map((m) =>
-    typeof m.workspace === 'string' ? m.workspace : m.workspace.id,
-  )
 }
 
 /** Normalise a scorecard's ladder into clean {@link LevelDef}s, lowest rank first. */
@@ -132,10 +107,10 @@ function summarise(
  */
 export async function listScorecards(): Promise<ScorecardSummary[]> {
   const payload = await getPayload({ config })
-  const uid = (await getCurrentUser())?.id
-  if (!uid) return []
+  const actor = await getActor()
+  if (!actor) return []
 
-  const workspaceIds = await getMemberWorkspaceIds(payload, uid)
+  const workspaceIds = await memberWorkspaceIds('member', actor)
   if (workspaceIds.length === 0) return []
 
   const scResult = await payload.find({
@@ -221,10 +196,10 @@ export interface ScorecardDetail {
  */
 export async function getScorecardDetail(scorecardId: string): Promise<ScorecardDetail | null> {
   const payload = await getPayload({ config })
-  const uid = (await getCurrentUser())?.id
-  if (!uid) return null
+  const actor = await getActor()
+  if (!actor) return null
 
-  const workspaceIds = await getMemberWorkspaceIds(payload, uid)
+  const workspaceIds = await memberWorkspaceIds('member', actor)
   if (workspaceIds.length === 0) return null
 
   let scorecard: Scorecard
@@ -315,7 +290,11 @@ export async function getScorecardDetail(scorecardId: string): Promise<Scorecard
 
   const summary = summarise(scorecard, rules, resultsResult.docs)
 
-  const canManage = await canManageScorecards(payload, uid, relId(scorecard.workspace))
+  const scorecardWorkspaceId = relId(scorecard.workspace)
+  const canManageDecision = scorecardWorkspaceId
+    ? await check('manage', { kind: 'workspace', id: scorecardWorkspaceId }, actor)
+    : { allowed: false }
+  const canManage = canManageDecision.allowed
 
   return { scorecard, levels, rules, rows, summary, canManage }
 }
@@ -356,11 +335,11 @@ export interface EntityScoreSummary {
  */
 export async function getEntityScoreSummary(entityId: string): Promise<EntityScoreSummary> {
   const payload = await getPayload({ config })
-  const uid = (await getCurrentUser())?.id
+  const actor = await getActor()
   const empty: EntityScoreSummary = { scorecards: [] }
-  if (!uid || !entityId) return empty
+  if (!actor || !entityId) return empty
 
-  const workspaceIds = await getMemberWorkspaceIds(payload, uid)
+  const workspaceIds = await memberWorkspaceIds('member', actor)
   if (workspaceIds.length === 0) return empty
 
   const resultsResult = await payload.find({
@@ -448,10 +427,9 @@ export interface EvaluationSummary {
  */
 export async function runEvaluation(scorecardId: string): Promise<EvaluationSummary> {
   const payload = await getPayload({ config })
-  const uid = (await getCurrentUser())?.id
-  if (!uid) throw new Error('Not authenticated')
+  const actor = await requireActor()
 
-  const workspaceIds = await getMemberWorkspaceIds(payload, uid)
+  const workspaceIds = await memberWorkspaceIds('member', actor)
   if (workspaceIds.length === 0) throw new Error('No workspace access')
 
   let scorecard: Scorecard
@@ -474,7 +452,8 @@ export async function runEvaluation(scorecardId: string): Promise<EvaluationSumm
 
 // ===========================================================================
 // Authoring actions (IDP refocus P2, Option A) — RBAC-gated on workspace
-// owner/admin via canManageScorecards. EVERY action resolves the session user,
+// owner/admin via `@/lib/authz`'s `check('manage', ...)`. EVERY action resolves
+// the session actor,
 // determines the target workspace (from input for create; by loading the doc
 // for update/delete), and throws BEFORE any write when the check fails. The
 // check IS the authz, so the Payload mutations run with overrideAccess: true
@@ -528,20 +507,12 @@ export interface UpdateRuleInput {
   weight?: number
 }
 
-/** Resolve + assert the session user; throws when unauthenticated. */
-async function requireUserId(): Promise<string> {
-  const uid = (await getCurrentUser())?.id
-  if (!uid) throw new Error('Not authenticated')
-  return uid
-}
-
-/** Throw unless the user may author scorecards in `workspaceId`. */
-async function assertCanManage(
-  payload: Payload,
-  userId: string,
-  workspaceId: string | null,
-): Promise<void> {
-  if (!workspaceId || !(await canManageScorecards(payload, userId, workspaceId))) {
+/** Throw unless the actor may author scorecards in `workspaceId`. */
+async function assertCanManage(actor: Actor, workspaceId: string | null): Promise<void> {
+  const decision = workspaceId
+    ? await check('manage', { kind: 'workspace', id: workspaceId }, actor)
+    : { allowed: false }
+  if (!decision.allowed) {
     throw new Error('You do not have permission to manage scorecards in this workspace.')
   }
 }
@@ -563,26 +534,10 @@ function sanitiseLevels(levels?: LevelInput[]): LevelInput[] {
  */
 export async function getManageableWorkspaces(): Promise<ManageableWorkspace[]> {
   const payload = await getPayload({ config })
-  const uid = (await getCurrentUser())?.id
-  if (!uid) return []
+  const actor = await getActor()
+  if (!actor) return []
 
-  const memberships = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { user: { equals: uid } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1000,
-    depth: 0,
-    overrideAccess: true,
-  })
-
-  const workspaceIds = [
-    ...new Set(memberships.docs.map((m) => relId(m.workspace)).filter((v): v is string => !!v)),
-  ]
+  const workspaceIds = await memberWorkspaceIds('manage', actor)
   if (workspaceIds.length === 0) return []
 
   const wsResult = await payload.find({
@@ -601,8 +556,8 @@ export async function getManageableWorkspaces(): Promise<ManageableWorkspace[]> 
 
 export async function createScorecard(input: CreateScorecardInput): Promise<{ id: string }> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  await assertCanManage(payload, uid, input.workspace)
+  const actor = await requireActor()
+  await assertCanManage(actor, input.workspace)
 
   if (!input.name?.trim()) throw new Error('A scorecard name is required.')
 
@@ -629,7 +584,7 @@ export async function updateScorecard(
   input: UpdateScorecardInput,
 ): Promise<{ id: string }> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
+  const actor = await requireActor()
 
   let scorecard: Scorecard
   try {
@@ -642,7 +597,7 @@ export async function updateScorecard(
   } catch {
     throw new Error('Scorecard not found')
   }
-  await assertCanManage(payload, uid, relId(scorecard.workspace))
+  await assertCanManage(actor, relId(scorecard.workspace))
 
   const data: Record<string, unknown> = {}
   if (input.name !== undefined) {
@@ -680,7 +635,7 @@ export async function updateScorecard(
 
 export async function deleteScorecard(scorecardId: string): Promise<{ id: string }> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
+  const actor = await requireActor()
 
   let scorecard: Scorecard
   try {
@@ -694,7 +649,7 @@ export async function deleteScorecard(scorecardId: string): Promise<{ id: string
     throw new Error('Scorecard not found')
   }
   const workspaceId = relId(scorecard.workspace) as string
-  await assertCanManage(payload, uid, workspaceId)
+  await assertCanManage(actor, workspaceId)
 
   await clearScorecardProjections(payload, scorecardId, workspaceId)
 
@@ -746,7 +701,7 @@ export async function deleteScorecard(scorecardId: string): Promise<{ id: string
 
 export async function createRule(input: RuleInput): Promise<{ id: string }> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
+  const actor = await requireActor()
 
   // The parent scorecard determines the workspace (denormalised onto the rule).
   let scorecard: Scorecard
@@ -761,7 +716,7 @@ export async function createRule(input: RuleInput): Promise<{ id: string }> {
     throw new Error('Scorecard not found')
   }
   const workspaceId = relId(scorecard.workspace)
-  await assertCanManage(payload, uid, workspaceId)
+  await assertCanManage(actor, workspaceId)
 
   if (!input.title?.trim()) throw new Error('A rule title is required.')
   const exprError = validateExpression(input.type, input.expression)
@@ -789,7 +744,7 @@ export async function createRule(input: RuleInput): Promise<{ id: string }> {
 
 export async function updateRule(ruleId: string, input: UpdateRuleInput): Promise<{ id: string }> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
+  const actor = await requireActor()
 
   let rule: ScorecardRule
   try {
@@ -802,7 +757,7 @@ export async function updateRule(ruleId: string, input: UpdateRuleInput): Promis
   } catch {
     throw new Error('Rule not found')
   }
-  await assertCanManage(payload, uid, relId(rule.workspace))
+  await assertCanManage(actor, relId(rule.workspace))
 
   const data: Record<string, unknown> = {}
   if (input.title !== undefined) {
@@ -837,7 +792,7 @@ export async function updateRule(ruleId: string, input: UpdateRuleInput): Promis
 
 export async function deleteRule(ruleId: string): Promise<{ id: string }> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
+  const actor = await requireActor()
 
   let rule: ScorecardRule
   try {
@@ -850,7 +805,7 @@ export async function deleteRule(ruleId: string): Promise<{ id: string }> {
   } catch {
     throw new Error('Rule not found')
   }
-  await assertCanManage(payload, uid, relId(rule.workspace))
+  await assertCanManage(actor, relId(rule.workspace))
 
   // Remove this rule's result rows alongside it.
   await payload.delete({

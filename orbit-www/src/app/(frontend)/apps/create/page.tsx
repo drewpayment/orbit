@@ -1,7 +1,6 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor, memberWorkspaceIds } from '@/lib/authz'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -13,30 +12,26 @@ import { ArrowLeft } from 'lucide-react'
 import { CreateAppForm } from '@/components/features/apps/CreateAppForm'
 
 export default async function CreateAppPage() {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     redirect('/login')
   }
 
   const payload = await getPayload({ config })
 
   // Get user's workspaces
-  const memberships = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      user: { equals: session.user.id },
-      status: { equals: 'active' },
-    },
-    depth: 1,
-    limit: 100,
-  })
-
-  const workspaces = memberships.docs
-    .map(m => (typeof m.workspace === 'object' ? m.workspace : null))
-    .filter(Boolean) as Array<{ id: string; name: string }>
+  const workspaceIds = await memberWorkspaceIds('member', actor)
+  const workspaces =
+    workspaceIds.length === 0
+      ? []
+      : (
+          await payload.find({
+            collection: 'workspaces',
+            where: { id: { in: workspaceIds } },
+            limit: 100,
+          })
+        ).docs.map((w) => ({ id: String(w.id), name: w.name }))
 
   if (workspaces.length === 0) {
     return (

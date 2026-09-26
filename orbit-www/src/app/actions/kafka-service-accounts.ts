@@ -2,7 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
+import { getActor, check, type Actor } from '@/lib/authz'
 import { getTemporalClient } from '@/lib/temporal/client'
 import { WorkflowExecutionAlreadyStartedError } from '@temporalio/client'
 import type { KafkaServiceAccount } from '@/payload-types'
@@ -133,7 +133,7 @@ async function triggerCredentialRevokeWorkflow(
  */
 async function verifyServiceAccountAccess(
   payload: Awaited<ReturnType<typeof getPayload>>,
-  userId: string | null | undefined,
+  actor: Actor,
   serviceAccountId: string
 ): Promise<{
   allowed: boolean
@@ -170,21 +170,9 @@ async function verifyServiceAccountAccess(
   const workspaceId = typeof app.workspace === 'string' ? app.workspace : app.workspace.id
 
   // Check if user is admin/owner of the workspace
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: userId } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-    overrideAccess: true,
-  })
+  const decision = await check('manage', { kind: 'workspace', id: workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!decision.allowed) {
     return { allowed: false, error: 'Insufficient permissions' }
   }
 
@@ -225,8 +213,8 @@ export async function createServiceAccount(
   input: CreateServiceAccountInput
 ): Promise<CreateServiceAccountResult> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -285,21 +273,9 @@ export async function createServiceAccount(
     }
 
     // Verify user is member of workspace with admin/owner role
-    const membership = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: workspace.id } },
-          { user: { equals: payloadUser.betterAuthId } },
-          { role: { in: ['owner', 'admin'] } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      limit: 1,
-      overrideAccess: true,
-    })
+    const membershipDecision = await check('manage', { kind: 'workspace', id: workspace.id }, actor)
 
-    if (membership.docs.length === 0) {
+    if (!membershipDecision.allowed) {
       return { success: false, error: 'Insufficient permissions' }
     }
 
@@ -337,9 +313,9 @@ export async function createServiceAccount(
         permissionTemplate: input.permissionTemplate,
         customPermissions: input.customPermissions || [],
         status: 'active',
-        createdBy: payloadUser.betterAuthId,
+        createdBy: actor.payloadId,
       },
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -402,15 +378,15 @@ export async function rotateServiceAccountPassword(
   serviceAccountId: string
 ): Promise<RotateServiceAccountResult> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
     const payload = await getPayload({ config })
 
     // Verify workspace admin access
-    const accessCheck = await verifyServiceAccountAccess(payload, payloadUser.betterAuthId, serviceAccountId)
+    const accessCheck = await verifyServiceAccountAccess(payload, actor, serviceAccountId)
     if (!accessCheck.allowed) {
       return { success: false, error: accessCheck.error }
     }
@@ -519,15 +495,15 @@ export async function revokeServiceAccount(
   serviceAccountId: string
 ): Promise<RevokeServiceAccountResult> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
     const payload = await getPayload({ config })
 
     // Verify workspace admin access
-    const accessCheck = await verifyServiceAccountAccess(payload, payloadUser.betterAuthId, serviceAccountId)
+    const accessCheck = await verifyServiceAccountAccess(payload, actor, serviceAccountId)
     if (!accessCheck.allowed) {
       return { success: false, error: accessCheck.error }
     }
@@ -549,9 +525,9 @@ export async function revokeServiceAccount(
       data: {
         status: 'revoked',
         revokedAt: new Date().toISOString(),
-        revokedBy: payloadUser.betterAuthId,
+        revokedBy: actor.payloadId,
       },
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -598,8 +574,8 @@ export async function listServiceAccounts(
   input: ListServiceAccountsInput
 ): Promise<ListServiceAccountsResult> {
   try {
-    const payloadUser = await getPayloadUserFromSession()
-    if (!payloadUser) {
+    const actor = await getActor()
+    if (!actor) {
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -627,20 +603,9 @@ export async function listServiceAccounts(
       return { success: false, error: 'Virtual cluster has no workspace' }
     }
 
-    const vcMembership = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: vcWorkspaceId } },
-          { user: { equals: payloadUser.betterAuthId } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      limit: 1,
-      overrideAccess: true,
-    })
+    const vcMembershipDecision = await check('read', { kind: 'workspace', id: vcWorkspaceId }, actor)
 
-    if (vcMembership.docs.length === 0) {
+    if (!vcMembershipDecision.allowed) {
       return { success: false, error: 'Not a member of this workspace' }
     }
 

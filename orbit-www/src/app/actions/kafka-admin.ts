@@ -3,7 +3,7 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { kafkaClient } from '@/lib/grpc/kafka-client'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
+import { authorize } from '@/lib/authz'
 
 // ============================================================================
 // Payload Type Definitions
@@ -247,17 +247,8 @@ export interface KafkaEnvironmentMappingConfig {
  * Throws an error if the user is not authenticated or not an admin.
  */
 async function requireAdmin(): Promise<{ userId: string }> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
-    throw new Error('Unauthorized: Authentication required')
-  }
-
-  const role = payloadUser.role
-  if (role !== 'super_admin' && role !== 'admin') {
-    throw new Error('Unauthorized: Admin privileges required')
-  }
-
-  return { userId: payloadUser.betterAuthId || payloadUser.id }
+  const actor = await authorize('manage', { kind: 'platform' })
+  return { userId: actor.betterAuthId }
 }
 
 // ============================================================================

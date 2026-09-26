@@ -3,13 +3,13 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import type { Where } from 'payload'
+import { getActor, memberWorkspaceIds } from '@/lib/authz'
 
 export interface SearchAPIsInput {
   query?: string
   status?: 'draft' | 'published' | 'deprecated'
   workspaceId?: string
   tags?: string[]
-  userId?: string
   limit?: number
   page?: number
 }
@@ -17,7 +17,7 @@ export interface SearchAPIsInput {
 export async function searchAPIs(input: SearchAPIsInput = {}) {
   const payload = await getPayload({ config })
 
-  const { query, status, workspaceId, tags, userId, limit = 20, page = 1 } = input
+  const { query, status, workspaceId, tags, limit = 20, page = 1 } = input
 
   // Build where clause for visibility-based access
   const conditions: Where[] = []
@@ -32,22 +32,18 @@ export async function searchAPIs(input: SearchAPIsInput = {}) {
     },
   ]
 
-  // If user is provided, include workspace-visible APIs they have access to
-  if (userId) {
-    // Get user's workspace memberships
-    const memberships = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        user: { equals: userId },
-        status: { equals: 'active' },
-      },
-      limit: 1000,
-      overrideAccess: true,
-    })
-
-    const userWorkspaceIds = memberships.docs.map(m =>
-      typeof m.workspace === 'string' ? m.workspace : m.workspace.id
-    )
+  // Identity is resolved from the session, never a client-supplied id.
+  const actor = await getActor()
+  if (actor) {
+    // SEMANTIC CHANGE: the old code used ONE `userId` (the Better-Auth session
+    // id from getCurrentUser) for both this membership lookup AND the
+    // `createdBy` filter below. `workspace-members.user` stores the
+    // Better-Auth id (this part happened to work), but `createdBy` is a
+    // `relationTo: 'users'` field keyed on the Payload id — so "private APIs
+    // created by the user" never matched except when a user's Better-Auth id
+    // and Payload id happen to be equal. Fixed here by using
+    // `actor.betterAuthId` for membership and `actor.payloadId` for `createdBy`.
+    const userWorkspaceIds = await memberWorkspaceIds('member', actor)
 
     if (userWorkspaceIds.length > 0) {
       // Workspace-visible APIs in user's workspaces (they can see drafts in their own workspaces)
@@ -57,15 +53,15 @@ export async function searchAPIs(input: SearchAPIsInput = {}) {
           { workspace: { in: userWorkspaceIds } },
         ],
       })
-
-      // Private APIs created by the user (they can see their own drafts)
-      visibilityConditions.push({
-        and: [
-          { visibility: { equals: 'private' } },
-          { createdBy: { equals: userId } },
-        ],
-      })
     }
+
+    // Private APIs created by the user (they can see their own drafts).
+    visibilityConditions.push({
+      and: [
+        { visibility: { equals: 'private' } },
+        { createdBy: { equals: actor.payloadId } },
+      ],
+    })
   }
 
   conditions.push({ or: visibilityConditions })

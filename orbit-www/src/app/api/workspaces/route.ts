@@ -1,31 +1,29 @@
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import { headers } from 'next/headers'
-import { auth } from '@/lib/auth'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
-import { getMemberWorkspaceIds } from '@/lib/access/workspace-access'
+import { requireActor, memberWorkspaceIds, authzErrorResponse } from '@/lib/authz'
 
 export async function GET() {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  let actor
+  try {
+    actor = await requireActor()
+  } catch (err) {
+    return authzErrorResponse(err) ?? NextResponse.json({ error: 'Internal error' }, { status: 500 })
   }
 
   const payload = await getPayload({ config: configPromise })
 
-  // session.user.id is the Better Auth ID, which is what workspace-members.user stores.
-  const betterAuthId = session.user.id
-  const memberWorkspaceIds = await getMemberWorkspaceIds(payload, betterAuthId)
+  const workspaceIds = await memberWorkspaceIds('member', actor)
 
-  if (memberWorkspaceIds.length === 0) {
+  if (workspaceIds.length === 0) {
     return NextResponse.json({ docs: [], totalDocs: 0, page: 1, totalPages: 0 })
   }
 
   const workspaces = await payload.find({
     collection: 'workspaces',
-    where: { id: { in: memberWorkspaceIds } },
+    where: { id: { in: workspaceIds } },
     sort: 'name',
     overrideAccess: true,
   })

@@ -12,6 +12,7 @@ import { sendNotification, createNotification } from '@/lib/notifications'
 import { SYSTEM_DEFAULT_QUOTA } from '@/lib/kafka/quotas'
 import { getMongoClient } from '@/lib/mongodb'
 import { startVirtualClusterProvisionWorkflow } from '@/lib/temporal/client'
+import { listWorkspaceMembers } from '@/lib/workspaces/members'
 
 interface RequestDoc {
   id: string
@@ -93,21 +94,12 @@ async function getWorkspaceAdmins(
   payload: Payload,
   workspaceId: string
 ): Promise<{ id: string; name: string; email: string }[]> {
-  const members = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    depth: 0,
+  const members = await listWorkspaceMembers(payload, workspaceId, {
+    roles: ['owner', 'admin'],
     limit: 100,
-    overrideAccess: true,
   })
 
-  const userIds = members.docs
+  const userIds = members
     .map((m) => (typeof m.user === 'string' ? m.user : ''))
     .filter(Boolean)
 

@@ -4,8 +4,7 @@ import config from '@payload-config'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
+import { getActor } from '@/lib/authz'
 import { describeCatalogScanWorkflow } from '@/lib/temporal/client'
 import {
   GlobalDiscoveryClient,
@@ -28,9 +27,9 @@ export const metadata = {
  * Non-admins are redirected, matching the other Platform Admin pages.
  */
 export default async function GlobalDiscoveryPage() {
-  const user = await getPayloadUserFromSession()
-  if (!user) redirect('/login')
-  if (!isPlatformAdmin(user)) redirect('/')
+  const actor = await getActor()
+  if (!actor) redirect('/login')
+  if (!actor.isPlatformAdmin) redirect('/')
 
   const payload = await getPayload({ config })
 

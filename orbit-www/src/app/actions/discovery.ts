@@ -4,8 +4,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
 import type { DiscoveredEntity } from '@/payload-types'
-import { getCurrentUser, getPayloadUserFromSession } from '@/lib/auth/session'
-import { getWorkspaceMembership, isPlatformAdmin } from '@/lib/access/workspace-access'
+import { getActor, check } from '@/lib/authz'
 import { getWorkspaceGitHubInstallations } from './github'
 import { startCatalogScanWorkflow, describeCatalogScanWorkflow } from '@/lib/temporal/client'
 import {
@@ -43,15 +42,15 @@ export async function startWorkspaceScan(workspaceId: string): Promise<{
   error?: string
   started: StartedScan[]
 }> {
-  const user = await getCurrentUser()
-  if (!user) return { success: false, error: 'Unauthorized', started: [] }
+  const actor = await getActor()
+  if (!actor) return { success: false, error: 'Unauthorized', started: [] }
 
   const payload = await getPayload({ config })
 
   // Membership gate BEFORE resolving installations, so non-members learn
   // nothing about the workspace's GitHub wiring (the core re-checks too).
-  const membership = await getWorkspaceMembership(payload, user.id, workspaceId)
-  if (!membership) return { success: false, error: 'Not a member of this workspace', started: [] }
+  const membership = await check('read', { kind: 'workspace', id: workspaceId }, actor)
+  if (!membership.allowed) return { success: false, error: 'Not a member of this workspace', started: [] }
 
   const installations = await getWorkspaceGitHubInstallations(workspaceId)
   if (!installations.success) {
@@ -68,7 +67,7 @@ export async function startWorkspaceScan(workspaceId: string): Promise<{
   try {
     const { started } = await startWorkspaceScanCore(
       payload,
-      user.id,
+      actor.betterAuthId,
       workspaceId,
       installations.installations,
       (input) => startCatalogScanWorkflow(input),
@@ -91,12 +90,11 @@ export async function getScanStatus(workspaceId: string): Promise<{
   error?: string
   statuses: ScanStatusEntry[]
 }> {
-  const user = await getCurrentUser()
-  if (!user) return { success: false, error: 'Unauthorized', statuses: [] }
+  const actor = await getActor()
+  if (!actor) return { success: false, error: 'Unauthorized', statuses: [] }
 
-  const payload = await getPayload({ config })
-  const membership = await getWorkspaceMembership(payload, user.id, workspaceId)
-  if (!membership) return { success: false, error: 'Not a member of this workspace', statuses: [] }
+  const membership = await check('read', { kind: 'workspace', id: workspaceId }, actor)
+  if (!membership.allowed) return { success: false, error: 'Not a member of this workspace', statuses: [] }
 
   const installations = await getWorkspaceGitHubInstallations(workspaceId)
   if (!installations.success) {
@@ -118,10 +116,10 @@ export async function listDiscoveries(
   workspaceId: string,
   filter: DiscoveryFilter = {},
 ): Promise<DiscoveredEntity[]> {
-  const user = await getCurrentUser()
-  if (!user) return []
+  const actor = await getActor()
+  if (!actor) return []
   const payload = await getPayload({ config })
-  return listDiscoveriesCore(payload, user.id, workspaceId, filter)
+  return listDiscoveriesCore(payload, actor.betterAuthId, workspaceId, filter)
 }
 
 export async function approveDiscoveries(
@@ -134,15 +132,15 @@ export async function approveDiscoveries(
 }> {
   // Resolve the Payload user doc: `betterAuthId` keys RBAC, `id` is the
   // `api-schemas` import actor (createdBy), `role` gates global proposals.
-  const actor = await getPayloadUserFromSession()
+  const actor = await getActor()
   if (!actor) return { success: false, error: 'Unauthorized', results: [] }
 
   const payload = await getPayload({ config })
   const results = await approveDiscoveriesCore(
     payload,
-    actor.betterAuthId ?? '',
-    String(actor.id),
-    isPlatformAdmin(actor),
+    actor.betterAuthId,
+    actor.payloadId,
+    actor.isPlatformAdmin,
     ids,
     opts,
   )
@@ -165,15 +163,15 @@ export async function renameDiscovery(id: string, name: string): Promise<{
   success: boolean
   error?: string
 }> {
-  const actor = await getPayloadUserFromSession()
+  const actor = await getActor()
   if (!actor) return { success: false, error: 'Unauthorized' }
 
   const payload = await getPayload({ config })
   const result = await renameDiscoveryCore(
     payload,
-    actor.betterAuthId ?? '',
-    String(actor.id),
-    isPlatformAdmin(actor),
+    actor.betterAuthId,
+    actor.payloadId,
+    actor.isPlatformAdmin,
     id,
     name,
   )
@@ -187,14 +185,14 @@ export async function ignoreDiscoveries(ids: string[]): Promise<{
   error?: string
   results: IgnoreResult[]
 }> {
-  const actor = await getPayloadUserFromSession()
+  const actor = await getActor()
   if (!actor) return { success: false, error: 'Unauthorized', results: [] }
 
   const payload = await getPayload({ config })
   const results = await ignoreDiscoveriesCore(
     payload,
-    actor.betterAuthId ?? '',
-    isPlatformAdmin(actor),
+    actor.betterAuthId,
+    actor.isPlatformAdmin,
     ids,
   )
 
@@ -210,9 +208,9 @@ export async function startInstallationScan(installationId: string): Promise<{
   error?: string
   started: StartedScan | null
 }> {
-  const actor = await getPayloadUserFromSession()
+  const actor = await getActor()
   if (!actor) return { success: false, error: 'Unauthorized', started: null }
-  if (!isPlatformAdmin(actor)) return { success: false, error: 'Platform admin required', started: null }
+  if (!actor.isPlatformAdmin) return { success: false, error: 'Platform admin required', started: null }
 
   try {
     const { started } = await startInstallationScanCore(true, installationId, (input) =>
@@ -228,10 +226,10 @@ export async function startInstallationScan(installationId: string): Promise<{
 export async function listGlobalDiscoveries(
   filter: DiscoveryFilter = {},
 ): Promise<DiscoveredEntity[]> {
-  const actor = await getPayloadUserFromSession()
+  const actor = await getActor()
   if (!actor) return []
   const payload = await getPayload({ config })
-  return listGlobalDiscoveriesCore(payload, isPlatformAdmin(actor), filter)
+  return listGlobalDiscoveriesCore(payload, actor.isPlatformAdmin, filter)
 }
 
 /** Scan status for a single installation (global page banner) — admin only. */
@@ -241,9 +239,9 @@ export async function getInstallationScanStatus(installationId: string): Promise
   status: ScanStatusEntry['status']
   lastRunAt?: string
 }> {
-  const actor = await getPayloadUserFromSession()
+  const actor = await getActor()
   if (!actor) return { success: false, error: 'Unauthorized', status: 'none' }
-  if (!isPlatformAdmin(actor)) return { success: false, error: 'Platform admin required', status: 'none' }
+  if (!actor.isPlatformAdmin) return { success: false, error: 'Platform admin required', status: 'none' }
 
   const res = await describeCatalogScanWorkflow(String(installationId))
   return { success: true, status: res.status, lastRunAt: res.lastRunAt }

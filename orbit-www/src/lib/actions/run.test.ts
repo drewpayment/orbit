@@ -209,7 +209,15 @@ let mockPayload: ReturnType<typeof makeStatefulPayload>['payload']
 
 vi.mock('@payload-config', () => ({ default: {} }))
 vi.mock('payload', () => ({ getPayload: vi.fn(async () => mockPayload) }))
-vi.mock('@/lib/auth/session', () => ({ getCurrentUser: vi.fn(async () => ({ id: 'user-1' })) }))
+// Actor with deliberately distinct ids; runs are stamped with the Payload id.
+const RUN_ACTOR = { payloadId: 'pl-user-1', betterAuthId: 'ba-user-1', email: 'u1@example.com', role: 'user', isPlatformAdmin: false, user: {} }
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(async () => RUN_ACTOR),
+  requireActor: vi.fn(async () => RUN_ACTOR),
+  // Membership is granted for the fixture workspace; policy verbs are not under test here.
+  check: vi.fn(async () => ({ allowed: true, reason: 'test', actor: RUN_ACTOR })),
+  memberWorkspaceIds: vi.fn(async () => ['ws-1']),
+}))
 
 describe('runAction — approval branching', () => {
   beforeEach(() => vi.clearAllMocks())

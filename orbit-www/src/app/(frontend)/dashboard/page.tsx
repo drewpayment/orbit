@@ -5,7 +5,7 @@ import { SiteHeader } from '@/components/site-header'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { Plus, LayoutTemplate } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
-import { getPayloadClient, getSession, getUserWorkspaceMemberships } from '@/lib/data/cached-queries'
+import { getPayloadClient, getActor, getUserWorkspaceMemberships } from '@/lib/data/cached-queries'
 import {
   DashboardGreeting,
   DashboardStatsRow,
@@ -33,15 +33,15 @@ const agentRunStatusLabel: Record<string, string> = {
 }
 
 export default async function DashboardPage() {
-  // Phase 1: Get payload client + user session
-  const [payload, session] = await Promise.all([
+  // Phase 1: Get payload client + actor
+  const [payload, actor] = await Promise.all([
     getPayloadClient(),
-    getSession(),
+    getActor(),
   ])
 
   // Phase 2: Get user's workspace memberships
-  const memberships = session?.user
-    ? await getUserWorkspaceMemberships(session.user.id)
+  const memberships = actor
+    ? await getUserWorkspaceMemberships(actor.betterAuthId)
     : []
 
   const workspaceIds = memberships
@@ -375,7 +375,7 @@ export default async function DashboardPage() {
   activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
   const topActivities = activities.slice(0, 6)
 
-  const userName = session?.user?.name?.split(' ')[0] || ''
+  const userName = actor?.user?.name?.split(' ')[0] || ''
 
   return (
     <SidebarProvider>

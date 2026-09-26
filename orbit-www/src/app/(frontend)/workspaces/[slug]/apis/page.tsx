@@ -9,7 +9,7 @@ import { WorkspaceAPIsClient } from './workspace-apis-client'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
-import { getCurrentUser } from '@/lib/auth/session'
+import { getActor } from '@/lib/authz'
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -17,9 +17,9 @@ interface PageProps {
 
 export default async function WorkspaceAPIsPage({ params }: PageProps) {
   const { slug } = await params
-  const user = await getCurrentUser()
+  const actor = await getActor()
 
-  if (!user) {
+  if (!actor) {
     redirect('/login')
   }
 

@@ -10,18 +10,11 @@ vi.mock('@payload-config', () => ({
   default: {},
 }))
 
-// Mock auth
-vi.mock('@/lib/auth', () => ({
-  auth: {
-    api: {
-      getSession: vi.fn(),
-    },
-  },
-}))
-
-// Mock next/headers
-vi.mock('next/headers', () => ({
-  headers: vi.fn(() => Promise.resolve(new Headers())),
+// Mock @/lib/authz at the module boundary (do not import the real actor.ts;
+// it pulls in the Better-Auth Mongo client).
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(),
+  check: vi.fn(),
 }))
 
 // Mock Temporal client
@@ -54,7 +47,7 @@ vi.mock('@/collections/kafka/KafkaServiceAccounts', () => ({
 }))
 
 import { getPayload } from 'payload'
-import { auth } from '@/lib/auth'
+import { getActor, check } from '@/lib/authz'
 import { getTemporalClient } from '@/lib/temporal/client'
 import { WorkflowExecutionAlreadyStartedError } from '@temporalio/client'
 import {
@@ -85,13 +78,22 @@ function createMockTemporalClient(workflowStartResult?: unknown) {
   }
 }
 
+const mockActor = {
+  payloadId: 'pl-1',
+  betterAuthId: 'ba-1',
+  email: 'user-1@test.com',
+  role: 'user',
+  isPlatformAdmin: false,
+  user: { id: 'pl-1', collection: 'users', _strategy: 'better-auth' },
+}
+
 describe('createServiceAccount', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
   it('should return error when not authenticated', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    vi.mocked(getActor).mockResolvedValue(null)
 
     const result = await createServiceAccount({
       name: 'test-sa',
@@ -104,10 +106,7 @@ describe('createServiceAccount', () => {
   })
 
   it('should return error when virtual cluster not found', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
       findByID: vi.fn().mockResolvedValue(null),
@@ -125,10 +124,7 @@ describe('createServiceAccount', () => {
   })
 
   it('should return error when virtual cluster is not active', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
       findByID: vi.fn().mockResolvedValue({
@@ -153,10 +149,7 @@ describe('createServiceAccount', () => {
   })
 
   it('should return error when virtual cluster is read_only', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
       findByID: vi.fn().mockResolvedValue({
@@ -181,10 +174,7 @@ describe('createServiceAccount', () => {
   })
 
   it('should return error when user is not workspace admin', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
       findByID: vi.fn().mockResolvedValue({
@@ -200,6 +190,7 @@ describe('createServiceAccount', () => {
       find: vi.fn().mockResolvedValue({ docs: [] }), // No membership found
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
+    vi.mocked(check).mockResolvedValue({ allowed: false, reason: 'test', actor: mockActor } as never)
 
     const result = await createServiceAccount({
       name: 'test-sa',
@@ -212,10 +203,7 @@ describe('createServiceAccount', () => {
   })
 
   it('should return error when username already exists', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
       findByID: vi.fn().mockResolvedValue({
@@ -228,12 +216,10 @@ describe('createServiceAccount', () => {
           workspace: { id: 'ws-1', slug: 'test-workspace' },
         },
       }),
-      find: vi
-        .fn()
-        .mockResolvedValueOnce({ docs: [{ id: 'membership-1', role: 'admin' }] }) // membership check
-        .mockResolvedValueOnce({ docs: [{ id: 'existing-sa' }] }), // username exists
+      find: vi.fn().mockResolvedValueOnce({ docs: [{ id: 'existing-sa' }] }), // username exists
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'workspace admin', actor: mockActor } as never)
 
     const result = await createServiceAccount({
       name: 'test-sa',
@@ -249,10 +235,7 @@ describe('createServiceAccount', () => {
   })
 
   it('should create service account successfully', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
       findByID: vi.fn().mockResolvedValue({
@@ -265,13 +248,11 @@ describe('createServiceAccount', () => {
           workspace: { id: 'ws-1', slug: 'test-workspace' },
         },
       }),
-      find: vi
-        .fn()
-        .mockResolvedValueOnce({ docs: [{ id: 'membership-1', role: 'admin' }] }) // membership check
-        .mockResolvedValueOnce({ docs: [] }), // no existing username
+      find: vi.fn().mockResolvedValueOnce({ docs: [] }), // no existing username
       create: vi.fn().mockResolvedValue({ id: 'sa-1' }),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'workspace admin', actor: mockActor } as never)
 
     const mockTemporalClient = createMockTemporalClient()
     vi.mocked(getTemporalClient).mockResolvedValue(mockTemporalClient as never)
@@ -294,16 +275,14 @@ describe('createServiceAccount', () => {
           name: 'test-sa',
           status: 'active',
           permissionTemplate: 'producer',
+          createdBy: 'pl-1',
         }),
       })
     )
   })
 
   it('should rollback service account when workflow fails to start', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
       findByID: vi.fn().mockResolvedValue({
@@ -316,14 +295,12 @@ describe('createServiceAccount', () => {
           workspace: { id: 'ws-1', slug: 'test-workspace' },
         },
       }),
-      find: vi
-        .fn()
-        .mockResolvedValueOnce({ docs: [{ id: 'membership-1', role: 'admin' }] }) // membership check
-        .mockResolvedValueOnce({ docs: [] }), // no existing username
+      find: vi.fn().mockResolvedValueOnce({ docs: [] }), // no existing username
       create: vi.fn().mockResolvedValue({ id: 'sa-1' }),
       delete: vi.fn().mockResolvedValue(undefined),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'workspace admin', actor: mockActor } as never)
 
     // Mock workflow failure
     const mockTemporalClient = {
@@ -353,10 +330,7 @@ describe('createServiceAccount', () => {
   })
 
   it('should return critical error when rollback fails', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
       findByID: vi.fn().mockResolvedValue({
@@ -369,14 +343,12 @@ describe('createServiceAccount', () => {
           workspace: { id: 'ws-1', slug: 'test-workspace' },
         },
       }),
-      find: vi
-        .fn()
-        .mockResolvedValueOnce({ docs: [{ id: 'membership-1', role: 'admin' }] }) // membership check
-        .mockResolvedValueOnce({ docs: [] }), // no existing username
+      find: vi.fn().mockResolvedValueOnce({ docs: [] }), // no existing username
       create: vi.fn().mockResolvedValue({ id: 'sa-1' }),
       delete: vi.fn().mockRejectedValue(new Error('Database error')), // Rollback fails
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'workspace admin', actor: mockActor } as never)
 
     // Mock workflow failure
     const mockTemporalClient = {
@@ -400,10 +372,7 @@ describe('createServiceAccount', () => {
   })
 
   it('should handle workflow already started gracefully', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
       findByID: vi.fn().mockResolvedValue({
@@ -416,13 +385,11 @@ describe('createServiceAccount', () => {
           workspace: { id: 'ws-1', slug: 'test-workspace' },
         },
       }),
-      find: vi
-        .fn()
-        .mockResolvedValueOnce({ docs: [{ id: 'membership-1', role: 'admin' }] }) // membership check
-        .mockResolvedValueOnce({ docs: [] }), // no existing username
+      find: vi.fn().mockResolvedValueOnce({ docs: [] }), // no existing username
       create: vi.fn().mockResolvedValue({ id: 'sa-1' }),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'workspace admin', actor: mockActor } as never)
 
     // Mock workflow already started error
     const mockTemporalClient = {
@@ -457,7 +424,7 @@ describe('rotateServiceAccountPassword', () => {
   })
 
   it('should return error when not authenticated', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    vi.mocked(getActor).mockResolvedValue(null)
 
     const result = await rotateServiceAccountPassword('sa-1')
 
@@ -465,10 +432,7 @@ describe('rotateServiceAccountPassword', () => {
   })
 
   it('should return error when service account not found', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
       findByID: vi.fn().mockResolvedValue(null),
@@ -481,10 +445,7 @@ describe('rotateServiceAccountPassword', () => {
   })
 
   it('should return error when user lacks permissions', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
       findByID: vi.fn().mockResolvedValue({
@@ -502,6 +463,7 @@ describe('rotateServiceAccountPassword', () => {
       find: vi.fn().mockResolvedValue({ docs: [] }), // No membership
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
+    vi.mocked(check).mockResolvedValue({ allowed: false, reason: 'test', actor: mockActor } as never)
 
     const result = await rotateServiceAccountPassword('sa-1')
 
@@ -509,10 +471,7 @@ describe('rotateServiceAccountPassword', () => {
   })
 
   it('should return error when service account is revoked', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
       findByID: vi.fn().mockResolvedValue({
@@ -530,6 +489,7 @@ describe('rotateServiceAccountPassword', () => {
       find: vi.fn().mockResolvedValue({ docs: [{ id: 'membership-1', role: 'admin' }] }),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'test', actor: mockActor } as never)
 
     const result = await rotateServiceAccountPassword('sa-1')
 
@@ -537,10 +497,7 @@ describe('rotateServiceAccountPassword', () => {
   })
 
   it('should enforce rate limiting (5 minute cooldown)', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     // Last rotated 2 minutes ago
     const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString()
@@ -562,6 +519,7 @@ describe('rotateServiceAccountPassword', () => {
       find: vi.fn().mockResolvedValue({ docs: [{ id: 'membership-1', role: 'admin' }] }),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'test', actor: mockActor } as never)
 
     const result = await rotateServiceAccountPassword('sa-1')
 
@@ -570,10 +528,7 @@ describe('rotateServiceAccountPassword', () => {
   })
 
   it('should allow rotation after cooldown expires', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     // Last rotated 6 minutes ago (past 5 minute cooldown)
     const sixMinutesAgo = new Date(Date.now() - 6 * 60 * 1000).toISOString()
@@ -596,6 +551,7 @@ describe('rotateServiceAccountPassword', () => {
       update: vi.fn().mockResolvedValue({ id: 'sa-1' }),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'test', actor: mockActor } as never)
 
     const mockTemporalClient = createMockTemporalClient()
     vi.mocked(getTemporalClient).mockResolvedValue(mockTemporalClient as never)
@@ -607,10 +563,7 @@ describe('rotateServiceAccountPassword', () => {
   })
 
   it('should rotate password successfully', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
       findByID: vi.fn().mockResolvedValue({
@@ -629,6 +582,7 @@ describe('rotateServiceAccountPassword', () => {
       update: vi.fn().mockResolvedValue({ id: 'sa-1' }),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'test', actor: mockActor } as never)
 
     const mockTemporalClient = createMockTemporalClient()
     vi.mocked(getTemporalClient).mockResolvedValue(mockTemporalClient as never)
@@ -649,10 +603,7 @@ describe('rotateServiceAccountPassword', () => {
   })
 
   it('should rollback password when workflow fails to start', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
       findByID: vi.fn().mockResolvedValue({
@@ -672,6 +623,7 @@ describe('rotateServiceAccountPassword', () => {
       update: vi.fn().mockResolvedValue({ id: 'sa-1' }),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'test', actor: mockActor } as never)
 
     // Mock workflow failure
     const mockTemporalClient = {
@@ -700,10 +652,7 @@ describe('rotateServiceAccountPassword', () => {
   })
 
   it('should return critical error when rollback fails', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
       findByID: vi.fn().mockResolvedValue({
@@ -726,6 +675,7 @@ describe('rotateServiceAccountPassword', () => {
         .mockRejectedValueOnce(new Error('Database error')), // Rollback fails
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'test', actor: mockActor } as never)
 
     // Mock workflow failure
     const mockTemporalClient = {
@@ -750,7 +700,7 @@ describe('revokeServiceAccount', () => {
   })
 
   it('should return error when not authenticated', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    vi.mocked(getActor).mockResolvedValue(null)
 
     const result = await revokeServiceAccount('sa-1')
 
@@ -758,10 +708,7 @@ describe('revokeServiceAccount', () => {
   })
 
   it('should return error when service account not found', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
       findByID: vi.fn().mockResolvedValue(null),
@@ -774,10 +721,7 @@ describe('revokeServiceAccount', () => {
   })
 
   it('should return error when user lacks permissions', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
       findByID: vi.fn().mockResolvedValue({
@@ -792,6 +736,7 @@ describe('revokeServiceAccount', () => {
       find: vi.fn().mockResolvedValue({ docs: [] }), // No membership
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
+    vi.mocked(check).mockResolvedValue({ allowed: false, reason: 'test', actor: mockActor } as never)
 
     const result = await revokeServiceAccount('sa-1')
 
@@ -799,10 +744,7 @@ describe('revokeServiceAccount', () => {
   })
 
   it('should return error when service account is already revoked', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
       findByID: vi.fn().mockResolvedValue({
@@ -817,6 +759,7 @@ describe('revokeServiceAccount', () => {
       find: vi.fn().mockResolvedValue({ docs: [{ id: 'membership-1', role: 'admin' }] }),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'test', actor: mockActor } as never)
 
     const result = await revokeServiceAccount('sa-1')
 
@@ -824,10 +767,7 @@ describe('revokeServiceAccount', () => {
   })
 
   it('should revoke service account successfully', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
       findByID: vi.fn().mockResolvedValue({
@@ -843,6 +783,7 @@ describe('revokeServiceAccount', () => {
       update: vi.fn().mockResolvedValue({ id: 'sa-1' }),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'test', actor: mockActor } as never)
 
     const mockTemporalClient = createMockTemporalClient()
     vi.mocked(getTemporalClient).mockResolvedValue(mockTemporalClient as never)
@@ -856,7 +797,7 @@ describe('revokeServiceAccount', () => {
         id: 'sa-1',
         data: expect.objectContaining({
           status: 'revoked',
-          revokedBy: 'user-1',
+          revokedBy: 'pl-1',
         }),
       })
     )
@@ -870,10 +811,7 @@ describe('revokeServiceAccount', () => {
   })
 
   it('should still succeed when workflow fails (revocation is logged)', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
       findByID: vi.fn().mockResolvedValue({
@@ -889,6 +827,7 @@ describe('revokeServiceAccount', () => {
       update: vi.fn().mockResolvedValue({ id: 'sa-1' }),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'test', actor: mockActor } as never)
 
     // Mock workflow failure - revoke should still succeed in DB
     const mockTemporalClient = {
@@ -916,7 +855,7 @@ describe('listServiceAccounts', () => {
   })
 
   it('should return error when not authenticated', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    vi.mocked(getActor).mockResolvedValue(null)
 
     const result = await listServiceAccounts({ virtualClusterId: 'vc-1' })
 
@@ -924,10 +863,7 @@ describe('listServiceAccounts', () => {
   })
 
   it('should return service accounts for virtual cluster', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockServiceAccounts = [
       {
@@ -950,9 +886,11 @@ describe('listServiceAccounts', () => {
     ]
 
     const mockPayload = createMockPayload({
+      findByID: vi.fn().mockResolvedValue({ id: 'vc-1', workspace: { id: 'ws-1' } }),
       find: vi.fn().mockResolvedValue({ docs: mockServiceAccounts }),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'workspace member', actor: mockActor } as never)
 
     const result = await listServiceAccounts({ virtualClusterId: 'vc-1' })
 
@@ -969,6 +907,7 @@ describe('listServiceAccounts', () => {
     })
     expect(result.serviceAccounts?.[1].lastRotatedAt).toBeUndefined()
 
+    expect(check).toHaveBeenCalledWith('read', { kind: 'workspace', id: 'ws-1' }, mockActor)
     expect(mockPayload.find).toHaveBeenCalledWith({
       collection: 'kafka-service-accounts',
       where: {
@@ -976,19 +915,19 @@ describe('listServiceAccounts', () => {
       },
       sort: '-createdAt',
       limit: 100,
+      overrideAccess: true,
     })
   })
 
   it('should return empty array when no service accounts exist', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
+      findByID: vi.fn().mockResolvedValue({ id: 'vc-1', workspace: { id: 'ws-1' } }),
       find: vi.fn().mockResolvedValue({ docs: [] }),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'workspace member', actor: mockActor } as never)
 
     const result = await listServiceAccounts({ virtualClusterId: 'vc-1' })
 
@@ -997,15 +936,14 @@ describe('listServiceAccounts', () => {
   })
 
   it('should handle database errors gracefully', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as never)
+    vi.mocked(getActor).mockResolvedValue(mockActor as never)
 
     const mockPayload = createMockPayload({
+      findByID: vi.fn().mockResolvedValue({ id: 'vc-1', workspace: { id: 'ws-1' } }),
       find: vi.fn().mockRejectedValue(new Error('Database connection failed')),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as never)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'workspace member', actor: mockActor } as never)
 
     const result = await listServiceAccounts({ virtualClusterId: 'vc-1' })
 

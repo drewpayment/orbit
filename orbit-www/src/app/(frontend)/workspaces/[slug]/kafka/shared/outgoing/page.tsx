@@ -1,8 +1,7 @@
 import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor, check } from '@/lib/authz'
 import { SharedTopicsList } from '@/components/features/kafka/SharedTopicsList'
 
 interface OutgoingPageProps {
@@ -11,9 +10,9 @@ interface OutgoingPageProps {
 
 export default async function OutgoingSharesPage({ params }: OutgoingPageProps) {
   const { slug } = await params
-  const session = await auth.api.getSession({ headers: await headers() })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     notFound()
   }
 
@@ -31,20 +30,9 @@ export default async function OutgoingSharesPage({ params }: OutgoingPageProps) 
 
   const workspace = workspaces.docs[0]
 
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspace.id } },
-        { user: { equals: session.user.id } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-    overrideAccess: true,
-  })
+  const membershipDecision = await check('read', { kind: 'workspace', id: workspace.id }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membershipDecision.allowed) {
     notFound()
   }
 

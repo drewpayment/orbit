@@ -26,16 +26,12 @@ vi.mock('@/lib/temporal/client', () => ({
   ensureGitHubTokenRefreshWorkflow: vi.fn(),
 }))
 
-vi.mock('@/lib/auth', () => ({
-  auth: { api: { getSession: vi.fn() } },
-}))
-
-vi.mock('next/headers', () => ({
-  headers: vi.fn(() => Promise.resolve(new Headers())),
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(),
 }))
 
 import { getPayload } from 'payload'
-import { auth } from '@/lib/auth'
+import { getActor } from '@/lib/authz'
 import { getInstallation, createInstallationToken } from '@/lib/github/octokit'
 import { GITHUB_INSTALL_STATE_COOKIE } from '@/lib/github/install-state'
 
@@ -83,16 +79,15 @@ function req(params: Record<string, string>, cookieValue?: string) {
   return new NextRequest(url, { headers: headersInit })
 }
 
-const adminUser = { id: 'user-1', email: 'admin@example.com', role: 'super_admin' }
-const memberUser = { id: 'user-2', email: 'member@example.com', role: 'member' }
+const adminUser = { id: 'user-1', payloadId: 'user-1', betterAuthId: 'ba-user-1', email: 'admin@example.com', role: 'super_admin', isPlatformAdmin: true }
+const memberUser = { id: 'user-2', payloadId: 'user-2', betterAuthId: 'ba-user-2', email: 'member@example.com', role: 'member', isPlatformAdmin: false }
 
-// The real getInstallation()/getSession() return types are the full GitHub
-// Installation schema / Better-Auth session — dozens of fields our fixtures
-// deliberately don't need. Casting through `unknown` to the real return type
-// documents the intentional narrowing at the call site without opting out of
-// typing entirely.
+// The real getInstallation() return type is the full GitHub Installation
+// schema — dozens of fields our fixtures deliberately don't need. Casting
+// through `unknown` to the real return type documents the intentional
+// narrowing at the call site without opting out of typing entirely.
 type GetInstallationResult = Awaited<ReturnType<typeof getInstallation>>
-type GetSessionResult = Awaited<ReturnType<typeof auth.api.getSession>>
+type GetActorResult = Awaited<ReturnType<typeof getActor>>
 
 const installationApiResponse = {
   account: { login: 'acme-org', id: 999, type: 'Organization', avatar_url: 'https://avatar' },
@@ -110,13 +105,20 @@ function mockHappyGitHubApi() {
   })
 }
 
-/** Mocks auth.api.getSession for a signed-in user by email, or null for no session. */
-function mockSession(email: string | null) {
-  if (email === null) {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+/** Mocks getActor() for a signed-in user, or null for no session. */
+function mockActor(user: typeof adminUser | typeof memberUser | null) {
+  if (user === null) {
+    vi.mocked(getActor).mockResolvedValue(null)
     return
   }
-  vi.mocked(auth.api.getSession).mockResolvedValue({ user: { email } } as unknown as GetSessionResult)
+  vi.mocked(getActor).mockResolvedValue({
+    payloadId: user.payloadId,
+    betterAuthId: user.betterAuthId,
+    email: user.email,
+    role: user.role,
+    isPlatformAdmin: user.isPlatformAdmin,
+    user: { id: user.payloadId, email: user.email, role: user.role },
+  } as unknown as GetActorResult)
 }
 
 describe('GET /api/github/installation/callback — CSRF state + auth (WI4)', () => {
@@ -128,7 +130,7 @@ describe('GET /api/github/installation/callback — CSRF state + auth (WI4)', ()
     const f = new FakePayload()
     f.collections.users = [adminUser]
     vi.mocked(getPayload).mockResolvedValue(p(f))
-    mockSession(adminUser.email)
+    mockActor(adminUser)
     mockHappyGitHubApi()
 
     const request = req(
@@ -157,7 +159,7 @@ describe('GET /api/github/installation/callback — CSRF state + auth (WI4)', ()
     expect(res.headers.get('location')).toContain('/settings/connections?error=state_mismatch')
     expect(f.created).toHaveLength(0)
     expect(getPayload).not.toHaveBeenCalled()
-    expect(auth.api.getSession).not.toHaveBeenCalled()
+    expect(getActor).not.toHaveBeenCalled()
   })
 
   it('state param present, cookie absent → rejects, no doc created', async () => {
@@ -175,7 +177,7 @@ describe('GET /api/github/installation/callback — CSRF state + auth (WI4)', ()
     const f = new FakePayload()
     f.collections.users = [adminUser]
     vi.mocked(getPayload).mockResolvedValue(p(f))
-    mockSession(adminUser.email)
+    mockActor(adminUser)
     mockHappyGitHubApi()
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
@@ -192,7 +194,7 @@ describe('GET /api/github/installation/callback — CSRF state + auth (WI4)', ()
   it('no state param + no session → redirects to login, no doc created', async () => {
     const f = new FakePayload()
     vi.mocked(getPayload).mockResolvedValue(p(f))
-    mockSession(null)
+    mockActor(null)
 
     const request = req({ installation_id: '55555', setup_action: 'install' })
     const res = await GET(request)
@@ -205,7 +207,7 @@ describe('GET /api/github/installation/callback — CSRF state + auth (WI4)', ()
     const f = new FakePayload()
     f.collections.users = [memberUser]
     vi.mocked(getPayload).mockResolvedValue(p(f))
-    mockSession(memberUser.email)
+    mockActor(memberUser)
 
     const request = req({ installation_id: '55555', setup_action: 'install' })
     const res = await GET(request)

@@ -2,7 +2,6 @@ import { Suspense } from 'react'
 import { searchAPIs, getAllWorkspaces, getAllTags } from './actions'
 import { APICatalogClient } from './catalog-client'
 import { Loader2 } from 'lucide-react'
-import { getCurrentUser } from '@/lib/auth/session'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -19,7 +18,6 @@ interface PageProps {
 
 async function APICatalogContent({ searchParams }: PageProps) {
   const params = await searchParams
-  const user = await getCurrentUser()
 
   const [apisResult, workspaces, tags] = await Promise.all([
     searchAPIs({
@@ -27,7 +25,6 @@ async function APICatalogContent({ searchParams }: PageProps) {
       status: params.status as 'draft' | 'published' | 'deprecated' | undefined,
       workspaceId: params.workspace,
       tags: params.tags?.split(',').filter(Boolean),
-      userId: user?.id,
       page: params.page ? parseInt(params.page) : 1,
     }),
     getAllWorkspaces(),

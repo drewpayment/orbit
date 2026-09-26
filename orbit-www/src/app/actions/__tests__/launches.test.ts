@@ -9,12 +9,79 @@ vi.mock('@payload-config', () => ({
   default: {},
 }))
 
-vi.mock('@/lib/auth', () => ({
-  auth: {
-    api: {
-      getSession: vi.fn(),
-    },
-  },
+/**
+ * Mocked at the `@/lib/authz` module boundary (never the real `actor.ts`,
+ * which pulls in the Better-Auth Mongo client). `getActor` returns the Actor
+ * built from the test's simulated session (`authApi.getSession`, kept as a
+ * drop-in for the old `auth.api.getSession` mock); `check`/`memberWorkspaceIds`
+ * re-derive the caller's workspace role(s) by calling the CURRENTLY mocked
+ * `getPayload()`'s `find({ collection: 'workspace-members' })` — the exact
+ * query surface these tests already control per-case (`docs: [...]` /
+ * `docs: []`) — so every existing `find` stub keeps driving the same
+ * ALLOW/DENY outcome it always did. `betterAuthId` is the session's
+ * `user.id` (used for membership lookups and forwarded to the Go gRPC
+ * calls); `payloadId` is a DISTINCT `user.payloadId` (defaulting to the
+ * session id if a test doesn't set one) so any `relationTo: 'users'` write
+ * (`launchedBy`, `approvedBy`) or Payload-id comparison (`isOwner`) that
+ * accidentally used `betterAuthId` instead of `payloadId` would fail here
+ * rather than passing by coincidence.
+ */
+const authApi = { getSession: vi.fn() }
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(async () => {
+    const session = await authApi.getSession()
+    if (!session?.user) return null
+    return {
+      payloadId: session.user.payloadId ?? session.user.id,
+      betterAuthId: session.user.id,
+      email: session.user.email ?? '',
+      role: 'user',
+      isPlatformAdmin: false,
+      user: session.user,
+    }
+  }),
+  check: vi.fn(async (verb: string, resource: { kind: string; id?: string; roles?: string[] }, actorArg?: unknown) => {
+    const session = await authApi.getSession()
+    const actor = (actorArg as { betterAuthId: string } | undefined) ?? (session?.user ? { betterAuthId: session.user.id } : null)
+    if (!actor) return { allowed: false, reason: 'unauthenticated', actor: null }
+    if (resource.kind !== 'workspace') return { allowed: false, reason: 'platform admin required', actor }
+    const { getPayload } = await import('payload')
+    const payload = await getPayload({} as never)
+    const result = await payload.find({
+      collection: 'workspace-members',
+      where: {
+        and: [
+          { workspace: { equals: resource.id } },
+          { user: { equals: actor.betterAuthId } },
+          { status: { equals: 'active' } },
+        ],
+      },
+      limit: 1,
+    })
+    const role = (result.docs[0]?.role as string | undefined) ?? (result.docs.length > 0 ? 'member' : null)
+    if (!role) return { allowed: false, reason: 'not a member of this workspace', actor }
+    const allowedRoles = resource.roles ?? (verb === 'read' || verb === 'create' ? ['owner', 'admin', 'member'] : ['owner', 'admin'])
+    return { allowed: allowedRoles.includes(role), reason: role, actor }
+  }),
+  memberWorkspaceIds: vi.fn(async (_scope: string, actorArg?: unknown) => {
+    const session = await authApi.getSession()
+    const actor = (actorArg as { betterAuthId: string } | undefined) ?? (session?.user ? { betterAuthId: session.user.id } : null)
+    if (!actor) return []
+    const { getPayload } = await import('payload')
+    const payload = await getPayload({} as never)
+    const result = await payload.find({
+      collection: 'workspace-members',
+      where: { user: { equals: actor.betterAuthId }, status: { equals: 'active' } },
+      limit: 1000,
+    })
+    return [
+      ...new Set(
+        (result.docs as Array<{ workspace: string | { id: string } }>).map((m) =>
+          String(typeof m.workspace === 'string' ? m.workspace : m.workspace.id),
+        ),
+      ),
+    ]
+  }),
 }))
 
 vi.mock('next/headers', () => ({
@@ -34,7 +101,6 @@ vi.mock('@/lib/clients/launch-client', () => ({
 }))
 
 import { getPayload } from 'payload'
-import { auth } from '@/lib/auth'
 import { startLaunchWorkflow, getLaunchProgress, approveLaunch, deorbitLaunch, abortLaunch } from '@/lib/clients/launch-client'
 import {
   createLaunch,
@@ -51,7 +117,7 @@ import {
 } from '../launches'
 
 const mockSession = {
-  user: { id: 'user-1' },
+  user: { id: 'user-1', payloadId: 'pl-1' },
   session: {},
 } as any
 
@@ -72,7 +138,7 @@ describe('createLaunch', () => {
   }
 
   it('should return unauthorized when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    authApi.getSession.mockResolvedValue(null)
 
     const result = await createLaunch(validInput)
 
@@ -80,7 +146,7 @@ describe('createLaunch', () => {
   })
 
   it('should return error when user is not a workspace member', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockSession)
+    authApi.getSession.mockResolvedValue(mockSession)
 
     const mockPayload = {
       find: vi.fn().mockResolvedValue({ docs: [] }),
@@ -90,20 +156,25 @@ describe('createLaunch', () => {
     const result = await createLaunch(validInput)
 
     expect(result).toEqual({ success: false, error: 'Not a member of this workspace' })
-    expect(mockPayload.find).toHaveBeenCalledWith({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: 'workspace-1' } },
-          { user: { equals: 'user-1' } },
-          { status: { equals: 'active' } },
-        ],
-      },
-    })
+    // Membership is now resolved through the `@/lib/authz` `check()` layer
+    // (mocked above) rather than a direct `payload.find` in this action — it
+    // still queries `workspace-members` for this workspace/user under the hood.
+    expect(mockPayload.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collection: 'workspace-members',
+        where: expect.objectContaining({
+          and: expect.arrayContaining([
+            { workspace: { equals: 'workspace-1' } },
+            { user: { equals: 'user-1' } },
+            { status: { equals: 'active' } },
+          ]),
+        }),
+      }),
+    )
   })
 
   it('should return error when cloud account not found', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockSession)
+    authApi.getSession.mockResolvedValue(mockSession)
 
     const mockPayload = {
       find: vi.fn().mockResolvedValue({ docs: [{ id: 'membership-1' }] }),
@@ -117,7 +188,7 @@ describe('createLaunch', () => {
   })
 
   it('should return error when template not found', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockSession)
+    authApi.getSession.mockResolvedValue(mockSession)
 
     const mockPayload = {
       find: vi.fn().mockResolvedValue({ docs: [{ id: 'membership-1' }] }),
@@ -133,7 +204,7 @@ describe('createLaunch', () => {
   })
 
   it('should create a launch record successfully', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockSession)
+    authApi.getSession.mockResolvedValue(mockSession)
 
     const mockPayload = {
       find: vi.fn().mockResolvedValue({ docs: [{ id: 'membership-1' }] }),
@@ -158,7 +229,7 @@ describe('createLaunch', () => {
         region: 'us-east-1',
         parameters: { bucketName: 'my-bucket' },
         status: 'pending',
-        launchedBy: 'user-1',
+        launchedBy: 'pl-1',
         approvalConfig: {
           required: true,
           approvers: ['user-2'],
@@ -169,7 +240,7 @@ describe('createLaunch', () => {
   })
 
   it('should include appId when provided', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockSession)
+    authApi.getSession.mockResolvedValue(mockSession)
 
     const mockPayload = {
       find: vi.fn().mockResolvedValue({ docs: [{ id: 'membership-1' }] }),
@@ -197,7 +268,7 @@ describe('startLaunch', () => {
   })
 
   it('should return unauthorized when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    authApi.getSession.mockResolvedValue(null)
 
     const result = await startLaunch('launch-1')
 
@@ -205,7 +276,7 @@ describe('startLaunch', () => {
   })
 
   it('should return error when launch not found', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockSession)
+    authApi.getSession.mockResolvedValue(mockSession)
 
     const mockPayload = {
       findByID: vi.fn().mockResolvedValue(null),
@@ -218,7 +289,7 @@ describe('startLaunch', () => {
   })
 
   it('should call gRPC and update the launch record on success', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockSession)
+    authApi.getSession.mockResolvedValue(mockSession)
 
     const mockLaunch = {
       id: 'launch-1',
@@ -274,8 +345,64 @@ describe('startLaunch', () => {
     })
   })
 
+  it('auto-approves and writes approvedBy as the Payload id when the launcher is an approver', async () => {
+    authApi.getSession.mockResolvedValue(mockSession)
+
+    const mockLaunch = {
+      id: 'launch-1',
+      workspace: 'workspace-1',
+      template: { id: 'template-1', slug: 's3-bucket' },
+      cloudAccount: { id: 'cloud-1' },
+      provider: 'aws',
+      region: 'us-east-1',
+      parameters: {},
+      // approvers holds Payload ids — 'pl-1' matches mockSession's payloadId,
+      // not its betterAuthId ('user-1'), so this only auto-approves if the
+      // source compares against actor.payloadId.
+      approvalConfig: { required: true, approvers: ['pl-1'] },
+    }
+
+    const mockPayload = {
+      findByID: vi.fn().mockResolvedValue(mockLaunch),
+      find: vi.fn().mockResolvedValue({ docs: [{ id: 'member-1' }] }),
+      update: vi.fn().mockResolvedValue({}),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+    vi.mocked(startLaunchWorkflow).mockResolvedValue({
+      success: true,
+      workflowId: 'workflow-123',
+      error: '',
+    } as any)
+
+    const result = await startLaunch('launch-1')
+
+    expect(result).toEqual({ success: true, workflowId: 'workflow-123' })
+    expect(startLaunchWorkflow).toHaveBeenCalledWith(
+      'launch-1',
+      's3-bucket',
+      'cloud-1',
+      'aws',
+      'us-east-1',
+      {},
+      true,
+      undefined,
+      'workspace-1',
+      true,
+      'user-1',
+    )
+    expect(mockPayload.update).toHaveBeenCalledWith({
+      collection: 'launches',
+      id: 'launch-1',
+      data: expect.objectContaining({
+        workflowId: 'workflow-123',
+        status: 'launching',
+        approvedBy: 'pl-1',
+      }),
+    })
+  })
+
   it('should update launch status to failed when gRPC call fails', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockSession)
+    authApi.getSession.mockResolvedValue(mockSession)
 
     const mockLaunch = {
       id: 'launch-1',
@@ -310,7 +437,7 @@ describe('startLaunch', () => {
   })
 
   it('should resolve template from string ID if needed', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockSession)
+    authApi.getSession.mockResolvedValue(mockSession)
 
     const mockLaunch = {
       id: 'launch-1',
@@ -362,7 +489,7 @@ describe('getLaunchStatus', () => {
   })
 
   it('should return null when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    authApi.getSession.mockResolvedValue(null)
 
     const result = await getLaunchStatus('launch-1')
 
@@ -370,7 +497,7 @@ describe('getLaunchStatus', () => {
   })
 
   it('should return launch details', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockSession)
+    authApi.getSession.mockResolvedValue(mockSession)
 
     const mockLaunch = { id: 'launch-1', status: 'running', workspace: 'workspace-1' }
     const mockPayload = {
@@ -391,7 +518,7 @@ describe('getLaunchWorkflowProgress', () => {
   })
 
   it('should return unauthorized when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    authApi.getSession.mockResolvedValue(null)
 
     const result = await getLaunchWorkflowProgress('workflow-1')
 
@@ -399,7 +526,7 @@ describe('getLaunchWorkflowProgress', () => {
   })
 
   it('should return progress from gRPC client', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockSession)
+    authApi.getSession.mockResolvedValue(mockSession)
     vi.mocked(getLaunchProgress).mockResolvedValue({
       status: 'running',
       currentStep: 2,
@@ -429,7 +556,7 @@ describe('approveLaunchAction', () => {
   })
 
   it('should return unauthorized when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    authApi.getSession.mockResolvedValue(null)
 
     const result = await approveLaunchAction('workflow-1', true)
 
@@ -437,13 +564,55 @@ describe('approveLaunchAction', () => {
   })
 
   it('should call gRPC approve with user ID and notes', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockSession)
+    authApi.getSession.mockResolvedValue(mockSession)
     vi.mocked(approveLaunch).mockResolvedValue({ success: true, error: '' } as any)
+
+    const mockPayload = {
+      find: vi.fn().mockImplementation(async (args: { collection: string }) => {
+        if (args.collection === 'launches') {
+          return { docs: [{ id: 'launch-1', workspace: 'workspace-1' }] }
+        }
+        return { docs: [{ id: 'membership-1', role: 'owner' }] }
+      }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
 
     const result = await approveLaunchAction('workflow-1', true, 'Looks good')
 
     expect(result).toEqual({ success: true })
     expect(approveLaunch).toHaveBeenCalledWith('workflow-1', true, 'user-1', 'Looks good')
+  })
+
+  it('should deny when the actor cannot manage the launch workspace', async () => {
+    authApi.getSession.mockResolvedValue(mockSession)
+
+    const mockPayload = {
+      find: vi.fn().mockImplementation(async (args: { collection: string }) => {
+        if (args.collection === 'launches') {
+          return { docs: [{ id: 'launch-1', workspace: 'workspace-1' }] }
+        }
+        return { docs: [] } // no membership → deny
+      }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await approveLaunchAction('workflow-1', true)
+
+    expect(result).toEqual({ success: false, error: 'Not a member of this workspace' })
+    expect(approveLaunch).not.toHaveBeenCalled()
+  })
+
+  it('should return Launch not found when no launch matches the workflow id', async () => {
+    authApi.getSession.mockResolvedValue(mockSession)
+
+    const mockPayload = {
+      find: vi.fn().mockResolvedValue({ docs: [] }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await approveLaunchAction('workflow-1', true)
+
+    expect(result).toEqual({ success: false, error: 'Launch not found' })
   })
 })
 
@@ -453,7 +622,7 @@ describe('deorbitLaunchAction', () => {
   })
 
   it('should return unauthorized when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    authApi.getSession.mockResolvedValue(null)
 
     const result = await deorbitLaunchAction('workflow-1')
 
@@ -461,13 +630,42 @@ describe('deorbitLaunchAction', () => {
   })
 
   it('should call gRPC deorbit with user ID and reason', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockSession)
+    authApi.getSession.mockResolvedValue(mockSession)
     vi.mocked(deorbitLaunch).mockResolvedValue({ success: true, error: '' } as any)
+
+    const mockPayload = {
+      find: vi.fn().mockImplementation(async (args: { collection: string }) => {
+        if (args.collection === 'launches') {
+          return { docs: [{ id: 'launch-1', workspace: 'workspace-1' }] }
+        }
+        return { docs: [{ id: 'membership-1', role: 'owner' }] }
+      }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
 
     const result = await deorbitLaunchAction('workflow-1', 'No longer needed')
 
     expect(result).toEqual({ success: true })
     expect(deorbitLaunch).toHaveBeenCalledWith('workflow-1', 'user-1', 'No longer needed')
+  })
+
+  it('should deny when the actor cannot manage the launch workspace', async () => {
+    authApi.getSession.mockResolvedValue(mockSession)
+
+    const mockPayload = {
+      find: vi.fn().mockImplementation(async (args: { collection: string }) => {
+        if (args.collection === 'launches') {
+          return { docs: [{ id: 'launch-1', workspace: 'workspace-1' }] }
+        }
+        return { docs: [] } // no membership → deny
+      }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await deorbitLaunchAction('workflow-1')
+
+    expect(result).toEqual({ success: false, error: 'Not a member of this workspace' })
+    expect(deorbitLaunch).not.toHaveBeenCalled()
   })
 })
 
@@ -477,21 +675,50 @@ describe('abortLaunchAction', () => {
   })
 
   it('should return unauthorized when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    authApi.getSession.mockResolvedValue(null)
 
     const result = await abortLaunchAction('workflow-1')
 
     expect(result).toEqual({ success: false, error: 'Unauthorized' })
   })
 
-  it('should call gRPC abort with user ID', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockSession)
+  it('should call gRPC abort with user ID (owner of the launch, no membership needed)', async () => {
+    authApi.getSession.mockResolvedValue(mockSession)
     vi.mocked(abortLaunch).mockResolvedValue({ success: true, error: '' } as any)
+
+    const mockPayload = {
+      find: vi.fn().mockImplementation(async (args: { collection: string }) => {
+        if (args.collection === 'launches') {
+          return { docs: [{ id: 'launch-1', workspace: 'workspace-1', launchedBy: 'pl-1' }] }
+        }
+        return { docs: [] } // no membership row needed — actor is the launch owner
+      }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
 
     const result = await abortLaunchAction('workflow-1')
 
     expect(result).toEqual({ success: true })
     expect(abortLaunch).toHaveBeenCalledWith('workflow-1', 'user-1')
+  })
+
+  it('should deny when the actor is neither the launch owner nor a workspace member', async () => {
+    authApi.getSession.mockResolvedValue(mockSession)
+
+    const mockPayload = {
+      find: vi.fn().mockImplementation(async (args: { collection: string }) => {
+        if (args.collection === 'launches') {
+          return { docs: [{ id: 'launch-1', workspace: 'workspace-1', launchedBy: 'someone-else' }] }
+        }
+        return { docs: [] } // no membership → deny
+      }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await abortLaunchAction('workflow-1')
+
+    expect(result).toEqual({ success: false, error: 'Not a member of this workspace' })
+    expect(abortLaunch).not.toHaveBeenCalled()
   })
 })
 
@@ -501,7 +728,7 @@ describe('getLaunchTemplates', () => {
   })
 
   it('should return unauthorized when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    authApi.getSession.mockResolvedValue(null)
 
     const result = await getLaunchTemplates()
 
@@ -509,7 +736,7 @@ describe('getLaunchTemplates', () => {
   })
 
   it('should return all templates when no provider filter', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockSession)
+    authApi.getSession.mockResolvedValue(mockSession)
 
     const mockTemplates = [
       { id: 't1', name: 'S3 Bucket', provider: 'aws' },
@@ -531,7 +758,7 @@ describe('getLaunchTemplates', () => {
   })
 
   it('should filter by provider when provided', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockSession)
+    authApi.getSession.mockResolvedValue(mockSession)
 
     const mockPayload = {
       find: vi.fn().mockResolvedValue({ docs: [{ id: 't1', provider: 'aws' }] }),
@@ -555,7 +782,7 @@ describe('getCloudAccounts', () => {
   })
 
   it('should return unauthorized when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    authApi.getSession.mockResolvedValue(null)
 
     const result = await getCloudAccounts('workspace-1')
 
@@ -563,7 +790,7 @@ describe('getCloudAccounts', () => {
   })
 
   it('should filter by workspace and connected status', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockSession)
+    authApi.getSession.mockResolvedValue(mockSession)
 
     const mockAccounts = [
       { id: 'ca-1', name: 'Production AWS', provider: 'aws' },
@@ -595,7 +822,7 @@ describe('getLaunches', () => {
   })
 
   it('should return unauthorized when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    authApi.getSession.mockResolvedValue(null)
 
     const result = await getLaunches('workspace-1')
 
@@ -603,7 +830,7 @@ describe('getLaunches', () => {
   })
 
   it('should return launches for workspace', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockSession)
+    authApi.getSession.mockResolvedValue(mockSession)
 
     const mockLaunches = [{ id: 'l1', status: 'running' }]
     const mockPayload = {
@@ -635,7 +862,7 @@ describe('getAllUserLaunches', () => {
   })
 
   it('should return unauthorized when no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    authApi.getSession.mockResolvedValue(null)
 
     const result = await getAllUserLaunches()
 
@@ -643,7 +870,7 @@ describe('getAllUserLaunches', () => {
   })
 
   it('should return empty docs when user has no workspace memberships', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockSession)
+    authApi.getSession.mockResolvedValue(mockSession)
 
     const mockPayload = {
       find: vi.fn().mockResolvedValue({ docs: [] }),
@@ -658,7 +885,7 @@ describe('getAllUserLaunches', () => {
   })
 
   it('should query launches across all user workspaces', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockSession)
+    authApi.getSession.mockResolvedValue(mockSession)
 
     const mockPayload = {
       find: vi.fn()

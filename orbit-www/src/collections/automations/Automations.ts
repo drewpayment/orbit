@@ -27,7 +27,8 @@ import {
  *     /api/internal/automations/dispatch; `schedule` holds the cron expression.
  *
  * Authoring is gated on workspace owner/admin (same Option A as P2/P3), enforced
- * here and in lib/automations/authz.ts → canManageAutomations.
+ * here and by the policy in lib/authz/policy.ts, via the `check('manage', …)`
+ * calls in app/(frontend)/automations/actions.ts.
  *
  * See docs/plans/2026-06-27-idp-refocus-implementation.md (P4).
  */

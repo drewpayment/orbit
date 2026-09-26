@@ -3,8 +3,7 @@ import Link from 'next/link'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { ArrowLeft } from 'lucide-react'
-import { getCurrentUser } from '@/lib/auth/session'
-import { canManageActions } from '@/lib/actions/authz'
+import { getActor, check } from '@/lib/authz'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -27,7 +26,7 @@ interface PageProps {
  */
 export default async function EditActionPage({ params }: PageProps) {
   const { id } = await params
-  const user = await getCurrentUser()
+  const actor = await getActor()
   const payload = await getPayload({ config })
 
   let action: Action
@@ -44,7 +43,8 @@ export default async function EditActionPage({ params }: PageProps) {
 
   const workspaceId =
     typeof action.workspace === 'string' ? action.workspace : action.workspace?.id
-  const canManage = await canManageActions(payload, user?.id, workspaceId)
+  if (!workspaceId) notFound()
+  const canManage = (await check('manage', { kind: 'workspace', id: workspaceId }, actor)).allowed
   if (!canManage) notFound()
 
   return (

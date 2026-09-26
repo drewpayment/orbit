@@ -2,8 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor, check } from '@/lib/authz'
 import { revalidatePath } from 'next/cache'
 import { getTemporalClient } from '@/lib/temporal/client'
 
@@ -182,32 +181,18 @@ export interface CreateTopicResult {
  * 6. Update Payload topic status to 'active' or 'failed'
  */
 export async function createTopic(input: CreateTopicInput): Promise<CreateTopicResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
-
-  const userId = session.user.id
 
   const payload = await getPayload({ config })
 
   // Check workspace membership
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: input.workspaceId } },
-        { user: { equals: userId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
+  const membershipDecision = await check('create', { kind: 'workspace', id: input.workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membershipDecision.allowed) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 
@@ -282,7 +267,7 @@ export async function createTopic(input: CreateTopicInput): Promise<CreateTopicR
       config: topicConfig,
       status: 'provisioning',
       approvalRequired: false, // Auto-approve for MVP
-      createdBy: userId,
+      createdBy: actor.payloadId,
     },
   })
 
@@ -369,32 +354,18 @@ export interface ListTopicsResult {
  * List Kafka topics for a workspace from Payload CMS.
  */
 export async function listTopics(input: ListTopicsInput): Promise<ListTopicsResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
-
-  const userId = session.user.id
 
   const payload = await getPayload({ config })
 
   // Check workspace membership
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: input.workspaceId } },
-        { user: { equals: userId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
+  const membershipDecision = await check('read', { kind: 'workspace', id: input.workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membershipDecision.allowed) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 
@@ -456,15 +427,11 @@ export interface GetTopicResult {
  * Get a single Kafka topic by ID from Payload CMS.
  */
 export async function getTopic(topicId: string): Promise<GetTopicResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
-
-  const userId = session.user.id
 
   try {
     const payload = await getPayload({ config })
@@ -482,19 +449,9 @@ export async function getTopic(topicId: string): Promise<GetTopicResult> {
 
     // Check workspace membership
     const workspaceId = typeof topic.workspace === 'object' ? topic.workspace.id : topic.workspace
-    const membership = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: workspaceId } },
-          { user: { equals: userId } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      limit: 1,
-    })
+    const membershipDecision = await check('read', { kind: 'workspace', id: workspaceId }, actor)
 
-    if (membership.docs.length === 0) {
+    if (!membershipDecision.allowed) {
       return { success: false, error: 'Not a member of this workspace' }
     }
 
@@ -529,11 +486,9 @@ export interface UpdateTopicResult {
  * Update a Kafka topic
  */
 export async function updateTopic(input: UpdateTopicInput): Promise<UpdateTopicResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -558,15 +513,11 @@ export interface DeleteTopicResult {
  * 5. Delete from Payload
  */
 export async function deleteTopic(topicId: string): Promise<DeleteTopicResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
-
-  const userId = session.user.id
 
   const payload = await getPayload({ config })
 
@@ -586,20 +537,9 @@ export async function deleteTopic(topicId: string): Promise<DeleteTopicResult> {
     const workspaceId = typeof topic.workspace === 'object' ? topic.workspace.id : topic.workspace
 
     // Check workspace membership (owner/admin required for delete)
-    const membership = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: workspaceId } },
-          { user: { equals: userId } },
-          { role: { in: ['owner', 'admin'] } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      limit: 1,
-    })
+    const membershipDecision = await check('delete', { kind: 'workspace', id: workspaceId }, actor)
 
-    if (membership.docs.length === 0) {
+    if (!membershipDecision.allowed) {
       return { success: false, error: 'Permission denied. You must be an admin or owner of this workspace.' }
     }
 
@@ -646,11 +586,9 @@ export interface ApproveTopicResult {
  * Approve a pending Kafka topic
  */
 export async function approveTopic(topicId: string): Promise<ApproveTopicResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -680,15 +618,11 @@ export interface RegisterSchemaResult {
  * Register a new schema for a topic
  */
 export async function registerSchema(input: RegisterSchemaInput): Promise<RegisterSchemaResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
-
-  const userId = session.user.id
 
   const payload = await getPayload({ config })
 
@@ -783,11 +717,9 @@ export interface ListSchemasResult {
  * List schemas for a topic
  */
 export async function listSchemas(topicId: string): Promise<ListSchemasResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -805,11 +737,9 @@ export interface GetSchemaResult {
  * Get a schema by ID
  */
 export async function getSchema(schemaId: string): Promise<GetSchemaResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -836,11 +766,9 @@ export interface CheckCompatibilityResult {
 export async function checkSchemaCompatibility(
   input: CheckCompatibilityInput
 ): Promise<CheckCompatibilityResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -871,32 +799,16 @@ export interface RequestTopicAccessResult {
 export async function requestTopicAccess(
   input: RequestTopicAccessInput
 ): Promise<RequestTopicAccessResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
-  const userId = session.user.id
-
-  const payload = await getPayload({ config })
-
   // Check workspace membership
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: input.requestingWorkspaceId } },
-        { user: { equals: userId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
+  const membershipDecision = await check('create', { kind: 'workspace', id: input.requestingWorkspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membershipDecision.allowed) {
     return { success: false, error: 'Not a member of the requesting workspace' }
   }
 
@@ -908,7 +820,7 @@ export async function requestTopicAccess(
     sharedWithWorkspaceId: input.requestingWorkspaceId,
     permission: input.permission,
     status: 'pending_request',
-    requestedBy: userId,
+    requestedBy: actor.payloadId,
     requestedAt: new Date().toISOString(),
     justification: input.justification,
   }
@@ -932,11 +844,9 @@ export interface ApproveTopicAccessResult {
 export async function approveTopicAccess(
   input: ApproveTopicAccessInput
 ): Promise<ApproveTopicAccessResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -954,11 +864,9 @@ export interface RevokeTopicAccessResult {
  * Revoke topic access
  */
 export async function revokeTopicAccess(shareId: string): Promise<RevokeTopicAccessResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -984,11 +892,9 @@ export interface ListTopicSharesResult {
 export async function listTopicShares(
   input: ListTopicSharesInput
 ): Promise<ListTopicSharesResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -1022,32 +928,16 @@ export interface DiscoverTopicsResult {
 export async function discoverTopics(
   input: DiscoverTopicsInput
 ): Promise<DiscoverTopicsResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
-  const userId = session.user.id
-
-  const payload = await getPayload({ config })
-
   // Check workspace membership
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: input.requestingWorkspaceId } },
-        { user: { equals: userId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
+  const membershipDecision = await check('read', { kind: 'workspace', id: input.requestingWorkspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membershipDecision.allowed) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 
@@ -1090,11 +980,9 @@ export interface GetTopicMetricsResult {
 export async function getTopicMetrics(
   input: GetTopicMetricsInput
 ): Promise<GetTopicMetricsResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -1123,11 +1011,9 @@ export interface GetTopicLineageResult {
  * Get topic lineage (producers and consumers)
  */
 export async function getTopicLineage(topicId: string): Promise<GetTopicLineageResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -1169,33 +1055,16 @@ export interface CreateServiceAccountResult {
 export async function createServiceAccount(
   input: CreateServiceAccountInput
 ): Promise<CreateServiceAccountResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
-  const userId = session.user.id
-
-  const payload = await getPayload({ config })
-
   // Check workspace membership with admin/owner role
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: input.workspaceId } },
-        { user: { equals: userId } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
+  const membershipDecision = await check('manage', { kind: 'workspace', id: input.workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membershipDecision.allowed) {
     return {
       success: false,
       error: 'Permission denied. You must be an admin or owner of this workspace.',
@@ -1218,32 +1087,16 @@ export interface ListServiceAccountsResult {
 export async function listServiceAccounts(
   workspaceId: string
 ): Promise<ListServiceAccountsResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
-  const userId = session.user.id
-
-  const payload = await getPayload({ config })
-
   // Check workspace membership
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: userId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
+  const membershipDecision = await check('read', { kind: 'workspace', id: workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membershipDecision.allowed) {
     return { success: false, error: 'Not a member of this workspace' }
   }
 
@@ -1262,11 +1115,9 @@ export interface RevokeServiceAccountResult {
 export async function revokeServiceAccount(
   serviceAccountId: string
 ): Promise<RevokeServiceAccountResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -1304,11 +1155,9 @@ export interface ListProvidersResult {
  * List available Kafka providers (admin only)
  */
 export async function listProviders(): Promise<ListProvidersResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -1347,11 +1196,9 @@ export interface RegisterClusterResult {
 export async function registerCluster(
   input: RegisterClusterInput
 ): Promise<RegisterClusterResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -1370,11 +1217,9 @@ export interface ListClustersResult {
  * List Kafka clusters (platform admin only)
  */
 export async function listClusters(): Promise<ListClustersResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -1393,11 +1238,9 @@ export interface ValidateClusterResult {
  * Validate a Kafka cluster connection (platform admin only)
  */
 export async function validateCluster(clusterId: string): Promise<ValidateClusterResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 
@@ -1415,11 +1258,9 @@ export interface DeleteClusterResult {
  * Delete a Kafka cluster (platform admin only)
  */
 export async function deleteCluster(clusterId: string): Promise<DeleteClusterResult> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { success: false, error: 'Not authenticated' }
   }
 

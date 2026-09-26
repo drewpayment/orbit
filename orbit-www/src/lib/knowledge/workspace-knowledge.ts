@@ -1,5 +1,6 @@
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
+import { membershipRole, type WorkspaceRole } from '@/lib/authz/membership'
 
 export interface KnowledgeSpaceWithStats {
   id: string
@@ -58,24 +59,19 @@ export async function getWorkspaceKnowledgeSpaces(
   return spacesWithStats
 }
 
+/**
+ * `userId` is the caller's Better-Auth id. SEMANTIC NOTE (Phase C, #135): the
+ * original inline query allowed a `'contributor'` role that has never existed
+ * on `workspace-members` (the collection only defines owner/admin/member), so
+ * this was already owner/admin-only in practice; `membershipRole` makes that
+ * explicit instead of encoding a non-existent role.
+ */
 export async function canUserManageKnowledgeSpaces(
   workspaceId: string,
   userId: string
 ): Promise<boolean> {
   const payload = await getPayload({ config: configPromise })
-
-  const membershipsResult = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: userId } },
-        { role: { in: ['owner', 'admin', 'contributor'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-  })
-
-  return membershipsResult.docs.length > 0
+  const role = await membershipRole(payload, userId, workspaceId)
+  const manageRoles: readonly WorkspaceRole[] = ['owner', 'admin']
+  return role !== null && manageRoles.includes(role)
 }

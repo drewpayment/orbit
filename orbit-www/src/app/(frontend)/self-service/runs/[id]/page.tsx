@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
-import { getCurrentUser } from '@/lib/auth/session'
+import { getActor } from '@/lib/authz'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -25,8 +25,8 @@ interface PageProps {
  */
 export default async function ActionRunDetailPage({ params }: PageProps) {
   const { id } = await params
-  const user = await getCurrentUser()
-  const run = await getRun(user?.id, id)
+  const actor = await getActor()
+  const run = await getRun(actor, id)
   if (!run) notFound()
 
   const actionName = resolveActionName(run.action)

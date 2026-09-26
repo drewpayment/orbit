@@ -1,26 +1,21 @@
 'use server'
 
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor } from '@/lib/authz'
 
 /**
  * Check if the current user has platform admin privileges.
- * Uses the role field on the Better Auth user record.
+ * `userId` is the Better-Auth id, matching the session id the old
+ * implementation returned here (no caller in the repo consumes it).
  */
 export async function checkPlatformAdmin(): Promise<{
   isAdmin: boolean
   userId?: string
 }> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return { isAdmin: false }
   }
 
-  const role = (session.user as any).role || 'user'
-  const isAdmin = role === 'super_admin' || role === 'admin'
-
-  return { isAdmin, userId: session.user.id }
+  return { isAdmin: actor.isPlatformAdmin, userId: actor.betterAuthId }
 }

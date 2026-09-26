@@ -8,16 +8,9 @@ vi.mock('@payload-config', () => ({
   default: {},
 }))
 
-vi.mock('@/lib/auth', () => ({
-  auth: {
-    api: {
-      getSession: vi.fn(),
-    },
-  },
-}))
-
-vi.mock('next/headers', () => ({
-  headers: vi.fn(() => Promise.resolve(new Headers())),
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(),
+  check: vi.fn(),
 }))
 
 vi.mock('@/lib/kafka/quotas', () => ({
@@ -30,8 +23,17 @@ vi.mock('@/lib/temporal/client', () => ({
 }))
 
 import { getPayload } from 'payload'
-import { auth } from '@/lib/auth'
+import { getActor, check } from '@/lib/authz'
 import { listApplicationsWithProvisioningIssues } from '../kafka-applications'
+
+const mockActor = {
+  payloadId: 'user-1',
+  betterAuthId: 'user-1',
+  email: 'user-1@test.com',
+  role: 'user' as const,
+  isPlatformAdmin: false,
+  user: { id: 'user-1', collection: 'users' as const, _strategy: 'better-auth' as const },
+}
 
 describe('listApplicationsWithProvisioningIssues', () => {
   beforeEach(() => {
@@ -39,7 +41,7 @@ describe('listApplicationsWithProvisioningIssues', () => {
   })
 
   it('should return error when not authenticated', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null)
+    vi.mocked(getActor).mockResolvedValue(null)
 
     const result = await listApplicationsWithProvisioningIssues()
 
@@ -47,10 +49,8 @@ describe('listApplicationsWithProvisioningIssues', () => {
   })
 
   it('should return applications with provisioning issues', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+    vi.mocked(getActor).mockResolvedValue(mockActor as any)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'platform admin', actor: mockActor } as any)
 
     const mockApps = {
       docs: [
@@ -113,13 +113,13 @@ describe('listApplicationsWithProvisioningIssues', () => {
         },
       })
     )
+
+    expect(check).toHaveBeenCalledWith('read', { kind: 'platform' }, mockActor)
   })
 
   it('should filter by workspaceId when provided', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+    vi.mocked(getActor).mockResolvedValue(mockActor as any)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'owner', actor: mockActor } as any)
 
     const mockPayload = {
       find: vi.fn().mockResolvedValue({ docs: [] }),
@@ -128,6 +128,7 @@ describe('listApplicationsWithProvisioningIssues', () => {
 
     await listApplicationsWithProvisioningIssues('ws-1')
 
+    expect(check).toHaveBeenCalledWith('read', { kind: 'workspace', id: 'ws-1' }, mockActor)
     expect(mockPayload.find).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
@@ -139,11 +140,24 @@ describe('listApplicationsWithProvisioningIssues', () => {
     )
   })
 
+  it('should deny when the actor cannot read the requested workspace', async () => {
+    vi.mocked(getActor).mockResolvedValue(mockActor as any)
+    vi.mocked(check).mockResolvedValue({ allowed: false, reason: 'not a member', actor: mockActor } as any)
+
+    const mockPayload = {
+      find: vi.fn().mockResolvedValue({ docs: [] }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await listApplicationsWithProvisioningIssues('ws-1')
+
+    expect(result).toEqual({ success: false, error: 'Not a member of this workspace' })
+    expect(mockPayload.find).not.toHaveBeenCalled()
+  })
+
   it('should handle workspace as string ID', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+    vi.mocked(getActor).mockResolvedValue(mockActor as any)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'platform admin', actor: mockActor } as any)
 
     const mockApps = {
       docs: [

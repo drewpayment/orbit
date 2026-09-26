@@ -2,8 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor, check } from '@/lib/authz'
 
 export interface RegistryUsage {
   currentBytes: number
@@ -20,9 +19,9 @@ export async function getRegistryUsage(workspaceId: string): Promise<{
   usage: RegistryUsage | null
   error?: string
 }> {
-  const session = await auth.api.getSession({ headers: await headers() })
+  const actor = await getActor()
 
-  if (!session?.user?.id) {
+  if (!actor) {
     return { usage: null, error: 'Unauthorized' }
   }
 
@@ -30,18 +29,9 @@ export async function getRegistryUsage(workspaceId: string): Promise<{
 
   try {
     // Verify user has access to the workspace
-    const membership = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { workspace: { equals: workspaceId } },
-          { user: { equals: session.user.id } },
-          { status: { equals: 'active' } },
-        ],
-      },
-    })
+    const membership = await check('read', { kind: 'workspace', id: workspaceId }, actor)
 
-    if (membership.docs.length === 0) {
+    if (!membership.allowed) {
       return { usage: null, error: 'Not a member of this workspace' }
     }
 

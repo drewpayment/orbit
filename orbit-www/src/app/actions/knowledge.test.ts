@@ -13,6 +13,24 @@ vi.mock('@payload-config', () => ({
   default: {},
 }))
 
+// Fixed actor (Phase C, #135): pre-existing test never mocked identity at all
+// and always crashed at module load (`@/lib/auth/session` → `@/lib/auth`
+// constructs a MongoClient at import time with no DATABASE_URI); confirmed by
+// reproducing the identical crash against the pre-migration `knowledge.ts`.
+// Mock `@/lib/authz` at the module boundary per the Phase C brief — never the
+// real `actor.ts`.
+const mockActor = {
+  payloadId: 'payload-1',
+  betterAuthId: 'ba-1',
+  email: 'user@example.com',
+  role: 'user',
+  isPlatformAdmin: false,
+  user: { id: 'payload-1', collection: 'users', _strategy: 'better-auth' },
+}
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(async () => mockActor),
+}))
+
 describe('Knowledge Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -34,6 +52,8 @@ describe('Knowledge Actions', () => {
         data: {
           title: 'New Title',
         },
+        user: mockActor.user,
+        overrideAccess: false,
       })
     })
 
@@ -67,6 +87,8 @@ describe('Knowledge Actions', () => {
         data: {
           parentPage: '2',
         },
+        user: mockActor.user,
+        overrideAccess: false,
       })
     })
 
@@ -85,6 +107,8 @@ describe('Knowledge Actions', () => {
         data: {
           parentPage: null,
         },
+        user: mockActor.user,
+        overrideAccess: false,
       })
     })
 
@@ -108,10 +132,12 @@ describe('Knowledge Actions', () => {
       const mockOriginalPage = {
         id: '1',
         title: 'Original Page',
+        slug: 'original-page',
         content: { type: 'doc', content: [] },
         knowledgeSpace: 'space1',
         parentPage: null,
         author: 'user1',
+        sortOrder: 0,
       }
       const mockPayload = {
         findByID: vi.fn().mockResolvedValue(mockOriginalPage),
@@ -128,18 +154,24 @@ describe('Knowledge Actions', () => {
       expect(mockPayload.findByID).toHaveBeenCalledWith({
         collection: 'knowledge-pages',
         id: '1',
+        overrideAccess: true,
       })
 
       expect(mockPayload.create).toHaveBeenCalledWith({
         collection: 'knowledge-pages',
         data: {
           title: 'Original Page (Copy)',
+          slug: 'original-page-copy',
           content: mockOriginalPage.content,
           knowledgeSpace: mockOriginalPage.knowledgeSpace,
           parentPage: mockOriginalPage.parentPage,
           author: mockOriginalPage.author,
           status: 'draft',
+          sortOrder: 1,
+          version: 1,
         },
+        user: mockActor.user,
+        overrideAccess: false,
       })
 
       expect(result.title).toBe('Original Page (Copy)')
@@ -180,6 +212,8 @@ describe('Knowledge Actions', () => {
       expect(mockPayload.delete).toHaveBeenCalledWith({
         collection: 'knowledge-pages',
         id: '1',
+        user: mockActor.user,
+        overrideAccess: false,
       })
     })
 

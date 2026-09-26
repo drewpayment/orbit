@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import { ArrowLeft, ShieldAlert } from 'lucide-react'
-import { getCurrentUser } from '@/lib/auth/session'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -15,8 +14,7 @@ import { getManageableAutomationWorkspaces, getActionsByWorkspace } from '../act
  * RBAC-enforced createAutomation server action.
  */
 export default async function NewAutomationPage() {
-  const user = await getCurrentUser()
-  const workspaces = await getManageableAutomationWorkspaces(user?.id)
+  const workspaces = await getManageableAutomationWorkspaces()
   const actionsByWorkspace =
     workspaces.length > 0 ? await getActionsByWorkspace(workspaces.map((w) => w.id)) : {}
 

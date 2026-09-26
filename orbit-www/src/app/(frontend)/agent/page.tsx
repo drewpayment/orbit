@@ -14,7 +14,7 @@ import type {
   AppOption,
   ProviderOption,
 } from '@/components/features/infra-agent/CrossWorkspaceAgentRunForm'
-import { getActor } from '@/lib/authz'
+import { getActor, memberWorkspaceIds } from '@/lib/authz'
 
 // /agent — top-level Infrastructure Agent entry point.
 //
@@ -30,23 +30,19 @@ export default async function AgentHubPage() {
 
   const payload = await getPayload({ config })
 
-  // Active workspace memberships → workspace ids.
-  const memberships = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { user: { equals: actor.betterAuthId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 100,
-    depth: 1,
-    overrideAccess: true,
-  })
+  // Active workspace memberships → workspace ids, then hydrate the docs.
+  const memberWsIds = await memberWorkspaceIds('member', actor)
+  const workspacesResult = memberWsIds.length
+    ? await payload.find({
+        collection: 'workspaces',
+        where: { id: { in: memberWsIds } },
+        limit: 100,
+        depth: 0,
+        overrideAccess: true,
+      })
+    : { docs: [] }
 
-  const workspaces = memberships.docs
-    .map((m) => (typeof m.workspace === 'string' ? null : m.workspace))
-    .filter((w): w is NonNullable<typeof w> => w != null)
+  const workspaces = workspacesResult.docs
 
   const workspaceIds = workspaces.map((w) => w.id)
   const workspaceNameById = new Map(workspaces.map((w) => [w.id, w.name]))

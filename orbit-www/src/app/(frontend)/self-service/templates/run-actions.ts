@@ -12,21 +12,15 @@
  * provides (everything else there addresses a definition by Payload id).
  *
  * Mirrors `authoring-actions.ts#getTemplateDefinition`'s gating exactly:
- * `draft`/`deprecated` rows require `canManageTemplateDefinitions` on the
- * row's workspace, `published` rows require `canRunTemplateDefinition`.
+ * `draft`/`deprecated` rows require `canManage` on the
+ * row's workspace, `published` rows require `canRun`.
  * Returns `null` on denial or not-found so callers 404 rather than leak
  * existence.
  */
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getCurrentUser, getPayloadUserFromSession } from '@/lib/auth/session'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
-import {
-  canManageTemplateDefinitions,
-  canRunTemplateDefinition,
-  canApproveScaffolderStep,
-} from '@/lib/templates/authz'
+import { getActor, requireActor, check, type Actor } from '@/lib/authz'
 import { resolveScaffolderApproval as resolveScaffolderApprovalRPC } from '@/lib/clients/template-client'
 import type { TemplateDefinition as TemplateDefinitionDoc, ActionRun } from '@/payload-types'
 
@@ -39,15 +33,34 @@ function relId(value: unknown): string | null {
   return null
 }
 
-async function requireUserId(): Promise<string> {
-  const uid = (await getCurrentUser())?.id
-  if (!uid) throw new Error('Not authenticated')
-  return uid
+/** May `actor` author (manage) definitions in `workspaceId`? Owner/admin. */
+async function canManage(actor: Actor, workspaceId: string | null): Promise<boolean> {
+  if (!workspaceId) return false
+  return (await check('manage', { kind: 'workspace', id: workspaceId }, actor)).allowed
 }
 
-async function currentUserIsPlatformAdmin(): Promise<boolean> {
-  const user = await getPayloadUserFromSession()
-  return isPlatformAdmin(user)
+/** May `actor` run a PUBLISHED definition in `workspaceId`? Any active member. */
+async function canRun(actor: Actor, workspaceId: string | null): Promise<boolean> {
+  if (!workspaceId) return false
+  return (await check('create', { kind: 'workspace', id: workspaceId }, actor)).allowed
+}
+
+/**
+ * May `actor` resolve an `approval:request` gate? Owner/admin (platform admin
+ * bypasses via `canManage`'s policy check), or listed in `approvers` by
+ * Better-Auth id or email (plan §13 decision 6).
+ */
+async function canApproveScaffolderStep(
+  actor: Actor,
+  workspaceId: string | null,
+  approvers: string[],
+): Promise<boolean> {
+  if (actor.isPlatformAdmin) return true
+  const listed = approvers.some(
+    (a) => a === actor.betterAuthId || a.toLowerCase() === actor.email.toLowerCase(),
+  )
+  if (listed) return true
+  return canManage(actor, workspaceId)
 }
 
 /**
@@ -66,8 +79,7 @@ export async function getTemplateDefinitionByIdOrSlug(
   idOrSlug: string,
 ): Promise<TemplateDefinitionDoc | null> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await requireActor()
 
   let definition: TemplateDefinitionDoc | undefined
   try {
@@ -91,9 +103,7 @@ export async function getTemplateDefinitionByIdOrSlug(
 
   const workspaceId = relId(definition.workspace)
   const allowed =
-    definition.status === 'published'
-      ? await canRunTemplateDefinition(payload, uid, workspaceId, isAdmin)
-      : await canManageTemplateDefinitions(payload, uid, workspaceId, isAdmin)
+    definition.status === 'published' ? await canRun(actor, workspaceId) : await canManage(actor, workspaceId)
   if (!allowed) return null
 
   return definition
@@ -130,10 +140,7 @@ export async function resolveScaffolderApproval(
   comment?: string,
 ): Promise<{ ok: boolean; runId: string; errors?: string[] }> {
   const payload = await getPayload({ config })
-  const user = await getCurrentUser()
-  const uid = user?.id
-  if (!uid) throw new Error('Not authenticated')
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await requireActor()
 
   let run: ActionRun
   try {
@@ -177,7 +184,7 @@ export async function resolveScaffolderApproval(
     ? gatePayload.approvers.filter((a): a is string => typeof a === 'string')
     : []
 
-  const canApprove = await canApproveScaffolderStep(payload, uid, user?.email, workspaceId, approvers, isAdmin)
+  const canApprove = await canApproveScaffolderStep(actor, workspaceId, approvers)
   if (!canApprove) {
     throw new Error('You do not have permission to resolve this approval gate.')
   }
@@ -194,7 +201,7 @@ export async function resolveScaffolderApproval(
       workflowId: gate.workflowId,
       approvalId,
       approved,
-      approverId: uid,
+      approverId: actor.betterAuthId,
       comment,
       workspaceId,
     })
@@ -229,10 +236,8 @@ export async function getScaffolderApprovalGates(
   runId: string,
 ): Promise<Record<string, ScaffolderApprovalGateInfo>> {
   const payload = await getPayload({ config })
-  const user = await getCurrentUser()
-  const uid = user?.id
-  if (!uid) return {}
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await getActor()
+  if (!actor) return {}
 
   let run: ActionRun
   try {
@@ -242,7 +247,7 @@ export async function getScaffolderApprovalGates(
   }
   const workspaceId = relId(run.workspace)
   if (!workspaceId || !run.workflowId) return {}
-  if (!(await canRunTemplateDefinition(payload, uid, workspaceId, isAdmin))) return {}
+  if (!(await canRun(actor, workspaceId))) return {}
 
   // By `runId` (this root run's action-runs doc id), not `workflowId` — see
   // the identical comment in `resolveScaffolderApproval` above. A gate
@@ -271,7 +276,7 @@ export async function getScaffolderApprovalGates(
     const approvers = Array.isArray(gatePayload.approvers)
       ? gatePayload.approvers.filter((a): a is string => typeof a === 'string')
       : []
-    const canApprove = await canApproveScaffolderStep(payload, uid, user?.email, workspaceId, approvers, isAdmin)
+    const canApprove = await canApproveScaffolderStep(actor, workspaceId, approvers)
 
     out[stepId] = {
       approvalId: gate.approvalId,

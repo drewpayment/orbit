@@ -6,14 +6,7 @@ import { revalidatePath } from 'next/cache'
 import * as yaml from 'yaml'
 import Ajv from 'ajv'
 import type { Where } from 'payload'
-import { getCurrentUser, getPayloadUserFromSession } from '@/lib/auth/session'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
-import {
-  canManageTemplateDefinitions,
-  canPublishTemplateDefinition,
-  canRunTemplateDefinition,
-  type TemplateVisibility,
-} from '@/lib/templates/authz'
+import { requireActor, check, type Actor } from '@/lib/authz'
 import { createDraftVersion, publishVersion, deprecateDefinition } from '@/lib/scaffolder/versions'
 import { TemplateDefinitionSchema, type TemplateDefinition as DefinitionJson } from '@/lib/scaffolder/schema'
 import { validateDefinition, type ActionDescriptor, type ValidationResult } from '@/lib/scaffolder/validate'
@@ -29,11 +22,14 @@ import type {
   Action,
 } from '@/payload-types'
 
+/** Mirrors `template-definitions.visibility`'s options (design §3.7). */
+type TemplateVisibility = 'workspace' | 'shared' | 'public' | undefined | null
+
 /**
  * RBAC-gated authoring + run server actions for the In-App Template
  * Authoring surfaces (`/self-service/templates/**`, phase-2 plan §0 + Task
  * 8). Mirrors `self-service/authoring-actions.ts`'s conventions exactly:
- * resolve the session user, gate through `lib/templates/authz.ts` BEFORE
+ * resolve the session user, gate through `authorize()`/`check()` from `@/lib/authz` BEFORE
  * every read/write, then use `overrideAccess: true` (the gate here IS the
  * source of truth — never trust the collection's own `access` rules alone,
  * and never trust the client to have already checked).
@@ -75,17 +71,31 @@ function relId(value: unknown): string | null {
   return null
 }
 
-/** Resolve + assert the session user; throws when unauthenticated. Returns the better-auth id used throughout this codebase's workspace-members checks. */
-async function requireUserId(): Promise<string> {
-  const uid = (await getCurrentUser())?.id
-  if (!uid) throw new Error('Not authenticated')
-  return uid
+/** May `actor` author (create/edit/delete/dry-run) definitions in `workspaceId`? Owner/admin. */
+async function canManage(actor: Actor, workspaceId: string | null): Promise<boolean> {
+  if (!workspaceId) return false
+  return (await check('manage', { kind: 'workspace', id: workspaceId }, actor)).allowed
 }
 
-/** Whether the current session belongs to a platform admin (super_admin/admin). */
-async function currentUserIsPlatformAdmin(): Promise<boolean> {
-  const user = await getPayloadUserFromSession()
-  return isPlatformAdmin(user)
+/** May `actor` run/plan a PUBLISHED definition in `workspaceId`? Any active member. */
+async function canRun(actor: Actor, workspaceId: string | null): Promise<boolean> {
+  if (!workspaceId) return false
+  return (await check('create', { kind: 'workspace', id: workspaceId }, actor)).allowed
+}
+
+/**
+ * Publish gate (design §3.7): owner/admin for `visibility: workspace`;
+ * platform admin additionally required for `shared`/`public`. Platform admins
+ * bypass the workspace-membership requirement entirely.
+ */
+async function canPublish(
+  actor: Actor,
+  workspaceId: string | null,
+  visibility: TemplateVisibility,
+): Promise<boolean> {
+  if (actor.isPlatformAdmin) return true
+  if (!(await canManage(actor, workspaceId))) return false
+  return !(visibility === 'shared' || visibility === 'public')
 }
 
 async function loadDefinitionOrThrow(
@@ -119,15 +129,17 @@ export async function listTemplateDefinitions(
   input: ListTemplateDefinitionsInput,
 ): Promise<TemplateDefinitionDoc[]> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await requireActor()
 
-  if (!(await canManageTemplateDefinitions(payload, uid, input.workspaceId, isAdmin))) {
+  if (!(await canManage(actor, input.workspaceId))) {
     return []
   }
 
   const and: Where[] = [{ workspace: { equals: input.workspaceId } }]
-  if (input.mine) and.push({ createdBy: { equals: uid } })
+  // `createdBy` is a `relationTo: 'users'` field — the Payload id (semantic
+  // fix; the old code compared it against the caller's Better-Auth id, so
+  // "mine" silently matched nothing).
+  if (input.mine) and.push({ createdBy: { equals: actor.payloadId } })
 
   const result = await payload.find({
     collection: 'template-definitions',
@@ -142,16 +154,15 @@ export async function listTemplateDefinitions(
 
 /**
  * Load a single template-definition with `currentVersion` populated. Gated:
- * `draft`/`deprecated` rows require `canManageTemplateDefinitions` on the
- * row's workspace; `published` rows require `canRunTemplateDefinition`
+ * `draft`/`deprecated` rows require `canManage` on the
+ * row's workspace; `published` rows require `canRun`
  * (design §3.2: drafts are author/workspace-admin-only, published templates
  * are any active member). Returns `null` on denial or not-found so callers
  * can 404 rather than leak existence.
  */
 export async function getTemplateDefinition(id: string): Promise<TemplateDefinitionDoc | null> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await requireActor()
 
   let definition: TemplateDefinitionDoc
   try {
@@ -168,8 +179,8 @@ export async function getTemplateDefinition(id: string): Promise<TemplateDefinit
   const workspaceId = relId(definition.workspace)
   const allowed =
     definition.status === 'published'
-      ? await canRunTemplateDefinition(payload, uid, workspaceId, isAdmin)
-      : await canManageTemplateDefinitions(payload, uid, workspaceId, isAdmin)
+      ? await canRun(actor, workspaceId)
+      : await canManage(actor, workspaceId)
   if (!allowed) return null
 
   return definition
@@ -202,10 +213,9 @@ export async function createTemplateDefinition(
   input: CreateTemplateDefinitionInput,
 ): Promise<{ id: string; versionId: string }> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await requireActor()
 
-  if (!(await canManageTemplateDefinitions(payload, uid, input.workspaceId, isAdmin))) {
+  if (!(await canManage(actor, input.workspaceId))) {
     throw new Error('You do not have permission to author templates in this workspace.')
   }
 
@@ -227,7 +237,8 @@ export async function createTemplateDefinition(
       visibility: input.visibility ?? 'workspace',
       sourceMode: input.sourceMode ?? 'orbit',
       status: 'draft',
-      createdBy: uid,
+      // Semantic fix: `createdBy` is `relationTo: 'users'` — the Payload id.
+      createdBy: actor.payloadId,
     },
     overrideAccess: true,
   })
@@ -249,7 +260,8 @@ export async function createTemplateDefinition(
   const version = await createDraftVersion(payload, {
     definitionId: created.id,
     definitionJson: starter,
-    userId: uid,
+    // Semantic fix: `editedBy` is `relationTo: 'users'` — the Payload id.
+    userId: actor.payloadId,
     changeNote: 'Initial draft',
   })
 
@@ -270,12 +282,11 @@ export async function saveTemplateDefinitionDraft(
   changeNote?: string,
 ): Promise<{ versionId: string; versionNumber: number }> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await requireActor()
 
   const definition = await loadDefinitionOrThrow(payload, id)
   const workspaceId = relId(definition.workspace)
-  if (!(await canManageTemplateDefinitions(payload, uid, workspaceId, isAdmin))) {
+  if (!(await canManage(actor, workspaceId))) {
     throw new Error('You do not have permission to author templates in this workspace.')
   }
 
@@ -287,7 +298,7 @@ export async function saveTemplateDefinitionDraft(
   const version = await createDraftVersion(payload, {
     definitionId: id,
     definitionJson: parsed.data,
-    userId: uid,
+    userId: actor.payloadId,
     changeNote,
   })
 
@@ -306,7 +317,7 @@ export async function saveTemplateDefinitionDraft(
  * session, and touches no workspace data.
  */
 export async function validateTemplateDefinition(definitionJson: unknown): Promise<ValidationResult> {
-  await requireUserId()
+  await requireActor()
 
   const parsed = TemplateDefinitionSchema.safeParse(definitionJson)
   if (!parsed.success) {
@@ -623,7 +634,7 @@ function validateRunParameters(version: TemplateDefinitionVersion, parameters: R
  */
 async function createAndDispatchDryRun(
   payload: PayloadClient,
-  uid: string,
+  actor: Actor,
   version: TemplateDefinitionVersion,
   definition: TemplateDefinitionDoc,
   workspaceId: string | null,
@@ -660,7 +671,8 @@ async function createAndDispatchDryRun(
       dryRun: true,
       inputs: parameters,
       status: 'pending',
-      triggeredBy: uid,
+      // Semantic fix: `triggeredBy` is `relationTo: 'users'` — the Payload id.
+      triggeredBy: actor.payloadId,
       trigger: 'manual',
       logs: [{ ts: new Date().toISOString(), level: 'info', message: 'Dry run created.' }],
     },
@@ -688,43 +700,39 @@ async function createAndDispatchDryRun(
  */
 export async function startDryRun(input: StartDryRunInput): Promise<{ runId: string }> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await requireActor()
 
   const { version, definition } = await loadVersionAndDefinition(payload, input.templateVersionId)
   const workspaceId = relId(definition.workspace)
-  if (!(await canManageTemplateDefinitions(payload, uid, workspaceId, isAdmin))) {
+  if (!(await canManage(actor, workspaceId))) {
     throw new Error('You do not have permission to dry-run templates in this workspace.')
   }
 
-  return createAndDispatchDryRun(payload, uid, version, definition, workspaceId, input)
+  return createAndDispatchDryRun(payload, actor, version, definition, workspaceId, input)
 }
 
 /**
  * The consumer run wizard's "Review" step (design §3.6/§4) — a dry run IS
  * the plan, so this shares {@link startDryRun}'s creation/dispatch core but
  * with a DIFFERENT, looser authorization: side-effect-free, so any active
- * member may plan-run a PUBLISHED definition (`canRunTemplateDefinition`),
+ * member may plan-run a PUBLISHED definition (`canRun`),
  * without needing the manage/owner-admin gate `startDryRun` otherwise
  * requires. A draft/deprecated definition still falls back to the manage
  * gate — a consumer has no business previewing an unpublished template.
  */
 export async function planRun(input: StartDryRunInput): Promise<{ runId: string }> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await requireActor()
 
   const { version, definition } = await loadVersionAndDefinition(payload, input.templateVersionId)
   const workspaceId = relId(definition.workspace)
 
-  const canPlanAsConsumer =
-    definition.status === 'published' &&
-    (await canRunTemplateDefinition(payload, uid, workspaceId, isAdmin))
-  if (!canPlanAsConsumer && !(await canManageTemplateDefinitions(payload, uid, workspaceId, isAdmin))) {
+  const canPlanAsConsumer = definition.status === 'published' && (await canRun(actor, workspaceId))
+  if (!canPlanAsConsumer && !(await canManage(actor, workspaceId))) {
     throw new Error('You do not have permission to dry-run templates in this workspace.')
   }
 
-  return createAndDispatchDryRun(payload, uid, version, definition, workspaceId, input)
+  return createAndDispatchDryRun(payload, actor, version, definition, workspaceId, input)
 }
 
 export interface StartRunInput {
@@ -741,12 +749,11 @@ export interface StartRunInput {
  */
 export async function startRun(input: StartRunInput): Promise<{ runId: string; status: string }> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await requireActor()
 
   const { version, definition } = await loadVersionAndDefinition(payload, input.templateVersionId)
   const workspaceId = relId(definition.workspace)
-  if (!(await canRunTemplateDefinition(payload, uid, workspaceId, isAdmin))) {
+  if (!(await canRun(actor, workspaceId))) {
     throw new Error('You do not have permission to run templates in this workspace.')
   }
   if (definition.status !== 'published') {
@@ -773,7 +780,8 @@ export async function startRun(input: StartRunInput): Promise<{ runId: string; s
       dryRun: false,
       inputs: parameters,
       status: needsApproval ? 'awaiting-approval' : 'pending',
-      triggeredBy: uid,
+      // Semantic fix: `triggeredBy` is `relationTo: 'users'` — the Payload id.
+      triggeredBy: actor.payloadId,
       trigger: 'manual',
       logs: [
         {
@@ -817,8 +825,7 @@ export async function startRun(input: StartRunInput): Promise<{ runId: string; s
  */
 export async function getRun(runId: string): Promise<ActionRun | null> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await requireActor()
 
   let run: ActionRun
   try {
@@ -834,7 +841,7 @@ export async function getRun(runId: string): Promise<ActionRun | null> {
   }
 
   const workspaceId = relId(run.workspace)
-  if (!(await canRunTemplateDefinition(payload, uid, workspaceId, isAdmin))) return null
+  if (!(await canRun(actor, workspaceId))) return null
 
   const versionId = relId(run.templateVersion)
   if (versionId && run.inputs && typeof run.inputs === 'object' && !Array.isArray(run.inputs)) {
@@ -895,11 +902,10 @@ export async function saveFixture(
   fixture: SaveFixtureInput,
 ): Promise<{ id: string }> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await requireActor()
 
   const definition = await loadDefinitionOrThrow(payload, templateDefinitionId)
-  if (!(await canManageTemplateDefinitions(payload, uid, relId(definition.workspace), isAdmin))) {
+  if (!(await canManage(actor, relId(definition.workspace)))) {
     throw new Error('You do not have permission to author templates in this workspace.')
   }
 
@@ -931,11 +937,10 @@ export async function saveFixture(
 /** Remove a fixture by id. Manage-gated. */
 export async function deleteFixture(templateDefinitionId: string, fixtureId: string): Promise<void> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await requireActor()
 
   const definition = await loadDefinitionOrThrow(payload, templateDefinitionId)
-  if (!(await canManageTemplateDefinitions(payload, uid, relId(definition.workspace), isAdmin))) {
+  if (!(await canManage(actor, relId(definition.workspace)))) {
     throw new Error('You do not have permission to author templates in this workspace.')
   }
 
@@ -982,7 +987,7 @@ async function latestVersionId(payload: PayloadClient, definitionId: string): Pr
  * bug this fixes always re-published whatever `currentVersion` already was,
  * so a template could never move past its first published version.
  *
- * Gated by {@link canPublishTemplateDefinition} — owner/admin for
+ * Gated by {@link canPublish} — owner/admin for
  * `visibility: workspace`, platform admin additionally required for
  * `shared`/`public` (design §3.7). The actual publish-gate business rules
  * (validatedAt + succeeded-dry-run-of-THIS-version) are enforced by
@@ -996,12 +1001,11 @@ export async function publishTemplateDefinition(
   versionId?: string,
 ): Promise<{ id: string }> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await requireActor()
 
   const definition = await loadDefinitionOrThrow(payload, id)
   const workspaceId = relId(definition.workspace)
-  if (!(await canPublishTemplateDefinition(payload, uid, workspaceId, definition.visibility, isAdmin))) {
+  if (!(await canPublish(actor, workspaceId, definition.visibility))) {
     throw new Error('You do not have permission to publish this template.')
   }
 
@@ -1016,7 +1020,7 @@ export async function publishTemplateDefinition(
   await publishVersion(payload, {
     definitionId: id,
     versionId: targetVersionId,
-    actor: { userId: uid, isPlatformAdmin: isAdmin },
+    actor: { userId: actor.payloadId, isPlatformAdmin: actor.isPlatformAdmin },
   })
 
   revalidatePath('/self-service/templates')
@@ -1027,15 +1031,14 @@ export async function publishTemplateDefinition(
 /** Deprecates a published (or draft) template. Manage-gated. */
 export async function deprecateTemplateDefinition(id: string): Promise<{ id: string }> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await requireActor()
 
   const definition = await loadDefinitionOrThrow(payload, id)
-  if (!(await canManageTemplateDefinitions(payload, uid, relId(definition.workspace), isAdmin))) {
+  if (!(await canManage(actor, relId(definition.workspace)))) {
     throw new Error('You do not have permission to manage this template.')
   }
 
-  await deprecateDefinition(payload, { definitionId: id, userId: uid })
+  await deprecateDefinition(payload, { definitionId: id, userId: actor.payloadId })
 
   revalidatePath('/self-service/templates')
   revalidatePath(`/self-service/templates/${id}/edit`)
@@ -1049,15 +1052,12 @@ export async function deprecateTemplateDefinition(id: string): Promise<{ id: str
 /** Exports a definition's CURRENT version as YAML text. Same read gate as {@link getTemplateDefinition}. */
 export async function exportTemplateDefinitionYaml(id: string): Promise<string> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await requireActor()
 
   const definition = await loadDefinitionOrThrow(payload, id)
   const workspaceId = relId(definition.workspace)
   const allowed =
-    definition.status === 'published'
-      ? await canRunTemplateDefinition(payload, uid, workspaceId, isAdmin)
-      : await canManageTemplateDefinitions(payload, uid, workspaceId, isAdmin)
+    definition.status === 'published' ? await canRun(actor, workspaceId) : await canManage(actor, workspaceId)
   if (!allowed) throw new Error('Template definition not found')
 
   const versionId = relId(definition.currentVersion)
@@ -1086,7 +1086,7 @@ export interface ImportTemplateDefinitionYamlResult {
 export async function importTemplateDefinitionYaml(
   yamlText: string,
 ): Promise<ImportTemplateDefinitionYamlResult> {
-  await requireUserId()
+  await requireActor()
 
   let parsedYaml: unknown
   try {

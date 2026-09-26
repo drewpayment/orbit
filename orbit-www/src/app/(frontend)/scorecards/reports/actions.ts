@@ -2,7 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getCurrentUser } from '@/lib/auth/session'
+import { getActor, check, memberWorkspaceIds } from '@/lib/authz'
 import type {
   CatalogEntity,
   EntityScore,
@@ -68,27 +68,6 @@ async function findAllDocs<T>(
   }
 }
 
-async function hasActiveMembership(
-  payload: Payload,
-  userId: string,
-  workspaceId: string,
-): Promise<boolean> {
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { user: { equals: userId } },
-        { workspace: { equals: workspaceId } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    limit: 1,
-    depth: 0,
-    overrideAccess: true,
-  })
-  return membership.docs.length > 0
-}
-
 export interface ReportWorkspaceOption {
   id: string
   name: string
@@ -97,20 +76,18 @@ export interface ReportWorkspaceOption {
 /** Workspaces the current user may select as the explicit report boundary. */
 export async function getReportWorkspaceOptions(): Promise<ReportWorkspaceOption[]> {
   const payload = await getPayload({ config })
-  const uid = (await getCurrentUser())?.id
-  if (!uid) return []
-  const memberships = await findAllDocs<Record<string, unknown>>(payload, {
-    collection: 'workspace-members',
-    where: { and: [{ user: { equals: uid } }, { status: { equals: 'active' } }] },
-    depth: 1,
+  const actor = await getActor()
+  if (!actor) return []
+  const workspaceIds = await memberWorkspaceIds('member', actor)
+  if (workspaceIds.length === 0) return []
+
+  const wsResult = await findAllDocs<{ id: string; name: string }>(payload, {
+    collection: 'workspaces',
+    where: { id: { in: workspaceIds } },
+    depth: 0,
     overrideAccess: true,
   })
-  return memberships
-    .map((membership) => membership.workspace)
-    .filter(
-      (workspace): workspace is { id: string; name: string } =>
-        typeof workspace === 'object' && workspace !== null && 'id' in workspace && 'name' in workspace,
-    )
+  return wsResult
     .map((workspace) => ({ id: String(workspace.id), name: String(workspace.name) }))
     .sort((left, right) => left.name.localeCompare(right.name))
 }
@@ -199,9 +176,10 @@ export async function getScorecardReport(
   windowDays: number,
 ): Promise<ScorecardReport> {
   const payload = await getPayload({ config })
-  const uid = (await getCurrentUser())?.id
-  if (!uid || !workspaceId) return emptyReport(workspaceId, windowDays)
-  if (!(await hasActiveMembership(payload, uid, workspaceId))) {
+  const actor = await getActor()
+  if (!actor || !workspaceId) return emptyReport(workspaceId, windowDays)
+  const decision = await check('read', { kind: 'workspace', id: workspaceId }, actor)
+  if (!decision.allowed) {
     return emptyReport(workspaceId, windowDays)
   }
   const reportNow = new Date()

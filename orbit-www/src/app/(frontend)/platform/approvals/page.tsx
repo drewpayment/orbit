@@ -4,12 +4,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { buildReviewLink } from '@/lib/approvals/review-link'
 
-import { getPayloadUserFromSession } from '@/lib/auth/session'
-import {
-  isPlatformAdmin,
-  getAdminOrOwnerWorkspaceIds,
-  getMemberWorkspaceIds,
-} from '@/lib/access/workspace-access'
+import { getActor, memberWorkspaceIds } from '@/lib/authz'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
@@ -47,8 +42,8 @@ const KIND_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'ou
  * thread anchored to the right approval card.
  */
 export default async function PlatformApprovalsPage() {
-  const user = await getPayloadUserFromSession()
-  if (!user) redirect('/login')
+  const actor = await getActor()
+  if (!actor) redirect('/login')
 
   const payload = await getPayload({ config })
 
@@ -56,12 +51,16 @@ export default async function PlatformApprovalsPage() {
   // workspaces; plain members see their workspaces too (read-only — but
   // the approve/reject buttons are gated server-side by gRPC and live in
   // the chat thread, so this page is a discovery surface for everyone).
-  const platformAdmin = isPlatformAdmin(user)
+  const platformAdmin = actor.isPlatformAdmin
   let workspaceFilter: Record<string, unknown> | undefined
   if (!platformAdmin) {
-    const adminOwnerIds = await getAdminOrOwnerWorkspaceIds(payload, user.id)
-    const memberIds = await getMemberWorkspaceIds(payload, user.id)
-    const allowedWorkspaceIds = Array.from(new Set([...adminOwnerIds, ...memberIds]))
+    // `memberWorkspaceIds('member', …)` already covers every active role
+    // (owner/admin/member) — owner/admin is a subset, so no separate union
+    // is needed. Semantic fix: the old code passed the Payload id
+    // (`getPayloadUserFromSession().id`) where `workspace-members.user`
+    // needs the Better-Auth id, so this scoping silently matched nothing for
+    // any workspace admin/owner viewing this page.
+    const allowedWorkspaceIds = await memberWorkspaceIds('member', actor)
     if (allowedWorkspaceIds.length === 0) {
       redirect('/')
     }

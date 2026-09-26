@@ -6,9 +6,7 @@ import configPromise from '@payload-config'
 import { encrypt } from '@/lib/encryption'
 import { getInstallation, createInstallationToken } from '@/lib/github/octokit'
 import { ensureGitHubTokenRefreshWorkflow } from '@/lib/temporal/client'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
+import { getActor } from '@/lib/authz'
 import { GITHUB_INSTALL_STATE_COOKIE } from '@/lib/github/install-state'
 
 /**
@@ -64,21 +62,14 @@ export async function GET(request: NextRequest) {
   try {
     const payload = await getPayload({ config: configPromise })
 
-    const session = await auth.api.getSession({ headers: await headers() })
-    if (!session?.user) {
+    const actor = await getActor()
+    if (!actor) {
       return clearStateCookie(
         NextResponse.redirect(new URL('/login?redirectTo=/settings/connections', request.url)),
       )
     }
 
-    const payloadUserResult = await payload.find({
-      collection: 'users',
-      where: { email: { equals: session.user.email } },
-      limit: 1,
-    })
-    const payloadUser = payloadUserResult.docs[0]
-
-    if (!payloadUser || !isPlatformAdmin(payloadUser)) {
+    if (!actor.isPlatformAdmin) {
       return clearStateCookie(
         NextResponse.redirect(new URL('/settings/connections?error=unauthorized', request.url)),
       )
@@ -86,7 +77,7 @@ export async function GET(request: NextRequest) {
 
     if (!state) {
       console.warn(
-        `[GitHub Installation Callback] No Orbit-issued state token for installation_id=${installationId} — proceeding as an unsolicited GitHub-initiated install for platform admin ${session.user.email}.`,
+        `[GitHub Installation Callback] No Orbit-issued state token for installation_id=${installationId} — proceeding as an unsolicited GitHub-initiated install for platform admin ${actor.email}.`,
       )
     }
 
@@ -164,7 +155,7 @@ export async function GET(request: NextRequest) {
         // Repositories are fetched separately via the installations API
         allowedWorkspaces: [], // Admin will configure
         status: 'active',
-        installedBy: payloadUser.id,
+        installedBy: actor.payloadId,
         installedAt: new Date().toISOString(),
         // temporalWorkflowStatus will be set after starting workflow
       },

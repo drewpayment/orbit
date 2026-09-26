@@ -4,8 +4,7 @@ import config from '@payload-config'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
-import { getCurrentUser } from '@/lib/auth/session'
-import { getWorkspaceMembership } from '@/lib/access/workspace-access'
+import { getActor, check } from '@/lib/authz'
 import { DiscoveryClient } from '@/components/features/discovery/DiscoveryClient'
 import { listDiscoveries, getScanStatus } from '@/app/actions/discovery'
 
@@ -15,8 +14,8 @@ interface PageProps {
 
 export default async function WorkspaceDiscoveryPage({ params }: PageProps) {
   const { slug } = await params
-  const user = await getCurrentUser()
-  if (!user) redirect('/login')
+  const actor = await getActor()
+  if (!actor) redirect('/login')
 
   const payload = await getPayload({ config })
 
@@ -30,8 +29,10 @@ export default async function WorkspaceDiscoveryPage({ params }: PageProps) {
   if (!workspace) notFound()
 
   // Tenant isolation (AC-7): non-members don't see another workspace's queue.
-  const membership = await getWorkspaceMembership(payload, user.id, workspace.id)
-  if (!membership) notFound()
+  // (Platform admins now bypass via `check()` — the old membership-only check
+  // had no admin exception, so this is a semantic addition, not a restriction.)
+  const decision = await check('read', { kind: 'workspace', id: workspace.id }, actor)
+  if (!decision.allowed) notFound()
 
   const [discoveries, scan] = await Promise.all([
     listDiscoveries(workspace.id),

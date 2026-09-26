@@ -36,8 +36,8 @@ const dbMock = {
   collection: (name: string) => (name === 'session' ? sessionCollection : baUserCollection),
 }
 
-vi.mock('@/lib/auth/session', () => ({
-  getPayloadUserFromSession: () => mockGetActor(),
+vi.mock('@/lib/authz', () => ({
+  getActor: () => mockGetActor(),
 }))
 vi.mock('payload', () => ({ getPayload: async () => payloadMock }))
 vi.mock('@payload-config', () => ({ default: {} }))
@@ -52,9 +52,22 @@ import * as actions from '../actions'
 // --- Fixtures ---
 // Payload id and betterAuthId deliberately differ (session revocation keys on
 // betterAuthId, never the Payload doc id).
-const superAdmin = { id: 'p-super', betterAuthId: 'ba-super', role: 'super_admin', email: 'super@x.io', status: 'approved' }
-const admin = { id: 'p-admin', betterAuthId: 'ba-admin', role: 'admin', email: 'admin@x.io', status: 'approved' }
-const regular = { id: 'p-user', betterAuthId: 'ba-user', role: 'user', email: 'user@x.io', status: 'approved' }
+// Each fixture doubles as (a) the mocked `getActor()` result (Actor shape:
+// payloadId/betterAuthId/isPlatformAdmin/user) and (b) a raw Payload `users`
+// doc returned by `payload.findByID` (id/betterAuthId/role/email/status) —
+// the extra fields are additive so both consumers see what they expect.
+const superAdmin = {
+  id: 'p-super', payloadId: 'p-super', betterAuthId: 'ba-super', role: 'super_admin',
+  email: 'super@x.io', status: 'approved', isPlatformAdmin: true, user: { status: 'approved' },
+}
+const admin = {
+  id: 'p-admin', payloadId: 'p-admin', betterAuthId: 'ba-admin', role: 'admin',
+  email: 'admin@x.io', status: 'approved', isPlatformAdmin: true, user: { status: 'approved' },
+}
+const regular = {
+  id: 'p-user', payloadId: 'p-user', betterAuthId: 'ba-user', role: 'user',
+  email: 'user@x.io', status: 'approved', isPlatformAdmin: false, user: { status: 'approved' },
+}
 
 function targetUser(over: Record<string, unknown> = {}) {
   return { ...regular, ...over }

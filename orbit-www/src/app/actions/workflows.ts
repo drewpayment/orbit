@@ -1,7 +1,6 @@
 'use server'
 
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor } from '@/lib/authz'
 import { getInstantiationProgress } from './templates'
 
 export interface WorkflowStep {
@@ -39,11 +38,9 @@ const WORKFLOW_STEPS = [
  * Falls back to mock progress if service unavailable
  */
 export async function getWorkflowStatus(workflowId: string): Promise<WorkflowStatus | null> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const actor = await getActor()
 
-  if (!session?.user) {
+  if (!actor) {
     return null
   }
 

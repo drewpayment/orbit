@@ -1,7 +1,7 @@
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
-import { getPayloadClient, getSession, getUserWorkspaceMemberships } from '@/lib/data/cached-queries'
+import { getPayloadClient, getActor, getUserWorkspaceMemberships } from '@/lib/data/cached-queries'
 import type { Activity } from '@/components/features/dashboard'
 import { Activity as ActivityIcon } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
@@ -23,13 +23,13 @@ const typeColors: Record<Activity['type'], string> = {
 }
 
 export default async function NotificationsPage() {
-  const [payload, session] = await Promise.all([
+  const [payload, actor] = await Promise.all([
     getPayloadClient(),
-    getSession(),
+    getActor(),
   ])
 
-  const memberships = session?.user
-    ? await getUserWorkspaceMemberships(session.user.id)
+  const memberships = actor
+    ? await getUserWorkspaceMemberships(actor.betterAuthId)
     : []
 
   const workspaceIds = memberships

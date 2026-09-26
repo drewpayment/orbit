@@ -10,8 +10,12 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 vi.mock('payload', () => ({ getPayload: vi.fn() }))
 vi.mock('@payload-config', () => ({ default: {} }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
-vi.mock('@/lib/auth/session', () => ({ getCurrentUser: vi.fn() }))
-vi.mock('@/lib/automations/authz', () => ({ canManageAutomations: vi.fn() }))
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(),
+  requireActor: vi.fn(),
+  check: vi.fn(),
+  memberWorkspaceIds: vi.fn(),
+}))
 vi.mock('@/lib/temporal/automation-schedules', () => ({
   ensureAutomationSchedule: vi.fn(),
   deleteAutomationSchedule: vi.fn(),
@@ -19,15 +23,26 @@ vi.mock('@/lib/temporal/automation-schedules', () => ({
 }))
 
 import { getPayload } from 'payload'
-import { getCurrentUser } from '@/lib/auth/session'
-import { canManageAutomations } from '@/lib/automations/authz'
+import { getActor, requireActor, check, memberWorkspaceIds } from '@/lib/authz'
 import { ensureAutomationSchedule } from '@/lib/temporal/automation-schedules'
 import {
   scheduleOpFor,
   createAutomation,
   updateAutomation,
   findUnmappedRequiredInputs,
+  listAutomations,
+  getAutomationForEdit,
+  getAutomationDetail,
 } from './actions'
+
+const ownerActor = {
+  payloadId: 'payload-u1',
+  betterAuthId: 'u1',
+  email: 'owner@example.com',
+  role: 'user' as const,
+  isPlatformAdmin: false,
+  user: {} as never,
+}
 
 // ---------------------------------------------------------------------------
 // findUnmappedRequiredInputs — authoring-time required-input guard (pure)
@@ -116,8 +131,10 @@ function makePayload() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  ;(getCurrentUser as Mock).mockResolvedValue({ id: 'u1' })
-  ;(canManageAutomations as Mock).mockResolvedValue(true)
+  ;(getActor as Mock).mockResolvedValue(ownerActor)
+  ;(requireActor as Mock).mockResolvedValue(ownerActor)
+  ;(check as Mock).mockResolvedValue({ allowed: true, reason: 'workspace owner', actor: ownerActor })
+  ;(memberWorkspaceIds as Mock).mockResolvedValue(['ws1'])
 })
 
 describe('createAutomation — schedule path (fail-closed)', () => {
@@ -351,5 +368,56 @@ describe('schedule automations reject {{template}} action inputs', () => {
 
     expect(res).toEqual({ id: 'new1' })
     expect(payload.create).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Session-identity boundary (bugfix): these query actions used to accept an
+// optional `userId` argument that overrode the session — since they are
+// exported `'use server'` actions, callable from the client with arbitrary
+// arguments, that let any caller list or load another user's workspace
+// automations. They now always resolve the actor from the session.
+// ---------------------------------------------------------------------------
+
+describe('automation query actions ignore any injected identity', () => {
+  it('listAutomations takes no identity argument and scopes to the session actor', async () => {
+    const payload = { find: vi.fn(async () => ({ docs: [] })) }
+    ;(getPayload as Mock).mockResolvedValue(payload)
+
+    expect(listAutomations.length).toBe(0)
+    await listAutomations()
+
+    expect(memberWorkspaceIds).toHaveBeenCalledWith('member', ownerActor)
+    expect(payload.find).toHaveBeenCalledWith(
+      expect.objectContaining({ collection: 'automations', where: { workspace: { in: ['ws1'] } } }),
+    )
+  })
+
+  it('getAutomationForEdit takes only an automationId and denies when the policy denies management', async () => {
+    const payload = {
+      findByID: vi.fn().mockResolvedValue({ id: 'auto1', workspace: 'ws1' }),
+    }
+    ;(getPayload as Mock).mockResolvedValue(payload)
+    ;(check as Mock).mockResolvedValue({ allowed: false, reason: 'not a member', actor: ownerActor })
+
+    expect(getAutomationForEdit.length).toBe(1)
+    const result = await getAutomationForEdit('auto1')
+
+    expect(result).toBeNull()
+    expect(check).toHaveBeenCalledWith('manage', { kind: 'workspace', id: 'ws1' }, ownerActor)
+  })
+
+  it('getAutomationDetail takes only an automationId and denies a non-member read', async () => {
+    const payload = {
+      findByID: vi.fn().mockResolvedValue({ id: 'auto1', workspace: 'ws1' }),
+    }
+    ;(getPayload as Mock).mockResolvedValue(payload)
+    ;(check as Mock).mockResolvedValue({ allowed: false, reason: 'not a member', actor: ownerActor })
+
+    expect(getAutomationDetail.length).toBe(1)
+    const result = await getAutomationDetail('auto1')
+
+    expect(result).toBeNull()
+    expect(check).toHaveBeenCalledWith('read', { kind: 'workspace', id: 'ws1' }, ownerActor)
   })
 })

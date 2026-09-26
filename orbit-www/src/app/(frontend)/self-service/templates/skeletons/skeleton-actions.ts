@@ -3,23 +3,20 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
-import { getCurrentUser, getPayloadUserFromSession } from '@/lib/auth/session'
-import { isPlatformAdmin } from '@/lib/access/workspace-access'
-import { canManageTemplateDefinitions, canRunTemplateDefinition } from '@/lib/templates/authz'
+import { getActor, requireActor, check, type Actor } from '@/lib/authz'
 import type { TemplateSkeleton } from '@/payload-types'
 
 /**
  * Server actions backing the skeleton authoring UI (Template Authoring
  * Phase 3, Task 3 — `docs/plans/2026-09-10-template-authoring-phase-3-greenfield-content.md`
  * §3.4). Mirrors `../authoring-actions.ts`'s conventions: resolve the
- * session user, gate through `lib/templates/authz.ts` BEFORE every read and
+ * session user, gate through `authorize()`/`check()` from `@/lib/authz` BEFORE every read and
  * write, then use `overrideAccess: true` — the gate here IS the source of
  * truth, matching the doc comment on that module.
  *
  * RBAC (plan §2.1, lead decision §7.2): edit (create/save/delete) requires
  * workspace owner/admin, matching template definitions. Read (list/get)
- * requires any active member. Reused from `lib/templates/authz.ts` rather
- * than forking a parallel authz module, per the task brief.
+ * requires any active member. Expressed inline via `@/lib/authz`'s `check()` rather than a parallel authz module.
  *
  * Every mutation surfaces server-side errors (including the collection's
  * `beforeValidate` bundle-validation hook) as `{ ok: false, errors }` —
@@ -41,16 +38,16 @@ function relId(value: unknown): string | null {
   return null
 }
 
-/** Resolve + assert the session user; throws when unauthenticated. */
-async function requireUserId(): Promise<string> {
-  const uid = (await getCurrentUser())?.id
-  if (!uid) throw new Error('Not authenticated')
-  return uid
+/** May `actor` author (create/save/delete) skeletons in `workspaceId`? Owner/admin. */
+async function canManage(actor: Actor, workspaceId: string | null): Promise<boolean> {
+  if (!workspaceId) return false
+  return (await check('manage', { kind: 'workspace', id: workspaceId }, actor)).allowed
 }
 
-/** Whether the current session belongs to a platform admin (super_admin/admin). */
-async function currentUserIsPlatformAdmin(): Promise<boolean> {
-  return isPlatformAdmin(await getPayloadUserFromSession())
+/** May `actor` read skeletons in `workspaceId`? Any active member. */
+async function canRun(actor: Actor, workspaceId: string | null): Promise<boolean> {
+  if (!workspaceId) return false
+  return (await check('read', { kind: 'workspace', id: workspaceId }, actor)).allowed
 }
 
 /**
@@ -151,11 +148,10 @@ function validateNameAndSlug(name: string, slug: string): string[] {
 /** Lists skeletons in a workspace. Read-gated: any active member. Returns [] rather than throwing when unauthorized. */
 export async function listSkeletons(workspaceId: string): Promise<SkeletonListItem[]> {
   const payload = await getPayload({ config })
-  const uid = (await getCurrentUser())?.id
-  if (!uid || !workspaceId) return []
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await getActor()
+  if (!actor || !workspaceId) return []
 
-  if (!(await canRunTemplateDefinition(payload, uid, workspaceId, isAdmin))) return []
+  if (!(await canRun(actor, workspaceId))) return []
 
   const result = await payload.find({
     collection: 'template-skeletons',
@@ -181,15 +177,14 @@ export async function listSkeletons(workspaceId: string): Promise<SkeletonListIt
 /** Loads a single skeleton with full file contents. Read-gated: any active member. Returns null (never throws) for missing/unauthorized. */
 export async function getSkeleton(id: string): Promise<SkeletonDetail | null> {
   const payload = await getPayload({ config })
-  const uid = (await getCurrentUser())?.id
-  if (!uid) return null
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await getActor()
+  if (!actor) return null
 
   const doc = await loadSkeletonOrNull(payload, id)
   if (!doc) return null
 
   const workspaceId = relId(doc.workspace)
-  if (!workspaceId || !(await canRunTemplateDefinition(payload, uid, workspaceId, isAdmin))) return null
+  if (!workspaceId || !(await canRun(actor, workspaceId))) return null
 
   return {
     id: doc.id,
@@ -212,10 +207,9 @@ export async function createSkeleton(
   input: CreateSkeletonInput,
 ): Promise<SkeletonActionResult<{ id: string }>> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await requireActor()
 
-  if (!(await canManageTemplateDefinitions(payload, uid, input.workspaceId, isAdmin))) {
+  if (!(await canManage(actor, input.workspaceId))) {
     return { ok: false, errors: ['You do not have permission to author skeletons in this workspace.'] }
   }
 
@@ -233,7 +227,8 @@ export async function createSkeleton(
         slug,
         description: input.description?.trim() || undefined,
         files: input.files,
-        createdBy: uid,
+        // Semantic fix: `createdBy` is `relationTo: 'users'` — the Payload id.
+        createdBy: actor.payloadId,
       },
       overrideAccess: true,
     })
@@ -250,14 +245,13 @@ export async function saveSkeleton(
   input: SaveSkeletonInput,
 ): Promise<SkeletonActionResult<{ id: string }>> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await requireActor()
 
   const existing = await loadSkeletonOrNull(payload, id)
   if (!existing) return { ok: false, errors: ['Skeleton not found.'] }
 
   const workspaceId = relId(existing.workspace)
-  if (!workspaceId || !(await canManageTemplateDefinitions(payload, uid, workspaceId, isAdmin))) {
+  if (!workspaceId || !(await canManage(actor, workspaceId))) {
     return { ok: false, errors: ['You do not have permission to edit this skeleton.'] }
   }
 
@@ -289,14 +283,13 @@ export async function saveSkeleton(
 /** Deletes a skeleton. Manage-gated: workspace owner/admin (checked against the doc's OWN workspace). */
 export async function deleteSkeleton(id: string): Promise<SkeletonActionResult<{ id: string }>> {
   const payload = await getPayload({ config })
-  const uid = await requireUserId()
-  const isAdmin = await currentUserIsPlatformAdmin()
+  const actor = await requireActor()
 
   const existing = await loadSkeletonOrNull(payload, id)
   if (!existing) return { ok: false, errors: ['Skeleton not found.'] }
 
   const workspaceId = relId(existing.workspace)
-  if (!workspaceId || !(await canManageTemplateDefinitions(payload, uid, workspaceId, isAdmin))) {
+  if (!workspaceId || !(await canManage(actor, workspaceId))) {
     return { ok: false, errors: ['You do not have permission to delete this skeleton.'] }
   }
 

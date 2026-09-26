@@ -1,5 +1,4 @@
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { getActor } from '@/lib/authz'
 import { redirect } from 'next/navigation'
 
 interface AuthGuardProps {
@@ -15,13 +14,11 @@ interface AuthGuardProps {
  * Usage: Wrap protected layouts or pages with this component.
  */
 export async function AuthGuard({ children }: AuthGuardProps) {
-  // Get current session using better-auth API
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  // Resolve the current Actor.
+  const actor = await getActor()
 
   // Redirect to login if no valid session
-  if (!session?.user) {
+  if (!actor) {
     redirect('/login')
   }
 

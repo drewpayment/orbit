@@ -10,7 +10,7 @@ import {
   Sparkles,
   ArrowRight,
 } from 'lucide-react'
-import { getCurrentUser } from '@/lib/auth/session'
+import { getActor } from '@/lib/authz'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -59,8 +59,8 @@ const backendCards: BackendCard[] = [
 ]
 
 async function ActionsCatalog() {
-  const user = await getCurrentUser()
-  const actions = await listActions(user?.id)
+  const actor = await getActor()
+  const actions = await listActions(actor)
 
   if (actions.length === 0) {
     return (
@@ -90,8 +90,8 @@ async function ActionsCatalog() {
  * boundary so resolving manageable workspaces never blocks the page header.
  */
 async function NewActionButton() {
-  const user = await getCurrentUser()
-  const workspaces = await getManageableActionWorkspaces(user?.id)
+  const actor = await getActor()
+  const workspaces = await getManageableActionWorkspaces(actor)
   if (workspaces.length === 0) return null
   return (
     <Button asChild size="sm">

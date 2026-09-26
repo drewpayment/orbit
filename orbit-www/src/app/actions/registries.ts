@@ -2,7 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
+import { getActor, check, memberWorkspaceIds } from '@/lib/authz'
 import { decrypt } from '@/lib/encryption'
 
 export interface RegistryConfig {
@@ -36,8 +36,8 @@ export async function getRegistriesAndWorkspaces(): Promise<{
   workspaces: Workspace[]
   error?: string
 }> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { registries: [], workspaces: [], error: 'Unauthorized' }
   }
 
@@ -45,30 +45,10 @@ export async function getRegistriesAndWorkspaces(): Promise<{
 
   try {
     // Get user's workspace memberships
-    const memberships = await payload.find({
-      collection: 'workspace-members',
-      where: {
-        and: [
-          { user: { equals: payloadUser.betterAuthId } },
-          { status: { equals: 'active' } },
-        ],
-      },
-      depth: 1,
-      limit: 100,
-      overrideAccess: true,
-    })
-
-    const workspaceIds = memberships.docs.map((m) =>
-      typeof m.workspace === 'string' ? m.workspace : m.workspace.id
-    )
+    const workspaceIds = await memberWorkspaceIds('member', actor)
 
     // Get workspaces where user is admin/owner (for creating registries)
-    const adminMemberships = memberships.docs.filter((m) =>
-      ['owner', 'admin'].includes(m.role)
-    )
-    const adminWorkspaceIds = adminMemberships.map((m) =>
-      typeof m.workspace === 'string' ? m.workspace : m.workspace.id
-    )
+    const adminWorkspaceIds = await memberWorkspaceIds('manage', actor)
 
     // Fetch workspaces
     const workspacesResult = adminWorkspaceIds.length > 0
@@ -123,28 +103,17 @@ export async function createRegistry(data: {
   acrUsername?: string
   acrToken?: string
 }): Promise<{ success: boolean; registry?: RegistryConfig; error?: string }> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
   const payload = await getPayload({ config })
 
   // Verify user is admin/owner of the workspace
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: data.workspace } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    overrideAccess: true,
-  })
+  const membership = await check('manage', { kind: 'workspace', id: data.workspace }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membership.allowed) {
     return { success: false, error: 'Not authorized for this workspace' }
   }
 
@@ -195,7 +164,7 @@ export async function createRegistry(data: {
     const registry = await payload.create({
       collection: 'registry-configs',
       data: registryData as any,
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -221,8 +190,8 @@ export async function updateRegistry(
     acrToken?: string
   }
 ): Promise<{ success: boolean; registry?: RegistryConfig; error?: string }> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -244,20 +213,9 @@ export async function updateRegistry(
     : existingRegistry.workspace.id
 
   // Verify user is admin/owner of the workspace
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    overrideAccess: true,
-  })
+  const membership = await check('manage', { kind: 'workspace', id: workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membership.allowed) {
     return { success: false, error: 'Not authorized for this workspace' }
   }
 
@@ -300,7 +258,7 @@ export async function updateRegistry(
       collection: 'registry-configs',
       id,
       data: updateData as any,
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -315,8 +273,8 @@ export async function updateRegistry(
  * Delete a registry config
  */
 export async function deleteRegistry(id: string): Promise<{ success: boolean; error?: string }> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -338,20 +296,9 @@ export async function deleteRegistry(id: string): Promise<{ success: boolean; er
     : existingRegistry.workspace.id
 
   // Verify user is owner of the workspace (only owners can delete)
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { role: { equals: 'owner' } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    overrideAccess: true,
-  })
+  const membership = await check('delete', { kind: 'workspace', id: workspaceId, roles: ['owner'] }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membership.allowed) {
     return { success: false, error: 'Only workspace owners can delete registries' }
   }
 
@@ -359,7 +306,7 @@ export async function deleteRegistry(id: string): Promise<{ success: boolean; er
     await payload.delete({
       collection: 'registry-configs',
       id,
-      user: payloadUser,
+      user: actor.user,
       overrideAccess: false,
     })
 
@@ -377,8 +324,8 @@ export async function testGhcrConnection(configId: string): Promise<{
   success: boolean
   error?: string
 }> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -411,20 +358,9 @@ export async function testGhcrConnection(configId: string): Promise<{
       ? registryConfig.workspace
       : registryConfig.workspace.id
 
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    overrideAccess: true,
-  })
+  const membership = await check('manage', { kind: 'workspace', id: workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membership.allowed) {
     return { success: false, error: 'Not authorized for this workspace' }
   }
 
@@ -477,28 +413,17 @@ export async function setOrbitAsDefault(workspaceId: string): Promise<{
   success: boolean
   error?: string
 }> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
   const payload = await getPayload({ config })
 
   // Verify user is admin/owner of the workspace
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    overrideAccess: true,
-  })
+  const membership = await check('manage', { kind: 'workspace', id: workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membership.allowed) {
     return { success: false, error: 'Not authorized for this workspace' }
   }
 
@@ -542,7 +467,7 @@ export async function setOrbitAsDefault(workspaceId: string): Promise<{
         collection: 'registry-configs',
         id: existingOrbit.docs[0].id,
         data: { isDefault: true },
-        user: payloadUser,
+        user: actor.user,
         overrideAccess: false,
       })
     } else {
@@ -555,7 +480,7 @@ export async function setOrbitAsDefault(workspaceId: string): Promise<{
           workspace: workspaceId,
           isDefault: true,
         } as any,
-        user: payloadUser,
+        user: actor.user,
         overrideAccess: false,
       })
     }
@@ -574,8 +499,8 @@ export async function testAcrConnection(configId: string): Promise<{
   success: boolean
   error?: string
 }> {
-  const payloadUser = await getPayloadUserFromSession()
-  if (!payloadUser) {
+  const actor = await getActor()
+  if (!actor) {
     return { success: false, error: 'Unauthorized' }
   }
 
@@ -619,20 +544,9 @@ export async function testAcrConnection(configId: string): Promise<{
       ? registryConfig.workspace
       : registryConfig.workspace.id
 
-  const membership = await payload.find({
-    collection: 'workspace-members',
-    where: {
-      and: [
-        { workspace: { equals: workspaceId } },
-        { user: { equals: payloadUser.betterAuthId } },
-        { role: { in: ['owner', 'admin'] } },
-        { status: { equals: 'active' } },
-      ],
-    },
-    overrideAccess: true,
-  })
+  const membership = await check('manage', { kind: 'workspace', id: workspaceId }, actor)
 
-  if (membership.docs.length === 0) {
+  if (!membership.allowed) {
     return { success: false, error: 'Not authorized for this workspace' }
   }
 
