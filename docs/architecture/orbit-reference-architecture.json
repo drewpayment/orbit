@@ -1,0 +1,486 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Orbit \u2014 Reference Architecture",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/drewpayment/orbit",
+      "revision": "f958fc5946c44f6d8a9565dc366070af0719a2f6"
+    },
+    "viewBox": [
+      1800,
+      660
+    ],
+    "views": [
+      {
+        "id": "portal-path",
+        "label": "Developer request path",
+        "focus": [
+          "portal",
+          "mongo",
+          "repo_svc",
+          "kafka_svc"
+        ],
+        "note": "Browser \u2192 Next.js server actions \u2192 Payload/Mongo, or Connect-ES to Go services with a svc-auth JWT."
+      },
+      {
+        "id": "durable-work",
+        "label": "Durable work",
+        "focus": [
+          "portal",
+          "temporal",
+          "workers",
+          "build_svc",
+          "stores"
+        ],
+        "note": "Portal starts workflows; workers poll task queues and write results back through /api/internal."
+      },
+      {
+        "id": "kafka-platform",
+        "label": "Kafka self-service",
+        "focus": [
+          "portal",
+          "kafka_svc",
+          "workers"
+        ],
+        "note": "kafka-service owns topics/quotas; Bifrost proxies tenant traffic to Redpanda behind Traefik."
+      },
+      {
+        "id": "outside-world",
+        "label": "External providers",
+        "focus": [
+          "workers",
+          "git",
+          "llm",
+          "azure"
+        ],
+        "note": "Git hosts, LLM providers and Azure are reached only from workers, never from the browser."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "mongo",
+      "type": "database",
+      "label": "MongoDB",
+      "sublabel": "Payload collections \u00b7 :27017",
+      "pos": [
+        40,
+        210
+      ],
+      "size": [
+        220,
+        70
+      ],
+      "sources": [
+        {
+          "path": "orbit-www/src/payload.config.ts",
+          "label": "collections"
+        }
+      ]
+    },
+    {
+      "id": "portal",
+      "type": "frontend",
+      "label": "Orbit portal",
+      "sublabel": "Next.js 15 + Payload 3 \u00b7 server actions \u00b7 /api/internal",
+      "pos": [
+        370,
+        210
+      ],
+      "size": [
+        220,
+        70
+      ],
+      "sources": [
+        {
+          "path": "orbit-www/src/app/layout.tsx",
+          "label": "app shell"
+        },
+        {
+          "path": "orbit-www/src/lib/authz/policy.ts",
+          "label": "authorization policy"
+        },
+        {
+          "path": "orbit-www/src/lib/auth/internal-api-auth.ts",
+          "label": "internal API"
+        }
+      ]
+    },
+    {
+      "id": "temporal",
+      "type": "backend",
+      "label": "Temporal",
+      "sublabel": "server :7233 \u00b7 UI :8080",
+      "pos": [
+        760,
+        40
+      ],
+      "size": [
+        220,
+        70
+      ],
+      "sources": [
+        {
+          "path": "docker-compose.yml",
+          "label": "temporal-server"
+        }
+      ]
+    },
+    {
+      "id": "repo_svc",
+      "type": "backend",
+      "label": "Repository service",
+      "sublabel": "Go gRPC :50051 \u00b7 git, templates, agent",
+      "pos": [
+        760,
+        210
+      ],
+      "size": [
+        220,
+        70
+      ],
+      "sources": [
+        {
+          "path": "services/repository/cmd/server/main.go",
+          "label": "entry point"
+        },
+        {
+          "path": "orbit-www/src/lib/grpc/auth-interceptor.ts",
+          "label": "svc-auth JWT"
+        }
+      ]
+    },
+    {
+      "id": "workers",
+      "type": "backend",
+      "label": "Temporal workers",
+      "sublabel": "Go worker \u00b7 TS launch worker \u00b7 TS automations",
+      "pos": [
+        1150,
+        210
+      ],
+      "size": [
+        220,
+        70
+      ],
+      "sources": [
+        {
+          "path": "temporal-workflows/cmd/worker/main.go",
+          "label": "Go worker"
+        },
+        {
+          "path": "launches-worker-azure/src/worker.ts",
+          "label": "launches_azure"
+        },
+        {
+          "path": "orbit-www/services/automation-worker/src/worker.ts",
+          "label": "orbit-automations"
+        }
+      ]
+    },
+    {
+      "id": "build_svc",
+      "type": "backend",
+      "label": "Build service",
+      "sublabel": "Go gRPC :50054 \u00b7 BuildKit",
+      "pos": [
+        1150,
+        380
+      ],
+      "size": [
+        220,
+        70
+      ],
+      "sources": [
+        {
+          "path": "services/build-service/cmd/server/main.go",
+          "label": "entry point"
+        }
+      ]
+    },
+    {
+      "id": "kafka_svc",
+      "type": "backend",
+      "label": "Kafka platform services",
+      "sublabel": "kafka-service :50055 \u00b7 Bifrost :9092 \u2192 Redpanda",
+      "pos": [
+        760,
+        550
+      ],
+      "size": [
+        220,
+        70
+      ],
+      "sources": [
+        {
+          "path": "services/kafka/cmd/server/main.go",
+          "label": "kafka-service"
+        },
+        {
+          "path": "services/bifrost/cmd/bifrost/main.go",
+          "label": "bifrost"
+        },
+        {
+          "path": "docker-compose.yml",
+          "label": "redpanda"
+        }
+      ]
+    },
+    {
+      "id": "git",
+      "type": "external",
+      "label": "Git providers",
+      "sublabel": "GitHub App \u00b7 Azure DevOps",
+      "pos": [
+        1540,
+        40
+      ],
+      "size": [
+        220,
+        70
+      ],
+      "sources": [
+        {
+          "path": "temporal-workflows/internal/services/github_service.go",
+          "label": "GitHub"
+        },
+        {
+          "path": "temporal-workflows/internal/services/payload_ado_connection_client.go",
+          "label": "Azure DevOps"
+        }
+      ]
+    },
+    {
+      "id": "llm",
+      "type": "external",
+      "label": "LLM providers",
+      "sublabel": "Anthropic \u00b7 OpenAI-compatible / Ollama",
+      "pos": [
+        1540,
+        210
+      ],
+      "size": [
+        220,
+        70
+      ],
+      "sources": [
+        {
+          "path": "temporal-workflows/internal/agent/providers/registry.go",
+          "label": "provider registry"
+        }
+      ]
+    },
+    {
+      "id": "stores",
+      "type": "database",
+      "label": "Artifact stores",
+      "sublabel": "MinIO S3 :9000 \u00b7 OCI registry :5050",
+      "pos": [
+        1540,
+        550
+      ],
+      "size": [
+        220,
+        70
+      ],
+      "sources": [
+        {
+          "path": "temporal-workflows/internal/clients/storage_client.go",
+          "label": "storage client"
+        },
+        {
+          "path": "docker-compose.yml",
+          "label": "minio, orbit-registry"
+        }
+      ]
+    },
+    {
+      "id": "azure",
+      "type": "cloud",
+      "label": "Azure",
+      "sublabel": "Pulumi-provisioned launches",
+      "pos": [
+        1540,
+        380
+      ],
+      "size": [
+        220,
+        70
+      ],
+      "sources": [
+        {
+          "path": "launches-worker-azure/src/activities/provision.ts",
+          "label": "activities"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Orbit platform (docker compose / cluster)",
+      "wraps": [
+        "mongo",
+        "portal",
+        "temporal",
+        "repo_svc",
+        "workers",
+        "build_svc",
+        "kafka_svc"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "Tenant boundary: Better-Auth session \u2192 Actor \u2192 policy",
+      "wraps": [
+        "mongo",
+        "portal"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "portal-mongo",
+      "from": "portal",
+      "to": "mongo",
+      "label": "Payload local API",
+      "variant": "emphasis",
+      "fromSide": "left",
+      "toSide": "right"
+    },
+    {
+      "id": "portal-temporal",
+      "from": "portal",
+      "to": "temporal",
+      "label": "start workflows",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "left",
+      "labelSegment": 1
+    },
+    {
+      "id": "portal-repo",
+      "from": "portal",
+      "to": "repo_svc",
+      "label": "Connect-ES + svc-auth JWT",
+      "variant": "security",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "portal-kafka",
+      "from": "portal",
+      "to": "kafka_svc",
+      "label": "gRPC + svc-auth JWT",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "left",
+      "labelSegment": 1
+    },
+    {
+      "id": "temporal-workers",
+      "from": "temporal",
+      "to": "workers",
+      "label": "task queues",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelSegment": 0
+    },
+    {
+      "id": "workers-portal",
+      "from": "workers",
+      "to": "portal",
+      "label": "/api/internal (x-api-key)",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "top",
+      "labelSegment": 1
+    },
+    {
+      "id": "workers-build",
+      "from": "workers",
+      "to": "build_svc",
+      "label": "build image",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    },
+    {
+      "id": "workers-git",
+      "from": "workers",
+      "to": "git",
+      "label": "clone, push, tokens",
+      "fromSide": "top",
+      "toSide": "left",
+      "labelSegment": 1
+    },
+    {
+      "id": "workers-llm",
+      "from": "workers",
+      "to": "llm",
+      "label": "infra-agent turns",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDy": -14
+    },
+    {
+      "id": "workers-azure",
+      "from": "workers",
+      "to": "azure",
+      "label": "Pulumi up / destroy",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelSegment": 1
+    },
+    {
+      "id": "build-stores",
+      "from": "build_svc",
+      "to": "stores",
+      "label": "push image",
+      "fromSide": "bottom",
+      "toSide": "left",
+      "labelSegment": 1
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "One identity, one policy",
+      "items": [
+        "Better-Auth session \u2192 Actor {payloadId, betterAuthId, isPlatformAdmin}",
+        "lib/authz can() drives Payload access rules and authorize()/check()",
+        "workspace-members.user = Better-Auth id; relationTo users = Payload id"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Task queues",
+      "items": [
+        "orbit-workflows (Go): templates, deployments, builds, kafka, catalog scan, infra agent",
+        "launches_azure (TS): Pulumi launches",
+        "orbit-automations (TS): schedules + nightly scorecard sweep"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Data ownership",
+      "items": [
+        "MongoDB: every Payload collection (tenant = workspace)",
+        "PostgreSQL: Temporal + kafka-service",
+        "MinIO: artifacts, Pulumi state \u00b7 OCI registry :5050: images"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Not drawn",
+      "items": [
+        "Traefik :9092 \u2192 Bifrost \u2192 Redpanda :19092",
+        "Prometheus, Temporal UI, Redpanda Console",
+        "Frozen: registry, health monitoring \u00b7 Removed: AWS/GCP, plugins, Backstage"
+      ]
+    }
+  ]
+}
