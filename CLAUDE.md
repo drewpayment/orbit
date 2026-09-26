@@ -270,7 +270,7 @@ Implementation plans:
 
 ### .agent/ (Architectural Context)
 System architecture and established patterns:
-- **system/**: High-level architecture snapshots (project-structure.md, api-architecture.md)
+- **system/**: High-level architecture snapshots (reference-architecture.md — read first for runtime topology, call paths, credentials, data ownership; project-structure.md, api-architecture.md)
 - **SOPs/**: Standard procedures and conventions
 - **tasks/**: Completed feature summaries for reference
 - **README.md**: Navigation guide and workflow integration

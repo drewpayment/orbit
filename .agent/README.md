@@ -16,6 +16,7 @@
 ### 📋 System Documentation (.agent)
 **For architecture reference during implementation:**
 
+- **[Reference Architecture](system/reference-architecture.md)** - Runtime components, call paths and credentials, data ownership, task queues (read first; interactive diagram in `docs/architecture/`)
 - **[Project Structure](system/project-structure.md)** - Monorepo layout, service organization, and module dependencies
 - **[API Architecture](system/api-architecture.md)** - gRPC service contracts and communication patterns
 
