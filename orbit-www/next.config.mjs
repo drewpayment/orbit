@@ -3,6 +3,12 @@ import { withPayload } from '@payloadcms/next/withPayload'
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  // Expose the preview-feature list to client components (e.g. the sidebar) so
+  // nav entries follow the same ORBIT_ENABLE_PREVIEW_FEATURES setting. Inlined
+  // at build time; server-side route/action gates read the runtime env var.
+  env: {
+    NEXT_PUBLIC_ORBIT_ENABLE_PREVIEW_FEATURES: process.env.ORBIT_ENABLE_PREVIEW_FEATURES ?? '',
+  },
   // @orbit/automation-worker is an internal workspace package that ships raw TS
   // (its `exports` point at .ts). Next must transpile it like app source. Only
   // the client-safe `./shared` subpath is ever imported by the app; the
