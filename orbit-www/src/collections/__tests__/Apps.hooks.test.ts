@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+// collections/Apps.ts may pull in the encryption module, which requires a
+// 32-byte base64 key at import time. Hoisted so it is set before any import.
+vi.hoisted(() => {
+  process.env.ENCRYPTION_KEY ||= Buffer.alloc(32, 7).toString('base64')
+})
+
 const octokitRequest = vi.fn()
 const getInstallationOctokit = vi.fn(async () => ({ request: octokitRequest }))
 
