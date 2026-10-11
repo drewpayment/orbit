@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
+import { authorize, authzErrorResponse } from '@/lib/authz'
 import { getTemporalClient, startGitHubTokenRefreshWorkflow } from '@/lib/temporal/client'
 
 /**
@@ -13,6 +14,13 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Platform-admin only (GitHub installations are platform resources).
+  try {
+    await authorize('manage', { kind: 'platform' })
+  } catch (err) {
+    return authzErrorResponse(err) ?? NextResponse.json({ error: 'Internal error' }, { status: 500 })
+  }
+
   const { id } = await params
 
   try {

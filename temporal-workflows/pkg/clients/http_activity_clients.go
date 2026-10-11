@@ -32,6 +32,22 @@ func isTerminalRefreshStatus(status int) bool {
 	}
 }
 
+// isAPIKeyRejection reports whether a 401 came from the route's internal API-key
+// gate (a worker misconfiguration, fixable by config) rather than from GitHub
+// rejecting the installation's credentials. Only the latter is terminal.
+func isAPIKeyRejection(status int, body []byte) bool {
+	if status != http.StatusUnauthorized {
+		return false
+	}
+	var parsed struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return false
+	}
+	return parsed.Code == "UNAUTHORIZED"
+}
+
 type HTTPActivityClients struct {
 	baseURL    string
 	apiKey     string
@@ -123,6 +139,7 @@ func (c *HTTPActivityClients) RefreshGitHubInstallationTokenActivity(
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", c.apiKey)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -146,7 +163,7 @@ func (c *HTTPActivityClients) RefreshGitHubInstallationTokenActivity(
 		// Terminal HTTP codes (installation gone, bad credentials, encryption failure,
 		// bad request) cannot be fixed by retrying. Mark them non-retryable so the
 		// workflow escalates the installation to needs_reconnect instead of looping.
-		if isTerminalRefreshStatus(resp.StatusCode) {
+		if isTerminalRefreshStatus(resp.StatusCode) && !isAPIKeyRejection(resp.StatusCode, body) {
 			return workflows.RefreshTokenResult{
 					Success:      false,
 					ErrorMessage: errMsg,
@@ -197,6 +214,7 @@ func (c *HTTPActivityClients) UpdateInstallationStatusActivity(
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", c.apiKey)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

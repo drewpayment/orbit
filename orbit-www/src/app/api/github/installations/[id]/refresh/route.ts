@@ -3,23 +3,25 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
+import { authorize, authzErrorResponse } from '@/lib/authz'
 import { getTemporalClient } from '@/lib/temporal/client'
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Platform-admin only (GitHub installations are platform resources).
+  try {
+    await authorize('manage', { kind: 'platform' })
+  } catch (err) {
+    return authzErrorResponse(err) ?? NextResponse.json({ error: 'Internal error' }, { status: 500 })
+  }
+
   const { id } = await params
 
   try {
     // Get Payload instance
     const payload = await getPayload({ config: configPromise })
-
-    // TODO: Add auth check - verify user is admin
-    // const user = await getUser(request)
-    // if (user.role !== 'admin') {
-    //   return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
-    // }
 
     // Get installation to verify it exists
     const installation = await payload.findByID({
