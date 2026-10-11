@@ -21,9 +21,12 @@ const PROVIDERS: ProviderInfo[] = [
 interface ProviderSelectorProps {
   templateCounts: Record<string, number>
   onSelect: (provider: Provider) => void
+  /** Preview feature `digitalOceanLaunches`, resolved on the server (see lib/features.ts). */
+  showDigitalOcean?: boolean
 }
 
-export function ProviderSelector({ templateCounts, onSelect }: ProviderSelectorProps) {
+export function ProviderSelector({ templateCounts, onSelect, showDigitalOcean = false }: ProviderSelectorProps) {
+  const providers = PROVIDERS.filter((p) => p.id !== 'digitalocean' || showDigitalOcean)
   return (
     <div className="space-y-8">
       <div className="text-center">
@@ -34,7 +37,7 @@ export function ProviderSelector({ templateCounts, onSelect }: ProviderSelectorP
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {PROVIDERS.map((provider) => {
+        {providers.map((provider) => {
           const count = templateCounts[provider.id] || 0
           return (
             <Card

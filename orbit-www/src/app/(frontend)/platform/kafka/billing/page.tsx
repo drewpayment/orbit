@@ -5,6 +5,9 @@ import { getActor, check } from '@/lib/authz'
 import { PlatformBillingClient } from './client'
 import { assertFeatureEnabled } from '@/lib/features'
 
+// Preview-feature gate reads the runtime env var, so never prerender at build time.
+export const dynamic = 'force-dynamic'
+
 export default async function PlatformKafkaBillingPage() {
   assertFeatureEnabled('kafkaChargeback')
 

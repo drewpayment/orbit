@@ -135,7 +135,7 @@ function formFromCredentials(
 // Main component
 // ---------------------------------------------------------------------------
 
-export function CloudAccountsSettingsClient() {
+export function CloudAccountsSettingsClient({ showDigitalOcean = false }: { showDigitalOcean?: boolean }) {
   const [accounts, setAccounts] = useState<CloudAccountDoc[]>([])
   const [workspaces, setWorkspaces] = useState<WorkspaceOption[]>([])
   const [users, setUsers] = useState<UserOption[]>([])
@@ -397,7 +397,9 @@ export function CloudAccountsSettingsClient() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="azure">Azure</SelectItem>
-                    <SelectItem value="digitalocean">DigitalOcean</SelectItem>
+                    {(showDigitalOcean || form.provider === 'digitalocean') && (
+                      <SelectItem value="digitalocean">DigitalOcean</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>

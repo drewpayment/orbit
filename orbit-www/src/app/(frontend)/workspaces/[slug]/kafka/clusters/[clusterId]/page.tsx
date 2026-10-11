@@ -6,6 +6,9 @@ import { ClusterDetailClient } from './cluster-detail-client'
 import { isFeatureEnabled } from '@/lib/features'
 import type { KafkaApplication, Workspace } from '@/payload-types'
 
+// Preview-feature gate reads the runtime env var, so never prerender at build time.
+export const dynamic = 'force-dynamic'
+
 interface PageProps {
   params: Promise<{
     slug: string

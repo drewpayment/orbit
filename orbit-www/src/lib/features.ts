@@ -69,6 +69,12 @@ export const PREVIEW_FEATURES = {
       'Creating a deployment only writes a DB row and starts no workflow; deployment generators are paused.',
     followUp: 'Resume the deployment generators and connect the workflow.',
   },
+  digitalOceanLaunches: {
+    label: 'DigitalOcean launches',
+    reason:
+      'The launch workflow dispatches to the launches_digitalocean task queue, but no DigitalOcean launches worker or launch templates ship in this repo.',
+    followUp: 'Add a launches-worker-digitalocean and seed DigitalOcean launch templates.',
+  },
   deployToLaunch: {
     label: 'Deploy to launch',
     reason: 'Calls DeployToLaunchWorkflow, which is not defined anywhere.',
@@ -87,11 +93,12 @@ export const PREVIEW_FEATURES_ENV = 'ORBIT_ENABLE_PREVIEW_FEATURES'
  * NEXT_PUBLIC_ variant into client bundles.
  */
 export function readPreviewFeaturesEnv(): string | undefined {
-  return (
-    process.env.ORBIT_ENABLE_PREVIEW_FEATURES ||
-    process.env.NEXT_PUBLIC_ORBIT_ENABLE_PREVIEW_FEATURES ||
-    undefined
-  )
+  // Runtime server env wins when it is set at all (even empty); the
+  // build-time NEXT_PUBLIC copy is the fallback, and the only value client
+  // bundles can see.
+  const runtime = process.env.ORBIT_ENABLE_PREVIEW_FEATURES
+  if (runtime !== undefined) return runtime
+  return process.env.NEXT_PUBLIC_ORBIT_ENABLE_PREVIEW_FEATURES || undefined
 }
 
 function isKey(value: string): value is PreviewFeatureKey {

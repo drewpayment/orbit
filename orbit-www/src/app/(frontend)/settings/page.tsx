@@ -5,6 +5,9 @@ import { SiteHeader } from '@/components/site-header'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { isFeatureEnabled, type PreviewFeatureKey } from '@/lib/features'
 
+// Preview-feature gate reads the runtime env var, so never prerender at build time.
+export const dynamic = 'force-dynamic'
+
 const settingsItems: {
   title: string
   description: string

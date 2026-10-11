@@ -108,8 +108,8 @@ const envConfig: Record<string, { label: string; className: string }> = {
   },
 }
 
-const VALID_TABS = ['topics', 'schemas', 'consumer-groups', 'service-accounts', 'settings'] as const
-type TabValue = typeof VALID_TABS[number]
+const ALL_TABS = ['topics', 'schemas', 'consumer-groups', 'service-accounts', 'settings'] as const
+type TabValue = typeof ALL_TABS[number]
 
 export function ClusterDetailClient({
   workspaceSlug,
@@ -128,7 +128,8 @@ export function ClusterDetailClient({
 
   // Get tab from URL or default to 'topics'
   const tabParam = searchParams.get('tab')
-  const currentTab: TabValue = VALID_TABS.includes(tabParam as TabValue) ? (tabParam as TabValue) : 'topics'
+  const validTabs = ALL_TABS.filter((t) => t !== 'schemas' || showSchemas)
+  const currentTab: TabValue = validTabs.includes(tabParam as TabValue) ? (tabParam as TabValue) : 'topics'
 
   const handleTabChange = useCallback((value: string) => {
     const params = new URLSearchParams(searchParams.toString())

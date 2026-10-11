@@ -13,6 +13,7 @@ vi.mock('@/lib/clients/deployment-client', () => ({
 }))
 vi.mock('@/lib/encryption', () => ({ encrypt: vi.fn(), decrypt: vi.fn() }))
 vi.mock('@octokit/rest', () => ({ Octokit: vi.fn() }))
+vi.mock('@/lib/temporal/client', () => ({ getTemporalClient: vi.fn() }))
 vi.mock('next/headers', () => ({ headers: vi.fn() }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
@@ -21,6 +22,7 @@ import { createDeployment, startDeployment, startDeployToLaunch } from './deploy
 import { instantiateTemplate, startInstantiation, getInstantiationProgress } from './templates'
 import { exportPlatformChargebackCSV } from '../(frontend)/platform/kafka/billing/actions'
 import { analyzeRepository } from './builds'
+import { registerSchema } from '../(frontend)/workspaces/[slug]/kafka/actions'
 
 describe('hidden preview features refuse to run server actions', () => {
   beforeEach(() => {
@@ -59,6 +61,12 @@ describe('hidden preview features refuse to run server actions', () => {
     expect(await getInstantiationProgress('wf-1-abc')).toMatchObject({
       error: expect.stringContaining('not available'),
     })
+    expect(getPayload).not.toHaveBeenCalled()
+  })
+
+  it('kafka schema registration', async () => {
+    const res = await registerSchema({ topicId: 't', type: 'value', format: 'avro', content: '{}' } as never)
+    expect(res).toMatchObject({ success: false, error: expect.stringContaining('not available') })
     expect(getPayload).not.toHaveBeenCalled()
   })
 

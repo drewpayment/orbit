@@ -8,6 +8,7 @@ import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { ArrowLeft } from 'lucide-react'
+import { isFeatureEnabled } from '@/lib/features'
 import { LaunchWizard } from '@/components/features/launches/LaunchWizard'
 import type { TemplateDoc, CloudAccountDoc } from '@/components/features/launches/LaunchWizard'
 
@@ -108,6 +109,7 @@ export default async function NewLaunchPage() {
               templates={templates}
               cloudAccounts={cloudAccounts}
               workspaceId={workspaceId}
+              showDigitalOcean={isFeatureEnabled('digitalOceanLaunches')}
             />
           ) : (
             <Card>

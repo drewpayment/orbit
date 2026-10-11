@@ -8,6 +8,9 @@ import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { isFeatureEnabled } from '@/lib/features'
 
+// Preview-feature gate reads the runtime env var, so never prerender at build time.
+export const dynamic = 'force-dynamic'
+
 interface AppDetailPageProps {
   params: Promise<{ id: string }>
 }

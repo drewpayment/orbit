@@ -53,8 +53,8 @@ describe('isFeatureEnabled / assertFeatureEnabled', () => {
   beforeEach(() => {
     notFound.mockClear()
     vi.unstubAllEnvs()
-    vi.stubEnv('ORBIT_ENABLE_PREVIEW_FEATURES', '')
-    vi.stubEnv('NEXT_PUBLIC_ORBIT_ENABLE_PREVIEW_FEATURES', '')
+    vi.stubEnv('ORBIT_ENABLE_PREVIEW_FEATURES', undefined)
+    vi.stubEnv('NEXT_PUBLIC_ORBIT_ENABLE_PREVIEW_FEATURES', undefined)
   })
   afterEach(() => vi.unstubAllEnvs())
 
@@ -70,6 +70,15 @@ describe('isFeatureEnabled / assertFeatureEnabled', () => {
 
   it('falls back to the NEXT_PUBLIC_ mirror used by client bundles', () => {
     vi.stubEnv('NEXT_PUBLIC_ORBIT_ENABLE_PREVIEW_FEATURES', 'deployments')
+    expect(isFeatureEnabled('deployments')).toBe(true)
+  })
+
+  it('server runtime env wins over the build-time NEXT_PUBLIC copy, even when empty', () => {
+    vi.stubEnv('NEXT_PUBLIC_ORBIT_ENABLE_PREVIEW_FEATURES', 'billing')
+    vi.stubEnv('ORBIT_ENABLE_PREVIEW_FEATURES', '')
+    expect(isFeatureEnabled('billing')).toBe(false)
+    vi.stubEnv('ORBIT_ENABLE_PREVIEW_FEATURES', 'deployments')
+    expect(isFeatureEnabled('billing')).toBe(false)
     expect(isFeatureEnabled('deployments')).toBe(true)
   })
 

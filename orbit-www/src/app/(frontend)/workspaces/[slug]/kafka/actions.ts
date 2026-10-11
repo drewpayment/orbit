@@ -5,6 +5,7 @@ import config from '@payload-config'
 import { getActor, check } from '@/lib/authz'
 import { revalidatePath } from 'next/cache'
 import { getTemporalClient } from '@/lib/temporal/client'
+import { featureUnavailableMessage, isFeatureEnabled } from '@/lib/features'
 
 // ============================================================================
 // Types
@@ -618,6 +619,10 @@ export interface RegisterSchemaResult {
  * Register a new schema for a topic
  */
 export async function registerSchema(input: RegisterSchemaInput): Promise<RegisterSchemaResult> {
+  if (!isFeatureEnabled('kafkaSchemas')) {
+    return { success: false, error: featureUnavailableMessage('kafkaSchemas') }
+  }
+
   const actor = await getActor()
 
   if (!actor) {

@@ -23,7 +23,7 @@ Every item below is wired end to end in this repository. Anything that is not is
 A unified catalog of entities (services, APIs, Kafka topics, docs, and custom entity types) with typed relations and a relationship graph. The API schema catalog stores OpenAPI, AsyncAPI, GraphQL, and Protocol Buffers schemas with versions. **Discovery** scans connected GitHub and Azure DevOps repositories, proposes catalog entities into a review queue, and imports the ones you accept.
 
 ### 🧭 Self-Service Templates & Golden Paths
-Author templates in the portal (`orbit/v2` definitions with skeletons, typed input forms, and RBAC-gated authoring), then run them from a guided wizard. A run clones the skeleton, renders it, pushes a new repository to GitHub or Azure DevOps, and registers the resulting app. **Actions** (a catalog of things developers can run) and **Automations** (triggered by scorecard changes or a schedule) build on the same engine, with approval gates where a workspace admin must sign off.
+Author templates in the portal (`orbit/v2` definitions with skeletons, typed input forms, and RBAC-gated authoring), then run them from a guided wizard. A run clones the skeleton, renders it, pushes a new repository to GitHub (via the GitHub App installation), and registers the resulting app. Azure DevOps is supported for import, discovery, and creating an empty repository, but `git:push` has no Azure DevOps credentials yet, so template runs do not push scaffolded code to ADO. **Actions** (a catalog of things developers can run) and **Automations** (triggered by scorecard changes or a schedule) build on the same engine, with approval gates where a workspace admin must sign off.
 
 ### ✅ Scorecards
 Define scorecards and rules over catalog entities, evaluate them (on demand and in a nightly sweep), track initiatives, and roll results up into reports for leaders.
@@ -32,7 +32,7 @@ Define scorecards and rules over catalog entities, evaluate them (on demand and 
 Workspaces are the tenant boundary. Members have `owner`, `admin`, or `member` roles; platform admins have a separate role. Authorization is enforced in one policy layer (`orbit-www/src/lib/authz`) and by Payload collection access rules, so every query is scoped to the caller's workspaces.
 
 ### 🔌 Connections
-Connect GitHub (GitHub App installations with automatic token refresh) and Azure DevOps (Entra service principal or PAT) once under **Settings → Connections**; import, clone, discovery, and template runs use them. Apps can export and sync a `.orbit.yaml` manifest with their repository (export, webhook-driven pull, and conflict resolution).
+Connect GitHub (GitHub App installations with automatic token refresh) and Azure DevOps (Entra service principal or PAT) once under **Settings → Connections**; import, clone, and discovery use both, and template runs use GitHub. Apps can export and sync a `.orbit.yaml` manifest with their repository (export, webhook-driven pull, and conflict resolution).
 
 ### 🔄 Kafka Self-Service (Project Bifrost)
 Multi-tenant Kafka through a gateway that gives each application/environment its own virtual cluster. Developers create topics (with an approval step in governed environments), issue service-account credentials, inspect consumer groups, browse the topic catalog, request access to other workspaces' topics, and view topic lineage. Platform admins manage providers, clusters, environment mappings, virtual clusters, credentials, and gateway status under **Platform → Kafka**. Cluster-level operations require the platform-admin claim.
@@ -67,15 +67,18 @@ Surfaces whose backend is stubbed, mocked, or not wired to a real workflow are h
 | `kafkaTopicSharing` | Topic-detail "Sharing" tab | Stubbed actions; use the topic catalog share-request flow instead |
 | `legacyTemplates` | `/templates/**`, `/settings/templates` | Legacy instantiate used placeholder workflow IDs and simulated progress; use `/self-service/templates` |
 | `deployments` | App "Deployments" card and actions | Deployment generators are paused (see Frozen Capabilities) |
+| `digitalOceanLaunches` | DigitalOcean in the launch wizard and cloud-account form | No DigitalOcean launches worker or launch templates ship; launches would never complete |
 | `deployToLaunch` | "Deploy to launch" action | Calls `DeployToLaunchWorkflow`, which is not defined anywhere |
 
 Also unavailable, without a flag: Kafka offset restore (the action returns an explicit "not available" error because `OffsetRestoreWorkflow` is not registered in the worker), repository analysis for builds, the launch "Resources" tab, and knowledge search. Topic-share rejection notifications are only logged (no email or in-app notification is sent).
 
-To turn features back on for development, set a comma-separated list (or `all`) before starting the server, and rebuild if you also want the sidebar entries to reappear:
+To turn features back on, set a comma-separated list (or `all`) of the keys above:
 
 ```bash
 ORBIT_ENABLE_PREVIEW_FEATURES=billing,kafkaSchemas
 ```
+
+Pages, layouts, and server actions read the variable at runtime (gated pages are `force-dynamic`), so a server restart is enough for them. The sidebar is a client component and uses a build-time copy (`NEXT_PUBLIC_ORBIT_ENABLE_PREVIEW_FEATURES`, mirrored from the same variable by `next.config.mjs`), so entries hidden from the sidebar (currently only Settings → Templates, via `legacyTemplates`) reappear only after a rebuild with the variable set.
 
 ### 🧊 Frozen Capabilities
 Per the product focus strategy (`docs/plans/2026-06-09-product-focus-strategy.md`), these remain functional but accept no new feature work:
@@ -88,7 +91,7 @@ Per the product focus strategy (`docs/plans/2026-06-09-product-focus-strategy.md
 - **Deployment generators** (Terraform/Helm/Compose) — paused; only the Azure launch path
   is being resumed. The UI is hidden (`deployments` above).
 
-Cloud launches support **Azure and DigitalOcean** in the data model; the AWS and GCP workers were removed
+Cloud launches ship with **Azure** only (DigitalOcean is accepted by the data model but has no worker yet); the AWS and GCP workers were removed
 (last present at git tag `archive/pre-strip-2026-06-10`).
 
 ## 🏛️ Architecture
