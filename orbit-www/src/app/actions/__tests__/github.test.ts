@@ -11,6 +11,8 @@ vi.mock('@payload-config', () => ({
 
 vi.mock('@/lib/authz', () => ({
   getActor: vi.fn(),
+  check: vi.fn(async () => ({ allowed: true, reason: 'workspace member' })),
+  memberWorkspaceIds: vi.fn(async () => ['workspace-1']),
 }))
 
 vi.mock('@/lib/github/octokit', () => ({
@@ -18,7 +20,7 @@ vi.mock('@/lib/github/octokit', () => ({
 }))
 
 import { getPayload } from 'payload'
-import { getActor } from '@/lib/authz'
+import { getActor, check, memberWorkspaceIds } from '@/lib/authz'
 import { getInstallationOctokit } from '@/lib/github/octokit'
 import { getWorkspaceGitHubInstallations, listInstallationRepositories, searchInstallationRepositories, getRepositoryBranches } from '../github'
 
@@ -197,6 +199,7 @@ describe('listInstallationRepositories', () => {
       findByID: vi.fn().mockResolvedValue({
         id: 'install-1',
         installationId: 12345,
+        allowedWorkspaces: ['workspace-1'],
       }),
     }
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
@@ -271,6 +274,7 @@ describe('searchInstallationRepositories', () => {
       findByID: vi.fn().mockResolvedValue({
         id: 'install-1',
         installationId: 12345,
+        allowedWorkspaces: ['workspace-1'],
         accountLogin: 'acme-org',
       }),
     }
@@ -375,6 +379,7 @@ describe('getRepositoryBranches', () => {
       findByID: vi.fn().mockResolvedValue({
         id: 'install-1',
         installationId: 12345,
+        allowedWorkspaces: ['workspace-1'],
       }),
     }
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
@@ -416,6 +421,7 @@ describe('getRepositoryBranches', () => {
       findByID: vi.fn().mockResolvedValue({
         id: 'install-1',
         installationId: 12345,
+        allowedWorkspaces: ['workspace-1'],
       }),
     }
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
@@ -429,5 +435,69 @@ describe('getRepositoryBranches', () => {
 
     expect(result.success).toBe(false)
     expect(result.error).toBe('Not Found')
+  })
+})
+
+
+describe('workspace/connection authorization', () => {
+  const actor = {
+    payloadId: 'payload-user-1',
+    betterAuthId: 'user-1',
+    email: 'user@example.com',
+    role: 'user',
+    isPlatformAdmin: false,
+    user: { id: 'payload-user-1' },
+  } as any
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getActor).mockResolvedValue(actor)
+    vi.mocked(check).mockResolvedValue({ allowed: true, reason: 'workspace member', actor } as any)
+    vi.mocked(memberWorkspaceIds).mockResolvedValue(['workspace-1'])
+  })
+
+  it('getWorkspaceGitHubInstallations denies non-members of the workspace', async () => {
+    vi.mocked(check).mockResolvedValue({ allowed: false, reason: 'not a member', actor } as any)
+    const find = vi.fn()
+    vi.mocked(getPayload).mockResolvedValue({ find } as any)
+
+    const result = await getWorkspaceGitHubInstallations('workspace-other')
+
+    expect(result).toEqual({ success: false, error: 'Not a member of this workspace', installations: [] })
+    expect(check).toHaveBeenCalledWith('read', { kind: 'workspace', id: 'workspace-other' }, actor)
+    expect(find).not.toHaveBeenCalled()
+  })
+
+  describe.each([
+    ['listInstallationRepositories', () => listInstallationRepositories('install-1')],
+    ['searchInstallationRepositories', () => searchInstallationRepositories('install-1', 'backend')],
+    ['getRepositoryBranches', () => getRepositoryBranches('install-1', 'acme-org', 'backend')],
+  ])('%s', (_name, call) => {
+    it('denies users outside every workspace the installation was granted to, without calling GitHub', async () => {
+      vi.mocked(getPayload).mockResolvedValue({
+        findByID: vi.fn().mockResolvedValue({
+          id: 'install-1',
+          installationId: 12345,
+          allowedWorkspaces: ['workspace-victim'],
+        }),
+      } as any)
+
+      const result = await call()
+
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('Installation not found')
+      expect(getInstallationOctokit).not.toHaveBeenCalled()
+    })
+
+    it('denies installations that were granted to no workspace', async () => {
+      vi.mocked(getPayload).mockResolvedValue({
+        findByID: vi.fn().mockResolvedValue({ id: 'install-1', installationId: 12345 }),
+      } as any)
+
+      const result = await call()
+
+      expect(result.success).toBe(false)
+      expect(getInstallationOctokit).not.toHaveBeenCalled()
+    })
   })
 })

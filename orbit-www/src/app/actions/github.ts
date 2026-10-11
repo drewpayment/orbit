@@ -2,7 +2,8 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getActor } from '@/lib/authz'
+import { getActor, check } from '@/lib/authz'
+import { actorMayUseSource } from '@/lib/connections/workspace-access'
 import { getInstallationOctokit } from '@/lib/github/octokit'
 
 export interface GitHubInstallation {
@@ -22,6 +23,11 @@ export async function getWorkspaceGitHubInstallations(workspaceId: string): Prom
 
   if (!actor) {
     return { success: false, error: 'Unauthorized', installations: [] }
+  }
+
+  const membership = await check('read', { kind: 'workspace', id: workspaceId }, actor)
+  if (!membership.allowed) {
+    return { success: false, error: 'Not a member of this workspace', installations: [] }
   }
 
   const payload = await getPayload({ config })
@@ -82,6 +88,12 @@ export async function listInstallationRepositories(
   })
 
   if (!installation) {
+    return { success: false, error: 'Installation not found', repos: [], hasMore: false }
+  }
+
+  // Installations are admin-managed credentials shared into workspaces via
+  // `allowedWorkspaces`; the caller must belong to one of them.
+  if (!(await actorMayUseSource(actor, installation.allowedWorkspaces))) {
     return { success: false, error: 'Installation not found', repos: [], hasMore: false }
   }
 
@@ -146,6 +158,12 @@ export async function searchInstallationRepositories(
     return { success: false, error: 'Installation not found', repos: [], hasMore: false }
   }
 
+  // Installations are admin-managed credentials shared into workspaces via
+  // `allowedWorkspaces`; the caller must belong to one of them.
+  if (!(await actorMayUseSource(actor, installation.allowedWorkspaces))) {
+    return { success: false, error: 'Installation not found', repos: [], hasMore: false }
+  }
+
   try {
     const octokit = await getInstallationOctokit(installation.installationId as number)
     const accountLogin = installation.accountLogin as string
@@ -194,6 +212,12 @@ export async function getRepositoryBranches(
   })
 
   if (!installation) {
+    return { success: false, error: 'Installation not found' }
+  }
+
+  // Installations are admin-managed credentials shared into workspaces via
+  // `allowedWorkspaces`; the caller must belong to one of them.
+  if (!(await actorMayUseSource(actor, installation.allowedWorkspaces))) {
     return { success: false, error: 'Installation not found' }
   }
 
