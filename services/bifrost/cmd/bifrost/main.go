@@ -65,10 +65,7 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
 	})
-	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("READY"))
-	})
+	mux.HandleFunc("/ready", readyHandler(cfg.AuthSecret != nil))
 
 	metricsServer := &http.Server{
 		Addr:    ":" + strconv.Itoa(cfg.MetricsPort),
@@ -140,6 +137,25 @@ func main() {
 	adminServer.Stop()
 
 	logrus.Info("Bifrost Gateway stopped")
+}
+
+// readyHandler is the k8s readiness endpoint. Bifrost keeps virtual clusters and
+// credentials in memory and only the admin API can restore them after a
+// restart, so a pod whose admin API is disabled (no usable
+// ORBIT_SVC_AUTH_SECRET) would accept connections yet fail every tenant's SASL
+// login. Report it NotReady so a bad rollout stalls and the old pod keeps
+// serving. Liveness (/health) is deliberately unaffected so the pod does not
+// crash-loop.
+func readyHandler(adminEnabled bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !adminEnabled {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte("NOT READY: admin API disabled (no valid ORBIT_SVC_AUTH_SECRET); gateway config cannot be restored"))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("READY"))
+	}
 }
 
 // Config holds the Bifrost gateway configuration.

@@ -322,11 +322,13 @@ func main() {
 	// rather than failing obscurely inside an activity.
 	var bifrostOpts []internalClients.BifrostClientOption
 	if rawSecret := os.Getenv("ORBIT_SVC_AUTH_SECRET"); rawSecret != "" {
-		secret, secretErr := svcauth.LoadSecret(rawSecret)
-		if secretErr != nil {
-			log.Fatalf("FATAL: %v", secretErr)
+		if secret, secretErr := svcauth.LoadSecret(rawSecret); secretErr != nil {
+			// Same as unset: a bad secret must not stop every workflow, only
+			// the Bifrost admin calls that need it.
+			log.Printf("Warning: %v; Bifrost admin calls will be rejected as unauthenticated", secretErr)
+		} else {
+			bifrostOpts = append(bifrostOpts, internalClients.WithServiceAuth(secret))
 		}
-		bifrostOpts = append(bifrostOpts, internalClients.WithServiceAuth(secret))
 	} else {
 		log.Println("Warning: ORBIT_SVC_AUTH_SECRET is not set; Bifrost admin calls will be rejected as unauthenticated")
 	}

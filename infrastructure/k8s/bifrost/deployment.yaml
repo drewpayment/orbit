@@ -59,9 +59,12 @@ spec:
               port: 8080
             initialDelaySeconds: 10
             periodSeconds: 10
+          # /ready (not /health) fails while the admin API is disabled: Bifrost's
+          # config is in memory and only the admin API can restore it, so such a
+          # pod must not replace a working one. Liveness stays on /health.
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: 8080
             initialDelaySeconds: 5
             periodSeconds: 10
