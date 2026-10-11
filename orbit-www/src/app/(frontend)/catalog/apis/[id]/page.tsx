@@ -54,7 +54,6 @@ export default async function APIDetailPage({ params }: PageProps) {
             api={api as unknown as APISchema}
             versions={versions as unknown as APISchemaVersion[]}
             canEdit={canEdit}
-            userId={actor?.payloadId}
           />
         </div>
       </SidebarInset>

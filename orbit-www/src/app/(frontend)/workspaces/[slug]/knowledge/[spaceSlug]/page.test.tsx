@@ -26,6 +26,22 @@ vi.mock('@payload-config', () => ({
   default: {},
 }))
 
+
+// Session actor (mocked at the module boundary; the real actor.ts opens a Mongo client).
+// cached-queries opens a Mongo client at import time (needs DATABASE_URI); not used here.
+vi.mock('@/lib/mongodb', () => ({ getMongoClient: vi.fn() }))
+
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(async () => ({
+    payloadId: 'user-1',
+    betterAuthId: 'ba-1',
+    email: 'u@test.com',
+    role: 'user',
+    isPlatformAdmin: false,
+    user: { id: 'user-1', collection: 'users' },
+  })),
+}))
+
 // Mock UI components
 vi.mock('@/components/ui/card', () => ({
   Card: ({ children }: { children: React.ReactNode }) => <div data-testid="card">{children}</div>,
@@ -69,10 +85,6 @@ describe('KnowledgeSpacePage', () => {
             id: 'workspace-1',
             slug: 'test-workspace',
           }],
-        })
-        .mockResolvedValueOnce({
-          // User (temp auth)
-          docs: [{ id: 'user-1' }],
         })
         .mockResolvedValueOnce({
           // Knowledge space
@@ -131,10 +143,6 @@ describe('KnowledgeSpacePage', () => {
           }],
         })
         .mockResolvedValueOnce({
-          // User (temp auth)
-          docs: [{ id: 'user-1' }],
-        })
-        .mockResolvedValueOnce({
           // Knowledge space
           docs: [{
             id: 'space-1',
@@ -174,10 +182,6 @@ describe('KnowledgeSpacePage', () => {
         .mockResolvedValueOnce({
           // Workspace not found
           docs: [],
-        })
-        .mockResolvedValueOnce({
-          // User (temp auth) - won't be called but needed for completeness
-          docs: [{ id: 'user-1' }],
         }),
     }
 
@@ -204,10 +208,6 @@ describe('KnowledgeSpacePage', () => {
             id: 'workspace-1',
             slug: 'test-workspace',
           }],
-        })
-        .mockResolvedValueOnce({
-          // User (temp auth)
-          docs: [{ id: 'user-1' }],
         })
         .mockResolvedValueOnce({
           // Space not found

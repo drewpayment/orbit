@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,7 @@ import { BookOpen, FileText, Lock, Users, Globe } from 'lucide-react'
 import {
   getWorkspaceBySlug,
   getPayloadClient,
+  getActor,
 } from '@/lib/data/cached-queries'
 
 interface PageProps {
@@ -20,6 +21,11 @@ interface PageProps {
 
 export default async function KnowledgePage({ params }: PageProps) {
   const { slug } = await params
+
+  const actor = await getActor()
+  if (!actor) {
+    redirect('/login')
+  }
 
   // Use cached fetchers for request-level deduplication
   const workspace = await getWorkspaceBySlug(slug)
@@ -35,6 +41,9 @@ export default async function KnowledgePage({ params }: PageProps) {
     where: { workspace: { equals: workspace.id } },
     limit: 100,
     sort: 'name',
+    // Payload's local API skips access control by default; run as the actor.
+    user: actor.user,
+    overrideAccess: false,
   })
 
   const spaces = spacesResult.docs
@@ -46,6 +55,8 @@ export default async function KnowledgePage({ params }: PageProps) {
         collection: 'knowledge-pages',
         where: { knowledgeSpace: { equals: space.id } },
         limit: 0, // Only need count, not docs
+        user: actor.user,
+        overrideAccess: false,
       })
 
       return {

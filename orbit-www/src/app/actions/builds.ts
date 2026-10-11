@@ -5,7 +5,7 @@ import config from '@payload-config'
 import { getActor, check } from '@/lib/authz'
 import { decrypt } from '@/lib/encryption'
 import { getTemporalClient } from '@/lib/temporal/client'
-import { resolveEnvironmentVariables } from './environment-variables'
+import { resolveEnvironmentVariablesUnchecked } from '@/lib/environment-variables/resolve'
 
 // Use localhost since Docker daemon runs on host and registry is exposed at localhost:5050
 const ORBIT_REGISTRY_URL = process.env.ORBIT_REGISTRY_URL || 'localhost:5050'
@@ -219,8 +219,9 @@ export async function startBuild(input: StartBuildInput) {
       throw new Error('Invalid registry configuration')
     }
 
-    // Resolve environment variables from workspace and app settings
-    const envResult = await resolveEnvironmentVariables(input.appId, 'build')
+    // Resolve environment variables from workspace and app settings. Workspace
+    // membership for this app was checked above, so the unchecked resolver is correct here.
+    const envResult = await resolveEnvironmentVariablesUnchecked(input.appId, 'build')
     console.log('[Build] Environment variables resolved:', {
       success: envResult.success,
       error: envResult.error,

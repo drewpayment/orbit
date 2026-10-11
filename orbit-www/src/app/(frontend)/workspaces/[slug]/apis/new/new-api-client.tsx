@@ -15,7 +15,6 @@ import { toast } from 'sonner'
 interface NewAPIClientProps {
   workspaceId: string
   workspaceSlug: string
-  userId: string
 }
 
 type WizardStep = 'basic' | 'schema' | 'review'
@@ -28,7 +27,7 @@ const STEP_NAMES: Record<WizardStep, string> = {
   review: 'Review & Create',
 }
 
-export function NewAPIClient({ workspaceId, workspaceSlug, userId }: NewAPIClientProps) {
+export function NewAPIClient({ workspaceId, workspaceSlug }: NewAPIClientProps) {
   const router = useRouter()
   const [currentStep, setCurrentStep] = React.useState<WizardStep>('basic')
   const [isCreating, setIsCreating] = React.useState(false)
@@ -96,7 +95,6 @@ export function NewAPIClient({ workspaceId, workspaceSlug, userId }: NewAPIClien
         tags: formData.tags,
         contactName: formData.contactName,
         contactEmail: formData.contactEmail,
-        userId,
       })
 
       toast.success('API created successfully')

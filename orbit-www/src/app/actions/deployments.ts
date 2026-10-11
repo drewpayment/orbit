@@ -3,6 +3,7 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { getActor, check } from '@/lib/authz'
+import { resolveInstallationForWorkspace } from '@/lib/connections/workspace-access'
 import { startDeploymentWorkflow, getDeploymentProgress } from '@/lib/clients/deployment-client'
 import type { JsonObject } from '@bufbuild/protobuf'
 import type { Deployment } from '@/payload-types'
@@ -66,7 +67,10 @@ export async function createDeployment(input: CreateDeploymentInput) {
       overrideAccess: true,
     })
 
-    if (!launch || launch.status !== 'active') {
+    // The launch id is client-supplied: it must belong to the app's workspace,
+    // or its Pulumi outputs would be copied across tenants.
+    const launchWorkspaceId = typeof launch?.workspace === 'string' ? launch.workspace : launch?.workspace?.id
+    if (!launch || launch.status !== 'active' || launchWorkspaceId !== workspaceId) {
       return { success: false, error: 'Launch not found or not active' }
     }
 
@@ -485,8 +489,16 @@ export async function getRepoBranches(appId: string) {
       return { success: true, branches: ['main'], defaultBranch: 'main' }
     }
 
+    // Re-check at use time: the stored ref (a github-installations doc id, or a
+    // legacy numeric GitHub id) must resolve to an installation granted to this
+    // workspace; GitHub is called with that doc's NUMERIC installation id.
+    const installation = await resolveInstallationForWorkspace(payload, app.repository.installationId, repoWorkspaceId)
+    if (!installation) {
+      return { success: false, error: 'Repository installation is not available for this workspace', branches: [] as string[] }
+    }
+
     const { createInstallationToken } = await import('@/lib/github/octokit')
-    const { token } = await createInstallationToken(Number(app.repository.installationId))
+    const { token } = await createInstallationToken(installation.githubInstallationId)
 
     const response = await fetch(
       `https://api.github.com/repos/${app.repository.owner}/${app.repository.name}/branches?per_page=100`,
@@ -587,8 +599,14 @@ export async function commitGeneratedFiles(input: {
       return { success: false, error: 'App has no linked repository' }
     }
 
+    // Re-check at use time: never push through an installation this workspace is not granted.
+    const installation = await resolveInstallationForWorkspace(payload, app.repository.installationId, workspaceId)
+    if (!installation) {
+      return { success: false, error: 'Repository installation is not available for this workspace' }
+    }
+
     const { createInstallationToken } = await import('@/lib/github/octokit')
-    const { token } = await createInstallationToken(Number(app.repository.installationId), { requireContentsWrite: true })
+    const { token } = await createInstallationToken(installation.githubInstallationId, { requireContentsWrite: true })
 
     const owner = app.repository.owner as string
     const repo = app.repository.name as string
@@ -1007,6 +1025,12 @@ export async function startDeployToLaunch(deploymentId: string) {
     return { success: false, error: 'Launch is not active' }
   }
 
+  // Defence in depth: never deploy into another workspace's launch.
+  const deployLaunchWsId = typeof (launch as any).workspace === 'string' ? (launch as any).workspace : (launch as any).workspace?.id
+  if (deployLaunchWsId !== deployWsId) {
+    return { success: false, error: 'Launch is not active' }
+  }
+
   const app = typeof deployment.app === 'string'
     ? await payload.findByID({ collection: 'apps', id: deployment.app, depth: 0, overrideAccess: true })
     : deployment.app
@@ -1021,11 +1045,13 @@ export async function startDeployToLaunch(deploymentId: string) {
 
   try {
     const { deployToLaunch } = await import('@/lib/clients/launch-client')
-    const { resolveEnvironmentVariables } = await import('./environment-variables')
+    // Membership in the deployment's workspace was checked above, so use the
+    // unchecked resolver (the exported server action would re-check needlessly).
+    const { resolveEnvironmentVariablesUnchecked } = await import('@/lib/environment-variables/resolve')
 
     // Resolve app env vars for the build
     const appId = typeof deployment.app === 'string' ? deployment.app : (deployment.app as any).id
-    const envResult = await resolveEnvironmentVariables(appId, 'build')
+    const envResult = await resolveEnvironmentVariablesUnchecked(appId, 'build')
     const buildEnv = envResult.success && envResult.variables ? envResult.variables : {}
 
     const response = await deployToLaunch(

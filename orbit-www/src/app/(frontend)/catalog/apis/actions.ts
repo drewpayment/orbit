@@ -3,7 +3,7 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import type { Where } from 'payload'
-import { getActor, memberWorkspaceIds } from '@/lib/authz'
+import { getActor, memberWorkspaceIds, type Actor } from '@/lib/authz'
 
 export interface SearchAPIsInput {
   query?: string
@@ -14,15 +14,14 @@ export interface SearchAPIsInput {
   page?: number
 }
 
-export async function searchAPIs(input: SearchAPIsInput = {}) {
-  const payload = await getPayload({ config })
-
-  const { query, status, workspaceId, tags, limit = 20, page = 1 } = input
-
-  // Build where clause for visibility-based access
-  const conditions: Where[] = []
-
-  // Public APIs are visible only if NOT in draft status
+/**
+ * The visibility rule for catalog reads. Public APIs are visible only when not
+ * draft; workspace-visibility APIs are visible to members of their workspace;
+ * private APIs to their creator. Identity comes from the session, never a
+ * client-supplied id. Every catalog read below ANDs this in, because they use
+ * `overrideAccess: true` (the collection rule would also expose public drafts).
+ */
+async function visibleSchemasWhere(actor: Actor | null): Promise<Where> {
   const visibilityConditions: Where[] = [
     {
       and: [
@@ -32,17 +31,9 @@ export async function searchAPIs(input: SearchAPIsInput = {}) {
     },
   ]
 
-  // Identity is resolved from the session, never a client-supplied id.
-  const actor = await getActor()
   if (actor) {
-    // SEMANTIC CHANGE: the old code used ONE `userId` (the Better-Auth session
-    // id from getCurrentUser) for both this membership lookup AND the
-    // `createdBy` filter below. `workspace-members.user` stores the
-    // Better-Auth id (this part happened to work), but `createdBy` is a
-    // `relationTo: 'users'` field keyed on the Payload id — so "private APIs
-    // created by the user" never matched except when a user's Better-Auth id
-    // and Payload id happen to be equal. Fixed here by using
-    // `actor.betterAuthId` for membership and `actor.payloadId` for `createdBy`.
+    // `workspace-members.user` stores the Better-Auth id (membership lookup);
+    // `createdBy` is a `relationTo: 'users'` field keyed on the Payload id.
     const userWorkspaceIds = await memberWorkspaceIds('member', actor)
 
     if (userWorkspaceIds.length > 0) {
@@ -64,7 +55,19 @@ export async function searchAPIs(input: SearchAPIsInput = {}) {
     })
   }
 
-  conditions.push({ or: visibilityConditions })
+  return { or: visibilityConditions }
+}
+
+export async function searchAPIs(input: SearchAPIsInput = {}) {
+  const payload = await getPayload({ config })
+
+  const { query, status, workspaceId, tags, limit = 20, page = 1 } = input
+
+  // Build where clause for visibility-based access
+  const conditions: Where[] = []
+
+  const actor = await getActor()
+  conditions.push(await visibleSchemasWhere(actor))
 
   // Filter by search query
   if (query) {
@@ -122,19 +125,25 @@ export async function searchAPIs(input: SearchAPIsInput = {}) {
 
 export async function getAPIById(id: string) {
   const payload = await getPayload({ config })
+  const actor = await getActor()
 
-  const schema = await payload.findByID({
+  const result = await payload.find({
     collection: 'api-schemas',
-    id,
+    where: { and: [{ id: { equals: id } }, await visibleSchemasWhere(actor)] },
+    limit: 1,
     depth: 2,
     overrideAccess: true,
   })
 
-  return schema
+  return result.docs[0] ?? null
 }
 
 export async function getAPIVersions(schemaId: string) {
   const payload = await getPayload({ config })
+
+  // Versions are only readable when the parent schema is visible to the caller.
+  const schema = await getAPIById(schemaId)
+  if (!schema) return []
 
   const versions = await payload.find({
     collection: 'api-schema-versions',
@@ -148,12 +157,17 @@ export async function getAPIVersions(schemaId: string) {
 }
 
 export async function getAllWorkspaces() {
+  const actor = await getActor()
+  if (!actor) return []
+
   const payload = await getPayload({ config })
 
+  // Collection access scopes list queries to the actor's own workspaces.
   const workspaces = await payload.find({
     collection: 'workspaces',
     limit: 100,
-    overrideAccess: true,
+    user: actor.user,
+    overrideAccess: false,
   })
 
   return workspaces.docs
@@ -161,10 +175,12 @@ export async function getAllWorkspaces() {
 
 export async function getAllTags() {
   const payload = await getPayload({ config })
+  const actor = await getActor()
 
-  // Get all schemas and extract unique tags
+  // Only tags from schemas the caller can see.
   const schemas = await payload.find({
     collection: 'api-schemas',
+    where: await visibleSchemasWhere(actor),
     limit: 1000,
     overrideAccess: true,
   })

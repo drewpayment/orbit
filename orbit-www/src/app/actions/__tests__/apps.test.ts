@@ -85,40 +85,63 @@ vi.mock('@/lib/github/octokit', () => ({
 
 import { getPayload } from 'payload'
 import { getInstallationOctokit } from '@/lib/github/octokit'
-import { importRepository, updateAppSettings, deleteApp, exportAppManifest, resolveManifestConflict, disableManifestSync } from '../apps'
+import { importRepository, createAppFromTemplate, updateAppSettings, deleteApp, exportAppManifest, resolveManifestConflict, disableManifestSync, getHealthHistory, seedBuiltInGenerators } from '../apps'
 
 describe('importRepository', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('should store installationId when provided', async () => {
-    authApi.getSession.mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+  const INSTALL_ID = 'a1b2c3d4e5f6a1b2c3d4e5f6'
 
-    const mockPayload = {
-      find: vi.fn().mockResolvedValue({ docs: [{ id: 'membership-1' }] }),
+  /** `find` that answers membership lookups and github-installations lookups separately. */
+  function payloadWithInstallation(installationDocs: unknown[]) {
+    return {
+      find: vi.fn().mockImplementation(async ({ collection }: { collection: string }) =>
+        collection === 'github-installations'
+          ? { docs: installationDocs }
+          : { docs: [{ id: 'membership-1' }] },
+      ),
       create: vi.fn().mockResolvedValue({ id: 'app-1' }),
     }
+  }
+
+  it('should store installationId when it is granted to the workspace', async () => {
+    authApi.getSession.mockResolvedValue({ user: { id: 'user-1' }, session: {} } as any)
+    const mockPayload = payloadWithInstallation([{ id: INSTALL_ID }])
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
 
     await importRepository({
       workspaceId: 'workspace-1',
       repositoryUrl: 'https://github.com/acme/repo',
       name: 'my-app',
-      installationId: 'install-1',
+      installationId: INSTALL_ID,
     })
 
     expect(mockPayload.create).toHaveBeenCalledWith({
       collection: 'apps',
       data: expect.objectContaining({
-        repository: expect.objectContaining({
-          installationId: 'install-1',
-        }),
+        repository: expect.objectContaining({ installationId: INSTALL_ID }),
       }),
     })
+    const lookup = mockPayload.find.mock.calls.map((c: any[]) => c[0]).find((a: any) => a.collection === 'github-installations')
+    expect(JSON.stringify(lookup.where)).toContain('"allowedWorkspaces":{"contains":"workspace-1"}')
+  })
+
+  it('should refuse an installation that is not granted to the workspace', async () => {
+    authApi.getSession.mockResolvedValue({ user: { id: 'user-1' }, session: {} } as any)
+    const mockPayload = payloadWithInstallation([])
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await importRepository({
+      workspaceId: 'workspace-1',
+      repositoryUrl: 'https://github.com/victim/repo',
+      name: 'my-app',
+      installationId: INSTALL_ID,
+    })
+
+    expect(result).toEqual({ success: false, error: 'Installation is not available for this workspace' })
+    expect(mockPayload.create).not.toHaveBeenCalled()
   })
 
   it('should work without installationId', async () => {
@@ -171,6 +194,9 @@ describe('importRepository — Azure DevOps', () => {
         return Promise.resolve({
           docs: opts.connectionAllowed === false ? [] : [{ id: 'conn-1', allowedWorkspaces: ['ws-1'] }],
         })
+      }
+      if (args.collection === 'github-installations') {
+        return Promise.resolve({ docs: [{ id: 'a1b2c3d4e5f6a1b2c3d4e5f6' }] })
       }
       return Promise.resolve({ docs: [] })
     })
@@ -274,13 +300,13 @@ describe('importRepository — Azure DevOps', () => {
       workspaceId: 'ws-1',
       repositoryUrl: 'https://github.com/acme/backend',
       name: 'backend',
-      installationId: 'install-1',
+      installationId: 'a1b2c3d4e5f6a1b2c3d4e5f6',
     })
 
     const call = create.mock.calls[0][0]
     expect(call.data.repository.owner).toBe('acme')
     expect(call.data.repository.provider).toBeUndefined()
-    expect(call.data.repository.installationId).toBe('install-1')
+    expect(call.data.repository.installationId).toBe('a1b2c3d4e5f6a1b2c3d4e5f6')
   })
 })
 
@@ -579,5 +605,218 @@ describe('disableManifestSync', () => {
     await expect(disableManifestSync('app-id')).rejects.toThrow(
       'You do not have permission to update this app.',
     )
+  })
+})
+
+
+describe('getHealthHistory', () => {
+  const mockSession = { user: { id: 'user-1' }, session: {} } as any
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('rejects unauthenticated callers', async () => {
+    authApi.getSession.mockResolvedValue(null)
+    const result = await getHealthHistory({ appId: 'app-1' })
+    expect(result).toEqual({ success: false, error: 'Unauthorized', data: [] })
+  })
+
+  it('does not return health checks of an app in a workspace the caller is not a member of', async () => {
+    authApi.getSession.mockResolvedValue(mockSession)
+    const find = vi
+      .fn()
+      // workspace-members lookup: not a member
+      .mockResolvedValueOnce({ docs: [] })
+    const mockPayload = {
+      findByID: vi.fn().mockResolvedValue({ id: 'app-1', workspace: 'ws-victim' }),
+      find,
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await getHealthHistory({ appId: 'app-1' })
+
+    expect(result.success).toBe(false)
+    expect(result.data).toEqual([])
+    expect(find).not.toHaveBeenCalledWith(expect.objectContaining({ collection: 'health-checks' }))
+  })
+
+  it('returns health checks for a workspace member', async () => {
+    authApi.getSession.mockResolvedValue(mockSession)
+    const find = vi
+      .fn()
+      .mockResolvedValueOnce({ docs: [{ id: 'm-1', role: 'member' }] })
+      .mockResolvedValueOnce({ docs: [{ id: 'hc-1' }] })
+    const mockPayload = {
+      findByID: vi.fn().mockResolvedValue({ id: 'app-1', workspace: { id: 'ws-1' } }),
+      find,
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await getHealthHistory({ appId: 'app-1' })
+
+    expect(result).toEqual({ success: true, data: [{ id: 'hc-1' }] })
+  })
+})
+
+describe('seedBuiltInGenerators', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('refuses non-platform-admins (it writes global platform data)', async () => {
+    authApi.getSession.mockResolvedValue({ user: { id: 'user-1' }, session: {} })
+    const mockPayload = { find: vi.fn(), create: vi.fn() }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await seedBuiltInGenerators()
+
+    expect(result).toEqual({ success: false, error: 'Platform admin required' })
+    expect(mockPayload.create).not.toHaveBeenCalled()
+  })
+})
+
+
+describe('createAppFromTemplate — installation binding', () => {
+  const INSTALL_ID = 'a1b2c3d4e5f6a1b2c3d4e5f6'
+  const input = {
+    name: 'svc',
+    repositoryOwner: 'acme',
+    repositoryName: 'svc',
+    repositoryUrl: 'https://github.com/acme/svc',
+    templateId: 'tpl-1',
+    workspaceId: 'workspace-1',
+    installationId: INSTALL_ID,
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    authApi.getSession.mockResolvedValue({ user: { id: 'user-1' }, session: {} } as any)
+  })
+
+  function payloadWithInstallation(installationDocs: unknown[]) {
+    return {
+      find: vi.fn().mockImplementation(async ({ collection }: { collection: string }) =>
+        collection === 'github-installations'
+          ? { docs: installationDocs }
+          : { docs: [{ id: 'membership-1' }] },
+      ),
+      create: vi.fn().mockResolvedValue({ id: 'app-1' }),
+    }
+  }
+
+  it('refuses another workspace\'s installation', async () => {
+    const mockPayload = payloadWithInstallation([])
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await createAppFromTemplate(input)
+
+    expect(result).toEqual({ success: false, error: 'Installation is not available for this workspace' })
+    expect(mockPayload.create).not.toHaveBeenCalled()
+  })
+
+  it('stores a granted installation', async () => {
+    const mockPayload = payloadWithInstallation([{ id: INSTALL_ID }])
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await createAppFromTemplate(input)
+
+    expect(result).toEqual({ success: true, appId: 'app-1' })
+    expect(mockPayload.create.mock.calls[0][0].data.repository.installationId).toBe(INSTALL_ID)
+  })
+
+  it('still works without an installation', async () => {
+    const mockPayload = payloadWithInstallation([])
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await createAppFromTemplate({ ...input, installationId: undefined })
+
+    expect(result.success).toBe(true)
+  })
+})
+
+describe('manifest sync consumers resolve the stored installation ref', () => {
+  const PAYLOAD_ID = 'a1b2c3d4e5f6a1b2c3d4e5f6'
+  const NUMERIC = 4242
+
+  /** workspace-members => member; github-installations => granted (or not) doc with a numeric id. */
+  function find(granted: boolean) {
+    return vi.fn().mockImplementation(async ({ collection }: { collection: string }) => {
+      if (collection === 'github-installations') {
+        return { docs: granted ? [{ id: PAYLOAD_ID, installationId: NUMERIC }] : [] }
+      }
+      return { docs: [{ id: 'm1', role: 'owner' }] }
+    })
+  }
+
+  const app = {
+    id: 'app-1',
+    name: 'my-app',
+    workspace: 'ws-1',
+    conflictDetected: true,
+    webhookId: '777',
+    repository: { url: 'https://github.com/acme/repo', installationId: PAYLOAD_ID },
+  }
+
+  const octokit = {
+    request: vi.fn().mockImplementation(async (route: string) => {
+      if (route.startsWith('PUT')) return { data: { commit: { sha: 'sha1' } } }
+      if (route.startsWith('POST')) return { data: { id: 1 } }
+      throw new Error('404')
+    }),
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    authApi.getSession.mockResolvedValue({ user: { id: 'user-1' }, session: {} } as any)
+    vi.mocked(getInstallationOctokit).mockResolvedValue(octokit as any)
+  })
+
+  it('exportAppManifest calls GitHub with the doc numeric id (not Number(payloadId) = NaN)', async () => {
+    vi.mocked(getPayload).mockResolvedValue({
+      findByID: vi.fn().mockResolvedValue(app),
+      find: find(true),
+      update: vi.fn().mockResolvedValue({}),
+    } as any)
+
+    await exportAppManifest('app-1')
+
+    expect(getInstallationOctokit).toHaveBeenCalledWith(NUMERIC)
+  })
+
+  it('exportAppManifest refuses an installation not granted to the app workspace', async () => {
+    vi.mocked(getPayload).mockResolvedValue({
+      findByID: vi.fn().mockResolvedValue(app),
+      find: find(false),
+      update: vi.fn(),
+    } as any)
+
+    await expect(exportAppManifest('app-1')).rejects.toThrow('not available for this workspace')
+    expect(getInstallationOctokit).not.toHaveBeenCalled()
+  })
+
+  it('resolveManifestConflict(keep-orbit) uses the numeric id and refuses ungranted installations', async () => {
+    const update = vi.fn().mockResolvedValue({})
+    vi.mocked(getPayload).mockResolvedValue({ findByID: vi.fn().mockResolvedValue(app), find: find(true), update } as any)
+    await resolveManifestConflict('app-1', 'keep-orbit')
+    expect(getInstallationOctokit).toHaveBeenCalledWith(NUMERIC)
+
+    vi.clearAllMocks()
+    vi.mocked(getPayload).mockResolvedValue({ findByID: vi.fn().mockResolvedValue(app), find: find(false), update } as any)
+    await expect(resolveManifestConflict('app-1', 'keep-orbit')).rejects.toThrow('not available for this workspace')
+    expect(getInstallationOctokit).not.toHaveBeenCalled()
+  })
+
+  it('disableManifestSync deletes the webhook through the numeric id, and skips GitHub when ungranted', async () => {
+    const update = vi.fn().mockResolvedValue({})
+    vi.mocked(getPayload).mockResolvedValue({ findByID: vi.fn().mockResolvedValue(app), find: find(true), update } as any)
+    await disableManifestSync('app-1')
+    expect(getInstallationOctokit).toHaveBeenCalledWith(NUMERIC)
+
+    vi.clearAllMocks()
+    vi.mocked(getPayload).mockResolvedValue({ findByID: vi.fn().mockResolvedValue(app), find: find(false), update } as any)
+    await disableManifestSync('app-1')
+    expect(getInstallationOctokit).not.toHaveBeenCalled()
+    expect(update).toHaveBeenCalled() // sync is still turned off locally
   })
 })

@@ -1,7 +1,6 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Loader2, ScrollText } from 'lucide-react'
-import { getActor } from '@/lib/authz'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -13,8 +12,7 @@ import { listRuns } from '../actions'
  * execution the user can see, newest first. Each row links to the run detail.
  */
 async function RunsContent() {
-  const actor = await getActor()
-  const runs = await listRuns(actor)
+  const runs = await listRuns()
 
   if (runs.length === 0) {
     return (

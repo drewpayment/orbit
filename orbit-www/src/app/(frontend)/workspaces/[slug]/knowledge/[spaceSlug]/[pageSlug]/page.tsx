@@ -1,17 +1,15 @@
 import { notFound } from 'next/navigation'
-import { getPayload } from 'payload'
-import config from '@payload-config'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { PageContent } from '@/components/features/knowledge/PageContent'
 import { KnowledgeBreadcrumbs } from '@/components/features/knowledge/KnowledgeBreadcrumbs'
-import { revalidatePath } from 'next/cache'
-import type { BlockDocument } from '@/lib/blocks/types'
 import {
   getWorkspaceBySlug,
   getKnowledgeSpaceBySlug,
   getKnowledgePageBySlug,
 } from '@/lib/data/cached-queries'
+import { updatePageContent } from '@/app/actions/knowledge'
+import { getActor, check, MANAGE_ROLES } from '@/lib/authz'
 
 interface PageProps {
   params: Promise<{
@@ -19,23 +17,6 @@ interface PageProps {
     spaceSlug: string
     pageSlug: string
   }>
-}
-
-async function updatePage(pageId: string, workspaceSlug: string, spaceSlug: string, pageSlug: string, content: BlockDocument) {
-  'use server'
-
-  const payload = await getPayload({ config })
-
-  await payload.update({
-    collection: 'knowledge-pages',
-    id: pageId,
-    data: {
-      content: content as unknown as Record<string, unknown>,
-      contentFormat: 'blocks',
-    },
-  })
-
-  revalidatePath(`/workspaces/${workspaceSlug}/knowledge/${spaceSlug}/${pageSlug}`)
 }
 
 export default async function KnowledgePageView({ params }: PageProps) {
@@ -63,8 +44,24 @@ export default async function KnowledgePageView({ params }: PageProps) {
   const author = typeof page.author === 'object' ? page.author : null
   const lastEditedBy = typeof page.lastEditedBy === 'object' ? page.lastEditedBy : null
 
+  // Same rule the knowledge-pages collection enforces on update (and therefore
+  // on updatePageContent): the page's author, or a workspace owner/admin
+  // (platform admins pass via the policy). Plain members read only; offering
+  // them the editor would just produce failed autosaves.
+  const actor = await getActor()
+  const authorId = page.author && typeof page.author === 'object' ? page.author.id : page.author
+  const canEdit = actor
+    ? (
+        await check(
+          'update',
+          { kind: 'doc', workspaceId: workspace.id, ownerPayloadId: authorId ?? null, roles: MANAGE_ROLES },
+          actor,
+        )
+      ).allowed
+    : false
+
   // Bind the updatePage server action with the current page's parameters
-  const boundUpdatePage = updatePage.bind(null, page.id, workspace.slug, space.slug as string, page.slug)
+  const boundUpdatePage = updatePageContent.bind(null, page.id, workspace.slug, space.slug as string, page.slug)
 
   return (
     <>
@@ -80,6 +77,7 @@ export default async function KnowledgePageView({ params }: PageProps) {
               author={author}
               lastEditedBy={lastEditedBy}
               onSave={boundUpdatePage}
+              canEdit={canEdit}
             />
 
             {/* Tags - inline presentation */}

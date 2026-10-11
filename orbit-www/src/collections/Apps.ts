@@ -60,7 +60,7 @@ export const Apps: CollectionConfig = {
         return doc
       },
       // Outbound manifest sync: Orbit → repo
-      async ({ doc, previousDoc, context }) => {
+      async ({ doc, previousDoc, context, req }) => {
         // Skip if this change came from a webhook or conflict resolution
         if (context?._syncSource) return doc
 
@@ -86,6 +86,17 @@ export const Apps: CollectionConfig = {
             const installationId = doc.repository?.installationId
             if (!repoUrl || !installationId) return
 
+            // `installationId` is a github-installations doc id (or a legacy
+            // numeric GitHub id): resolve it, require it be granted to this
+            // app's workspace, and call GitHub with the doc's numeric id.
+            const { resolveInstallationForWorkspace } = await import('../lib/connections/installation-access')
+            const workspaceId = typeof doc.workspace === 'object' && doc.workspace ? doc.workspace.id : doc.workspace
+            const installation = await resolveInstallationForWorkspace(req.payload, installationId, workspaceId)
+            if (!installation) {
+              console.warn(`[Apps Hook] skipping outbound manifest sync for app ${doc.id}: installation not available for its workspace`)
+              return
+            }
+
             const parsed = parseGitHubUrl(repoUrl)
             if (!parsed) return
 
@@ -96,7 +107,7 @@ export const Apps: CollectionConfig = {
               buildConfig: doc.buildConfig,
             })
 
-            const octokit = await getInstallationOctokit(Number(installationId))
+            const octokit = await getInstallationOctokit(installation.githubInstallationId)
             const manifestPath = doc.manifestPath || '.orbit.yaml'
             const branch = doc.repository?.branch || 'main'
 
@@ -174,10 +185,22 @@ export const Apps: CollectionConfig = {
             try {
               const { parseGitHubUrl } = await import('../lib/github-manifest')
               const { getInstallationOctokit } = await import('../lib/github/octokit')
+              const { resolveInstallationForWorkspace } = await import('../lib/connections/installation-access')
+
+              const workspaceId = typeof doc.workspace === 'object' && doc.workspace ? doc.workspace.id : doc.workspace
+              const installation = await resolveInstallationForWorkspace(
+                req.payload,
+                doc.repository!.installationId,
+                workspaceId,
+              )
+              if (!installation) {
+                console.warn(`[Apps Hook] skipping webhook cleanup for app ${doc.id}: installation not available for its workspace`)
+                return
+              }
 
               const parsed = parseGitHubUrl(doc.repository!.url!)
               if (parsed) {
-                const octokit = await getInstallationOctokit(Number(doc.repository!.installationId))
+                const octokit = await getInstallationOctokit(installation.githubInstallationId)
                 await octokit.request('DELETE /repos/{owner}/{repo}/hooks/{hook_id}', {
                   owner: parsed.owner,
                   repo: parsed.repo,

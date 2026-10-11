@@ -4,7 +4,24 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // Mock all external dependencies
 vi.mock('next/navigation', () => ({
   notFound: vi.fn(),
+  redirect: vi.fn(),
 }))
+
+// cached-queries opens a Mongo client at import time (needs DATABASE_URI); not used here.
+vi.mock('@/lib/mongodb', () => ({ getMongoClient: vi.fn() }))
+
+const mockGetActor = vi.fn()
+vi.mock('@/lib/authz', () => ({
+  getActor: (...args: unknown[]) => mockGetActor(...args),
+}))
+const defaultActor = {
+    payloadId: 'user-1',
+    betterAuthId: 'ba-1',
+    email: 'u@test.com',
+    role: 'user',
+    isPlatformAdmin: false,
+    user: { id: 'user-1', collection: 'users' },
+}
 
 vi.mock('payload', () => ({
   getPayload: vi.fn(),
@@ -43,6 +60,28 @@ vi.mock('@/components/features/knowledge/KnowledgeTreeSidebar', () => ({
 describe('KnowledgeSpaceLayout', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockGetActor.mockResolvedValue(defaultActor)
+  })
+
+  it('redirects unauthenticated visitors to /login without querying payload', async () => {
+    mockGetActor.mockResolvedValue(null)
+    const { redirect } = await import('next/navigation')
+    const { getPayload } = await import('payload')
+    ;(redirect as any).mockImplementation(() => {
+      throw new Error('NEXT_REDIRECT')
+    })
+    ;(getPayload as any).mockClear()
+
+    const KnowledgeSpaceLayout = (await import('./layout')).default
+
+    await expect(
+      KnowledgeSpaceLayout({
+        children: <div />,
+        params: Promise.resolve({ slug: 'w', spaceSlug: 's' }),
+      }),
+    ).rejects.toThrow('NEXT_REDIRECT')
+    expect(redirect).toHaveBeenCalledWith('/login')
+    expect(getPayload).not.toHaveBeenCalled()
   })
 
   it('should render with auto-minimized sidebar', async () => {
@@ -52,7 +91,6 @@ describe('KnowledgeSpaceLayout', () => {
     mockGetPayload.mockResolvedValue({
       find: vi.fn()
         .mockResolvedValueOnce({ docs: [{ id: '1', slug: 'test-workspace', name: 'Test' }] })
-        .mockResolvedValueOnce({ docs: [{ id: 'user-1' }] })
         .mockResolvedValueOnce({ docs: [{ id: '2', slug: 'test-space', name: 'Test Space' }] })
         .mockResolvedValueOnce({ docs: [] }),
     })
@@ -79,7 +117,6 @@ describe('KnowledgeSpaceLayout', () => {
     mockGetPayload.mockResolvedValue({
       find: vi.fn()
         .mockResolvedValueOnce({ docs: [{ id: '1', slug: 'test-workspace', name: 'Test Workspace' }] })
-        .mockResolvedValueOnce({ docs: [{ id: 'user-1' }] })
         .mockResolvedValueOnce({ docs: [{ id: '2', slug: 'test-space', name: 'Test Space' }] })
         .mockResolvedValueOnce({ docs: [] }),
     })
@@ -106,7 +143,6 @@ describe('KnowledgeSpaceLayout', () => {
     mockGetPayload.mockResolvedValue({
       find: vi.fn()
         .mockResolvedValueOnce({ docs: [{ id: '1', slug: 'test-workspace', name: 'Test Workspace' }] })
-        .mockResolvedValueOnce({ docs: [{ id: 'user-1' }] })
         .mockResolvedValueOnce({ docs: [{ id: '2', slug: 'test-space', name: 'Test Space' }] })
         .mockResolvedValueOnce({ docs: [] }),
     })
