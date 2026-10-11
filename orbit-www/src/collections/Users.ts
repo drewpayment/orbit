@@ -1,6 +1,21 @@
 import type { CollectionConfig } from 'payload'
 import { userApprovalAfterChangeHook } from './hooks/userApprovalHook'
 import { betterAuthStrategy } from '@/lib/payload-better-auth-strategy'
+import {
+  adminOrSelfFieldRead,
+  privilegedFieldCreate,
+  privilegedFieldUpdate,
+  usersCreate,
+  usersDelete,
+  usersRead,
+  usersUpdate,
+} from '@/lib/authz/users'
+
+// Field access shared by privilege / approval fields. See lib/authz/users.ts.
+const privilegedAccess = (options: { assignsRole?: boolean } = {}) => ({
+  create: privilegedFieldCreate(options),
+  update: privilegedFieldUpdate(options),
+})
 
 export const Users: CollectionConfig = {
   slug: 'users',
@@ -8,6 +23,10 @@ export const Users: CollectionConfig = {
     useAsTitle: 'email',
   },
   access: {
+    create: usersCreate,
+    read: usersRead,
+    update: usersUpdate,
+    delete: usersDelete,
     admin: ({ req }) => {
       const role = req.user?.role
       // A deactivated admin must lose the /admin panel immediately, not on
@@ -45,6 +64,10 @@ export const Users: CollectionConfig = {
     },
     {
       name: 'status',
+      access: {
+        ...privilegedAccess(),
+        read: adminOrSelfFieldRead,
+      },
       type: 'select',
       label: 'Registration Status',
       defaultValue: 'pending',
@@ -61,6 +84,10 @@ export const Users: CollectionConfig = {
     },
     {
       name: 'role',
+      access: {
+        ...privilegedAccess({ assignsRole: true }),
+        read: adminOrSelfFieldRead,
+      },
       type: 'select',
       label: 'User Role',
       defaultValue: 'user',
@@ -76,6 +103,9 @@ export const Users: CollectionConfig = {
     },
     {
       name: 'betterAuthId',
+      access: {
+        ...privilegedAccess(),
+      },
       type: 'text',
       unique: true,
       index: true,
@@ -87,6 +117,10 @@ export const Users: CollectionConfig = {
     },
     {
       name: 'skipEmailVerification',
+      access: {
+        ...privilegedAccess(),
+        read: adminOrSelfFieldRead,
+      },
       type: 'checkbox',
       label: 'Skip Email Verification',
       defaultValue: false,
@@ -98,6 +132,10 @@ export const Users: CollectionConfig = {
     },
     {
       name: 'invitedAt',
+      access: {
+        ...privilegedAccess(),
+        read: adminOrSelfFieldRead,
+      },
       type: 'date',
       label: 'Invited At',
       admin: {
@@ -109,6 +147,10 @@ export const Users: CollectionConfig = {
     },
     {
       name: 'registrationApprovedAt',
+      access: {
+        ...privilegedAccess(),
+        read: adminOrSelfFieldRead,
+      },
       type: 'date',
       label: 'Approved At',
       admin: {
@@ -118,6 +160,10 @@ export const Users: CollectionConfig = {
     },
     {
       name: 'registrationApprovedBy',
+      access: {
+        ...privilegedAccess(),
+        read: adminOrSelfFieldRead,
+      },
       type: 'relationship',
       relationTo: 'users',
       label: 'Approved By',
