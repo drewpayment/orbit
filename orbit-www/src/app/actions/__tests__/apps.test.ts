@@ -85,7 +85,7 @@ vi.mock('@/lib/github/octokit', () => ({
 
 import { getPayload } from 'payload'
 import { getInstallationOctokit } from '@/lib/github/octokit'
-import { importRepository, updateAppSettings, deleteApp, exportAppManifest, resolveManifestConflict, disableManifestSync } from '../apps'
+import { importRepository, updateAppSettings, deleteApp, exportAppManifest, resolveManifestConflict, disableManifestSync, getHealthHistory, seedBuiltInGenerators } from '../apps'
 
 describe('importRepository', () => {
   beforeEach(() => {
@@ -579,5 +579,73 @@ describe('disableManifestSync', () => {
     await expect(disableManifestSync('app-id')).rejects.toThrow(
       'You do not have permission to update this app.',
     )
+  })
+})
+
+
+describe('getHealthHistory', () => {
+  const mockSession = { user: { id: 'user-1' }, session: {} } as any
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('rejects unauthenticated callers', async () => {
+    authApi.getSession.mockResolvedValue(null)
+    const result = await getHealthHistory({ appId: 'app-1' })
+    expect(result).toEqual({ success: false, error: 'Unauthorized', data: [] })
+  })
+
+  it('does not return health checks of an app in a workspace the caller is not a member of', async () => {
+    authApi.getSession.mockResolvedValue(mockSession)
+    const find = vi
+      .fn()
+      // workspace-members lookup: not a member
+      .mockResolvedValueOnce({ docs: [] })
+    const mockPayload = {
+      findByID: vi.fn().mockResolvedValue({ id: 'app-1', workspace: 'ws-victim' }),
+      find,
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await getHealthHistory({ appId: 'app-1' })
+
+    expect(result.success).toBe(false)
+    expect(result.data).toEqual([])
+    expect(find).not.toHaveBeenCalledWith(expect.objectContaining({ collection: 'health-checks' }))
+  })
+
+  it('returns health checks for a workspace member', async () => {
+    authApi.getSession.mockResolvedValue(mockSession)
+    const find = vi
+      .fn()
+      .mockResolvedValueOnce({ docs: [{ id: 'm-1', role: 'member' }] })
+      .mockResolvedValueOnce({ docs: [{ id: 'hc-1' }] })
+    const mockPayload = {
+      findByID: vi.fn().mockResolvedValue({ id: 'app-1', workspace: { id: 'ws-1' } }),
+      find,
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await getHealthHistory({ appId: 'app-1' })
+
+    expect(result).toEqual({ success: true, data: [{ id: 'hc-1' }] })
+  })
+})
+
+describe('seedBuiltInGenerators', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('refuses non-platform-admins (it writes global platform data)', async () => {
+    authApi.getSession.mockResolvedValue({ user: { id: 'user-1' }, session: {} })
+    const mockPayload = { find: vi.fn(), create: vi.fn() }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await seedBuiltInGenerators()
+
+    expect(result).toEqual({ success: false, error: 'Platform admin required' })
+    expect(mockPayload.create).not.toHaveBeenCalled()
   })
 })

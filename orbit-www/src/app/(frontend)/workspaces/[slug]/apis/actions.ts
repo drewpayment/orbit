@@ -5,7 +5,7 @@ import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
 import { createHash } from 'crypto'
 import { requireActor, authorize, ALL_ROLES, MANAGE_ROLES, type Actor } from '@/lib/authz'
-import type { APISchema } from '@/payload-types'
+import type { ApiSchema as APISchema } from '@/payload-types'
 
 // Identity always comes from the session (`requireActor`); no action accepts a
 // client-supplied user id. Writes run with `overrideAccess: true` only AFTER

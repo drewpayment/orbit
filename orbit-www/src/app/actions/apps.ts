@@ -179,6 +179,11 @@ export async function seedBuiltInGenerators() {
     return { success: false, error: 'Unauthorized' }
   }
 
+  // Deployment generators are global platform data, not tenant data.
+  if (!actor.isPlatformAdmin) {
+    return { success: false, error: 'Platform admin required' }
+  }
+
   const payload = await getPayload({ config })
 
   try {
@@ -303,7 +308,6 @@ export async function getHealthHistory(input: GetHealthHistoryInput) {
 
   const payload = await getPayload({ config })
 
-  // Verify user has access to this app
   const app = await payload.findByID({
     collection: 'apps',
     id: input.appId,
@@ -311,6 +315,13 @@ export async function getHealthHistory(input: GetHealthHistoryInput) {
 
   if (!app) {
     return { success: false, error: 'App not found', data: [] }
+  }
+
+  // Verify the caller belongs to the app's workspace.
+  const healthWsId = typeof app.workspace === 'string' ? app.workspace : app.workspace?.id
+  const healthAccess = await check('read', { kind: 'workspace', id: healthWsId ?? '' }, actor)
+  if (!healthAccess.allowed) {
+    return { success: false, error: 'Not a member of this workspace', data: [] }
   }
 
   try {

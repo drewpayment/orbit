@@ -47,7 +47,13 @@ export async function createLaunch(data: CreateLaunchInput) {
       depth: 0,
     })
 
-    if (!cloudAccount) {
+    // The cloud account id is client-supplied: it must be linked to THIS
+    // workspace (cloud-accounts.workspaces), or a member could launch infra
+    // with another tenant's cloud credentials.
+    const linkedWorkspaceIds = ((cloudAccount?.workspaces ?? []) as Array<string | { id: string }>).map(
+      (w) => (typeof w === 'string' ? w : w.id),
+    )
+    if (!cloudAccount || !linkedWorkspaceIds.includes(data.workspaceId)) {
       return { success: false, error: 'Cloud account not found' }
     }
 
@@ -60,6 +66,15 @@ export async function createLaunch(data: CreateLaunchInput) {
 
     if (!template) {
       return { success: false, error: 'Launch template not found' }
+    }
+
+    // An associated app must live in the same workspace.
+    if (data.appId) {
+      const app = await payload.findByID({ collection: 'apps', id: data.appId, depth: 0 }).catch(() => null)
+      const appWorkspaceId = typeof app?.workspace === 'string' ? app.workspace : app?.workspace?.id
+      if (!app || appWorkspaceId !== data.workspaceId) {
+        return { success: false, error: 'App not found' }
+      }
     }
 
     // Create the launch record
