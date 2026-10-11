@@ -117,7 +117,7 @@ export function NavUser({
             <DropdownMenuGroup>
               <DropdownMenuItem onClick={() => router.push('/notifications')}>
                 <Bell />
-                Notifications
+                Recent activity
               </DropdownMenuItem>
             </DropdownMenuGroup>
             {isAdmin && (

@@ -380,7 +380,6 @@ export function LaunchDetail({ launch, currentUserId }: LaunchDetailProps) {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="progress">Progress</TabsTrigger>
-          <TabsTrigger value="resources">Resources</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
 
@@ -533,19 +532,7 @@ export function LaunchDetail({ launch, currentUserId }: LaunchDetailProps) {
           )}
         </TabsContent>
 
-        {/* Resources Tab */}
-        <TabsContent value="resources">
-          <Card>
-            <CardHeader>
-              <CardTitle>Provisioned Resources</CardTitle>
-            </CardHeader>
-            <CardContent className="py-16 text-center text-muted-foreground">
-              {status === 'active'
-                ? 'Resource inventory will be available in a future update.'
-                : 'Resources will appear here once the launch is active.'}
-            </CardContent>
-          </Card>
-        </TabsContent>
+        {/* Resources tab removed: it only rendered a "future update" placeholder. */}
 
         {/* History Tab */}
         <TabsContent value="history">

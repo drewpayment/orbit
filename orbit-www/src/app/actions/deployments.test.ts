@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+// Deployments are a hidden preview feature (lib/features.ts); these tests exercise
+// the underlying behaviour, so enable it for the whole file.
+process.env.ORBIT_ENABLE_PREVIEW_FEATURES = 'deployments,deployToLaunch'
+
 // Mock dependencies before imports
 vi.mock('payload', () => ({
   getPayload: vi.fn(),

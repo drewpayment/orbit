@@ -41,6 +41,8 @@ import { ExportManifestButton } from './ExportManifestButton'
 interface AppDetailProps {
   app: App
   deployments: Deployment[]
+  /** Preview feature `deployments`, resolved on the server (see lib/features.ts). */
+  showDeployments?: boolean
 }
 
 const statusConfig = {
@@ -58,7 +60,7 @@ const deploymentStatusColors: Record<string, string> = {
   failed: 'bg-red-100 text-red-800',
 }
 
-export function AppDetail({ app, deployments }: AppDetailProps) {
+export function AppDetail({ app, deployments, showDeployments = false }: AppDetailProps) {
   const router = useRouter()
   const [showAddDeployment, setShowAddDeployment] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -243,51 +245,53 @@ export function AppDetail({ app, deployments }: AppDetailProps) {
         workspaceId={typeof app.workspace === 'string' ? app.workspace : app.workspace.id}
       />
 
-      {/* Deployments */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Deployments</CardTitle>
-            <Button size="sm" onClick={() => setShowAddDeployment(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Deployment
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {deployments.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No deployments yet. Add a deployment to start monitoring.
+      {/* Deployments (preview feature: deployments) */}
+      {showDeployments && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Deployments</CardTitle>
+              <Button size="sm" onClick={() => setShowAddDeployment(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Deployment
+              </Button>
             </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-8"></TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Generator</TableHead>
-                  <TableHead>Target</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Health</TableHead>
-                  <TableHead>Last Deployed</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {deployments.map((deployment) => (
-                  <DeploymentRow
-                    key={deployment.id}
-                    deployment={deployment}
-                    onDeploy={handleDeploy}
-                    onEdit={handleEditDeployment}
-                    onDelete={handleDeleteDeployment}
-                  />
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent>
+            {deployments.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No deployments yet. Add a deployment to start monitoring.
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8"></TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Generator</TableHead>
+                    <TableHead>Target</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Health</TableHead>
+                    <TableHead>Last Deployed</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {deployments.map((deployment) => (
+                    <DeploymentRow
+                      key={deployment.id}
+                      deployment={deployment}
+                      onDeploy={handleDeploy}
+                      onEdit={handleEditDeployment}
+                      onDelete={handleDeleteDeployment}
+                    />
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Health History */}
       {app.healthConfig?.url && (
@@ -343,13 +347,15 @@ export function AppDetail({ app, deployments }: AppDetailProps) {
         </Card>
       )}
 
-      <AddDeploymentModal
-        open={showAddDeployment}
-        onOpenChange={setShowAddDeployment}
-        appId={app.id}
-        appName={app.name}
-        workspaceId={typeof app.workspace === 'string' ? app.workspace : app.workspace.id}
-      />
+      {showDeployments && (
+        <AddDeploymentModal
+          open={showAddDeployment}
+          onOpenChange={setShowAddDeployment}
+          appId={app.id}
+          appName={app.name}
+          workspaceId={typeof app.workspace === 'string' ? app.workspace : app.workspace.id}
+        />
+      )}
 
       <AppSettingsSheet
         app={app}

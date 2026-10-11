@@ -4,7 +4,7 @@ import { useMemo, useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
-import { Plus, Search, FileText, Loader2 } from 'lucide-react'
+import { Plus, FileText, Loader2 } from 'lucide-react'
 import { PageTreeNode } from './PageTreeNode'
 import { buildPageTree } from '@/lib/knowledge/tree-builder'
 import type { SpaceNavigatorProps } from './types'
@@ -138,9 +138,6 @@ export function SpaceNavigator({
               title="Create new page"
             >
               <Plus className="h-4 w-4" />
-            </Button>
-            <Button size="sm" variant="ghost">
-              <Search className="h-4 w-4" />
             </Button>
           </div>
         </div>

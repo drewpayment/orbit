@@ -529,19 +529,10 @@ export async function analyzeRepository(appId: string) {
     return { success: false, error: 'App or repository not found' }
   }
 
-  // TODO: Call build service AnalyzeRepository RPC
-  // For now, return mock data
-  return {
-    success: true,
-    detected: true,
-    config: {
-      language: 'nodejs',
-      languageVersion: '22',
-      framework: 'nextjs',
-      buildCommand: 'npm run build',
-      startCommand: 'npm start',
-    },
-  }
+  // The build service AnalyzeRepository RPC is not wired up. This used to
+  // return a hard-coded Next.js config for every repository; fail instead of
+  // fabricating detection results. (No UI calls this; builds use startBuild.)
+  return { success: false, error: 'Repository analysis is not available yet.' }
 }
 
 export async function selectPackageManager(

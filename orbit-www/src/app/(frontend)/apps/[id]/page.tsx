@@ -6,6 +6,7 @@ import { AppDetail } from '@/components/features/apps/AppDetail'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
+import { isFeatureEnabled } from '@/lib/features'
 
 interface AppDetailPageProps {
   params: Promise<{ id: string }>
@@ -47,7 +48,11 @@ export default async function AppDetailPage({ params }: AppDetailPageProps) {
         <AppSidebar />
         <SidebarInset>
           <SiteHeader />
-          <AppDetail app={app} deployments={deployments} />
+          <AppDetail
+            app={app}
+            deployments={deployments}
+            showDeployments={isFeatureEnabled('deployments')}
+          />
         </SidebarInset>
       </SidebarProvider>
     )

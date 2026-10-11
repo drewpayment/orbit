@@ -7,6 +7,7 @@ import { resolveInstallationForWorkspace } from '@/lib/connections/workspace-acc
 import { startDeploymentWorkflow, getDeploymentProgress } from '@/lib/clients/deployment-client'
 import type { JsonObject } from '@bufbuild/protobuf'
 import type { Deployment } from '@/payload-types'
+import { featureUnavailableMessage, isFeatureEnabled } from '@/lib/features'
 
 type DeployStrategy = NonNullable<Deployment['deployStrategy']>
 
@@ -27,6 +28,10 @@ interface CreateDeploymentInput {
 }
 
 export async function createDeployment(input: CreateDeploymentInput) {
+  if (!isFeatureEnabled('deployments')) {
+    return { success: false, error: featureUnavailableMessage('deployments') }
+  }
+
   const actor = await getActor()
   if (!actor) {
     return { success: false, error: 'Unauthorized' }
@@ -133,6 +138,10 @@ export async function createDeployment(input: CreateDeploymentInput) {
 }
 
 export async function startDeployment(deploymentId: string) {
+  if (!isFeatureEnabled('deployments')) {
+    return { success: false, error: featureUnavailableMessage('deployments') }
+  }
+
   const actor = await getActor()
   if (!actor) {
     return { success: false, error: 'Unauthorized' }
@@ -979,6 +988,10 @@ export async function getActiveLaunchesForWorkspace(workspaceId: string) {
 }
 
 export async function startDeployToLaunch(deploymentId: string) {
+  if (!isFeatureEnabled('deployToLaunch')) {
+    return { success: false, error: featureUnavailableMessage('deployToLaunch') }
+  }
+
   const actor = await getActor()
   if (!actor) {
     return { success: false, error: 'Unauthorized' }

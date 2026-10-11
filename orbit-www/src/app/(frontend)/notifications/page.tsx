@@ -144,7 +144,7 @@ export default async function NotificationsPage() {
         <SiteHeader />
         <div className="flex flex-1 flex-col gap-6 p-8">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Notifications</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Recent activity</h1>
             <p className="text-sm text-muted-foreground">
               Recent activity across your workspaces
             </p>
