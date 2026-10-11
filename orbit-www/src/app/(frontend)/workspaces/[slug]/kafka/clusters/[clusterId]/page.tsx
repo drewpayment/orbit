@@ -3,6 +3,7 @@ import config from '@payload-config'
 import { getActor, workspaceRole } from '@/lib/authz'
 import { redirect, notFound } from 'next/navigation'
 import { ClusterDetailClient } from './cluster-detail-client'
+import { isFeatureEnabled } from '@/lib/features'
 import type { KafkaApplication, Workspace } from '@/payload-types'
 
 interface PageProps {
@@ -112,6 +113,7 @@ export default async function ClusterDetailPage({ params }: PageProps) {
       canManage={memberRole === 'owner' || memberRole === 'admin' || memberRole === 'member'}
       canApprove={memberRole === 'owner' || memberRole === 'admin'}
       userId={actor.betterAuthId}
+      showSchemas={isFeatureEnabled('kafkaSchemas')}
     />
   )
 }

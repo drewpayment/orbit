@@ -47,6 +47,8 @@ interface ClusterDetailClientProps {
   canManage: boolean
   canApprove: boolean
   userId: string
+  /** Preview-feature visibility, resolved on the server (see lib/features.ts). */
+  showSchemas?: boolean
 }
 
 const statusConfig = {
@@ -117,6 +119,7 @@ export function ClusterDetailClient({
   canManage,
   canApprove,
   userId,
+  showSchemas = false,
 }: ClusterDetailClientProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null)
   const searchParams = useSearchParams()
@@ -199,10 +202,12 @@ export function ClusterDetailClient({
               <Database className="h-4 w-4 mr-2" />
               Topics
             </TabsTrigger>
-            <TabsTrigger value="schemas">
-              <FileJson className="h-4 w-4 mr-2" />
-              Schemas
-            </TabsTrigger>
+            {showSchemas && (
+              <TabsTrigger value="schemas">
+                <FileJson className="h-4 w-4 mr-2" />
+                Schemas
+              </TabsTrigger>
+            )}
             <TabsTrigger value="consumer-groups">
               <Users className="h-4 w-4 mr-2" />
               Consumer Groups
@@ -231,7 +236,8 @@ export function ClusterDetailClient({
             />
           </TabsContent>
 
-          {/* Schemas Tab */}
+          {/* Schemas Tab (preview feature: kafkaSchemas) */}
+          {showSchemas && (
           <TabsContent value="schemas">
             <Card>
               <CardHeader>
@@ -250,6 +256,7 @@ export function ClusterDetailClient({
               </CardContent>
             </Card>
           </TabsContent>
+          )}
 
           {/* Consumer Groups Tab */}
           <TabsContent value="consumer-groups">
@@ -366,23 +373,7 @@ export function ClusterDetailClient({
                 </CardContent>
               </Card>
 
-              {/* Cluster Configuration Card */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Cluster Configuration</CardTitle>
-                  <CardDescription>
-                    Advanced settings for this virtual cluster
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-col items-center justify-center py-12">
-                  <Settings className="h-16 w-16 text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">Configuration Coming Soon</h3>
-                  <p className="text-muted-foreground text-center max-w-md">
-                    Advanced cluster configuration options will be available in a future update.
-                    You&apos;ll be able to manage quotas, ACLs, and cluster-wide settings.
-                  </p>
-                </CardContent>
-              </Card>
+
             </div>
           </TabsContent>
         </Tabs>
