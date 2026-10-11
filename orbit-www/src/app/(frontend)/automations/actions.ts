@@ -161,12 +161,19 @@ function inputsOf(inputSchema: unknown): AutomationActionInput[] {
 export async function getActionsByWorkspace(
   workspaceIds: string[],
 ): Promise<Record<string, AutomationActionOption[]>> {
+  // `workspaceIds` is client-supplied: only the caller's own manageable
+  // workspaces (the authoring picker's source) may be read.
+  const actor = await getActor()
+  if (!actor) return {}
+  const manageable = new Set(await memberWorkspaceIds('manage', actor))
+  const allowedIds = workspaceIds.filter((id) => manageable.has(id))
+  if (allowedIds.length === 0) return {}
+
   const payload = await getPayload({ config })
-  if (workspaceIds.length === 0) return {}
 
   const result = await payload.find({
     collection: 'actions',
-    where: { and: [{ workspace: { in: workspaceIds } }, { enabled: { equals: true } }] },
+    where: { and: [{ workspace: { in: allowedIds } }, { enabled: { equals: true } }] },
     sort: 'name',
     limit: 1000,
     depth: 0,

@@ -33,6 +33,7 @@ import {
   listAutomations,
   getAutomationForEdit,
   getAutomationDetail,
+  getActionsByWorkspace,
 } from './actions'
 
 const ownerActor = {
@@ -419,5 +420,42 @@ describe('automation query actions ignore any injected identity', () => {
 
     expect(result).toBeNull()
     expect(check).toHaveBeenCalledWith('read', { kind: 'workspace', id: 'ws1' }, ownerActor)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// getActionsByWorkspace — the workspace ids are client-supplied
+// ---------------------------------------------------------------------------
+
+describe('getActionsByWorkspace scopes to workspaces the caller manages', () => {
+  const find = vi.fn()
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    ;(getPayload as Mock).mockResolvedValue({ find })
+    find.mockResolvedValue({ docs: [] })
+  })
+
+  it('returns {} for unauthenticated callers without querying', async () => {
+    ;(getActor as Mock).mockResolvedValue(null)
+    await expect(getActionsByWorkspace(['ws-1'])).resolves.toEqual({})
+    expect(find).not.toHaveBeenCalled()
+  })
+
+  it('drops workspace ids the caller does not manage', async () => {
+    ;(getActor as Mock).mockResolvedValue(ownerActor)
+    ;(memberWorkspaceIds as Mock).mockResolvedValue(['ws-1'])
+    await getActionsByWorkspace(['ws-1', 'ws-victim'])
+    expect(memberWorkspaceIds).toHaveBeenCalledWith('manage', ownerActor)
+    const where = JSON.stringify(find.mock.calls[0][0].where)
+    expect(where).toContain('"in":["ws-1"]')
+    expect(where).not.toContain('ws-victim')
+  })
+
+  it('does not query when none of the requested workspaces are managed', async () => {
+    ;(getActor as Mock).mockResolvedValue(ownerActor)
+    ;(memberWorkspaceIds as Mock).mockResolvedValue(['ws-1'])
+    await expect(getActionsByWorkspace(['ws-victim'])).resolves.toEqual({})
+    expect(find).not.toHaveBeenCalled()
   })
 })

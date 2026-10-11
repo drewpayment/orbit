@@ -351,6 +351,27 @@ export async function getLaunchWorkflowProgress(workflowId: string) {
     return { success: false, error: 'Unauthorized' }
   }
 
+  // The workflow id is client-supplied: only return progress/logs for a launch
+  // that belongs to a workspace the caller is a member of.
+  const payload = await getPayload({ config })
+  const progressLookup = await payload.find({
+    collection: 'launches',
+    where: { workflowId: { equals: workflowId } },
+    limit: 1,
+    depth: 0,
+    overrideAccess: true,
+  })
+  const progressLaunch = progressLookup.docs[0]
+  if (!progressLaunch) {
+    return { success: false, error: 'Launch not found' }
+  }
+  const progressWsId =
+    typeof progressLaunch.workspace === 'string' ? progressLaunch.workspace : progressLaunch.workspace?.id
+  const progressMembership = await check('read', { kind: 'workspace', id: progressWsId ?? '' }, actor)
+  if (!progressMembership.allowed) {
+    return { success: false, error: 'Not a member of this workspace' }
+  }
+
   try {
     const progress = await getLaunchProgress(workflowId)
 

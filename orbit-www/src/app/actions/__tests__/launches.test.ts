@@ -525,8 +525,44 @@ describe('getLaunchWorkflowProgress', () => {
     expect(result).toEqual({ success: false, error: 'Unauthorized' })
   })
 
-  it('should return progress from gRPC client', async () => {
+  it('should return not found for a workflow id that matches no launch', async () => {
     authApi.getSession.mockResolvedValue(mockSession)
+    const mockPayload = { find: vi.fn().mockResolvedValue({ docs: [] }) }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await getLaunchWorkflowProgress('workflow-other')
+
+    expect(result).toEqual({ success: false, error: 'Launch not found' })
+    expect(getLaunchProgress).not.toHaveBeenCalled()
+  })
+
+  it('should deny non-members of the launch workspace without fetching logs', async () => {
+    authApi.getSession.mockResolvedValue(mockSession)
+    const mockPayload = {
+      find: vi
+        .fn()
+        // launches lookup by workflowId
+        .mockResolvedValueOnce({ docs: [{ id: 'launch-1', workspace: 'workspace-other' }] })
+        // workspace-members lookup: not a member
+        .mockResolvedValueOnce({ docs: [] }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await getLaunchWorkflowProgress('workflow-1')
+
+    expect(result).toEqual({ success: false, error: 'Not a member of this workspace' })
+    expect(getLaunchProgress).not.toHaveBeenCalled()
+  })
+
+  it('should return progress from gRPC client for a workspace member', async () => {
+    authApi.getSession.mockResolvedValue(mockSession)
+    const mockPayload = {
+      find: vi
+        .fn()
+        .mockResolvedValueOnce({ docs: [{ id: 'launch-1', workspace: { id: 'workspace-1' } }] })
+        .mockResolvedValueOnce({ docs: [{ id: 'member-1', role: 'member' }] }),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
     vi.mocked(getLaunchProgress).mockResolvedValue({
       status: 'running',
       currentStep: 2,
@@ -538,6 +574,7 @@ describe('getLaunchWorkflowProgress', () => {
 
     const result = await getLaunchWorkflowProgress('workflow-1')
 
+    expect(getLaunchProgress).toHaveBeenCalledWith('workflow-1')
     expect(result).toEqual({
       success: true,
       status: 'running',
