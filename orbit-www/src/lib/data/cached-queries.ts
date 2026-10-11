@@ -52,6 +52,11 @@ export const getWorkspaceBySlug = cache(async (slug: string, depth: number = 1) 
  * Get a knowledge space by slug and workspace ID (cached per request)
  */
 export const getKnowledgeSpaceBySlug = cache(async (spaceSlug: string, workspaceId: string) => {
+  // Payload's local API skips access control unless told otherwise, so the
+  // knowledge fetchers run as the session actor with `overrideAccess: false`
+  // (workspace members only). No session ⇒ nothing.
+  const actor = await getActor()
+  if (!actor) return null
   const payload = await getPayloadClient()
   const result = await payload.find({
     collection: 'knowledge-spaces',
@@ -60,6 +65,8 @@ export const getKnowledgeSpaceBySlug = cache(async (spaceSlug: string, workspace
       workspace: { equals: workspaceId },
     },
     limit: 1,
+    user: actor.user,
+    overrideAccess: false,
   })
   return result.docs[0] ?? null
 })
@@ -68,12 +75,16 @@ export const getKnowledgeSpaceBySlug = cache(async (spaceSlug: string, workspace
  * Get all knowledge pages for a space (cached per request)
  */
 export const getKnowledgePagesBySpace = cache(async (spaceId: string) => {
+  const actor = await getActor()
+  if (!actor) return []
   const payload = await getPayloadClient()
   const result = await payload.find({
     collection: 'knowledge-pages',
     where: { knowledgeSpace: { equals: spaceId } },
     limit: 1000,
     sort: 'sortOrder',
+    user: actor.user,
+    overrideAccess: false,
   })
   return result.docs
 })
@@ -82,6 +93,8 @@ export const getKnowledgePagesBySpace = cache(async (spaceId: string) => {
  * Get a specific knowledge page by slug and space ID (cached per request)
  */
 export const getKnowledgePageBySlug = cache(async (pageSlug: string, spaceId: string, depth: number = 2) => {
+  const actor = await getActor()
+  if (!actor) return null
   const payload = await getPayloadClient()
   const result = await payload.find({
     collection: 'knowledge-pages',
@@ -91,6 +104,8 @@ export const getKnowledgePageBySlug = cache(async (pageSlug: string, spaceId: st
     },
     limit: 1,
     depth,
+    user: actor.user,
+    overrideAccess: false,
   })
   return result.docs[0] ?? null
 })

@@ -5,7 +5,6 @@ import {
   getWorkspaceBySlug,
   getKnowledgeSpaceBySlug,
   getKnowledgePagesBySpace,
-  getPayloadClient,
 } from '@/lib/data/cached-queries'
 
 interface PageProps {
@@ -23,16 +22,7 @@ export default async function KnowledgeSpacePage({ params }: PageProps) {
     notFound()
   }
 
-  const payload = await getPayloadClient()
-  const [usersResult, space] = await Promise.all([
-    payload.find({
-      collection: 'users',
-      limit: 1,
-    }),
-    getKnowledgeSpaceBySlug(spaceSlug, workspace.id),
-  ])
-
-  const tempUserId = usersResult.docs[0]?.id
+  const space = await getKnowledgeSpaceBySlug(spaceSlug, workspace.id)
 
   if (!space) {
     notFound()
@@ -59,14 +49,11 @@ export default async function KnowledgeSpacePage({ params }: PageProps) {
               This knowledge space doesn&apos;t have any pages yet. Create your first page to get
               started.
             </p>
-            {tempUserId && (
-              <SpaceNavigator
-                knowledgeSpace={space}
-                pages={pages}
-                workspaceSlug={workspace.slug}
-                userId={tempUserId}
-              />
-            )}
+            <SpaceNavigator
+              knowledgeSpace={space}
+              pages={pages}
+              workspaceSlug={workspace.slug}
+            />
           </CardContent>
         </Card>
       </div>

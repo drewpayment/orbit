@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -7,7 +7,7 @@ import {
   getWorkspaceBySlug,
   getKnowledgeSpaceBySlug,
   getKnowledgePagesBySpace,
-  getPayloadClient,
+  getActor,
 } from '@/lib/data/cached-queries'
 
 interface LayoutProps {
@@ -21,24 +21,19 @@ interface LayoutProps {
 export default async function KnowledgeSpaceLayout({ children, params }: LayoutProps) {
   const { slug, spaceSlug } = await params
 
+  const actor = await getActor()
+  if (!actor) {
+    redirect('/login')
+  }
+
   // Use cached fetchers for request-level deduplication
   const workspace = await getWorkspaceBySlug(slug)
   if (!workspace) {
     notFound()
   }
 
-  // Fetch user and space in parallel
-  const payload = await getPayloadClient()
-  const [usersResult, space] = await Promise.all([
-    // Fetch a user for temporary auth (TODO: Replace with actual auth session)
-    payload.find({
-      collection: 'users',
-      limit: 1,
-    }),
-    getKnowledgeSpaceBySlug(spaceSlug, workspace.id),
-  ])
-
-  const tempUserId = usersResult.docs[0]?.id
+  // Access-checked: returns null for non-members of the workspace.
+  const space = await getKnowledgeSpaceBySlug(spaceSlug, workspace.id)
 
   if (!space) {
     notFound()
@@ -58,7 +53,6 @@ export default async function KnowledgeSpaceLayout({ children, params }: LayoutP
             space={space}
             pages={pages}
             workspaceSlug={slug}
-            userId={tempUserId}
           />
 
           <div className="flex-1 flex flex-col">

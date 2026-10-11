@@ -34,7 +34,6 @@ export function SpaceNavigator({
   currentPageId,
   onPageSelect,
   workspaceSlug,
-  userId,
   onReorder,
   isLoading = false,
 }: SpaceNavigatorProps) {
@@ -100,17 +99,11 @@ export function SpaceNavigator({
     slug: string
     parentPageId?: string
   }) => {
-    if (!userId) {
-      alert('You must be logged in to create pages.')
-      return
-    }
-
     const newPage = await createKnowledgePage({
       title: data.title,
       slug: data.slug,
       knowledgeSpaceId: knowledgeSpace.id,
       parentPageId: data.parentPageId,
-      userId,
       workspaceSlug,
       spaceSlug: knowledgeSpace.slug as string,
     })

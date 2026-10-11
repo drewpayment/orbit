@@ -1,17 +1,14 @@
 import { notFound } from 'next/navigation'
-import { getPayload } from 'payload'
-import config from '@payload-config'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { PageContent } from '@/components/features/knowledge/PageContent'
 import { KnowledgeBreadcrumbs } from '@/components/features/knowledge/KnowledgeBreadcrumbs'
-import { revalidatePath } from 'next/cache'
-import type { BlockDocument } from '@/lib/blocks/types'
 import {
   getWorkspaceBySlug,
   getKnowledgeSpaceBySlug,
   getKnowledgePageBySlug,
 } from '@/lib/data/cached-queries'
+import { updatePageContent } from '@/app/actions/knowledge'
 
 interface PageProps {
   params: Promise<{
@@ -19,23 +16,6 @@ interface PageProps {
     spaceSlug: string
     pageSlug: string
   }>
-}
-
-async function updatePage(pageId: string, workspaceSlug: string, spaceSlug: string, pageSlug: string, content: BlockDocument) {
-  'use server'
-
-  const payload = await getPayload({ config })
-
-  await payload.update({
-    collection: 'knowledge-pages',
-    id: pageId,
-    data: {
-      content: content as unknown as Record<string, unknown>,
-      contentFormat: 'blocks',
-    },
-  })
-
-  revalidatePath(`/workspaces/${workspaceSlug}/knowledge/${spaceSlug}/${pageSlug}`)
 }
 
 export default async function KnowledgePageView({ params }: PageProps) {
@@ -64,7 +44,7 @@ export default async function KnowledgePageView({ params }: PageProps) {
   const lastEditedBy = typeof page.lastEditedBy === 'object' ? page.lastEditedBy : null
 
   // Bind the updatePage server action with the current page's parameters
-  const boundUpdatePage = updatePage.bind(null, page.id, workspace.slug, space.slug as string, page.slug)
+  const boundUpdatePage = updatePageContent.bind(null, page.id, workspace.slug, space.slug as string, page.slug)
 
   return (
     <>
