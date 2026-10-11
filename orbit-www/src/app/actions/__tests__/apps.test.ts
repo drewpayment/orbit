@@ -85,40 +85,63 @@ vi.mock('@/lib/github/octokit', () => ({
 
 import { getPayload } from 'payload'
 import { getInstallationOctokit } from '@/lib/github/octokit'
-import { importRepository, updateAppSettings, deleteApp, exportAppManifest, resolveManifestConflict, disableManifestSync, getHealthHistory, seedBuiltInGenerators } from '../apps'
+import { importRepository, createAppFromTemplate, updateAppSettings, deleteApp, exportAppManifest, resolveManifestConflict, disableManifestSync, getHealthHistory, seedBuiltInGenerators } from '../apps'
 
 describe('importRepository', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('should store installationId when provided', async () => {
-    authApi.getSession.mockResolvedValue({
-      user: { id: 'user-1' },
-      session: {},
-    } as any)
+  const INSTALL_ID = 'a1b2c3d4e5f6a1b2c3d4e5f6'
 
-    const mockPayload = {
-      find: vi.fn().mockResolvedValue({ docs: [{ id: 'membership-1' }] }),
+  /** `find` that answers membership lookups and github-installations lookups separately. */
+  function payloadWithInstallation(installationDocs: unknown[]) {
+    return {
+      find: vi.fn().mockImplementation(async ({ collection }: { collection: string }) =>
+        collection === 'github-installations'
+          ? { docs: installationDocs }
+          : { docs: [{ id: 'membership-1' }] },
+      ),
       create: vi.fn().mockResolvedValue({ id: 'app-1' }),
     }
+  }
+
+  it('should store installationId when it is granted to the workspace', async () => {
+    authApi.getSession.mockResolvedValue({ user: { id: 'user-1' }, session: {} } as any)
+    const mockPayload = payloadWithInstallation([{ id: INSTALL_ID }])
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
 
     await importRepository({
       workspaceId: 'workspace-1',
       repositoryUrl: 'https://github.com/acme/repo',
       name: 'my-app',
-      installationId: 'install-1',
+      installationId: INSTALL_ID,
     })
 
     expect(mockPayload.create).toHaveBeenCalledWith({
       collection: 'apps',
       data: expect.objectContaining({
-        repository: expect.objectContaining({
-          installationId: 'install-1',
-        }),
+        repository: expect.objectContaining({ installationId: INSTALL_ID }),
       }),
     })
+    const lookup = mockPayload.find.mock.calls.map((c: any[]) => c[0]).find((a: any) => a.collection === 'github-installations')
+    expect(JSON.stringify(lookup.where)).toContain('"allowedWorkspaces":{"contains":"workspace-1"}')
+  })
+
+  it('should refuse an installation that is not granted to the workspace', async () => {
+    authApi.getSession.mockResolvedValue({ user: { id: 'user-1' }, session: {} } as any)
+    const mockPayload = payloadWithInstallation([])
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await importRepository({
+      workspaceId: 'workspace-1',
+      repositoryUrl: 'https://github.com/victim/repo',
+      name: 'my-app',
+      installationId: INSTALL_ID,
+    })
+
+    expect(result).toEqual({ success: false, error: 'Installation is not available for this workspace' })
+    expect(mockPayload.create).not.toHaveBeenCalled()
   })
 
   it('should work without installationId', async () => {
@@ -171,6 +194,9 @@ describe('importRepository — Azure DevOps', () => {
         return Promise.resolve({
           docs: opts.connectionAllowed === false ? [] : [{ id: 'conn-1', allowedWorkspaces: ['ws-1'] }],
         })
+      }
+      if (args.collection === 'github-installations') {
+        return Promise.resolve({ docs: [{ id: 'a1b2c3d4e5f6a1b2c3d4e5f6' }] })
       }
       return Promise.resolve({ docs: [] })
     })
@@ -274,13 +300,13 @@ describe('importRepository — Azure DevOps', () => {
       workspaceId: 'ws-1',
       repositoryUrl: 'https://github.com/acme/backend',
       name: 'backend',
-      installationId: 'install-1',
+      installationId: 'a1b2c3d4e5f6a1b2c3d4e5f6',
     })
 
     const call = create.mock.calls[0][0]
     expect(call.data.repository.owner).toBe('acme')
     expect(call.data.repository.provider).toBeUndefined()
-    expect(call.data.repository.installationId).toBe('install-1')
+    expect(call.data.repository.installationId).toBe('a1b2c3d4e5f6a1b2c3d4e5f6')
   })
 })
 
@@ -647,5 +673,64 @@ describe('seedBuiltInGenerators', () => {
 
     expect(result).toEqual({ success: false, error: 'Platform admin required' })
     expect(mockPayload.create).not.toHaveBeenCalled()
+  })
+})
+
+
+describe('createAppFromTemplate — installation binding', () => {
+  const INSTALL_ID = 'a1b2c3d4e5f6a1b2c3d4e5f6'
+  const input = {
+    name: 'svc',
+    repositoryOwner: 'acme',
+    repositoryName: 'svc',
+    repositoryUrl: 'https://github.com/acme/svc',
+    templateId: 'tpl-1',
+    workspaceId: 'workspace-1',
+    installationId: INSTALL_ID,
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    authApi.getSession.mockResolvedValue({ user: { id: 'user-1' }, session: {} } as any)
+  })
+
+  function payloadWithInstallation(installationDocs: unknown[]) {
+    return {
+      find: vi.fn().mockImplementation(async ({ collection }: { collection: string }) =>
+        collection === 'github-installations'
+          ? { docs: installationDocs }
+          : { docs: [{ id: 'membership-1' }] },
+      ),
+      create: vi.fn().mockResolvedValue({ id: 'app-1' }),
+    }
+  }
+
+  it('refuses another workspace\'s installation', async () => {
+    const mockPayload = payloadWithInstallation([])
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await createAppFromTemplate(input)
+
+    expect(result).toEqual({ success: false, error: 'Installation is not available for this workspace' })
+    expect(mockPayload.create).not.toHaveBeenCalled()
+  })
+
+  it('stores a granted installation', async () => {
+    const mockPayload = payloadWithInstallation([{ id: INSTALL_ID }])
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await createAppFromTemplate(input)
+
+    expect(result).toEqual({ success: true, appId: 'app-1' })
+    expect(mockPayload.create.mock.calls[0][0].data.repository.installationId).toBe(INSTALL_ID)
+  })
+
+  it('still works without an installation', async () => {
+    const mockPayload = payloadWithInstallation([])
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await createAppFromTemplate({ ...input, installationId: undefined })
+
+    expect(result.success).toBe(true)
   })
 })

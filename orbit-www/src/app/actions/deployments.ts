@@ -3,6 +3,7 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { getActor, check } from '@/lib/authz'
+import { installationAllowedForWorkspace } from '@/lib/connections/workspace-access'
 import { startDeploymentWorkflow, getDeploymentProgress } from '@/lib/clients/deployment-client'
 import type { JsonObject } from '@bufbuild/protobuf'
 import type { Deployment } from '@/payload-types'
@@ -488,6 +489,11 @@ export async function getRepoBranches(appId: string) {
       return { success: true, branches: ['main'], defaultBranch: 'main' }
     }
 
+    // Re-check at use time: the stored installation must be granted to this workspace.
+    if (!(await installationAllowedForWorkspace(payload, app.repository.installationId, repoWorkspaceId))) {
+      return { success: false, error: 'Repository installation is not available for this workspace', branches: [] as string[] }
+    }
+
     const { createInstallationToken } = await import('@/lib/github/octokit')
     const { token } = await createInstallationToken(Number(app.repository.installationId))
 
@@ -588,6 +594,11 @@ export async function commitGeneratedFiles(input: {
 
     if (!app?.repository?.installationId || !app.repository.owner || !app.repository.name) {
       return { success: false, error: 'App has no linked repository' }
+    }
+
+    // Re-check at use time: never push through an installation this workspace is not granted.
+    if (!(await installationAllowedForWorkspace(payload, app.repository.installationId, workspaceId))) {
+      return { success: false, error: 'Repository installation is not available for this workspace' }
     }
 
     const { createInstallationToken } = await import('@/lib/github/octokit')

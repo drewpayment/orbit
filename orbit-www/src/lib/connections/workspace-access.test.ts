@@ -34,3 +34,45 @@ describe('actorMayUseSource', () => {
     expect(memberWorkspaceIds).not.toHaveBeenCalled()
   })
 })
+
+import { installationAllowedForWorkspace } from './workspace-access'
+
+describe('installationAllowedForWorkspace', () => {
+  const find = vi.fn()
+  const payload = { find } as any
+
+  beforeEach(() => {
+    find.mockReset()
+    find.mockResolvedValue({ docs: [{ id: 'i-1' }] })
+  })
+
+  it('allows an installation granted to the workspace (payload id)', async () => {
+    await expect(installationAllowedForWorkspace(payload, 'a'.repeat(24), 'ws-1')).resolves.toBe(true)
+    const q = JSON.stringify(find.mock.calls[0][0].where)
+    expect(q).toContain('"allowedWorkspaces":{"contains":"ws-1"}')
+    expect(q).toContain('"id":{"equals"')
+  })
+
+  it('also resolves the numeric GitHub installation id', async () => {
+    await installationAllowedForWorkspace(payload, '12345', 'ws-1')
+    expect(JSON.stringify(find.mock.calls[0][0].where)).toContain('"installationId":{"equals":12345}')
+  })
+
+  it('denies when no doc matches both the ref and the workspace', async () => {
+    find.mockResolvedValue({ docs: [] })
+    await expect(installationAllowedForWorkspace(payload, '12345', 'ws-2')).resolves.toBe(false)
+  })
+
+  it('denies malformed/empty refs and missing workspace without querying', async () => {
+    await expect(installationAllowedForWorkspace(payload, 'not-an-id', 'ws-1')).resolves.toBe(false)
+    await expect(installationAllowedForWorkspace(payload, '', 'ws-1')).resolves.toBe(false)
+    await expect(installationAllowedForWorkspace(payload, undefined, 'ws-1')).resolves.toBe(false)
+    await expect(installationAllowedForWorkspace(payload, '12345', null)).resolves.toBe(false)
+    expect(find).not.toHaveBeenCalled()
+  })
+
+  it('denies when the lookup throws', async () => {
+    find.mockRejectedValue(new Error('boom'))
+    await expect(installationAllowedForWorkspace(payload, '12345', 'ws-1')).resolves.toBe(false)
+  })
+})

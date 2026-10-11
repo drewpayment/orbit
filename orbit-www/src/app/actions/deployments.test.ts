@@ -682,3 +682,71 @@ describe('createDeployment launch ownership', () => {
     expect(result).toEqual({ success: true, deploymentId: 'dep-1' })
   })
 })
+
+// ---------------------------------------------------------------------------
+// Use-time installation re-check (repository.installationId is client-originated)
+// ---------------------------------------------------------------------------
+
+describe('installation re-check at use time', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  /** Membership lookups succeed; github-installations lookups return no doc (not granted). */
+  const findWithoutInstallation = () =>
+    vi.fn().mockImplementation(async ({ collection }: { collection: string }) =>
+      collection === 'github-installations' ? { docs: [] } : { docs: [{ id: 'membership-1' }] },
+    )
+
+  const app = {
+    id: 'app-1',
+    workspace: 'workspace-1',
+    repository: { installationId: '12345', owner: 'victim', name: 'repo' },
+  }
+
+  it('getRepoBranches refuses an installation not granted to the app workspace, without minting a token', async () => {
+    mockSession()
+    const mockPayload = buildMockPayload({
+      findByID: vi.fn().mockResolvedValue(app),
+      find: findWithoutInstallation(),
+    })
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await getRepoBranches('app-1')
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Repository installation is not available for this workspace',
+      branches: [],
+    })
+    expect(createInstallationToken).not.toHaveBeenCalled()
+  })
+
+  it('commitGeneratedFiles refuses an installation not granted to the app workspace, without minting a token', async () => {
+    mockSession()
+    const mockPayload = buildMockPayload({
+      findByID: vi
+        .fn()
+        .mockResolvedValueOnce({
+          id: 'deploy-1',
+          app: 'app-1',
+          generatedFiles: [{ path: 'docker-compose.yml', content: 'x' }],
+        })
+        .mockResolvedValueOnce(app),
+      find: findWithoutInstallation(),
+    })
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await commitGeneratedFiles({
+      deploymentId: 'deploy-1',
+      branch: 'main',
+      message: 'add compose',
+    } as any)
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Repository installation is not available for this workspace',
+    })
+    expect(createInstallationToken).not.toHaveBeenCalled()
+  })
+})

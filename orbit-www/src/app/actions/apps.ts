@@ -9,6 +9,7 @@ import { serializeAppManifest } from '@/lib/app-manifest'
 import { generateWebhookSecret, parseGitHubUrl } from '@/lib/github-manifest'
 import { getInstallationOctokit } from '@/lib/github/octokit'
 import { parseAdoRepoUrl } from '@/lib/connections/ado-url'
+import { installationAllowedForWorkspace } from '@/lib/connections/workspace-access'
 
 interface CreateAppFromTemplateInput {
   name: string
@@ -35,6 +36,15 @@ export async function createAppFromTemplate(input: CreateAppFromTemplateInput) {
 
   if (!membership.allowed) {
     return { success: false, error: 'Not a member of this workspace' }
+  }
+
+  // The installation id is client-supplied: it must be granted to THIS
+  // workspace, or the app would later read/push to another tenant's repos.
+  if (
+    input.installationId &&
+    !(await installationAllowedForWorkspace(payload, input.installationId, input.workspaceId))
+  ) {
+    return { success: false, error: 'Installation is not available for this workspace' }
   }
 
   try {
@@ -102,6 +112,12 @@ export async function importRepository(input: ImportRepositoryInput) {
   let repositoryData: Record<string, unknown>
   if (githubMatch) {
     const [, owner, repoName] = githubMatch
+    if (
+      input.installationId &&
+      !(await installationAllowedForWorkspace(payload, input.installationId, input.workspaceId))
+    ) {
+      return { success: false, error: 'Installation is not available for this workspace' }
+    }
     repositoryData = {
       owner,
       name: repoName.replace(/\.git$/, ''),
@@ -502,6 +518,10 @@ export async function exportAppManifest(appId: string): Promise<void> {
   if (!repoUrl || !installationId) {
     throw new Error('App must have a linked repository with a GitHub installation to export a manifest')
   }
+  // Re-check at use time: the stored installation must (still) be granted to this app's workspace.
+  if (!(await installationAllowedForWorkspace(payload, installationId, appWorkspaceId))) {
+    throw new Error('The linked GitHub installation is not available for this workspace.')
+  }
 
   const parsed = parseGitHubUrl(repoUrl)
   if (!parsed) throw new Error('Invalid repository URL')
@@ -607,6 +627,9 @@ export async function resolveManifestConflict(
     const repoUrl = app.repository?.url
     const installationId = app.repository?.installationId
     if (!repoUrl || !installationId) throw new Error('Missing repository config')
+    if (!(await installationAllowedForWorkspace(payload, installationId, appWorkspaceId))) {
+      throw new Error('The linked GitHub installation is not available for this workspace.')
+    }
 
     const parsed = parseGitHubUrl(repoUrl)
     if (!parsed) throw new Error('Invalid repository URL')
@@ -690,7 +713,13 @@ export async function disableManifestSync(appId: string): Promise<void> {
   const updateDecision = await check('update', { kind: 'workspace', id: appWorkspaceId ?? '' }, actor)
   if (!updateDecision.allowed) throw new Error('You do not have permission to update this app.')
 
-  if (app.webhookId && app.repository?.url && app.repository?.installationId) {
+  if (
+    app.webhookId &&
+    app.repository?.url &&
+    app.repository?.installationId &&
+    // Never act through an installation the app's workspace is not granted.
+    (await installationAllowedForWorkspace(payload, app.repository.installationId, appWorkspaceId))
+  ) {
     try {
       const parsed = parseGitHubUrl(app.repository.url)
       if (parsed) {
