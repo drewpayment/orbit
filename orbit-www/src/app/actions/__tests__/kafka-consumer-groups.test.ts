@@ -101,6 +101,19 @@ describe('kafka consumer group actions: authentication and authorization', () =>
     })
   })
 
+  describe('plain member attempting a reset', () => {
+    it('is told the role is insufficient (not "not a member")', async () => {
+      ;(check as any).mockImplementation(async (verb: string) =>
+        verb === 'manage'
+          ? { allowed: false, reason: 'requires workspace owner or admin; you are member', actor }
+          : { allowed: true, reason: 'workspace member', actor },
+      )
+      const r = await resetConsumerGroupOffsets('vc-1', 'g', 't', 'earliest')
+      expect(r).toEqual({ success: false, error: 'Insufficient role: workspace owner or admin required' })
+      noBifrostCalls()
+    })
+  })
+
   describe('unknown virtual cluster', () => {
     it('is denied without reaching bifrost', async () => {
       payload.findByID.mockRejectedValue(new Error('Not Found'))

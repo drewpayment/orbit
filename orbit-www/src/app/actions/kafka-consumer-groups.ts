@@ -122,7 +122,16 @@ async function authorizeVirtualCluster(
   if (!workspaceId) return { ok: false, error: 'Virtual cluster not found' }
 
   const decision = await check(verb, { kind: 'workspace', id: workspaceId }, actor)
-  if (!decision.allowed) return { ok: false, error: 'Not a member of this workspace' }
+  if (!decision.allowed) {
+    // A member who merely lacks the role gets a different message than an outsider.
+    if (verb === 'manage') {
+      const read = await check('read', { kind: 'workspace', id: workspaceId }, actor)
+      if (read.allowed) {
+        return { ok: false, error: 'Insufficient role: workspace owner or admin required' }
+      }
+    }
+    return { ok: false, error: 'Not a member of this workspace' }
+  }
 
   return { ok: true }
 }

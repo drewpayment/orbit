@@ -255,7 +255,8 @@ export function ClusterDetailClient({
           <TabsContent value="consumer-groups">
             <ConsumerGroupsPanel
               virtualClusterId={cluster.id}
-              canManage={canManage && cluster.status === 'active'}
+              // Offset resets require workspace owner/admin server-side.
+              canManage={canApprove && cluster.status === 'active'}
             />
           </TabsContent>
 

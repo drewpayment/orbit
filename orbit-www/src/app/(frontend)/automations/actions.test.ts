@@ -452,6 +452,13 @@ describe('getActionsByWorkspace scopes to workspaces the caller manages', () => 
     expect(where).not.toContain('ws-victim')
   })
 
+  it('lets a platform admin read actions for any requested workspace (no membership lookup)', async () => {
+    ;(getActor as Mock).mockResolvedValue({ ...ownerActor, isPlatformAdmin: true })
+    await getActionsByWorkspace(['ws-1', 'ws-other'])
+    expect(memberWorkspaceIds).not.toHaveBeenCalled()
+    expect(JSON.stringify(find.mock.calls[0][0].where)).toContain('"in":["ws-1","ws-other"]')
+  })
+
   it('does not query when none of the requested workspaces are managed', async () => {
     ;(getActor as Mock).mockResolvedValue(ownerActor)
     ;(memberWorkspaceIds as Mock).mockResolvedValue(['ws-1'])

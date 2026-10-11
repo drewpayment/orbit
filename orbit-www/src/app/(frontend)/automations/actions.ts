@@ -165,8 +165,9 @@ export async function getActionsByWorkspace(
   // workspaces (the authoring picker's source) may be read.
   const actor = await getActor()
   if (!actor) return {}
-  const manageable = new Set(await memberWorkspaceIds('manage', actor))
-  const allowedIds = workspaceIds.filter((id) => manageable.has(id))
+  // Platform admins may author in any workspace (matches getAutomationForEdit).
+  const manageable = actor.isPlatformAdmin ? null : new Set(await memberWorkspaceIds('manage', actor))
+  const allowedIds = manageable ? workspaceIds.filter((id) => manageable.has(id)) : workspaceIds
   if (allowedIds.length === 0) return {}
 
   const payload = await getPayload({ config })
