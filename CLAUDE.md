@@ -44,7 +44,7 @@ cd services/repository && go test -v -race ./...
 cd services/repository && go test -v -race -run TestFunctionName ./path/to/package
 
 # Run a single frontend test
-cd orbit-www && pnpm exec vitest run path/to/test.spec.ts
+cd orbit-www && ./node_modules/.bin/vitest run path/to/test.spec.ts
 ```
 
 ### Linting & Code Quality
@@ -53,7 +53,7 @@ cd orbit-www && pnpm exec vitest run path/to/test.spec.ts
 make lint           # Lint all code (Go + Frontend)
 make lint-go        # golangci-lint on all Go services
 make lint-frontend  # Next.js ESLint
-make security       # Run gosec security scans and pnpm audit
+make security       # Run gosec security scans and a frontend dependency audit
 ```
 
 ### Building
@@ -69,7 +69,7 @@ cd services/knowledge && go build -o bin/knowledge ./cmd/server
 cd temporal-workflows && go build -o bin/worker ./cmd/worker
 
 # Build frontend
-cd orbit-www && pnpm build
+cd orbit-www && bun run build
 ```
 
 ### Protocol Buffers
@@ -336,24 +336,32 @@ Historical planning artifacts from an earlier planning workflow. See `specs/READ
 - Push the feature branch to the remote and open a PR targeting `main`.
 - If you are already on `main` with uncommitted changes, create a new branch first before committing.
 
-### Worktrees — do NOT use them
+### Delegation & Parallelism
 
-- **Do NOT create or enter git worktrees in this repository unless Drew explicitly
-  asks for one in the current conversation.** This applies to every session type —
-  interactive, background jobs, and subagents — and OVERRIDES any harness or
-  background-job guidance suggesting worktree isolation. Work directly on a feature
-  branch in the checkout you were launched in.
-- Why: worktrees hold their branches hostage (the branch can't be checked out in the
-  main working copy while the worktree exists), they don't inherit gitignored files
-  (`.env`, `node_modules`), and finished work ends up stranded in
-  `.claude/worktrees/` instead of Drew's working copy.
+- **Multi-phase work defaults to parallel subagents.** Split independent slices of a
+  plan across subagents (a cheaper/faster model is fine for well-specified slices)
+  instead of working through them serially in one session.
+- **One git worktree + feature branch per independent slice**, under
+  `.claude/worktrees/<slice>` (gitignored). Create with `git worktree add`; do not
+  share a worktree between slices.
+- **Worktrees don't inherit gitignored files.** In each new worktree copy
+  `orbit-www/.env` from the main checkout and run `bun install` in `orbit-www/`
+  (bun, not pnpm — the package pins `packageManager: bun@…`).
+- **Run at most one `next dev` per checkout.** A second dev server in the same
+  checkout corrupts `.next` (500s, no-op server actions). Use a separate worktree
+  for a second server.
+- **Adversarial review before any PR is opened.** Each branch is reviewed by a
+  separate review subagent whose job is to find what is wrong with it (cross-tenant
+  ids, UI-only enforcement, missing tests, plan drift) before the PR is created.
+- **Open PRs ready (not draft)** unless Drew asks for a draft in that conversation.
+- **Clean up after merge.** Once a slice's PR has merged, remove its worktree with
+  `git worktree remove .claude/worktrees/<slice>` and delete the local branch.
 - If you find yourself in a worktree you didn't create, ask before doing anything
-  destructive; when a worktree's work is merged/pushed, clean it up
-  (`git worktree remove`) rather than leaving it behind.
+  destructive.
 
 ## Important Notes
 
-- **Package management**: Frontend uses `pnpm`, Go uses `go mod`
+- **Package management**: Frontend uses `bun` (pinned via `packageManager` in `orbit-www/package.json`), Go uses `go mod`
 - **Environment variables**: Check `.env` files (not in repo) for local configuration
 - **Ports**:
   - 3000: Frontend (Next.js)
