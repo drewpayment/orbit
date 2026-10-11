@@ -7,6 +7,7 @@
  * user could PATCH /api/users/<self> {role:'super_admin'}.
  */
 import { describe, it, expect, vi } from 'vitest'
+import { buildConfig } from 'payload'
 import type { Access, Field, FieldAccess, Payload } from 'payload'
 
 vi.mock('../hooks/userApprovalHook', () => ({ userApprovalAfterChangeHook: vi.fn() }))
@@ -103,6 +104,33 @@ describe('Users access: privilege escalation', () => {
   })
 })
 
+describe('Users access: identity keys', () => {
+  it('email is writable only by super_admin on update (self, admin and plain user denied)', async () => {
+    const f = field('email')
+    expect(f.access?.update, 'email must declare field update access').toBeDefined()
+    expect(await invokeField(f.access!.update, { user: plain, id: 'p-1', doc: plain })).toBe(false)
+    expect(await invokeField(f.access!.update, { user: admin, id: 'p-9', doc: admin })).toBe(false)
+    expect(await invokeField(f.access!.update, { user: admin, id: 'p-2', doc: other })).toBe(false)
+    expect(await invokeField(f.access!.update, { user: undefined, id: 'p-2', doc: other })).toBe(false)
+    expect(await invokeField(f.access!.update, { user: superAdmin, id: 'p-2', doc: other })).toBe(true)
+  })
+
+  it('betterAuthId is writable only by super_admin (admins cannot repoint an account)', async () => {
+    const f = field('betterAuthId')
+    for (const op of ['create', 'update'] as const) {
+      expect(await invokeField(f.access![op], { user: admin, id: 'p-2', doc: other })).toBe(false)
+      expect(await invokeField(f.access![op], { user: plain, id: 'p-1', doc: plain })).toBe(false)
+      expect(await invokeField(f.access![op], { user: superAdmin, id: 'p-2', doc: other })).toBe(true)
+    }
+  })
+
+  it('an admin cannot write status or other privileged fields on their own doc', async () => {
+    for (const name of ['status', 'skipEmailVerification', 'registrationApprovedBy']) {
+      expect(await invokeField(field(name).access!.update, { user: admin, id: 'p-9', doc: admin })).toBe(false)
+    }
+  })
+})
+
 describe('Users access: field reads', () => {
   const sensitive = ['role', 'status', 'skipEmailVerification', 'invitedAt', 'registrationApprovedAt', 'registrationApprovedBy']
   it.each(sensitive)('%s is readable by self and admins, not by other users', async (name) => {
@@ -158,6 +186,12 @@ describe('Users access: collection level', () => {
       expect(await invoke(update, { user: admin, payload, id: 'nope' })).toBe(false)
     })
 
+    it('a bulk update with no id is denied for everyone but a super_admin', async () => {
+      const { payload } = makePayload({ users })
+      expect(await invoke(update, { user: plain, payload })).toBe(false)
+      expect(await invoke(update, { user: admin, payload })).toBe(false)
+    })
+
     it('a super_admin can update anyone', async () => {
       const { payload } = makePayload({ users })
       expect(await invoke(update, { user: superAdmin, payload, id: 'p-5' })).toBe(true)
@@ -181,6 +215,20 @@ describe('Users access: collection level', () => {
     it('a user with no workspaces reads only themselves', async () => {
       const { payload } = makePayload()
       expect(await invoke(read, { user: plain, payload })).toEqual({ id: { equals: 'p-1' } })
+    })
+
+    it('inactive memberships are excluded from the co-member set', async () => {
+      const { payload } = makePayload({
+        members: [
+          { workspace: 'ws-1', user: 'ba-1', role: 'member', status: 'active' },
+          { workspace: 'ws-1', user: 'ba-2', role: 'member', status: 'suspended' },
+          { workspace: 'ws-2', user: 'ba-3', role: 'member', status: 'active' },
+        ],
+      })
+      const where: any = await invoke(read, { user: plain, payload })
+      const inClause = where?.or?.find((c: any) => c.betterAuthId)
+      // ba-1 is the only active member of ws-1 (the caller); ba-2 must not leak.
+      expect(inClause.betterAuthId.in).toEqual(['ba-1'])
     })
 
     it('a user reads themselves plus co-members of their workspaces, never other tenants', async () => {
@@ -210,5 +258,65 @@ describe('Media access', () => {
     expect(await invoke(access, { user: undefined, id: 'm-1' })).toBe(false)
     expect(await invoke(access, { user: plain, id: 'm-1' })).toBe(false)
     expect(await invoke(access, { user: admin, id: 'm-1' })).toBe(true)
+  })
+})
+
+describe('Users access: enforced through the real Payload field pipeline', () => {
+  // Drives Payload's own beforeValidate traversal (where field access is
+  // executed for payload.update({ overrideAccess: false, user })) against the
+  // sanitized Users collection. This also proves the explicit `email` field
+  // merged with the built-in auth field. A denied field is reverted to the
+  // stored doc value, so the attempted write never reaches the database.
+  async function run(user: any, doc: any, data: Record<string, unknown>) {
+    const config = await buildConfig({ secret: 'test', collections: [Users, Media], db: {} as any })
+    const collection = config.collections.find((c) => c.slug === 'users')!
+    const mod: any = await import('../../../node_modules/payload/dist/fields/hooks/beforeValidate/index.js')
+    return mod.beforeValidate({
+      id: doc.id,
+      collection,
+      context: {},
+      data: { ...data },
+      doc,
+      operation: 'update',
+      overrideAccess: false,
+      req: { user, payload: { config }, payloadAPI: 'local', context: {} },
+    })
+  }
+
+  const stored = { id: 'p-1', email: 'me@example.com', name: 'Me', role: 'user', status: 'approved', betterAuthId: 'ba-1', skipEmailVerification: false }
+
+  it('reverts role/status/email/betterAuthId/skipEmailVerification on a self-update by a plain user, keeps name', async () => {
+    const out = await run(plain, stored, {
+      name: 'New Name',
+      role: 'super_admin',
+      status: 'pending',
+      email: 'victim@example.com',
+      betterAuthId: 'ba-other',
+      skipEmailVerification: true,
+    })
+    expect(out.name).toBe('New Name')
+    expect(out).toMatchObject({
+      role: 'user',
+      status: 'approved',
+      email: 'me@example.com',
+      betterAuthId: 'ba-1',
+      skipEmailVerification: false,
+    })
+  })
+
+  it('lets a super_admin write the same fields on another user', async () => {
+    const out = await run(superAdmin, stored, { role: 'admin', status: 'deactivated', email: 'new@example.com' })
+    expect(out).toMatchObject({ role: 'admin', status: 'deactivated', email: 'new@example.com' })
+  })
+
+  it('lets an admin change status on a regular user but not promote them or touch email/betterAuthId', async () => {
+    const out = await run(admin, stored, { status: 'deactivated', role: 'admin', email: 'x@example.com', betterAuthId: 'ba-x' })
+    expect(out).toMatchObject({ status: 'deactivated', role: 'user', email: 'me@example.com', betterAuthId: 'ba-1' })
+  })
+
+  it('an admin cannot change status on their own doc through the pipeline', async () => {
+    const adminDoc = { ...admin, email: 'a@example.com', status: 'approved' }
+    const out = await run(admin, adminDoc, { status: 'rejected', role: 'super_admin' })
+    expect(out).toMatchObject({ status: 'approved', role: 'admin' })
   })
 })

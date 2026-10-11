@@ -59,6 +59,9 @@ export const usersUpdate: Access = async ({ req: { user, payload }, id }) => {
  * (never other tenants). Privileged fields are further limited by
  * `adminOrSelfFieldRead`.
  */
+// Accepted limits: the co-member set is recomputed per request (uncached) and
+// capped at 10k membership docs by coMemberBetterAuthIds. Follow-up: cache per
+// request / move to a join once workspaces outgrow that.
 export const usersRead: Access = async ({ req: { user, payload } }) => {
   if (!user) return false
   if (isPlatformAdmin(user)) return true
@@ -70,6 +73,9 @@ export const usersRead: Access = async ({ req: { user, payload } }) => {
   if (coMembers.length === 0) return self
   return { or: [self, { betterAuthId: { in: coMembers } }] }
 }
+
+/** Field write reserved for super_admin (email, betterAuthId: identity keys). */
+export const superAdminFieldWrite: FieldAccess = ({ req: { user } }) => isSuperAdmin(user)
 
 /** Field read: the doc's owner or a platform admin (approval/privilege metadata). */
 export const adminOrSelfFieldRead: FieldAccess = ({ req: { user }, id, doc }) => {
