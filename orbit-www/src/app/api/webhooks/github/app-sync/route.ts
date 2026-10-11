@@ -1,7 +1,6 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import crypto from 'crypto'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import {
@@ -11,6 +10,7 @@ import {
 } from '@/lib/app-manifest'
 import { fetchManifestContent } from '@/lib/github-manifest'
 import { createInstallationToken } from '@/lib/github/octokit'
+import { filterVerified } from '@/lib/github/webhook-signature'
 import type { App } from '@/payload-types'
 
 type HealthMethod = NonNullable<NonNullable<App['healthConfig']>['method']>
@@ -125,11 +125,11 @@ export async function POST(request: NextRequest) {
       limit: 100,
     })
 
-    if (apps.docs.length === 0) {
-      return NextResponse.json(
-        { message: 'No matching apps', repository: repoFullName },
-        { status: 200 },
-      )
+    // Verify the HMAC against each candidate's own secret before acting on, or
+    // revealing anything about, any app. Generic 401 when none verify.
+    const verifiedApps = filterVerified(apps.docs, body, signature)
+    if (verifiedApps.length === 0) {
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
     }
 
     // 7. Process each matching app
@@ -140,39 +140,7 @@ export async function POST(request: NextRequest) {
       error?: string
     }> = []
 
-    for (const app of apps.docs) {
-      // Verify webhook signature for this app
-      if (!app.webhookSecret) {
-        results.push({
-          appId: app.id,
-          success: false,
-          error: 'No webhook secret configured',
-        })
-        continue
-      }
-
-      const expectedSignature =
-        'sha256=' +
-        crypto
-          .createHmac('sha256', app.webhookSecret)
-          .update(body)
-          .digest('hex')
-
-      // Use timing-safe comparison to prevent timing attacks
-      const isValid = crypto.timingSafeEqual(
-        Buffer.from(signature),
-        Buffer.from(expectedSignature),
-      )
-
-      if (!isValid) {
-        results.push({
-          appId: app.id,
-          success: false,
-          error: 'Invalid signature',
-        })
-        continue
-      }
-
+    for (const app of verifiedApps) {
       try {
         const result = await processAppSync(
           app,

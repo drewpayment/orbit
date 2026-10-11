@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
 
@@ -46,6 +47,12 @@ func isAPIKeyRejection(status int, body []byte) bool {
 		return false
 	}
 	return parsed.Code == "UNAUTHORIZED"
+}
+
+// logAPIKeyRejection makes a misconfigured worker loud: the orbit-www route gate
+// rejected our X-API-Key, so every call will keep failing until the key matches.
+func logAPIKeyRejection(endpoint string) {
+	log.Printf("ERROR: internal API key rejected by %s — check ORBIT_INTERNAL_API_KEY on the worker and orbit-www", endpoint)
 }
 
 type HTTPActivityClients struct {
@@ -160,6 +167,9 @@ func (c *HTTPActivityClients) RefreshGitHubInstallationTokenActivity(
 
 	if resp.StatusCode != http.StatusOK {
 		errMsg := fmt.Sprintf("API returned status %d: %s", resp.StatusCode, string(body))
+		if isAPIKeyRejection(resp.StatusCode, body) {
+			logAPIKeyRejection("refresh-github-token")
+		}
 		// Terminal HTTP codes (installation gone, bad credentials, encryption failure,
 		// bad request) cannot be fixed by retrying. Mark them non-retryable so the
 		// workflow escalates the installation to needs_reconnect instead of looping.
@@ -224,6 +234,9 @@ func (c *HTTPActivityClients) UpdateInstallationStatusActivity(
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		if isAPIKeyRejection(resp.StatusCode, body) {
+			logAPIKeyRejection("update-installation-status")
+		}
 		return fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
 	}
 

@@ -20,6 +20,8 @@ import { FakeAuthzError, FakeUnauthenticatedError } from '@/lib/authz/route-test
 
 const { GET, PATCH } = await import('./route')
 
+const W1 = 'aaaaaaaaaaaaaaaaaaaaaaaa'
+const W2 = 'bbbbbbbbbbbbbbbbbbbbbbbb'
 const ctx = { params: Promise.resolve({ id: 'inst-1' }) }
 const doc = {
   id: 'inst-1',
@@ -75,26 +77,44 @@ describe('/api/github/installations/[id]', () => {
 
   it('PATCH returns 401/403 without touching the doc', async () => {
     mocks.authorize.mockRejectedValueOnce(new FakeUnauthenticatedError())
-    expect((await PATCH(patch({ allowedWorkspaces: ['w1'] }), ctx)).status).toBe(401)
+    expect((await PATCH(patch({ allowedWorkspaces: [W1] }), ctx)).status).toBe(401)
     mocks.authorize.mockRejectedValueOnce(new FakeAuthzError())
-    expect((await PATCH(patch({ allowedWorkspaces: ['w1'] }), ctx)).status).toBe(403)
+    expect((await PATCH(patch({ allowedWorkspaces: [W1] }), ctx)).status).toBe(403)
     expect(mocks.update).not.toHaveBeenCalled()
   })
 
   it('PATCH updates allowedWorkspaces for a platform admin and strips the token from the response', async () => {
-    const res = await PATCH(patch({ allowedWorkspaces: ['w1', 'w2'] }), ctx)
+    const res = await PATCH(patch({ allowedWorkspaces: [W1, W2] }), ctx)
     expect(res.status).toBe(200)
     expect(mocks.update).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'inst-1', data: { allowedWorkspaces: ['w1', 'w2'] } }),
+      expect.objectContaining({ id: 'inst-1', data: { allowedWorkspaces: [W1, W2] } }),
     )
     expect(await res.json()).not.toHaveProperty('installationToken')
+  })
+
+  it('PATCH returns 404 when the installation does not exist', async () => {
+    mocks.findByID.mockRejectedValue(new Error('Not Found'))
+    expect((await PATCH(patch({ allowedWorkspaces: [W1] }), ctx)).status).toBe(404)
+    expect(mocks.update).not.toHaveBeenCalled()
+  })
+
+  it('PATCH maps a Payload ValidationError to 400 (not 404)', async () => {
+    mocks.update.mockRejectedValue(Object.assign(new Error('invalid'), { name: 'ValidationError' }))
+    expect((await PATCH(patch({ allowedWorkspaces: [W1] }), ctx)).status).toBe(400)
+  })
+
+  it('PATCH maps an unexpected update failure to 500', async () => {
+    mocks.update.mockRejectedValue(new Error('db down'))
+    expect((await PATCH(patch({ allowedWorkspaces: [W1] }), ctx)).status).toBe(500)
   })
 
   it.each([
     [{ installationToken: 'attacker' }],
     [{ status: 'active' }],
-    [{ allowedWorkspaces: ['w1'], installationToken: 'attacker' }],
-    [{ allowedWorkspaces: 'w1' }],
+    [{ allowedWorkspaces: [W1], installationToken: 'attacker' }],
+    [{ allowedWorkspaces: W1 }],
+    [{ allowedWorkspaces: ['not-an-id'] }],
+    [{ allowedWorkspaces: ['../etc'] }],
     [{ allowedWorkspaces: [1] }],
     [{}],
     [null],

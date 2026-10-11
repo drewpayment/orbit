@@ -1,12 +1,12 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import crypto from 'crypto'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { parseManifest } from '@/lib/template-manifest'
 import { parseGitHubUrl, fetchManifestContent } from '@/lib/github-manifest'
 import { revalidatePath } from 'next/cache'
+import { filterVerified } from '@/lib/github/webhook-signature'
 
 // Valid category values that match the Templates collection
 const VALID_CATEGORIES = [
@@ -199,57 +199,29 @@ export async function POST(request: NextRequest) {
       limit: 1000,
     })
 
-    if (templates.docs.length === 0) {
-      return NextResponse.json({
-        message: 'No templates found for repository',
-        repository: repoFullName
-      }, { status: 200 })
+    // Verify the HMAC against each candidate's own secret before acting on, or
+    // revealing anything about, any template. Generic 401 when none verify.
+    const verifiedTemplates = filterVerified(templates.docs, body, signature)
+    if (verifiedTemplates.length === 0) {
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
     }
 
-    // 7. Verify signature for each matching template and sync
+    // 7. Sync each verified template
     const results: Array<{ templateId: string; success: boolean; error?: string }> = []
 
-    for (const template of templates.docs) {
-      if (!template.webhookSecret) {
+    for (const template of verifiedTemplates) {
+      try {
+        const result = await syncTemplateManifestInternal(template.id as string)
         results.push({
           templateId: template.id as string,
-          success: false,
-          error: 'No webhook secret configured'
+          success: result.success,
+          error: result.error
         })
-        continue
-      }
-
-      const expectedSignature = 'sha256=' + crypto
-        .createHmac('sha256', template.webhookSecret)
-        .update(body)
-        .digest('hex')
-
-      // Use timing-safe comparison to prevent timing attacks
-      const signatureValid = crypto.timingSafeEqual(
-        Buffer.from(signature),
-        Buffer.from(expectedSignature)
-      )
-
-      if (signatureValid) {
-        try {
-          const result = await syncTemplateManifestInternal(template.id as string)
-          results.push({
-            templateId: template.id as string,
-            success: result.success,
-            error: result.error
-          })
-        } catch (error) {
-          results.push({
-            templateId: template.id as string,
-            success: false,
-            error: error instanceof Error ? error.message : 'Unknown error'
-          })
-        }
-      } else {
+      } catch (error) {
         results.push({
           templateId: template.id as string,
           success: false,
-          error: 'Invalid signature'
+          error: error instanceof Error ? error.message : 'Unknown error'
         })
       }
     }

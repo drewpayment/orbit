@@ -1,10 +1,13 @@
 package clients
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -72,4 +75,39 @@ func TestRefreshGitHubInstallationTokenActivity_GitHubBadCredentialsStaysTermina
 	var appErr *temporal.ApplicationError
 	require.ErrorAs(t, err, &appErr)
 	assert.True(t, appErr.NonRetryable())
+}
+
+func TestUpdateInstallationStatusActivity_GateUnauthorizedLogsLoudly(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"Unauthorized","code":"UNAUTHORIZED"}`))
+	}))
+	defer srv.Close()
+
+	c := NewHTTPActivityClientsWithAuth(srv.URL, "wrong")
+	err := c.UpdateInstallationStatusActivity(context.Background(), "inst-1", "needs_reconnect", "x")
+	require.Error(t, err)
+	assert.Contains(t, buf.String(), "ORBIT_INTERNAL_API_KEY")
+	assert.Contains(t, buf.String(), "ERROR")
+}
+
+func TestRefreshGitHubInstallationTokenActivity_GateUnauthorizedLogsLoudly(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"Unauthorized","code":"UNAUTHORIZED"}`))
+	}))
+	defer srv.Close()
+
+	c := NewHTTPActivityClientsWithAuth(srv.URL, "wrong")
+	_, err := c.RefreshGitHubInstallationTokenActivity(context.Background(), "inst-1")
+	require.Error(t, err)
+	assert.Contains(t, buf.String(), "ORBIT_INTERNAL_API_KEY")
 }
