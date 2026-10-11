@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 import { adminOnly, workspaceScopedRead } from '@/lib/authz/payload'
+import { secretFieldAccess, secretJsonFieldHooks } from '@/lib/encryption/secret-fields'
 
 export const CloudAccounts: CollectionConfig = {
   slug: 'cloud-accounts',
@@ -37,8 +38,13 @@ export const CloudAccounts: CollectionConfig = {
       name: 'credentials',
       type: 'json',
       required: true,
+      // Encrypted at rest (JSON serialized, then AES-256-GCM) and never returned
+      // by REST/GraphQL. Server code reads with overrideAccess and decrypts via
+      // decryptSecretJson (lib/encryption/secret-fields).
+      access: secretFieldAccess,
+      hooks: secretJsonFieldHooks,
       admin: {
-        description: 'Provider-specific credentials (admin only)',
+        description: 'Provider-specific credentials (admin only; encrypted at rest)',
         condition: (data, siblingData, { user }) => {
           const role = user?.role
           return role === 'super_admin' || role === 'admin'

@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 import { adminOnly } from '@/lib/authz/payload'
+import { secretFieldAccess, secretFieldHooksPreEncrypted } from '@/lib/encryption/secret-fields'
 
 export const GitHubInstallations: CollectionConfig = {
   slug: 'github-installations',
@@ -74,6 +75,11 @@ export const GitHubInstallations: CollectionConfig = {
       name: 'installationToken',
       type: 'text',
       required: true,
+      // `admin.hidden` only hides the admin UI; field access is what keeps the
+      // token out of REST/GraphQL responses. Writers (callback, refresh route)
+      // already encrypt; the hook is a backstop for any other writer.
+      access: secretFieldAccess,
+      hooks: secretFieldHooksPreEncrypted,
       admin: {
         description: 'Encrypted GitHub App installation access token',
         hidden: true, // Never show in admin UI

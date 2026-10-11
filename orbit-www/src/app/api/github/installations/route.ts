@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import { authorize, authzErrorResponse } from '@/lib/authz'
+import { stripInstallationToken } from '@/lib/github/installation-sanitize'
 
 // Platform-admin only: installation inventory (account logins, repo selection,
 // workspace grants) is operational metadata, not something any authenticated —
@@ -23,5 +24,6 @@ export async function GET() {
     sort: '-installedAt',
   })
 
-  return NextResponse.json(installations)
+  // Never ship the encrypted installation token to the browser.
+  return NextResponse.json({ ...installations, docs: installations.docs.map(stripInstallationToken) })
 }

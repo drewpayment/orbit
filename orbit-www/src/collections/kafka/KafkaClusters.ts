@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 import { adminOnly } from '@/lib/access/collection-access'
+import { secretFieldAccess, secretJsonFieldHooks } from '@/lib/encryption/secret-fields'
 
 export const KafkaClusters: CollectionConfig = {
   slug: 'kafka-clusters',
@@ -47,9 +48,13 @@ export const KafkaClusters: CollectionConfig = {
     {
       name: 'credentials',
       type: 'json',
+      // Stored as AES-256-GCM ciphertext of the JSON object and never returned
+      // by REST/GraphQL. The internal kafka-clusters routes (Go worker) and the
+      // validateCluster action decrypt it server-side.
+      access: secretFieldAccess,
+      hooks: secretJsonFieldHooks,
       admin: {
-        description: 'Encrypted auth credentials (SASL, mTLS certs, API keys)',
-        // Note: In production, this should use encrypted storage
+        description: 'Auth credentials (SASL, mTLS certs, API keys); encrypted at rest',
       },
     },
     {

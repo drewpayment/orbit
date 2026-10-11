@@ -561,7 +561,11 @@ export async function getCloudAccounts(workspaceId: string) {
       limit: 100,
     })
 
-    return { success: true, docs: accounts.docs }
+    // Never ship credentials (even encrypted) to the browser.
+    return {
+      success: true,
+      docs: accounts.docs.map(({ credentials: _credentials, ...safe }) => safe),
+    }
   } catch (error) {
     console.error('Failed to fetch cloud accounts:', error)
     return { success: false, error: 'Failed to fetch cloud accounts', docs: [] }

@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 import { workspaceScopedRead, manageCreate, docWorkspaceMutate } from '@/lib/authz/payload'
+import { secretFieldAccess, secretFieldHooks } from '@/lib/encryption/secret-fields'
 
 /**
  * LLMProviders Collection
@@ -9,9 +10,10 @@ import { workspaceScopedRead, manageCreate, docWorkspaceMutate } from '@/lib/aut
  * loads a provider record by id, decrypts the apiKey, and constructs a
  * runtime Provider via the plugin registry (anthropic | openai_compat).
  *
- * Mirrors the encrypted-secret pattern from PluginConfig: the `apiKey` field
- * uses the EncryptedField admin component so the value is encrypted at rest
- * and never exposed in raw form to non-privileged callers.
+ * The `apiKey` is encrypted at rest (AES-256-GCM, field-level beforeChange hook)
+ * and field-level read access is denied to every API caller; only server code
+ * using overrideAccess can read it, and must decrypt it (see
+ * lib/encryption/secret-fields).
  */
 export const LLMProviders: CollectionConfig = {
   slug: 'llm-providers',
@@ -82,6 +84,10 @@ export const LLMProviders: CollectionConfig = {
       name: 'apiKey',
       type: 'text',
       label: 'API Key',
+      // Encrypted at rest and never returned by REST/GraphQL; the internal
+      // llm-providers route decrypts it for the agent worker.
+      access: secretFieldAccess,
+      hooks: secretFieldHooks,
       admin: {
         description: 'Encrypted at rest. Leave blank for self-hosted backends that don\'t require a key.',
         components: {

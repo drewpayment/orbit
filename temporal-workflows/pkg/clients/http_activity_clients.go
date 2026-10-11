@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
 
@@ -30,6 +31,28 @@ func isTerminalRefreshStatus(status int) bool {
 	default:
 		return false
 	}
+}
+
+// isAPIKeyRejection reports whether a 401 came from the route's internal API-key
+// gate (a worker misconfiguration, fixable by config) rather than from GitHub
+// rejecting the installation's credentials. Only the latter is terminal.
+func isAPIKeyRejection(status int, body []byte) bool {
+	if status != http.StatusUnauthorized {
+		return false
+	}
+	var parsed struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return false
+	}
+	return parsed.Code == "UNAUTHORIZED"
+}
+
+// logAPIKeyRejection makes a misconfigured worker loud: the orbit-www route gate
+// rejected our X-API-Key, so every call will keep failing until the key matches.
+func logAPIKeyRejection(endpoint string) {
+	log.Printf("ERROR: internal API key rejected by %s — check ORBIT_INTERNAL_API_KEY on the worker and orbit-www", endpoint)
 }
 
 type HTTPActivityClients struct {
@@ -123,6 +146,7 @@ func (c *HTTPActivityClients) RefreshGitHubInstallationTokenActivity(
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", c.apiKey)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -143,10 +167,13 @@ func (c *HTTPActivityClients) RefreshGitHubInstallationTokenActivity(
 
 	if resp.StatusCode != http.StatusOK {
 		errMsg := fmt.Sprintf("API returned status %d: %s", resp.StatusCode, string(body))
+		if isAPIKeyRejection(resp.StatusCode, body) {
+			logAPIKeyRejection("refresh-github-token")
+		}
 		// Terminal HTTP codes (installation gone, bad credentials, encryption failure,
 		// bad request) cannot be fixed by retrying. Mark them non-retryable so the
 		// workflow escalates the installation to needs_reconnect instead of looping.
-		if isTerminalRefreshStatus(resp.StatusCode) {
+		if isTerminalRefreshStatus(resp.StatusCode) && !isAPIKeyRejection(resp.StatusCode, body) {
 			return workflows.RefreshTokenResult{
 					Success:      false,
 					ErrorMessage: errMsg,
@@ -197,6 +224,7 @@ func (c *HTTPActivityClients) UpdateInstallationStatusActivity(
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", c.apiKey)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -206,6 +234,9 @@ func (c *HTTPActivityClients) UpdateInstallationStatusActivity(
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		if isAPIKeyRejection(resp.StatusCode, body) {
+			logAPIKeyRejection("update-installation-status")
+		}
 		return fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
 	}
 

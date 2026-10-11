@@ -1,6 +1,7 @@
 // orbit-www/src/collections/Templates.ts
 import type { CollectionConfig, Where } from 'payload'
 import { memberCreate, workspaceScopedRead, docWorkspaceMutate } from '@/lib/authz/payload'
+import { secretFieldAccess, secretFieldHooks } from '@/lib/encryption/secret-fields'
 
 export const Templates: CollectionConfig = {
   slug: 'templates',
@@ -277,6 +278,10 @@ export const Templates: CollectionConfig = {
       name: 'webhookSecret',
       type: 'text',
       label: 'Webhook Secret',
+      // HMAC key for the template-sync webhook: encrypted at rest and never
+      // returned by REST/GraphQL (public templates are readable by everyone).
+      access: secretFieldAccess,
+      hooks: secretFieldHooks,
       admin: {
         hidden: true,
       },
