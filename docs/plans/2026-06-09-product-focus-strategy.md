@@ -1,5 +1,7 @@
 # Orbit Product Focus Strategy — Strip Back & Sharpen
 
+> **Superseded in part by [2026-10-11-product-direction.md](./2026-10-11-product-direction.md) (2026-10-11).** Bifrost is no longer the flagship, Orbit's role is decided (the portal for application developers), and scorecards shipped, so the #45 build-candidate decision is made. The strip list and the frozen-capabilities decisions below still stand.
+
 **Date:** 2026-06-09
 **Status:** Keep/strip decisions **accepted**. Build candidates (scorecards, cost visibility) are **not committed** — tracked as a proposal in [#45](https://github.com/drewpayment/orbit/issues/45), pending the force-ranking exercise with the sponsor.
 **Inputs:** Commercial IDP evaluation (Cortex / Port / OpsLevel / DX), security & engineering audit (`docs/audits/2026-06-09-security-and-engineering-audit.md`), capability inventory (this doc, §2)
