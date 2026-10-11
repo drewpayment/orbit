@@ -50,3 +50,27 @@ export const workspaceIdsFor = cache(
     }
   },
 )
+
+/**
+ * Better-Auth ids of every active member of any of `workspaceIds`. Backs the
+ * `users` read filter (a user may see the people they share a workspace with).
+ * Uncached; capped at 10k membership docs (follow-up if workspaces outgrow it).
+ */
+export async function coMemberBetterAuthIds(payload: Payload, workspaceIds: string[]): Promise<string[]> {
+  if (workspaceIds.length === 0) return []
+  const result = await payload.find({
+    collection: 'workspace-members',
+    where: {
+      and: [{ workspace: { in: workspaceIds } }, { status: { equals: 'active' } }],
+    },
+    limit: 10000,
+    depth: 0,
+    overrideAccess: true,
+  })
+  const ids = new Set<string>()
+  for (const doc of result.docs) {
+    const user = (doc as { user?: unknown }).user
+    if (typeof user === 'string' && user) ids.add(user)
+  }
+  return [...ids]
+}
