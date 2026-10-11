@@ -11,6 +11,7 @@ import {
 import { fetchManifestContent } from '@/lib/github-manifest'
 import { createInstallationToken } from '@/lib/github/octokit'
 import { filterVerified } from '@/lib/github/webhook-signature'
+import { tryReadSecretString } from '@/lib/encryption/secret-fields'
 import type { App } from '@/payload-types'
 
 type HealthMethod = NonNullable<NonNullable<App['healthConfig']>['method']>
@@ -134,7 +135,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true }, { status: 200 })
     }
 
-    const verifiedApps = filterVerified(apps.docs, body, signature)
+    const verifiedApps = filterVerified(apps.docs, body, signature, (a) =>
+      tryReadSecretString(a.webhookSecret, 'apps.webhookSecret'),
+    )
     if (verifiedApps.length === 0) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
     }

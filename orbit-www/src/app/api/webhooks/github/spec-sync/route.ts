@@ -5,6 +5,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { Client, Connection } from '@temporalio/client'
 import { filterVerified } from '@/lib/github/webhook-signature'
+import { tryReadSecretString } from '@/lib/encryption/secret-fields'
 
 const SPEC_FILE_PATTERNS = [
   /openapi\.(yaml|yml|json)$/i,
@@ -108,7 +109,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true }, { status: 200 })
     }
 
-    const verifiedApps = filterVerified(apps.docs, body, signature)
+    const verifiedApps = filterVerified(apps.docs, body, signature, (a) =>
+      tryReadSecretString(a.webhookSecret, 'apps.webhookSecret'),
+    )
     if (verifiedApps.length === 0) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
     }

@@ -15,6 +15,8 @@
     "generate:importmap": "cross-env NODE_OPTIONS=\"--no-deprecation --conditions=react-server\" payload generate:importmap",
     "generate:types": "cross-env NODE_OPTIONS=\"--no-deprecation --conditions=react-server\" payload generate:types",
     "generate:proto": "cd ../proto && ../orbit-www/node_modules/.bin/buf generate",
+    "secrets:encrypt": "tsx src/scripts/migrate-encrypt-secrets.ts",
+    "secrets:encrypt:dry-run": "tsx src/scripts/migrate-encrypt-secrets.ts --dry-run",
     "scorecards:dedupe": "tsx src/scripts/dedupe-scorecard-projections.ts",
     "scorecards:dedupe:apply": "tsx src/scripts/dedupe-scorecard-projections.ts --apply",
     "lint": "cross-env NODE_OPTIONS=--no-deprecation next lint",

@@ -1,5 +1,5 @@
 import type { CollectionConfig } from 'payload'
-import { encrypt } from '@/lib/encryption'
+import { secretFieldAccess, secretFieldHooks } from '@/lib/encryption/secret-fields'
 import { adminOnly } from '@/lib/authz/payload'
 
 /**
@@ -11,7 +11,7 @@ import { adminOnly } from '@/lib/authz/payload'
  *
  * The `credentials.pat` is encrypted at rest with AES-256-GCM via
  * `lib/encryption` (the same envelope as `github-installations.installationToken`
- * and `registry-configs.ghcrPat`) in the beforeChange hook below. It is
+ * and `registry-configs.ghcrPat`) by the field-level beforeChange hooks below. It is
  * `hidden` from the admin UI and MUST never cross the server/client boundary:
  * the admin server actions project a PAT-less view, and only the internal
  * `POST /api/internal/git-connections/token` route (X-API-Key, Go worker only)
@@ -38,27 +38,6 @@ export const GitConnections: CollectionConfig = {
     create: adminOnly,
     update: adminOnly,
     delete: adminOnly,
-  },
-
-  hooks: {
-    beforeChange: [
-      ({ data }) => {
-        // Encrypt secrets if present and not already encrypted (encrypted values
-        // have the iv:authTag:ciphertext shape — ADO PATs and Entra client
-        // secrets never contain colons). An absent secret on update means "keep
-        // the stored value" — the action omits the field entirely.
-        for (const field of ['pat', 'clientSecret'] as const) {
-          const value = data?.credentials?.[field]
-          if (typeof value === 'string' && value.length > 0) {
-            const isEncrypted = value.includes(':') && value.split(':').length === 3
-            if (!isEncrypted) {
-              data.credentials[field] = encrypt(value)
-            }
-          }
-        }
-        return data
-      },
-    ],
   },
 
   fields: [
@@ -119,6 +98,10 @@ export const GitConnections: CollectionConfig = {
         {
           name: 'pat',
           type: 'text',
+          // Encrypted at rest; `admin.hidden` alone does not stop REST/GraphQL
+          // from returning it, so field access denies every API read.
+          access: secretFieldAccess,
+          hooks: secretFieldHooks,
           admin: {
             description: 'Personal access token (AES-256-GCM encrypted at rest).',
             hidden: true, // Never show in the admin UI.
@@ -138,6 +121,8 @@ export const GitConnections: CollectionConfig = {
         {
           name: 'clientSecret',
           type: 'text',
+          access: secretFieldAccess,
+          hooks: secretFieldHooks,
           admin: {
             description: 'Entra client secret (AES-256-GCM encrypted at rest).',
             hidden: true, // Never show in the admin UI.

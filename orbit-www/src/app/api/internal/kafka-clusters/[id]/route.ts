@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import { validateInternalApiKey } from '@/lib/auth/internal-api-auth'
+import { revealClusterCredentials } from '@/lib/kafka/cluster-credentials'
 
 
 /**
@@ -39,7 +40,8 @@ export async function GET(
       )
     }
 
-    return NextResponse.json(cluster)
+    // credentials are encrypted at rest; the Go worker needs the real values.
+    return NextResponse.json(revealClusterCredentials(cluster))
   } catch (error) {
     console.error('[Internal API] Kafka cluster get error:', error)
 

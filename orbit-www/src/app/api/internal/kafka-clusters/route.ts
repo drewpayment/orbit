@@ -5,6 +5,7 @@ import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import type { Where } from 'payload'
 import { validateInternalApiKey } from '@/lib/auth/internal-api-auth'
+import { revealClusterCredentials } from '@/lib/kafka/cluster-credentials'
 
 
 /**
@@ -50,7 +51,11 @@ export async function GET(request: NextRequest) {
       overrideAccess: true,
     })
 
-    return NextResponse.json(result)
+    // credentials are encrypted at rest; the Go worker needs the real values.
+    return NextResponse.json({
+      ...result,
+      docs: result.docs.map((doc) => revealClusterCredentials(doc)),
+    })
   } catch (error) {
     console.error('[Internal API] Kafka clusters query error:', error)
 

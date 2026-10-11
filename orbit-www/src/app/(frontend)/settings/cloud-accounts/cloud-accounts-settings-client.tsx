@@ -194,17 +194,20 @@ export function CloudAccountsSettingsClient() {
       const credentials = credentialsFromForm(form)
 
       if (editing) {
-        // For updates, only send credentials if user filled them in
-        const hasNewCredentials = Object.values(credentials).some(
-          (v) => typeof v === 'string' && v.length > 0,
+        // For updates, send only the credential fields the user filled in. Blank
+        // secret inputs are omitted (the server also treats blanks as "keep the
+        // stored value"), so editing tenant/client id never wipes the secret.
+        const filled = Object.fromEntries(
+          Object.entries(credentials).filter(([, v]) => typeof v === 'string' && v.length > 0),
         )
+        const hasNewCredentials = Object.keys(filled).length > 0
         const result = await updateCloudAccount(editing.id, {
           name: form.name,
           region: form.region || undefined,
           workspaces: form.workspaces,
           approvalRequired: form.approvalRequired,
           approvers: form.approvalRequired ? form.approvers : [],
-          ...(hasNewCredentials ? { credentials } : {}),
+          ...(hasNewCredentials ? { credentials: filled } : {}),
         })
         if (!result.success) throw new Error(result.error || 'Failed to update')
         toast.success('Cloud account updated')

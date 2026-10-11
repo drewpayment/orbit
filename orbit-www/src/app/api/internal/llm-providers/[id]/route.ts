@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
-import { decrypt } from '@/lib/encryption'
+import { readSecretString } from '@/lib/encryption/secret-fields'
 import { validateInternalApiKey } from '@/lib/auth/internal-api-auth'
 
 
@@ -52,15 +52,23 @@ export async function GET(
       }
     }
 
+    // Ciphertext that cannot be decrypted (corrupt data, wrong ENCRYPTION_KEY) is
+    // an error, never something to forward to the worker. A not-yet-migrated
+    // legacy plaintext value is used as-is (warned once) so deploy -> migrate has
+    // no outage window. Empty means a keyless self-hosted backend.
     let plainKey = ''
     if (doc.apiKey) {
       try {
-        plainKey = decrypt(doc.apiKey)
+        plainKey = readSecretString(doc.apiKey, 'llm-providers.apiKey') ?? ''
       } catch {
-        // The EncryptedField may store the value already-encrypted from the UI
-        // pass; if decryption fails the value is treated as plaintext (e.g.
-        // self-hosted backend with no key).
-        plainKey = doc.apiKey
+        console.error('[internal/llm-providers] failed to decrypt apiKey', { id })
+        return NextResponse.json(
+          {
+            error: 'stored apiKey could not be decrypted; re-save the provider key',
+            code: 'DECRYPT_FAILED',
+          },
+          { status: 500 },
+        )
       }
     }
 

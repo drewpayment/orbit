@@ -5,14 +5,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 import crypto from 'crypto'
 
-const mocks = vi.hoisted(() => ({
+const mocks = vi.hoisted(() => {
+  // Routes decrypt webhook secrets via lib/encryption, which needs a key at import.
+  process.env.ENCRYPTION_KEY ??= Buffer.alloc(32, 7).toString('base64')
+  return {
   find: vi.fn(),
   update: vi.fn(),
   findByID: vi.fn(),
   connect: vi.fn(),
   signal: vi.fn(),
   start: vi.fn(),
-}))
+  }
+})
 
 vi.mock('payload', () => ({
   getPayload: vi.fn(async () => ({ find: mocks.find, update: mocks.update, findByID: mocks.findByID })),
@@ -112,5 +116,47 @@ describe.each(Object.keys(routes) as Array<keyof typeof routes>)('webhooks/githu
     const ids = (json.results as Array<Record<string, string>>).map((r) => r[idKey])
     expect(ids).toEqual(['with-secret'])
     if (name === 'spec-sync') expect(mocks.connect).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe.each(Object.keys(routes) as Array<keyof typeof routes>)('webhooks/github/%s with secrets encrypted at rest', (name) => {
+  const idKey = name === 'template-sync' ? 'templateId' : 'appId'
+  let stored: string
+  let corrupt: string
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    const { encryptSecretValue } = await import('@/lib/encryption/secret-fields')
+    stored = encryptSecretValue('good') as string
+    corrupt = stored.slice(0, -2) + (stored.endsWith('00') ? 'ff' : '00')
+    mocks.connect.mockResolvedValue({})
+    mocks.signal.mockResolvedValue(undefined)
+    mocks.start.mockResolvedValue(undefined)
+    mocks.update.mockResolvedValue({})
+    mocks.findByID.mockRejectedValue(new Error('not found'))
+    mocks.find.mockImplementation(async () => ({
+      docs: [
+        { id: 'enc', webhookSecret: stored, repository: { owner: 'acme', name: 'svc' }, workspace: 'w1', slug: 's' },
+        { id: 'broken', webhookSecret: corrupt },
+      ],
+    }))
+  })
+
+  it('verifies the HMAC against the decrypted secret; an undecryptable one never verifies', async () => {
+    const res = await routes[name].POST(req(name, sign(body, 'good')))
+    expect(res.status).toBe(200)
+    const ids = ((await res.json()).results as Array<Record<string, string>>).map((r) => r[idKey])
+    expect(ids).toEqual(['enc'])
+  })
+
+  it('a signature computed with the stored ciphertext is rejected', async () => {
+    const res = await routes[name].POST(req(name, sign(body, stored)))
+    expect(res.status).toBe(401)
+    expect(mocks.connect).not.toHaveBeenCalled()
+  })
+
+  it('a signature over the corrupt candidate\'s ciphertext is rejected (not skipped past verification)', async () => {
+    const res = await routes[name].POST(req(name, sign(body, corrupt)))
+    expect(res.status).toBe(401)
   })
 })

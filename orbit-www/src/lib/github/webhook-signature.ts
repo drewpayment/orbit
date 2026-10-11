@@ -25,6 +25,16 @@ export function filterVerified<T extends { webhookSecret?: string | null }>(
   candidates: readonly T[],
   body: string,
   signature: string,
+  /**
+   * Resolves the plaintext HMAC secret for a candidate. Webhook secrets are
+   * encrypted at rest, so routes pass a resolver that decrypts; returning
+   * null/'' (e.g. undecryptable ciphertext) makes that candidate fail
+   * verification — it is never skipped past verification.
+   */
+  resolveSecret: (candidate: T) => string | null | undefined = (c) => c.webhookSecret,
 ): T[] {
-  return candidates.filter((c) => !!c.webhookSecret && verifyHmacSha256(body, signature, c.webhookSecret))
+  return candidates.filter((c) => {
+    const secret = resolveSecret(c)
+    return !!secret && verifyHmacSha256(body, signature, secret)
+  })
 }

@@ -7,6 +7,7 @@ import { parseManifest } from '@/lib/template-manifest'
 import { parseGitHubUrl, fetchManifestContent } from '@/lib/github-manifest'
 import { revalidatePath } from 'next/cache'
 import { filterVerified } from '@/lib/github/webhook-signature'
+import { tryReadSecretString, decryptSecretString } from '@/lib/encryption/secret-fields'
 
 // Valid category values that match the Templates collection
 const VALID_CATEGORIES = [
@@ -77,7 +78,8 @@ async function syncTemplateManifestInternal(templateId: string): Promise<{ succe
     return { success: false, error: 'No GitHub App installation found' }
   }
 
-  const accessToken = installation.docs[0].installationToken as string
+  // installationToken is stored encrypted (AES-256-GCM); decrypt for the GitHub API.
+  const accessToken = decryptSecretString(installation.docs[0].installationToken)
   const parsed = parseGitHubUrl(template.repoUrl)
 
   if (!parsed) {
@@ -208,7 +210,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true }, { status: 200 })
     }
 
-    const verifiedTemplates = filterVerified(templates.docs, body, signature)
+    const verifiedTemplates = filterVerified(templates.docs, body, signature, (t) =>
+      tryReadSecretString(t.webhookSecret, 'templates.webhookSecret'),
+    )
     if (verifiedTemplates.length === 0) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
     }

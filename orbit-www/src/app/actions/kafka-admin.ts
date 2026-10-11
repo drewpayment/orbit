@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { kafkaClient } from '@/lib/grpc/kafka-client'
 import { authorize } from '@/lib/authz'
+import { revealClusterCredentials, splitClusterConfig } from '@/lib/kafka/cluster-credentials'
 
 // ============================================================================
 // Payload Type Definitions
@@ -630,12 +631,15 @@ export async function createCluster(data: {
 
     const providerPayloadId = providersResult.docs[0].id
 
-    // Build connection config
+    // connectionConfig is stored in plaintext and shown in the UI, so secret-
+    // looking free-form keys (sasl.password, ssl.key.password, ...) are moved
+    // into the encrypted credentials instead. Explicit `credentials` win.
+    const { plain, secret } = splitClusterConfig(data.config)
     const connectionConfig: Record<string, string> = {
+      ...plain,
       'bootstrap.servers': data.bootstrapServers,
       ...(data.environment && { environment: data.environment }),
       ...(data.schemaRegistryUrl && { 'schema.registry.url': data.schemaRegistryUrl }),
-      ...(data.config || {}),
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -646,7 +650,7 @@ export async function createCluster(data: {
         provider: providerPayloadId,
         connectionConfig,
         consoleUrl: data.consoleUrl || undefined,
-        credentials: data.credentials || {},
+        credentials: { ...secret, ...(data.credentials || {}) },
         validationStatus: 'pending',
       },
     })
@@ -850,7 +854,8 @@ export async function validateCluster(clusterId: string): Promise<{
     // The Go service needs bootstrap servers and credentials to test
     const response = await kafkaClient.validateClusterConnection({
       connectionConfig: cluster.connectionConfig || {},
-      credentials: cluster.credentials || {},
+      // Encrypted at rest; decrypt server-side for the Go service only.
+      credentials: (revealClusterCredentials(cluster).credentials ?? {}) as Record<string, string>,
     })
 
     // Update validation status in Payload

@@ -5,6 +5,7 @@ import {
   memberCreate,
   docWorkspaceMutate,
 } from '@/lib/access/collection-access'
+import { secretFieldAccess, secretFieldHooks } from '@/lib/encryption/secret-fields'
 
 export const Apps: CollectionConfig = {
   slug: 'apps',
@@ -401,6 +402,10 @@ export const Apps: CollectionConfig = {
     {
       name: 'webhookSecret',
       type: 'text',
+      // Encrypted at rest and never returned by REST/GraphQL; the GitHub
+      // webhook routes read it with overrideAccess and decrypt it for HMAC.
+      access: secretFieldAccess,
+      hooks: secretFieldHooks,
       admin: {
         hidden: true,
         description: 'Per-app webhook secret (encrypted)',

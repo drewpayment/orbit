@@ -37,3 +37,22 @@ describe('filterVerified', () => {
     expect(out.map((o) => o.id)).toEqual([1])
   })
 })
+
+describe('filterVerified with a secret resolver (secrets encrypted at rest)', () => {
+  const body = '{"x":1}'
+  const decrypt = (c: { webhookSecret?: string | null }) =>
+    c.webhookSecret?.startsWith('enc:') ? c.webhookSecret.slice(4) : null
+
+  it('verifies against the resolved plaintext, not the stored value', () => {
+    const a = { id: 'a', webhookSecret: 'enc:secret-a' }
+    const b = { id: 'b', webhookSecret: 'enc:secret-b' }
+    expect(filterVerified([a, b], body, sign(body, 'secret-a'), decrypt)).toEqual([a])
+    // a signature over the stored (encrypted) value is not valid
+    expect(filterVerified([a], body, sign(body, 'enc:secret-a'), decrypt)).toEqual([])
+  })
+
+  it('a candidate whose secret cannot be resolved fails verification', () => {
+    const broken = { id: 'x', webhookSecret: 'garbage' }
+    expect(filterVerified([broken], body, sign(body, 'garbage'), decrypt)).toEqual([])
+  })
+})

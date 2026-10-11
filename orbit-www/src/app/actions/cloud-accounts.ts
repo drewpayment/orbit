@@ -3,6 +3,11 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { getActor, type Actor } from '@/lib/authz'
+import {
+  mergeCredentialUpdate,
+  publicCloudAccount,
+  revealCloudCredentials,
+} from '@/lib/cloud-accounts/credentials'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -95,7 +100,9 @@ export async function getAllCloudAccounts(): Promise<{
     ])
 
     return {
-      accounts: accountsResult.docs as unknown as CloudAccountDoc[],
+      // Credentials are encrypted at rest; only non-secret identifiers (tenant /
+      // client id) are projected for the browser, never secrets or ciphertext.
+      accounts: accountsResult.docs.map((d) => publicCloudAccount(d)) as unknown as CloudAccountDoc[],
       workspaces: workspacesResult.docs.map((w) => ({
         id: w.id,
         name: w.name,
@@ -183,7 +190,20 @@ export async function updateCloudAccount(
     const updateData: Record<string, unknown> = {}
     if (data.name !== undefined) updateData.name = data.name
     if (data.provider !== undefined) updateData.provider = data.provider
-    if (data.credentials !== undefined) updateData.credentials = data.credentials
+    if (data.credentials !== undefined) {
+      // Blank values mean "keep the stored value" so editing non-secret fields
+      // (tenant/client id) never wipes the stored secret.
+      const existing = await payload.findByID({
+        collection: 'cloud-accounts',
+        id,
+        depth: 0,
+        overrideAccess: true,
+      })
+      updateData.credentials = mergeCredentialUpdate(
+        revealCloudCredentials(existing.credentials),
+        data.credentials,
+      )
+    }
     if (data.region !== undefined) updateData.region = data.region
     if (data.workspaces !== undefined) updateData.workspaces = data.workspaces
     if (data.approvalRequired !== undefined) updateData.approvalRequired = data.approvalRequired
@@ -257,8 +277,14 @@ export async function testCloudAccountConnection(
       return { success: false, valid: false, error: 'Cloud account not found' }
     }
 
-    // Stub validation: check that credentials object is non-empty
-    const creds = account.credentials as Record<string, unknown> | null
+    // Stub validation: check that credentials object is non-empty. Credentials
+    // are encrypted at rest; an unreadable value counts as incomplete.
+    let creds: Record<string, unknown> | null = null
+    try {
+      creds = revealCloudCredentials(account.credentials)
+    } catch {
+      creds = null
+    }
     const hasCredentials =
       creds != null &&
       typeof creds === 'object' &&
