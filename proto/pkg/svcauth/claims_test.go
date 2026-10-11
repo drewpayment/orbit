@@ -26,9 +26,28 @@ func TestEnforceWorkspace(t *testing.T) {
 		assert.Equal(t, codes.PermissionDenied, status.Code(err))
 	})
 
-	t.Run("empty body workspace is allowed (no workspace scope)", func(t *testing.T) {
+	t.Run("empty body workspace fails closed for a non-admin", func(t *testing.T) {
 		err := EnforceWorkspace(withWid("ws-1"), "")
-		require.NoError(t, err)
+		require.Error(t, err)
+		assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	})
+
+	t.Run("empty body workspace is allowed for a platform admin", func(t *testing.T) {
+		ctx := WithIdentity(context.Background(), Identity{UserID: "u", PlatformAdmin: true})
+		require.NoError(t, EnforceWorkspace(ctx, ""))
+	})
+
+	t.Run("empty body workspace without identity is PermissionDenied", func(t *testing.T) {
+		err := EnforceWorkspace(context.Background(), "")
+		require.Error(t, err)
+		assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	})
+
+	t.Run("platform admin does not bypass a cross-tenant mismatch", func(t *testing.T) {
+		ctx := WithIdentity(context.Background(), Identity{UserID: "u", WorkspaceID: "ws-1", PlatformAdmin: true})
+		err := EnforceWorkspace(ctx, "ws-2")
+		require.Error(t, err)
+		assert.Equal(t, codes.PermissionDenied, status.Code(err))
 	})
 
 	t.Run("missing identity is PermissionDenied", func(t *testing.T) {
@@ -102,4 +121,29 @@ func TestBearerFrom(t *testing.T) {
 	assert.Equal(t, "", bearerFrom(nil))
 	assert.Equal(t, "", bearerFrom([]string{""}))
 	assert.Equal(t, "abc", bearerFrom([]string{"Basic xyz", "Bearer abc"}))
+}
+
+func TestEnforceWorkspaceOrPlatformAdmin(t *testing.T) {
+	member := WithIdentity(context.Background(), Identity{UserID: "u", WorkspaceID: "ws-1"})
+	admin := WithIdentity(context.Background(), Identity{UserID: "u", PlatformAdmin: true})
+
+	tests := []struct {
+		name     string
+		ctx      context.Context
+		owner    string
+		wantCode codes.Code
+	}{
+		{"member of owning workspace", member, "ws-1", codes.OK},
+		{"member of another workspace", member, "ws-2", codes.PermissionDenied},
+		{"member, owner unknown", member, "", codes.PermissionDenied},
+		{"admin without wid, any workspace", admin, "ws-2", codes.OK},
+		{"admin, owner unknown", admin, "", codes.OK},
+		{"no identity", context.Background(), "ws-1", codes.PermissionDenied},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := EnforceWorkspaceOrPlatformAdmin(tc.ctx, tc.owner)
+			assert.Equal(t, tc.wantCode, status.Code(err))
+		})
+	}
 }
