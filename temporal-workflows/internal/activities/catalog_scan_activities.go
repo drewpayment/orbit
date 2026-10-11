@@ -31,8 +31,11 @@ import (
 
 const (
 	// maxFilesPerRepo caps how many well-known files a single repo scan will
-	// fetch and ship in the evidence bundle.
-	maxFilesPerRepo = 40
+	// fetch and ship in the evidence bundle. Raised to 80 for monorepo-aware
+	// collection: one repo can now yield build/orbit manifests for several
+	// sub-apps (up to maxManifestDepth) plus API/k8s specs, so the old cap of 40
+	// could crowd out a real sub-app under a large tree.
+	maxFilesPerRepo = 80
 	// maxFileBytes is the per-file size ceiling. Larger blobs are skipped
 	// (their paths are noted in the bundle) rather than fetched.
 	maxFileBytes int64 = 256 * 1024
@@ -296,9 +299,11 @@ type fileSelection struct {
 
 // selectWellKnownFiles picks the discovery-relevant files out of a repo tree.
 // It is the Go mirror of orbit-www's DISCOVERY_FETCH_PATTERNS — keep the two in
-// sync (see lib/discovery/detectors.ts). Higher-signal files (Tier 1 manifests,
-// API specs) sort ahead of lower-signal ones so the cap never crowds out an
-// .orbit.yaml.
+// sync (see lib/discovery/detectors.ts). The composite priority (class + depth)
+// from classifyWellKnown means higher-signal classes (Tier 1 manifests, API
+// specs) sort ahead of lower-signal ones and, within a class, shallower paths
+// sort ahead of deeper sub-app files — so the cap never crowds out an
+// .orbit.yaml or a root manifest in favour of a nested one.
 func selectWellKnownFiles(entries []treeEntry, maxFiles int, maxBytes int64) fileSelection {
 	type candidate struct {
 		path     string
@@ -370,13 +375,44 @@ func buildBundleTreePaths(entries []treeEntry, alreadyTruncated bool) (paths []s
 	return paths, truncated
 }
 
-// Detection priorities (lower = higher signal, fetched first).
+// Detection priority classes (lower = higher signal). classifyWellKnown does not
+// return these directly — it returns a composite score (prioScore) that folds in
+// the path's directory depth, so within a class shallower paths sort ahead of
+// deeper ones (root files keep winning under the file cap) while the class order
+// (manifest < apispec < service < k8s) stays intact.
 const (
-	prioManifest = iota // .orbit.yaml / catalog-info.yaml
-	prioAPISpec         // openapi/swagger/asyncapi/graphql
-	prioService         // Dockerfile, compose, build manifests, CODEOWNERS
-	prioK8s             // yaml under k8s manifest dirs
+	prioManifest = iota // .orbit.yaml (depth ≤ maxManifestDepth) / catalog-info.yaml (root)
+	prioAPISpec         // openapi/swagger/asyncapi/graphql (anywhere)
+	prioService         // Dockerfile, compose, build manifests (depth ≤ maxManifestDepth), CODEOWNERS
+	prioK8s             // yaml under k8s manifest dirs (anywhere)
 )
+
+// maxManifestDepth bounds how deep a sub-app build/orbit manifest may sit and
+// still be collected. Root file = depth 0, apps/api/.orbit.yaml = depth 2. This
+// keeps monorepo sub-apps in range while excluding deeply nested noise.
+const maxManifestDepth = 3
+
+// prioScore combines a priority class with a path's directory depth into the
+// sort key returned by classifyWellKnown: class*10 + min(depth, 9). The depth
+// clamp is what guarantees class dominance: build/orbit manifests are already
+// capped at maxManifestDepth, but API-spec and k8s classes match at any depth,
+// so without the clamp a spec 10+ dirs deep could reach the next class's score.
+// Clamping keeps every score within its class's [class*10, class*10+9] band.
+func prioScore(class, depth int) int {
+	return class*10 + min(depth, 9)
+}
+
+// pathDepth is the number of directory segments above a file: a root file is
+// depth 0, "apps/api/.orbit.yaml" is depth 2. Leading/trailing slashes are
+// stripped first so a defensive "/apps/api/x" input counts the same as
+// "apps/api/x".
+func pathDepth(p string) int {
+	dir := strings.Trim(path.Dir(p), "/")
+	if dir == "." || dir == "" {
+		return 0
+	}
+	return strings.Count(dir, "/") + 1
+}
 
 // vendoredSegments are directory names whose contents must never be scanned or
 // shipped — vendored dependencies and generated output. Keep in sync with
@@ -400,9 +436,21 @@ func isVendoredPath(p string) bool {
 }
 
 // classifyWellKnown reports whether a path is a discovery-relevant file and, if
-// so, its fetch priority. Build manifests and container files are matched at the
-// repo root only (to avoid node_modules / vendored noise); API specs and k8s
-// manifests are matched anywhere in the tree. Vendored paths never classify.
+// so, its composite fetch priority (prioScore: class + directory depth).
+//
+// Monorepo-aware collection (keep in sync with DISCOVERY_FETCH_PATTERNS in
+// orbit-www/src/lib/discovery/detectors.ts):
+//   - .orbit.yaml/.orbit.yml: root and sub-app dirs up to maxManifestDepth.
+//   - catalog-info.yaml/.yml: root only (Backstage descriptor we don't parse).
+//   - Build manifests + container files (Dockerfile, package.json, go.mod,
+//     pom.xml, Cargo.toml, pyproject.toml, requirements.txt, docker-compose*):
+//     root and sub-app dirs up to maxManifestDepth.
+//   - API specs (openapi/swagger/asyncapi/graphql): anywhere.
+//   - CODEOWNERS: root, .github, docs.
+//   - k8s/Helm yaml: anywhere under a recognised top-level dir.
+//
+// Vendored paths never classify; anything deeper than maxManifestDepth in the
+// depth-bounded classes does not classify.
 func classifyWellKnown(p string) (int, bool) {
 	if isVendoredPath(p) {
 		return 0, false
@@ -413,41 +461,58 @@ func classifyWellKnown(p string) (int, bool) {
 	dir := path.Dir(p) // "." at the repo root
 	isRoot := dir == "."
 	ext := strings.ToLower(path.Ext(p))
+	depth := pathDepth(p)
 
-	// Tier 1 self-declaring manifests (root only).
-	if isRoot {
-		switch base {
-		case ".orbit.yaml", ".orbit.yml", "catalog-info.yaml", "catalog-info.yml":
-			return prioManifest, true
+	// Tier 1 self-declaring manifests.
+	switch base {
+	case ".orbit.yaml", ".orbit.yml":
+		// Orbit manifests may live in a sub-app dir (monorepo), bounded by depth.
+		if depth <= maxManifestDepth {
+			return prioScore(prioManifest, depth), true
 		}
+		return 0, false
+	case "catalog-info.yaml", "catalog-info.yml":
+		// Backstage descriptor we don't parse — root only, avoid scope creep.
+		if isRoot {
+			return prioScore(prioManifest, depth), true
+		}
+		return 0, false
 	}
 
 	// API specs (anywhere in the tree).
 	if ext == ".graphql" || ext == ".graphqls" || ext == ".gql" {
-		return prioAPISpec, true
+		return prioScore(prioAPISpec, depth), true
 	}
 	if ext == ".json" || ext == ".yaml" || ext == ".yml" {
 		if strings.Contains(lowerBase, "openapi") ||
 			strings.Contains(lowerBase, "swagger") ||
 			strings.Contains(lowerBase, "asyncapi") {
-			return prioAPISpec, true
+			return prioScore(prioAPISpec, depth), true
 		}
 	}
 
-	// Build manifests + container files (root only).
-	if isRoot {
-		switch base {
-		case "Dockerfile", "package.json", "go.mod", "pom.xml", "Cargo.toml", "pyproject.toml", "requirements.txt":
-			return prioService, true
+	// Build manifests + container files (root and sub-app dirs up to depth cap).
+	switch base {
+	case "Dockerfile", "package.json", "go.mod", "pom.xml", "Cargo.toml", "pyproject.toml", "requirements.txt":
+		if depth <= maxManifestDepth {
+			return prioScore(prioService, depth), true
 		}
-		if strings.HasPrefix(lowerBase, "docker-compose") && (ext == ".yml" || ext == ".yaml") {
-			return prioService, true
+		return 0, false
+	}
+	// Compose files: docker-compose*.ya?ml plus the Compose Spec canonical
+	// basenames compose.yml/compose.yaml, same depth rule as build manifests.
+	isCompose := (strings.HasPrefix(lowerBase, "docker-compose") && (ext == ".yml" || ext == ".yaml")) ||
+		lowerBase == "compose.yml" || lowerBase == "compose.yaml"
+	if isCompose {
+		if depth <= maxManifestDepth {
+			return prioScore(prioService, depth), true
 		}
+		return 0, false
 	}
 
 	// CODEOWNERS in the conventional locations.
 	if base == "CODEOWNERS" && (isRoot || dir == ".github" || dir == "docs") {
-		return prioService, true
+		return prioScore(prioService, depth), true
 	}
 
 	// Kubernetes/Helm manifests under a recognised top-level directory.
@@ -458,7 +523,7 @@ func classifyWellKnown(p string) (int, bool) {
 		}
 		switch top {
 		case "k8s", "kubernetes", "manifests", "deploy", "deployments", "charts":
-			return prioK8s, true
+			return prioScore(prioK8s, depth), true
 		}
 	}
 

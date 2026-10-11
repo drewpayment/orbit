@@ -1228,6 +1228,10 @@ export interface App {
      */
     owner?: string | null;
     name?: string | null;
+    /**
+     * Monorepo sub-app directory relative to the repo root (e.g. "apps/api"). Empty/absent = repo root. Distinguishes multiple apps discovered from one repo.
+     */
+    path?: string | null;
     url?: string | null;
     /**
      * GitHub App installation ID (GitHub rows only).
@@ -5090,6 +5094,7 @@ export interface AppsSelect<T extends boolean = true> {
         provider?: T;
         owner?: T;
         name?: T;
+        path?: T;
         url?: T;
         installationId?: T;
         connection?: T;

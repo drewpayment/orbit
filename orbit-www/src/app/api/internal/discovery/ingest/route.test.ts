@@ -262,6 +262,47 @@ describe('ingestScan', () => {
     expect(row.importedRef).toEqual({ collectionSlug: 'apps', docId: f.collections['apps'][0].id })
   })
 
+  it('creates two distinct proposals for two subdirectory services in one bundle (monorepo), idempotent on re-ingest', async () => {
+    const f = new FakePayload()
+    // A monorepo evidence bundle: two sub-apps, each with a build manifest +
+    // Dockerfile. detectService groups by directory, so this yields one service
+    // detection per sub-app with a distinct `path`.
+    const monorepoBundle = {
+      tree: [
+        'apps/web-next/package.json',
+        'apps/web-next/Dockerfile',
+        'apps/api/pyproject.toml',
+        'apps/api/Dockerfile',
+      ],
+      files: {
+        'apps/web-next/package.json': '{"name":"web-next","dependencies":{"next":"14.0.0"}}',
+        'apps/api/pyproject.toml': '[project]\nname = "api"\ndependencies = ["fastapi"]\n',
+      },
+    }
+
+    const counts = await ingestScan(p(f), body({ bundle: monorepoBundle }))
+
+    expect(counts).toEqual({ proposed: 2, imported: 0, skippedIgnored: 0 })
+    const rows = f.collections['discovered-entities']
+    expect(rows).toHaveLength(2)
+    // Two distinct paths — one proposal per sub-app directory.
+    const paths = rows.map((r) => r.path).sort()
+    expect(paths).toEqual(['apps/api', 'apps/web-next'])
+    // dedupeKey folds in `path`, so the two rows never collide.
+    expect(rows[0].dedupeKey).not.toBe(rows[1].dedupeKey)
+    for (const r of rows) {
+      expect(r.detectedKind).toBe('service')
+      expect(r.status).toBe('proposed')
+    }
+
+    // Re-ingesting the same bundle refreshes the existing rows — no duplicates.
+    await ingestScan(p(f), body({ bundle: monorepoBundle, scanRunId: 'run-2' }))
+    expect(f.collections['discovered-entities']).toHaveLength(2)
+    for (const r of f.collections['discovered-entities']) {
+      expect(r.scanRunId).toBe('run-2')
+    }
+  })
+
   it('creates an api proposal (not auto-imported) for an OpenAPI spec', async () => {
     const f = new FakePayload()
     const counts = await ingestScan(p(f), body({ bundle: apiBundle() }))
