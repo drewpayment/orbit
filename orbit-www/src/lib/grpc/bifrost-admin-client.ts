@@ -15,6 +15,7 @@
 import { createClient } from '@connectrpc/connect'
 import { createGrpcTransport } from '@connectrpc/connect-node'
 import { BifrostAdminService } from '@/lib/proto/idp/gateway/v1/gateway_pb'
+import { bifrostConsumerGroupInterceptor } from './bifrost-auth-interceptor'
 
 /**
  * Transport configuration for the Bifrost Admin service.
@@ -25,6 +26,10 @@ import { BifrostAdminService } from '@/lib/proto/idp/gateway/v1/gateway_pb'
  */
 const transport = createGrpcTransport({
   baseUrl: process.env.BIFROST_ADMIN_URL || 'http://localhost:50060',
+  // Bifrost rejects any admin call without a service-auth token. This
+  // interceptor signs one and scopes consumer-group calls to the workspace that
+  // owns the virtual cluster.
+  interceptors: [bifrostConsumerGroupInterceptor],
 })
 
 /**

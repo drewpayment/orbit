@@ -21,6 +21,7 @@ import 'server-only'
 import type { Interceptor } from '@connectrpc/connect'
 import { getActor, workspaceRole } from '@/lib/authz'
 import { mintServiceToken } from './svc-auth-token'
+import { resolveOwningWorkspace } from './object-workspace'
 
 /**
  * Pull a workspace id out of a request message regardless of which field the
@@ -39,7 +40,14 @@ export const authInterceptor: Interceptor = (next) => async (req) => {
     throw new Error('authInterceptor: no authenticated user for outbound service call')
   }
 
-  const requestedWorkspaceId = workspaceIdFromMessage(req.message)
+  // Id-addressed RPCs (approve/abort a launch, deployment progress, ...) carry
+  // no workspace field. Resolve the owning workspace from our own database so
+  // the token can carry it and the Go service can check it against the object.
+  const bodyWorkspaceId = workspaceIdFromMessage(req.message)
+  const resolvedWorkspaceId = bodyWorkspaceId
+    ? null
+    : await resolveOwningWorkspace(req.service?.typeName, req.method?.name, req.message)
+  const requestedWorkspaceId = bodyWorkspaceId || resolvedWorkspaceId || ''
 
   // Only sign a `wid` the user is actually authorized for. If the request
   // targets a workspace, confirm membership; refuse to mint a cross-tenant
@@ -53,12 +61,16 @@ export const authInterceptor: Interceptor = (next) => async (req) => {
   let workspaceId = ''
   if (requestedWorkspaceId) {
     const role = await workspaceRole(requestedWorkspaceId, actor)
-    if (!role) {
+    if (role) {
+      workspaceId = requestedWorkspaceId
+    } else if (!(resolvedWorkspaceId && actor.isPlatformAdmin)) {
       throw new Error(
         `authInterceptor: user ${actor.betterAuthId} is not a member of workspace ${requestedWorkspaceId}`,
       )
     }
-    workspaceId = requestedWorkspaceId
+    // else: a platform admin acting on an id-addressed object of a workspace
+    // they are not a member of. Sign no `wid`; the `adm` claim below is what
+    // admits them on the Go side (EnforceWorkspaceOrPlatformAdmin).
   }
 
   // Platform-admin status is derived from the server-side Actor (backed by the

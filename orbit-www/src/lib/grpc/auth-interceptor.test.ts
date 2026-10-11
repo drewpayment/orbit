@@ -34,6 +34,10 @@ vi.mock('./svc-auth-token', () => ({ mintServiceToken }))
 vi.mock('payload', () => ({ getPayload: vi.fn() }))
 vi.mock('@payload-config', () => ({ default: {} }))
 
+// Id-addressed RPC owner resolution (launches, deployments). Default: not found.
+const resolveOwningWorkspace = vi.fn(async () => null as string | null)
+vi.mock('./object-workspace', () => ({ resolveOwningWorkspace }))
+
 async function runInterceptor(user: unknown, message: unknown = {}) {
   getActor.mockResolvedValue(actorFor(user as { id: string; role: string } | null))
   const { authInterceptor } = await import('./auth-interceptor')
@@ -98,5 +102,68 @@ describe('authInterceptor platform-admin derivation', () => {
     const { next } = await runInterceptor({ id: 'u1', role: 'user' }, { workspaceId: 'ws-1' })
     expect(mintServiceToken).toHaveBeenCalledWith('u1', 'ws-1', { platformAdmin: false })
     expect(next).toHaveBeenCalled()
+  })
+
+  describe('id-addressed RPCs (owning workspace resolved server-side)', () => {
+    const req = (message: unknown) => ({
+      message,
+      service: { typeName: 'idp.launch.v1.LaunchService' },
+      method: { name: 'AbortLaunch' },
+      header: new Headers(),
+    })
+
+    it('signs the resolved workspace for a member', async () => {
+      resolveOwningWorkspace.mockResolvedValue('ws-9')
+      workspaceRole.mockResolvedValue('member')
+      getActor.mockResolvedValue(actorFor({ id: 'u1', role: 'user' }))
+      const { authInterceptor } = await import('./auth-interceptor')
+
+      await authInterceptor(vi.fn() as never)(req({ workflowId: 'launch-1' }) as never)
+
+      expect(resolveOwningWorkspace).toHaveBeenCalledWith('idp.launch.v1.LaunchService', 'AbortLaunch', { workflowId: 'launch-1' })
+      expect(mintServiceToken).toHaveBeenCalledWith('u1', 'ws-9', { platformAdmin: false })
+    })
+
+    it('refuses to mint for a non-member of the resolved workspace', async () => {
+      resolveOwningWorkspace.mockResolvedValue('ws-9')
+      workspaceRole.mockResolvedValue(null)
+      getActor.mockResolvedValue(actorFor({ id: 'u1', role: 'user' }))
+      const { authInterceptor } = await import('./auth-interceptor')
+
+      await expect(authInterceptor(vi.fn() as never)(req({ workflowId: 'launch-1' }) as never)).rejects.toThrow(/not a member/)
+      expect(mintServiceToken).not.toHaveBeenCalled()
+    })
+
+    it('lets a platform admin who is not a member through on the adm claim, without a wid', async () => {
+      resolveOwningWorkspace.mockResolvedValue('ws-9')
+      workspaceRole.mockResolvedValue(null)
+      getActor.mockResolvedValue(actorFor({ id: 'root', role: 'super_admin' }))
+      const { authInterceptor } = await import('./auth-interceptor')
+
+      await authInterceptor(vi.fn() as never)(req({ workflowId: 'launch-1' }) as never)
+
+      expect(mintServiceToken).toHaveBeenCalledWith('root', '', { platformAdmin: true })
+    })
+
+    it('signs an empty wid when the owner cannot be resolved, leaving the Go service to fail closed', async () => {
+      resolveOwningWorkspace.mockResolvedValue(null)
+      getActor.mockResolvedValue(actorFor({ id: 'u1', role: 'user' }))
+      const { authInterceptor } = await import('./auth-interceptor')
+
+      await authInterceptor(vi.fn() as never)(req({ workflowId: 'launch-gone' }) as never)
+
+      expect(mintServiceToken).toHaveBeenCalledWith('u1', '', { platformAdmin: false })
+    })
+
+    it('does not resolve when the body already names a workspace', async () => {
+      workspaceRole.mockResolvedValue('member')
+      getActor.mockResolvedValue(actorFor({ id: 'u1', role: 'user' }))
+      const { authInterceptor } = await import('./auth-interceptor')
+
+      await authInterceptor(vi.fn() as never)(req({ workspaceId: 'ws-1' }) as never)
+
+      expect(resolveOwningWorkspace).not.toHaveBeenCalled()
+      expect(mintServiceToken).toHaveBeenCalledWith('u1', 'ws-1', { platformAdmin: false })
+    })
   })
 })

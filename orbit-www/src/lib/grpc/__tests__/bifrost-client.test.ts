@@ -1,4 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+
+// The client attaches authInterceptor, whose import chain reaches the Payload
+// config (needs DATABASE_URI). These tests only inspect the client's shape.
+vi.mock('../auth-interceptor', () => ({ authInterceptor: (next: unknown) => next }))
 
 describe('bifrostClient', () => {
   it('is defined and exported', async () => {

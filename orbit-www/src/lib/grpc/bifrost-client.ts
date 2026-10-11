@@ -16,6 +16,7 @@
 import { createClient } from '@connectrpc/connect'
 import { createGrpcTransport } from '@connectrpc/connect-node'
 import { BifrostAdminService } from '@/lib/proto/idp/gateway/v1/gateway_pb'
+import { authInterceptor } from './auth-interceptor'
 
 /**
  * Transport configuration for the Bifrost Admin gRPC service.
@@ -25,6 +26,10 @@ import { BifrostAdminService } from '@/lib/proto/idp/gateway/v1/gateway_pb'
  */
 const transport = createGrpcTransport({
   baseUrl: process.env.BIFROST_ADMIN_URL || 'http://localhost:50060',
+  // Bifrost rejects any admin call without a service-auth token. The control
+  // plane RPCs here need the platform-admin claim, which authInterceptor signs
+  // from the server-side session role (the callers also requireAdmin()).
+  interceptors: [authInterceptor],
 })
 
 /**
