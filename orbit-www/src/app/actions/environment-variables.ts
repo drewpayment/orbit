@@ -4,7 +4,6 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { getActor, check, type Actor } from '@/lib/authz'
 import { encrypt, decrypt } from '@/lib/encryption'
-import { resolveEnvironmentVariablesUnchecked } from '@/lib/environment-variables/resolve'
 import type { EnvironmentVariable } from '@/payload-types'
 
 // ============================================================================
@@ -427,43 +426,11 @@ export async function getAppEnvironmentVariables(
 // Resolution Function (for builds/deployments)
 // ============================================================================
 
-/**
- * Resolve decrypted variables for a build/deployment.
- *
- * This is an exported server action, i.e. callable from any client with
- * arbitrary arguments, and it returns plaintext secrets: it authenticates and
- * requires membership (the level needed to start a build) in the app's
- * workspace. Server code that has already authorized the caller should use
- * `resolveEnvironmentVariablesUnchecked` from `@/lib/environment-variables/resolve`.
- */
-export async function resolveEnvironmentVariables(
-  appId: string,
-  usage: 'build' | 'deployment'
-): Promise<{ success: boolean; error?: string; variables?: Record<string, string> }> {
-  const actor = await getActor()
-  if (!actor) {
-    return { success: false, error: 'Unauthorized' }
-  }
-
-  const payload = await getPayload({ config })
-  let workspaceId: string | undefined
-  try {
-    const app = await payload.findByID({ collection: 'apps', id: appId, depth: 0, overrideAccess: true })
-    workspaceId = typeof app?.workspace === 'string' ? app.workspace : app?.workspace?.id
-  } catch {
-    return { success: false, error: 'App not found' }
-  }
-  if (!workspaceId) {
-    return { success: false, error: 'App not found' }
-  }
-
-  const decision = await check('create', { kind: 'workspace', id: workspaceId }, actor)
-  if (!decision.allowed) {
-    return { success: false, error: 'Not a member of this workspace' }
-  }
-
-  return resolveEnvironmentVariablesUnchecked(appId, usage)
-}
+// NOTE: build/deployment resolution of decrypted variables is deliberately NOT a
+// server action (every export here is a client-callable endpoint, and plaintext
+// secrets require owner/admin via revealEnvironmentVariableValue). Server code
+// that has already authorized the caller uses
+// `resolveEnvironmentVariablesUnchecked` from `@/lib/environment-variables/resolve`.
 
 // ============================================================================
 // Reveal Value (for admin UI)

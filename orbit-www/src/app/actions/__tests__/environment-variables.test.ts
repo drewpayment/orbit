@@ -9,52 +9,34 @@ vi.mock('@/lib/encryption', () => ({
 }))
 
 import { getPayload } from 'payload'
-import { getActor, check } from '@/lib/authz'
-import { resolveEnvironmentVariables } from '../environment-variables'
+import * as envActions from '../environment-variables'
+import { resolveEnvironmentVariablesUnchecked } from '@/lib/environment-variables/resolve'
 
-const actor = {
-  payloadId: 'pl-1',
-  betterAuthId: 'ba-1',
-  email: 'a@test.com',
-  role: 'user',
-  isPlatformAdmin: false,
-  user: { id: 'pl-1', collection: 'users' },
-}
+describe('decrypted variable resolution is not a client-callable server action', () => {
+  it('the use-server module does not export any resolver of plaintext variables', () => {
+    // Every export of a 'use server' module is a public endpoint. Plaintext
+    // resolution must stay in lib/environment-variables/resolve (server-only).
+    expect(Object.keys(envActions).filter((k) => /resolve/i.test(k))).toEqual([])
+  })
+})
 
-describe('resolveEnvironmentVariables (returns decrypted secrets)', () => {
-  let payload: { findByID: ReturnType<typeof vi.fn>; find: ReturnType<typeof vi.fn> }
-
+describe('resolveEnvironmentVariablesUnchecked (server-internal)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    payload = {
+  })
+
+  it('merges workspace variables with app overrides and decrypts them', async () => {
+    const find = vi
+      .fn()
+      .mockResolvedValueOnce({ docs: [{ name: 'API_KEY', value: 'enc:ws' }, { name: 'A', value: 'enc:1' }] })
+      .mockResolvedValueOnce({ docs: [{ name: 'API_KEY', value: 'enc:app' }] })
+    ;(getPayload as any).mockResolvedValue({
       findByID: vi.fn().mockResolvedValue({ id: 'app-1', workspace: 'ws-1' }),
-      find: vi.fn().mockResolvedValue({ docs: [{ name: 'API_KEY', value: 'enc:s3cret' }] }),
-    }
-    ;(getPayload as any).mockResolvedValue(payload)
-    ;(getActor as any).mockResolvedValue(actor)
-    ;(check as any).mockResolvedValue({ allowed: true, reason: 'workspace member', actor })
-  })
+      find,
+    })
 
-  it('rejects unauthenticated callers without reading or decrypting anything', async () => {
-    ;(getActor as any).mockResolvedValue(null)
-    const r = await resolveEnvironmentVariables('app-1', 'build')
-    expect(r).toEqual({ success: false, error: 'Unauthorized' })
-    expect(payload.findByID).not.toHaveBeenCalled()
-    expect(payload.find).not.toHaveBeenCalled()
-  })
+    const r = await resolveEnvironmentVariablesUnchecked('app-1', 'build')
 
-  it('rejects non-members of the app workspace without returning secrets', async () => {
-    ;(check as any).mockResolvedValue({ allowed: false, reason: 'not a member of this workspace', actor })
-    const r = await resolveEnvironmentVariables('app-1', 'build')
-    expect(r.success).toBe(false)
-    expect(r.variables).toBeUndefined()
-    expect(check).toHaveBeenCalledWith('create', { kind: 'workspace', id: 'ws-1' }, actor)
-    expect(payload.find).not.toHaveBeenCalled()
-  })
-
-  it('returns decrypted variables to a member (the build path)', async () => {
-    const r = await resolveEnvironmentVariables('app-1', 'build')
-    expect(r.success).toBe(true)
-    expect(r.variables).toEqual({ API_KEY: 's3cret' })
+    expect(r).toEqual({ success: true, variables: { API_KEY: 'app', A: '1' } })
   })
 })

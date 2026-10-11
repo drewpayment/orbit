@@ -1,3 +1,4 @@
+import 'server-only'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { decrypt } from '@/lib/encryption'
@@ -9,8 +10,8 @@ import { decrypt } from '@/lib/encryption'
  * NO AUTHORIZATION: this returns plaintext secrets. It lives outside any
  * `'use server'` module on purpose so it is not a client-callable endpoint;
  * only server code that has ALREADY authorized the caller against the app's
- * workspace may call it. The client-reachable entry point is the
- * `resolveEnvironmentVariables` server action, which checks membership first.
+ * workspace may call it (startBuild / startDeployToLaunch check membership
+ * first). There is intentionally no client-reachable wrapper.
  */
 export async function resolveEnvironmentVariablesUnchecked(
   appId: string,
