@@ -25,6 +25,7 @@ vi.mock('@payload-config', () => ({
 // cached-queries opens a Mongo client at import time (needs DATABASE_URI); not used here.
 vi.mock('@/lib/mongodb', () => ({ getMongoClient: vi.fn() }))
 
+const mockCheck = vi.fn()
 vi.mock('@/lib/authz', () => ({
   getActor: vi.fn(async () => ({
     payloadId: 'user-1',
@@ -34,6 +35,8 @@ vi.mock('@/lib/authz', () => ({
     isPlatformAdmin: false,
     user: { id: 'user-1', collection: 'users' },
   })),
+  check: (...args: unknown[]) => mockCheck(...args),
+  MANAGE_ROLES: ['owner', 'admin'],
 }))
 
 // Mock UI components
@@ -55,8 +58,8 @@ vi.mock('@/components/ui/badge', () => ({
 }))
 
 vi.mock('@/components/features/knowledge/PageContent', () => ({
-  PageContent: ({ page }: any) => (
-    <div data-testid="page-content" data-page-title={page.title}>
+  PageContent: ({ page, canEdit }: any) => (
+    <div data-testid="page-content" data-page-title={page.title} data-can-edit={String(canEdit)}>
       Page Content
     </div>
   ),
@@ -78,6 +81,7 @@ vi.mock('@/components/features/knowledge/KnowledgeBreadcrumbs', () => ({
 describe('KnowledgePageView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockCheck.mockResolvedValue({ allowed: true, reason: 'workspace admin' })
   })
 
   afterEach(() => {
@@ -248,5 +252,47 @@ describe('KnowledgePageView', () => {
 
     // Should throw not found error
     await expect(KnowledgePageView({ params })).rejects.toThrow('NEXT_NOT_FOUND')
+  })
+  describe('canEdit mirrors the knowledge-pages update rule (author or workspace owner/admin)', () => {
+    async function renderWith(pageAuthor: unknown) {
+      mockGetPayload.mockResolvedValue({
+        find: vi.fn()
+          .mockResolvedValueOnce({ docs: [{ id: 'workspace-1', slug: 'test-workspace', name: 'W' }] })
+          .mockResolvedValueOnce({ docs: [{ id: 'space-1', slug: 'test-space', name: 'S' }] })
+          .mockResolvedValueOnce({
+            docs: [{
+              id: 'page-1', slug: 'test-page', title: 'T', content: null,
+              author: pageAuthor, lastEditedBy: pageAuthor, tags: [], childPages: [],
+            }],
+          }),
+      } as any)
+      const { default: KnowledgePageView } = await import('./page')
+      const { getAllByTestId } = render(
+        await KnowledgePageView({
+          params: Promise.resolve({ slug: 'test-workspace', spaceSlug: 'test-space', pageSlug: 'test-page' }),
+        }),
+      )
+      return getAllByTestId('page-content')[0].getAttribute('data-can-edit')
+    }
+
+    it('is true when the policy allows (author or owner/admin)', async () => {
+      mockCheck.mockResolvedValue({ allowed: true, reason: 'owner of the document' })
+      await expect(renderWith({ id: 'user-1', name: 'Me' })).resolves.toBe('true')
+      expect(mockCheck).toHaveBeenCalledWith(
+        'update',
+        { kind: 'doc', workspaceId: 'workspace-1', ownerPayloadId: 'user-1', roles: ['owner', 'admin'] },
+        expect.objectContaining({ payloadId: 'user-1' }),
+      )
+    })
+
+    it('is false for a non-author plain member (no autosave attempts that would fail)', async () => {
+      mockCheck.mockResolvedValue({ allowed: false, reason: 'requires workspace owner or admin; you are member' })
+      await expect(renderWith({ id: 'someone-else', name: 'Other' })).resolves.toBe('false')
+      expect(mockCheck).toHaveBeenCalledWith(
+        'update',
+        expect.objectContaining({ ownerPayloadId: 'someone-else' }),
+        expect.anything(),
+      )
+    })
   })
 })
