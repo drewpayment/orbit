@@ -201,6 +201,13 @@ export async function POST(request: NextRequest) {
 
     // Verify the HMAC against each candidate's own secret before acting on, or
     // revealing anything about, any template. Generic 401 when none verify.
+    // No candidates: a normal delivery for an unrelated repo in the installation.
+    // Answer 200 with no details so GitHub's delivery log stays clean.
+    if (templates.docs.length === 0) {
+      console.debug('[template-sync webhook] no candidates for repository; ignoring')
+      return NextResponse.json({ ok: true }, { status: 200 })
+    }
+
     const verifiedTemplates = filterVerified(templates.docs, body, signature)
     if (verifiedTemplates.length === 0) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })

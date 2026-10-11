@@ -96,11 +96,13 @@ describe.each(Object.keys(routes) as Array<keyof typeof routes>)('webhooks/githu
     expect(res.status).toBe(401)
   })
 
-  it('unknown repo returns the same generic 401 (no existence oracle)', async () => {
+  it('no candidates for the repo: generic 200 {ok:true}, no details, no Temporal, no writes', async () => {
     mocks.find.mockResolvedValue({ docs: [] })
     const res = await routes[name].POST(req(name, sign(body, 'attacker')))
-    expect(res.status).toBe(401)
-    expect(await res.json()).toEqual({ error: 'Invalid signature' })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true })
+    expect(mocks.connect).not.toHaveBeenCalled()
+    expect(mocks.update).not.toHaveBeenCalled()
   })
 
   it('valid signature: processes only the verified candidate and reports only it', async () => {

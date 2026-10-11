@@ -101,6 +101,13 @@ export async function POST(request: NextRequest) {
     // Temporal or revealing anything about which apps matched. Unverified
     // candidates are dropped silently; if none verify, respond with a generic
     // 401 (same body whether the repo is unknown, has no secret, or mismatched).
+    // No candidates: a normal delivery for an unrelated repo in the installation.
+    // Answer 200 with no details so GitHub's delivery log stays clean.
+    if (apps.docs.length === 0) {
+      console.debug('[spec-sync webhook] no candidates for repository; ignoring')
+      return NextResponse.json({ ok: true }, { status: 200 })
+    }
+
     const verifiedApps = filterVerified(apps.docs, body, signature)
     if (verifiedApps.length === 0) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
