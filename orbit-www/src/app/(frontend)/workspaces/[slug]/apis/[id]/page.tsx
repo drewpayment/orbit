@@ -78,7 +78,6 @@ export default async function EditAPIPage({ params }: PageProps) {
           <EditAPIClient
             api={api}
             workspaceSlug={slug}
-            userId={actor.payloadId}
           />
         </div>
       </SidebarInset>

@@ -4,6 +4,39 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
 import { createHash } from 'crypto'
+import { requireActor, authorize, ALL_ROLES, MANAGE_ROLES, type Actor } from '@/lib/authz'
+import type { APISchema } from '@/payload-types'
+
+// Identity always comes from the session (`requireActor`); no action accepts a
+// client-supplied user id. Writes run with `overrideAccess: true` only AFTER
+// `authorize()` has checked the actor against the schema's workspace (the
+// collection rules are mirrored: update = creator or any member, delete =
+// creator or owner/admin). Reads go through the collection access rules as the
+// actor (`overrideAccess: false`) so private/workspace visibility is honoured.
+
+const relId = (v: unknown): string | null =>
+  typeof v === 'string' ? v : v && typeof v === 'object' && 'id' in v ? String((v as { id: unknown }).id) : null
+
+/** Load a schema (no access filter) so its workspace/creator can be authorized. */
+async function loadSchemaForAuth(id: string, payload: Awaited<ReturnType<typeof getPayload>>) {
+  const schema = (await payload.findByID({
+    collection: 'api-schemas',
+    id,
+    depth: 0,
+    overrideAccess: true,
+  })) as APISchema | null
+  if (!schema) throw new Error('API schema not found')
+  return schema
+}
+
+function schemaResource(schema: APISchema, roles: readonly ('owner' | 'admin' | 'member')[]) {
+  return {
+    kind: 'doc' as const,
+    workspaceId: relId(schema.workspace),
+    ownerPayloadId: relId(schema.createdBy),
+    roles,
+  }
+}
 
 export interface CreateAPISchemaInput {
   name: string
@@ -15,7 +48,6 @@ export interface CreateAPISchemaInput {
   tags?: string[]
   contactName?: string
   contactEmail?: string
-  userId: string
 }
 
 export interface UpdateAPISchemaInput {
@@ -29,10 +61,10 @@ export interface UpdateAPISchemaInput {
   contactEmail?: string
   status?: 'draft' | 'published' | 'deprecated'
   releaseNotes?: string
-  userId: string
 }
 
 export async function createAPISchema(input: CreateAPISchemaInput) {
+  const actor = await authorize('create', { kind: 'workspace', id: input.workspaceId })
   const payload = await getPayload({ config })
 
   // Create the API schema
@@ -50,7 +82,7 @@ export async function createAPISchema(input: CreateAPISchemaInput) {
       tags: input.tags?.map((tag) => ({ tag })) || [],
       contactName: input.contactName || '',
       contactEmail: input.contactEmail || '',
-      createdBy: input.userId,
+      createdBy: actor.payloadId,
       latestVersionNumber: 1,
     },
     overrideAccess: true,
@@ -69,7 +101,7 @@ export async function createAPISchema(input: CreateAPISchemaInput) {
       rawContent: input.rawContent,
       contentHash,
       releaseNotes: 'Initial version',
-      createdBy: input.userId,
+      createdBy: actor.payloadId,
     },
     overrideAccess: true,
   })
@@ -81,18 +113,11 @@ export async function createAPISchema(input: CreateAPISchemaInput) {
 }
 
 export async function updateAPISchema(input: UpdateAPISchemaInput) {
+  const actor = await requireActor()
   const payload = await getPayload({ config })
 
-  // Get current schema
-  const currentSchema = await payload.findByID({
-    collection: 'api-schemas',
-    id: input.id,
-    overrideAccess: true,
-  })
-
-  if (!currentSchema) {
-    throw new Error('API schema not found')
-  }
+  const currentSchema = await loadSchemaForAuth(input.id, payload)
+  await authorize('update', schemaResource(currentSchema, ALL_ROLES), actor)
 
   // Check if content changed
   let newVersionNumber = currentSchema.latestVersionNumber || 1
@@ -119,15 +144,13 @@ export async function updateAPISchema(input: UpdateAPISchemaInput) {
       collection: 'api-schema-versions',
       data: {
         schema: input.id,
-        workspace: typeof currentSchema.workspace === 'string'
-          ? currentSchema.workspace
-          : currentSchema.workspace.id,
+        workspace: relId(currentSchema.workspace) as string,
         version,
         versionNumber: newVersionNumber,
         rawContent: input.rawContent,
         contentHash,
         releaseNotes: input.releaseNotes || '',
-        createdBy: input.userId,
+        createdBy: actor.payloadId,
       },
       overrideAccess: true,
     })
@@ -135,7 +158,7 @@ export async function updateAPISchema(input: UpdateAPISchemaInput) {
 
   // Update the schema
   const updateData: Record<string, unknown> = {
-    lastEditedBy: input.userId,
+    lastEditedBy: actor.payloadId,
   }
 
   if (input.name !== undefined) updateData.name = input.name
@@ -162,7 +185,11 @@ export async function updateAPISchema(input: UpdateAPISchemaInput) {
 }
 
 export async function deleteAPISchema(id: string) {
+  const actor = await requireActor()
   const payload = await getPayload({ config })
+
+  const schema = await loadSchemaForAuth(id, payload)
+  await authorize('delete', schemaResource(schema, MANAGE_ROLES), actor)
 
   // Delete all versions first
   const versions = await payload.find({
@@ -192,17 +219,22 @@ export async function deleteAPISchema(id: string) {
   return { success: true }
 }
 
-export async function restoreVersion(schemaId: string, versionId: string, userId: string) {
+export async function restoreVersion(schemaId: string, versionId: string) {
+  const actor = await requireActor()
   const payload = await getPayload({ config })
+
+  const schema = await loadSchemaForAuth(schemaId, payload)
+  await authorize('update', schemaResource(schema, ALL_ROLES), actor)
 
   // Get the version to restore
   const version = await payload.findByID({
     collection: 'api-schema-versions',
     id: versionId,
+    depth: 0,
     overrideAccess: true,
   })
 
-  if (!version) {
+  if (!version || relId(version.schema) !== schemaId) {
     throw new Error('Version not found')
   }
 
@@ -211,33 +243,36 @@ export async function restoreVersion(schemaId: string, versionId: string, userId
     id: schemaId,
     rawContent: version.rawContent,
     releaseNotes: `Restored from version ${version.version}`,
-    userId,
   })
 
   return { success: true }
 }
 
 export async function getWorkspaceAPIs(workspaceId: string) {
+  const actor = await authorize('read', { kind: 'workspace', id: workspaceId })
   const payload = await getPayload({ config })
 
   const schemas = await payload.find({
     collection: 'api-schemas',
     where: { workspace: { equals: workspaceId } },
     sort: '-updatedAt',
-    overrideAccess: true,
+    user: actor.user,
+    overrideAccess: false,
   })
 
   return schemas.docs
 }
 
 export async function getAPISchema(id: string) {
+  const actor = await requireActor()
   const payload = await getPayload({ config })
 
   const schema = await payload.findByID({
     collection: 'api-schemas',
     id,
     depth: 2,
-    overrideAccess: true,
+    user: actor.user,
+    overrideAccess: false,
   })
 
   return schema
@@ -247,7 +282,11 @@ export async function deprecateAPISchema(
   id: string,
   message?: string,
 ): Promise<void> {
+  const actor = await requireActor()
   const payload = await getPayload({ config })
+
+  const schema = await loadSchemaForAuth(id, payload)
+  await authorize('update', schemaResource(schema, ALL_ROLES), actor)
 
   await payload.update({
     collection: 'api-schemas',
@@ -261,13 +300,15 @@ export async function deprecateAPISchema(
 }
 
 export async function getAPISchemaVersions(schemaId: string) {
+  const actor: Actor = await requireActor()
   const payload = await getPayload({ config })
 
   const versions = await payload.find({
     collection: 'api-schema-versions',
     where: { schema: { equals: schemaId } },
     sort: '-versionNumber',
-    overrideAccess: true,
+    user: actor.user,
+    overrideAccess: false,
   })
 
   return versions.docs

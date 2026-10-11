@@ -51,7 +51,6 @@ const Editor = dynamic(() => import('@monaco-editor/react'), {
 interface EditAPIClientProps {
   api: APISchema
   workspaceSlug: string
-  userId: string
 }
 
 interface FormData {
@@ -65,7 +64,7 @@ interface FormData {
   contactEmail: string
 }
 
-export function EditAPIClient({ api, workspaceSlug: _workspaceSlug, userId }: EditAPIClientProps) {
+export function EditAPIClient({ api, workspaceSlug: _workspaceSlug }: EditAPIClientProps) {
   const router = useRouter()
   const [isSaving, setIsSaving] = React.useState(false)
   const [validation, setValidation] = React.useState<ValidationResult>({ valid: true, errors: [] })
@@ -165,7 +164,6 @@ export function EditAPIClient({ api, workspaceSlug: _workspaceSlug, userId }: Ed
         contactName: data.contactName,
         contactEmail: data.contactEmail,
         releaseNotes: notes,
-        userId,
       })
 
       if (result.newVersion) {

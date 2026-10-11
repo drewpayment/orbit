@@ -58,7 +58,6 @@ export default async function NewAPIPage({ params }: PageProps) {
           <NewAPIClient
             workspaceId={workspace.id}
             workspaceSlug={slug}
-            userId={actor.payloadId}
           />
         </div>
       </SidebarInset>
