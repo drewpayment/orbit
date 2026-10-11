@@ -162,7 +162,9 @@ services:
       context: .
       dockerfile: services/build-service/Dockerfile
     ports:
-      - "50054:50054"
+      # Loopback only: build-service has no auth of its own (unlike the
+      # svcauth-protected services), and only the in-network worker calls it.
+      - "127.0.0.1:50054:50054"
     environment:
       - BUILD_SERVICE_PORT=50054
       - BUILD_WORK_DIR=/tmp/orbit-builds
