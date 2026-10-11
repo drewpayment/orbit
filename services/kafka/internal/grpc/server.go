@@ -26,7 +26,7 @@ func NewKafkaServer(
 	return &KafkaServer{
 		clusterHandler: NewClusterHandler(clusterService),
 		topicHandler:   NewTopicHandler(topicService),
-		schemaHandler:  NewSchemaHandler(schemaService),
+		schemaHandler:  NewSchemaHandler(schemaService, topicService),
 		shareHandler:   NewShareHandler(shareService),
 	}
 }
