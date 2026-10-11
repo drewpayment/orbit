@@ -45,7 +45,7 @@ const backendCards: BackendCard[] = [
   },
   {
     title: 'Launches',
-    description: 'Provision cloud infrastructure (Azure, DigitalOcean).',
+    description: 'Provision cloud infrastructure on Azure.',
     icon: Rocket,
     href: '/launches',
   },
