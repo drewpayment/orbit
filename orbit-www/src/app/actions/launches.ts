@@ -47,7 +47,13 @@ export async function createLaunch(data: CreateLaunchInput) {
       depth: 0,
     })
 
-    if (!cloudAccount) {
+    // The cloud account id is client-supplied: it must be linked to THIS
+    // workspace (cloud-accounts.workspaces), or a member could launch infra
+    // with another tenant's cloud credentials.
+    const linkedWorkspaceIds = ((cloudAccount?.workspaces ?? []) as Array<string | { id: string }>).map(
+      (w) => (typeof w === 'string' ? w : w.id),
+    )
+    if (!cloudAccount || !linkedWorkspaceIds.includes(data.workspaceId)) {
       return { success: false, error: 'Cloud account not found' }
     }
 
@@ -60,6 +66,15 @@ export async function createLaunch(data: CreateLaunchInput) {
 
     if (!template) {
       return { success: false, error: 'Launch template not found' }
+    }
+
+    // An associated app must live in the same workspace.
+    if (data.appId) {
+      const app = await payload.findByID({ collection: 'apps', id: data.appId, depth: 0 }).catch(() => null)
+      const appWorkspaceId = typeof app?.workspace === 'string' ? app.workspace : app?.workspace?.id
+      if (!app || appWorkspaceId !== data.workspaceId) {
+        return { success: false, error: 'App not found' }
+      }
     }
 
     // Create the launch record
@@ -349,6 +364,27 @@ export async function getLaunchWorkflowProgress(workflowId: string) {
   const actor = await getActor()
   if (!actor) {
     return { success: false, error: 'Unauthorized' }
+  }
+
+  // The workflow id is client-supplied: only return progress/logs for a launch
+  // that belongs to a workspace the caller is a member of.
+  const payload = await getPayload({ config })
+  const progressLookup = await payload.find({
+    collection: 'launches',
+    where: { workflowId: { equals: workflowId } },
+    limit: 1,
+    depth: 0,
+    overrideAccess: true,
+  })
+  const progressLaunch = progressLookup.docs[0]
+  if (!progressLaunch) {
+    return { success: false, error: 'Launch not found' }
+  }
+  const progressWsId =
+    typeof progressLaunch.workspace === 'string' ? progressLaunch.workspace : progressLaunch.workspace?.id
+  const progressMembership = await check('read', { kind: 'workspace', id: progressWsId ?? '' }, actor)
+  if (!progressMembership.allowed) {
+    return { success: false, error: 'Not a member of this workspace' }
   }
 
   try {

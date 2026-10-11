@@ -9,6 +9,10 @@ import { serializeAppManifest } from '@/lib/app-manifest'
 import { generateWebhookSecret, parseGitHubUrl } from '@/lib/github-manifest'
 import { getInstallationOctokit } from '@/lib/github/octokit'
 import { parseAdoRepoUrl } from '@/lib/connections/ado-url'
+import {
+  installationAllowedForWorkspace,
+  resolveInstallationForWorkspace,
+} from '@/lib/connections/workspace-access'
 
 interface CreateAppFromTemplateInput {
   name: string
@@ -35,6 +39,15 @@ export async function createAppFromTemplate(input: CreateAppFromTemplateInput) {
 
   if (!membership.allowed) {
     return { success: false, error: 'Not a member of this workspace' }
+  }
+
+  // The installation id is client-supplied: it must be granted to THIS
+  // workspace, or the app would later read/push to another tenant's repos.
+  if (
+    input.installationId &&
+    !(await installationAllowedForWorkspace(payload, input.installationId, input.workspaceId))
+  ) {
+    return { success: false, error: 'Installation is not available for this workspace' }
   }
 
   try {
@@ -102,6 +115,12 @@ export async function importRepository(input: ImportRepositoryInput) {
   let repositoryData: Record<string, unknown>
   if (githubMatch) {
     const [, owner, repoName] = githubMatch
+    if (
+      input.installationId &&
+      !(await installationAllowedForWorkspace(payload, input.installationId, input.workspaceId))
+    ) {
+      return { success: false, error: 'Installation is not available for this workspace' }
+    }
     repositoryData = {
       owner,
       name: repoName.replace(/\.git$/, ''),
@@ -177,6 +196,11 @@ export async function seedBuiltInGenerators() {
 
   if (!actor) {
     return { success: false, error: 'Unauthorized' }
+  }
+
+  // Deployment generators are global platform data, not tenant data.
+  if (!actor.isPlatformAdmin) {
+    return { success: false, error: 'Platform admin required' }
   }
 
   const payload = await getPayload({ config })
@@ -303,7 +327,6 @@ export async function getHealthHistory(input: GetHealthHistoryInput) {
 
   const payload = await getPayload({ config })
 
-  // Verify user has access to this app
   const app = await payload.findByID({
     collection: 'apps',
     id: input.appId,
@@ -311,6 +334,13 @@ export async function getHealthHistory(input: GetHealthHistoryInput) {
 
   if (!app) {
     return { success: false, error: 'App not found', data: [] }
+  }
+
+  // Verify the caller belongs to the app's workspace.
+  const healthWsId = typeof app.workspace === 'string' ? app.workspace : app.workspace?.id
+  const healthAccess = await check('read', { kind: 'workspace', id: healthWsId ?? '' }, actor)
+  if (!healthAccess.allowed) {
+    return { success: false, error: 'Not a member of this workspace', data: [] }
   }
 
   try {
@@ -491,6 +521,12 @@ export async function exportAppManifest(appId: string): Promise<void> {
   if (!repoUrl || !installationId) {
     throw new Error('App must have a linked repository with a GitHub installation to export a manifest')
   }
+  // Re-check at use time: the stored ref (installation doc id, or legacy numeric
+  // GitHub id) must resolve to an installation granted to this app's workspace.
+  const installation = await resolveInstallationForWorkspace(payload, installationId, appWorkspaceId)
+  if (!installation) {
+    throw new Error('The linked GitHub installation is not available for this workspace.')
+  }
 
   const parsed = parseGitHubUrl(repoUrl)
   if (!parsed) throw new Error('Invalid repository URL')
@@ -502,7 +538,7 @@ export async function exportAppManifest(appId: string): Promise<void> {
     buildConfig: app.buildConfig,
   })
 
-  const octokit = await getInstallationOctokit(Number(installationId))
+  const octokit = await getInstallationOctokit(installation.githubInstallationId)
   const manifestPath = app.manifestPath || '.orbit.yaml'
   const branch = app.repository?.branch || 'main'
 
@@ -596,6 +632,10 @@ export async function resolveManifestConflict(
     const repoUrl = app.repository?.url
     const installationId = app.repository?.installationId
     if (!repoUrl || !installationId) throw new Error('Missing repository config')
+    const installation = await resolveInstallationForWorkspace(payload, installationId, appWorkspaceId)
+    if (!installation) {
+      throw new Error('The linked GitHub installation is not available for this workspace.')
+    }
 
     const parsed = parseGitHubUrl(repoUrl)
     if (!parsed) throw new Error('Invalid repository URL')
@@ -607,7 +647,7 @@ export async function resolveManifestConflict(
       buildConfig: app.buildConfig,
     })
 
-    const octokit = await getInstallationOctokit(Number(installationId))
+    const octokit = await getInstallationOctokit(installation.githubInstallationId)
     const manifestPath = app.manifestPath || '.orbit.yaml'
     const branch = app.repository?.branch || 'main'
 
@@ -680,18 +720,29 @@ export async function disableManifestSync(appId: string): Promise<void> {
   if (!updateDecision.allowed) throw new Error('You do not have permission to update this app.')
 
   if (app.webhookId && app.repository?.url && app.repository?.installationId) {
-    try {
-      const parsed = parseGitHubUrl(app.repository.url)
-      if (parsed) {
-        const octokit = await getInstallationOctokit(Number(app.repository.installationId))
-        await octokit.request('DELETE /repos/{owner}/{repo}/hooks/{hook_id}', {
-          owner: parsed.owner,
-          repo: parsed.repo,
-          hook_id: Number(app.webhookId),
-        })
+    // Never act through an installation the app's workspace is not granted;
+    // GitHub is called with the resolved doc's numeric installation id.
+    const installation = await resolveInstallationForWorkspace(
+      payload,
+      app.repository.installationId,
+      appWorkspaceId,
+    )
+    if (!installation) {
+      console.warn(`[disableManifestSync] skipping webhook cleanup for app ${appId}: installation not available for workspace`)
+    } else {
+      try {
+        const parsed = parseGitHubUrl(app.repository.url)
+        if (parsed) {
+          const octokit = await getInstallationOctokit(installation.githubInstallationId)
+          await octokit.request('DELETE /repos/{owner}/{repo}/hooks/{hook_id}', {
+            owner: parsed.owner,
+            repo: parsed.repo,
+            hook_id: Number(app.webhookId),
+          })
+        }
+      } catch (error) {
+        console.error('Failed to delete webhook:', error)
       }
-    } catch (error) {
-      console.error('Failed to delete webhook:', error)
     }
   }
 

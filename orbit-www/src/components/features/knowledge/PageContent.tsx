@@ -10,9 +10,11 @@ interface PageContentProps {
   author: any
   lastEditedBy: any
   onSave: (content: BlockDocument) => Promise<void>
+  /** Server-computed: mirrors the knowledge-pages update rule. Never derive this client-side. */
+  canEdit: boolean
 }
 
-export function PageContent({ page, author, lastEditedBy, onSave }: PageContentProps) {
+export function PageContent({ page, author, lastEditedBy, onSave, canEdit }: PageContentProps) {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved')
 
   return (
@@ -79,7 +81,7 @@ export function PageContent({ page, author, lastEditedBy, onSave }: PageContentP
       <div className="stagger-item">
         <PageEditor
           page={page}
-          canEdit={true}
+          canEdit={canEdit}
           onSave={onSave}
           onStatusChange={setSaveStatus}
         />

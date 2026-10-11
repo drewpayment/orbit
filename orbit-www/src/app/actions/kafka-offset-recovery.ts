@@ -338,29 +338,13 @@ export async function restoreOffsets(
       }
     }
 
-    const offsets = checkpoint.offsets || {}
-    const partitionCount = Object.keys(offsets).length
-
-    // TODO: Trigger Temporal OffsetRestoreWorkflow here
-    // For now, return a placeholder success message
-    // The actual implementation would:
-    // 1. Call temporalClient.workflow.start(OffsetRestoreWorkflow, {...})
-    // 2. Return the workflow ID for tracking
-    // 3. The workflow would handle the actual Kafka offset reset
-
-    console.log(
-      `[Offset Recovery] User ${actor.betterAuthId} requested restore to checkpoint ${input.checkpointId}`,
-      {
-        consumerGroupId: input.consumerGroupId,
-        checkpointedAt: checkpoint.checkpointedAt,
-        partitionCount,
-      }
-    )
-
+    // The OffsetRestoreWorkflow is not implemented, so a restore cannot be
+    // performed. Previously this returned a success message without starting
+    // anything, which told users their consumer group had been reset when it
+    // had not. Fail explicitly instead until the workflow exists.
     return {
-      success: true,
-      message: `Offset restoration initiated for ${partitionCount} partitions. The consumer group will be reset to the checkpoint from ${checkpoint.checkpointedAt}.`,
-      restoredPartitions: partitionCount,
+      success: false,
+      error: 'Offset restore is not available yet. No offsets were changed.',
     }
   } catch (error) {
     console.error('Error restoring offsets:', error)

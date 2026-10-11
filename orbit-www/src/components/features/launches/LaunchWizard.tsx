@@ -49,6 +49,7 @@ interface LaunchWizardProps {
   templates: TemplateDoc[]
   cloudAccounts: CloudAccountDoc[]
   workspaceId: string
+  showDigitalOcean?: boolean
 }
 
 type WizardStep = 1 | 2 | 3 | 4
@@ -71,7 +72,7 @@ const categoryLabels: Record<string, string> = {
   serverless: 'Serverless',
 }
 
-export function LaunchWizard({ templates, cloudAccounts, workspaceId }: LaunchWizardProps) {
+export function LaunchWizard({ templates, cloudAccounts, workspaceId, showDigitalOcean = false }: LaunchWizardProps) {
   const router = useRouter()
   const [step, setStep] = useState<WizardStep>(1)
   const [isLaunching, setIsLaunching] = useState(false)
@@ -226,6 +227,7 @@ export function LaunchWizard({ templates, cloudAccounts, workspaceId }: LaunchWi
         <ProviderSelector
           templateCounts={templateCounts}
           onSelect={handleProviderSelect}
+          showDigitalOcean={showDigitalOcean}
         />
       )}
 

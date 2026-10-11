@@ -186,7 +186,7 @@ const features = [
     icon: FileText,
     title: 'Knowledge Hub',
     description:
-      'Collaborative wikis with full-text search, so tribal knowledge becomes shared knowledge.',
+      'Hierarchical knowledge spaces with a rich-text editor, so tribal knowledge lives next to your catalog.',
     color: '#22C55E',
     bgColor: '#22C55E18',
   },
@@ -194,7 +194,7 @@ const features = [
     icon: GitBranch,
     title: 'GitOps Native',
     description:
-      'Bidirectional sync with GitHub. Changes in UI commit to code, changes in code reflect in Orbit.',
+      'Keep app metadata in a .orbit.yaml manifest: export it from Orbit to your repo, and changes pushed to the repo sync back.',
     color: '#A855F7',
     bgColor: '#A855F718',
   },
@@ -260,7 +260,7 @@ const steps = [
     number: '2',
     title: 'Catalog',
     description:
-      'Orbit discovers your APIs, services, and Kafka topics automatically.',
+      'Orbit scans your repositories and proposes catalog entries for you to review.',
     color: '#3B82F6',
     bgColor: '#3B82F618',
     borderColor: '#3B82F633',

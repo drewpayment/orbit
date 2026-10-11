@@ -35,7 +35,6 @@ export interface KnowledgeTreeSidebarProps {
   pages: KnowledgePage[]
   currentPageId?: string
   workspaceSlug: string
-  userId?: string
 }
 
 // Helper to convert icon text names to emojis
@@ -88,7 +87,6 @@ export function KnowledgeTreeSidebar({
   pages,
   currentPageId,
   workspaceSlug,
-  userId,
 }: KnowledgeTreeSidebarProps) {
   const tree = useMemo(() => buildPageTree(pages), [pages])
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
@@ -127,17 +125,11 @@ export function KnowledgeTreeSidebar({
     slug: string
     parentPageId?: string
   }) => {
-    if (!userId) {
-      alert('You must be logged in to create pages.')
-      return
-    }
-
     const newPage = await createKnowledgePage({
       title: data.title,
       slug: data.slug,
       knowledgeSpaceId: space.id,
       parentPageId: data.parentPageId,
-      userId,
       workspaceSlug,
       spaceSlug: space.slug as string,
     })

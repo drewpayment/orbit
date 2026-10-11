@@ -120,7 +120,11 @@ async function findLinkedDocs(
       },
       depth: 1,
       limit: 25,
+      // `user` alone does NOT apply access control in Payload's local API
+      // (overrideAccess defaults to true): without this, every workspace's
+      // published pages tagged with the slug would be listed to any viewer.
       user,
+      overrideAccess: false,
     })
 
     return pages.docs.map((page) => ({

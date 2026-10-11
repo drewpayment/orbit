@@ -1,5 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renamePage, movePage, duplicatePage, deletePage } from './knowledge'
+import { getActor } from '@/lib/authz'
+import {
+  createKnowledgeSpace,
+  createKnowledgePage,
+  renamePage,
+  movePage,
+  duplicatePage,
+  deletePage,
+  updatePageSortOrder,
+  updatePageContent,
+} from './knowledge'
 
 vi.mock('payload', () => ({
   getPayload: vi.fn(),
@@ -28,12 +38,118 @@ const mockActor = {
   user: { id: 'payload-1', collection: 'users', _strategy: 'better-auth' },
 }
 vi.mock('@/lib/authz', () => ({
-  getActor: vi.fn(async () => mockActor),
+  getActor: vi.fn(),
 }))
 
 describe('Knowledge Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(getActor).mockResolvedValue(mockActor as any)
+  })
+
+  describe('authentication', () => {
+    it.each([
+      ['createKnowledgeSpace', () => createKnowledgeSpace({ name: 'n', visibility: 'private', workspaceSlug: 'w' })],
+      ['createKnowledgePage', () => createKnowledgePage({ title: 't', slug: 's', knowledgeSpaceId: 'sp', workspaceSlug: 'w', spaceSlug: 's' })],
+      ['renamePage', () => renamePage('1', 't', 'w', 's')],
+      ['movePage', () => movePage('1', null, 'w', 's')],
+      ['duplicatePage', () => duplicatePage('1', 'w', 's')],
+      ['deletePage', () => deletePage('1', 'w', 's')],
+      ['updatePageSortOrder', () => updatePageSortOrder('1', '2', 'w', 's')],
+      ['updatePageContent', () => updatePageContent('1', 'w', 's', 'p', { type: 'doc', content: [] } as any)],
+    ])('%s rejects unauthenticated callers before touching payload', async (_name, call) => {
+      vi.mocked(getActor).mockResolvedValue(null)
+      const { getPayload } = await import('payload')
+      ;(getPayload as any).mockClear()
+      await expect(call()).rejects.toThrow('Not authenticated')
+      expect(getPayload).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('createKnowledgePage', () => {
+    it('attributes the page to the session actor, ignoring any client-supplied userId', async () => {
+      const { getPayload } = await import('payload')
+      const mockPayload = {
+        findByID: vi.fn().mockResolvedValue({ id: 'parent-1', knowledgeSpace: 'space-1' }),
+        create: vi.fn().mockResolvedValue({ id: 'new', slug: 'x' }),
+      }
+      ;(getPayload as any).mockResolvedValue(mockPayload)
+
+      await createKnowledgePage({
+        title: 'T',
+        slug: 'x',
+        knowledgeSpaceId: 'space-1',
+        parentPageId: 'parent-1',
+        userId: 'attacker-chosen',
+        workspaceSlug: 'w',
+        spaceSlug: 's',
+      } as any)
+
+      const data = mockPayload.create.mock.calls[0][0].data
+      expect(data.author).toBe(mockActor.payloadId)
+      expect(data.lastEditedBy).toBe(mockActor.payloadId)
+      expect(mockPayload.create.mock.calls[0][0]).toMatchObject({ user: mockActor.user, overrideAccess: false })
+    })
+
+    it('rejects a parent page that belongs to a different space', async () => {
+      const { getPayload } = await import('payload')
+      const mockPayload = {
+        findByID: vi.fn().mockResolvedValue({ id: 'parent-1', knowledgeSpace: 'other-space' }),
+        create: vi.fn(),
+      }
+      ;(getPayload as any).mockResolvedValue(mockPayload)
+
+      await expect(
+        createKnowledgePage({
+          title: 'T',
+          slug: 'x',
+          knowledgeSpaceId: 'space-1',
+          parentPageId: 'parent-1',
+          workspaceSlug: 'w',
+          spaceSlug: 's',
+        }),
+      ).rejects.toThrow('Parent page not found')
+      expect(mockPayload.create).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('updatePageContent', () => {
+    it('updates under the actor access rules (never override)', async () => {
+      const { getPayload } = await import('payload')
+      const mockPayload = { update: vi.fn().mockResolvedValue({ id: '1' }) }
+      ;(getPayload as any).mockResolvedValue(mockPayload)
+
+      await updatePageContent('1', 'w', 's', 'p', { type: 'doc', content: [] } as any)
+
+      expect(mockPayload.update).toHaveBeenCalledWith({
+        collection: 'knowledge-pages',
+        id: '1',
+        data: { content: { type: 'doc', content: [] }, contentFormat: 'blocks' },
+        user: mockActor.user,
+        overrideAccess: false,
+      })
+    })
+  })
+
+  describe('updatePageSortOrder', () => {
+    it('refuses to reorder across knowledge spaces and reads under actor access', async () => {
+      const { getPayload } = await import('payload')
+      const mockPayload = {
+        findByID: vi
+          .fn()
+          .mockResolvedValueOnce({ id: 'a', knowledgeSpace: 'space-1', parentPage: null })
+          .mockResolvedValueOnce({ id: 'b', knowledgeSpace: 'space-2', parentPage: null }),
+        find: vi.fn(),
+        update: vi.fn(),
+      }
+      ;(getPayload as any).mockResolvedValue(mockPayload)
+
+      await expect(updatePageSortOrder('a', 'b', 'w', 's')).rejects.toThrow('Pages must be in the same space')
+      for (const call of mockPayload.findByID.mock.calls) {
+        expect(call[0]).toMatchObject({ user: mockActor.user, overrideAccess: false })
+      }
+      expect(mockPayload.update).not.toHaveBeenCalled()
+    })
   })
 
   describe('renamePage', () => {
@@ -75,6 +191,10 @@ describe('Knowledge Actions', () => {
     it('should update parent page relationship', async () => {
       const { getPayload } = await import('payload')
       const mockPayload = {
+        findByID: vi
+          .fn()
+          .mockResolvedValueOnce({ id: '1', knowledgeSpace: 'space-1' })
+          .mockResolvedValueOnce({ id: '2', knowledgeSpace: 'space-1' }),
         update: vi.fn().mockResolvedValue({ id: '1', parentPage: '2' }),
       }
       ;(getPayload as any).mockResolvedValue(mockPayload)
@@ -116,6 +236,10 @@ describe('Knowledge Actions', () => {
       const { getPayload } = await import('payload')
       const { revalidatePath } = await import('next/cache')
       const mockPayload = {
+        findByID: vi
+          .fn()
+          .mockResolvedValueOnce({ id: '1', knowledgeSpace: 'space-1' })
+          .mockResolvedValueOnce({ id: '2', knowledgeSpace: 'space-1' }),
         update: vi.fn().mockResolvedValue({ id: '1' }),
       }
       ;(getPayload as any).mockResolvedValue(mockPayload)
@@ -123,6 +247,32 @@ describe('Knowledge Actions', () => {
       await movePage('1', '2', 'test', 'space')
 
       expect(revalidatePath).toHaveBeenCalledWith('/workspaces/test/knowledge/space')
+    })
+  })
+
+  describe('movePage (cross-space guard)', () => {
+    it('rejects a new parent in a different space', async () => {
+      const { getPayload } = await import('payload')
+      const mockPayload = {
+        findByID: vi
+          .fn()
+          .mockResolvedValueOnce({ id: '1', knowledgeSpace: 'space-1' })
+          .mockResolvedValueOnce({ id: '2', knowledgeSpace: 'space-2' }),
+        update: vi.fn(),
+      }
+      ;(getPayload as any).mockResolvedValue(mockPayload)
+
+      await expect(movePage('1', '2', 'test', 'space')).rejects.toThrow('Parent page not found')
+      expect(mockPayload.update).not.toHaveBeenCalled()
+    })
+
+    it('rejects moving a page under itself', async () => {
+      const { getPayload } = await import('payload')
+      const mockPayload = { findByID: vi.fn(), update: vi.fn() }
+      ;(getPayload as any).mockResolvedValue(mockPayload)
+
+      await expect(movePage('1', '1', 'test', 'space')).rejects.toThrow('Parent page not found')
+      expect(mockPayload.update).not.toHaveBeenCalled()
     })
   })
 
@@ -154,7 +304,8 @@ describe('Knowledge Actions', () => {
       expect(mockPayload.findByID).toHaveBeenCalledWith({
         collection: 'knowledge-pages',
         id: '1',
-        overrideAccess: true,
+        user: mockActor.user,
+        overrideAccess: false,
       })
 
       expect(mockPayload.create).toHaveBeenCalledWith({
@@ -165,7 +316,8 @@ describe('Knowledge Actions', () => {
           content: mockOriginalPage.content,
           knowledgeSpace: mockOriginalPage.knowledgeSpace,
           parentPage: mockOriginalPage.parentPage,
-          author: mockOriginalPage.author,
+          author: mockActor.payloadId,
+          lastEditedBy: mockActor.payloadId,
           status: 'draft',
           sortOrder: 1,
           version: 1,

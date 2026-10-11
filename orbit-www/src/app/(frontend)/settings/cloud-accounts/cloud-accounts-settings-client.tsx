@@ -60,6 +60,14 @@ const STATUS_BADGE: Record<string, { variant: 'default' | 'secondary' | 'destruc
   error: { variant: 'destructive' },
 }
 
+// Status is set by a credential-presence check only (no provider call), so
+// avoid wording that implies a live connection.
+const STATUS_LABEL: Record<string, string> = {
+  connected: 'Ready',
+  disconnected: 'Not validated',
+  error: 'Incomplete',
+}
+
 // ---------------------------------------------------------------------------
 // Form state type
 // ---------------------------------------------------------------------------
@@ -127,7 +135,7 @@ function formFromCredentials(
 // Main component
 // ---------------------------------------------------------------------------
 
-export function CloudAccountsSettingsClient() {
+export function CloudAccountsSettingsClient({ showDigitalOcean = false }: { showDigitalOcean?: boolean }) {
   const [accounts, setAccounts] = useState<CloudAccountDoc[]>([])
   const [workspaces, setWorkspaces] = useState<WorkspaceOption[]>([])
   const [users, setUsers] = useState<UserOption[]>([])
@@ -252,9 +260,11 @@ export function CloudAccountsSettingsClient() {
     try {
       const result = await testCloudAccountConnection(account.id)
       if (result.valid) {
-        toast.success('Connection successful!')
+        // The check only confirms credentials are present; it never contacts
+        // the provider. Say so, and mark the account ready for launches.
+        toast.success('Credentials are present and the account is marked ready for launches. Connectivity to the provider is not verified.')
       } else {
-        toast.error(result.error || 'Connection test failed')
+        toast.error(result.error || 'Credential check failed')
       }
       fetchData()
     } catch (err) {
@@ -387,7 +397,9 @@ export function CloudAccountsSettingsClient() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="azure">Azure</SelectItem>
-                    <SelectItem value="digitalocean">DigitalOcean</SelectItem>
+                    {(showDigitalOcean || form.provider === 'digitalocean') && (
+                      <SelectItem value="digitalocean">DigitalOcean</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -600,7 +612,7 @@ function AccountTableRow({
           {account.status === 'error' && (
             <XCircle className="h-3 w-3 mr-1" />
           )}
-          {account.status.charAt(0).toUpperCase() + account.status.slice(1)}
+          {STATUS_LABEL[account.status] ?? account.status}
         </Badge>
       </TableCell>
       <TableCell>
@@ -621,9 +633,10 @@ function AccountTableRow({
             onClick={handleTest}
             disabled={testing}
             className="h-8"
+            title="Checks that credentials are present and marks the account ready for launches. Does not contact the cloud provider."
           >
             <Plug className="h-3.5 w-3.5 mr-1" />
-            {testing ? '...' : 'Test'}
+            {testing ? '...' : 'Validate'}
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onEdit}>
             <Pencil className="h-3.5 w-3.5" />

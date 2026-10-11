@@ -234,7 +234,9 @@ export async function deleteCloudAccount(
 
 /**
  * Test a cloud account connection (admin only).
- * Stub: validates credentials are non-empty, updates status to 'connected'.
+ * Credential-presence check only: validates credentials are non-empty and marks
+ * the account 'connected' (launches require that status). It does NOT contact
+ * the cloud provider; the UI words it accordingly.
  */
 export async function testCloudAccountConnection(
   id: string,

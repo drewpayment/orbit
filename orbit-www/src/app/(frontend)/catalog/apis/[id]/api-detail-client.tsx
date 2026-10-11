@@ -58,7 +58,6 @@ interface APIDetailClientProps {
   api: APISchema
   versions: APISchemaVersion[]
   canEdit: boolean
-  userId?: string
 }
 
 const visibilityConfig = {
@@ -73,7 +72,7 @@ const statusConfig = {
   deprecated: { label: 'Deprecated', className: 'bg-red-100 text-red-800' },
 }
 
-export function APIDetailClient({ api, versions, canEdit, userId }: APIDetailClientProps) {
+export function APIDetailClient({ api, versions, canEdit }: APIDetailClientProps) {
   const router = useRouter()
   const [isDeleting, setIsDeleting] = React.useState(false)
   const [selectedVersionContent, setSelectedVersionContent] = React.useState<string | null>(null)
@@ -394,13 +393,13 @@ export function APIDetailClient({ api, versions, canEdit, userId }: APIDetailCli
             }
             onViewVersion={handleViewVersion}
             onRestoreVersion={
-              canEdit && userId
+              canEdit
                 ? async (versionId) => {
                     try {
                       const { restoreVersion } = await import(
                         '@/app/(frontend)/workspaces/[slug]/apis/actions'
                       )
-                      await restoreVersion(api.id, versionId, userId)
+                      await restoreVersion(api.id, versionId)
                       toast.success('Version restored')
                       router.refresh()
                     } catch (error) {

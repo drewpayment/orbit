@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { getActor, check } from '@/lib/authz'
 import { listConnectionRepositoriesCore } from '@/lib/connections/ado-repos-core'
+import { actorMayUseSource } from '@/lib/connections/workspace-access'
 import type { Repository } from './github'
 
 /**
@@ -89,6 +90,25 @@ export async function listConnectionRepositories(
   }
 
   const payload = await getPayload({ config })
+
+  // The connection's credential is platform-managed and shared into workspaces
+  // via `allowedWorkspaces`; never use it for someone outside those workspaces.
+  let allowedWorkspaces: unknown
+  try {
+    const connection = await payload.findByID({
+      collection: 'git-connections',
+      id: connectionId,
+      depth: 0,
+      overrideAccess: true,
+    })
+    allowedWorkspaces = connection?.allowedWorkspaces
+  } catch {
+    return { success: false, error: 'Connection not found', repos: [], hasMore: false }
+  }
+  if (!(await actorMayUseSource(actor, allowedWorkspaces))) {
+    return { success: false, error: 'Connection not found', repos: [], hasMore: false }
+  }
+
   const result = await listConnectionRepositoriesCore(payload, connectionId, {
     fetchFn: (url, init) => fetch(url, init),
   })

@@ -30,7 +30,7 @@ export function WorkspaceQuickLinksCard({ workspaceSlug }: WorkspaceQuickLinksCa
     },
     {
       label: 'Templates',
-      href: `/templates?workspace=${encodeURIComponent(workspaceSlug)}`,
+      href: '/self-service/templates',
       icon: LayoutTemplate,
     },
     {

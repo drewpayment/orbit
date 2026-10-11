@@ -8,6 +8,7 @@ import {
   OffsetResetType,
 } from '@/lib/proto/idp/gateway/v1/gateway_pb'
 import type { KafkaVirtualCluster, KafkaCluster, KafkaApplication } from '@/payload-types'
+import { getActor, check } from '@/lib/authz'
 
 // ============================================================================
 // Types
@@ -68,6 +69,71 @@ function mapResetType(
     default:
       return OffsetResetType.UNSPECIFIED
   }
+}
+
+// ============================================================================
+// Authorization
+// ============================================================================
+
+type AccessResult = { ok: true } | { ok: false; error: string }
+
+/**
+ * Bifrost's admin gRPC has no tenant awareness, so every consumer-group call
+ * is gated here: the caller must be authenticated and hold `verb` in the
+ * workspace that owns the virtual cluster (directly, or via its application
+ * for legacy clusters that predate the `workspace` field).
+ */
+async function authorizeVirtualCluster(
+  virtualClusterId: string,
+  verb: 'read' | 'manage',
+): Promise<AccessResult> {
+  const actor = await getActor()
+  if (!actor) return { ok: false, error: 'Not authenticated' }
+
+  const payload = await getPayload({ config })
+
+  let workspaceId: string | null = null
+  try {
+    const vc = await payload.findByID({
+      collection: 'kafka-virtual-clusters',
+      id: virtualClusterId,
+      depth: 0,
+      overrideAccess: true,
+    })
+    const relId = (v: unknown): string | null =>
+      typeof v === 'string' ? v : v && typeof v === 'object' && 'id' in v ? String((v as { id: unknown }).id) : null
+    workspaceId = relId(vc?.workspace)
+    if (!workspaceId) {
+      const appId = relId(vc?.application)
+      if (appId) {
+        const app = await payload.findByID({
+          collection: 'kafka-applications',
+          id: appId,
+          depth: 0,
+          overrideAccess: true,
+        })
+        workspaceId = relId(app?.workspace)
+      }
+    }
+  } catch {
+    return { ok: false, error: 'Virtual cluster not found' }
+  }
+
+  if (!workspaceId) return { ok: false, error: 'Virtual cluster not found' }
+
+  const decision = await check(verb, { kind: 'workspace', id: workspaceId }, actor)
+  if (!decision.allowed) {
+    // A member who merely lacks the role gets a different message than an outsider.
+    if (verb === 'manage') {
+      const read = await check('read', { kind: 'workspace', id: workspaceId }, actor)
+      if (read.allowed) {
+        return { ok: false, error: 'Insufficient role: workspace owner or admin required' }
+      }
+    }
+    return { ok: false, error: 'Not a member of this workspace' }
+  }
+
+  return { ok: true }
 }
 
 // ============================================================================
@@ -137,6 +203,9 @@ export async function listConsumerGroups(virtualClusterId: string): Promise<{
   data?: ConsumerGroupSummary[]
   error?: string
 }> {
+  const access = await authorizeVirtualCluster(virtualClusterId, 'read')
+  if (!access.ok) return { success: false, error: access.error }
+
   try {
     // Ensure the virtual cluster is synced to Bifrost (in case Bifrost restarted)
     await ensureVirtualClusterSynced(virtualClusterId)
@@ -177,6 +246,9 @@ export async function describeConsumerGroup(
   data?: ConsumerGroupDetail
   error?: string
 }> {
+  const access = await authorizeVirtualCluster(virtualClusterId, 'read')
+  if (!access.ok) return { success: false, error: access.error }
+
   try {
     const response = await bifrostAdminClient.describeConsumerGroup({
       virtualClusterId,
@@ -233,6 +305,10 @@ export async function resetConsumerGroupOffsets(
   newOffsets?: PartitionLag[]
   error?: string
 }> {
+  // Resetting offsets rewinds or skips a consumer group: owner/admin only.
+  const access = await authorizeVirtualCluster(virtualClusterId, 'manage')
+  if (!access.ok) return { success: false, error: access.error }
+
   try {
     const response = await bifrostAdminClient.resetConsumerGroupOffsets({
       virtualClusterId,

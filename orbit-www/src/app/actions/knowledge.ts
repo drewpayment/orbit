@@ -3,7 +3,26 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
-import { getActor } from '@/lib/authz'
+import { getActor, type Actor } from '@/lib/authz'
+import type { BlockDocument } from '@/lib/blocks/types'
+
+// Identity always comes from the session (`getActor`) and every read/write
+// runs under the collection access rules as that actor (`overrideAccess:
+// false`); no action accepts a client-supplied user id.
+
+const relId = (v: unknown): string | null =>
+  typeof v === 'string' ? v : v && typeof v === 'object' && 'id' in v ? String((v as { id: unknown }).id) : null
+
+/** Read a page as the actor (collection access applies); throws if not visible. */
+async function readPageAs(payload: Awaited<ReturnType<typeof getPayload>>, actor: Actor, id: string) {
+  return payload.findByID({
+    collection: 'knowledge-pages',
+    id,
+    depth: 0,
+    user: actor.user,
+    overrideAccess: false,
+  })
+}
 
 export async function createKnowledgeSpace(data: {
   name: string
@@ -62,7 +81,6 @@ export async function createKnowledgePage(data: {
   slug: string
   knowledgeSpaceId: string
   parentPageId?: string
-  userId: string
   workspaceSlug: string
   spaceSlug: string
 }) {
@@ -72,6 +90,14 @@ export async function createKnowledgePage(data: {
   }
 
   const payload = await getPayload({ config })
+
+  // A parent must live in the same space (and be visible to the caller).
+  if (data.parentPageId) {
+    const parent = await readPageAs(payload, actor, data.parentPageId).catch(() => null)
+    if (!parent || relId(parent.knowledgeSpace) !== data.knowledgeSpaceId) {
+      throw new Error('Parent page not found')
+    }
+  }
 
   // Create the page with empty block content
   const page = await payload.create({
@@ -92,8 +118,8 @@ export async function createKnowledgePage(data: {
       },
       contentFormat: 'blocks',
       status: 'draft',
-      author: data.userId,
-      lastEditedBy: data.userId,
+      author: actor.payloadId,
+      lastEditedBy: actor.payloadId,
       version: 1,
       sortOrder: 0,
       tags: [],
@@ -147,6 +173,18 @@ export async function movePage(
 
   const payload = await getPayload({ config })
 
+  // A new parent must be a different page in the same space.
+  if (newParentId) {
+    if (newParentId === pageId) throw new Error('Parent page not found')
+    const [page, parent] = await Promise.all([
+      readPageAs(payload, actor, pageId),
+      readPageAs(payload, actor, newParentId).catch(() => null),
+    ])
+    if (!parent || relId(parent.knowledgeSpace) !== relId(page.knowledgeSpace)) {
+      throw new Error('Parent page not found')
+    }
+  }
+
   await payload.update({
     collection: 'knowledge-pages',
     id: pageId,
@@ -176,7 +214,8 @@ export async function duplicatePage(
   const original = await payload.findByID({
     collection: 'knowledge-pages',
     id: pageId,
-    overrideAccess: true,
+    user: actor.user,
+    overrideAccess: false,
   })
 
   // Create duplicate with unique slug
@@ -189,7 +228,8 @@ export async function duplicatePage(
       content: original.content,
       knowledgeSpace: original.knowledgeSpace,
       parentPage: original.parentPage,
-      author: original.author,
+      author: actor.payloadId,
+      lastEditedBy: actor.payloadId,
       status: 'draft',
       sortOrder: (original.sortOrder ?? 0) + 1,
       version: 1,
@@ -243,14 +283,20 @@ export async function updatePageSortOrder(
   const activePage = await payload.findByID({
     collection: 'knowledge-pages',
     id: activePageId,
-    overrideAccess: true,
+    user: actor.user,
+    overrideAccess: false,
   })
 
   const overPage = await payload.findByID({
     collection: 'knowledge-pages',
     id: overPageId,
-    overrideAccess: true,
+    user: actor.user,
+    overrideAccess: false,
   })
+
+  if (relId(activePage.knowledgeSpace) !== relId(overPage.knowledgeSpace)) {
+    throw new Error('Pages must be in the same space')
+  }
 
   // Get parent ID (handle both string and object formats)
   const getParentId = (page: any): string | null => {
@@ -266,12 +312,13 @@ export async function updatePageSortOrder(
   const siblings = await payload.find({
     collection: 'knowledge-pages',
     where: {
-      knowledgeSpace: { equals: activePage.knowledgeSpace },
+      knowledgeSpace: { equals: relId(activePage.knowledgeSpace) },
       parentPage: parentId ? { equals: parentId } : { exists: false },
     },
     sort: 'sortOrder',
     limit: 1000,
-    overrideAccess: true,
+    user: actor.user,
+    overrideAccess: false,
   })
 
   // Reorder: remove active page and insert at over page's position
@@ -300,4 +347,32 @@ export async function updatePageSortOrder(
   )
 
   revalidatePath(`/workspaces/${workspaceSlug}/knowledge/${spaceSlug}`)
+}
+
+export async function updatePageContent(
+  pageId: string,
+  workspaceSlug: string,
+  spaceSlug: string,
+  pageSlug: string,
+  content: BlockDocument
+) {
+  const actor = await getActor()
+  if (!actor) {
+    throw new Error('Not authenticated')
+  }
+
+  const payload = await getPayload({ config })
+
+  await payload.update({
+    collection: 'knowledge-pages',
+    id: pageId,
+    data: {
+      content: content as unknown as Record<string, unknown>,
+      contentFormat: 'blocks',
+    },
+    user: actor.user,
+    overrideAccess: false,
+  })
+
+  revalidatePath(`/workspaces/${workspaceSlug}/knowledge/${spaceSlug}/${pageSlug}`)
 }

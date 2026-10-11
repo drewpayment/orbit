@@ -2,7 +2,7 @@
 
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { getActor } from '@/lib/authz'
+import { getActor, check, type Actor } from '@/lib/authz'
 import {
   getTopicLineageGraph,
   getApplicationLineageGraph,
@@ -18,6 +18,36 @@ import type { KafkaLineageEdge } from '@/payload-types'
 // =============================================================================
 // Types
 // =============================================================================
+
+// Lineage spans workspaces (producers/consumers in other workspaces appear as
+// nodes), but READING a lineage view requires membership in the workspace that
+// owns the topic/application it is anchored on. The Payload local API skips
+// access control by default, so the owner is resolved with an explicit lookup
+// and checked via the policy.
+
+type PayloadClient = Awaited<ReturnType<typeof getPayload>>
+
+const relId = (v: unknown): string | null =>
+  typeof v === 'string' ? v : v && typeof v === 'object' && 'id' in v ? String((v as { id: unknown }).id) : null
+
+/** Member of the workspace that owns `collection`/`id`? Never throws; unknown doc => false. */
+async function canReadOwnedDoc(
+  payload: PayloadClient,
+  actor: Actor,
+  collection: 'kafka-topics' | 'kafka-applications',
+  id: string,
+): Promise<boolean> {
+  try {
+    const doc = await payload.findByID({ collection, id, depth: 0, overrideAccess: true })
+    const workspaceId = relId(doc?.workspace)
+    if (!workspaceId) return false
+    return (await check('read', { kind: 'workspace', id: workspaceId }, actor)).allowed
+  } catch {
+    return false
+  }
+}
+
+const NOT_FOUND = (what: string) => ({ success: false as const, error: `${what} not found` })
 
 export type LineageQueryOptions = {
   includeInactive?: boolean
@@ -75,15 +105,8 @@ export async function getTopicLineage(
   const payload = await getPayload({ config })
 
   try {
-    // Verify user has access to the topic
-    const topic = await payload.findByID({
-      collection: 'kafka-topics',
-      id: topicId,
-      depth: 1,
-    })
-
-    if (!topic) {
-      return { success: false, error: 'Topic not found' }
+    if (!(await canReadOwnedDoc(payload, actor, 'kafka-topics', topicId))) {
+      return NOT_FOUND('Topic')
     }
 
     // Get the lineage graph
@@ -116,15 +139,8 @@ export async function getApplicationLineage(
   const payload = await getPayload({ config })
 
   try {
-    // Verify user has access to the application
-    const application = await payload.findByID({
-      collection: 'kafka-applications',
-      id: applicationId,
-      depth: 1,
-    })
-
-    if (!application) {
-      return { success: false, error: 'Application not found' }
+    if (!(await canReadOwnedDoc(payload, actor, 'kafka-applications', applicationId))) {
+      return NOT_FOUND('Application')
     }
 
     // Get the lineage graph
@@ -156,15 +172,8 @@ export async function getTopicLineageSummaryAction(
   const payload = await getPayload({ config })
 
   try {
-    // Verify user has access to the topic
-    const topic = await payload.findByID({
-      collection: 'kafka-topics',
-      id: topicId,
-      depth: 0,
-    })
-
-    if (!topic) {
-      return { success: false, error: 'Topic not found' }
+    if (!(await canReadOwnedDoc(payload, actor, 'kafka-topics', topicId))) {
+      return NOT_FOUND('Topic')
     }
 
     const summary = await getTopicLineageSummary(payload, topicId)
@@ -195,15 +204,8 @@ export async function getApplicationLineageSummaryAction(
   const payload = await getPayload({ config })
 
   try {
-    // Verify user has access to the application
-    const application = await payload.findByID({
-      collection: 'kafka-applications',
-      id: applicationId,
-      depth: 0,
-    })
-
-    if (!application) {
-      return { success: false, error: 'Application not found' }
+    if (!(await canReadOwnedDoc(payload, actor, 'kafka-applications', applicationId))) {
+      return NOT_FOUND('Application')
     }
 
     const summary = await getApplicationLineageSummary(payload, applicationId)
@@ -236,16 +238,9 @@ export async function getCrossWorkspaceLineageAction(
   const payload = await getPayload({ config })
 
   try {
-    // Verify user has access to the workspace
-    const workspace = await payload.findByID({
-      collection: 'workspaces',
-      id: workspaceId,
-      depth: 0,
-      overrideAccess: true,
-    })
-
-    if (!workspace) {
-      return { success: false, error: 'Workspace not found' }
+    const membership = await check('read', { kind: 'workspace', id: workspaceId }, actor)
+    if (!membership.allowed) {
+      return NOT_FOUND('Workspace')
     }
 
     const edges = await getCrossWorkspaceLineage(payload, workspaceId, direction)
@@ -278,6 +273,10 @@ export async function getTopicLineageEdges(
   const payload = await getPayload({ config })
 
   try {
+    if (!(await canReadOwnedDoc(payload, actor, 'kafka-topics', topicId))) {
+      return NOT_FOUND('Topic')
+    }
+
     const { includeInactive = false, limit = 100 } = options
 
     const result = await payload.find({
@@ -319,6 +318,10 @@ export async function getApplicationLineageEdges(
   const payload = await getPayload({ config })
 
   try {
+    if (!(await canReadOwnedDoc(payload, actor, 'kafka-applications', applicationId))) {
+      return NOT_FOUND('Application')
+    }
+
     const { includeInactive = false, limit = 100 } = options
 
     const result = await payload.find({

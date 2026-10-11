@@ -5,6 +5,7 @@ import config from '@payload-config'
 import { getActor, check } from '@/lib/authz'
 import { revalidatePath } from 'next/cache'
 import { getTemporalClient } from '@/lib/temporal/client'
+import { featureUnavailableMessage, isFeatureEnabled } from '@/lib/features'
 
 // ============================================================================
 // Types
@@ -618,6 +619,10 @@ export interface RegisterSchemaResult {
  * Register a new schema for a topic
  */
 export async function registerSchema(input: RegisterSchemaInput): Promise<RegisterSchemaResult> {
+  if (!isFeatureEnabled('kafkaSchemas')) {
+    return { success: false, error: featureUnavailableMessage('kafkaSchemas') }
+  }
+
   const actor = await getActor()
 
   if (!actor) {
@@ -642,6 +647,12 @@ export async function registerSchema(input: RegisterSchemaInput): Promise<Regist
     const workspaceId = typeof topic.workspace === 'string'
       ? topic.workspace
       : topic.workspace.id
+
+    // Caller must be an active member of the topic's workspace (not merely logged in).
+    const registerDecision = await check('create', { kind: 'workspace', id: workspaceId }, actor)
+    if (!registerDecision.allowed) {
+      return { success: false, error: 'Not a member of this workspace' }
+    }
 
     // 2. Create schema record in Payload (status: pending)
     const schema = await payload.create({
@@ -1202,7 +1213,10 @@ export async function registerCluster(
     return { success: false, error: 'Not authenticated' }
   }
 
-  // TODO: Verify platform admin role
+  if (!actor.isPlatformAdmin) {
+    return { success: false, error: 'Platform admin required' }
+  }
+
   // TODO: Call actual gRPC service when available
   return { success: false, error: 'Not implemented' }
 }
@@ -1223,7 +1237,10 @@ export async function listClusters(): Promise<ListClustersResult> {
     return { success: false, error: 'Not authenticated' }
   }
 
-  // TODO: Verify platform admin role
+  if (!actor.isPlatformAdmin) {
+    return { success: false, error: 'Platform admin required' }
+  }
+
   // TODO: Call actual gRPC service when available
   return { success: true, clusters: [] }
 }
@@ -1244,7 +1261,10 @@ export async function validateCluster(clusterId: string): Promise<ValidateCluste
     return { success: false, error: 'Not authenticated' }
   }
 
-  // TODO: Verify platform admin role
+  if (!actor.isPlatformAdmin) {
+    return { success: false, error: 'Platform admin required' }
+  }
+
   // TODO: Call actual gRPC service when available
   return { success: false, error: 'Not implemented' }
 }
@@ -1264,7 +1284,10 @@ export async function deleteCluster(clusterId: string): Promise<DeleteClusterRes
     return { success: false, error: 'Not authenticated' }
   }
 
-  // TODO: Verify platform admin role
+  if (!actor.isPlatformAdmin) {
+    return { success: false, error: 'Platform admin required' }
+  }
+
   // TODO: Call actual gRPC service when available
   return { success: false, error: 'Not implemented' }
 }

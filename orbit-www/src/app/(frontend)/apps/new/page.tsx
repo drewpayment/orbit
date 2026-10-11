@@ -68,7 +68,7 @@ export default async function NewAppPage() {
               </CardHeader>
               <CardContent>
                 <Button asChild className="w-full">
-                  <Link href="/templates">Browse Templates</Link>
+                  <Link href="/self-service/templates">Browse Templates</Link>
                 </Button>
               </CardContent>
             </Card>

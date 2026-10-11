@@ -3,7 +3,11 @@ import config from '@payload-config'
 import { getActor, workspaceRole } from '@/lib/authz'
 import { redirect, notFound } from 'next/navigation'
 import { ClusterDetailClient } from './cluster-detail-client'
+import { isFeatureEnabled } from '@/lib/features'
 import type { KafkaApplication, Workspace } from '@/payload-types'
+
+// Preview-feature gate reads the runtime env var, so never prerender at build time.
+export const dynamic = 'force-dynamic'
 
 interface PageProps {
   params: Promise<{
@@ -112,6 +116,7 @@ export default async function ClusterDetailPage({ params }: PageProps) {
       canManage={memberRole === 'owner' || memberRole === 'admin' || memberRole === 'member'}
       canApprove={memberRole === 'owner' || memberRole === 'admin'}
       userId={actor.betterAuthId}
+      showSchemas={isFeatureEnabled('kafkaSchemas')}
     />
   )
 }

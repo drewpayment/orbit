@@ -441,6 +441,15 @@ describe('templates/authoring-actions', () => {
       expect(mockListActionsRpc).toHaveBeenCalledTimes(1)
     })
 
+    it('listActionRegistry requires a session and never reaches the worker RPC anonymously', async () => {
+      mockSessionUser = null
+      mockListActionsRpc.mockClear()
+      const { listActionRegistry } = await import('./authoring-actions')
+
+      await expect(listActionRegistry()).rejects.toThrow('Not authenticated')
+      expect(mockListActionsRpc).not.toHaveBeenCalled()
+    })
+
     it('startDryRun creates a dryRun action-run, auto-provisions the runner action once, and dispatches', async () => {
       const env = makeFakePayload({
         'template-definitions': [{ ...DRAFT_DEFINITION, currentVersion: 'ver-1' }],

@@ -2,6 +2,10 @@ import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { TopicDetailClient } from './topic-detail-client'
+import { isFeatureEnabled } from '@/lib/features'
+
+// Preview-feature gate reads the runtime env var, so never prerender at build time.
+export const dynamic = 'force-dynamic'
 
 interface PageProps {
   params: Promise<{
@@ -36,6 +40,9 @@ export default async function TopicDetailPage({ params }: PageProps) {
       workspaceId={workspace.id as string}
       workspaceSlug={slug}
       topicId={topicId}
+      showSchemas={isFeatureEnabled('kafkaSchemas')}
+      showMetrics={isFeatureEnabled('kafkaTopicMetrics')}
+      showSharing={isFeatureEnabled('kafkaTopicSharing')}
     />
   )
 }

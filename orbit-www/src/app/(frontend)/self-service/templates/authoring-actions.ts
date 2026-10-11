@@ -355,6 +355,9 @@ const REGISTRY_CACHE_MS = 60_000
  * worker's ListActions RPC fails.
  */
 export async function listActionRegistry(): Promise<ActionDescriptor[]> {
+  // Global data, but it fronts a worker RPC: require a session so anonymous
+  // callers cannot drive it.
+  await requireActor()
   if (registryCache && Date.now() - registryCache.at < REGISTRY_CACHE_MS) {
     return registryCache.entries
   }

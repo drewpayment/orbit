@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+// Deployments are a hidden preview feature (lib/features.ts); these tests exercise
+// the underlying behaviour, so enable it for the whole file.
+process.env.ORBIT_ENABLE_PREVIEW_FEATURES = 'deployments,deployToLaunch'
+
 // Mock dependencies before imports
 vi.mock('payload', () => ({
   getPayload: vi.fn(),
@@ -78,6 +82,7 @@ import {
   getDeploymentWorkflowProgress,
   skipCommitAndComplete,
   syncDeploymentStatusFromWorkflow,
+  createDeployment,
 } from './deployments'
 import { getDeploymentProgress } from '@/lib/clients/deployment-client'
 
@@ -90,6 +95,20 @@ function mockSession(userId = 'user-1') {
     user: { id: userId },
     session: {},
   } as any)
+}
+
+/**
+ * `find` that answers membership lookups AND resolves the stored installation
+ * ref (a github-installations Payload id, as the repo picker stores it) to its
+ * doc, whose NUMERIC `installationId` is what GitHub calls must use.
+ */
+const NUMERIC_INSTALLATION_ID = 4242
+function findWithInstallation() {
+  return vi.fn().mockImplementation(async ({ collection }: { collection: string }) =>
+    collection === 'github-installations'
+      ? { docs: [{ id: 'a1b2c3d4e5f6a1b2c3d4e5f6', installationId: NUMERIC_INSTALLATION_ID }] }
+      : { docs: [{ id: 'membership-1' }] },
+  )
 }
 
 function buildMockPayload(overrides: Record<string, unknown> = {}) {
@@ -168,12 +187,12 @@ describe('getRepoBranches', () => {
         id: 'app-1',
         workspace: 'workspace-1',
         repository: {
-          installationId: '99',
+          installationId: 'a1b2c3d4e5f6a1b2c3d4e5f6',
           owner: 'acme',
           name: 'backend',
         },
       }),
-      find: vi.fn().mockResolvedValue({ docs: [{ id: 'membership-1' }] }),
+      find: findWithInstallation(),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
     vi.mocked(createInstallationToken).mockResolvedValue({
@@ -202,6 +221,8 @@ describe('getRepoBranches', () => {
 
     const result = await getRepoBranches('app-1')
 
+    // The stored ref is a Payload id: GitHub is called with the doc's numeric id, never Number(ref) = NaN.
+    expect(createInstallationToken).toHaveBeenCalledWith(NUMERIC_INSTALLATION_ID)
     expect(result).toEqual({
       success: true,
       branches: ['main', 'develop', 'feature/x'],
@@ -217,12 +238,12 @@ describe('getRepoBranches', () => {
         id: 'app-1',
         workspace: 'workspace-1',
         repository: {
-          installationId: '99',
+          installationId: 'a1b2c3d4e5f6a1b2c3d4e5f6',
           owner: 'acme',
           name: 'backend',
         },
       }),
-      find: vi.fn().mockResolvedValue({ docs: [{ id: 'membership-1' }] }),
+      find: findWithInstallation(),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
     vi.mocked(createInstallationToken).mockResolvedValue({
@@ -373,9 +394,9 @@ describe('commitGeneratedFiles', () => {
         .mockResolvedValueOnce({
           id: 'app-1',
           workspace: 'workspace-1',
-          repository: { installationId: '99', owner: 'acme', name: 'backend' },
+          repository: { installationId: 'a1b2c3d4e5f6a1b2c3d4e5f6', owner: 'acme', name: 'backend' },
         }),
-      find: vi.fn().mockResolvedValue({ docs: [{ id: 'membership-1' }] }),
+      find: findWithInstallation(),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
     vi.mocked(createInstallationToken).mockResolvedValue({
@@ -406,9 +427,9 @@ describe('commitGeneratedFiles', () => {
         .mockResolvedValueOnce({
           id: 'app-1',
           workspace: 'workspace-1',
-          repository: { installationId: '99', owner: 'acme', name: 'backend' },
+          repository: { installationId: 'a1b2c3d4e5f6a1b2c3d4e5f6', owner: 'acme', name: 'backend' },
         }),
-      find: vi.fn().mockResolvedValue({ docs: [{ id: 'membership-1' }] }),
+      find: findWithInstallation(),
       update: vi.fn().mockResolvedValue({}),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
@@ -446,6 +467,7 @@ describe('commitGeneratedFiles', () => {
       newBranch: 'feature/generated',
     })
 
+    expect(createInstallationToken).toHaveBeenCalledWith(NUMERIC_INSTALLATION_ID, { requireContentsWrite: true })
     expect(result).toEqual({ success: true, sha: commitSha })
   })
 
@@ -463,9 +485,9 @@ describe('commitGeneratedFiles', () => {
         .mockResolvedValueOnce({
           id: 'app-1',
           workspace: 'workspace-1',
-          repository: { installationId: '99', owner: 'acme', name: 'backend' },
+          repository: { installationId: 'a1b2c3d4e5f6a1b2c3d4e5f6', owner: 'acme', name: 'backend' },
         }),
-      find: vi.fn().mockResolvedValue({ docs: [{ id: 'membership-1' }] }),
+      find: findWithInstallation(),
       update: vi.fn().mockResolvedValue({}),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
@@ -621,5 +643,131 @@ describe('syncDeploymentStatusFromWorkflow', () => {
 
     expect(result).toEqual({ success: false, error: 'Not a member of this workspace' })
     expect(mockPayload.update).not.toHaveBeenCalled()
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+// createDeployment — launch reference must live in the app's workspace
+// ---------------------------------------------------------------------------
+
+describe('createDeployment launch ownership', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const input = {
+    appId: 'app-1',
+    name: 'prod',
+    generator: 'docker-compose' as const,
+    config: {},
+    target: { type: 'docker' },
+    launchId: 'launch-victim',
+  }
+
+  it('refuses a launch that belongs to a different workspace', async () => {
+    mockSession()
+    const payload = buildMockPayload()
+    payload.findByID.mockImplementation(async ({ collection }: { collection: string }) => {
+      if (collection === 'apps') return { id: 'app-1', workspace: 'ws-1' }
+      if (collection === 'launches') {
+        return { id: 'launch-victim', status: 'active', workspace: 'ws-victim', pulumiOutputs: { secret: 'x' } }
+      }
+      return null
+    })
+    payload.find.mockResolvedValue({ docs: [{ id: 'member-1', role: 'member' }] })
+    vi.mocked(getPayload).mockResolvedValue(payload as any)
+
+    const result = await createDeployment(input)
+
+    expect(result).toEqual({ success: false, error: 'Launch not found or not active' })
+    expect(payload.create).not.toHaveBeenCalled()
+  })
+
+  it('accepts a launch in the same workspace', async () => {
+    mockSession()
+    const payload = buildMockPayload()
+    payload.findByID.mockImplementation(async ({ collection }: { collection: string }) => {
+      if (collection === 'apps') return { id: 'app-1', workspace: { id: 'ws-1' } }
+      if (collection === 'launches') {
+        return { id: 'launch-1', status: 'active', workspace: 'ws-1', template: { category: 'storage' }, pulumiOutputs: {} }
+      }
+      return null
+    })
+    payload.find.mockResolvedValue({ docs: [{ id: 'member-1', role: 'member' }] })
+    payload.create.mockResolvedValue({ id: 'dep-1' })
+    vi.mocked(getPayload).mockResolvedValue(payload as any)
+
+    const result = await createDeployment({ ...input, launchId: 'launch-1' })
+
+    expect(result).toEqual({ success: true, deploymentId: 'dep-1' })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Use-time installation re-check (repository.installationId is client-originated)
+// ---------------------------------------------------------------------------
+
+describe('installation re-check at use time', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  /** Membership lookups succeed; github-installations lookups return no doc (not granted). */
+  const findWithoutInstallation = () =>
+    vi.fn().mockImplementation(async ({ collection }: { collection: string }) =>
+      collection === 'github-installations' ? { docs: [] } : { docs: [{ id: 'membership-1' }] },
+    )
+
+  const app = {
+    id: 'app-1',
+    workspace: 'workspace-1',
+    repository: { installationId: '12345', owner: 'victim', name: 'repo' },
+  }
+
+  it('getRepoBranches refuses an installation not granted to the app workspace, without minting a token', async () => {
+    mockSession()
+    const mockPayload = buildMockPayload({
+      findByID: vi.fn().mockResolvedValue(app),
+      find: findWithoutInstallation(),
+    })
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await getRepoBranches('app-1')
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Repository installation is not available for this workspace',
+      branches: [],
+    })
+    expect(createInstallationToken).not.toHaveBeenCalled()
+  })
+
+  it('commitGeneratedFiles refuses an installation not granted to the app workspace, without minting a token', async () => {
+    mockSession()
+    const mockPayload = buildMockPayload({
+      findByID: vi
+        .fn()
+        .mockResolvedValueOnce({
+          id: 'deploy-1',
+          app: 'app-1',
+          generatedFiles: [{ path: 'docker-compose.yml', content: 'x' }],
+        })
+        .mockResolvedValueOnce(app),
+      find: findWithoutInstallation(),
+    })
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+
+    const result = await commitGeneratedFiles({
+      deploymentId: 'deploy-1',
+      branch: 'main',
+      message: 'add compose',
+    } as any)
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Repository installation is not available for this workspace',
+    })
+    expect(createInstallationToken).not.toHaveBeenCalled()
   })
 })

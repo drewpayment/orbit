@@ -19,9 +19,7 @@ import {
   Activity,
   Users,
   Settings,
-  Trash2,
   Loader2,
-  Share2,
   GitBranch,
   Network,
 } from 'lucide-react'
@@ -44,12 +42,19 @@ interface TopicDetailClientProps {
   workspaceId: string
   workspaceSlug: string
   topicId: string
+  /** Preview-feature visibility, resolved on the server (see lib/features.ts). */
+  showSchemas?: boolean
+  showMetrics?: boolean
+  showSharing?: boolean
 }
 
 export function TopicDetailClient({
   workspaceId,
   workspaceSlug,
   topicId,
+  showSchemas = false,
+  showMetrics = false,
+  showSharing = false,
 }: TopicDetailClientProps) {
   const [topic, setTopic] = useState<KafkaTopic | null>(null)
   const [schemas, setSchemas] = useState<KafkaSchema[]>([])
@@ -97,10 +102,10 @@ export function TopicDetailClient({
 
   useEffect(() => {
     loadTopic()
-    loadSchemas()
-    loadShares()
-    loadMetrics()
-  }, [loadTopic, loadSchemas, loadShares, loadMetrics])
+    if (showSchemas) loadSchemas()
+    if (showSharing) loadShares()
+    if (showMetrics) loadMetrics()
+  }, [loadTopic, loadSchemas, loadShares, loadMetrics, showSchemas, showSharing, showMetrics])
 
   if (loading) {
     return (
@@ -160,16 +165,8 @@ export function TopicDetailClient({
           </Link>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{topic.name}</h1>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline">
-            <Share2 className="h-4 w-4 mr-2" />
-            Share
-          </Button>
-          <Button variant="outline" className="text-red-600 hover:text-red-700">
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete
-          </Button>
-        </div>
+        {/* Share/Delete header buttons removed: they had no handlers. Topic
+            deletion lives in the cluster Topics panel. */}
       </div>
 
       {/* Tabs */}
@@ -179,43 +176,52 @@ export function TopicDetailClient({
             <Settings className="h-4 w-4" />
             Overview
           </TabsTrigger>
-          <TabsTrigger value="schemas" className="flex items-center gap-2">
-            <FileCode className="h-4 w-4" />
-            Schemas
-            {schemas.length > 0 && (
-              <Badge variant="secondary" className="ml-1">
-                {schemas.length}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="metrics" className="flex items-center gap-2">
-            <Activity className="h-4 w-4" />
-            Metrics
-          </TabsTrigger>
+          {showSchemas && (
+            <TabsTrigger value="schemas" className="flex items-center gap-2">
+              <FileCode className="h-4 w-4" />
+              Schemas
+              {schemas.length > 0 && (
+                <Badge variant="secondary" className="ml-1">
+                  {schemas.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+          )}
+          {showMetrics && (
+            <TabsTrigger value="metrics" className="flex items-center gap-2">
+              <Activity className="h-4 w-4" />
+              Metrics
+            </TabsTrigger>
+          )}
           <TabsTrigger value="lineage" className="flex items-center gap-2">
             <Network className="h-4 w-4" />
             Lineage
           </TabsTrigger>
-          <TabsTrigger value="sharing" className="flex items-center gap-2">
-            <Users className="h-4 w-4" />
-            Sharing
-            {shares.length > 0 && (
-              <Badge variant="secondary" className="ml-1">
-                {shares.length}
-              </Badge>
-            )}
-          </TabsTrigger>
+          {showSharing && (
+            <TabsTrigger value="sharing" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Sharing
+              {shares.length > 0 && (
+                <Badge variant="secondary" className="ml-1">
+                  {shares.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="overview" className="mt-6">
           <TopicDetailsCard topic={topic} />
         </TabsContent>
 
-        <TabsContent value="schemas" className="mt-6">
+        {showSchemas && (
+          <TabsContent value="schemas" className="mt-6">
           <SchemaViewer schemas={schemas} topicName={topic.name} />
         </TabsContent>
+        )}
 
-        <TabsContent value="metrics" className="mt-6">
+        {showMetrics && (
+          <TabsContent value="metrics" className="mt-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -259,12 +265,14 @@ export function TopicDetailClient({
             </CardContent>
           </Card>
         </TabsContent>
+        )}
 
         <TabsContent value="lineage" className="mt-6">
           <TopicLineagePanel topicId={topicId} topicName={topic.name} />
         </TabsContent>
 
-        <TabsContent value="sharing" className="mt-6">
+        {showSharing && (
+          <TabsContent value="sharing" className="mt-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -280,10 +288,6 @@ export function TopicDetailClient({
                 <div className="text-center py-8 text-gray-500">
                   <Users className="h-12 w-12 mx-auto mb-4 text-gray-400" />
                   <p>This topic is not shared with any other workspaces</p>
-                  <Button variant="outline" size="sm" className="mt-4">
-                    <Share2 className="h-4 w-4 mr-2" />
-                    Share Topic
-                  </Button>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -322,6 +326,7 @@ export function TopicDetailClient({
             </CardContent>
           </Card>
         </TabsContent>
+        )}
       </Tabs>
     </div>
   )
