@@ -42,11 +42,14 @@ spec:
             - name: BIFROST_ADMIN_URL
               value: bifrost:50060
             # Mints the service token the worker presents to Bifrost's admin API.
+            # optional: a missing key must not stop every workflow; the worker
+            # logs a warning and only Bifrost admin calls fail.
             - name: ORBIT_SVC_AUTH_SECRET
               valueFrom:
                 secretKeyRef:
                   name: orbit-secrets
                   key: ORBIT_SVC_AUTH_SECRET
+                  optional: true
             - name: BUILD_SERVICE_ADDRESS
               value: build-service:50054
             - name: GIT_WORK_DIR

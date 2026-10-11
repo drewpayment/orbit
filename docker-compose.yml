@@ -410,8 +410,8 @@ services:
       - BIFROST_METRICS_PORT=8080
       - KAFKA_BOOTSTRAP_SERVERS=redpanda:9092
       - BIFROST_LOG_LEVEL=debug
-      # Required: the admin API verifies a service token with this secret and
-      # the gateway refuses to start without it.
+      # The admin API verifies a service token with this secret; without it only
+      # the admin listener is disabled (the Kafka proxy keeps running).
       - ORBIT_SVC_AUTH_SECRET=${ORBIT_SVC_AUTH_SECRET:?ORBIT_SVC_AUTH_SECRET is required — see DEV_SETUP.md}
       # Set to "true" to enable gRPC reflection (grpcurl) on the admin port.
       - BIFROST_ADMIN_REFLECTION=${BIFROST_ADMIN_REFLECTION:-false}

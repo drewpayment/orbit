@@ -84,11 +84,43 @@ describe('bifrostConsumerGroupInterceptor', () => {
     expect(mintServiceToken).toHaveBeenCalledWith('root', '', { platformAdmin: true })
   })
 
-  it('signs the admin claim for the server-trusted virtual cluster sync, for any authenticated user', async () => {
+  it('signs the admin claim for the config sync only after verifying membership of the cluster workspace', async () => {
+    virtualClusterWorkspace.mockResolvedValue('ws-1')
+    workspaceRole.mockResolvedValue('member')
+
     const { result } = await run('UpsertVirtualCluster', { config: { id: 'vc-1' } }, actorFor('u1', 'user'))
     await result
 
-    expect(mintServiceToken).toHaveBeenCalledWith('u1', '', { platformAdmin: true })
+    expect(virtualClusterWorkspace).toHaveBeenCalledWith('vc-1')
+    expect(mintServiceToken).toHaveBeenCalledWith('u1', 'ws-1', { platformAdmin: true })
+  })
+
+  it('refuses the config sync for a non-member: no admin token is minted and Bifrost is not called', async () => {
+    virtualClusterWorkspace.mockResolvedValue('ws-other')
+    workspaceRole.mockResolvedValue(null)
+
+    const { result, next } = await run('UpsertVirtualCluster', { config: { id: 'vc-victim' } }, actorFor('u1', 'user'))
+
+    await expect(result).rejects.toThrow(/refusing to sync/)
+    expect(mintServiceToken).not.toHaveBeenCalled()
+    expect(next).not.toHaveBeenCalled()
+  })
+
+  it('refuses the config sync when the cluster has no resolvable owner', async () => {
+    virtualClusterWorkspace.mockResolvedValue(null)
+
+    const { result } = await run('UpsertVirtualCluster', { config: { id: 'vc-gone' } }, actorFor('u1', 'user'))
+
+    await expect(result).rejects.toThrow(/refusing to sync/)
+    expect(mintServiceToken).not.toHaveBeenCalled()
+  })
+
+  it('lets a platform admin sync any cluster without a workspace lookup', async () => {
+    const { result } = await run('UpsertVirtualCluster', { config: { id: 'vc-1' } }, actorFor('root', 'super_admin'))
+    await result
+
+    expect(virtualClusterWorkspace).not.toHaveBeenCalled()
+    expect(mintServiceToken).toHaveBeenCalledWith('root', '', { platformAdmin: true })
   })
 
   it('does not elevate any other RPC for a plain user', async () => {

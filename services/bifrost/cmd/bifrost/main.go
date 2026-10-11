@@ -86,12 +86,17 @@ func main() {
 		}
 	}()
 
-	// Start admin gRPC server
-	go func() {
-		if err := adminServer.Start(); err != nil {
-			errChan <- fmt.Errorf("admin server failed: %w", err)
-		}
-	}()
+	// Start admin gRPC server — only with a usable auth secret. Without one the
+	// listener stays closed rather than serving an unauthenticated API.
+	if cfg.AuthSecret != nil {
+		go func() {
+			if err := adminServer.Start(); err != nil {
+				errChan <- fmt.Errorf("admin server failed: %w", err)
+			}
+		}()
+	} else {
+		logrus.Error("Admin gRPC server NOT started: no valid ORBIT_SVC_AUTH_SECRET")
+	}
 
 	// Start Kafka proxy
 	kafkaProxy := proxy.NewBifrostProxy(
@@ -145,7 +150,8 @@ type Config struct {
 	KafkaBrokers string
 	LogLevel     string
 
-	// AuthSecret verifies the service token on every admin gRPC call.
+	// AuthSecret verifies the service token on every admin gRPC call. nil means
+	// the secret was missing/invalid and the admin API is disabled.
 	AuthSecret []byte
 	// AdminReflection opts in to gRPC server reflection on the admin port
 	// (dev tooling only; reflection is exempt from token verification).
@@ -153,11 +159,15 @@ type Config struct {
 }
 
 func loadConfig() *Config {
-	// Fail fast on the service-auth secret: there is deliberately no default, so
-	// the admin API can never come up unauthenticated.
+	// The admin API verifies a service token with this secret and there is
+	// deliberately no default. A missing/short secret disables ONLY the admin
+	// gRPC listener (see main) — the Kafka proxy is the tenants' data plane and
+	// must not go down because a control-plane secret is misconfigured.
 	authSecret, err := svcauth.LoadSecret(os.Getenv("ORBIT_SVC_AUTH_SECRET"))
 	if err != nil {
-		logrus.Fatalf("FATAL: %v (set ORBIT_SVC_AUTH_SECRET; generate with `openssl rand -base64 48`)", err)
+		logrus.Errorf("ORBIT_SVC_AUTH_SECRET is unusable (%v): the admin gRPC API is DISABLED until it is set "+
+			"(generate with `openssl rand -base64 48`); the Kafka proxy keeps running", err)
+		authSecret = nil
 	}
 
 	return &Config{

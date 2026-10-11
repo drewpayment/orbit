@@ -34,9 +34,12 @@ const SYNC_METHOD = 'UpsertVirtualCluster'
  *
  * UpsertVirtualCluster is reached here only through ensureVirtualClusterSynced,
  * which rebuilds the config from the kafka-virtual-clusters row because Bifrost
- * keeps config in memory and loses it on restart. It is a server-trusted sync of
- * data we already hold, not a user-supplied write, so it is signed with the
- * admin claim for any authenticated user. Do NOT route a user-controlled
+ * keeps config in memory and loses it on restart. It needs the admin claim, so
+ * it is signed with it only for a platform admin, or for a caller who is a
+ * member of the workspace that owns the cluster being synced (resolved from our
+ * database via config.id, never trusted from the caller). Anyone else is
+ * refused: the sync replaces a cluster's gateway config wholesale, so a
+ * non-member must not be able to trigger it. Do NOT route a user-controlled
  * UpsertVirtualCluster body through this client.
  */
 export const bifrostConsumerGroupInterceptor: Interceptor = (next) => async (req) => {
@@ -70,7 +73,20 @@ export const bifrostConsumerGroupInterceptor: Interceptor = (next) => async (req
       }
       workspaceId = owner
     }
-  } else if (method === SYNC_METHOD) {
+  } else if (method === SYNC_METHOD && !platformAdmin) {
+    const message = req.message as { config?: { id?: unknown } }
+    const virtualClusterId = typeof message?.config?.id === 'string' ? message.config.id : ''
+    const owner = await virtualClusterWorkspace(virtualClusterId)
+    const role = owner ? await workspaceRole(owner, actor) : null
+    if (!owner || !role) {
+      throw new Error(
+        `bifrostConsumerGroupInterceptor: refusing to sync virtual cluster ${virtualClusterId || '(none)'} for user ${actor.betterAuthId}: not a member of its workspace`,
+      )
+    }
+    // Verified member of the owning workspace: this is the trusted re-push of
+    // our own row, so admit it with the admin claim (Bifrost's upsert is
+    // admin-only) but scope the token to that workspace.
+    workspaceId = owner
     platformAdmin = true
   }
 

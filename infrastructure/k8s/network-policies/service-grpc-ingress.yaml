@@ -13,7 +13,7 @@
 #
 # Callers (match on the `app` label of the Deployment's pod template):
 #   orbit-www       -> repository-service, kafka-service, bifrost admin
-#   temporal-worker -> bifrost admin (virtual cluster provisioning)
+#   temporal-worker -> bifrost admin (virtual cluster provisioning), build-service
 #
 # NetworkPolicy is only enforced when the cluster CNI supports it.
 ---
@@ -102,3 +102,29 @@ spec:
     - ports:
         - protocol: TCP
           port: 8081
+---
+# build-service has no authentication of its own, so the network is its only
+# gate. The only in-cluster caller is the Temporal worker (BUILD_SERVICE_ADDRESS;
+# build/analyze activities). orbit-www reaches builds through repository-service,
+# not directly.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: build-service-grpc-ingress
+  namespace: orbit
+  labels:
+    app.kubernetes.io/part-of: orbit
+spec:
+  podSelector:
+    matchLabels:
+      app: build-service
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: temporal-worker
+      ports:
+        - protocol: TCP
+          port: 50054
