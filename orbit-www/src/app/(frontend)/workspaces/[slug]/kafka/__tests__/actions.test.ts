@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('payload', () => ({ getPayload: vi.fn() }))
 vi.mock('@payload-config', () => ({ default: {} }))
@@ -39,6 +39,9 @@ describe('registerSchema authorization', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    // Schema registration is a hidden preview feature (lib/features.ts); enable it
+    // so these tests exercise the authorization behind the gate.
+    vi.stubEnv('ORBIT_ENABLE_PREVIEW_FEATURES', 'kafkaSchemas')
     payload = {
       findByID: vi.fn().mockResolvedValue({ id: 'topic-1', workspace: { id: 'ws-1' } }),
       create: vi.fn().mockResolvedValue({ id: 'schema-1', type: 'value', format: 'avro' }),
@@ -46,6 +49,21 @@ describe('registerSchema authorization', () => {
     ;(getPayload as any).mockResolvedValue(payload)
     ;(getActor as any).mockResolvedValue(actor)
     ;(check as any).mockResolvedValue({ allowed: true, reason: 'workspace member', actor })
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('is unavailable while the kafkaSchemas preview feature is hidden (no DB calls)', async () => {
+    vi.stubEnv('ORBIT_ENABLE_PREVIEW_FEATURES', '')
+    const r = await registerSchema(input)
+    expect(r.success).toBe(false)
+    expect(r.error).toContain('not available')
+    expect(getActor).not.toHaveBeenCalled()
+    expect(getPayload).not.toHaveBeenCalled()
+    expect(payload.create).not.toHaveBeenCalled()
+    expect(startWorkflow).not.toHaveBeenCalled()
   })
 
   it('rejects unauthenticated callers', async () => {
