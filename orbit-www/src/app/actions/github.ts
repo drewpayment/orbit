@@ -3,7 +3,7 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { getActor, check } from '@/lib/authz'
-import { actorMayUseSource } from '@/lib/connections/workspace-access'
+import { actorMayUseSource, findInstallationByRef } from '@/lib/connections/workspace-access'
 import { getInstallationOctokit } from '@/lib/github/octokit'
 
 export interface GitHubInstallation {
@@ -82,10 +82,8 @@ export async function listInstallationRepositories(
 
   const payload = await getPayload({ config })
 
-  const installation = await payload.findByID({
-    collection: 'github-installations',
-    id: installationId,
-  })
+  // `installationId` may be a github-installations doc id or a legacy numeric GitHub id.
+  const installation = await findInstallationByRef(payload, installationId)
 
   if (!installation) {
     return { success: false, error: 'Installation not found', repos: [], hasMore: false }
@@ -98,7 +96,7 @@ export async function listInstallationRepositories(
   }
 
   try {
-    const octokit = await getInstallationOctokit(installation.installationId as number)
+    const octokit = await getInstallationOctokit(installation.githubInstallationId)
     const response = await octokit.request('GET /installation/repositories', {
       per_page: perPage,
       page,
@@ -149,10 +147,8 @@ export async function searchInstallationRepositories(
 
   const payload = await getPayload({ config })
 
-  const installation = await payload.findByID({
-    collection: 'github-installations',
-    id: installationId,
-  })
+  // `installationId` may be a github-installations doc id or a legacy numeric GitHub id.
+  const installation = await findInstallationByRef(payload, installationId)
 
   if (!installation) {
     return { success: false, error: 'Installation not found', repos: [], hasMore: false }
@@ -165,8 +161,8 @@ export async function searchInstallationRepositories(
   }
 
   try {
-    const octokit = await getInstallationOctokit(installation.installationId as number)
-    const accountLogin = installation.accountLogin as string
+    const octokit = await getInstallationOctokit(installation.githubInstallationId)
+    const accountLogin = installation.accountLogin ?? ''
 
     const response = await octokit.request('GET /search/repositories', {
       q: `${query} org:${accountLogin}`,
@@ -206,10 +202,8 @@ export async function getRepositoryBranches(
 
   const payload = await getPayload({ config })
 
-  const installation = await payload.findByID({
-    collection: 'github-installations',
-    id: installationId,
-  })
+  // `installationId` may be a github-installations doc id or a legacy numeric GitHub id.
+  const installation = await findInstallationByRef(payload, installationId)
 
   if (!installation) {
     return { success: false, error: 'Installation not found' }
@@ -222,7 +216,7 @@ export async function getRepositoryBranches(
   }
 
   try {
-    const octokit = await getInstallationOctokit(installation.installationId as number)
+    const octokit = await getInstallationOctokit(installation.githubInstallationId)
 
     // Fetch branches - GitHub returns up to 100 per page by default
     const response = await octokit.request('GET /repos/{owner}/{repo}/branches', {

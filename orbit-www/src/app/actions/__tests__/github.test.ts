@@ -501,3 +501,26 @@ describe('workspace/connection authorization', () => {
     })
   })
 })
+
+describe('installation ref forms', () => {
+  it('listInstallationRepositories resolves a legacy numeric GitHub id through the installation doc', async () => {
+    const actor = { payloadId: 'p', betterAuthId: 'u', email: 'e', role: 'user', isPlatformAdmin: false, user: { id: 'p' } } as any
+    vi.mocked(getActor).mockResolvedValue(actor)
+    vi.mocked(memberWorkspaceIds).mockResolvedValue(['workspace-1'])
+    const mockPayload = {
+      find: vi.fn().mockResolvedValue({
+        docs: [{ id: 'doc-1', installationId: 987654, allowedWorkspaces: ['workspace-1'] }],
+      }),
+      findByID: vi.fn(),
+    }
+    vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
+    const request = vi.fn().mockResolvedValue({ data: { repositories: [], total_count: 0 } })
+    vi.mocked(getInstallationOctokit).mockResolvedValue({ request } as any)
+
+    const result = await listInstallationRepositories('987654')
+
+    expect(result.success).toBe(true)
+    expect(JSON.stringify(mockPayload.find.mock.calls[0][0].where)).toContain('"installationId":{"equals":987654}')
+    expect(getInstallationOctokit).toHaveBeenCalledWith(987654)
+  })
+})

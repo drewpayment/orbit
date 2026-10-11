@@ -734,3 +734,89 @@ describe('createAppFromTemplate — installation binding', () => {
     expect(result.success).toBe(true)
   })
 })
+
+describe('manifest sync consumers resolve the stored installation ref', () => {
+  const PAYLOAD_ID = 'a1b2c3d4e5f6a1b2c3d4e5f6'
+  const NUMERIC = 4242
+
+  /** workspace-members => member; github-installations => granted (or not) doc with a numeric id. */
+  function find(granted: boolean) {
+    return vi.fn().mockImplementation(async ({ collection }: { collection: string }) => {
+      if (collection === 'github-installations') {
+        return { docs: granted ? [{ id: PAYLOAD_ID, installationId: NUMERIC }] : [] }
+      }
+      return { docs: [{ id: 'm1', role: 'owner' }] }
+    })
+  }
+
+  const app = {
+    id: 'app-1',
+    name: 'my-app',
+    workspace: 'ws-1',
+    conflictDetected: true,
+    webhookId: '777',
+    repository: { url: 'https://github.com/acme/repo', installationId: PAYLOAD_ID },
+  }
+
+  const octokit = {
+    request: vi.fn().mockImplementation(async (route: string) => {
+      if (route.startsWith('PUT')) return { data: { commit: { sha: 'sha1' } } }
+      if (route.startsWith('POST')) return { data: { id: 1 } }
+      throw new Error('404')
+    }),
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    authApi.getSession.mockResolvedValue({ user: { id: 'user-1' }, session: {} } as any)
+    vi.mocked(getInstallationOctokit).mockResolvedValue(octokit as any)
+  })
+
+  it('exportAppManifest calls GitHub with the doc numeric id (not Number(payloadId) = NaN)', async () => {
+    vi.mocked(getPayload).mockResolvedValue({
+      findByID: vi.fn().mockResolvedValue(app),
+      find: find(true),
+      update: vi.fn().mockResolvedValue({}),
+    } as any)
+
+    await exportAppManifest('app-1')
+
+    expect(getInstallationOctokit).toHaveBeenCalledWith(NUMERIC)
+  })
+
+  it('exportAppManifest refuses an installation not granted to the app workspace', async () => {
+    vi.mocked(getPayload).mockResolvedValue({
+      findByID: vi.fn().mockResolvedValue(app),
+      find: find(false),
+      update: vi.fn(),
+    } as any)
+
+    await expect(exportAppManifest('app-1')).rejects.toThrow('not available for this workspace')
+    expect(getInstallationOctokit).not.toHaveBeenCalled()
+  })
+
+  it('resolveManifestConflict(keep-orbit) uses the numeric id and refuses ungranted installations', async () => {
+    const update = vi.fn().mockResolvedValue({})
+    vi.mocked(getPayload).mockResolvedValue({ findByID: vi.fn().mockResolvedValue(app), find: find(true), update } as any)
+    await resolveManifestConflict('app-1', 'keep-orbit')
+    expect(getInstallationOctokit).toHaveBeenCalledWith(NUMERIC)
+
+    vi.clearAllMocks()
+    vi.mocked(getPayload).mockResolvedValue({ findByID: vi.fn().mockResolvedValue(app), find: find(false), update } as any)
+    await expect(resolveManifestConflict('app-1', 'keep-orbit')).rejects.toThrow('not available for this workspace')
+    expect(getInstallationOctokit).not.toHaveBeenCalled()
+  })
+
+  it('disableManifestSync deletes the webhook through the numeric id, and skips GitHub when ungranted', async () => {
+    const update = vi.fn().mockResolvedValue({})
+    vi.mocked(getPayload).mockResolvedValue({ findByID: vi.fn().mockResolvedValue(app), find: find(true), update } as any)
+    await disableManifestSync('app-1')
+    expect(getInstallationOctokit).toHaveBeenCalledWith(NUMERIC)
+
+    vi.clearAllMocks()
+    vi.mocked(getPayload).mockResolvedValue({ findByID: vi.fn().mockResolvedValue(app), find: find(false), update } as any)
+    await disableManifestSync('app-1')
+    expect(getInstallationOctokit).not.toHaveBeenCalled()
+    expect(update).toHaveBeenCalled() // sync is still turned off locally
+  })
+})

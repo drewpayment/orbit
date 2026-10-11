@@ -93,6 +93,20 @@ function mockSession(userId = 'user-1') {
   } as any)
 }
 
+/**
+ * `find` that answers membership lookups AND resolves the stored installation
+ * ref (a github-installations Payload id, as the repo picker stores it) to its
+ * doc, whose NUMERIC `installationId` is what GitHub calls must use.
+ */
+const NUMERIC_INSTALLATION_ID = 4242
+function findWithInstallation() {
+  return vi.fn().mockImplementation(async ({ collection }: { collection: string }) =>
+    collection === 'github-installations'
+      ? { docs: [{ id: 'a1b2c3d4e5f6a1b2c3d4e5f6', installationId: NUMERIC_INSTALLATION_ID }] }
+      : { docs: [{ id: 'membership-1' }] },
+  )
+}
+
 function buildMockPayload(overrides: Record<string, unknown> = {}) {
   return {
     findByID: vi.fn(),
@@ -169,12 +183,12 @@ describe('getRepoBranches', () => {
         id: 'app-1',
         workspace: 'workspace-1',
         repository: {
-          installationId: '99',
+          installationId: 'a1b2c3d4e5f6a1b2c3d4e5f6',
           owner: 'acme',
           name: 'backend',
         },
       }),
-      find: vi.fn().mockResolvedValue({ docs: [{ id: 'membership-1' }] }),
+      find: findWithInstallation(),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
     vi.mocked(createInstallationToken).mockResolvedValue({
@@ -203,6 +217,8 @@ describe('getRepoBranches', () => {
 
     const result = await getRepoBranches('app-1')
 
+    // The stored ref is a Payload id: GitHub is called with the doc's numeric id, never Number(ref) = NaN.
+    expect(createInstallationToken).toHaveBeenCalledWith(NUMERIC_INSTALLATION_ID)
     expect(result).toEqual({
       success: true,
       branches: ['main', 'develop', 'feature/x'],
@@ -218,12 +234,12 @@ describe('getRepoBranches', () => {
         id: 'app-1',
         workspace: 'workspace-1',
         repository: {
-          installationId: '99',
+          installationId: 'a1b2c3d4e5f6a1b2c3d4e5f6',
           owner: 'acme',
           name: 'backend',
         },
       }),
-      find: vi.fn().mockResolvedValue({ docs: [{ id: 'membership-1' }] }),
+      find: findWithInstallation(),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
     vi.mocked(createInstallationToken).mockResolvedValue({
@@ -374,9 +390,9 @@ describe('commitGeneratedFiles', () => {
         .mockResolvedValueOnce({
           id: 'app-1',
           workspace: 'workspace-1',
-          repository: { installationId: '99', owner: 'acme', name: 'backend' },
+          repository: { installationId: 'a1b2c3d4e5f6a1b2c3d4e5f6', owner: 'acme', name: 'backend' },
         }),
-      find: vi.fn().mockResolvedValue({ docs: [{ id: 'membership-1' }] }),
+      find: findWithInstallation(),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
     vi.mocked(createInstallationToken).mockResolvedValue({
@@ -407,9 +423,9 @@ describe('commitGeneratedFiles', () => {
         .mockResolvedValueOnce({
           id: 'app-1',
           workspace: 'workspace-1',
-          repository: { installationId: '99', owner: 'acme', name: 'backend' },
+          repository: { installationId: 'a1b2c3d4e5f6a1b2c3d4e5f6', owner: 'acme', name: 'backend' },
         }),
-      find: vi.fn().mockResolvedValue({ docs: [{ id: 'membership-1' }] }),
+      find: findWithInstallation(),
       update: vi.fn().mockResolvedValue({}),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)
@@ -447,6 +463,7 @@ describe('commitGeneratedFiles', () => {
       newBranch: 'feature/generated',
     })
 
+    expect(createInstallationToken).toHaveBeenCalledWith(NUMERIC_INSTALLATION_ID, { requireContentsWrite: true })
     expect(result).toEqual({ success: true, sha: commitSha })
   })
 
@@ -464,9 +481,9 @@ describe('commitGeneratedFiles', () => {
         .mockResolvedValueOnce({
           id: 'app-1',
           workspace: 'workspace-1',
-          repository: { installationId: '99', owner: 'acme', name: 'backend' },
+          repository: { installationId: 'a1b2c3d4e5f6a1b2c3d4e5f6', owner: 'acme', name: 'backend' },
         }),
-      find: vi.fn().mockResolvedValue({ docs: [{ id: 'membership-1' }] }),
+      find: findWithInstallation(),
       update: vi.fn().mockResolvedValue({}),
     })
     vi.mocked(getPayload).mockResolvedValue(mockPayload as any)

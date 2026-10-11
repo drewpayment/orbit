@@ -76,3 +76,46 @@ describe('installationAllowedForWorkspace', () => {
     await expect(installationAllowedForWorkspace(payload, '12345', 'ws-1')).resolves.toBe(false)
   })
 })
+
+import { resolveInstallationForWorkspace, findInstallationByRef } from './workspace-access'
+
+describe('resolveInstallationForWorkspace / findInstallationByRef', () => {
+  const find = vi.fn()
+  const findByID = vi.fn()
+  const payload = { find, findByID } as any
+  const doc = { id: 'a'.repeat(24), installationId: 987654, allowedWorkspaces: ['ws-1'] }
+
+  beforeEach(() => {
+    find.mockReset()
+    findByID.mockReset()
+  })
+
+  it('maps a Payload-id ref to the numeric GitHub installation id (not NaN)', async () => {
+    find.mockResolvedValue({ docs: [doc] })
+    const r = await resolveInstallationForWorkspace(payload, 'a'.repeat(24), 'ws-1')
+    expect(r).toEqual({ id: 'a'.repeat(24), githubInstallationId: 987654, allowedWorkspaces: ['ws-1'] })
+  })
+
+  it('tolerates a legacy numeric ref', async () => {
+    find.mockResolvedValue({ docs: [doc] })
+    const r = await resolveInstallationForWorkspace(payload, '987654', 'ws-1')
+    expect(r?.githubInstallationId).toBe(987654)
+    expect(JSON.stringify(find.mock.calls[0][0].where)).toContain('"installationId":{"equals":987654}')
+  })
+
+  it('returns null when not granted, or the doc has no numeric installation id', async () => {
+    find.mockResolvedValue({ docs: [] })
+    await expect(resolveInstallationForWorkspace(payload, 'a'.repeat(24), 'ws-2')).resolves.toBeNull()
+    find.mockResolvedValue({ docs: [{ id: 'a'.repeat(24) }] })
+    await expect(resolveInstallationForWorkspace(payload, 'a'.repeat(24), 'ws-1')).resolves.toBeNull()
+  })
+
+  it('findInstallationByRef resolves a doc id via findByID and a numeric ref via find', async () => {
+    findByID.mockResolvedValue(doc)
+    await expect(findInstallationByRef(payload, 'a'.repeat(24))).resolves.toMatchObject({ githubInstallationId: 987654 })
+    find.mockResolvedValue({ docs: [doc] })
+    await expect(findInstallationByRef(payload, '987654')).resolves.toMatchObject({ id: 'a'.repeat(24) })
+    findByID.mockRejectedValue(new Error('Not Found'))
+    await expect(findInstallationByRef(payload, 'b'.repeat(24))).resolves.toBeNull()
+  })
+})

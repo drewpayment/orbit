@@ -3,7 +3,7 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { getActor, check } from '@/lib/authz'
-import { installationAllowedForWorkspace } from '@/lib/connections/workspace-access'
+import { resolveInstallationForWorkspace } from '@/lib/connections/workspace-access'
 import { startDeploymentWorkflow, getDeploymentProgress } from '@/lib/clients/deployment-client'
 import type { JsonObject } from '@bufbuild/protobuf'
 import type { Deployment } from '@/payload-types'
@@ -489,13 +489,16 @@ export async function getRepoBranches(appId: string) {
       return { success: true, branches: ['main'], defaultBranch: 'main' }
     }
 
-    // Re-check at use time: the stored installation must be granted to this workspace.
-    if (!(await installationAllowedForWorkspace(payload, app.repository.installationId, repoWorkspaceId))) {
+    // Re-check at use time: the stored ref (a github-installations doc id, or a
+    // legacy numeric GitHub id) must resolve to an installation granted to this
+    // workspace; GitHub is called with that doc's NUMERIC installation id.
+    const installation = await resolveInstallationForWorkspace(payload, app.repository.installationId, repoWorkspaceId)
+    if (!installation) {
       return { success: false, error: 'Repository installation is not available for this workspace', branches: [] as string[] }
     }
 
     const { createInstallationToken } = await import('@/lib/github/octokit')
-    const { token } = await createInstallationToken(Number(app.repository.installationId))
+    const { token } = await createInstallationToken(installation.githubInstallationId)
 
     const response = await fetch(
       `https://api.github.com/repos/${app.repository.owner}/${app.repository.name}/branches?per_page=100`,
@@ -597,12 +600,13 @@ export async function commitGeneratedFiles(input: {
     }
 
     // Re-check at use time: never push through an installation this workspace is not granted.
-    if (!(await installationAllowedForWorkspace(payload, app.repository.installationId, workspaceId))) {
+    const installation = await resolveInstallationForWorkspace(payload, app.repository.installationId, workspaceId)
+    if (!installation) {
       return { success: false, error: 'Repository installation is not available for this workspace' }
     }
 
     const { createInstallationToken } = await import('@/lib/github/octokit')
-    const { token } = await createInstallationToken(Number(app.repository.installationId), { requireContentsWrite: true })
+    const { token } = await createInstallationToken(installation.githubInstallationId, { requireContentsWrite: true })
 
     const owner = app.repository.owner as string
     const repo = app.repository.name as string
