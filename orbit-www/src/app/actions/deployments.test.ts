@@ -78,6 +78,7 @@ import {
   getDeploymentWorkflowProgress,
   skipCommitAndComplete,
   syncDeploymentStatusFromWorkflow,
+  createDeployment,
 } from './deployments'
 import { getDeploymentProgress } from '@/lib/clients/deployment-client'
 
@@ -621,5 +622,63 @@ describe('syncDeploymentStatusFromWorkflow', () => {
 
     expect(result).toEqual({ success: false, error: 'Not a member of this workspace' })
     expect(mockPayload.update).not.toHaveBeenCalled()
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+// createDeployment — launch reference must live in the app's workspace
+// ---------------------------------------------------------------------------
+
+describe('createDeployment launch ownership', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const input = {
+    appId: 'app-1',
+    name: 'prod',
+    generator: 'docker-compose' as const,
+    config: {},
+    target: { type: 'docker' },
+    launchId: 'launch-victim',
+  }
+
+  it('refuses a launch that belongs to a different workspace', async () => {
+    mockSession()
+    const payload = buildMockPayload()
+    payload.findByID.mockImplementation(async ({ collection }: { collection: string }) => {
+      if (collection === 'apps') return { id: 'app-1', workspace: 'ws-1' }
+      if (collection === 'launches') {
+        return { id: 'launch-victim', status: 'active', workspace: 'ws-victim', pulumiOutputs: { secret: 'x' } }
+      }
+      return null
+    })
+    payload.find.mockResolvedValue({ docs: [{ id: 'member-1', role: 'member' }] })
+    vi.mocked(getPayload).mockResolvedValue(payload as any)
+
+    const result = await createDeployment(input)
+
+    expect(result).toEqual({ success: false, error: 'Launch not found or not active' })
+    expect(payload.create).not.toHaveBeenCalled()
+  })
+
+  it('accepts a launch in the same workspace', async () => {
+    mockSession()
+    const payload = buildMockPayload()
+    payload.findByID.mockImplementation(async ({ collection }: { collection: string }) => {
+      if (collection === 'apps') return { id: 'app-1', workspace: { id: 'ws-1' } }
+      if (collection === 'launches') {
+        return { id: 'launch-1', status: 'active', workspace: 'ws-1', template: { category: 'storage' }, pulumiOutputs: {} }
+      }
+      return null
+    })
+    payload.find.mockResolvedValue({ docs: [{ id: 'member-1', role: 'member' }] })
+    payload.create.mockResolvedValue({ id: 'dep-1' })
+    vi.mocked(getPayload).mockResolvedValue(payload as any)
+
+    const result = await createDeployment({ ...input, launchId: 'launch-1' })
+
+    expect(result).toEqual({ success: true, deploymentId: 'dep-1' })
   })
 })

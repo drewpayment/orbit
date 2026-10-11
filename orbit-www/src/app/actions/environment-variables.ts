@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { getActor, check, type Actor } from '@/lib/authz'
 import { encrypt, decrypt } from '@/lib/encryption'
+import { resolveEnvironmentVariablesUnchecked } from '@/lib/environment-variables/resolve'
 import type { EnvironmentVariable } from '@/payload-types'
 
 // ============================================================================
@@ -426,96 +427,42 @@ export async function getAppEnvironmentVariables(
 // Resolution Function (for builds/deployments)
 // ============================================================================
 
+/**
+ * Resolve decrypted variables for a build/deployment.
+ *
+ * This is an exported server action, i.e. callable from any client with
+ * arbitrary arguments, and it returns plaintext secrets: it authenticates and
+ * requires membership (the level needed to start a build) in the app's
+ * workspace. Server code that has already authorized the caller should use
+ * `resolveEnvironmentVariablesUnchecked` from `@/lib/environment-variables/resolve`.
+ */
 export async function resolveEnvironmentVariables(
   appId: string,
   usage: 'build' | 'deployment'
 ): Promise<{ success: boolean; error?: string; variables?: Record<string, string> }> {
-  // This is a server-only function - no user auth check needed
-  // It's called internally by the build system
+  const actor = await getActor()
+  if (!actor) {
+    return { success: false, error: 'Unauthorized' }
+  }
 
   const payload = await getPayload({ config })
-
+  let workspaceId: string | undefined
   try {
-    // Get app to find workspace
-    const app = await payload.findByID({
-      collection: 'apps',
-      id: appId,
-      overrideAccess: true,
-    })
-
-    if (!app) {
-      return { success: false, error: 'App not found' }
-    }
-
-    const workspaceId = typeof app.workspace === 'string'
-      ? app.workspace
-      : app.workspace.id
-
-    // 1. Get workspace-level variables
-    const workspaceVars = await payload.find({
-      collection: 'environment-variables',
-      where: {
-        and: [
-          { workspace: { equals: workspaceId } },
-          { app: { exists: false } },
-          usage === 'build'
-            ? { useInBuilds: { equals: true } }
-            : { useInDeployments: { equals: true } },
-        ],
-      },
-      limit: 1000,
-      overrideAccess: true,
-    })
-
-    // 2. Get app-level overrides
-    const appVars = await payload.find({
-      collection: 'environment-variables',
-      where: {
-        and: [
-          { app: { equals: appId } },
-          usage === 'build'
-            ? { useInBuilds: { equals: true } }
-            : { useInDeployments: { equals: true } },
-        ],
-      },
-      limit: 1000,
-      overrideAccess: true,
-    })
-
-    console.log('[ResolveEnv] Found variables:', {
-      workspaceVarsCount: workspaceVars.docs.length,
-      appVarsCount: appVars.docs.length,
-      workspaceVarNames: workspaceVars.docs.map(v => v.name),
-      appVarNames: appVars.docs.map(v => v.name),
-    })
-
-    // 3. Merge (app overrides workspace)
-    const result: Record<string, string> = {}
-
-    for (const v of workspaceVars.docs) {
-      try {
-        result[v.name] = decrypt(v.value)
-      } catch (e) {
-        console.error(`Failed to decrypt workspace variable ${v.name}:`, e)
-      }
-    }
-
-    for (const v of appVars.docs) {
-      try {
-        result[v.name] = decrypt(v.value)
-      } catch (e) {
-        console.error(`Failed to decrypt app variable ${v.name}:`, e)
-      }
-    }
-
-    return { success: true, variables: result }
-  } catch (error) {
-    console.error('Failed to resolve environment variables:', error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to resolve environment variables',
-    }
+    const app = await payload.findByID({ collection: 'apps', id: appId, depth: 0, overrideAccess: true })
+    workspaceId = typeof app?.workspace === 'string' ? app.workspace : app?.workspace?.id
+  } catch {
+    return { success: false, error: 'App not found' }
   }
+  if (!workspaceId) {
+    return { success: false, error: 'App not found' }
+  }
+
+  const decision = await check('create', { kind: 'workspace', id: workspaceId }, actor)
+  if (!decision.allowed) {
+    return { success: false, error: 'Not a member of this workspace' }
+  }
+
+  return resolveEnvironmentVariablesUnchecked(appId, usage)
 }
 
 // ============================================================================
