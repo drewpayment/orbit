@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 
+	"github.com/drewpayment/orbit/proto/pkg/svcauth"
 	"github.com/drewpayment/orbit/services/bifrost/internal/admin"
 	"github.com/drewpayment/orbit/services/bifrost/internal/auth"
 	"github.com/drewpayment/orbit/services/bifrost/internal/config"
@@ -49,7 +50,10 @@ func main() {
 
 	// Initialize admin service
 	adminService := admin.NewService(vcStore, credStore)
-	adminServer := admin.NewServer(adminService, cfg.AdminPort)
+	adminServer := admin.NewServer(adminService, cfg.AdminPort, admin.ServerOptions{
+		Secret:           cfg.AuthSecret,
+		EnableReflection: cfg.AdminReflection,
+	})
 
 	// Initialize SASL handler
 	saslHandler := auth.NewSASLHandler(credStore, vcStore)
@@ -140,15 +144,30 @@ type Config struct {
 	MetricsPort  int
 	KafkaBrokers string
 	LogLevel     string
+
+	// AuthSecret verifies the service token on every admin gRPC call.
+	AuthSecret []byte
+	// AdminReflection opts in to gRPC server reflection on the admin port
+	// (dev tooling only; reflection is exempt from token verification).
+	AdminReflection bool
 }
 
 func loadConfig() *Config {
+	// Fail fast on the service-auth secret: there is deliberately no default, so
+	// the admin API can never come up unauthenticated.
+	authSecret, err := svcauth.LoadSecret(os.Getenv("ORBIT_SVC_AUTH_SECRET"))
+	if err != nil {
+		logrus.Fatalf("FATAL: %v (set ORBIT_SVC_AUTH_SECRET; generate with `openssl rand -base64 48`)", err)
+	}
+
 	return &Config{
-		ProxyPort:    getEnvInt("BIFROST_PROXY_PORT", 9092),
-		AdminPort:    getEnvInt("BIFROST_ADMIN_PORT", 50060),
-		MetricsPort:  getEnvInt("BIFROST_METRICS_PORT", 8080),
-		KafkaBrokers: getEnv("KAFKA_BOOTSTRAP_SERVERS", "redpanda:9092"),
-		LogLevel:     getEnv("BIFROST_LOG_LEVEL", "info"),
+		ProxyPort:       getEnvInt("BIFROST_PROXY_PORT", 9092),
+		AdminPort:       getEnvInt("BIFROST_ADMIN_PORT", 50060),
+		MetricsPort:     getEnvInt("BIFROST_METRICS_PORT", 8080),
+		KafkaBrokers:    getEnv("KAFKA_BOOTSTRAP_SERVERS", "redpanda:9092"),
+		LogLevel:        getEnv("BIFROST_LOG_LEVEL", "info"),
+		AuthSecret:      authSecret,
+		AdminReflection: os.Getenv("BIFROST_ADMIN_REFLECTION") == "true",
 	}
 }
 

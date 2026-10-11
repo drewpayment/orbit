@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	gatewayv1 "github.com/drewpayment/orbit/proto/gen/go/idp/gateway/v1"
+	"github.com/drewpayment/orbit/proto/pkg/svcauth"
 )
 
 // Server wraps the gRPC server for the Admin API.
@@ -19,13 +20,36 @@ type Server struct {
 	port       int
 }
 
-// NewServer creates a new admin server.
-func NewServer(service *Service, port int) *Server {
-	grpcServer := grpc.NewServer()
+// ServerOptions configures the admin server's security posture.
+type ServerOptions struct {
+	// Secret is the shared ORBIT_SVC_AUTH_SECRET used to verify the service
+	// token on every admin RPC. Required: callers load it with
+	// svcauth.LoadSecret so a missing/short secret stops startup.
+	Secret []byte
+	// EnableReflection registers gRPC server reflection (grpcurl and friends).
+	// Reflection is exempt from token verification, so it is off unless a
+	// developer explicitly opts in (BIFROST_ADMIN_REFLECTION=true).
+	EnableReflection bool
+}
+
+// NewServer creates a new admin server. Every admin RPC requires a valid
+// service token (default deny) and is then checked against methodPolicies.
+func NewServer(service *Service, port int, opts ServerOptions) *Server {
+	grpcServer := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(
+			svcauth.UnaryServerInterceptor(opts.Secret, true),
+			policyUnaryInterceptor,
+		),
+		grpc.ChainStreamInterceptor(
+			svcauth.StreamServerInterceptor(opts.Secret, true),
+		),
+	)
 	gatewayv1.RegisterBifrostAdminServiceServer(grpcServer, service)
 
-	// Enable server reflection for grpcurl and other tools
-	reflection.Register(grpcServer)
+	if opts.EnableReflection {
+		logrus.Warn("Admin gRPC reflection is ENABLED; do not use this setting in production")
+		reflection.Register(grpcServer)
+	}
 
 	return &Server{
 		grpcServer: grpcServer,
