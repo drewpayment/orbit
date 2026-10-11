@@ -1,10 +1,10 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import crypto from 'crypto'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { Client, Connection } from '@temporalio/client'
+import { filterVerified } from '@/lib/github/webhook-signature'
 
 const SPEC_FILE_PATTERNS = [
   /openapi\.(yaml|yml|json)$/i,
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 6. Find apps linked to this repository
+    // 6. Find candidate apps linked to this repository
     const payload = await getPayload({ config })
     const apps = await payload.find({
       collection: 'apps',
@@ -97,11 +97,20 @@ export async function POST(request: NextRequest) {
       limit: 100,
     })
 
+    // Verify the HMAC against each candidate's own secret BEFORE connecting to
+    // Temporal or revealing anything about which apps matched. Unverified
+    // candidates are dropped silently; if none verify, respond with a generic
+    // 401 (same body whether the repo is unknown, has no secret, or mismatched).
+    // No candidates: a normal delivery for an unrelated repo in the installation.
+    // Answer 200 with no details so GitHub's delivery log stays clean.
     if (apps.docs.length === 0) {
-      return NextResponse.json(
-        { message: 'No matching apps' },
-        { status: 200 },
-      )
+      console.debug('[spec-sync webhook] no candidates for repository; ignoring')
+      return NextResponse.json({ ok: true }, { status: 200 })
+    }
+
+    const verifiedApps = filterVerified(apps.docs, body, signature)
+    if (verifiedApps.length === 0) {
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
     }
 
     // 7. Connect to Temporal
@@ -112,44 +121,14 @@ export async function POST(request: NextRequest) {
     })
     const client = new Client({ connection })
 
-    // 8. Verify signature and signal/start workflow per app
+    // 8. Signal/start workflow per verified app
     const results: Array<{
       appId: string
       success: boolean
       error?: string
     }> = []
 
-    for (const app of apps.docs) {
-      if (!app.webhookSecret) {
-        results.push({
-          appId: app.id,
-          success: false,
-          error: 'No webhook secret configured',
-        })
-        continue
-      }
-
-      const expectedSig =
-        'sha256=' +
-        crypto
-          .createHmac('sha256', app.webhookSecret)
-          .update(body)
-          .digest('hex')
-
-      const isValid = crypto.timingSafeEqual(
-        Buffer.from(signature),
-        Buffer.from(expectedSig),
-      )
-
-      if (!isValid) {
-        results.push({
-          appId: app.id,
-          success: false,
-          error: 'Invalid signature',
-        })
-        continue
-      }
-
+    for (const app of verifiedApps) {
       try {
         // Try to signal existing workflow
         const workflowId = `spec-sync-${app.id}`

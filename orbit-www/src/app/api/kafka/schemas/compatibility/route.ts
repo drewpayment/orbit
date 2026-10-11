@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getActor } from '@/lib/authz'
+import { guardTopicWorkspace } from '@/lib/authz/kafka-topic-guard'
 import { checkSchemaCompatibility } from '@/app/(frontend)/workspaces/[slug]/kafka/actions'
 
 /**
@@ -25,6 +26,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    const denied = await guardTopicWorkspace(String(topicId), 'read')
+    if (denied) return denied
 
     const result = await checkSchemaCompatibility({
       topicId,

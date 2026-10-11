@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
+import { validateInternalApiKey } from '@/lib/auth/internal-api-auth'
 import { createInstallationToken } from '@/lib/github/octokit'
 import { encrypt } from '@/lib/encryption'
 
@@ -22,6 +23,10 @@ function terminalResponse(code: string, message: string, httpStatus: number) {
 }
 
 export async function POST(request: NextRequest) {
+  // Worker-only endpoint (called by the Temporal GitHub token-refresh activities).
+  const authError = validateInternalApiKey(request.headers.get('X-API-Key'))
+  if (authError) return authError
+
   let installationId: string | undefined
   try {
     ;({ installationId } = await request.json())
