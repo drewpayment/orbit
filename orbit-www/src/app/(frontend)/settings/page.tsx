@@ -3,8 +3,15 @@ import { Plug, Container, LayoutTemplate, Cloud } from 'lucide-react'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
+import { isFeatureEnabled, type PreviewFeatureKey } from '@/lib/features'
 
-const settingsItems = [
+const settingsItems: {
+  title: string
+  description: string
+  href: string
+  icon: typeof Plug
+  feature?: PreviewFeatureKey
+}[] = [
   {
     title: 'Connections',
     description: 'Connect GitHub and Azure DevOps for repository import and catalog discovery.',
@@ -22,6 +29,7 @@ const settingsItems = [
     description: 'Manage application templates and scaffolding configurations.',
     href: '/settings/templates',
     icon: LayoutTemplate,
+    feature: 'legacyTemplates',
   },
   {
     title: 'Cloud Accounts',
@@ -45,7 +53,7 @@ export default function SettingsPage() {
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            {settingsItems.map((item) => (
+            {settingsItems.filter((item) => !item.feature || isFeatureEnabled(item.feature)).map((item) => (
               <Link
                 key={item.href}
                 href={item.href}

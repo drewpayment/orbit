@@ -26,6 +26,7 @@ import {
 import Link from "next/link"
 import { useSession } from "@/lib/auth-client"
 import { usePlatformAdmin } from "@/hooks/usePlatformAdmin"
+import { filterByFeature, parseEnabledFeatures, readPreviewFeaturesEnv, type PreviewFeatureKey } from "@/lib/features"
 
 import { NavMain } from "@/components/nav-main"
 import { NavPlatform, type NavPlatformItem } from "@/components/nav-platform"
@@ -76,7 +77,7 @@ const navMainData = [
       url: "/self-service",
       icon: Sparkles,
       // Highlight on the hub and the folded-in self-service surfaces.
-      activeMatch: ["/self-service", "/templates", "/launches", "/agent", "/infra-agent"],
+      activeMatch: ["/self-service", "/launches", "/agent", "/infra-agent"],
       items: [
         // In-app template authoring + the published-template catalog
         // (docs/plans/2026-09-09-template-authoring-phase-2-authoring-ui.md).
@@ -102,7 +103,15 @@ const navMainData = [
     },
 ]
 
-const navSettingsData = [
+// Entries tagged with `feature` are hidden unless that preview feature is
+// enabled (see lib/features.ts).
+const navSettingsData: {
+  title: string
+  url: string
+  icon: typeof Settings
+  feature?: PreviewFeatureKey
+  items: { title: string; url: string; icon: typeof Settings; feature?: PreviewFeatureKey }[]
+}[] = [
   {
     title: "Settings",
     url: "/settings",
@@ -110,15 +119,14 @@ const navSettingsData = [
     items: [
       { title: "Connections", url: "/settings/connections", icon: Plug },
       { title: "Registries", url: "/settings/registries", icon: Container },
-      { title: "Templates", url: "/settings/templates", icon: LayoutTemplate },
+      // Admin for the legacy /templates catalog (hidden preview feature).
+      { title: "Templates", url: "/settings/templates", icon: LayoutTemplate, feature: "legacyTemplates" },
       { title: "Cloud Accounts", url: "/settings/cloud-accounts", icon: Cloud },
     ],
   },
 ]
 
 const navSecondaryData: { title: string; url: string; icon: typeof MessageSquare }[] = [
-  // Support page hidden behind feature flag — re-enable when complete
-  // { title: "Support", url: "/support", icon: LifeBuoy },
   {
     title: "Feedback",
     url: "/feedback",
@@ -177,6 +185,10 @@ const navPlatformData: NavPlatformItem[] = [
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { data: session } = useSession()
   const { isPlatformAdmin, isSuperAdmin } = usePlatformAdmin()
+  const settingsNav = React.useMemo(
+    () => filterByFeature(navSettingsData, parseEnabledFeatures(readPreviewFeaturesEnv())),
+    [],
+  )
 
   // Prepare user data from session
   const user = React.useMemo(() => {
@@ -224,7 +236,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={navMainData} />
-        <NavMain items={navSettingsData} label="Settings" />
+        <NavMain items={settingsNav} label="Settings" />
         <NavPlatform items={navPlatformData} isVisible={isPlatformAdmin} />
         <NavSecondary items={navSecondaryData} className="mt-auto" />
       </SidebarContent>

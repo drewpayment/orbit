@@ -105,7 +105,7 @@ export function AppsCatalog({ apps }: AppsCatalogProps) {
           {apps.length === 0 && (
             <div className="flex gap-4 justify-center mt-4">
               <Button asChild variant="outline">
-                <Link href="/templates">Browse Templates</Link>
+                <Link href="/self-service/templates">Browse Templates</Link>
               </Button>
               <Button asChild>
                 <Link href="/apps/import">Import Repository</Link>

@@ -399,7 +399,7 @@ export default async function DashboardPage() {
                 </Link>
               </Button>
               <Button size="sm" variant="outline" asChild>
-                <Link href="/templates">
+                <Link href="/self-service/templates">
                   <LayoutTemplate className="mr-1.5 h-4 w-4" />
                   Browse Templates
                 </Link>

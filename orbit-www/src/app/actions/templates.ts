@@ -10,6 +10,7 @@ import { parseGitHubUrl, fetchRepoInfo, fetchManifestContent, generateWebhookSec
 import { revalidatePath } from 'next/cache'
 import { Octokit } from '@octokit/rest'
 import { decrypt } from '@/lib/encryption'
+import { featureUnavailableMessage, isFeatureEnabled } from '@/lib/features'
 
 // NOTE: gRPC client removed - @connectrpc/connect-node breaks Next.js webpack bundling
 // Template instantiation will use mock workflow IDs until we implement a different architecture
@@ -590,6 +591,12 @@ export interface InstantiateTemplateResult {
 export async function instantiateTemplate(
   input: InstantiateTemplateInput
 ): Promise<InstantiateTemplateResult> {
+  // Hidden preview feature: this returns a placeholder workflow ID and never
+  // starts a workflow. Real scaffolding lives under /self-service/templates.
+  if (!isFeatureEnabled('legacyTemplates')) {
+    return { success: false, error: featureUnavailableMessage('legacyTemplates') }
+  }
+
   const actor = await getActor()
 
   if (!actor) {
@@ -1337,6 +1344,11 @@ export async function triggerTokenRefresh(installationIds: string[]): Promise<Tr
  * TODO: Replace mock implementation with actual gRPC call to template service
  */
 export async function startInstantiation(input: StartInstantiationInput): Promise<StartInstantiationResult> {
+  // Hidden preview feature: uses a random mock workflow ID, no real workflow.
+  if (!isFeatureEnabled('legacyTemplates')) {
+    return { success: false, error: featureUnavailableMessage('legacyTemplates') }
+  }
+
   const actor = await getActor()
 
   if (!actor) {
@@ -1419,6 +1431,11 @@ export async function startInstantiation(input: StartInstantiationInput): Promis
  * TODO: Implement via HTTP REST to Go service - gRPC client breaks Next.js bundling
  */
 export async function getInstantiationProgress(workflowId: string): Promise<ProgressResult> {
+  // Hidden preview feature: progress below is simulated from elapsed time.
+  if (!isFeatureEnabled('legacyTemplates')) {
+    return { error: featureUnavailableMessage('legacyTemplates') }
+  }
+
   const actor = await getActor()
 
   if (!actor) {

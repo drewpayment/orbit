@@ -41,7 +41,7 @@ const backendCards: BackendCard[] = [
     title: 'Templates',
     description: 'Scaffold a new repository from a golden-path template.',
     icon: LayoutTemplate,
-    href: '/templates',
+    href: '/self-service/templates',
   },
   {
     title: 'Launches',
