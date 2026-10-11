@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import { ArrowLeft, ShieldAlert } from 'lucide-react'
-import { getActor } from '@/lib/authz'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
@@ -15,8 +14,7 @@ import { getManageableActionWorkspaces } from '../actions'
  * RBAC-enforced createAction server action.
  */
 export default async function NewActionPage() {
-  const actor = await getActor()
-  const workspaces = await getManageableActionWorkspaces(actor)
+  const workspaces = await getManageableActionWorkspaces()
 
   return (
     <SidebarProvider>

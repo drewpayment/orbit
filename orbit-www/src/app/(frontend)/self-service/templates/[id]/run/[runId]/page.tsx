@@ -66,7 +66,7 @@ export default async function RunDetailPage({ params }: PageProps) {
   const workspaceId = relId(run.workspace)
   const approvalPolicy =
     run.action && typeof run.action === 'object' ? run.action.approvalPolicy ?? 'none' : 'none'
-  const canApprove = actor ? await canApproveRun(actor, workspaceId ?? '', approvalPolicy) : false
+  const canApprove = actor ? await canApproveRun(workspaceId ?? '', approvalPolicy) : false
   const gates = await getScaffolderApprovalGates(runId)
 
   return (
