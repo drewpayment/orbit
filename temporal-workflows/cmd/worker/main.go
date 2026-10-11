@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
+	"github.com/drewpayment/orbit/proto/pkg/svcauth"
 	"github.com/drewpayment/orbit/temporal-workflows/internal/activities"
 	agentactivity "github.com/drewpayment/orbit/temporal-workflows/internal/activities/agent"
 	_ "github.com/drewpayment/orbit/temporal-workflows/internal/agent/providers/anthropic"     // register provider
@@ -316,8 +317,22 @@ func main() {
 	// Create shared Payload CMS client for Kafka activities
 	kafkaPayloadClient := internalClients.NewPayloadClient(orbitAPIURL, orbitInternalAPIKey, logger)
 
+	// Bifrost's admin API requires a service token. Without the shared secret
+	// every call would be rejected as Unauthenticated, so say so loudly now
+	// rather than failing obscurely inside an activity.
+	var bifrostOpts []internalClients.BifrostClientOption
+	if rawSecret := os.Getenv("ORBIT_SVC_AUTH_SECRET"); rawSecret != "" {
+		secret, secretErr := svcauth.LoadSecret(rawSecret)
+		if secretErr != nil {
+			log.Fatalf("FATAL: %v", secretErr)
+		}
+		bifrostOpts = append(bifrostOpts, internalClients.WithServiceAuth(secret))
+	} else {
+		log.Println("Warning: ORBIT_SVC_AUTH_SECRET is not set; Bifrost admin calls will be rejected as unauthenticated")
+	}
+
 	// Create Bifrost gRPC client
-	bifrostClient, err := internalClients.NewBifrostClient(bifrostAdminURL, logger)
+	bifrostClient, err := internalClients.NewBifrostClient(bifrostAdminURL, logger, bifrostOpts...)
 	if err != nil {
 		log.Printf("Warning: Failed to create Bifrost client: %v", err)
 		log.Println("Virtual cluster activities will not work until Bifrost is available")

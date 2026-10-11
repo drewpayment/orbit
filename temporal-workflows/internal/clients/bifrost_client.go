@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	gatewayv1 "github.com/drewpayment/orbit/proto/gen/go/idp/gateway/v1"
+	"github.com/drewpayment/orbit/proto/pkg/svcauth"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -17,10 +18,43 @@ type BifrostClient struct {
 	logger *slog.Logger
 }
 
+// bifrostWorkerSubject is the token subject the worker presents. There is no
+// user behind a workflow activity, so the call is attributed to the service.
+const bifrostWorkerSubject = "temporal-worker"
+
+// BifrostClientOption configures NewBifrostClient.
+type BifrostClientOption func(*bifrostClientConfig)
+
+type bifrostClientConfig struct {
+	authSecret []byte
+}
+
+// WithServiceAuth makes the client present a freshly minted service token with
+// the platform-admin claim on every call. Bifrost's admin API rejects calls
+// without one, and the worker provisions virtual clusters, credentials and
+// ACLs, so it needs the admin claim. secret is ORBIT_SVC_AUTH_SECRET.
+func WithServiceAuth(secret []byte) BifrostClientOption {
+	return func(c *bifrostClientConfig) { c.authSecret = secret }
+}
+
 // NewBifrostClient creates a new Bifrost gRPC client.
-func NewBifrostClient(address string, logger *slog.Logger) (*BifrostClient, error) {
+func NewBifrostClient(address string, logger *slog.Logger, opts ...BifrostClientOption) (*BifrostClient, error) {
+	var cfg bifrostClientConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	// TODO: Add TLS support for production
-	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	dialOpts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	if len(cfg.authSecret) > 0 {
+		creds, err := svcauth.NewPerRPCCredentials(cfg.authSecret, bifrostWorkerSubject, true)
+		if err != nil {
+			return nil, fmt.Errorf("configuring bifrost service auth: %w", err)
+		}
+		dialOpts = append(dialOpts, grpc.WithPerRPCCredentials(creds))
+	}
+
+	conn, err := grpc.NewClient(address, dialOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("connecting to bifrost: %w", err)
 	}
