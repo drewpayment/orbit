@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 
+	"github.com/drewpayment/orbit/proto/pkg/svcauth"
 	"github.com/drewpayment/orbit/services/bifrost/internal/admin"
 	"github.com/drewpayment/orbit/services/bifrost/internal/auth"
 	"github.com/drewpayment/orbit/services/bifrost/internal/config"
@@ -49,7 +50,10 @@ func main() {
 
 	// Initialize admin service
 	adminService := admin.NewService(vcStore, credStore)
-	adminServer := admin.NewServer(adminService, cfg.AdminPort)
+	adminServer := admin.NewServer(adminService, cfg.AdminPort, admin.ServerOptions{
+		Secret:           cfg.AuthSecret,
+		EnableReflection: cfg.AdminReflection,
+	})
 
 	// Initialize SASL handler
 	saslHandler := auth.NewSASLHandler(credStore, vcStore)
@@ -61,10 +65,7 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
 	})
-	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("READY"))
-	})
+	mux.HandleFunc("/ready", readyHandler(cfg.AuthSecret != nil))
 
 	metricsServer := &http.Server{
 		Addr:    ":" + strconv.Itoa(cfg.MetricsPort),
@@ -82,12 +83,17 @@ func main() {
 		}
 	}()
 
-	// Start admin gRPC server
-	go func() {
-		if err := adminServer.Start(); err != nil {
-			errChan <- fmt.Errorf("admin server failed: %w", err)
-		}
-	}()
+	// Start admin gRPC server — only with a usable auth secret. Without one the
+	// listener stays closed rather than serving an unauthenticated API.
+	if cfg.AuthSecret != nil {
+		go func() {
+			if err := adminServer.Start(); err != nil {
+				errChan <- fmt.Errorf("admin server failed: %w", err)
+			}
+		}()
+	} else {
+		logrus.Error("Admin gRPC server NOT started: no valid ORBIT_SVC_AUTH_SECRET")
+	}
 
 	// Start Kafka proxy
 	kafkaProxy := proxy.NewBifrostProxy(
@@ -133,6 +139,25 @@ func main() {
 	logrus.Info("Bifrost Gateway stopped")
 }
 
+// readyHandler is the k8s readiness endpoint. Bifrost keeps virtual clusters and
+// credentials in memory and only the admin API can restore them after a
+// restart, so a pod whose admin API is disabled (no usable
+// ORBIT_SVC_AUTH_SECRET) would accept connections yet fail every tenant's SASL
+// login. Report it NotReady so a bad rollout stalls and the old pod keeps
+// serving. Liveness (/health) is deliberately unaffected so the pod does not
+// crash-loop.
+func readyHandler(adminEnabled bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !adminEnabled {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte("NOT READY: admin API disabled (no valid ORBIT_SVC_AUTH_SECRET); gateway config cannot be restored"))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("READY"))
+	}
+}
+
 // Config holds the Bifrost gateway configuration.
 type Config struct {
 	ProxyPort    int
@@ -140,15 +165,35 @@ type Config struct {
 	MetricsPort  int
 	KafkaBrokers string
 	LogLevel     string
+
+	// AuthSecret verifies the service token on every admin gRPC call. nil means
+	// the secret was missing/invalid and the admin API is disabled.
+	AuthSecret []byte
+	// AdminReflection opts in to gRPC server reflection on the admin port
+	// (dev tooling only; reflection is exempt from token verification).
+	AdminReflection bool
 }
 
 func loadConfig() *Config {
+	// The admin API verifies a service token with this secret and there is
+	// deliberately no default. A missing/short secret disables ONLY the admin
+	// gRPC listener (see main) — the Kafka proxy is the tenants' data plane and
+	// must not go down because a control-plane secret is misconfigured.
+	authSecret, err := svcauth.LoadSecret(os.Getenv("ORBIT_SVC_AUTH_SECRET"))
+	if err != nil {
+		logrus.Errorf("ORBIT_SVC_AUTH_SECRET is unusable (%v): the admin gRPC API is DISABLED until it is set "+
+			"(generate with `openssl rand -base64 48`); the Kafka proxy keeps running", err)
+		authSecret = nil
+	}
+
 	return &Config{
-		ProxyPort:    getEnvInt("BIFROST_PROXY_PORT", 9092),
-		AdminPort:    getEnvInt("BIFROST_ADMIN_PORT", 50060),
-		MetricsPort:  getEnvInt("BIFROST_METRICS_PORT", 8080),
-		KafkaBrokers: getEnv("KAFKA_BOOTSTRAP_SERVERS", "redpanda:9092"),
-		LogLevel:     getEnv("BIFROST_LOG_LEVEL", "info"),
+		ProxyPort:       getEnvInt("BIFROST_PROXY_PORT", 9092),
+		AdminPort:       getEnvInt("BIFROST_ADMIN_PORT", 50060),
+		MetricsPort:     getEnvInt("BIFROST_METRICS_PORT", 8080),
+		KafkaBrokers:    getEnv("KAFKA_BOOTSTRAP_SERVERS", "redpanda:9092"),
+		LogLevel:        getEnv("BIFROST_LOG_LEVEL", "info"),
+		AuthSecret:      authSecret,
+		AdminReflection: os.Getenv("BIFROST_ADMIN_REFLECTION") == "true",
 	}
 }
 

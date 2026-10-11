@@ -1,0 +1,130 @@
+# infrastructure/k8s/network-policies/service-grpc-ingress.yaml
+#
+# Restricts who may reach the internal gRPC/Connect APIs. These services also
+# verify a service-auth JWT (ORBIT_SVC_AUTH_SECRET), so this is defense in depth:
+# a pod that is compromised or merely misbehaving in the namespace cannot even
+# open a connection to the admin / control-plane ports.
+#
+# Additive and label-based: each policy selects ONLY the pods named in
+# podSelector and only narrows ingress to the listed API port. Other ports on
+# those pods (Kafka proxy, metrics, health) keep their existing reachability via
+# an explicit allow-from-anywhere rule, so Traefik and Prometheus are unaffected.
+# Pods not selected by any policy here are untouched.
+#
+# Callers (match on the `app` label of the Deployment's pod template):
+#   orbit-www       -> repository-service, kafka-service, bifrost admin
+#   temporal-worker -> bifrost admin (virtual cluster provisioning), build-service
+#
+# NetworkPolicy is only enforced when the cluster CNI supports it.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bifrost-admin-ingress
+  namespace: orbit
+  labels:
+    app.kubernetes.io/part-of: orbit
+spec:
+  podSelector:
+    matchLabels:
+      app: bifrost
+  policyTypes:
+    - Ingress
+  ingress:
+    # Admin gRPC: only the portal and the worker.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: orbit-www
+        - podSelector:
+            matchLabels:
+              app: temporal-worker
+      ports:
+        - protocol: TCP
+          port: 50060
+    # Kafka proxy (via Traefik) and metrics/health stay reachable as before.
+    - ports:
+        - protocol: TCP
+          port: 9092
+        - protocol: TCP
+          port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kafka-service-grpc-ingress
+  namespace: orbit
+  labels:
+    app.kubernetes.io/part-of: orbit
+spec:
+  podSelector:
+    matchLabels:
+      app: kafka-service
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: orbit-www
+        - podSelector:
+            matchLabels:
+              app: temporal-worker
+      ports:
+        - protocol: TCP
+          port: 50055
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: repository-service-grpc-ingress
+  namespace: orbit
+  labels:
+    app.kubernetes.io/part-of: orbit
+spec:
+  podSelector:
+    matchLabels:
+      app: repository-service
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: orbit-www
+        - podSelector:
+            matchLabels:
+              app: temporal-worker
+      ports:
+        - protocol: TCP
+          port: 50051
+    # HTTP health/metrics port stays reachable as before.
+    - ports:
+        - protocol: TCP
+          port: 8081
+---
+# build-service has no authentication of its own, so the network is its only
+# gate. The only in-cluster caller is the Temporal worker (BUILD_SERVICE_ADDRESS;
+# build/analyze activities). orbit-www reaches builds through repository-service,
+# not directly.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: build-service-grpc-ingress
+  namespace: orbit
+  labels:
+    app.kubernetes.io/part-of: orbit
+spec:
+  podSelector:
+    matchLabels:
+      app: build-service
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: temporal-worker
+      ports:
+        - protocol: TCP
+          port: 50054

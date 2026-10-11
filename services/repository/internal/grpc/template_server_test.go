@@ -30,6 +30,12 @@ func (m *MockTemporalClient) CancelWorkflow(ctx context.Context, workflowID stri
 	return args.Error(0)
 }
 
+// WorkflowWorkspace makes the mock a WorkflowWorkspaceResolver: every workflow
+// belongs to testWS unless a test overrides the owner via workflowOwner.
+func (m *MockTemporalClient) WorkflowWorkspace(_ context.Context, _ string) (string, error) {
+	return testWS, nil
+}
+
 // MockPayloadClient is a mock for Payload CMS operations
 type MockPayloadClient struct {
 	mock.Mock
@@ -54,13 +60,13 @@ func (m *MockPayloadClient) ListWorkspaceInstallations(ctx context.Context, work
 func TestStartInstantiation_Success(t *testing.T) {
 	mockTemporal := new(MockTemporalClient)
 	mockTemporal.On("StartTemplateWorkflow", mock.Anything, mock.Anything).
-		Return("workflow-123", nil)
+		Return("template-instantiation-workflow-123", nil)
 
 	server := NewTemplateServer(mockTemporal, nil)
 
-	resp, err := server.StartInstantiation(context.Background(), connect.NewRequest(&templatev1.StartInstantiationRequest{
+	resp, err := server.StartInstantiation(wsCtx(), connect.NewRequest(&templatev1.StartInstantiationRequest{
 		TemplateId:     "template-1",
-		WorkspaceId:    "workspace-1",
+		WorkspaceId:    testWS,
 		TargetOrg:      "my-org",
 		RepositoryName: "new-service",
 		IsPrivate:      true,
@@ -69,15 +75,15 @@ func TestStartInstantiation_Success(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Equal(t, "workflow-123", resp.Msg.WorkflowId)
+	assert.Equal(t, "template-instantiation-workflow-123", resp.Msg.WorkflowId)
 	mockTemporal.AssertExpectations(t)
 }
 
 func TestStartInstantiation_MissingTemplateID(t *testing.T) {
 	server := NewTemplateServer(nil, nil)
 
-	_, err := server.StartInstantiation(context.Background(), connect.NewRequest(&templatev1.StartInstantiationRequest{
-		WorkspaceId:    "workspace-1",
+	_, err := server.StartInstantiation(wsCtx(), connect.NewRequest(&templatev1.StartInstantiationRequest{
+		WorkspaceId:    testWS,
 		TargetOrg:      "my-org",
 		RepositoryName: "new-service",
 	}))
@@ -89,7 +95,7 @@ func TestStartInstantiation_MissingTemplateID(t *testing.T) {
 func TestStartInstantiation_MissingWorkspaceID(t *testing.T) {
 	server := NewTemplateServer(nil, nil)
 
-	_, err := server.StartInstantiation(context.Background(), connect.NewRequest(&templatev1.StartInstantiationRequest{
+	_, err := server.StartInstantiation(wsCtx(), connect.NewRequest(&templatev1.StartInstantiationRequest{
 		TemplateId:     "template-1",
 		TargetOrg:      "my-org",
 		RepositoryName: "new-service",
@@ -102,9 +108,9 @@ func TestStartInstantiation_MissingWorkspaceID(t *testing.T) {
 func TestStartInstantiation_MissingTargetOrg(t *testing.T) {
 	server := NewTemplateServer(nil, nil)
 
-	_, err := server.StartInstantiation(context.Background(), connect.NewRequest(&templatev1.StartInstantiationRequest{
+	_, err := server.StartInstantiation(wsCtx(), connect.NewRequest(&templatev1.StartInstantiationRequest{
 		TemplateId:     "template-1",
-		WorkspaceId:    "workspace-1",
+		WorkspaceId:    testWS,
 		RepositoryName: "new-service",
 	}))
 
@@ -115,9 +121,9 @@ func TestStartInstantiation_MissingTargetOrg(t *testing.T) {
 func TestStartInstantiation_MissingRepositoryName(t *testing.T) {
 	server := NewTemplateServer(nil, nil)
 
-	_, err := server.StartInstantiation(context.Background(), connect.NewRequest(&templatev1.StartInstantiationRequest{
+	_, err := server.StartInstantiation(wsCtx(), connect.NewRequest(&templatev1.StartInstantiationRequest{
 		TemplateId:  "template-1",
-		WorkspaceId: "workspace-1",
+		WorkspaceId: testWS,
 		TargetOrg:   "my-org",
 	}))
 
@@ -127,7 +133,7 @@ func TestStartInstantiation_MissingRepositoryName(t *testing.T) {
 
 func TestGetInstantiationProgress_Success(t *testing.T) {
 	mockTemporal := new(MockTemporalClient)
-	mockTemporal.On("QueryWorkflow", mock.Anything, "workflow-123", "progress").
+	mockTemporal.On("QueryWorkflow", mock.Anything, "template-instantiation-workflow-123", "progress").
 		Return(map[string]interface{}{
 			"currentStep":     "creating_repository",
 			"progressPercent": int32(50),
@@ -136,13 +142,13 @@ func TestGetInstantiationProgress_Success(t *testing.T) {
 
 	server := NewTemplateServer(mockTemporal, nil)
 
-	resp, err := server.GetInstantiationProgress(context.Background(), connect.NewRequest(&templatev1.GetProgressRequest{
-		WorkflowId: "workflow-123",
+	resp, err := server.GetInstantiationProgress(wsCtx(), connect.NewRequest(&templatev1.GetProgressRequest{
+		WorkflowId: "template-instantiation-workflow-123",
 	}))
 
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Equal(t, "workflow-123", resp.Msg.WorkflowId)
+	assert.Equal(t, "template-instantiation-workflow-123", resp.Msg.WorkflowId)
 	assert.Equal(t, "creating_repository", resp.Msg.CurrentStep)
 	assert.Equal(t, int32(50), resp.Msg.ProgressPercent)
 	mockTemporal.AssertExpectations(t)
@@ -151,7 +157,7 @@ func TestGetInstantiationProgress_Success(t *testing.T) {
 func TestGetInstantiationProgress_MissingWorkflowID(t *testing.T) {
 	server := NewTemplateServer(nil, nil)
 
-	_, err := server.GetInstantiationProgress(context.Background(), connect.NewRequest(&templatev1.GetProgressRequest{}))
+	_, err := server.GetInstantiationProgress(wsCtx(), connect.NewRequest(&templatev1.GetProgressRequest{}))
 
 	assert.Error(t, err)
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
@@ -159,13 +165,13 @@ func TestGetInstantiationProgress_MissingWorkflowID(t *testing.T) {
 
 func TestCancelInstantiation_Success(t *testing.T) {
 	mockTemporal := new(MockTemporalClient)
-	mockTemporal.On("CancelWorkflow", mock.Anything, "workflow-123").
+	mockTemporal.On("CancelWorkflow", mock.Anything, "template-instantiation-workflow-123").
 		Return(nil)
 
 	server := NewTemplateServer(mockTemporal, nil)
 
-	resp, err := server.CancelInstantiation(context.Background(), connect.NewRequest(&templatev1.CancelRequest{
-		WorkflowId: "workflow-123",
+	resp, err := server.CancelInstantiation(wsCtx(), connect.NewRequest(&templatev1.CancelRequest{
+		WorkflowId: "template-instantiation-workflow-123",
 	}))
 
 	assert.NoError(t, err)
@@ -177,7 +183,7 @@ func TestCancelInstantiation_Success(t *testing.T) {
 func TestCancelInstantiation_MissingWorkflowID(t *testing.T) {
 	server := NewTemplateServer(nil, nil)
 
-	_, err := server.CancelInstantiation(context.Background(), connect.NewRequest(&templatev1.CancelRequest{}))
+	_, err := server.CancelInstantiation(wsCtx(), connect.NewRequest(&templatev1.CancelRequest{}))
 
 	assert.Error(t, err)
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
@@ -185,7 +191,7 @@ func TestCancelInstantiation_MissingWorkflowID(t *testing.T) {
 
 func TestListAvailableOrgs_Success(t *testing.T) {
 	mockPayload := new(MockPayloadClient)
-	mockPayload.On("ListWorkspaceInstallations", mock.Anything, "workspace-1").
+	mockPayload.On("ListWorkspaceInstallations", mock.Anything, testWS).
 		Return([]*InstallationData{
 			{OrgName: "org-1", AvatarURL: "https://example.com/avatar1.png", InstallationID: "inst-1"},
 			{OrgName: "org-2", AvatarURL: "https://example.com/avatar2.png", InstallationID: "inst-2"},
@@ -193,8 +199,8 @@ func TestListAvailableOrgs_Success(t *testing.T) {
 
 	server := NewTemplateServer(nil, mockPayload)
 
-	resp, err := server.ListAvailableOrgs(context.Background(), connect.NewRequest(&templatev1.ListAvailableOrgsRequest{
-		WorkspaceId: "workspace-1",
+	resp, err := server.ListAvailableOrgs(wsCtx(), connect.NewRequest(&templatev1.ListAvailableOrgsRequest{
+		WorkspaceId: testWS,
 	}))
 
 	assert.NoError(t, err)
@@ -209,7 +215,7 @@ func TestListAvailableOrgs_Success(t *testing.T) {
 func TestListAvailableOrgs_MissingWorkspaceID(t *testing.T) {
 	server := NewTemplateServer(nil, nil)
 
-	_, err := server.ListAvailableOrgs(context.Background(), connect.NewRequest(&templatev1.ListAvailableOrgsRequest{}))
+	_, err := server.ListAvailableOrgs(wsCtx(), connect.NewRequest(&templatev1.ListAvailableOrgsRequest{}))
 
 	assert.Error(t, err)
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))

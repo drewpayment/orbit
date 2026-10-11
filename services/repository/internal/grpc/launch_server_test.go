@@ -19,16 +19,33 @@ type mockLaunchClient struct {
 	signalApprovalFn func(ctx context.Context, workflowID string, approved bool, approvedBy, notes string) error
 	signalDeorbitFn  func(ctx context.Context, workflowID string, requestedBy, reason string) error
 	signalAbortFn    func(ctx context.Context, workflowID string, requestedBy string) error
+	// workflowWorkspaceFn overrides the owning workspace WorkflowWorkspace
+	// reports; by default every workflow belongs to testWS.
+	workflowWorkspaceFn func(ctx context.Context, workflowID string) (string, error)
+
+	// Side-effect flags, set when the corresponding call reaches the client, so
+	// authorization tests can prove a rejected caller never touched the workflow.
+	started, queried, signalled bool
+}
+
+// WorkflowWorkspace makes the mock a WorkflowWorkspaceResolver.
+func (m *mockLaunchClient) WorkflowWorkspace(ctx context.Context, workflowID string) (string, error) {
+	if m.workflowWorkspaceFn != nil {
+		return m.workflowWorkspaceFn(ctx, workflowID)
+	}
+	return testWS, nil
 }
 
 func (m *mockLaunchClient) StartLaunchWorkflow(ctx context.Context, input *StartLaunchInput) (string, error) {
+	m.started = true
 	if m.startWorkflowFn != nil {
 		return m.startWorkflowFn(ctx, input)
 	}
-	return "wf-123", nil
+	return "launch-wf-123", nil
 }
 
 func (m *mockLaunchClient) QueryLaunchProgress(ctx context.Context, workflowID string) (*LaunchProgressResult, error) {
+	m.queried = true
 	if m.queryProgressFn != nil {
 		return m.queryProgressFn(ctx, workflowID)
 	}
@@ -36,6 +53,7 @@ func (m *mockLaunchClient) QueryLaunchProgress(ctx context.Context, workflowID s
 }
 
 func (m *mockLaunchClient) SignalLaunchApproval(ctx context.Context, workflowID string, approved bool, approvedBy, notes string) error {
+	m.signalled = true
 	if m.signalApprovalFn != nil {
 		return m.signalApprovalFn(ctx, workflowID, approved, approvedBy, notes)
 	}
@@ -43,6 +61,7 @@ func (m *mockLaunchClient) SignalLaunchApproval(ctx context.Context, workflowID 
 }
 
 func (m *mockLaunchClient) SignalLaunchDeorbit(ctx context.Context, workflowID string, requestedBy, reason string) error {
+	m.signalled = true
 	if m.signalDeorbitFn != nil {
 		return m.signalDeorbitFn(ctx, workflowID, requestedBy, reason)
 	}
@@ -50,6 +69,7 @@ func (m *mockLaunchClient) SignalLaunchDeorbit(ctx context.Context, workflowID s
 }
 
 func (m *mockLaunchClient) SignalLaunchAbort(ctx context.Context, workflowID string, requestedBy string) error {
+	m.signalled = true
 	if m.signalAbortFn != nil {
 		return m.signalAbortFn(ctx, workflowID, requestedBy)
 	}
@@ -73,12 +93,13 @@ func TestStartLaunch_Success(t *testing.T) {
 	}
 	server := NewLaunchServer(client)
 
-	resp, err := server.StartLaunch(context.Background(), connect.NewRequest(&launchv1.StartLaunchRequest{
+	resp, err := server.StartLaunch(wsCtx(), connect.NewRequest(&launchv1.StartLaunchRequest{
 		LaunchId:       "launch-001",
 		TemplateSlug:   "s3-bucket",
 		CloudAccountId: "acct-1",
 		Provider:       "aws",
 		Region:         "us-east-1",
+		WorkspaceId:    testWS,
 	}))
 
 	require.NoError(t, err)
@@ -90,7 +111,7 @@ func TestStartLaunch_Success(t *testing.T) {
 func TestStartLaunch_MissingLaunchID(t *testing.T) {
 	server := NewLaunchServer(nil)
 
-	_, err := server.StartLaunch(context.Background(), connect.NewRequest(&launchv1.StartLaunchRequest{
+	_, err := server.StartLaunch(wsCtx(), connect.NewRequest(&launchv1.StartLaunchRequest{
 		TemplateSlug:   "s3-bucket",
 		CloudAccountId: "acct-1",
 		Provider:       "aws",
@@ -105,7 +126,7 @@ func TestStartLaunch_MissingLaunchID(t *testing.T) {
 func TestStartLaunch_MissingTemplateSlug(t *testing.T) {
 	server := NewLaunchServer(nil)
 
-	_, err := server.StartLaunch(context.Background(), connect.NewRequest(&launchv1.StartLaunchRequest{
+	_, err := server.StartLaunch(wsCtx(), connect.NewRequest(&launchv1.StartLaunchRequest{
 		LaunchId:       "launch-001",
 		CloudAccountId: "acct-1",
 		Provider:       "aws",
@@ -120,7 +141,7 @@ func TestStartLaunch_MissingTemplateSlug(t *testing.T) {
 func TestStartLaunch_MissingCloudAccountID(t *testing.T) {
 	server := NewLaunchServer(nil)
 
-	_, err := server.StartLaunch(context.Background(), connect.NewRequest(&launchv1.StartLaunchRequest{
+	_, err := server.StartLaunch(wsCtx(), connect.NewRequest(&launchv1.StartLaunchRequest{
 		LaunchId:     "launch-001",
 		TemplateSlug: "s3-bucket",
 		Provider:     "aws",
@@ -135,7 +156,7 @@ func TestStartLaunch_MissingCloudAccountID(t *testing.T) {
 func TestStartLaunch_MissingProvider(t *testing.T) {
 	server := NewLaunchServer(nil)
 
-	_, err := server.StartLaunch(context.Background(), connect.NewRequest(&launchv1.StartLaunchRequest{
+	_, err := server.StartLaunch(wsCtx(), connect.NewRequest(&launchv1.StartLaunchRequest{
 		LaunchId:       "launch-001",
 		TemplateSlug:   "s3-bucket",
 		CloudAccountId: "acct-1",
@@ -150,7 +171,7 @@ func TestStartLaunch_MissingProvider(t *testing.T) {
 func TestStartLaunch_MissingRegion(t *testing.T) {
 	server := NewLaunchServer(nil)
 
-	_, err := server.StartLaunch(context.Background(), connect.NewRequest(&launchv1.StartLaunchRequest{
+	_, err := server.StartLaunch(wsCtx(), connect.NewRequest(&launchv1.StartLaunchRequest{
 		LaunchId:       "launch-001",
 		TemplateSlug:   "s3-bucket",
 		CloudAccountId: "acct-1",
@@ -170,12 +191,13 @@ func TestStartLaunch_WorkflowError(t *testing.T) {
 	}
 	server := NewLaunchServer(client)
 
-	_, err := server.StartLaunch(context.Background(), connect.NewRequest(&launchv1.StartLaunchRequest{
+	_, err := server.StartLaunch(wsCtx(), connect.NewRequest(&launchv1.StartLaunchRequest{
 		LaunchId:       "launch-001",
 		TemplateSlug:   "s3-bucket",
 		CloudAccountId: "acct-1",
 		Provider:       "aws",
 		Region:         "us-east-1",
+		WorkspaceId:    testWS,
 	}))
 
 	require.Error(t, err)
@@ -188,7 +210,7 @@ func TestStartLaunch_WorkflowError(t *testing.T) {
 func TestGetLaunchProgress_Success(t *testing.T) {
 	client := &mockLaunchClient{
 		queryProgressFn: func(_ context.Context, workflowID string) (*LaunchProgressResult, error) {
-			assert.Equal(t, "wf-123", workflowID)
+			assert.Equal(t, "launch-wf-123", workflowID)
 			return &LaunchProgressResult{
 				Status:      "launching",
 				CurrentStep: 3,
@@ -201,8 +223,8 @@ func TestGetLaunchProgress_Success(t *testing.T) {
 	}
 	server := NewLaunchServer(client)
 
-	resp, err := server.GetLaunchProgress(context.Background(), connect.NewRequest(&launchv1.GetLaunchProgressRequest{
-		WorkflowId: "wf-123",
+	resp, err := server.GetLaunchProgress(wsCtx(), connect.NewRequest(&launchv1.GetLaunchProgressRequest{
+		WorkflowId: "launch-wf-123",
 	}))
 
 	require.NoError(t, err)
@@ -218,7 +240,7 @@ func TestGetLaunchProgress_Success(t *testing.T) {
 func TestGetLaunchProgress_MissingWorkflowID(t *testing.T) {
 	server := NewLaunchServer(nil)
 
-	_, err := server.GetLaunchProgress(context.Background(), connect.NewRequest(&launchv1.GetLaunchProgressRequest{}))
+	_, err := server.GetLaunchProgress(wsCtx(), connect.NewRequest(&launchv1.GetLaunchProgressRequest{}))
 
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
@@ -233,8 +255,8 @@ func TestGetLaunchProgress_QueryError(t *testing.T) {
 	}
 	server := NewLaunchServer(client)
 
-	_, err := server.GetLaunchProgress(context.Background(), connect.NewRequest(&launchv1.GetLaunchProgressRequest{
-		WorkflowId: "wf-nonexistent",
+	_, err := server.GetLaunchProgress(wsCtx(), connect.NewRequest(&launchv1.GetLaunchProgressRequest{
+		WorkflowId: "launch-nonexistent",
 	}))
 
 	require.Error(t, err)
@@ -246,7 +268,7 @@ func TestGetLaunchProgress_QueryError(t *testing.T) {
 func TestApproveLaunch_Success(t *testing.T) {
 	client := &mockLaunchClient{
 		signalApprovalFn: func(_ context.Context, workflowID string, approved bool, approvedBy, notes string) error {
-			assert.Equal(t, "wf-123", workflowID)
+			assert.Equal(t, "launch-wf-123", workflowID)
 			assert.True(t, approved)
 			assert.Equal(t, "admin@test.com", approvedBy)
 			assert.Equal(t, "Approved for production", notes)
@@ -255,8 +277,8 @@ func TestApproveLaunch_Success(t *testing.T) {
 	}
 	server := NewLaunchServer(client)
 
-	resp, err := server.ApproveLaunch(context.Background(), connect.NewRequest(&launchv1.ApproveLaunchRequest{
-		WorkflowId: "wf-123",
+	resp, err := server.ApproveLaunch(wsCtx(), connect.NewRequest(&launchv1.ApproveLaunchRequest{
+		WorkflowId: "launch-wf-123",
 		Approved:   true,
 		ApprovedBy: "admin@test.com",
 		Notes:      "Approved for production",
@@ -270,7 +292,7 @@ func TestApproveLaunch_Success(t *testing.T) {
 func TestApproveLaunch_MissingWorkflowID(t *testing.T) {
 	server := NewLaunchServer(nil)
 
-	_, err := server.ApproveLaunch(context.Background(), connect.NewRequest(&launchv1.ApproveLaunchRequest{
+	_, err := server.ApproveLaunch(wsCtx(), connect.NewRequest(&launchv1.ApproveLaunchRequest{
 		Approved:   true,
 		ApprovedBy: "admin@test.com",
 	}))
@@ -288,8 +310,8 @@ func TestApproveLaunch_SignalError(t *testing.T) {
 	}
 	server := NewLaunchServer(client)
 
-	_, err := server.ApproveLaunch(context.Background(), connect.NewRequest(&launchv1.ApproveLaunchRequest{
-		WorkflowId: "wf-123",
+	_, err := server.ApproveLaunch(wsCtx(), connect.NewRequest(&launchv1.ApproveLaunchRequest{
+		WorkflowId: "launch-wf-123",
 		Approved:   true,
 		ApprovedBy: "admin@test.com",
 	}))
@@ -303,7 +325,7 @@ func TestApproveLaunch_SignalError(t *testing.T) {
 func TestDeorbitLaunch_Success(t *testing.T) {
 	client := &mockLaunchClient{
 		signalDeorbitFn: func(_ context.Context, workflowID, requestedBy, reason string) error {
-			assert.Equal(t, "wf-123", workflowID)
+			assert.Equal(t, "launch-wf-123", workflowID)
 			assert.Equal(t, "ops-team", requestedBy)
 			assert.Equal(t, "no longer needed", reason)
 			return nil
@@ -311,8 +333,8 @@ func TestDeorbitLaunch_Success(t *testing.T) {
 	}
 	server := NewLaunchServer(client)
 
-	resp, err := server.DeorbitLaunch(context.Background(), connect.NewRequest(&launchv1.DeorbitLaunchRequest{
-		WorkflowId:  "wf-123",
+	resp, err := server.DeorbitLaunch(wsCtx(), connect.NewRequest(&launchv1.DeorbitLaunchRequest{
+		WorkflowId:  "launch-wf-123",
 		RequestedBy: "ops-team",
 		Reason:      "no longer needed",
 	}))
@@ -325,7 +347,7 @@ func TestDeorbitLaunch_Success(t *testing.T) {
 func TestDeorbitLaunch_MissingWorkflowID(t *testing.T) {
 	server := NewLaunchServer(nil)
 
-	_, err := server.DeorbitLaunch(context.Background(), connect.NewRequest(&launchv1.DeorbitLaunchRequest{
+	_, err := server.DeorbitLaunch(wsCtx(), connect.NewRequest(&launchv1.DeorbitLaunchRequest{
 		RequestedBy: "ops-team",
 		Reason:      "cleanup",
 	}))
@@ -343,8 +365,8 @@ func TestDeorbitLaunch_SignalError(t *testing.T) {
 	}
 	server := NewLaunchServer(client)
 
-	_, err := server.DeorbitLaunch(context.Background(), connect.NewRequest(&launchv1.DeorbitLaunchRequest{
-		WorkflowId:  "wf-123",
+	_, err := server.DeorbitLaunch(wsCtx(), connect.NewRequest(&launchv1.DeorbitLaunchRequest{
+		WorkflowId:  "launch-wf-123",
 		RequestedBy: "ops-team",
 		Reason:      "cleanup",
 	}))
@@ -358,15 +380,15 @@ func TestDeorbitLaunch_SignalError(t *testing.T) {
 func TestAbortLaunch_Success(t *testing.T) {
 	client := &mockLaunchClient{
 		signalAbortFn: func(_ context.Context, workflowID, requestedBy string) error {
-			assert.Equal(t, "wf-123", workflowID)
+			assert.Equal(t, "launch-wf-123", workflowID)
 			assert.Equal(t, "admin", requestedBy)
 			return nil
 		},
 	}
 	server := NewLaunchServer(client)
 
-	resp, err := server.AbortLaunch(context.Background(), connect.NewRequest(&launchv1.AbortLaunchRequest{
-		WorkflowId:  "wf-123",
+	resp, err := server.AbortLaunch(wsCtx(), connect.NewRequest(&launchv1.AbortLaunchRequest{
+		WorkflowId:  "launch-wf-123",
 		RequestedBy: "admin",
 	}))
 
@@ -378,7 +400,7 @@ func TestAbortLaunch_Success(t *testing.T) {
 func TestAbortLaunch_MissingWorkflowID(t *testing.T) {
 	server := NewLaunchServer(nil)
 
-	_, err := server.AbortLaunch(context.Background(), connect.NewRequest(&launchv1.AbortLaunchRequest{
+	_, err := server.AbortLaunch(wsCtx(), connect.NewRequest(&launchv1.AbortLaunchRequest{
 		RequestedBy: "admin",
 	}))
 
@@ -395,8 +417,8 @@ func TestAbortLaunch_SignalError(t *testing.T) {
 	}
 	server := NewLaunchServer(client)
 
-	_, err := server.AbortLaunch(context.Background(), connect.NewRequest(&launchv1.AbortLaunchRequest{
-		WorkflowId:  "wf-123",
+	_, err := server.AbortLaunch(wsCtx(), connect.NewRequest(&launchv1.AbortLaunchRequest{
+		WorkflowId:  "launch-wf-123",
 		RequestedBy: "admin",
 	}))
 

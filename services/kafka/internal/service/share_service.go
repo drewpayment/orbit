@@ -191,6 +191,12 @@ func (s *ShareService) GetShare(ctx context.Context, shareID uuid.UUID) (*domain
 	return share, nil
 }
 
+// GetShareTopic loads the topic a share grants access to, so a handler can
+// authorize an ID-based share RPC against the topic's owning workspace.
+func (s *ShareService) GetShareTopic(ctx context.Context, share *domain.KafkaTopicShare) (*domain.KafkaTopic, error) {
+	return s.topicService.GetTopic(ctx, share.TopicID)
+}
+
 // GetServiceAccount loads a single service account by id, for handler-side
 // tenant authorization of ID-based RPCs. Returns
 // domain.ErrServiceAccountNotFound when absent.

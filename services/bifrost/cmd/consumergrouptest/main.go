@@ -14,6 +14,7 @@
 //   TEST_TOPIC_PREFIX     - Topic prefix for test VC (default: testvc:)
 //   TEST_GROUP_PREFIX     - Group prefix for test VC (default: testvc:)
 //   VERBOSE               - Enable verbose output (default: false)
+//   ORBIT_SVC_AUTH_SECRET - Required; the secret Bifrost's admin API verifies tokens with
 package main
 
 import (
@@ -35,6 +36,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	gatewayv1 "github.com/drewpayment/orbit/proto/gen/go/idp/gateway/v1"
+	"github.com/drewpayment/orbit/proto/pkg/svcauth"
 )
 
 // Config holds test configuration
@@ -179,9 +181,21 @@ func runTests(ctx context.Context, testCtx *TestContext) error {
 func setupAdminClient(ctx context.Context, testCtx *TestContext) error {
 	log.Printf("Connecting to Bifrost admin API at %s...", testCtx.Config.BifrostAdminAddr)
 
+	// The admin API requires a service token; mint an admin one from the same
+	// ORBIT_SVC_AUTH_SECRET the gateway was started with.
+	secret, err := svcauth.LoadSecret(os.Getenv("ORBIT_SVC_AUTH_SECRET"))
+	if err != nil {
+		return fmt.Errorf("admin auth: %w", err)
+	}
+	creds, err := svcauth.NewPerRPCCredentials(secret, "consumergrouptest", true)
+	if err != nil {
+		return fmt.Errorf("admin auth: %w", err)
+	}
+
 	conn, err := grpc.NewClient(
 		testCtx.Config.BifrostAdminAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithPerRPCCredentials(creds),
 	)
 	if err != nil {
 		return fmt.Errorf("connect to admin: %w", err)

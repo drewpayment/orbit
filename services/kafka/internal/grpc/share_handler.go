@@ -97,6 +97,28 @@ func (h *ShareHandler) ApproveTopicAccess(ctx context.Context, req *kafkav1.Appr
 		return nil, err
 	}
 
+	// GO-H2: approving access is the topic owner's decision. The share is
+	// addressed by id only, so derive the owning workspace from the share's
+	// topic and require the caller's wid to match — otherwise any
+	// authenticated caller (including the requester) could approve any share.
+	existing, err := h.shareService.GetShare(ctx, shareID)
+	if err != nil {
+		if err == domain.ErrShareNotFound {
+			return nil, status.Errorf(codes.NotFound, "share not found")
+		}
+		return nil, status.Errorf(codes.Internal, "failed to load share: %v", err)
+	}
+	topic, err := h.shareService.GetShareTopic(ctx, existing)
+	if err != nil {
+		if err == domain.ErrTopicNotFound {
+			return nil, status.Errorf(codes.NotFound, "topic not found")
+		}
+		return nil, status.Errorf(codes.Internal, "failed to load topic: %v", err)
+	}
+	if err := svcauth.EnforceWorkspace(ctx, topic.WorkspaceID.String()); err != nil {
+		return nil, err
+	}
+
 	share, err := h.shareService.ApproveTopicAccess(ctx, shareID, approverID)
 	if err != nil {
 		return &kafkav1.ApproveTopicAccessResponse{
@@ -162,8 +184,10 @@ func (h *ShareHandler) ListTopicShares(ctx context.Context, req *kafkav1.ListTop
 	// workspace. If a workspace filter is supplied it must match the authorized
 	// workspace; if omitted, we pin the filter to the caller's workspace so the
 	// listing can never span tenants.
-	if err := svcauth.EnforceWorkspace(ctx, req.WorkspaceId); err != nil {
-		return nil, err
+	if req.WorkspaceId != "" {
+		if err := svcauth.EnforceWorkspace(ctx, req.WorkspaceId); err != nil {
+			return nil, err
+		}
 	}
 	id, ok := svcauth.IdentityFromContext(ctx)
 	if !ok || id.WorkspaceID == "" {

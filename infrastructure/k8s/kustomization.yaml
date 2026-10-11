@@ -33,3 +33,6 @@ resources:
   - temporal-worker
   - launches-worker-azure
   - automations-worker
+
+  # Network isolation for the internal gRPC APIs
+  - network-policies

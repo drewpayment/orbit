@@ -54,6 +54,12 @@ func (s *BuildServer) StartBuildWorkflow(ctx context.Context, req *connect.Reque
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("registry is required"))
 	}
 
+	// GO-H2: the build runs in the request's workspace, which must be the
+	// workspace the verified caller is authorized for.
+	if err := enforceBodyWorkspace(ctx, msg.WorkspaceId); err != nil {
+		return nil, err
+	}
+
 	// Default ref to main if not provided
 	ref := msg.Ref
 	if ref == "" {
@@ -85,7 +91,6 @@ func (s *BuildServer) StartBuildWorkflow(ctx context.Context, req *connect.Reque
 		"url", msg.Registry.Url,
 		"repository", msg.Registry.Repository,
 		"tokenLength", len(msg.Registry.Token),
-		"tokenPrefix", msg.Registry.Token[:min(10, len(msg.Registry.Token))]+"...",
 	)
 
 	registryConfig := types.BuildRegistryConfig{
@@ -141,6 +146,10 @@ func (s *BuildServer) GetBuildProgress(ctx context.Context, req *connect.Request
 	// Validate required fields
 	if msg.WorkflowId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow_id is required"))
+	}
+	// GO-H2: authorize against the workspace the build was started for.
+	if err := authorizeWorkflow(ctx, s.temporalClient, msg.WorkflowId, buildWorkflowIDPrefix); err != nil {
+		return nil, err
 	}
 
 	// Query the workflow for progress

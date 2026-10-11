@@ -36,6 +36,16 @@ spec:
               value: redpanda:9092
             - name: BIFROST_LOG_LEVEL
               value: info
+            # The admin gRPC API verifies a service token with this secret. Without
+            # it ONLY the admin listener is disabled (loud error log); the Kafka
+            # proxy keeps serving tenants. optional: a missing key must not keep
+            # the pod from starting.
+            - name: ORBIT_SVC_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: ORBIT_SVC_AUTH_SECRET
+                  optional: true
           resources:
             requests:
               memory: 64Mi
@@ -49,9 +59,12 @@ spec:
               port: 8080
             initialDelaySeconds: 10
             periodSeconds: 10
+          # /ready (not /health) fails while the admin API is disabled: Bifrost's
+          # config is in memory and only the admin API can restore it, so such a
+          # pod must not replace a working one. Liveness stays on /health.
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: 8080
             initialDelaySeconds: 5
             periodSeconds: 10

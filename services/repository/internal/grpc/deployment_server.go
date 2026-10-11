@@ -52,6 +52,12 @@ func (s *DeploymentServer) StartDeploymentWorkflow(ctx context.Context, req *con
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("generator_slug is required"))
 	}
 
+	// GO-H2: the deployment runs in the request's workspace, which must be the
+	// workspace the verified caller is authorized for.
+	if err := enforceBodyWorkspace(ctx, msg.WorkspaceId); err != nil {
+		return nil, err
+	}
+
 	// Convert google.protobuf.Struct config to JSON bytes
 	var configBytes []byte
 	var err error
@@ -105,6 +111,10 @@ func (s *DeploymentServer) GetDeploymentProgress(ctx context.Context, req *conne
 	// Validate required fields
 	if msg.WorkflowId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow_id is required"))
+	}
+	// GO-H2: authorize against the workspace the deployment was started for.
+	if err := authorizeWorkflow(ctx, s.temporalClient, msg.WorkflowId, deploymentWorkflowIDPrefix); err != nil {
+		return nil, err
 	}
 
 	// Query the workflow for progress

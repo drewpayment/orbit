@@ -46,6 +46,14 @@ spec:
                 secretKeyRef:
                   name: orbit-secrets
                   key: ENCRYPTION_KEY
+            # Signs the service-auth JWT on every call to repository-service,
+            # kafka-service and Bifrost admin (lib/grpc/svc-auth-token.ts throws
+            # when unset). Must match the secret those services verify with.
+            - name: ORBIT_SVC_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: orbit-secrets
+                  key: ORBIT_SVC_AUTH_SECRET
             - name: BETTER_AUTH_SECRET
               valueFrom:
                 secretKeyRef:

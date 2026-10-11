@@ -164,6 +164,7 @@ func (tc *TemporalClient) StartTemplateWorkflow(ctx context.Context, input inter
 	we, err := tc.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:        workflowID,
 		TaskQueue: "orbit-workflows",
+		Memo:      workspaceMemo(req.WorkspaceId),
 	}, "TemplateInstantiationWorkflow", workflowInput)
 
 	if err != nil {
@@ -339,6 +340,7 @@ func (tc *TemporalClient) StartDeploymentWorkflow(ctx context.Context, input *ty
 	we, err := tc.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:        workflowID,
 		TaskQueue: "orbit-workflows",
+		Memo:      workspaceMemo(input.WorkspaceID),
 	}, "DeploymentWorkflow", input)
 
 	if err != nil {
@@ -373,6 +375,7 @@ func (tc *TemporalClient) StartBuildWorkflow(ctx context.Context, input *types.B
 	we, err := tc.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:        workflowID,
 		TaskQueue: "orbit-workflows",
+		Memo:      workspaceMemo(input.WorkspaceID),
 	}, "BuildWorkflow", *input)
 
 	if err != nil {
@@ -418,6 +421,7 @@ func (tc *TemporalClient) StartLaunchWorkflow(ctx context.Context, input *grpcse
 	we, err := tc.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:        workflowID,
 		TaskQueue: "orbit-workflows",
+		Memo:      workspaceMemo(input.WorkspaceID),
 	}, "LaunchWorkflow", workflowInput)
 
 	if err != nil {

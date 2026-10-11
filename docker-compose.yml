@@ -89,6 +89,8 @@ services:
       - ORBIT_API_URL=http://host.docker.internal:3000
       - ORBIT_INTERNAL_API_KEY=${ORBIT_INTERNAL_API_KEY:?ORBIT_INTERNAL_API_KEY is required — see DEV_SETUP.md}
       - BIFROST_ADMIN_URL=bifrost:50060
+      # Mints the service token the worker presents to Bifrost's admin API.
+      - ORBIT_SVC_AUTH_SECRET=${ORBIT_SVC_AUTH_SECRET:?ORBIT_SVC_AUTH_SECRET is required — see DEV_SETUP.md}
       - BUILD_SERVICE_ADDRESS=build-service:50054
       - GIT_WORK_DIR=/tmp/orbit-repos
       - TEMPLATE_WORK_DIR=/tmp/orbit-templates
@@ -160,7 +162,9 @@ services:
       context: .
       dockerfile: services/build-service/Dockerfile
     ports:
-      - "50054:50054"
+      # Loopback only: build-service has no auth of its own (unlike the
+      # svcauth-protected services), and only the in-network worker calls it.
+      - "127.0.0.1:50054:50054"
     environment:
       - BUILD_SERVICE_PORT=50054
       - BUILD_WORK_DIR=/tmp/orbit-builds
@@ -395,7 +399,9 @@ services:
       context: .
       dockerfile: services/bifrost/Dockerfile
     ports:
-      - "50060:50060"  # Admin gRPC
+      # Admin gRPC. Loopback only: the host-run orbit-www (make dev-local) reaches
+      # it at localhost:50060, but it must never be exposed on the LAN.
+      - "127.0.0.1:50060:50060"
       - "8084:8080"    # Metrics (use 8084 externally since 8080 is often used)
     # Note: Kafka proxy (9092) is accessed via Traefik, not exposed directly
     environment:
@@ -404,6 +410,11 @@ services:
       - BIFROST_METRICS_PORT=8080
       - KAFKA_BOOTSTRAP_SERVERS=redpanda:9092
       - BIFROST_LOG_LEVEL=debug
+      # The admin API verifies a service token with this secret; without it only
+      # the admin listener is disabled (the Kafka proxy keeps running).
+      - ORBIT_SVC_AUTH_SECRET=${ORBIT_SVC_AUTH_SECRET:?ORBIT_SVC_AUTH_SECRET is required — see DEV_SETUP.md}
+      # Set to "true" to enable gRPC reflection (grpcurl) on the admin port.
+      - BIFROST_ADMIN_REFLECTION=${BIFROST_ADMIN_REFLECTION:-false}
     depends_on:
       redpanda:
         condition: service_healthy
@@ -425,7 +436,7 @@ services:
       context: .
       dockerfile: services/kafka/Dockerfile
     ports:
-      - "50055:50055"  # gRPC
+      - "127.0.0.1:50055:50055"  # gRPC (loopback only; see bifrost admin note)
     environment:
       - GRPC_PORT=50055
       - ENVIRONMENT=development
@@ -447,7 +458,7 @@ services:
       context: .
       dockerfile: services/repository/Dockerfile
     ports:
-      - "50051:50051"  # gRPC
+      - "127.0.0.1:50051:50051"  # gRPC (loopback only; see bifrost admin note)
       - "8081:8081"    # HTTP (health/metrics)
     environment:
       - GRPC_PORT=50051

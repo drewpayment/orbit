@@ -62,18 +62,28 @@ func IdentityFromContext(ctx context.Context) (Identity, bool) {
 // EnforceWorkspace closes GO-H2: it rejects any request whose body-supplied
 // workspace id does not match the authorized workspace in the verified identity.
 //
-//   - bodyWorkspaceID == "" : the RPC has no workspace scope; allowed.
-//   - identity missing      : not authenticated; PermissionDenied.
-//   - wid == ""             : token carried no workspace; PermissionDenied
+// It fails closed on an empty body workspace id. An RPC that reaches this check
+// is by definition tenant-scoped, so "no workspace supplied" means the handler
+// could not establish which tenant the request touches — and letting that pass
+// would make the check skippable by omitting the field. Only a platform admin
+// (the "adm" claim) may act without naming a workspace.
+//
+//   - identity missing       : not authenticated; PermissionDenied.
+//   - bodyWorkspaceID == ""  : allowed only for a platform admin; otherwise
+//     PermissionDenied.
+//   - wid == ""              : token carried no workspace; PermissionDenied
 //     (a workspace-scoped RPC requires an authorized workspace).
 //   - bodyWorkspaceID != wid : cross-tenant access attempt; PermissionDenied.
 func EnforceWorkspace(ctx context.Context, bodyWorkspaceID string) error {
-	if bodyWorkspaceID == "" {
-		return nil
-	}
 	id, ok := IdentityFromContext(ctx)
 	if !ok {
 		return status.Error(codes.PermissionDenied, "no verified identity in context")
+	}
+	if bodyWorkspaceID == "" {
+		if id.PlatformAdmin {
+			return nil
+		}
+		return status.Error(codes.PermissionDenied, "request does not identify a workspace")
 	}
 	if id.WorkspaceID == "" {
 		return status.Error(codes.PermissionDenied, "token has no workspace claim for a workspace-scoped request")
@@ -82,6 +92,19 @@ func EnforceWorkspace(ctx context.Context, bodyWorkspaceID string) error {
 		return status.Error(codes.PermissionDenied, "workspace_id does not match authorized workspace")
 	}
 	return nil
+}
+
+// EnforceWorkspaceOrPlatformAdmin is EnforceWorkspace for object-addressed RPCs
+// whose owning workspace was resolved server-side (from a workflow memo or a
+// stored record) rather than read from the request body. A verified platform
+// admin may act on any workspace's objects; everyone else must hold a token
+// whose wid is exactly the owning workspace. An empty owning workspace (a legacy
+// object with no recorded owner) is therefore admin-only.
+func EnforceWorkspaceOrPlatformAdmin(ctx context.Context, owningWorkspaceID string) error {
+	if id, ok := IdentityFromContext(ctx); ok && id.PlatformAdmin {
+		return nil
+	}
+	return EnforceWorkspace(ctx, owningWorkspaceID)
 }
 
 // EnforcePlatformAdmin gates platform-scoped RPCs (e.g. Kafka cluster
