@@ -5,8 +5,11 @@ import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { Check, Sparkles } from 'lucide-react'
+import { assertFeatureEnabled } from '@/lib/features'
 
 export default function UpgradePage() {
+  assertFeatureEnabled('billing')
+
   return (
     <SidebarProvider>
       <AppSidebar />

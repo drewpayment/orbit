@@ -1,11 +1,16 @@
 'use server'
 
 import { format } from 'date-fns'
+import { featureUnavailableMessage, isFeatureEnabled } from '@/lib/features'
 
 export async function exportPlatformChargebackCSV(
   periodStart: Date,
   periodEnd: Date
 ): Promise<{ filename: string; content: string }> {
+  if (!isFeatureEnabled('kafkaChargeback')) {
+    throw new Error(featureUnavailableMessage('kafkaChargeback'))
+  }
+
   // For now, return mock data until calculateChargeback is fully integrated with Payload
   const headers = [
     'Workspace',

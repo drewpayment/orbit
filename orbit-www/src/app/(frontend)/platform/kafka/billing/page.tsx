@@ -3,8 +3,11 @@ import { redirect } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { getActor, check } from '@/lib/authz'
 import { PlatformBillingClient } from './client'
+import { assertFeatureEnabled } from '@/lib/features'
 
 export default async function PlatformKafkaBillingPage() {
+  assertFeatureEnabled('kafkaChargeback')
+
   const actor = await getActor()
   if (!actor) redirect('/login')
 
