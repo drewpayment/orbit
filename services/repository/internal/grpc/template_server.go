@@ -126,6 +126,12 @@ func (s *TemplateServer) StartInstantiation(ctx context.Context, req *connect.Re
 		return nil, connect.NewError(connect.CodeInvalidArgument, nil)
 	}
 
+	// GO-H2: the repository is created for the request's workspace, which must
+	// be the workspace the verified caller is authorized for.
+	if err := enforceBodyWorkspace(ctx, msg.WorkspaceId); err != nil {
+		return nil, err
+	}
+
 	// Start the Temporal workflow
 	workflowID, err := s.temporalClient.StartTemplateWorkflow(ctx, msg)
 	if err != nil {
@@ -143,6 +149,10 @@ func (s *TemplateServer) GetInstantiationProgress(ctx context.Context, req *conn
 	// Validate required fields
 	if msg.WorkflowId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, nil)
+	}
+	// GO-H2: authorize against the workspace the workflow was started for.
+	if err := authorizeWorkflow(ctx, s.temporalClient, msg.WorkflowId, templateWorkflowIDPrefix); err != nil {
+		return nil, err
 	}
 
 	// Query the workflow for progress
@@ -201,6 +211,10 @@ func (s *TemplateServer) CancelInstantiation(ctx context.Context, req *connect.R
 	if msg.WorkflowId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, nil)
 	}
+	// GO-H2: authorize against the workspace the workflow was started for.
+	if err := authorizeWorkflow(ctx, s.temporalClient, msg.WorkflowId, templateWorkflowIDPrefix); err != nil {
+		return nil, err
+	}
 
 	// Cancel the workflow
 	err := s.temporalClient.CancelWorkflow(ctx, msg.WorkflowId)
@@ -219,6 +233,12 @@ func (s *TemplateServer) ListAvailableOrgs(ctx context.Context, req *connect.Req
 	// Validate required fields
 	if msg.WorkspaceId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, nil)
+	}
+
+	// GO-H2: installations are listed for the request's workspace, which must
+	// be the workspace the verified caller is authorized for.
+	if err := enforceBodyWorkspace(ctx, msg.WorkspaceId); err != nil {
+		return nil, err
 	}
 
 	// Get installations from Payload

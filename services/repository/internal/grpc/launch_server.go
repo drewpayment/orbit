@@ -94,6 +94,13 @@ func (s *LaunchServer) StartLaunch(ctx context.Context, req *connect.Request[lau
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("region is required"))
 	}
 
+	// GO-H2: the launch is created in the request's workspace, which must be
+	// the workspace the verified caller is authorized for. An omitted
+	// workspace_id fails closed (platform admin only).
+	if err := enforceBodyWorkspace(ctx, msg.WorkspaceId); err != nil {
+		return nil, err
+	}
+
 	// Convert proto Struct parameters to map
 	var params map[string]interface{}
 	if msg.Parameters != nil {
@@ -135,6 +142,11 @@ func (s *LaunchServer) GetLaunchProgress(ctx context.Context, req *connect.Reque
 	if msg.WorkflowId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow_id is required"))
 	}
+	// GO-H2: the request carries only a workflow id; authorize against the
+	// workspace the workflow was started for, resolved server-side.
+	if err := authorizeWorkflow(ctx, s.temporalClient, msg.WorkflowId, launchWorkflowIDPrefix); err != nil {
+		return nil, err
+	}
 
 	// Query the workflow for progress
 	progress, err := s.temporalClient.QueryLaunchProgress(ctx, msg.WorkflowId)
@@ -160,6 +172,11 @@ func (s *LaunchServer) ApproveLaunch(ctx context.Context, req *connect.Request[l
 	if msg.WorkflowId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow_id is required"))
 	}
+	// GO-H2: the request carries only a workflow id; authorize against the
+	// workspace the workflow was started for, resolved server-side.
+	if err := authorizeWorkflow(ctx, s.temporalClient, msg.WorkflowId, launchWorkflowIDPrefix); err != nil {
+		return nil, err
+	}
 
 	// Send approval signal
 	err := s.temporalClient.SignalLaunchApproval(ctx, msg.WorkflowId, msg.Approved, msg.ApprovedBy, msg.Notes)
@@ -180,6 +197,11 @@ func (s *LaunchServer) DeorbitLaunch(ctx context.Context, req *connect.Request[l
 	if msg.WorkflowId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow_id is required"))
 	}
+	// GO-H2: the request carries only a workflow id; authorize against the
+	// workspace the workflow was started for, resolved server-side.
+	if err := authorizeWorkflow(ctx, s.temporalClient, msg.WorkflowId, launchWorkflowIDPrefix); err != nil {
+		return nil, err
+	}
 
 	// Send deorbit signal
 	err := s.temporalClient.SignalLaunchDeorbit(ctx, msg.WorkflowId, msg.RequestedBy, msg.Reason)
@@ -199,6 +221,11 @@ func (s *LaunchServer) AbortLaunch(ctx context.Context, req *connect.Request[lau
 	// Validate required fields
 	if msg.WorkflowId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow_id is required"))
+	}
+	// GO-H2: the request carries only a workflow id; authorize against the
+	// workspace the workflow was started for, resolved server-side.
+	if err := authorizeWorkflow(ctx, s.temporalClient, msg.WorkflowId, launchWorkflowIDPrefix); err != nil {
+		return nil, err
 	}
 
 	// Send abort signal
@@ -224,6 +251,14 @@ func (s *LaunchServer) DeployToLaunch(ctx context.Context, req *connect.Request[
 	}
 	if msg.Strategy == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("strategy is required"))
+	}
+
+	// GO-H2: the request names a launch by id only, and the launch's owning
+	// workspace lives in orbit-www's database, so it cannot be resolved here.
+	// Require a workspace-scoped (or platform-admin) token: orbit-www signs the
+	// wid only after verifying the caller's membership of the launch's workspace.
+	if err := enforceCallerWorkspace(ctx); err != nil {
+		return nil, err
 	}
 
 	var launchOutputs map[string]interface{}
