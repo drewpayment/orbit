@@ -13,6 +13,11 @@ vi.mock('@/lib/authz', () => ({
   memberWorkspaceIds: vi.fn(),
 }))
 
+// Mock Temporal client: the auto-approve path starts AccessProvisioningWorkflow.
+vi.mock('@/lib/temporal/client', () => ({
+  getTemporalClient: vi.fn(async () => ({ workflow: { start: vi.fn().mockResolvedValue({}) } })),
+}))
+
 // Mock next/cache
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
@@ -286,11 +291,20 @@ describe('kafka-topic-catalog actions', () => {
               },
             ], // Auto-approve policy exists
           }),
-        findByID: vi.fn().mockResolvedValue({
-          id: 'topic-1',
-          name: 'events',
-          workspace: 'ws-2',
-        }),
+        // 1st: the topic lookup in requestTopicAccess. 2nd: the share re-fetch in
+        // the auto-approve workflow trigger, which needs the share's topic/target.
+        findByID: vi.fn()
+          .mockResolvedValueOnce({
+            id: 'topic-1',
+            name: 'events',
+            workspace: 'ws-2',
+          })
+          .mockResolvedValueOnce({
+            id: 'share-1',
+            topic: { id: 'topic-1', name: 'events' },
+            targetWorkspace: 'ws-1',
+            accessLevel: 'read',
+          }),
         create: vi.fn().mockResolvedValue({
           id: 'share-1',
           status: 'approved',

@@ -16,11 +16,14 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
     include: [
-      'tests/int/**/*.int.spec.ts',
       'src/**/*.test.{ts,tsx}',
       // Workspace-package unit tests (e.g. the automation Temporal worker under
       // services/automation-worker) live outside the app `src/` tree.
       'services/**/src/**/*.test.ts',
+      // tests/int/* boot a live Payload instance against MongoDB (getPayload +
+      // real collections). They only run when DATABASE_URI points at a database;
+      // on a clean checkout they are left out so `test:int` needs no services.
+      ...(process.env.DATABASE_URI ? ['tests/int/**/*.int.spec.ts'] : []),
     ],
   },
 })

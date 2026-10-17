@@ -175,7 +175,7 @@ describe('MovePageModal', () => {
     })
   })
 
-  it('should close modal after successful move', async () => {
+  it('leaves closing to the parent after a successful move', async () => {
     const user = userEvent.setup()
     const mockOnMove = vi.fn().mockResolvedValue(undefined)
     const mockOnOpenChange = vi.fn()
@@ -194,10 +194,13 @@ describe('MovePageModal', () => {
     await user.click(screen.getByText('Page 2'))
     await user.click(screen.getByRole('button', { name: 'Move Page' }))
 
-    // Should close modal after successful move
     await waitFor(() => {
-      expect(mockOnOpenChange).toHaveBeenCalledWith(false)
+      expect(mockOnMove).toHaveBeenCalledTimes(1)
+      expect(screen.getByRole('button', { name: 'Move Page' })).toBeEnabled()
     })
+    // The parent owns modal state (it closes the modal and refreshes), so the
+    // modal must not close itself as a side effect of a successful move.
+    expect(mockOnOpenChange).not.toHaveBeenCalledWith(false)
   })
 
   it('should call onOpenChange when Cancel clicked', async () => {

@@ -3,6 +3,19 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+const mockUpdateOne = vi.fn()
+vi.mock('mongodb', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('mongodb')>()
+  // The route writes the first-user approval straight to the Better Auth `user`
+  // collection via its own client. Record that write instead of hitting a DB.
+  class MongoClient {
+    connect = vi.fn().mockResolvedValue(undefined)
+    close = vi.fn().mockResolvedValue(undefined)
+    db = () => ({ collection: () => ({ updateOne: (...args: unknown[]) => mockUpdateOne(...args) }) })
+  }
+  return { ...actual, MongoClient }
+})
+
 const mockHasUsers = vi.fn()
 const mockResetSetupCache = vi.fn()
 vi.mock('@/lib/setup', () => ({
@@ -55,7 +68,7 @@ describe('POST /api/setup', () => {
     mockHasUsers.mockResolvedValue(false)
     // asResponse: true — mock returns a Response-like object
     mockSignUpEmail.mockResolvedValue(
-      new Response(JSON.stringify({ user: { id: 'ba-user-1', email: 'admin@example.com', name: 'Admin User' } }), {
+      new Response(JSON.stringify({ user: { id: '64b7f0c2a1e2f3a4b5c6d7e8', email: 'admin@example.com', name: 'Admin User' } }), {
         status: 200,
         headers: { 'set-cookie': 'session=abc123', 'content-type': 'application/json' },
       })
@@ -136,7 +149,7 @@ describe('POST /api/setup', () => {
         collection: 'workspace-members',
         data: expect.objectContaining({
           workspace: 'workspace-1',
-          user: 'ba-user-1',
+          user: '64b7f0c2a1e2f3a4b5c6d7e8',
           role: 'owner',
           status: 'active',
         }),
