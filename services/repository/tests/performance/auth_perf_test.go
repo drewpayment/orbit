@@ -1,3 +1,5 @@
+//go:build integration
+
 /**
  * T025 - Performance Test: Authentication Operations (<100ms p95)
  *

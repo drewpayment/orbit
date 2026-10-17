@@ -757,7 +757,6 @@ func (s *WorkspaceService) canUserViewStats(ctx context.Context, workspace *doma
 	
 	// Members with elevated roles can view stats
 	return member.Role == domain.WorkspaceRoleOwner || 
-		   member.Role == domain.WorkspaceRoleAdmin || 
 		   member.Role == domain.WorkspaceRoleAdmin
 }
 
