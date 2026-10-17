@@ -52,13 +52,17 @@ var (
 		Level: 100,
 	}
 
+	// AdminRole is a superset of DeveloperRole (role hierarchy) plus user and
+	// workspace administration. It deliberately has no system.*, audit.* or
+	// role.* permissions: those are SuperAdmin-only. Mirrors
+	// domain.rolePermissions; TestFixtureRolesMatchProduction guards drift.
 	AdminRole = Role{
 		Name: "admin",
-		Permissions: []string{
-			"workspace.create", "workspace.read", "workspace.update", "workspace.delete",
+		Permissions: append(append([]string{}, DeveloperRole.Permissions...),
+			"workspace.create", "workspace.delete",
 			"user.create", "user.read", "user.update",
-			"schema.create", "schema.read", "schema.update", "schema.delete",
-		},
+			"schema.delete",
+		),
 		Level: 80,
 	}
 
@@ -348,7 +352,8 @@ func testResourceOwnershipAuthorization(t *testing.T) {
 	t.Log("🔐 Testing resource ownership authorization...")
 
 	t.Run("ResourceOwner_CanModify", func(t *testing.T) {
-		schemaId := "user-schema-123"
+		// Resource IDs embed the owner's user ID as "<ownerID>/<resource>"
+		schemaId := "user-schema-owner/schema-123"
 		ownerUser := createTestUser("schema-owner", DeveloperRole)
 
 		// User should be able to modify their own resources
@@ -362,7 +367,7 @@ func testResourceOwnershipAuthorization(t *testing.T) {
 	})
 
 	t.Run("NonOwner_CannotModify", func(t *testing.T) {
-		schemaId := "other-user-schema-456"
+		schemaId := "user-other-owner/schema-456"
 		nonOwnerUser := createTestUser("non-owner", DeveloperRole)
 
 		// User should NOT be able to modify resources they don't own
@@ -465,10 +470,11 @@ func testAPIEndpointAuthorization(t *testing.T) {
 		developerUser := createTestUser("developer-user", DeveloperRole)
 		viewerUser := createTestUser("viewer-user", ViewerRole)
 
-		// Admin-only endpoints
+		superAdminUser := createTestUser("super-admin-user", SuperAdminRole)
+
+		// Admin-level endpoints (user management)
 		adminEndpoints := []string{
 			"/api/v1/users/create",
-			"/api/v1/system/config",
 		}
 
 		for _, endpoint := range adminEndpoints {
@@ -483,6 +489,25 @@ func testAPIEndpointAuthorization(t *testing.T) {
 			// Viewer should NOT have access
 			hasAccess = checkEndpointAccess(viewerUser, endpoint, "POST")
 			assert.False(t, hasAccess, "Viewer should NOT have access to %s", endpoint)
+		}
+
+		// System-level endpoints are SuperAdmin-only: system.* is not granted to
+		// Admin in production (domain.User.HasPermission). See issue #159.
+		superAdminEndpoints := []string{
+			"/api/v1/system/config",
+		}
+
+		for _, endpoint := range superAdminEndpoints {
+			for _, method := range []string{"GET", "POST"} {
+				assert.True(t, checkEndpointAccess(superAdminUser, endpoint, method),
+					"Super admin should have %s access to %s", method, endpoint)
+				assert.False(t, checkEndpointAccess(adminUser, endpoint, method),
+					"Admin should NOT have %s access to %s (system.configure is super_admin only)", method, endpoint)
+				assert.False(t, checkEndpointAccess(developerUser, endpoint, method),
+					"Developer should NOT have %s access to %s", method, endpoint)
+				assert.False(t, checkEndpointAccess(viewerUser, endpoint, method),
+					"Viewer should NOT have %s access to %s", method, endpoint)
+			}
 		}
 
 		t.Log("✅ Role-based endpoint access validated")
@@ -795,10 +820,10 @@ func getWorkspaceRoleLevel(workspaceRole string) int {
 }
 
 func extractOwnerFromResourceId(resourceId string) string {
-	// Simulate extracting owner from resource ID
-	// In real implementation, this would be more sophisticated
-	if strings.Contains(resourceId, "user-") {
-		return "user-" + strings.Split(resourceId, "-")[1]
+	// Resource IDs are "<ownerID>/<resource>". The old "user-<x>-..." split
+	// could not recover multi-segment user IDs like "user-schema-owner".
+	if owner, _, found := strings.Cut(resourceId, "/"); found && owner != "" {
+		return owner
 	}
 	return "unknown"
 }

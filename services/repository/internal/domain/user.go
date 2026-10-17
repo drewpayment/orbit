@@ -287,32 +287,43 @@ func (u *User) GetWorkspaceRole(workspaceID uuid.UUID) *WorkspaceRole {
 	return nil
 }
 
+// developerPermissions is the Developer role's permission set. Admin is
+// defined as a superset of it (role hierarchy: a higher-level role holds every
+// permission of the lower-level roles it manages).
+var developerPermissions = []string{
+	"workspace.read", "workspace.update",
+	"schema.create", "schema.read", "schema.update",
+	"repository.create", "repository.read", "repository.update",
+	"codegen.execute",
+}
+
+// adminOnlyPermissions are the permissions Admin holds beyond Developer.
+// Admin deliberately has NO system.*, audit.* or role.* permissions: those are
+// SuperAdmin-only (RoleAdmin is "User/workspace management").
+var adminOnlyPermissions = []string{
+	"workspace.create", "workspace.delete",
+	"user.create", "user.read", "user.update",
+	"schema.delete",
+}
+
+// rolePermissions is the role -> permission matrix. Entries ending in '*' are
+// wildcards.
+var rolePermissions = map[UserRole][]string{
+	RoleSuperAdmin: {
+		"workspace.*", "user.*", "role.*", "schema.*", "system.*", "audit.*",
+	},
+	RoleAdmin:     append(append([]string{}, developerPermissions...), adminOnlyPermissions...),
+	RoleDeveloper: developerPermissions,
+	RoleViewer: {
+		"workspace.read", "schema.read", "repository.read",
+	},
+	RoleGuest: {
+		"schema.read",
+	},
+}
+
 // HasPermission checks if user has a specific permission based on their role
 func (u *User) HasPermission(permission string) bool {
-	// Define permission matrix based on roles
-	rolePermissions := map[UserRole][]string{
-		RoleSuperAdmin: {
-			"workspace.*", "user.*", "role.*", "schema.*", "system.*", "audit.*",
-		},
-		RoleAdmin: {
-			"workspace.create", "workspace.read", "workspace.update", "workspace.delete",
-			"user.create", "user.read", "user.update",
-			"schema.create", "schema.read", "schema.update", "schema.delete",
-		},
-		RoleDeveloper: {
-			"workspace.read", "workspace.update",
-			"schema.create", "schema.read", "schema.update",
-			"repository.create", "repository.read", "repository.update",
-			"codegen.execute",
-		},
-		RoleViewer: {
-			"workspace.read", "schema.read", "repository.read",
-		},
-		RoleGuest: {
-			"schema.read",
-		},
-	}
-
 	permissions, exists := rolePermissions[u.Role]
 	if !exists {
 		return false

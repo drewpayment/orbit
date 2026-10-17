@@ -1,3 +1,5 @@
+//go:build integration
+
 /**
  * T024 - Performance Test: Workspace Operations (<200ms p95)
  *
