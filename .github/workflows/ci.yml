@@ -1,0 +1,86 @@
+name: CI
+
+# Required PR checks. No path filters, so every check reports on every PR to main.
+# Check names (for branch protection):
+#   web-test-and-lint
+#   go-test (services/api-catalog)
+#   go-test (services/bifrost)
+#   go-test (services/build-service)
+#   go-test (services/kafka)
+#   go-test (services/knowledge)
+#   go-test (services/repository)
+#   go-test (temporal-workflows)
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web-test-and-lint:
+    name: web-test-and-lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: orbit-www
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.2.23'
+
+      - name: Cache Bun install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('orbit-www/bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Unit and integration tests
+        run: bun run test:int
+
+      - name: Lint
+        run: bun run lint
+
+  go-test:
+    name: go-test (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - services/api-catalog
+          - services/bifrost
+          - services/build-service
+          - services/kafka
+          - services/knowledge
+          - services/repository
+          - temporal-workflows
+    steps:
+      # Full repo checkout: several modules use replace directives into ../../proto,
+      # ../../temporal-workflows and ../services/kafka.
+      - uses: actions/checkout@v4
+
+      - name: Set up Go (version from module go.mod)
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.module }}/go.mod
+          cache: true
+          cache-dependency-path: ${{ matrix.module }}/go.sum
+
+      - name: Test with race detector
+        working-directory: ${{ matrix.module }}
+        run: go test -race ./...
