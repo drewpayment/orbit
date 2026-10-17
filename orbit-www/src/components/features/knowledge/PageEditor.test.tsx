@@ -41,7 +41,7 @@ describe('PageEditor - Always-On Mode', () => {
     vi.clearAllMocks()
   })
 
-  it('should always render NovelEditor when canEdit is true', () => {
+  it('should always render NovelEditor when canEdit is true', async () => {
     render(
       <PageEditor
         page={mockPage as KnowledgePage}
@@ -50,7 +50,8 @@ describe('PageEditor - Always-On Mode', () => {
       />
     )
 
-    expect(screen.getByTestId('novel-editor')).toBeInTheDocument()
+    // NovelEditor is loaded via next/dynamic, so it appears after the import resolves.
+    expect(await screen.findByTestId('novel-editor')).toBeInTheDocument()
   })
 
   it('should render read-only view when canEdit is false', () => {
@@ -67,7 +68,9 @@ describe('PageEditor - Always-On Mode', () => {
     expect(screen.getByTestId('serialized-content')).toBeInTheDocument()
   })
 
-  it('should show empty state when content is empty and canEdit is true', () => {
+  it('should keep the editor mounted when content is empty and canEdit is true', async () => {
+    // No separate empty-state block: the editor is always rendered so users can
+    // type into an empty page (see dfc5820e); its own placeholder guides them.
     const emptyPage = {
       ...mockPage,
       content: { type: 'doc', content: [] },
@@ -81,6 +84,7 @@ describe('PageEditor - Always-On Mode', () => {
       />
     )
 
-    expect(screen.getByText(/start writing/i)).toBeInTheDocument()
+    expect(await screen.findByTestId('novel-editor')).toBeInTheDocument()
+    expect(screen.queryByText(/start writing/i)).not.toBeInTheDocument()
   })
 })

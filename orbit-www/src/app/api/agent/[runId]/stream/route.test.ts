@@ -6,14 +6,14 @@ vi.mock('@payload-config', () => ({ default: {} }))
 vi.mock('@/lib/grpc/agent-client', () => ({
   agentClient: { streamAgentEvents: vi.fn() },
 }))
-vi.mock('@/lib/auth/session', () => ({ getPayloadUserFromSession: vi.fn() }))
+vi.mock('@/lib/authz', () => ({ getActor: vi.fn() }))
 vi.mock('@/lib/access/workspace-access', () => ({ isWorkspaceMember: vi.fn() }))
 
 import type { BasePayload } from 'payload'
 import { getPayload } from 'payload'
 import { agentClient } from '@/lib/grpc/agent-client'
 import type { AgentEvent } from '@/lib/proto/idp/agent/v1/agent_pb'
-import { getPayloadUserFromSession } from '@/lib/auth/session'
+import { getActor } from '@/lib/authz'
 import { isWorkspaceMember } from '@/lib/access/workspace-access'
 import { GET } from './route'
 
@@ -67,9 +67,10 @@ describe('GET /api/agent/[runId]/stream', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(getPayload).mockResolvedValue(mockPayload as unknown as BasePayload)
-    vi.mocked(getPayloadUserFromSession).mockResolvedValue({
-      id: 'user-1',
-    } as unknown as Awaited<ReturnType<typeof getPayloadUserFromSession>>)
+    vi.mocked(getActor).mockResolvedValue({
+      payloadId: 'user-1',
+      betterAuthId: 'ba-user-1',
+    } as unknown as Awaited<ReturnType<typeof getActor>>)
     vi.mocked(isWorkspaceMember).mockResolvedValue(true)
     // agent-runs lookup at connect time
     mockPayload.find.mockResolvedValue({ docs: [{ id: 'run-1', workspace: 'ws-1', status: 'running' }] })

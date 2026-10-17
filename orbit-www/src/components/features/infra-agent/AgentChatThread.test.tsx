@@ -279,6 +279,9 @@ describe('AgentChatThread', () => {
     expect(vi.mocked(sendAgentMessage).mock.calls[0][0].message).toMatch(/approve/i)
 
     const reject = screen.getByRole('button', { name: /^reject/i })
+    // Approve put the proposal into a pending transition; its buttons are disabled
+    // until that settles. Wait for that before clicking the next action.
+    await waitFor(() => expect(reject).toBeEnabled())
     fireEvent.click(reject)
     await waitFor(() => expect(sendAgentMessage).toHaveBeenCalledTimes(2))
     expect(vi.mocked(sendAgentMessage).mock.calls[1][0].message).toMatch(/reject|do not proceed/i)
@@ -308,7 +311,10 @@ describe('AgentChatThread', () => {
       expect.objectContaining({ workspaceId: 'ws1', workflowId: 'wf-1', approvalId: 'gate-1' }),
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /^reject$/i }))
+    // Approve keeps the card's buttons disabled while its transition is in flight.
+    const reject = screen.getByRole('button', { name: /^reject$/i })
+    await waitFor(() => expect(reject).toBeEnabled())
+    fireEvent.click(reject)
     await waitFor(() => expect(rejectAgentAction).toHaveBeenCalledTimes(1))
     expect(rejectAgentAction).toHaveBeenCalledWith(
       expect.objectContaining({ approvalId: 'gate-1' }),

@@ -1,10 +1,17 @@
 import { MongoClient } from 'mongodb'
 
-if (!process.env.DATABASE_URI) {
-  throw new Error('DATABASE_URI environment variable is required')
-}
+// Lazy: created on first use so importing this module doesn't require DATABASE_URI.
+let client: MongoClient | undefined
 
-const client = new MongoClient(process.env.DATABASE_URI)
+function getSetupClient(): MongoClient {
+  if (!client) {
+    if (!process.env.DATABASE_URI) {
+      throw new Error('DATABASE_URI environment variable is required')
+    }
+    client = new MongoClient(process.env.DATABASE_URI)
+  }
+  return client
+}
 
 let cachedHasUsers: boolean | null = null
 
@@ -17,9 +24,13 @@ let cachedHasUsers: boolean | null = null
 export async function hasUsers(): Promise<boolean> {
   if (cachedHasUsers === true) return true
 
+  // Outside the try: a missing DATABASE_URI is a configuration error and should
+  // surface, not be masked as "no users" like connection failures are.
+  const c = getSetupClient()
+
   try {
-    await client.connect()
-    const count = await client.db().collection('user').countDocuments({}, { limit: 1 })
+    await c.connect()
+    const count = await c.db().collection('user').countDocuments({}, { limit: 1 })
     const result = count > 0
 
     if (result) {

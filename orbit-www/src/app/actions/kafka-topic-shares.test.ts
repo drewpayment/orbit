@@ -12,6 +12,12 @@ vi.mock('@/lib/authz', () => ({
   check: vi.fn(),
 }))
 
+// Mock Temporal client. approveShare/revokeShare start workflows; without this the
+// real client tries to connect to localhost:7233 and the test hits its 5s timeout.
+vi.mock('@/lib/temporal/client', () => ({
+  getTemporalClient: vi.fn(async () => ({ workflow: { start: vi.fn().mockResolvedValue({}) } })),
+}))
+
 // Mock next/cache
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
