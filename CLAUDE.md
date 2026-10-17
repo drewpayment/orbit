@@ -376,6 +376,36 @@ Historical planning artifacts from an earlier planning workflow. See `specs/READ
   Azure and DigitalOcean only; the AWS/GCP workers, plugins service, and Backstage backend
   were removed (last present at git tag `archive/pre-strip-2026-06-10`).
 
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues for `drewpayment/orbit` (via `gh`); PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one root `GLOSSARY.md` + `docs/adr/` (created lazily). See `docs/agents/domain.md`.
+
+## Hermes factory
+
+- **CD policy**: manual. Agents never deploy.
+- **Merging**: factory PRs merge automatically once CI and the `factory/review` status pass.
+- **Routing**: `size:S` / `size:M` → `builder`; `size:L` → `builder-hard`.
+- **Worktrees**: factory workers run in Hermes-managed worktrees; that is the explicit exception to "Worktrees — do NOT use them" above.
+- **Verify work** (run what your change touches):
+  ```bash
+  # Go: per changed module (services/{repository,api-catalog,knowledge,build-service,kafka,bifrost}, temporal-workflows)
+  cd services/<name> && go test -race ./... && golangci-lint run
+  # Frontend
+  cd orbit-www && bun run test:int && bun run lint
+  ```
+- **Known-red baseline**: `main` currently has pre-existing test failures (Vitest, `services/repository` RBAC tests, `go mod tidy` needed in api-catalog/knowledge). Until they are fixed, run the tests your change touches and do not introduce new failures; note pre-existing failures in the PR.
+- **E2E**: infrastructure services (mongo, postgres, redis, temporal, redpanda, etc.) run on the shared docker host `factory-docker` (192.168.86.108). Run orbit-www locally in the worktree with `cd orbit-www && bun run dev`, pointed at that host. Verify user-facing changes with agent-browser against this local dev server. If the environment is unavailable, say so in the PR.
+
 ## License
 
 Elastic License 2.0
